@@ -70,7 +70,7 @@ def _make_service() -> CitationResolveService:
 def _stub_enrich_passthrough(svc: CitationResolveService, monkeypatch):
     """Make _enrich_item a no-op identity so tests focus on the filter step."""
 
-    async def fake_enrich(item, login_user):  # noqa: ARG001
+    async def fake_enrich(item, login_user, url_allowed=True):
         return item
 
     monkeypatch.setattr(svc, "_enrich_item", fake_enrich)
@@ -79,7 +79,7 @@ def _stub_enrich_passthrough(svc: CitationResolveService, monkeypatch):
 def _stub_post_filter(monkeypatch, allowed_by_space: dict[int, set[int]]):
     """Patch KnowledgeFileVisibilityService.post_filter_visible_files."""
 
-    async def fake_post(self, space_id, file_ids):  # noqa: ARG001
+    async def fake_post(self, space_id, file_ids):
         return {fid for fid in file_ids if fid in allowed_by_space.get(int(space_id), set())}
 
     monkeypatch.setattr(
@@ -169,7 +169,7 @@ async def test_filter_visible_rag_items_anonymous_caller_preserves_all(monkeypat
     """login_user=None → no filtering, items unchanged (AC-20)."""
     svc = _make_service()
 
-    async def fake_post(self, space_id, file_ids):  # noqa: ARG001
+    async def fake_post(self, space_id, file_ids):
         raise AssertionError("anonymous caller must not invoke FGA")
 
     monkeypatch.setattr(
@@ -211,9 +211,7 @@ async def test_resolve_citations_filters_then_enriches(monkeypatch):
     login_user = MagicMock(user_id=7)
     login_user.is_admin = MagicMock(return_value=False)
 
-    result = await svc.resolve_citations(
-        citation_ids=["visible", "hidden"], login_user=login_user
-    )
+    result = await svc.resolve_citations(citation_ids=["visible", "hidden"], login_user=login_user)
 
     assert [item.citationId for item in result] == ["visible"]
 
@@ -251,7 +249,7 @@ async def test_resolve_citation_single_web_skips_filter(monkeypatch):
 
     fga_called = False
 
-    async def fake_post(self, space_id, file_ids):  # noqa: ARG001
+    async def fake_post(self, space_id, file_ids):
         nonlocal fga_called
         fga_called = True
         return set()
@@ -280,7 +278,7 @@ async def test_resolve_citation_anonymous_caller_passthrough(monkeypatch):
     svc = _make_service()
     _stub_enrich_passthrough(svc, monkeypatch)
 
-    async def fake_post(self, space_id, file_ids):  # noqa: ARG001
+    async def fake_post(self, space_id, file_ids):
         raise AssertionError("anonymous caller must not invoke FGA")
 
     monkeypatch.setattr(

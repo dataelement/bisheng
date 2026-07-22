@@ -1,4 +1,4 @@
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "../../../components/bs-ui/button";
 import {
     Table,
@@ -28,8 +28,11 @@ import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 import { useTable } from "../../../util/hook";
 import useKnowledgeStore from "../useKnowledgeStore";
 import { MetadataManagementDialog } from "./MetadataManagementDialog";
+import AddKnowledgeFileMenu from "./AddKnowledgeFileMenu";
+import WebLinkImportDialog from "./WebLinkImportDialog";
 import FileTagList from "./tags/FileTagList";
 import KnowledgeTagSelect from "./tags/KnowledgeTagSelect";
+import { resolveKnowledgeParseFailure } from "../knowledgeParseFailureMessage";
 
 interface StatusIndicatorProps {
     status: number;
@@ -46,6 +49,17 @@ const STATUS_CONFIG: Record<number, { labelKey: string; colorClass: string; bgCl
     7: { labelKey: "violation", colorClass: "text-red-500", bgClass: "bg-red-500" },
 };
 
+function normalizeWebLinkDisplayName(fileName: string): string {
+    const trimmed = fileName.trim().replace(/\.md$/i, "").trim();
+    if (!trimmed) return fileName;
+    return trimmed.toLowerCase().endsWith(".html") ? trimmed : `${trimmed}.html`;
+}
+
+function getKnowledgeFileDisplayName(file: Record<string, any>): string {
+    const fileName = String(file.file_name ?? "");
+    return file.file_source === "web_link" ? normalizeWebLinkDisplayName(fileName) : fileName;
+}
+
 function formatSensitiveViolationMessage(hits: any[], t: (key: string, options?: Record<string, any>) => string) {
     const words = hits
         .map((item) => String(item?.word ?? "").trim())
@@ -57,6 +71,10 @@ function formatSensitiveViolationMessage(hits: any[], t: (key: string, options?:
     }
 
     return `${t("sensitiveViolationMessagePrefix", { ns: "knowledge" })}{${words.join(",")}}${t("sensitiveViolationMessageSuffix", { ns: "knowledge" })}`;
+}
+
+function formatMediaParseFailureMessage(obj: any, t: (key: string, options?: Record<string, any>) => string) {
+    return resolveKnowledgeParseFailure(obj, t) ?? "";
 }
 
 export const StatusIndicator: React.FC<StatusIndicatorProps> = ({ status, remark }) => {
@@ -72,6 +90,8 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({ status, remark
                 if (status === 7 && obj?.reason === "sensitive_check") {
                     return formatSensitiveViolationMessage(Array.isArray(obj?.hits) ? obj.hits : [], t);
                 }
+                const mediaMessage = formatMediaParseFailureMessage(obj, t);
+                if (mediaMessage) return mediaMessage;
                 return t(`errors.${obj.status_code}`, obj.data)
             } catch (error) {
                 return trimmedRemark
@@ -151,6 +171,7 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
         readFileByLibDatabase({ ...param, id, name: param.keyword })
     )
     const [metadataOpen, setMetadataOpen] = useState(false);
+    const [webLinkOpen, setWebLinkOpen] = useState(false);
     const navigate = useNavigate()
 
     // Store complete file objects (preserving all original parameters)
@@ -334,15 +355,18 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
     const dataSouce = useMemo(() => {
         return datalist.map(el => {
             const suffix = el.file_name.split('.').pop()?.toLowerCase() || '';
+            const displayFileName = getKnowledgeFileDisplayName(el);
             if (['xlsx', 'xls', 'csv', 'et'].includes(suffix) && el.parse_type !== "local" && el.parse_type !== "uns") {
                 const excel_rule = JSON.parse(el.split_rule).excel_rule
                 return {
                     ...el,
+                    display_file_name: displayFileName,
                     strategy: ['', t('everyRowsAsOneSegment', { count: excel_rule?.slice_length })]
                 }
             }
             if (!el.split_rule) return {
                 ...el,
+                display_file_name: displayFileName,
                 strategy: ['', '']
             }
             const rule = JSON.parse(el.split_rule)
@@ -350,6 +374,7 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
             const data = separator.map((el, i) => `${separator_rule[i] === 'before' ? '✂️' : ''}${el}${separator_rule[i] === 'after' ? '✂️' : ''}`)
             return {
                 ...el,
+                display_file_name: displayFileName,
                 strategy: [data.length > 2 ? data.slice(0, 2).join(',') : '', data.join(',')]
             }
         })
@@ -501,14 +526,17 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
                         </Button>
                     )}
                     {canEditKb && (
-                        <Link to={`/filelib/upload/${id}`}>
-                            <Button className="px-4 md:px-8 h-9">{t('uploadFile')}</Button>
-                        </Link>
+                        <AddKnowledgeFileMenu
+                            buttonClassName="px-4 md:px-8"
+                            supportedFormatsLabel={t("supportedFormatsTip", { defaultValue: "" })}
+                            onUploadFile={() => navigate(`/filelib/upload/${id}`)}
+                            onWebLink={() => setWebLinkOpen(true)}
+                        />
                     )}
                 </div>
             </div>
 
-            <div className="h-[calc(100vh-180px)] overflow-y-auto pb-20">
+            <div className="h-[calc(100vh-180px-var(--license-banner-h,0px))] overflow-y-auto pb-20">
                 <Table>
                     <TableHeader>
                         <TableRow>
@@ -677,13 +705,13 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
                                     />
                                 </TableCell>
                                 <TableCell className="min-w-[250px]">
-                                    <Tip content={el.file_name} align="start" >
+                                    <Tip content={el.display_file_name || el.file_name} align="start" >
                                         <div className="flex items-center gap-2">
                                             <FileIcon
-                                                type={el.file_name.split('.').pop().toLowerCase() || 'txt'}
+                                                type={(el.display_file_name || el.file_name).split('.').pop().toLowerCase() || 'txt'}
                                                 className="size-[30px] min-w-[30px]"
                                             />
-                                            {truncateString(el.file_name, 35)}
+                                            {truncateString(el.display_file_name || el.file_name, 35)}
                                         </div>
                                     </Tip>
                                 </TableCell>
@@ -769,6 +797,12 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
                 hasManagePermission={canEditKb}
                 id={id}
                 initialMetadata={metadataFields}
+            />
+            <WebLinkImportDialog
+                knowledgeId={id}
+                open={webLinkOpen}
+                onOpenChange={setWebLinkOpen}
+                onImported={reload}
             />
         </div>
 

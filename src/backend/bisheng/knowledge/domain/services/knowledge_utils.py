@@ -9,6 +9,7 @@ from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.common.services.base import BaseService
 from bisheng.core.cache.redis_manager import get_redis_client, get_redis_client_sync
 from bisheng.knowledge.domain.models.knowledge_space_file import SpaceFileDao
+from bisheng.knowledge.domain.upload_file_size import MEDIA_FILE_EXTENSIONS
 from bisheng.llm.domain import LLMService
 from bisheng.llm.domain.schemas import KnowledgeLLMConfig
 from bisheng.utils import md5_hash
@@ -53,6 +54,44 @@ class KnowledgeUtils(BaseService):
         chunk = chunk.split("<paragraph_content>")[-1]
         chunk = chunk.split("</paragraph_content>")[0]
         return chunk
+
+    @classmethod
+    def format_retrieved_chunk(cls, doc, kb_name: str = "") -> str:
+        """Format a retrieved Document into the tool-output chunk string shared by
+        the workstation daily-mode search, the workflow agent knowledge tool, and
+        the RAG/assistant document-stuffing paths.
+
+        <chunk_id> carries the citation_key (the source id the model cites with);
+        the legacy document-segment id was unused downstream and is dropped.
+
+        page_content is stored pre-wrapped with <file_title>/<file_abstract>/
+        <paragraph_content> by aggregate_chunk_metadata at ingest time; strip that
+        wrapper so we don't nest it again. annotate_rag_documents_with_citations may
+        have appended a "\n\ncitation_key: ..." tail; peel it off so paragraph_content
+        holds only the bare body (the id now lives in <chunk_id>, not the tail).
+        """
+        meta = getattr(doc, "metadata", {}) or {}
+        file_title = meta.get("document_name") or meta.get("source") or meta.get("file_name") or ""
+        file_abstract = meta.get("file_abstract") or meta.get("abstract") or ""
+        citation_key = meta.get("citation_key") or ""
+        raw_content = (getattr(doc, "page_content", "") or "").strip()
+        if citation_key:
+            citation_suffix = f"\n\ncitation_key: {citation_key}"
+            if raw_content.endswith(citation_suffix):
+                raw_content = raw_content[: -len(citation_suffix)].rstrip()
+        content = cls.split_chunk_metadata(raw_content).strip()
+        kb_id_raw = meta.get("knowledge_id") or meta.get("kb_id") or ""
+        kb_id = str(kb_id_raw) if kb_id_raw not in (None, "") else ""
+        return (
+            "{"
+            f"<chunk_id>{citation_key}</chunk_id>\n"
+            f"<knowledge_base_id>{kb_id}</knowledge_base_id>\n"
+            f"<knowledge_base_name>{kb_name}</knowledge_base_name>\n"
+            f"<file_title>{file_title}</file_title>\n"
+            f"<file_abstract>{file_abstract}</file_abstract>\n"
+            f"<paragraph_content>{content}</paragraph_content>"
+            "}"
+        )
 
     @classmethod
     async def async_save_preview_cache(cls, cache_key, mapping: dict = None, chunk_index: int = 0, value: dict = None):
@@ -140,12 +179,15 @@ class KnowledgeUtils(BaseService):
         """Get the preview file corresponding to the knowledge base file atminioStorage Path for This path is stored in the officialbucketand within"""
         if file_name:
             file_ext = file_name.split(".")[-1]
+        file_ext = file_ext.lower() if file_ext else file_ext
         if file_ext in ["doc", "docx", "wps"]:
             return f"preview/{file_id}.docx"
         elif file_ext in ["xls", "xlsx", "et"]:
             return f"preview/{file_id}.xlsx"
         elif file_ext in ["ppt", "pptx", "dps", "ofd"]:
             return f"preview/{file_id}.pdf"
+        elif file_ext in ["mp3", "wav", "m4a", "aac", "flac", "ogg", "mp4", "mov", "avi", "mkv", "webm"]:
+            return f"preview/{file_id}.md"
         # No preview required for other file types
         return None
 
@@ -165,13 +207,15 @@ class KnowledgeUtils(BaseService):
         """Get a temporary preview file atminioStorage Path for This path is stored in a temporarybucket"""
         file_name = os.path.basename(file_path)
         file_name_no_ext, file_ext = file_name.rsplit(".", 1)
+        file_ext = file_ext.lower()
         if file_ext in ["doc", "docx", "wps"]:
             return f"preview/{file_name_no_ext}.docx"
         elif file_ext in ["xls", "xlsx", "et"]:
             return f"preview/{file_name_no_ext}.xlsx"
         elif file_ext in ["ppt", "pptx", "dps", "ofd"]:
             return f"preview/{file_name_no_ext}.pdf"
-        # No preview required for other file types
+        if file_ext in MEDIA_FILE_EXTENSIONS:
+            return f"preview/{file_name_no_ext}_transcript.md"
         return None
 
     @classmethod

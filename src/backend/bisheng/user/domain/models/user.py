@@ -538,13 +538,18 @@ class UserDao(UserBase):
         return new_version
 
     @classmethod
-    async def alist_users_paginated(cls, offset: int = 0, limit: int = 500) -> list["User"]:
-        """Page through active users ordered by user_id — used by the F012
-        Celery 6h reconcile task so it can walk the whole user table in
-        bounded batches without loading everything into memory.
-        """
+    async def alist_users_after_id(cls, last_user_id: int = 0, limit: int = 500) -> list["User"]:
+        """Keyset page active users for large cross-tenant maintenance scans."""
         async with get_async_db_session() as session:
-            statement = select(User).where(User.delete == 0).order_by(User.user_id.asc()).offset(offset).limit(limit)
+            statement = (
+                select(User)
+                .where(
+                    User.delete == 0,
+                    User.user_id > last_user_id,
+                )
+                .order_by(User.user_id.asc())
+                .limit(limit)
+            )
             result = await session.exec(statement)
             return list(result.all())
 

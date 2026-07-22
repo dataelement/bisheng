@@ -534,6 +534,8 @@ function FileTableHeader({
 
 interface FileTableProps {
     files: KnowledgeFile[];
+    /** F040: lazily resolve a file's action permissions when its row menu opens. */
+    onEnsureFilePermissions?: (file: KnowledgeFile) => void;
     selectedFiles: Set<string>;
     handleSelectAll: (isAllSelected: boolean) => void;
     handleSelectFile: (id: string, selected: boolean) => void;
@@ -583,7 +585,7 @@ interface FileTableProps {
     bottomSpacing?: number;
 }
 
-export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, currentUserRole, onDownload, onEditTags, onRename, onDelete, onRetry, onNavigateFolder, onPreview, onValidateName, onCancelCreate, permissionEntryIds, renameEntryIds, deleteEntryIds, downloadEntryIds, onManagePermission, onMove, canMoveFile = false, canMoveFolder = false, onMoveToFolder, versionManagementEnabled = false, onOpenVersionManagement, onOpenVersionHistory, canManageMembers = false, sortBy, sortDirection, onSort, highlightedTagIds, highlightKeyword, onScroll, bottomSpacing = 0 }: FileTableProps) {
+export function FileTable({ files, onEnsureFilePermissions, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, currentUserRole, onDownload, onEditTags, onRename, onDelete, onRetry, onNavigateFolder, onPreview, onValidateName, onCancelCreate, permissionEntryIds, renameEntryIds, deleteEntryIds, downloadEntryIds, onManagePermission, onMove, canMoveFile = false, canMoveFolder = false, onMoveToFolder, versionManagementEnabled = false, onOpenVersionManagement, onOpenVersionHistory, canManageMembers = false, sortBy, sortDirection, onSort, highlightedTagIds, highlightKeyword, onScroll, bottomSpacing = 0 }: FileTableProps) {
     const { columnWidths, onResizeStart } = useResizableColumns();
     const scrollRef = useRef<HTMLDivElement>(null);
     const hScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
@@ -705,6 +707,7 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
                                 key={file.id}
                                 file={file}
                                 isAdmin={isAdmin}
+                                onEnsureFilePermissions={onEnsureFilePermissions}
                                 isSelected={selectedFiles.has(file.id)}
                                 onSelect={(val) => handleSelectFile(file.id, val)}
                                 onDownload={() => onDownload(file.id)}
@@ -769,6 +772,7 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
 // ============================================================
 function FileRow({
     file,
+    onEnsureFilePermissions,
     isSelected,
     onSelect,
     isAdmin,
@@ -808,6 +812,7 @@ function FileRow({
     onFolderDrop,
 }: {
     file: KnowledgeFile;
+    onEnsureFilePermissions?: (file: KnowledgeFile) => void;
     isSelected: boolean;
     onSelect: (val: boolean) => void;
     isAdmin: boolean;
@@ -849,6 +854,11 @@ function FileRow({
 }) {
     const localize = useLocalize();
     const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+    // F040: resolve this file's action permissions lazily, only when the menu opens.
+    const handleMoreMenuOpenChange = (open: boolean) => {
+        setMoreMenuOpen(open);
+        if (open) onEnsureFilePermissions?.(file);
+    };
     // Right-click context menu mirrors the row "..." action menu, positioned at the cursor.
     const [contextMenuOpen, setContextMenuOpen] = useState(false);
     const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
@@ -1014,7 +1024,7 @@ function FileRow({
                 <div className="h-3.5 w-px shrink-0 bg-[#E5E6EB]" />
             )}
             {showMoreMenu && (
-                <DropdownMenu open={moreMenuOpen} onOpenChange={setMoreMenuOpen}>
+                <DropdownMenu open={moreMenuOpen} onOpenChange={handleMoreMenuOpenChange}>
                     <DropdownMenuTrigger asChild>
                         <button type="button" className={FILE_ROW_ACTION_BTN_CLASS}>
                             <Outlined.More className="size-4" />

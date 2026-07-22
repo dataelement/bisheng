@@ -7,12 +7,28 @@ import { getLlmDefaultModel } from "@/controllers/API/finetune";
 import { createWorkflowApi, getWorkflowNodeTemplate } from "@/controllers/API/workflow";
 import { useKnowledgeDetails } from "@/controllers/hooks/knowledge";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { initNode } from "@/util/flowUtils";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
+import { resolveKnowledgeParseFailure } from "../knowledgeParseFailureMessage";
+
+type TranslateFn = (key: string, options?: Record<string, unknown>) => string;
+
+function resolveParseFailureReason(remark: unknown, t: TranslateFn) {
+    const resolved = resolveKnowledgeParseFailure(remark, t);
+    if (resolved) return resolved;
+
+    const trimmedRemark = typeof remark === "string" ? remark.trim() : "";
+    if (!trimmedRemark) return t("parseFailed");
+    return trimmedRemark;
+}
 
 export default function FileUploadStep4({ data, kId, hasRepeat }) {
     const { t } = useTranslation('knowledge');
+    const { t: flowT } = useTranslation('flow');
+    const { message } = useToast();
     const [finish, setFinish] = useState(true)
     const navigate = useNavigate()
     const { id: kid } = useParams()
@@ -23,6 +39,7 @@ export default function FileUploadStep4({ data, kId, hasRepeat }) {
     const processingRef = useRef(new Set()); // Track processing file IDs
     const isPollingRef = useRef(false); // Prevent polling concurrency
     const hasInitialized = useRef(false);
+    const notifiedFailedFileIdsRef = useRef(new Set());
     const [premainingFileIds, setPremainingFileIds] = useState([]); // Track remaining file IDs
 
     // Initialize file status (executed only once)
@@ -44,6 +61,7 @@ export default function FileUploadStep4({ data, kId, hasRepeat }) {
             const frontEndFileIds = initialFiles.map(file => file.fileId);
             fileIdsRef.current = frontEndFileIds;
             processingRef.current.clear();
+            notifiedFailedFileIdsRef.current.clear();
             frontEndFileIds.forEach(id => processingRef.current.add(id)); // Use same batch of IDs
 
             setFinish(false);
@@ -95,7 +113,12 @@ export default function FileUploadStep4({ data, kId, hasRepeat }) {
                                 processingRef.current.delete(file.id);
                                 console.log(`移除待处理ID: ${file.id}（失败），剩余待处理: ${processingRef.current.size}`);
                             }
-                            updatedFiles[index] = { ...file, progress: 'end', error: true, reason: resItem.remark || t('parseFailed') };
+                            const reason = resolveParseFailureReason(resItem.remark, t);
+                            if (!notifiedFailedFileIdsRef.current.has(file.id)) {
+                                notifiedFailedFileIdsRef.current.add(file.id);
+                                message({ variant: 'error', description: reason });
+                            }
+                            updatedFiles[index] = { ...file, progress: 'end', error: true, reason };
                         }
                     });
 
@@ -131,7 +154,7 @@ export default function FileUploadStep4({ data, kId, hasRepeat }) {
         return () => {
             if (timerRef.current) clearInterval(timerRef.current);
         };
-    }, [kid, kId, t, data]); // Add t to dependencies
+    }, [kid, kId, t, data, message]); // Add t to dependencies
 
     useEffect(() => {
         return () => {
@@ -166,7 +189,7 @@ export default function FileUploadStep4({ data, kId, hasRepeat }) {
     const handleCreateFlow = async (params) => {
         const model = await getLlmDefaultModel()
 
-        const flow = await getKnowledgeDefaultFlowTemplate(finalId, details[0]?.name || '', model.model_id)
+        const flow = await getKnowledgeDefaultFlowTemplate(finalId, details[0]?.name || '', model.model_id, flowT)
         const res = await captureAndAlertRequestErrorHoc(createWorkflowApi(
             t('documentKnowledgeQa') + generateUUID(5),
             t('retrieveDocumentKnowledge'),
@@ -182,7 +205,7 @@ export default function FileUploadStep4({ data, kId, hasRepeat }) {
             <div className="flex-1">
                 <h1 className="text-3xl text-primary mt-2">{finish ? t('documentDataParsingCompleted') : t('documentDataBeingPrepared')}</h1>
                 <p className="text-base text-gray-500 mt-2">{t('youCanReturn')}</p>
-                <div className="overflow-y-auto mt-4 space-y-2 pb-10 max-h-[calc(100vh-400px)]">
+                <div className="overflow-y-auto mt-4 space-y-2 pb-10 max-h-[calc(100vh-400px-var(--license-banner-h,0px))]">
                     {files.map(item => <ProgressItem analysis key={item.id} item={item} />)}
                 </div>
                 <div className="flex justify-end gap-4">
@@ -204,8 +227,8 @@ export default function FileUploadStep4({ data, kId, hasRepeat }) {
     </div>
 };
 
-// Keep getKnowledgeDefaultFlowTemplate function unchanged
-const getKnowledgeDefaultFlowTemplate = async (kid, kname, modelId) => {
+// Build the quick-start flow with the same node initialization used by canvas drops.
+const getKnowledgeDefaultFlowTemplate = async (kid, kname, modelId, t) => {
     const templates = await getWorkflowNodeTemplate()
     let startNode = null
     let inputNode = null
@@ -225,6 +248,13 @@ const getKnowledgeDefaultFlowTemplate = async (kid, kname, modelId) => {
             ragNode = nodeCopy;
         }
     });
+
+    const initializedNodes = [];
+    startNode = initNode(startNode, initializedNodes, t);
+    initializedNodes.push({ data: startNode });
+    inputNode = initNode(inputNode, initializedNodes, t);
+    initializedNodes.push({ data: inputNode });
+    ragNode = initNode(ragNode, initializedNodes, t);
 
     ragNode.group_params.forEach(group => {
         group.params.forEach(param => {

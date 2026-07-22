@@ -3,6 +3,7 @@ import MultiSelect from "@/components/bs-ui/select/multi";
 import { Tabs, TabsList, TabsTrigger } from "@/components/bs-ui/tabs";
 import { QuestionTooltip } from "@/components/bs-ui/tooltip";
 import { getKnowledgeDetailApi, readFileLibDatabase } from "@/controllers/API";
+import { getSelectableKnowledgeSpacesApi } from "@/controllers/API/knowledgeSpace";
 import { isVarInFlow } from "@/util/flowUtils";
 import { memo, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -14,9 +15,13 @@ const TabsHead = memo(({ tab, onChange }) => {
 
     return (
         <Tabs defaultValue={tab} className="mb-2" onValueChange={onChange}>
-            <TabsList className="grid w-full grid-cols-2 py-1 max-w-80">
+            <TabsList className="grid w-full grid-cols-3 py-1 max-w-80">
                 <TabsTrigger value="knowledge" className="text-xs">
                     {t('documentKnowledgeBase')}
+                </TabsTrigger>
+                {/* F041: knowledge space tab (independent source, mutually exclusive with knowledge/tmp) */}
+                <TabsTrigger value="space" className="text-xs">
+                    {t('knowledgeSpace')}
                 </TabsTrigger>
                 <TabsTrigger value="tmp" className="text-xs">
                     {t('temporarySessionFiles')}
@@ -30,6 +35,7 @@ const TabsHead = memo(({ tab, onChange }) => {
 
 const enum KnowledgeType {
     Knowledge = 'knowledge',
+    Space = 'space',
     Temp = 'tmp'
 }
 type KnowledgeTypeValues = `${KnowledgeType}`;
@@ -55,6 +61,10 @@ export default function KnowledgeSelectItem({ data, nodeId, onChange, onVarEvent
 
     const [options, setOptions] = useState<any>([]);
     const [fileOptions, setFileOptions] = useState<any>([])
+    // F041: knowledge spaces are loaded once (INV-6 exception, full-return) and
+    // filtered client-side, matching the client daily-mode selector.
+    const [spaceOptions, setSpaceOptions] = useState<any>([])
+    const allSpacesRef = useRef<any[]>([])
     const originOptionsRef = useRef([])
 
     const cursorRef = useRef<string | null>(null)
@@ -92,9 +102,22 @@ export default function KnowledgeSelectItem({ data, nodeId, onChange, onVarEvent
         setFileOptions(files)
     }
 
+    // F041: load selectable knowledge spaces (mine + joined + department union).
+    const loadSpaces = () => {
+        getSelectableKnowledgeSpacesApi().then(spaces => {
+            allSpacesRef.current = spaces.map(s => ({ label: s.name, value: s.id }))
+            setSpaceOptions(allSpacesRef.current)
+        })
+    }
+    const filterSpaces = (name: string) => {
+        const kw = (name || '').toLowerCase()
+        setSpaceOptions(allSpacesRef.current.filter(o => o.label.toLowerCase().includes(kw)))
+    }
+
     useEffect(() => {
         reload(null, '')
         loadFiles()
+        loadSpaces()
     }, [])
 
     // const handleChange = (res) => {
@@ -108,7 +131,9 @@ export default function KnowledgeSelectItem({ data, nodeId, onChange, onVarEvent
     }
 
     const handleTabChange = (val) => {
-        KnowledgeType.Knowledge === val ? reload(null, '') : loadFiles()
+        if (val === KnowledgeType.Knowledge) reload(null, '')
+        else if (val === KnowledgeType.Space) loadSpaces()
+        else loadFiles()
 
         setTabType(val)
         const inputDom = document.getElementById('knowledge-select-item')
@@ -160,6 +185,19 @@ export default function KnowledgeSelectItem({ data, nodeId, onChange, onVarEvent
             return t('tmpKnowledgeBaseNotSupportSingleNodeDebug')
         }
         const _errorKeys = [];
+        if (typeof value[0].value === 'number' && data.value.type === KnowledgeType.Space) {
+            // F041: validate spaces against the loaded selectable-space list
+            // (getKnowledgeDetailApi is KB-only and would flag every space as missing).
+            const knownIds = new Set(allSpacesRef.current.map(o => o.value));
+            for (const el of value) {
+                if (!knownIds.has(el.value)) {
+                    error = `${flow.nodes.find(node => node.id === nodeId).data.name}${t('nodeError')}: ${el.label} ${t('doesNotExist')}.`
+                    _errorKeys.push(el.value);
+                }
+            }
+            setErrorKeys(_errorKeys);
+            return error;
+        }
         if (typeof value[0].value === 'number') {
             const effectiveKnowledges = await getKnowledgeDetailApi(value.map(el => el.value));
             for (const el of value) {
@@ -208,13 +246,13 @@ export default function KnowledgeSelectItem({ data, nodeId, onChange, onVarEvent
             className={''}
             hideSearch={tabType === KnowledgeType.Temp}
             value={value}
-            options={tabType === KnowledgeType.Knowledge ? options : fileOptions}
+            options={tabType === KnowledgeType.Knowledge ? options : tabType === KnowledgeType.Space ? spaceOptions : fileOptions}
             placeholder={data.placeholder && t(`${i18nPrefix}placeholder`) || ''}
             searchPlaceholder={t('build.searchBaseName', { ns: 'bs' })}
             onChange={handleSelect}
-            onLoad={() => { reload(null, ''); loadFiles() }}
-            onSearch={(val) => reload(null, val)}
-            onScrollLoad={(val) => loadMore(val)}
+            onLoad={() => { reload(null, ''); loadFiles(); loadSpaces() }}
+            onSearch={(val) => tabType === KnowledgeType.Space ? filterSpaces(val) : reload(null, val)}
+            onScrollLoad={(val) => { if (tabType === KnowledgeType.Knowledge) loadMore(val) }}
         >
             {/* {children?.(reload)} */}
         </MultiSelect>

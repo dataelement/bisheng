@@ -44,6 +44,7 @@ vi.mock("@/controllers/API/department", () => ({
   getDepartmentChildrenApi: vi.fn(),
   getDepartmentPathTreeApi: vi.fn(),
   getDepartmentMembersApi: vi.fn(),
+  searchGlobalMembersApi: vi.fn(),
 }))
 
 vi.mock("@/controllers/API/user", () => ({
@@ -54,12 +55,14 @@ import {
   getDepartmentChildrenApi,
   getDepartmentMembersApi,
   getDepartmentPathTreeApi,
+  searchGlobalMembersApi,
 } from "@/controllers/API/department"
 import { getUsersApi } from "@/controllers/API/user"
 
 const mockedChildren = vi.mocked(getDepartmentChildrenApi)
 const mockedPathTree = vi.mocked(getDepartmentPathTreeApi)
 const mockedMembers = vi.mocked(getDepartmentMembersApi)
+const mockedGlobalMembers = vi.mocked(searchGlobalMembersApi)
 const mockedUsers = vi.mocked(getUsersApi)
 
 // F038: lazy synthetic org tree.
@@ -99,9 +102,26 @@ beforeEach(() => {
   // path-tree: root→target chain (only id 10 is a valid rootDeptId here).
   mockedPathTree.mockImplementation((id: number) => {
     if (id === 10) return Promise.resolve({ roots: [{ ...NODES[1], children: [NODES[10]] }], total_matches: 1, truncated: false })
+    if (id === 21) {
+      return Promise.resolve({
+        roots: [{ ...NODES[1], children: [{ ...NODES[20], children: [NODES[21]] }] }],
+        total_matches: 1,
+        truncated: false,
+      })
+    }
     return Promise.resolve({ roots: [], total_matches: 0, truncated: false })
   })
-  mockedMembers.mockResolvedValue({ data: [] } as any)
+  mockedMembers.mockImplementation((deptId: string) =>
+    Promise.resolve(
+      deptId === "21"
+        ? {
+            data: [{ user_id: 5, user_name: "Leaf User", person_id: "00005" }],
+            total: 1,
+          }
+        : { data: [], total: 0 },
+    ) as any,
+  )
+  mockedGlobalMembers.mockResolvedValue({ data: [], total: 0 })
   mockedUsers.mockResolvedValue({ data: [] } as any)
 })
 
@@ -178,6 +198,50 @@ describe("DepartmentUsersSelect — rootDeptId scope", () => {
     )
     expect(screen.queryByText("A")).not.toBeInTheDocument()
     expect(screen.queryByText("B")).not.toBeInTheDocument()
+  })
+
+  it("loads and renders primary members for a scoped leaf department", async () => {
+    render(
+      <DepartmentUsersSelect value={[]} onChange={vi.fn()} rootDeptId={21} />,
+    )
+    openPicker()
+
+    await screen.findByText("Leaf User")
+    expect(mockedMembers).toHaveBeenCalledWith(
+      "21",
+      expect.objectContaining({ is_primary: 1 }),
+    )
+  })
+
+  it("uses the target subtree for scoped user-name search", async () => {
+    mockedGlobalMembers.mockResolvedValue({
+      data: [
+        {
+          user_id: 5,
+          user_name: "Zhang",
+          external_id: "00005",
+          primary_department_dept_id: "21",
+          primary_department_path: "Root / B / B1",
+        },
+      ],
+      total: 1,
+    })
+
+    render(
+      <DepartmentUsersSelect value={[]} onChange={vi.fn()} rootDeptId={10} />,
+    )
+    openPicker()
+
+    fireEvent.change(screen.getByPlaceholderText("system.searchUser"), {
+      target: { value: "Zhang" },
+    })
+
+    await screen.findByText("Zhang")
+    expect(mockedGlobalMembers).toHaveBeenCalledWith(
+      expect.objectContaining({ keyword: "Zhang", rootDeptId: 10 }),
+      expect.anything(),
+    )
+    expect(mockedUsers).not.toHaveBeenCalled()
   })
 
   // F038: the flat user search shows each user's org path from the backend

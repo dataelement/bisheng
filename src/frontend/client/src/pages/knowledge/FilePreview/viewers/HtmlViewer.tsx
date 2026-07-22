@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLocalize } from "~/hooks";
+import { resolveKnowledgePreviewUrl } from "../previewUrlUtils";
 
 interface HtmlViewerProps {
     fileUrl: string;
@@ -16,7 +17,7 @@ export function HtmlViewer({ fileUrl, zoomLevel }: HtmlViewerProps) {
         const fetchHtml = async () => {
             try {
                 setLoading(true);
-                const response = await fetch(fileUrl);
+                const response = await fetch(resolveKnowledgePreviewUrl(fileUrl));
                 if (!response.ok) throw new Error(localize("com_knowledge.failure_status", { 0: response.status }));
                 const text = await response.text();
                 setHtmlContent(text);

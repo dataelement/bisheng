@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { checkPermission } from "~/api/permission";
 import { useAuthContext } from "~/hooks";
 import { SystemRoles } from "~/types/chat";
@@ -32,75 +32,57 @@ export function hasKnowledgeSpacePermission(
     return permissions[String(spaceId)]?.includes(permissionId) ?? false;
 }
 
+/**
+ * F040: per-space action permissions are resolved LAZILY — instead of probing every
+ * sidebar space's edit/delete/share/manage permission on mount (N spaces x 4 checks =
+ * dozens of `permissions/check` on page load), `ensureSpacePermissions(spaceId)` is
+ * called when the user opens a space's "⋯" menu, checking only that one space. The
+ * `permissions` map starts empty and fills on demand; menu items gate on it (fail-closed
+ * until resolved). System admins short-circuit to all-granted without any request.
+ */
 export function useKnowledgeSpaceActionPermissions(spaceIds: string[]) {
     const { user } = useAuthContext();
     const [permissions, setPermissions] = useState<Record<string, KnowledgeSpaceActionPermission[]>>({});
-    const [loading, setLoading] = useState(false);
-    const abortRef = useRef<AbortController | null>(null);
-    const stableSpaceIds = useMemo(() => Array.from(new Set(spaceIds)).sort(), [spaceIds.join(",")]);
+    const checkedRef = useRef<Set<string>>(new Set());
+    const admin = isSystemAdmin(user?.role);
+    // Reset key: when the listed spaces or the role change, drop resolved grants so a
+    // re-opened menu re-checks against the new context.
+    const resetKey = useMemo(() => Array.from(new Set(spaceIds)).sort().join(","), [spaceIds.join(",")]);
 
     useEffect(() => {
-        if (!stableSpaceIds.length) {
-            abortRef.current?.abort();
-            setPermissions({});
-            setLoading(false);
-            return;
-        }
+        checkedRef.current = new Set();
+        setPermissions({});
+    }, [resetKey, user?.role]);
 
-        if (isSystemAdmin(user?.role)) {
-            const nextPermissions: Record<string, KnowledgeSpaceActionPermission[]> = {};
-            for (const id of stableSpaceIds) {
-                nextPermissions[id] = [...KNOWLEDGE_SPACE_ACTION_PERMISSION_IDS];
+    const ensureSpacePermissions = useCallback(
+        async (spaceId: string | number) => {
+            const id = String(spaceId);
+            if (checkedRef.current.has(id)) return; // already resolved for this space
+            checkedRef.current.add(id);
+
+            if (admin) {
+                setPermissions((prev) => ({ ...prev, [id]: [...KNOWLEDGE_SPACE_ACTION_PERMISSION_IDS] }));
+                return;
             }
-            setPermissions(nextPermissions);
-            setLoading(false);
-            return;
-        }
 
-        abortRef.current?.abort();
-        const controller = new AbortController();
-        abortRef.current = controller;
-        setLoading(true);
-
-        const resolveSpacePermissions = async (
-            spaceId: string,
-        ): Promise<[string, KnowledgeSpaceActionPermission[]]> => {
-            const allowedPermissions: KnowledgeSpaceActionPermission[] = [];
+            const allowed: KnowledgeSpaceActionPermission[] = [];
             for (const permissionId of KNOWLEDGE_SPACE_ACTION_PERMISSION_IDS) {
-                if (controller.signal.aborted) return [spaceId, allowedPermissions];
                 try {
                     const res = await checkPermission(
                         "knowledge_space",
-                        spaceId,
+                        id,
                         PERMISSION_RELATION[permissionId],
                         permissionId,
-                        { signal: controller.signal },
                     );
-                    if (res?.allowed) allowedPermissions.push(permissionId);
+                    if (res?.allowed) allowed.push(permissionId);
                 } catch {
                     // UI gating is best-effort; backend endpoints still enforce permission ids.
                 }
             }
-            return [spaceId, allowedPermissions];
-        };
+            setPermissions((prev) => ({ ...prev, [id]: allowed }));
+        },
+        [admin],
+    );
 
-        Promise.allSettled(stableSpaceIds.map(resolveSpacePermissions)).then((results) => {
-            if (controller.signal.aborted) return;
-
-            const nextPermissions: Record<string, KnowledgeSpaceActionPermission[]> = {};
-            for (const result of results) {
-                if (result.status !== "fulfilled") continue;
-                const [id, ids] = result.value;
-                if (ids.length) nextPermissions[id] = ids;
-            }
-            setPermissions(nextPermissions);
-            setLoading(false);
-        });
-
-        return () => {
-            controller.abort();
-        };
-    }, [stableSpaceIds.join(","), user?.role]);
-
-    return { permissions, loading };
+    return { permissions, ensureSpacePermissions };
 }

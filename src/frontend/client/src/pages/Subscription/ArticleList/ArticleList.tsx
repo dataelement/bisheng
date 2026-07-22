@@ -6,6 +6,7 @@ import {
     Channel,
     getArticlesApi,
     getChannelDetailApi,
+    getChannelUnreadCountsApi,
     type ArticleSearchResultItem
 } from "~/api/channels";
 import { InfiniteScroll } from "~/components/InfiniteScroll";
@@ -210,6 +211,19 @@ export function ArticleList({
         queryFn: () => getChannelDetailApi(channel.id),
         staleTime: 60_000, // Cache for 1 minute
     });
+
+    // F040: per-sub-channel unread counts are split out of the channel detail
+    // endpoint (the preview drawer no longer pays the per-user ES cost). The
+    // in-channel view fetches them lazily here to fill the sub-channel badges;
+    // on failure the badges degrade to 0 (empty map) rather than breaking the list.
+    const { data: subChannelUnreadCounts } = useQuery({
+        queryKey: ["channelUnreadCounts", channel.id],
+        queryFn: () => getChannelUnreadCountsApi(channel.id),
+        staleTime: 30_000,
+        // Best-effort badges: a failed unread fetch must not surface an error toast.
+        retry: false,
+        placeholderData: {} as Record<string, number>,
+    });
     // Share entry is available to anyone who can see the channel (creator/admin or subscriber),
     // regardless of visibility — subscribers should always be able to copy/share the link.
     const canOpenChannelShare = true;
@@ -224,7 +238,7 @@ export function ArticleList({
     }, [channelDetail?.source_infos]);
 
     const subChannels = useMemo(() => {
-        const unreadByName = channelDetail?.sub_channel_unread_counts || {};
+        const unreadByName = subChannelUnreadCounts || {};
         return (channelDetail?.filter_rules || [])
             .filter(fr => fr.channel_type === "sub" && fr.name)
             .map((fr, idx) => ({ id: `sub-${idx}`, name: fr.name!, unreadCount: unreadByName[fr.name!] ?? 0 }))
@@ -240,7 +254,7 @@ export function ArticleList({
                 if (pa !== pb) return pa - pb;
                 return a.name.localeCompare(b.name, "zh-CN");
             });
-    }, [channelDetail?.filter_rules]);
+    }, [channelDetail?.filter_rules, subChannelUnreadCounts]);
 
     const PAGE_SIZE = 20;
 

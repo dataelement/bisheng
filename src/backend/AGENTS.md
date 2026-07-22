@@ -101,9 +101,10 @@ uv run alembic revision --autogenerate -m "msg"   # autogen reflects MySQL only;
 
 **Ruff is the sole authority on formatting.** The PostToolUse hook runs `ruff format` + `ruff check --fix` on every file you write — let it. You don't need to format by hand; the hook does it. Do **not** work around the hook to keep the diff small — e.g. reaching for a different edit approach, partial writes, or reverting the hook's reflow because it "touched too many lines." If ruff reflows lines you didn't change, that reflow is correct and stays in. A smaller diff is never a reason to bypass formatting.
 
-**Migration vs. script — keep them separate:**
+**Schema ownership and migration scripts:**
 
-- **Schema DDL only** (create/alter/drop table, columns, indexes, constraints) → Alembic revision under `bisheng/core/database/alembic/versions/`, replayed on every environment via `alembic upgrade head`. The **only** data effect allowed is a `server_default` fill on an added column (the engine backfills existing rows as part of the DDL).
+- **Whole-table creation** → declare the SQLModel with `table=True` under a discovered model directory. Every online Alembic upgrade imports all model modules and runs `create_all(checkfirst=True)` for missing tables before revisions. A new standalone table does not require a create-table revision unless a same-release migration depends on it or it needs database objects SQLModel cannot express.
+- **Existing-table schema changes** (add/alter/drop columns, indexes, constraints; rename/drop tables) → Alembic revision under `bisheng/core/database/alembic/versions/`, replayed on every environment via `alembic upgrade head`. `create_all()` never changes an existing table. The **only** data effect allowed in a revision is a `server_default` fill on an added column (the engine backfills existing rows as part of the DDL).
 - **Any data migration / maintenance** — backfill, transform, dedup, purge, seed, or *any* read-then-write on existing rows (`SELECT`→`UPDATE`/`INSERT`, `INSERT…SELECT`) — is a **separate operational procedure** (`scripts/` or a DBA runbook) run out-of-band, **never** in a revision. Even cleanup required before a schema change (e.g. dedup before a unique constraint) is an ops prerequisite run before deploy; the migration only issues the DDL and fails loudly if the data wasn't prepared. Migration authoring rules → `bisheng/core/database/alembic/AGENTS.md`.
 
 ---

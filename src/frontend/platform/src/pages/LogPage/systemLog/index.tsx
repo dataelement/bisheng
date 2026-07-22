@@ -115,7 +115,7 @@ export default function SystemLog() {
                 <LoadingIcon />
             </div>
         )}
-        <div className="h-[calc(100vh-128px)] overflow-y-auto px-2 py-4 pb-10">
+        <div className="h-[calc(100vh-128px-var(--license-banner-h,0px))] overflow-y-auto px-2 py-4 pb-10">
             <div className="flex flex-wrap gap-4">
                 <div className="w-[200px] relative">
                     <MultiSelect contentClassName="overflow-y-auto max-w-[200px]" multiple

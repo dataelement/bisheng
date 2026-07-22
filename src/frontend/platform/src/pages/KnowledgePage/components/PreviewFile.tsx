@@ -10,6 +10,7 @@ import { convertJsonData } from "./ParagraphEdit";
 import { Partition } from "./PreviewResult";
 import TxtFileViewer from "./TxtFileViewer";
 import ExcelPreview from "./ExcelPreview";
+import RichPreviewFile, { isRichKnowledgePreview } from "./RichPreviewFile";
 
 export default function PreviewFile({
   urlState,
@@ -22,7 +23,9 @@ export default function PreviewFile({
   edit = false,
   resultFiles,
   etl,
-  previewUrl
+  previewUrl,
+  previewData,
+  previewErrorMessage,
 }: {
   urlState: { load: boolean; url: string };
   file: any;
@@ -31,6 +34,8 @@ export default function PreviewFile({
   rawFiles: any[];
   setChunks: any;
   edit?: boolean;
+  previewData?: any;
+  previewErrorMessage?: string;
 }) {
   const { t } = useTranslation('knowledge')
   const MemoizedFileView = React.memo(FileView);
@@ -223,8 +228,20 @@ export default function PreviewFile({
     const { url, load } = urlState;
 
     // 加载状态处理
-    if (!load && !url) return <div className="flex justify-center items-center h-full text-gray-400">预览失败</div>;
+    if (!load && !url) {
+      if (previewErrorMessage) {
+        return (
+          <div className="flex justify-center items-center h-full px-6 text-center text-gray-500">
+            <p className="text-sm leading-6 whitespace-pre-line">{previewErrorMessage}</p>
+          </div>
+        );
+      }
+      return <div className="flex justify-center items-center h-full text-gray-400">{t('previewFailed')}</div>;
+    }
     if (!url) return <div className="flex justify-center items-center h-full text-gray-400"><LoadingIcon /></div>;
+    if (isRichKnowledgePreview(previewData)) {
+      return <RichPreviewFile file={file} previewData={previewData} />;
+    }
 
     // 新版文件预览
     switch (suffix) {
@@ -327,6 +344,13 @@ export default function PreviewFile({
 
 
 
+  const richPreview = isRichKnowledgePreview(previewData);
+  const previewScrollClass = ['csv', 'xlsx', 'xls', 'et'].includes(file.suffix)
+    ? ''
+    : richPreview
+      ? 'overflow-hidden'
+      : 'overflow-y-auto';
+
   return <div className={cn('relative', step === 3 ? "w-full max-w-[50%]" : "w-1/2", step === 2 ? "-mt-9 w-full max-w-[50%]" : "")} onClick={e => {
     e.stopPropagation()
   }}>
@@ -337,7 +361,7 @@ export default function PreviewFile({
         <span className="text-primary cursor-pointer" onClick={handleOvergap}>{t('overwriteSegment')}</span>
       </div>
     </div>
-    <div className={`relative ${['csv', 'xlsx', 'xls', 'et'].includes(file.suffix) ? '' : "overflow-y-auto"}  ${edit ? 'h-[calc(100vh-206px)]' : 'h-[calc(100vh-284px)]'}`}>
+    <div className={`relative ${previewScrollClass}  ${edit ? 'h-[calc(100vh-206px-var(--license-banner-h,0px))]' : 'h-[calc(100vh-284px-var(--license-banner-h,0px))]'}`}>
       {render(file.suffix)}
     </div>
   </div>

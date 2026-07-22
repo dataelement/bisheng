@@ -9,7 +9,7 @@ import { ChevronLeft } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
-import DialogWithRepeatFiles from "./components/DuplicateFileDialog";
+import { DialogWithRepeatFiles } from "./components/DuplicateFileDialog";
 import FileUploadStep1 from "./components/FileUploadStep1";
 import FileUploadStep2, { Step2PersistState } from "./components/FileUploadStep2";
 import FileUploadStep4 from "./components/FileUploadStep4";
@@ -443,7 +443,6 @@ export default function FilesUpload() {
       {/* Duplicate file reminder dialog (shared for normal mode) */}
       <DialogWithRepeatFiles
         repeatFiles={repeatFiles}
-        setRepeatFiles={setRepeatFiles}
         unRetry={handleUnRetry}
         onRetry={handleRetry}
         retryLoad={retryLoad}

@@ -25,10 +25,9 @@ from sqlmodel import Field, select
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_async_db_session, get_sync_db_session
+from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT, JsonType
 
 logger = logging.getLogger(__name__)
-
-from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT, JsonType
 
 
 def _normalize_id_scalar_rows(rows) -> list[int]:
@@ -698,6 +697,18 @@ class DepartmentDao:
             return result.first()
 
     @classmethod
+    async def aget_mount_tenant_ids(cls) -> dict[int, int]:
+        """Return every valid department mount pointer as ``dept_id → tenant_id``."""
+        async with get_async_db_session() as session:
+            result = await session.exec(
+                select(Department.id, Department.mounted_tenant_id).where(
+                    Department.is_tenant_root == 1,
+                    Department.mounted_tenant_id.is_not(None),
+                )
+            )
+            return {int(row.id): int(row.mounted_tenant_id) for row in result.all()}
+
+    @classmethod
     async def aget_ancestors_with_mount(
         cls,
         dept_id: int,
@@ -1364,6 +1375,36 @@ class UserDepartmentDao:
                 )
             )
             return result.all()
+
+    @classmethod
+    async def aget_primary_department_paths_by_user_ids(
+        cls,
+        user_ids: list[int],
+    ) -> dict[int, tuple[int, str]]:
+        """Batch load each user's deterministic primary department and path."""
+        if not user_ids:
+            return {}
+        async with get_async_db_session() as session:
+            result = await session.exec(
+                select(
+                    UserDepartment.user_id,
+                    UserDepartment.department_id,
+                    Department.path,
+                )
+                .join(Department, UserDepartment.department_id == Department.id)
+                .where(
+                    UserDepartment.user_id.in_(user_ids),
+                    UserDepartment.is_primary == 1,
+                )
+                .order_by(UserDepartment.user_id.asc(), UserDepartment.id.asc())
+            )
+            primary_by_user: dict[int, tuple[int, str]] = {}
+            for row in result.all():
+                primary_by_user.setdefault(
+                    int(row.user_id),
+                    (int(row.department_id), row.path or ""),
+                )
+            return primary_by_user
 
     @classmethod
     def get_by_user_ids(cls, user_ids: list[int]) -> list[UserDepartment]:

@@ -1,11 +1,11 @@
-import { Fragment, useState, useRef, useEffect, useLayoutEffect, type MouseEvent } from "react";
+import { Fragment, useState, useRef, useEffect, useLayoutEffect, useCallback, type MouseEvent } from "react";
 import { useRecoilValue, useRecoilState } from "recoil";
 import { knowledgeSelectedFilesState } from "../selectionStore";
 import { EmptyStateIllustration } from "~/components/illustrations";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { FolderPlus } from "lucide-react";
+import { FolderPlus, Link2 } from "lucide-react";
 import { LoadingIcon } from "~/components/ui/icon/Loading";
-import { FileStatus, FileType, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceRole, VisibilityType, batchDownloadApi, batchRetryApi, getFileDownloadApi } from "~/api/knowledge";
+import { FileStatus, FileType, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceRole, VisibilityType, batchDownloadApi, batchRetryApi, getFileDownloadApi, importWebLinkApi } from "~/api/knowledge";
 import { Outlined } from "bisheng-icons";
 import { NotificationSeverity } from "~/common";
 import { buildClientShareUrl } from "~/components/CopyShareLinkButton";
@@ -16,6 +16,15 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from "~/components/ui/DropdownMenu";
+import {
+    Dialog,
+    DialogContent,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+    Input,
+    Label,
+} from "~/components/ui";
 import { useFileDragDrop } from "../hooks/useFileDragDrop";
 import { useKnowledgeMove } from "../hooks/useKnowledgeMove";
 import { useKnowledgeMoveDrag } from "../hooks/useKnowledgeMoveDrag";
@@ -24,9 +33,14 @@ import {
     DEFAULT_MAX_FILE_SIZE_MB,
     getAllowedExtensions,
     getFileInputAccept,
+    getMaxFileSizeBytesForFile,
+    getMaxFileSizeMBForFile,
     isKnowledgeItemUploading,
+    resolveUploadSizeLimits,
     triggerUrlDownload,
+    type UploadSizeLimits,
 } from "../knowledgeUtils";
+import { resolveLocalizedKnowledgeImportError } from "../webLinkI18n";
 import { bishengConfState } from "~/pages/appChat/store/atoms";
 import { CompoundSearchInput, SearchParams } from "./CompoundSearchInput";
 import { EditTagsModal } from "./EditTagsModal";
@@ -73,7 +87,7 @@ interface KnowledgeSpaceContentProps {
     onUploadFile: (files?: FileList | File[]) => void;
     onUploadFolder: (
         fileList: FileList | File[],
-        options: { allowedExtensions: readonly string[]; maxSizeMB: number },
+        options: { allowedExtensions: readonly string[]; maxSizeMB: number; limits?: UploadSizeLimits },
     ) => void;
     onCreateFolder: () => void;
     onDownloadFile: (fileId: string) => void;
@@ -108,6 +122,12 @@ interface KnowledgeSpaceContentProps {
     onCloseSearch?: () => void;
     /** Notify the page when a mobile batch selection is active, so it can hide the AI dock. */
     onSelectionActiveChange?: (active: boolean) => void;
+}
+
+function normalizeWebLinkTitle(title: string): string | undefined {
+    const trimmed = title.trim();
+    if (!trimmed) return undefined;
+    return /\.html$/i.test(trimmed) ? trimmed : `${trimmed}.html`;
 }
 
 export function KnowledgeSpaceContent({
@@ -281,7 +301,7 @@ export function KnowledgeSpaceContent({
     // per-resource backend probe, which is the source of truth: it still grants
     // delete on files the user owns, and on every file for a platform super-admin.
     const isOwner = space.role === SpaceRole.CREATOR;
-    const { permissions: spaceActionPermissions } = useKnowledgeSpaceActionPermissions([space.id]);
+    const { permissions: spaceActionPermissions, ensureSpacePermissions } = useKnowledgeSpaceActionPermissions([space.id]);
     const canShareSpace = isAdmin || hasKnowledgeSpacePermission(
         spaceActionPermissions,
         space.id,
@@ -367,7 +387,7 @@ export function KnowledgeSpaceContent({
         .filter((file) => !file.isCreating && /^\d+$/.test(String(file.id)))
         .map((file) => `${file.id}:${file.type}`)
         .join("|");
-    const canUseAddActions = canCreateFolder && !isSearching;
+    const canUseAddActions = (canCreateFolder || canUploadFile) && !isSearching;
     // Blank-area right-click menu opens when the user can upload a file OR create a folder.
     const canUseContextMenuActions = (canUploadFile || canCreateFolder) && !isSearching;
 
@@ -439,197 +459,76 @@ export function KnowledgeSpaceContent({
         };
     }, [currentFolderId, space.id]);
 
+    // F040: per-file action permissions (rename / download / delete / manage) are NO
+    // LONGER probed eagerly for every file on list load (that fired ~4 checkPermission
+    // per file → hundreds of requests). They are resolved lazily when the user opens a
+    // file's "⋯" action menu, via `ensureFilePermissions` below. `permissionEntryIds`
+    // etc. start empty and get populated on demand; menu items gate on them (fail-closed
+    // until the check resolves). Admin (rename/download/manage) and space-owner (delete)
+    // short-circuit without a request, matching the previous behavior.
+    const checkedFileIdsRef = useRef<Set<string>>(new Set());
+
+    // Drop lazily-cached grants when the listed files / folder change, so a re-opened
+    // menu re-checks against the new context (mirrors the old probe-key re-fetch).
     useEffect(() => {
-        let cancelled = false;
-        const controller = new AbortController();
-        const candidates = displayFiles.filter(
-            (file) => !file.isCreating && /^\d+$/.test(String(file.id))
-        );
+        checkedFileIdsRef.current = new Set();
+        setPermissionEntryIds(new Set());
+        setRenameEntryIds(new Set());
+        setDownloadEntryIds(new Set());
+        setDeleteEntryIds(new Set());
+    }, [permissionEntryProbeKey]);
 
-        if (isAdmin) {
-            setPermissionEntryIds(new Set(candidates.map((file) => file.id)));
-            return () => {
-                cancelled = true;
-                controller.abort();
-            };
-        }
+    const ensureFilePermissions = useCallback(
+        async (file: KnowledgeFile) => {
+            const id = String(file.id);
+            if (file.isCreating || !/^\d+$/.test(id)) return;
+            if (checkedFileIdsRef.current.has(id)) return; // already resolved for this file
+            checkedFileIdsRef.current.add(id);
 
-        if (candidates.length === 0) {
-            setPermissionEntryIds(new Set());
-            return () => {
-                cancelled = true;
-                controller.abort();
-            };
-        }
+            const resourceType = file.type === FileType.FOLDER ? "folder" : "knowledge_file";
+            const grant = (setter: (updater: (prev: Set<string>) => Set<string>) => void) =>
+                setter((prev) => new Set(prev).add(id));
 
-        Promise.all(
-            candidates.map(async (file) => {
-                const resourceType = file.type === FileType.FOLDER ? "folder" : "knowledge_file";
-                const allowed = await canOpenPermissionDialog(resourceType, file.id, {
-                    signal: controller.signal,
-                }).catch(() => false);
-                return allowed ? file.id : null;
-            })
-        ).then((ids) => {
-            if (!cancelled) {
-                setPermissionEntryIds(new Set(ids.filter((id): id is string => Boolean(id))));
+            // Admin holds rename/download/manage; space owner holds delete — no request.
+            if (isAdmin) {
+                grant(setPermissionEntryIds);
+                grant(setRenameEntryIds);
+                grant(setDownloadEntryIds);
             }
-        });
-
-        return () => {
-            cancelled = true;
-            controller.abort();
-        };
-    }, [
-        isAdmin,
-        permissionEntryProbeKey,
-    ]);
-
-    useEffect(() => {
-        let cancelled = false;
-        const controller = new AbortController();
-        const candidates = displayFiles.filter(
-            (file) => !file.isCreating && /^\d+$/.test(String(file.id))
-        );
-
-        if (isAdmin) {
-            setRenameEntryIds(new Set(candidates.map((file) => file.id)));
-            return () => {
-                cancelled = true;
-                controller.abort();
-            };
-        }
-
-        if (candidates.length === 0) {
-            setRenameEntryIds(new Set());
-            return () => {
-                cancelled = true;
-                controller.abort();
-            };
-        }
-
-        Promise.all(
-            candidates.map(async (file) => {
-                const resourceType = file.type === FileType.FOLDER ? "folder" : "knowledge_file";
-                const result = await checkPermission(
-                    resourceType,
-                    file.id,
-                    "can_edit",
-                    file.type === FileType.FOLDER ? "rename_folder" : "rename_file",
-                    { signal: controller.signal },
-                ).catch(() => ({ allowed: false }));
-                return result.allowed ? file.id : null;
-            })
-        ).then((ids) => {
-            if (!cancelled) {
-                setRenameEntryIds(new Set(ids.filter((id): id is string => Boolean(id))));
+            if (isOwner) {
+                grant(setDeleteEntryIds);
             }
-        });
 
-        return () => {
-            cancelled = true;
-            controller.abort();
-        };
-    }, [isAdmin, permissionEntryProbeKey]);
-
-    useEffect(() => {
-        let cancelled = false;
-        const controller = new AbortController();
-        const candidates = displayFiles.filter(
-            (file) => !file.isCreating && /^\d+$/.test(String(file.id))
-        );
-
-        if (isAdmin) {
-            setDownloadEntryIds(new Set(candidates.map((file) => file.id)));
-            return () => {
-                cancelled = true;
-                controller.abort();
-            };
-        }
-
-        if (candidates.length === 0) {
-            setDownloadEntryIds(new Set());
-            return () => {
-                cancelled = true;
-                controller.abort();
-            };
-        }
-
-        Promise.all(
-            candidates.map(async (file) => {
-                const resourceType = file.type === FileType.FOLDER ? "folder" : "knowledge_file";
-                const result = await checkPermission(
-                    resourceType,
-                    file.id,
-                    "can_read",
-                    file.type === FileType.FOLDER ? "download_folder" : "download_file",
-                    { signal: controller.signal },
-                ).catch(() => ({ allowed: false }));
-                return result.allowed ? file.id : null;
-            })
-        ).then((ids) => {
-            if (!cancelled) {
-                setDownloadEntryIds(new Set(ids.filter((id): id is string => Boolean(id))));
+            const tasks: Promise<unknown>[] = [];
+            if (!isAdmin) {
+                tasks.push(
+                    canOpenPermissionDialog(resourceType, file.id)
+                        .then((ok) => { if (ok) grant(setPermissionEntryIds); })
+                        .catch(() => { }),
+                    checkPermission(resourceType, file.id, "can_edit", file.type === FileType.FOLDER ? "rename_folder" : "rename_file")
+                        .then((r) => { if (r.allowed) grant(setRenameEntryIds); })
+                        .catch(() => { }),
+                    checkPermission(resourceType, file.id, "can_read", file.type === FileType.FOLDER ? "download_folder" : "download_file")
+                        .then((r) => { if (r.allowed) grant(setDownloadEntryIds); })
+                        .catch(() => { }),
+                );
             }
-        });
-
-        return () => {
-            cancelled = true;
-            controller.abort();
-        };
-    }, [isAdmin, permissionEntryProbeKey]);
-
-    useEffect(() => {
-        let cancelled = false;
-        const controller = new AbortController();
-        const candidates = displayFiles.filter(
-            (file) => !file.isCreating && /^\d+$/.test(String(file.id))
-        );
-
-        if (isOwner) {
-            setDeleteEntryIds(new Set(candidates.map((file) => file.id)));
-            return () => {
-                cancelled = true;
-                controller.abort();
-            };
-        }
-
-        if (candidates.length === 0) {
-            setDeleteEntryIds(new Set());
-            return () => {
-                cancelled = true;
-                controller.abort();
-            };
-        }
-
-        Promise.all(
-            candidates.map(async (file) => {
-                const resourceType = file.type === FileType.FOLDER ? "folder" : "knowledge_file";
-                const result = await checkPermission(
-                    resourceType,
-                    file.id,
-                    "can_delete",
-                    file.type === FileType.FOLDER ? "delete_folder" : "delete_file",
-                    { signal: controller.signal },
-                ).catch(() => ({ allowed: false }));
-                return result.allowed ? file.id : null;
-            })
-        ).then((ids) => {
-            if (!cancelled) {
-                setDeleteEntryIds(new Set(ids.filter((id): id is string => Boolean(id))));
+            if (!isOwner) {
+                tasks.push(
+                    checkPermission(resourceType, file.id, "can_delete", file.type === FileType.FOLDER ? "delete_folder" : "delete_file")
+                        .then((r) => { if (r.allowed) grant(setDeleteEntryIds); })
+                        .catch(() => { }),
+                );
             }
-        });
-
-        return () => {
-            cancelled = true;
-            controller.abort();
-        };
-    }, [isOwner, permissionEntryProbeKey]);
+            await Promise.all(tasks);
+        },
+        [isAdmin, isOwner],
+    );
 
     // Read max file size from env config (MB), fallback to default 200MB
     const bishengConfig = useRecoilValue(bishengConfState);
-    const maxFileSizeMB = bishengConfig?.uploaded_files_maximum_size ?? DEFAULT_MAX_FILE_SIZE_MB;
-    const maxFileSizeBytes = maxFileSizeMB * 1024 * 1024;
+    const uploadSizeLimits = resolveUploadSizeLimits(bishengConfig);
+    const maxFileSizeMB = uploadSizeLimits.defaultMaxMB;
     const enableEtl4lm = bishengConfig?.enable_etl4lm ?? false;
     const allowedExtensions = getAllowedExtensions(enableEtl4lm);
     const fileInputAccept = getFileInputAccept(enableEtl4lm);
@@ -646,6 +545,83 @@ export function KnowledgeSpaceContent({
     const triggerUploadFolder = () => {
         if (!canUploadFile) return;
         folderInputRef.current?.click();
+    };
+
+    const [webLinkDialogOpen, setWebLinkDialogOpen] = useState(false);
+    const [webLinkUrl, setWebLinkUrl] = useState("");
+    const [webLinkTitle, setWebLinkTitle] = useState("");
+    const [webLinkSubmitting, setWebLinkSubmitting] = useState(false);
+
+    const triggerWebLink = () => {
+        if (!canUploadFile) return;
+        setWebLinkDialogOpen(true);
+    };
+
+    const refreshAfterWebLinkImport = () => {
+        queryClient.invalidateQueries({ queryKey: ["file-versions"] });
+        dispatchKnowledgeSpaceFilesRefresh(space.id);
+        onDeleteFile("");
+    };
+
+    const resetWebLinkDialog = () => {
+        setWebLinkUrl("");
+        setWebLinkTitle("");
+    };
+
+    const submitWebLink = async (overwrite = false) => {
+        const trimmedUrl = webLinkUrl.trim();
+        const normalizedTitle = normalizeWebLinkTitle(webLinkTitle);
+        if (!trimmedUrl) {
+            showToast({ message: localize("com_knowledge.web_link_url_required"), status: "error" });
+            return;
+        }
+        try {
+            const parsed = new URL(trimmedUrl);
+            if (!["http:", "https:"].includes(parsed.protocol)) {
+                showToast({ message: localize("com_knowledge.web_link_http_only"), status: "error" });
+                return;
+            }
+        } catch {
+            showToast({ message: localize("com_knowledge.web_link_invalid"), status: "error" });
+            return;
+        }
+
+        setWebLinkSubmitting(true);
+        try {
+            await importWebLinkApi(space.id, {
+                url: trimmedUrl,
+                title: normalizedTitle,
+                parent_id: currentFolderId ? Number(currentFolderId) : null,
+                overwrite,
+            });
+            showToast({ message: localize("com_knowledge.web_link_import_success"), status: "success" });
+            setWebLinkDialogOpen(false);
+            resetWebLinkDialog();
+            refreshAfterWebLinkImport();
+        } catch (error: any) {
+            const statusCode = error?.status_code ?? error?.statusCode;
+            if (!overwrite && (statusCode === 18021 || statusCode === 18023)) {
+                const confirmed = await confirm({
+                    description: localize(
+                        statusCode === 18021
+                            ? "com_knowledge.web_link_duplicate_content_confirm"
+                            : "com_knowledge.web_link_duplicate_name_confirm"
+                    ),
+                    confirmText: localize("com_knowledge.overwrite"),
+                    cancelText: localize("com_knowledge.cancel"),
+                });
+                if (confirmed) {
+                    await submitWebLink(true);
+                }
+                return;
+            }
+            showToast({
+                message: resolveLocalizedKnowledgeImportError(error, localize, "com_knowledge.web_link_import_failed"),
+                status: "error",
+            });
+        } finally {
+            setWebLinkSubmitting(false);
+        }
     };
 
     useEffect(() => {
@@ -675,8 +651,10 @@ export function KnowledgeSpaceContent({
             }
 
             for (let f of filesList) {
-                if (f.size > maxFileSizeBytes) {
-                    showToast({ message: localize("com_knowledge.file_exceeds_limit", { name: f.name, size: maxFileSizeMB }), status: "error" });
+                const fileMaxSizeMB = getMaxFileSizeMBForFile(f.name, uploadSizeLimits);
+                const fileMaxSizeBytes = getMaxFileSizeBytesForFile(f.name, uploadSizeLimits);
+                if (f.size > fileMaxSizeBytes) {
+                    showToast({ message: localize("com_knowledge.file_exceeds_limit", { name: f.name, size: fileMaxSizeMB }), status: "error" });
                     if (fileInputRef.current) fileInputRef.current.value = "";
                     return;
                 }
@@ -701,7 +679,7 @@ export function KnowledgeSpaceContent({
     const handleFolderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const filesList = e.target.files;
         if (filesList && filesList.length > 0 && canUploadFile) {
-            onUploadFolder(filesList, { allowedExtensions, maxSizeMB: maxFileSizeMB });
+            onUploadFolder(filesList, { allowedExtensions, maxSizeMB: maxFileSizeMB, limits: uploadSizeLimits });
         }
         if (folderInputRef.current) folderInputRef.current.value = "";
     };
@@ -715,6 +693,7 @@ export function KnowledgeSpaceContent({
         // nothing. Gate on canUploadFile like onUploadFile.
         onUploadFolder: canUploadFile ? onUploadFolder : undefined,
         maxFileSizeMB,
+        uploadSizeLimits,
         enableEtl4lm,
     });
 
@@ -1190,7 +1169,7 @@ export function KnowledgeSpaceContent({
                             >
                                 <Outlined.Search className="size-5" />
                             </button>
-                            <DropdownMenu>
+                            <DropdownMenu onOpenChange={(open) => { if (open) ensureSpacePermissions(space.id); }}>
                                 <DropdownMenuTrigger asChild disabled={spaceListOpen}>
                                     <button
                                         type="button"
@@ -1225,7 +1204,7 @@ export function KnowledgeSpaceContent({
                             {/* Hide the whole "..." trigger when every item is permission-gated
                                 away — an empty menu is confusing on mobile. */}
                             {(canUploadFile || canCreateFolder || showShareInMenu || canManageMembers || canDeleteSpace) && (
-                            <DropdownMenu>
+                            <DropdownMenu onOpenChange={(open) => { if (open) ensureSpacePermissions(space.id); }}>
                                 <DropdownMenuTrigger asChild disabled={spaceListOpen}>
                                     <button
                                         type="button"
@@ -1240,6 +1219,12 @@ export function KnowledgeSpaceContent({
                                         <DropdownMenuItem className={sidebarListMoreMenuItemClassName} onClick={triggerUpload}>
                                             <Outlined.Upload className={sidebarListMoreMenuIconClassName} />
                                             <span className={sidebarListMoreMenuLabelClassName}>{localize("com_knowledge.upload_file")}</span>
+                                        </DropdownMenuItem>
+                                    )}
+                                    {canUploadFile && (
+                                        <DropdownMenuItem className={sidebarListMoreMenuItemClassName} onClick={triggerWebLink}>
+                                            <Link2 className={sidebarListMoreMenuIconClassName} />
+                                            <span className={sidebarListMoreMenuLabelClassName}>{localize("com_knowledge.web_link")}</span>
                                         </DropdownMenuItem>
                                     )}
                                     {canCreateFolder && (
@@ -1303,13 +1288,9 @@ export function KnowledgeSpaceContent({
                 onCreateFolder={onCreateFolder}
                 onTriggerUpload={triggerUpload}
                 onTriggerUploadFolder={triggerUploadFolder}
+                onTriggerWebLink={triggerWebLink}
                 canCreateFolder={canCreateFolder}
                 canUploadFile={canUploadFile}
-                supportedFormatsLabel={localize(
-                    enableEtl4lm
-                        ? "com_knowledge.supported_formats_with_etl4lm"
-                        : "com_knowledge.supported_formats_basic"
-                )}
                 selectedCount={selectedFiles.size}
                 hasFoldersSelected={hasFoldersSelected}
                 hasFailedFiles={hasFailedFiles}
@@ -1353,6 +1334,12 @@ export function KnowledgeSpaceContent({
                                 <DropdownMenuItem onClick={triggerUpload} className="cursor-pointer">
                                     <Outlined.Upload className="mr-2 size-4" />
                                     {localize("com_knowledge.upload_file")}
+                                </DropdownMenuItem>
+                            )}
+                            {canUploadFile && (
+                                <DropdownMenuItem onClick={triggerWebLink} className="cursor-pointer">
+                                    <Link2 className="mr-2 size-4" />
+                                    {localize("com_knowledge.web_link")}
                                 </DropdownMenuItem>
                             )}
                             {canCreateFolder && (
@@ -1417,6 +1404,7 @@ export function KnowledgeSpaceContent({
                                         <FileCard
                                             file={file}
                                             userRole={space.role}
+                                            onEnsureFilePermissions={ensureFilePermissions}
                                             isSelected={selectedFiles.has(file.id)}
                                             onSelect={(selected) => handleSelectFile(file.id, selected)}
                                             onDownload={() => handleSingleDownload(file.id)}
@@ -1456,6 +1444,7 @@ export function KnowledgeSpaceContent({
                         <div className="flex min-h-0 min-w-0 flex-1 flex-col pb-4">
                             <div ref={tableScrollRevealRef} className="flex min-h-0 min-w-0 flex-1 flex-col border-t border-[#e5e6eb]">
                                 <FileTable files={displayFiles}
+                                    onEnsureFilePermissions={ensureFilePermissions}
                                     onScroll={handleListScroll}
                                     /* Reserve 112px under the last row so the bottom AI dock leaves
                                        a 40px visual gap above the input. */
@@ -1582,6 +1571,60 @@ export function KnowledgeSpaceContent({
                         : []
                 }
             />
+
+            <Dialog
+                open={webLinkDialogOpen}
+                onOpenChange={(open) => {
+                    setWebLinkDialogOpen(open);
+                    if (!open) resetWebLinkDialog();
+                }}
+            >
+                <DialogContent className="max-w-[520px]">
+                    <DialogHeader>
+                        <DialogTitle>{localize("com_knowledge.web_link_import_title")}</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="knowledge-web-link-url">{localize("com_knowledge.web_link_url")}</Label>
+                            <Input
+                                id="knowledge-web-link-url"
+                                value={webLinkUrl}
+                                onChange={(e) => setWebLinkUrl(e.target.value)}
+                                placeholder="https://example.com/article"
+                                disabled={webLinkSubmitting}
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="knowledge-web-link-title">{localize("com_knowledge.web_link_title")}</Label>
+                            <Input
+                                id="knowledge-web-link-title"
+                                value={webLinkTitle}
+                                onChange={(e) => setWebLinkTitle(e.target.value)}
+                                placeholder={localize("com_knowledge.web_link_title_placeholder")}
+                                disabled={webLinkSubmitting}
+                            />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <button
+                            type="button"
+                            className="inline-flex h-9 items-center justify-center rounded-md border border-[#e5e6eb] bg-white px-4 text-sm text-[#4e5969] hover:bg-[#f7f8fa]"
+                            onClick={() => setWebLinkDialogOpen(false)}
+                            disabled={webLinkSubmitting}
+                        >
+                            {localize("com_knowledge.cancel")}
+                        </button>
+                        <button
+                            type="button"
+                            className="inline-flex h-9 items-center justify-center rounded-md bg-primary px-4 text-sm text-white hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+                            onClick={() => submitWebLink(false)}
+                            disabled={webLinkSubmitting}
+                        >
+                            {webLinkSubmitting ? localize("com_knowledge.importing") : localize("com_knowledge.import")}
+                        </button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
 
             {permTarget && (
                 <KnowledgeSpaceShareDialog

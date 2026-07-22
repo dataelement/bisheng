@@ -100,6 +100,21 @@ class KnowledgeFileFailedError(BaseErrorCode):
     Msg: str = "File parsing failed: {exception}"
 
 
+class KnowledgeMediaTranscriptionError(BaseErrorCode):
+    Code: int = 10954
+    Msg: str = "Media transcription failed"
+
+
+class KnowledgeMediaNoRecognizableAudioError(BaseErrorCode):
+    Code: int = 10956
+    Msg: str = "No recognizable audio detected"
+
+
+class KnowledgeWebLinkImportError(BaseErrorCode):
+    Code: int = 10955
+    Msg: str = "Web link import failed"
+
+
 # Is notQAThe knowledge base upon
 class KnowledgeNotQAError(BaseErrorCode):
     Code: int = 10960

@@ -25,6 +25,7 @@ for _mod in ("celery", "celery.schedules", "celery.app", "celery.app.task"):
         sys.modules[_mod] = MagicMock()
 
 from bisheng.department.domain.services.department_service import DepartmentService
+from bisheng.database.models.department import DepartmentDao
 
 _DDL = [
     """CREATE TABLE IF NOT EXISTS department (
@@ -61,6 +62,7 @@ _DDL = [
     """CREATE TABLE IF NOT EXISTS user (
         user_id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_name VARCHAR(255) UNIQUE,
+        external_id VARCHAR(128),
         email VARCHAR(255),
         phone_number VARCHAR(64),
         dept_id VARCHAR(64),
@@ -85,6 +87,11 @@ async def engine():
             await conn.execute(text(ddl))
     yield eng
     await eng.dispose()
+
+
+@pytest.fixture(autouse=True)
+def _set_tenant_context(tenant_context):
+    tenant_context(1)
 
 
 def _session_patch(engine):
@@ -200,15 +207,25 @@ class TestGlobalMembersSearch:
         assert len(res["data"]) == 1
         assert res["data"][0]["primary_department_dept_id"] == "BS@d1"
 
-    async def test_visible_scope_filters_out_other_departments(self, engine):
-        """Users whose primary dept is outside the visible set are excluded."""
+    async def test_requested_root_scope_filters_out_other_departments(self, engine):
+        """An explicit picker root excludes users from sibling subtrees."""
         await _seed_dept(engine, did=10, dept_id="BS@vis", name="Visible", path="/10/")
         await _seed_dept(engine, did=20, dept_id="BS@hid", name="Hidden", path="/20/")
         await _seed_user(engine, uid=1, name="sam_in", dept_int_id=10)
         await _seed_user(engine, uid=2, name="sam_out", dept_int_id=20)
 
-        with _session_patch(engine), _visible_tree(10):
-            res = await DepartmentService.aget_global_members_search("sam", 1, 20, _login)
+        requested_root = SimpleNamespace(id=10, status="active", path="/10/")
+        with (
+            _session_patch(engine),
+            patch.object(DepartmentDao, "aget_by_id", new=AsyncMock(return_value=requested_root)),
+        ):
+            res = await DepartmentService.aget_global_members_search(
+                "sam",
+                1,
+                20,
+                _login,
+                root_dept_id=10,
+            )
 
         assert {r["user_name"] for r in res["data"]} == {"sam_in"}
         assert res["total"] == 1

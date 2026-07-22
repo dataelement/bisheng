@@ -237,8 +237,8 @@ class TestDeleteGroupDecoupled:
 
             await UserGroupService.adelete_group(42, mock_group_owner)
 
-        # Residual side effects (admin cleanup + gateway notify) run via the
-        # shared sync helper; the group row is deleted.
+        # Gateway notification runs via the shared sync helper. GroupDao
+        # transactionally deletes all membership rows with the group row.
         mock_purge.assert_called_once_with(42)
         mock_group_dao.adelete.assert_awaited_once_with(42)
         # No role cascade on group deletion.

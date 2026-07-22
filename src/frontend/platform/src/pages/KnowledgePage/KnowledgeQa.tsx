@@ -399,7 +399,7 @@ export default function KnowledgeQa(params) {
                     <LoadingIcon />
                 </div>
             )}
-            <div className="h-[calc(100vh-128px)] overflow-y-auto pb-20">
+            <div className="h-[calc(100vh-128px-var(--license-banner-h,0px))] overflow-y-auto pb-20">
                 <div className="flex justify-end gap-4 items-center absolute right-0 top-[-44px]">
                     <SearchInput placeholder={t('lib.searchPlaceholder', { ns: 'bs' })} onChange={(e) => search(e.target.value)} />
                     {canCreateLibrary && <Button className="px-8 text-[#FFFFFF]" onClick={() => setOpen(true)}>{t('create', { ns: 'bs' })}</Button>}

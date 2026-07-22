@@ -750,8 +750,16 @@ class ChannelAuthorizationService:
         return out
 
     async def _resolve_channel_tenant(self, channel_id: str, login_user: UserPayload) -> int | None:
+        from bisheng.database.models.tenant import TenantDao
+
         try:
             tenant_id = await PermissionService._resolve_resource_tenant("channel", channel_id)
         except Exception:
             tenant_id = None
-        return int(tenant_id or getattr(login_user, "tenant_id", 0) or 0) or None
+        resolved_id = int(tenant_id or getattr(login_user, "tenant_id", 0) or 0) or None
+        if resolved_id is None:
+            return None
+        tenant = await TenantDao.aget_by_id(resolved_id)
+        if tenant is None or getattr(tenant, "status", None) != "active":
+            return None
+        return resolved_id

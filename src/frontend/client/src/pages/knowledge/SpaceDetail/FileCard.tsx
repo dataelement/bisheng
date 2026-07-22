@@ -36,6 +36,8 @@ const renderHighlightedName = (text: string, keyword?: string) => {
 interface FileCardProps {
     file: KnowledgeFile;
     userRole: SpaceRole;
+    /** F040: lazily resolve this file's action permissions when its menu opens. */
+    onEnsureFilePermissions?: (file: KnowledgeFile) => void;
     isSelected: boolean;
     onSelect: (selected: boolean) => void;
     onDownload: () => void;
@@ -85,6 +87,7 @@ interface FileCardProps {
 export function FileCard({
     file,
     userRole,
+    onEnsureFilePermissions,
     isSelected,
     onSelect,
     onDownload,
@@ -129,6 +132,11 @@ export function FileCard({
     const isUploading = isKnowledgeItemUploading(file);
     const [hovered, setHovered] = useState(false);
     const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+    // F040: resolve this file's action permissions lazily, only when the menu opens.
+    const handleMoreMenuOpenChange = (open: boolean) => {
+        setMoreMenuOpen(open);
+        if (open) onEnsureFilePermissions?.(file);
+    };
     // Right-click context menu mirrors the "..." action menu, positioned at the cursor.
     const [contextMenuOpen, setContextMenuOpen] = useState(false);
     const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
@@ -669,7 +677,7 @@ export function FileCard({
                                 </Button>
                             )}
                             {showMoreMenu && (
-                                <DropdownMenu open={moreMenuOpen} onOpenChange={setMoreMenuOpen}>
+                                <DropdownMenu open={moreMenuOpen} onOpenChange={handleMoreMenuOpenChange}>
                                     <DropdownMenuTrigger asChild>
                                         <Button
                                             variant="outline"
@@ -737,7 +745,7 @@ export function FileCard({
                         </Button>
                     )}
                     {showMoreMenu && (
-                        <DropdownMenu open={moreMenuOpen} onOpenChange={setMoreMenuOpen}>
+                        <DropdownMenu open={moreMenuOpen} onOpenChange={handleMoreMenuOpenChange}>
                             <DropdownMenuTrigger asChild>
                                 <Button
                                     variant="outline"

@@ -148,7 +148,7 @@ function TenantPageInner() {
         </div>
       </div>
 
-      <div className="h-[calc(100vh-200px)] overflow-y-auto">
+      <div className="h-[calc(100vh-200px-var(--license-banner-h,0px))] overflow-y-auto">
         <Table>
           <TableHeader>
             <TableRow>

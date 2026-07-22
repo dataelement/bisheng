@@ -934,6 +934,11 @@ class TestPermissionApiIntegration:
                 return_value=3,
             ),
             patch(
+                "bisheng.permission.api.endpoints.resource_permission._resolve_department_space_scope",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch(
                 "bisheng.permission.api.endpoints.resource_permission._list_knowledge_space_grant_users",
                 new_callable=AsyncMock,
                 return_value=[
@@ -954,7 +959,13 @@ class TestPermissionApiIntegration:
 
         assert body["status_code"] == 200
         assert body["data"][0]["user_name"] == "Alice"
-        mock_list_users.assert_awaited_once_with(tenant_id=3, keyword="Ali", page=1, page_size=1000)
+        mock_list_users.assert_awaited_once_with(
+            tenant_id=3,
+            keyword="Ali",
+            page=1,
+            page_size=1000,
+            restrict_dept_path=None,
+        )
 
     async def test_list_grant_users_resolves_paths_without_whole_department_table(self):
         """F038 perf regression: the primary-department full-path label must be resolved
@@ -972,13 +983,16 @@ class TestPermissionApiIntegration:
                 return users
 
         class _Session:
+            statement = None
+
             async def __aenter__(self):
                 return self
 
             async def __aexit__(self, *exc):
                 return False
 
-            async def exec(self, _stmt):
+            async def exec(self, stmt):
+                self.statement = stmt
                 return _Result()
 
         primary_rows = [SimpleNamespace(user_id=8, department_id=106, is_primary=1)]
@@ -994,13 +1008,20 @@ class TestPermissionApiIntegration:
         async def _forbidden_whole_table(*_a, **_k):
             raise AssertionError("aget_active_by_tenant must not be called (whole-table load)")
 
+        session = _Session()
         with (
-            patch("bisheng.core.database.get_async_db_session", lambda: _Session()),
+            patch("bisheng.core.database.get_async_db_session", lambda: session),
             patch.object(UserDepartmentDao, "aget_by_user_ids", AsyncMock(return_value=primary_rows)),
             patch.object(DepartmentDao, "aget_by_ids", AsyncMock(side_effect=_fake_aget_by_ids)),
             patch.object(DepartmentDao, "aget_active_by_tenant", AsyncMock(side_effect=_forbidden_whole_table)),
         ):
-            result = await rp._list_knowledge_space_grant_users(tenant_id=1, keyword="Ali", page=1, page_size=50)
+            result = await rp._list_knowledge_space_grant_users(
+                tenant_id=1,
+                keyword="Ali",
+                page=1,
+                page_size=50,
+                restrict_dept_path="/1/",
+            )
 
         assert result == [
             {
@@ -1010,6 +1031,13 @@ class TestPermissionApiIntegration:
                 "primary_department_path": "总部/研发部/平台组",
             }
         ]
+        sql = str(session.statement.compile(compile_kwargs={"literal_binds": True}))
+        assert "EXISTS" in sql
+        assert "JOIN department" in sql
+        assert "department.path LIKE '/1/%'" in sql
+        assert "department_id IN" not in sql
+        assert "JOIN tenant" not in sql
+        assert "user.password" not in sql
 
     def test_knowledge_space_grant_subject_user_groups_endpoint_returns_tenant_scoped_groups(self):
         app = _make_app(_ViewerUser)

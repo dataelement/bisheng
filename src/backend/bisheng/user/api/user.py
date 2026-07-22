@@ -178,6 +178,8 @@ async def get_info(login_user: LoginUser = Depends(LoginUser.get_login_user)):
     if not db_user:
         raise NotFoundError()
 
+    db_user_roles = await UserRoleDao.aget_user_roles(user_id)
+    role_ids = [user_role.role_id for user_role in db_user_roles]
     admin_group = await UserGroupDao.aget_user_admin_group(user_id)
     admin_group = [one.group_id for one in admin_group]
     dept_admin_depts = await DepartmentDao.aget_user_admin_departments(user_id)
@@ -185,8 +187,12 @@ async def get_info(login_user: LoginUser = Depends(LoginUser.get_login_user)):
     role, web_menu = await login_user.get_roles_web_menu(
         db_user,
         is_department_admin=is_department_admin,
+        role_ids=role_ids,
     )
-    menu_approval_mode_workbench, menu_approval_mode_admin = await login_user.compute_menu_approval_modes(db_user)
+    menu_approval_mode_workbench, menu_approval_mode_admin = await login_user.compute_menu_approval_modes(
+        db_user,
+        role_ids=role_ids,
+    )
     # Legacy union flag, kept for back-compat clients during transition.
     menu_approval_mode = menu_approval_mode_workbench or menu_approval_mode_admin
 
@@ -206,7 +212,7 @@ async def get_info(login_user: LoginUser = Depends(LoginUser.get_login_user)):
         from bisheng.utils.http_middleware import _check_is_global_super
 
         is_global_super, active = await asyncio.gather(
-            _check_is_global_super(user_id),
+            _check_is_global_super(user_id, role_ids=role_ids),
             UserTenantDao.aget_active_user_tenant(user_id),
         )
         leaf_tenant_id = active.tenant_id if active else ROOT_TENANT_ID
@@ -226,7 +232,11 @@ async def get_info(login_user: LoginUser = Depends(LoginUser.get_login_user)):
     # PRD §4.5: Child Admin manages own tenant's user groups → enable tab.
     can_manage_user_groups = bool(login_user.is_admin() or is_department_admin or is_child_admin)
 
-    entry = await LoginUser.user_entry_payload_for_read(db_user)
+    entry = await LoginUser.user_entry_payload_for_read(
+        db_user,
+        role_ids=role_ids,
+        is_department_admin=is_department_admin,
+    )
     return resp_200(
         await UserService.build_user_read(
             db_user,

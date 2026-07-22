@@ -1,4 +1,5 @@
 import request from "./request";
+import { resolveKnowledgeParseFailureMessage } from "./knowledgeParseFailureMessage";
 
 // Standard backend response wrapper
 interface ApiResponse<T> {
@@ -39,6 +40,9 @@ export enum FileType {
     HTML = "html",
     TXT = "txt",
     MD = "md",
+    AUDIO = "audio",
+    VIDEO = "video",
+    WEB = "web",
     WPS = "wps",
     DPS = "dps",
     ET = "et",
@@ -387,6 +391,9 @@ function extractKnowledgeSpaceList(response: unknown): RawKnowledgeSpace[] {
 function deriveFileType(raw: any): FileType {
     // Backend: file_type: 0(dir) | 1(file)
     if (raw?.type === "folder" || raw?.file_type === 0 || raw?.file_type === "0") return FileType.FOLDER;
+    if (raw?.file_source === "web_link") return FileType.WEB;
+    if (raw?.file_source === "audio_transcript") return FileType.AUDIO;
+    if (raw?.file_source === "video_transcript") return FileType.VIDEO;
 
     const fileName = raw?.file_name ?? raw?.name ?? raw?.object_name ?? raw?.path ?? "";
     const ext = String(fileName).split(".").pop()?.toLowerCase() ?? "";
@@ -419,6 +426,19 @@ function deriveFileType(raw: any): FileType {
             return FileType.TXT;
         case "md":
             return FileType.MD;
+        case "mp3":
+        case "wav":
+        case "m4a":
+        case "aac":
+        case "flac":
+        case "ogg":
+            return FileType.AUDIO;
+        case "mp4":
+        case "mov":
+        case "avi":
+        case "mkv":
+        case "webm":
+            return FileType.VIDEO;
         case "wps":
             return FileType.WPS;
         case "dps":
@@ -443,6 +463,10 @@ function formatSensitiveViolationMessage(hits: any[]): string {
     return `您上传的文件包含违规内容：{${words.join(",")}}，请修改后重试`;
 }
 
+function formatMediaParseFailureMessage(parsed: any): string | undefined {
+    return resolveKnowledgeParseFailureMessage(parsed);
+}
+
 export function extractKnowledgeFileError(raw: any): string | undefined {
     const directMessage = raw?.error_message;
     if (typeof directMessage === "string" && directMessage.trim()) {
@@ -459,6 +483,10 @@ export function extractKnowledgeFileError(raw: any): string | undefined {
         const parsed = JSON.parse(trimmedRemark);
         if (parsed?.reason === "sensitive_check") {
             return formatSensitiveViolationMessage(Array.isArray(parsed?.hits) ? parsed.hits : []);
+        }
+        const mediaMessage = formatMediaParseFailureMessage(parsed);
+        if (mediaMessage) {
+            return mediaMessage;
         }
 
         const statusMessage = parsed?.status_message;
@@ -526,13 +554,43 @@ export function extractKnowledgeFileSensitiveCheck(raw: any): KnowledgeFileSensi
     }
 }
 
+/** Display title for imported web links. */
+function ensureWebLinkHtmlName(name: string): string {
+    const trimmed = name.trim().replace(/\.md$/i, "").trim();
+    if (!trimmed) return "";
+    return trimmed.toLowerCase().endsWith(".html") ? trimmed : `${trimmed}.html`;
+}
+
+export function resolveWebLinkDisplayName(
+    fileName: string,
+    userMetadata?: Record<string, unknown>,
+): string {
+    const stem = ensureWebLinkHtmlName(fileName);
+    if (stem) return stem;
+    const webTitle = typeof userMetadata?.web_title === "string" ? userMetadata.web_title.trim() : "";
+    return ensureWebLinkHtmlName(webTitle) || "web-link.html";
+}
+
+/** Normalize user-entered web link display name to persisted file_name. */
+export function toWebLinkFileName(displayName: string): string {
+    return ensureWebLinkHtmlName(displayName);
+}
+
+export function isWebLinkKnowledgeFile(file: Pick<KnowledgeFile, "fileSource" | "type">): boolean {
+    return file.fileSource === "web_link" || file.type === FileType.WEB;
+}
+
 /** Map a raw space child (file/folder) to the frontend KnowledgeFile model */
 function mapChild(raw: any, spaceId: string): KnowledgeFile {
     // Backend keys in children response usually look like:
     // id, file_name, file_type(0|1), file_level_path, knowledge_id,
     // status(numeric), update_time/create_time, tags(list of {id,name}) for files
     const idVal = raw?.id ?? raw?.file_id ?? raw?.knowledge_file_id ?? "";
-    const nameVal = raw?.name ?? raw?.file_name ?? raw?.object_name ?? raw?.file_name ?? raw?.path ?? "";
+    const rawName = raw?.name ?? raw?.file_name ?? raw?.object_name ?? raw?.file_name ?? raw?.path ?? "";
+    const userMetadata = raw?.user_metadata ?? raw?.userMetadata ?? {};
+    const nameVal = raw?.file_source === "web_link"
+        ? resolveWebLinkDisplayName(String(rawName), userMetadata)
+        : rawName;
 
     const tags: FileTag[] = Array.isArray(raw?.tags)
         ? raw.tags
@@ -601,6 +659,19 @@ function deriveFileTypeFromName(fileName: string): FileType {
         case "jpg": return FileType.JPG;
         case "jpeg": return FileType.JPEG;
         case "png": return FileType.PNG;
+        case "mp3":
+        case "wav":
+        case "m4a":
+        case "aac":
+        case "flac":
+        case "ogg":
+            return FileType.AUDIO;
+        case "mp4":
+        case "mov":
+        case "avi":
+        case "mkv":
+        case "webm":
+            return FileType.VIDEO;
         case "wps": return FileType.WPS;
         case "dps": return FileType.DPS;
         case "et": return FileType.ET;
@@ -1246,11 +1317,14 @@ export async function searchSpaceChildrenApi(params: {
     order_field?: string;
     order_sort?: string;
     file_status?: number[];
-}): Promise<{ data: KnowledgeFile[]; total: number }> {
+}): Promise<{ data: KnowledgeFile[]; has_more: boolean }> {
     const { space_id, ...queryParams } = params;
-    if (!space_id) return { data: [], total: 0 };
+    if (!space_id) return { data: [], has_more: false };
 
-    const res = await request.get<ApiResponse<{ data: RawSpaceChild[]; total: number }>>(
+    // F040: the backend batch-scans the keyword-search candidate set and returns
+    // `has_more` directly instead of an exact post-filter `total` (which would
+    // require materialising every match). Pagination is driven off `has_more`.
+    const res = await request.get<ApiResponse<{ data: RawSpaceChild[]; has_more: boolean }>>(
         `/api/v1/knowledge/space/${space_id}/search`,
         {
             params: {
@@ -1271,7 +1345,7 @@ export async function searchSpaceChildrenApi(params: {
     const list = extractList<RawSpaceChild>(payload);
     return {
         data: list.map(raw => mapChild(raw, space_id)),
-        total: Number(payload?.total ?? list.length),
+        has_more: Boolean(payload?.has_more),
     };
 }
 
@@ -1393,6 +1467,27 @@ export async function addFilesApi(
         }
         return file;
     });
+}
+
+export async function importWebLinkApi(
+    space_id: string,
+    data: { url: string; title?: string; parent_id?: number | null; file_category_code?: string; overwrite?: boolean }
+): Promise<KnowledgeFile> {
+    const res = await request.post(
+        `/api/v1/knowledge/space/${space_id}/web-links`,
+        data,
+        { showError: false } as any
+    ) as ApiResponse<RawSpaceChild> & { message?: string; msg?: string };
+    if (res?.status_code !== undefined && res.status_code !== 200) {
+        const error = new Error(res.status_message || res.message || res.msg || "import web link failed") as Error & {
+            status_code?: number;
+            status_message?: string;
+        };
+        error.status_code = res.status_code;
+        error.status_message = res.status_message;
+        throw error;
+    }
+    return mapChild(res.data, space_id);
 }
 
 /** One file of a folder upload: uploaded body path + its path inside the picked folder. */
@@ -1609,19 +1704,35 @@ export async function batchRetryApi(
 // ─────────────────────────────────────────────
 
 /**
- * Get file preview URL
- * Returns { original_url, preview_url } — prefer preview_url, fallback to original_url
+ * File preview URLs and source metadata.
  */
+export interface KnowledgeFilePreview {
+    original_url: string;
+    preview_url: string;
+    file_source: string;
+    source_url: string;
+    final_url: string;
+    web_title: string;
+    media_kind: string;
+    html_preview_url: string;
+}
+
 export async function getFilePreviewApi(
     space_id: string,
     file_id: string
-): Promise<{ original_url: string; preview_url: string }> {
+): Promise<KnowledgeFilePreview> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const res = await request.get<any>(`/api/v1/knowledge/space/${space_id}/files/${file_id}/preview`);
     const data = res?.data ?? res;
     return {
         original_url: data?.original_url ?? "",
         preview_url: data?.preview_url ?? "",
+        file_source: data?.file_source ?? "",
+        source_url: data?.source_url ?? "",
+        final_url: data?.final_url ?? "",
+        web_title: data?.web_title ?? "",
+        media_kind: data?.media_kind ?? "",
+        html_preview_url: data?.html_preview_url ?? "",
     };
 }
 

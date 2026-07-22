@@ -383,7 +383,7 @@ wheels = [
 
 [[package]]
 name = "backend"
-version = "2.4.0"
+version = "2.6.0"
 source = { virtual = "." }
 dependencies = [
     { name = "aiofiles" },

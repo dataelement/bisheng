@@ -29,6 +29,7 @@ import {
     isKnowledgeItemPending,
     MAX_FOLDER_DEPTH,
     MAX_FOLDER_UPLOAD_COUNT,
+    type UploadSizeLimits,
 } from "../knowledgeUtils";
 import { useLocalize } from "~/hooks";
 import { dispatchKnowledgeSpaceFilesRefresh } from "./useFileManager";
@@ -398,7 +399,7 @@ export function useFileUpload({
     const handleUploadFolder = useCallback(
         async (
             fileList: FileList | File[],
-            options: { allowedExtensions: readonly string[]; maxSizeMB: number },
+            options: { allowedExtensions: readonly string[]; maxSizeMB: number; limits?: UploadSizeLimits },
         ) => {
             if (!activeSpace || !fileList || fileList.length === 0) return;
             // Re-entry guard. Ignore a second call while the first is still

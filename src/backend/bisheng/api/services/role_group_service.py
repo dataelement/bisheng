@@ -134,8 +134,8 @@ class RoleGroupService():
         # Log Audit Logs
         AuditLogService.delete_user_group(login_user, get_request_ip(request), group_info)
         # Resources and roles are no longer associated with user groups, so deletion
-        # neither migrates resources nor cascades role removal. Residual side effects
-        # (admin row cleanup + gateway notify) are shared with the F003 delete path.
+        # neither migrates resources nor cascades role removal. Gateway notification
+        # is shared with the F003 delete path; GroupDao removes membership rows.
         from bisheng.user_group.domain.services.user_group_service import (
             purge_user_group_residual_sync,
         )

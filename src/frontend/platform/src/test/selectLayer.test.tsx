@@ -5,6 +5,13 @@ import {
   DialogDescription,
   DialogTitle,
 } from "@/components/bs-ui/dialog";
+import {
+  Portal,
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/bs-ui/tooltip";
 import { fireEvent, render, screen } from "@/test/test-utils";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -34,6 +41,24 @@ beforeAll(() => {
 });
 
 describe("select layering", () => {
+  it("keeps tooltip content above select menus", async () => {
+    render(
+      <TooltipProvider>
+        <Tooltip open>
+          <TooltipTrigger>Temporary knowledge help</TooltipTrigger>
+          <Portal>
+            <TooltipContent>Temporary knowledge description</TooltipContent>
+          </Portal>
+        </Tooltip>
+      </TooltipProvider>,
+    );
+
+    const tooltip = await screen.findByRole("tooltip");
+    const tooltipContent = tooltip.closest("[data-side]");
+    expect(tooltipContent).not.toBeNull();
+    expect(tooltipContent?.className).toContain("z-[130]");
+  });
+
   it("keeps select content above dialog content", async () => {
     render(
       <Dialog open onOpenChange={() => {}}>

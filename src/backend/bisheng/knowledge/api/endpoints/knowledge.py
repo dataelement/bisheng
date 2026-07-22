@@ -6,22 +6,34 @@ from io import BytesIO
 from typing import List, Optional, Any, Literal
 
 import pandas as pd
-from fastapi import (APIRouter, BackgroundTasks, Body, Depends, File, HTTPException, Query, Request,
-                     UploadFile)
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, HTTPException, Query, Request, UploadFile
 from fastapi.encoders import jsonable_encoder
 from loguru import logger
 from starlette.concurrency import run_in_threadpool
 
 from bisheng.api.services import knowledge_imp
 from bisheng.api.services.knowledge_imp import add_qa
-from bisheng.api.v1.schemas import (KnowledgeFileProcess, UpdatePreviewFileChunk, UploadFileResponse,
-                                    UpdateKnowledgeReq, KnowledgeFileReProcess)
+from bisheng.api.v1.schemas import (
+    KnowledgeFileProcess,
+    UpdatePreviewFileChunk,
+    UploadFileResponse,
+    UpdateKnowledgeReq,
+    KnowledgeFileReProcess,
+)
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import UnAuthorizedError, NotFoundError, ServerError
-from bisheng.common.errcode.knowledge import KnowledgeCPError, KnowledgeQAError, KnowledgeRebuildingError, \
-    KnowledgePreviewError, KnowledgeNotQAError, KnowledgeNoEmbeddingError, KnowledgeNotExistError, KnowledgeCPEmptyError
+from bisheng.common.errcode.knowledge import (
+    KnowledgeCPError,
+    KnowledgeQAError,
+    KnowledgeRebuildingError,
+    KnowledgePreviewError,
+    KnowledgeNotQAError,
+    KnowledgeNoEmbeddingError,
+    KnowledgeNotExistError,
+    KnowledgeCPEmptyError,
+)
 from bisheng.common.errcode.llm_tenant import LLMModelNotAccessibleError
 from bisheng.common.schemas.api import resp_200, resp_500, UnifiedResponseModel
 from bisheng.common.services import telemetry_service
@@ -30,14 +42,23 @@ from bisheng.core.cache.utils import save_uploaded_file
 from bisheng.core.logger import trace_id_var
 from bisheng.database.models.role_access import AccessType, WebMenuResource
 from bisheng.knowledge.api.dependencies import get_knowledge_service, get_knowledge_file_service
-from bisheng.knowledge.domain.models.knowledge import (KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum,
-                                                       KnowledgeUpdate)
+from bisheng.knowledge.domain.models.knowledge import KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum, KnowledgeUpdate
 from bisheng.knowledge.domain.models.knowledge import KnowledgeState
-from bisheng.knowledge.domain.models.knowledge_file import (KnowledgeFileDao, KnowledgeFileStatus,
-                                                            QAKnoweldgeDao, QAKnowledgeUpsert, QAStatus)
+from bisheng.knowledge.domain.models.knowledge_file import (
+    KnowledgeFileDao,
+    KnowledgeFileStatus,
+    QAKnoweldgeDao,
+    QAKnowledgeUpsert,
+    QAStatus,
+)
+from bisheng.knowledge.domain.upload_file_size import validate_knowledge_upload_file_size
 from bisheng.knowledge.domain.schemas.knowledge_schema import (
-    AddKnowledgeMetadataFieldsReq, UpdateKnowledgeMetadataFieldsReq,
-    ModifyKnowledgeFileMetaDataReq, UpdateFileTagsReq, BatchAddFileTagsReq)
+    AddKnowledgeMetadataFieldsReq,
+    UpdateKnowledgeMetadataFieldsReq,
+    ModifyKnowledgeFileMetaDataReq,
+    UpdateFileTagsReq,
+    BatchAddFileTagsReq,
+)
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.llm.domain import LLMService
 from bisheng.llm.domain.const import LLMModelType
@@ -48,46 +69,52 @@ from bisheng.utils import generate_uuid, calc_data_sha256
 from bisheng.worker.knowledge.qa import insert_qa_celery
 
 # build router
-router = APIRouter(prefix='/knowledge', tags=['Knowledge'])
+router = APIRouter(prefix="/knowledge", tags=["Knowledge"])
 
 
-@router.post('/upload')
+@router.post("/upload")
 async def upload_file(*, file: UploadFile = File(...)):
     try:
         file_name = file.filename
+        validate_knowledge_upload_file_size(file_name, file.size)
 
         uuid_file_name = await KnowledgeService.save_upload_file_original_name(file_name)
 
-        file_path = await save_uploaded_file(file, 'bisheng', uuid_file_name)
+        file_path = await save_uploaded_file(file, "bisheng", uuid_file_name)
 
         if not isinstance(file_path, str):
             file_path = str(file_path)
 
         return resp_200(UploadFileResponse(file_path=file_path))
 
+    except BaseErrorCode:
+        raise
     except Exception as e:
-        logger.error(f'File upload failed: {e}')
-        raise ServerError(msg=f'File upload failed: {e}')
+        logger.error(f"File upload failed: {e}")
+        raise ServerError(msg=f"File upload failed: {e}")
 
     finally:
         await file.close()
 
 
-@router.post('/upload/{knowledge_id}')
+@router.post("/upload/{knowledge_id}")
 @require_quota(QuotaResourceType.KNOWLEDGE_SPACE_FILE)
-async def upload_knowledge_file(*,
-                                request: Request,
-                                login_user: UserPayload = Depends(UserPayload.get_login_user),
-                                knowledge_id: int,
-                                file: UploadFile = File(...)):
-    """ Knowledge base upload file """
+async def upload_knowledge_file(
+    *,
+    request: Request,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    knowledge_id: int,
+    file: UploadFile = File(...),
+):
+    """Knowledge base upload file"""
 
     try:
         file_name = file.filename
+        validate_knowledge_upload_file_size(file_name, file.size)
 
         # Save the uploaded file
         uuid_file_name = await KnowledgeService.save_upload_file_original_name(file_name)
-        file_path = await save_uploaded_file(file, 'bisheng', uuid_file_name)
+        file_path = await save_uploaded_file(file, "bisheng", uuid_file_name)
 
         if not isinstance(file_path, str):
             file_path = str(file_path)
@@ -110,114 +137,131 @@ async def upload_knowledge_file(*,
 
         return resp_200(ret)
 
+    except BaseErrorCode:
+        raise
     except Exception as e:
-        raise ServerError(msg=f'File upload failed: {e}')
+        raise ServerError(msg=f"File upload failed: {e}")
 
     finally:
         await file.close()
 
 
-@router.post('/preview')
-async def preview_file_chunk(*,
-                             request: Request,
-                             login_user: UserPayload = Depends(UserPayload.get_login_user),
-                             background_tasks: BackgroundTasks,
-                             req_data: KnowledgeFileProcess):
-    """ Get a chunked preview of a file """
+@router.post("/preview")
+async def preview_file_chunk(
+    *,
+    request: Request,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    background_tasks: BackgroundTasks,
+    req_data: KnowledgeFileProcess,
+):
+    """Get a chunked preview of a file"""
 
     preview_file_id = generate_uuid()
-    redis_key = f'preview_file:{preview_file_id}'
+    redis_key = f"preview_file:{preview_file_id}"
     redis_client = await get_redis_client()
     await redis_client.aset(redis_key, {"status": "processing"})
 
     async def exec_task():
         try:
-            parse_type, file_share_url, res, partitions = await KnowledgeService.get_preview_file_chunk(request,
-                                                                                                        login_user,
-                                                                                                        req_data)
-            await redis_client.aset(redis_key, {
-                "status": "completed",
-                "data": {
-                    'parse_type': parse_type,
-                    'file_url': file_share_url,
-                    'chunks': [one.model_dump() for one in res],
-                    'partitions': partitions
-                }
-            })
+            parse_type, file_share_url, res, partitions = await KnowledgeService.get_preview_file_chunk(
+                request, login_user, req_data
+            )
+            await redis_client.aset(
+                redis_key,
+                {
+                    "status": "completed",
+                    "data": {
+                        "parse_type": parse_type,
+                        "file_url": file_share_url,
+                        "chunks": [one.model_dump() for one in res],
+                        "partitions": partitions,
+                    },
+                },
+            )
         except BaseErrorCode as exc:
-            logger.exception(f'Preview file chunk error: {exc}')
-            await redis_client.aset(redis_key, {
-                "status": "error",
-                "code": exc.code,
-                "message": exc.message,
-                "data": {
-                    "exception": str(exc),
-                    **exc.kwargs,
-                }
-            })
+            logger.exception(f"Preview file chunk error: {exc}")
+            await redis_client.aset(
+                redis_key,
+                {
+                    "status": "error",
+                    "code": exc.code,
+                    "message": exc.message,
+                    "data": {
+                        "exception": str(exc),
+                        **exc.kwargs,
+                    },
+                },
+            )
         except Exception as exc:
-            logger.exception(f'Preview file chunk error: {exc}')
-            await redis_client.aset(redis_key, {
-                "status": "error",
-                "code": KnowledgePreviewError.Code,
-                "message": str(exc) or KnowledgePreviewError.Msg,
-                "data": {
-                    "exception": str(exc),
-                }
-            })
+            logger.exception(f"Preview file chunk error: {exc}")
+            await redis_client.aset(
+                redis_key,
+                {
+                    "status": "error",
+                    "code": KnowledgePreviewError.Code,
+                    "message": str(exc) or KnowledgePreviewError.Msg,
+                    "data": {
+                        "exception": str(exc),
+                    },
+                },
+            )
 
     background_tasks.add_task(exec_task)
-    return resp_200(data={'preview_file_id': preview_file_id})
+    return resp_200(data={"preview_file_id": preview_file_id})
 
 
-@router.get('/preview/status')
+@router.get("/preview/status")
 async def get_preview_file_status(
     request: Request,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
-    preview_file_id: str = Query(..., description='Preview the file returned by the interfaceID')):
-    redis_key = f'preview_file:{preview_file_id}'
+    preview_file_id: str = Query(..., description="Preview the file returned by the interfaceID"),
+):
+    redis_key = f"preview_file:{preview_file_id}"
     redis_client = await get_redis_client()
     file_status = await redis_client.aget(redis_key)
     if not file_status:
         raise KnowledgePreviewError.http_exception()
-    if file_status.get('status') == 'completed':
+    if file_status.get("status") == "completed":
         await redis_client.aexpire_key(redis_key, 10)
     return resp_200(data=file_status)
 
 
-@router.put('/preview')
-async def update_preview_file_chunk(*,
-                                    request: Request,
-                                    login_user: UserPayload = Depends(UserPayload.get_login_user),
-                                    req_data: UpdatePreviewFileChunk):
-    """ Updating a chunked preview of a file """
+@router.put("/preview")
+async def update_preview_file_chunk(
+    *, request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user), req_data: UpdatePreviewFileChunk
+):
+    """Updating a chunked preview of a file"""
 
     res = await KnowledgeService.update_preview_file_chunk(request, login_user, req_data)
     return resp_200(res)
 
 
-@router.delete('/preview')
-def delete_preview_file_chunk(*,
-                              request: Request,
-                              login_user: UserPayload = Depends(UserPayload.get_login_user),
-                              req_data: UpdatePreviewFileChunk):
-    """ Delete a chunked preview of a file """
+@router.delete("/preview")
+def delete_preview_file_chunk(
+    *, request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user), req_data: UpdatePreviewFileChunk
+):
+    """Delete a chunked preview of a file"""
 
     res = KnowledgeService.delete_preview_file_chunk(request, login_user, req_data)
     return resp_200(res)
 
 
-@router.post('/process')
-async def process_knowledge_file(*,
-                                 request: Request,
-                                 login_user: UserPayload = Depends(UserPayload.get_login_user),
-                                 background_tasks: BackgroundTasks,
-                                 req_data: KnowledgeFileProcess):
-    """ Uploading Files to the Knowledge Base """
+@router.post("/process")
+async def process_knowledge_file(
+    *,
+    request: Request,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    background_tasks: BackgroundTasks,
+    req_data: KnowledgeFileProcess,
+):
+    """Uploading Files to the Knowledge Base"""
 
     upload_limit_bytes = await QuotaService.get_knowledge_space_upload_limit_bytes(login_user)
     res = await KnowledgeService.aprocess_knowledge_file(
-        request, login_user, background_tasks, req_data,
+        request,
+        login_user,
+        background_tasks,
+        req_data,
         upload_limit_bytes=upload_limit_bytes,
     )
     return resp_200(res)
@@ -225,24 +269,21 @@ async def process_knowledge_file(*,
 
 # Modify Segment Reprocessing
 @router.post("/process/rebuild")
-async def rebuild_knowledge_file(*,
-                                 request: Request,
-                                 login_user: UserPayload = Depends(UserPayload.get_login_user),
-                                 req_data: KnowledgeFileReProcess):
-    """ Reprocessing Knowledge Base Files """
+async def rebuild_knowledge_file(
+    *, request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user), req_data: KnowledgeFileReProcess
+):
+    """Reprocessing Knowledge Base Files"""
 
     res = await KnowledgeService.rebuild_knowledge_file(request, login_user, req_data)
     return resp_200(res)
 
 
-@router.post('/create')
-async def create_knowledge(*,
-                           request: Request,
-                           login_user: UserPayload = Depends(UserPayload.get_login_user),
-                           knowledge: KnowledgeCreate):
-    """ Create Knowledge Base. """
-    await UserPayload.assert_effective_web_menu_contains(
-        login_user.user_id, WebMenuResource.CREATE_KNOWLEDGE.value)
+@router.post("/create")
+async def create_knowledge(
+    *, request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user), knowledge: KnowledgeCreate
+):
+    """Create Knowledge Base."""
+    await UserPayload.assert_effective_web_menu_contains(login_user.user_id, WebMenuResource.CREATE_KNOWLEDGE.value)
     db_knowledge = await run_in_threadpool(
         KnowledgeService.create_knowledge,
         request,
@@ -252,20 +293,21 @@ async def create_knowledge(*,
     return resp_200(db_knowledge)
 
 
-@router.post('/copy')
-async def copy_knowledge(*,
-                         request: Request,
-                         background_tasks: BackgroundTasks,
-                         login_user: UserPayload = Depends(UserPayload.get_login_user),
-                         knowledge_id: int = Body(..., embed=True),
-                         knowledge_name: str = Body(default=None, embed=True)):
-    """ Copy Knowledge Base. """
+@router.post("/copy")
+async def copy_knowledge(
+    *,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    knowledge_id: int = Body(..., embed=True),
+    knowledge_name: str = Body(default=None, embed=True),
+):
+    """Copy Knowledge Base."""
     knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
     if not knowledge:
         return KnowledgeNotExistError.return_resp()
 
-    await UserPayload.assert_effective_web_menu_contains(
-        login_user.user_id, WebMenuResource.CREATE_KNOWLEDGE.value)
+    await UserPayload.assert_effective_web_menu_contains(login_user.user_id, WebMenuResource.CREATE_KNOWLEDGE.value)
     try:
         await KnowledgeService.permission_service.ensure_knowledge_read_async(
             login_user=login_user,
@@ -286,11 +328,13 @@ async def copy_knowledge(*,
 
 
 @router.post("/qa/copy")
-async def copy_qa_knowledge(*,
-                            request: Request,
-                            login_user: UserPayload = Depends(UserPayload.get_login_user),
-                            knowledge_id: int = Body(..., embed=True),
-                            knowledge_name: str = Body(default=None, embed=True)):
+async def copy_qa_knowledge(
+    *,
+    request: Request,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    knowledge_id: int = Body(..., embed=True),
+    knowledge_name: str = Body(default=None, embed=True),
+):
     """
     SalinQAThe knowledge base upon.
     :param request:
@@ -304,8 +348,7 @@ async def copy_qa_knowledge(*,
     if not qa_knowledge:
         return KnowledgeNotExistError.return_resp()
 
-    await UserPayload.assert_effective_web_menu_contains(
-        login_user.user_id, WebMenuResource.CREATE_KNOWLEDGE.value)
+    await UserPayload.assert_effective_web_menu_contains(login_user.user_id, WebMenuResource.CREATE_KNOWLEDGE.value)
     try:
         await KnowledgeService.permission_service.ensure_knowledge_read_async(
             login_user=login_user,
@@ -330,28 +373,31 @@ async def copy_qa_knowledge(*,
     return resp_200(knowledge)
 
 
-@router.get('', status_code=200)
-async def get_knowledge(*,
-                        request: Request,
-                        login_user: UserPayload = Depends(UserPayload.get_login_user),
-                        permission_id: Literal['view_kb', 'use_kb'] = Query(default='use_kb'),
-                        name: str = None,
-                        knowledge_type: int = Query(default=KnowledgeTypeEnum.NORMAL.value,
-                                                    alias='type'),
-                        sort_by: Literal['create_time', 'update_time', 'name'] = Query(default='update_time'),
-                        preferred_ids: Optional[str] = Query(
-                            default=None,
-                            description=('Comma-separated knowledge ids to pin to the top of the global '
-                                         'sort (before sort_by). Used by workstation plus-menu so admin-'
-                                         'configured KBs surface on page 1 regardless of name. Ignored '
-                                         'when `cursor` is set.'),
-                        ),
-                        page_size: Optional[int] = 10,
-                        cursor: Optional[str] = Query(
-                            default=None,
-                            description='F027 cursor-based pagination token from the previous response\'s '
-                                        '`next_cursor`. Omit (or pass empty) to fetch the first page.',
-                        )):
+@router.get("", status_code=200)
+async def get_knowledge(
+    *,
+    request: Request,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    permission_id: Literal["view_kb", "use_kb"] = Query(default="use_kb"),
+    name: str = None,
+    knowledge_type: int = Query(default=KnowledgeTypeEnum.NORMAL.value, alias="type"),
+    sort_by: Literal["create_time", "update_time", "name"] = Query(default="update_time"),
+    preferred_ids: Optional[str] = Query(
+        default=None,
+        description=(
+            "Comma-separated knowledge ids to pin to the top of the global "
+            "sort (before sort_by). Used by workstation plus-menu so admin-"
+            "configured KBs surface on page 1 regardless of name. Ignored "
+            "when `cursor` is set."
+        ),
+    ),
+    page_size: Optional[int] = 10,
+    cursor: Optional[str] = Query(
+        default=None,
+        description="F027 cursor-based pagination token from the previous response's "
+        "`next_cursor`. Omit (or pass empty) to fetch the first page.",
+    ),
+):
     """List knowledge bases with cursor-based pagination (F027).
 
     Response shape (PageInfiniteCursorData): ``{data, page_size, has_more, next_cursor}``.
@@ -362,7 +408,7 @@ async def get_knowledge(*,
     pinned: Optional[List[int]] = None
     if preferred_ids:
         parsed: List[int] = []
-        for raw in preferred_ids.split(','):
+        for raw in preferred_ids.split(","):
             raw = raw.strip()
             if not raw:
                 continue
@@ -385,209 +431,219 @@ async def get_knowledge(*,
     return resp_200(data=result)
 
 
-@router.get('/info', status_code=200)
-def get_knowledge_info(*,
-                       request: Request,
-                       login_user: UserPayload = Depends(UserPayload.get_login_user),
-                       knowledge_id: List[int] = Query(...)):
-    """ Based on Knowledge BaseIDRead Knowledge Base Information. """
+@router.get("/info", status_code=200)
+def get_knowledge_info(
+    *,
+    request: Request,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    knowledge_id: List[int] = Query(...),
+):
+    """Based on Knowledge BaseIDRead Knowledge Base Information."""
     res = KnowledgeService.get_knowledge_info(request, login_user, knowledge_id)
     return resp_200(data=res)
 
 
-@router.put('/', status_code=200)
-def update_knowledge(*,
-                     request: Request,
-                     login_user: UserPayload = Depends(UserPayload.get_login_user),
-                     knowledge: KnowledgeUpdate):
+@router.put("/", status_code=200)
+def update_knowledge(
+    *, request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user), knowledge: KnowledgeUpdate
+):
     res = KnowledgeService.update_knowledge(request, login_user, knowledge)
     return resp_200(data=res)
 
 
-@router.delete('/', status_code=200)
-def delete_knowledge(*,
-                     request: Request,
-                     login_user: UserPayload = Depends(UserPayload.get_login_user),
-                     knowledge_id: int = Body(..., embed=True)):
-    """ Delete Knowledge Base Information. """
+@router.delete("/", status_code=200)
+def delete_knowledge(
+    *,
+    request: Request,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    knowledge_id: int = Body(..., embed=True),
+):
+    """Delete Knowledge Base Information."""
 
     KnowledgeService.delete_knowledge(request, login_user, knowledge_id)
-    return resp_200(message='Delete successful')
+    return resp_200(message="Delete successful")
 
 
 # Personal Knowledge Base Information Acquisition
-@router.get('/personal_knowledge_info', status_code=200)
-def get_personal_knowledge_info(
-    *,
-    request: Request,
-    login_user: UserPayload = Depends(UserPayload.get_login_user)):
-    """ Get personal knowledge base information. """
-    knowledge = KnowledgeDao.get_user_knowledge(login_user.user_id, None,
-                                                KnowledgeTypeEnum.PRIVATE)
+@router.get("/personal_knowledge_info", status_code=200)
+def get_personal_knowledge_info(*, request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user)):
+    """Get personal knowledge base information."""
+    knowledge = KnowledgeDao.get_user_knowledge(login_user.user_id, None, KnowledgeTypeEnum.PRIVATE)
 
     if not knowledge:
         model = LLMService.get_knowledge_llm()
-        knowledgeCreate = KnowledgeCreate(name='Personal Knowledge Base',
-                                          type=KnowledgeTypeEnum.PRIVATE.value,
-                                          user_id=login_user.user_id,
-                                          model=model.embedding_model_id)
+        knowledgeCreate = KnowledgeCreate(
+            name="Personal Knowledge Base",
+            type=KnowledgeTypeEnum.PRIVATE.value,
+            user_id=login_user.user_id,
+            model=model.embedding_model_id,
+        )
 
         knowledge = [KnowledgeService.create_knowledge(request, login_user, knowledgeCreate)]
 
     return resp_200(data=knowledge)
 
 
-@router.get('/file_list/{knowledge_id}', status_code=200)
-async def get_filelist(*,
-                       request: Request,
-                       login_user: UserPayload = Depends(UserPayload.get_login_user),
-                       file_name: str = None,
-                       file_ids: List[int] = None,
-                       knowledge_id: int = 0,
-                       page_size: int = 10,
-                       page_num: int = 1,
-                       status: List[int] = Query(default=None)):
-    """ Get knowledge base file information. """
+@router.get("/file_list/{knowledge_id}", status_code=200)
+async def get_filelist(
+    *,
+    request: Request,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    file_name: str = None,
+    file_ids: List[int] = Query(default=None),
+    knowledge_id: int = 0,
+    page_size: int = 10,
+    page_num: int = 1,
+    status: List[int] = Query(default=None),
+):
+    """Get knowledge base file information."""
     data, total, flag = await KnowledgeService.aget_knowledge_files(
-        request, login_user, knowledge_id,
-        file_name, status, page_num,
-        page_size, file_ids,
+        request,
+        login_user,
+        knowledge_id,
+        file_name,
+        status,
+        page_num,
+        page_size,
+        file_ids,
     )
 
-    return resp_200({
-        'data': data,
-        'total': total,
-        'writeable': flag,
-    })
+    return resp_200(
+        {
+            "data": data,
+            "total": total,
+            "writeable": flag,
+        }
+    )
 
 
-@router.get('/qa/list/{qa_knowledge_id}', status_code=200)
-async def get_QA_list(*,
-                      qa_knowledge_id: int,
-                      page_size: int = 10,
-                      page_num: int = 1,
-                      question: Optional[str] = None,
-                      answer: Optional[str] = None,
-                      keyword: Optional[str] = None,
-                      status: Optional[int] = None,
-                      login_user: UserPayload = Depends(UserPayload.get_login_user)):
-    """ Get knowledge base file information. """
+@router.get("/qa/list/{qa_knowledge_id}", status_code=200)
+async def get_QA_list(
+    *,
+    qa_knowledge_id: int,
+    page_size: int = 10,
+    page_num: int = 1,
+    question: Optional[str] = None,
+    answer: Optional[str] = None,
+    keyword: Optional[str] = None,
+    status: Optional[int] = None,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    """Get knowledge base file information."""
     db_knowledge = await KnowledgeService.ajudge_qa_knowledge_view(login_user, qa_knowledge_id)
 
-    qa_list, total_count = await knowledge_imp.list_qa_by_knowledge_id(qa_knowledge_id, page_size,
-                                                                       page_num, question, answer,
-                                                                       keyword, status)
+    qa_list, total_count = await knowledge_imp.list_qa_by_knowledge_id(
+        qa_knowledge_id, page_size, page_num, question, answer, keyword, status
+    )
     user_list = UserDao.get_user_by_ids([qa.user_id for qa in qa_list])
     user_map = {user.user_id: user.user_name for user in user_list}
     data = [jsonable_encoder(qa) for qa in qa_list]
     for qa in data:
-        qa['questions'] = qa['questions'][0]
-        qa['answers'] = json.loads(qa['answers'])[0]
-        qa['user_name'] = user_map.get(qa['user_id'], qa['user_id'])
+        qa["questions"] = qa["questions"][0]
+        qa["answers"] = json.loads(qa["answers"])[0]
+        qa["user_name"] = user_map.get(qa["user_id"], qa["user_id"])
 
-    return resp_200({
-        'data':
-            data,
-        'total':
-            total_count,
-        'writeable':
-            await KnowledgeService.permission_service.check_access_async(
+    return resp_200(
+        {
+            "data": data,
+            "total": total_count,
+            "writeable": await KnowledgeService.permission_service.check_access_async(
                 login_user=login_user,
                 owner_user_id=db_knowledge.user_id,
                 knowledge_id=qa_knowledge_id,
                 access_type=AccessType.KNOWLEDGE_WRITE,
-            )
-    })
+            ),
+        }
+    )
 
 
-@router.post('/retry', status_code=200)
-async def retry(*,
-                request: Request,
-                login_user: UserPayload = Depends(UserPayload.get_login_user),
-                req_data: dict):
+@router.post("/retry", status_code=200)
+async def retry(*, request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user), req_data: dict):
     """Failed Retry"""
     await KnowledgeService.retry_files(request, login_user, req_data)
     return resp_200()
 
 
-@router.delete('/file/{file_id}', status_code=200)
-def delete_knowledge_file(*,
-                          request: Request,
-                          file_id: int,
-                          login_user: UserPayload = Depends(UserPayload.get_login_user)):
-    """ Delete Knowledge File Information """
+@router.delete("/file/{file_id}", status_code=200)
+def delete_knowledge_file(
+    *, request: Request, file_id: int, login_user: UserPayload = Depends(UserPayload.get_login_user)
+):
+    """Delete Knowledge File Information"""
     KnowledgeService.delete_knowledge_file(request, login_user, [file_id])
-    return resp_200(message='Delete successful')
+    return resp_200(message="Delete successful")
 
 
-@router.get('/chunk', status_code=200)
-def get_knowledge_chunk(request: Request,
-                        login_user: UserPayload = Depends(UserPayload.get_login_user),
-                        knowledge_id: int = Query(..., description='The knowledge base uponID'),
-                        file_ids: List[int] = Query(default=[], description='Doc.ID'),
-                        keyword: str = Query(default='', description='Keywords'),
-                        page: int = Query(default=1, description='Page'),
-                        limit: int = Query(default=10,
-                                           description='Number of bars per page Number of bars per page')):
-    """ Get Knowledge Base Block Content """
+@router.get("/chunk", status_code=200)
+def get_knowledge_chunk(
+    request: Request,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    knowledge_id: int = Query(..., description="The knowledge base uponID"),
+    file_ids: List[int] = Query(default=[], description="Doc.ID"),
+    keyword: str = Query(default="", description="Keywords"),
+    page: int = Query(default=1, description="Page"),
+    limit: int = Query(default=10, description="Number of bars per page Number of bars per page"),
+):
+    """Get Knowledge Base Block Content"""
     # In order to resolvekeywordParameters are sometimes not carried outurldecoderight of privacybug
-    if keyword.startswith('%'):
+    if keyword.startswith("%"):
         keyword = urllib.parse.unquote(keyword)
-    res, total = KnowledgeService.get_knowledge_chunks(request, login_user, knowledge_id, file_ids,
-                                                       keyword, page, limit)
-    return resp_200(data={'data': res, 'total': total})
+    res, total = KnowledgeService.get_knowledge_chunks(
+        request, login_user, knowledge_id, file_ids, keyword, page, limit
+    )
+    return resp_200(data={"data": res, "total": total})
 
 
-@router.put('/chunk', status_code=200)
-def update_knowledge_chunk(request: Request,
-                           login_user: UserPayload = Depends(UserPayload.get_login_user),
-                           knowledge_id: int = Body(..., embed=True, description='The knowledge base uponID'),
-                           file_id: int = Body(..., embed=True, description='Doc.ID'),
-                           chunk_index: int = Body(..., embed=True, description='Chunked index number'),
-                           text: str = Body(..., embed=True, description='Chunked content'),
-                           bbox: str = Body(default='', embed=True, description='Block box selection position')):
-    """ Update Knowledge Base Chunk Content """
-    KnowledgeService.update_knowledge_chunk(request, login_user, knowledge_id, file_id,
-                                            chunk_index, text, bbox)
+@router.put("/chunk", status_code=200)
+def update_knowledge_chunk(
+    request: Request,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    knowledge_id: int = Body(..., embed=True, description="The knowledge base uponID"),
+    file_id: int = Body(..., embed=True, description="Doc.ID"),
+    chunk_index: int = Body(..., embed=True, description="Chunked index number"),
+    text: str = Body(..., embed=True, description="Chunked content"),
+    bbox: str = Body(default="", embed=True, description="Block box selection position"),
+):
+    """Update Knowledge Base Chunk Content"""
+    KnowledgeService.update_knowledge_chunk(request, login_user, knowledge_id, file_id, chunk_index, text, bbox)
     return resp_200()
 
 
-@router.delete('/chunk', status_code=200)
-def delete_knowledge_chunk(request: Request,
-                           login_user: UserPayload = Depends(UserPayload.get_login_user),
-                           knowledge_id: int = Body(..., embed=True, description='The knowledge base uponID'),
-                           file_id: int = Body(..., embed=True, description='Doc.ID'),
-                           chunk_index: int = Body(..., embed=True, description='Chunked index number')):
-    """ Delete Knowledge Base Chunk Content """
-    KnowledgeService.delete_knowledge_chunk(request, login_user, knowledge_id, file_id,
-                                            chunk_index)
+@router.delete("/chunk", status_code=200)
+def delete_knowledge_chunk(
+    request: Request,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    knowledge_id: int = Body(..., embed=True, description="The knowledge base uponID"),
+    file_id: int = Body(..., embed=True, description="Doc.ID"),
+    chunk_index: int = Body(..., embed=True, description="Chunked index number"),
+):
+    """Delete Knowledge Base Chunk Content"""
+    KnowledgeService.delete_knowledge_chunk(request, login_user, knowledge_id, file_id, chunk_index)
     return resp_200()
 
 
-@router.get('/file_share')
-async def get_file_share_url(request: Request,
-                             login_user: UserPayload = Depends(UserPayload.get_login_user),
-                             file_id: int = Query(description='File UniqueID')):
-    original_url, preview_url = await KnowledgeService.aget_file_share_with_auth(
-        login_user, file_id, request=request)
-    return resp_200(data={
-        'original_url': original_url,
-        'preview_url': preview_url
-    })
+@router.get("/file_share")
+async def get_file_share_url(
+    request: Request,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    file_id: int = Query(description="File UniqueID"),
+):
+    original_url, preview_url = await KnowledgeService.aget_file_share_with_auth(login_user, file_id, request=request)
+    return resp_200(data={"original_url": original_url, "preview_url": preview_url})
 
 
-@router.get('/file_bbox')
-def get_file_bbox(request: Request,
-                  login_user: UserPayload = Depends(UserPayload.get_login_user),
-                  file_id: int = Query(description='File UniqueID')):
+@router.get("/file_bbox")
+def get_file_bbox(
+    request: Request,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    file_id: int = Query(description="File UniqueID"),
+):
     res = KnowledgeService.get_file_bbox(request, login_user, file_id)
     return resp_200(data=res)
 
 
-@router.post('/qa/add', status_code=200)
-def qa_add(*, QACreate: QAKnowledgeUpsert,
-           login_user: UserPayload = Depends(UserPayload.get_login_user)):
-    """ Add knowledge base information. """
+@router.post("/qa/add", status_code=200)
+def qa_add(*, QACreate: QAKnowledgeUpsert, login_user: UserPayload = Depends(UserPayload.get_login_user)):
+    """Add knowledge base information."""
     QACreate.user_id = login_user.user_id
     db_knowledge = KnowledgeService.judge_qa_knowledge_write(login_user, QACreate.knowledge_id)
 
@@ -600,12 +656,14 @@ def qa_add(*, QACreate: QAKnowledgeUpsert,
     return resp_200()
 
 
-@router.post('/qa/status_switch', status_code=200)
-def qa_status_switch(*,
-                     status: int = Body(embed=True),
-                     id: int = Body(embed=True),
-                     login_user: UserPayload = Depends(UserPayload.get_login_user)):
-    """ Modify Knowledge Base Information. """
+@router.post("/qa/status_switch", status_code=200)
+def qa_status_switch(
+    *,
+    status: int = Body(embed=True),
+    id: int = Body(embed=True),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    """Modify Knowledge Base Information."""
     qa_db = QAKnoweldgeDao.get_qa_knowledge_by_primary_id(id)
     if qa_db.status == status:
         return resp_200()
@@ -620,9 +678,9 @@ def qa_status_switch(*,
     return resp_200()
 
 
-@router.get('/qa/detail', status_code=200)
+@router.get("/qa/detail", status_code=200)
 def qa_detail(*, id: int, login_user: UserPayload = Depends(UserPayload.get_login_user)):
-    """ Add knowledge base information. """
+    """Add knowledge base information."""
     qa_knowledge = QAKnoweldgeDao.get_qa_knowledge_by_primary_id(id)
     if not qa_knowledge:
         raise NotFoundError()
@@ -631,14 +689,14 @@ def qa_detail(*, id: int, login_user: UserPayload = Depends(UserPayload.get_logi
     return resp_200(data=qa_knowledge)
 
 
-@router.post('/qa/append', status_code=200)
+@router.post("/qa/append", status_code=200)
 def qa_append(
     *,
     ids: list[int] = Body(..., embed=True),
     question: str = Body(..., embed=True),
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
-    """ Add knowledge base information. """
+    """Add knowledge base information."""
     qa_list = QAKnoweldgeDao.select_list(ids)
     knowledge = KnowledgeService.judge_qa_knowledge_write(login_user, qa_list[0].knowledge_id)
 
@@ -651,37 +709,35 @@ def qa_append(
     return resp_200()
 
 
-@router.delete('/qa/delete', status_code=200)
-def qa_delete(*,
-              ids: list[int] = Body(embed=True),
-              login_user: UserPayload = Depends(UserPayload.get_login_user)):
-    """ Delete Knowledge File Information """
+@router.delete("/qa/delete", status_code=200)
+def qa_delete(*, ids: list[int] = Body(embed=True), login_user: UserPayload = Depends(UserPayload.get_login_user)):
+    """Delete Knowledge File Information"""
     qa_list = QAKnoweldgeDao.select_list(ids)
 
     knowledge = KnowledgeService.judge_qa_knowledge_write(login_user, qa_list[0].knowledge_id)
 
     knowledge_imp.delete_vector_data(knowledge, ids)
     QAKnoweldgeDao.delete_batch(ids)
-    telemetry_service.log_event_sync(user_id=login_user.user_id,
-                                     event_type=BaseTelemetryTypeEnum.DELETE_KNOWLEDGE_FILE,
-                                     trace_id=trace_id_var.get())
+    telemetry_service.log_event_sync(
+        user_id=login_user.user_id, event_type=BaseTelemetryTypeEnum.DELETE_KNOWLEDGE_FILE, trace_id=trace_id_var.get()
+    )
     return resp_200()
 
 
-@router.post('/qa/auto_question')
+@router.post("/qa/auto_question")
 def qa_auto_question(
     *,
     number: int = Body(default=3, embed=True),
-    ori_question: str = Body(default='', embed=True),
-    answer: str = Body(default='', embed=True),
-    login_user: UserPayload = Depends(UserPayload.get_login_user)
+    ori_question: str = Body(default="", embed=True),
+    answer: str = Body(default="", embed=True),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     """Automatically generate questions from large models"""
     questions = knowledge_imp.recommend_question(login_user.user_id, ori_question, number=number, answer=answer)
-    return resp_200(data={'questions': questions})
+    return resp_200(data={"questions": questions})
 
 
-@router.get('/qa/export/template', status_code=200)
+@router.get("/qa/export/template", status_code=200)
 async def get_export_url():
     data = [{"Question": "", "Answer": "", "Similar question 1": "", "Similar question 2": ""}]
     df = pd.DataFrame(data)
@@ -691,20 +747,22 @@ async def get_export_url():
     file_name = f"qa_export_template.xlsx"
     bio.seek(0)
     file = UploadFile(filename=file_name, file=bio)
-    file_path = await save_uploaded_file(file, 'bisheng', file_name)
+    file_path = await save_uploaded_file(file, "bisheng", file_name)
     await file.close()
     return resp_200({"url": file_path})
 
 
-@router.get('/qa/export/{qa_knowledge_id}', status_code=200)
-async def get_export_url(*,
-                         qa_knowledge_id: int,
-                         question: Optional[str] = None,
-                         answer: Optional[str] = None,
-                         keyword: Optional[str] = None,
-                         status: Optional[int] = None,
-                         max_lines: Optional[int] = 10000,
-                         login_user: UserPayload = Depends(UserPayload.get_login_user)):
+@router.get("/qa/export/{qa_knowledge_id}", status_code=200)
+async def get_export_url(
+    *,
+    qa_knowledge_id: int,
+    question: Optional[str] = None,
+    answer: Optional[str] = None,
+    keyword: Optional[str] = None,
+    status: Optional[int] = None,
+    max_lines: Optional[int] = 10000,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
     # Query the current knowledge base, whether there are write permissions
     await KnowledgeService.ajudge_qa_knowledge_write(login_user, qa_knowledge_id)
 
@@ -715,22 +773,19 @@ async def get_export_url(*,
     total_num = 0
     page_size = max_lines
     file_list = []
-    file_pr = datetime.now().strftime('%Y%m%d%H%M%S')
+    file_pr = datetime.now().strftime("%Y%m%d%H%M%S")
     file_index = 1
     while True:
-        qa_list, total_count = await knowledge_imp.list_qa_by_knowledge_id(qa_knowledge_id, page_size,
-                                                                           page_num, question, answer,
-                                                                           status)
+        qa_list, total_count = await knowledge_imp.list_qa_by_knowledge_id(
+            qa_knowledge_id, page_size, page_num, question, answer, status
+        )
 
         data = [jsonable_encoder(qa) for qa in qa_list]
         qa_dict_list = []
         all_title = ["Question", "Answer"]
         for qa in data:
-            qa_dict_list.append({
-                "Question": qa['questions'][0],
-                "Answer": json.loads(qa['answers'])[0]
-            })
-            for index, question in enumerate(qa['questions']):
+            qa_dict_list.append({"Question": qa["questions"][0], "Answer": json.loads(qa["answers"])[0]})
+            for index, question in enumerate(qa["questions"]):
                 if index == 0:
                     continue
                 key = f"Similar question {index}"
@@ -749,7 +804,7 @@ async def get_export_url(*,
         file_index = file_index + 1
         bio.seek(0)
         file_io = UploadFile(filename=file_name, file=bio)
-        file_path = await save_uploaded_file(file_io, 'bisheng', file_name)
+        file_path = await save_uploaded_file(file_io, "bisheng", file_name)
         await file_io.close()
         file_list.append(file_path)
         total_num += len(qa_list)
@@ -761,36 +816,39 @@ async def get_export_url(*,
 
 def convert_excel_value(value: Any):
     if value is None or value == "":
-        return ''
-    if str(value) == 'nan' or str(value) == 'null':
-        return ''
+        return ""
+    if str(value) == "nan" or str(value) == "null":
+        return ""
     return str(value)
 
 
-@router.post('/qa/preview/{qa_knowledge_id}', status_code=200)
-def post_import_file(*,
-                     qa_knowledge_id: int,
-                     file_url: str = Body(..., embed=True),
-                     size: Optional[int] = Body(default=0, embed=True),
-                     offset: Optional[int] = Body(default=0, embed=True),
-                     login_user: UserPayload = Depends(UserPayload.get_login_user)):
+@router.post("/qa/preview/{qa_knowledge_id}", status_code=200)
+def post_import_file(
+    *,
+    qa_knowledge_id: int,
+    file_url: str = Body(..., embed=True),
+    size: Optional[int] = Body(default=0, embed=True),
+    offset: Optional[int] = Body(default=0, embed=True),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
     df = pd.read_excel(file_url)
     columns = df.columns.to_list()
-    if 'Question' not in columns or 'Answer' not in columns:
-        raise HTTPException(status_code=500, detail='file must have ‘Question’ Or ‘Answer’ column')
+    if "Question" not in columns or "Answer" not in columns:
+        raise HTTPException(status_code=500, detail="file must have ‘Question’ Or ‘Answer’ column")
     data = df.T.to_dict().values()
     insert_data = []
     for dd in data:
         d = QAKnowledgeUpsert(
             user_id=login_user.user_id,
             knowledge_id=qa_knowledge_id,
-            answers=[convert_excel_value(dd['Answer'])],
-            questions=[convert_excel_value(dd['Question'])],
+            answers=[convert_excel_value(dd["Answer"])],
+            questions=[convert_excel_value(dd["Question"])],
             source=4,
             create_time=datetime.now(),
-            update_time=datetime.now())
+            update_time=datetime.now(),
+        )
         for key, value in dd.items():
-            if key.startswith('Similar question') and convert_excel_value(value):
+            if key.startswith("Similar question") and convert_excel_value(value):
                 d.questions.append(convert_excel_value(value))
         insert_data.append(d)
     try:
@@ -804,12 +862,14 @@ def post_import_file(*,
     return resp_200({"result": insert_data})
 
 
-@router.post('/qa/import/{qa_knowledge_id}', status_code=200)
-def post_import_file(*,
-                     qa_knowledge_id: int,
-                     file_list: list[str] = Body(..., embed=True),
-                     background_tasks: BackgroundTasks,
-                     login_user: UserPayload = Depends(UserPayload.get_login_user)):
+@router.post("/qa/import/{qa_knowledge_id}", status_code=200)
+def post_import_file(
+    *,
+    qa_knowledge_id: int,
+    file_list: list[str] = Body(..., embed=True),
+    background_tasks: BackgroundTasks,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
     # Query the current knowledge base, whether there are write permissions
     db_knowledge = KnowledgeService.judge_qa_knowledge_write(login_user, qa_knowledge_id)
 
@@ -819,7 +879,7 @@ def post_import_file(*,
     for file_url in file_list:
         df = pd.read_excel(file_url)
         columns = df.columns.to_list()
-        if 'Question' not in columns or 'Answer' not in columns:
+        if "Question" not in columns or "Answer" not in columns:
             insert_result.append(0)
             continue
         data = df.T.to_dict().values()
@@ -828,18 +888,19 @@ def post_import_file(*,
         all_questions = set()
         for index, dd in enumerate(data):
             tmp_questions = set()
-            dd_question = convert_excel_value(dd['Question'])
-            dd_answer = convert_excel_value(dd['Answer'])
+            dd_question = convert_excel_value(dd["Question"])
+            dd_answer = convert_excel_value(dd["Answer"])
             QACreate = QAKnowledgeUpsert(
                 user_id=login_user.user_id,
                 knowledge_id=qa_knowledge_id,
                 answers=[dd_answer],
                 questions=[dd_question],
                 source=4,
-                status=QAStatus.PROCESSING.value)
+                status=QAStatus.PROCESSING.value,
+            )
             tmp_questions.add(QACreate.questions[0])
             for key, value in dd.items():
-                if key.startswith('Similar question'):
+                if key.startswith("Similar question"):
                     if tmp_value := convert_excel_value(value):
                         if tmp_value not in tmp_questions:
                             QACreate.questions.append(tmp_value)
@@ -854,9 +915,7 @@ def post_import_file(*,
         result = QAKnoweldgeDao.batch_insert_qa(insert_data)
 
         telemetry_service.log_event_sync(
-            user_id=login_user.user_id,
-            event_type=BaseTelemetryTypeEnum.NEW_KNOWLEDGE_FILE,
-            trace_id=trace_id_var.get()
+            user_id=login_user.user_id, event_type=BaseTelemetryTypeEnum.NEW_KNOWLEDGE_FILE, trace_id=trace_id_var.get()
         )
 
         # async task add qa into milvus and es
@@ -868,7 +927,7 @@ def post_import_file(*,
     return resp_200({"errors": error_result})
 
 
-@router.get('/status', status_code=200)
+@router.get("/status", status_code=200)
 def get_knowledge_status(*, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
     View Knowledge Base Status Interface
@@ -878,11 +937,7 @@ def get_knowledge_status(*, login_user: UserPayload = Depends(UserPayload.get_lo
        Return "Personal Knowledge BaseembeddingThe model has been replaced, rebuilding the knowledge base, please try again later" State Code 502
     """
     # Query a user's personal knowledge base
-    user_private_knowledge = KnowledgeDao.get_user_knowledge(
-        login_user.user_id,
-        None,
-        KnowledgeTypeEnum.PRIVATE
-    )
+    user_private_knowledge = KnowledgeDao.get_user_knowledge(login_user.user_id, None, KnowledgeTypeEnum.PRIVATE)
 
     # If the user does not have a personal knowledge base, go directly back to200
     if not user_private_knowledge:
@@ -899,6 +954,7 @@ def get_knowledge_status(*, login_user: UserPayload = Depends(UserPayload.get_lo
     if private_knowledge.state == KnowledgeState.FAILED.value:
         # Delay imports to avoid looping imports
         from bisheng.worker.knowledge.rebuild_knowledge_worker import rebuild_knowledge_celery
+
         rebuild_knowledge_celery.delay(private_knowledge.id, int(private_knowledge.model), login_user.user_id)
         # Return502Status codes and corresponding prompts
         raise KnowledgeRebuildingError()
@@ -907,10 +963,10 @@ def get_knowledge_status(*, login_user: UserPayload = Depends(UserPayload.get_lo
     return resp_200({"status": "success"})
 
 
-@router.post('/update_knowledge', status_code=200)
-def update_knowledge_model(*,
-                           login_user: UserPayload = Depends(UserPayload.get_login_user),
-                           req_data: UpdateKnowledgeReq):
+@router.post("/update_knowledge", status_code=200)
+def update_knowledge_model(
+    *, login_user: UserPayload = Depends(UserPayload.get_login_user), req_data: UpdateKnowledgeReq
+):
     """
     Update Knowledge Base Interface
     Update embedding Rebuild Knowledge Base on Model
@@ -967,15 +1023,15 @@ def update_knowledge_model(*,
     # Start asynchronous task
 
     if knowledge.type == KnowledgeTypeEnum.NORMAL.value:
-
         # Delay imports to avoid looping imports
         from bisheng.worker.knowledge.rebuild_knowledge_worker import rebuild_knowledge_celery
+
         rebuild_knowledge_celery.delay(knowledge.id, req_data.model_id, login_user.user_id)
 
     elif knowledge.type == KnowledgeTypeEnum.QA.value:
-
         # Delay imports to avoid looping imports
         from bisheng.worker.knowledge.qa import rebuild_qa_knowledge_celery
+
         rebuild_qa_knowledge_celery.delay(knowledge.id, req_data.model_id, login_user.user_id)
 
     logger.info(f"Started rebuild task for knowledge_id={knowledge.id} with model_id={req_data.model_id}")
@@ -983,8 +1039,9 @@ def update_knowledge_model(*,
     return resp_200()
 
 
-@router.post("/file/batch_download", description="Batch download knowledge base files",
-             response_model=UnifiedResponseModel)
+@router.post(
+    "/file/batch_download", description="Batch download knowledge base files", response_model=UnifiedResponseModel
+)
 async def batch_download_knowledge_files(
     *,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
@@ -1066,9 +1123,7 @@ async def update_file_tags(
     login_user: UserPayload = Depends(UserPayload.get_login_user),
     req_data: UpdateFileTagsReq,
 ):
-    await KnowledgeService.update_file_tags(
-        login_user, req_data.knowledge_id, req_data.file_id, req_data.tag_ids
-    )
+    await KnowledgeService.update_file_tags(login_user, req_data.knowledge_id, req_data.file_id, req_data.tag_ids)
     return resp_200()
 
 
@@ -1078,18 +1133,19 @@ async def batch_add_file_tags(
     login_user: UserPayload = Depends(UserPayload.get_login_user),
     req_data: BatchAddFileTagsReq,
 ):
-    await KnowledgeService.batch_add_file_tags(
-        login_user, req_data.knowledge_id, req_data.file_ids, req_data.tag_ids
-    )
+    await KnowledgeService.batch_add_file_tags(login_user, req_data.knowledge_id, req_data.file_ids, req_data.tag_ids)
     return resp_200()
 
 
-@router.get("/file/info/{file_id}", description="Get knowledge base file information",
-            response_model=UnifiedResponseModel)
-async def get_knowledge_file_info(*,
-                                  login_user: UserPayload = Depends(UserPayload.get_login_user),
-                                  file_id: int,
-                                  knowledge_file_service=Depends(get_knowledge_file_service)):
+@router.get(
+    "/file/info/{file_id}", description="Get knowledge base file information", response_model=UnifiedResponseModel
+)
+async def get_knowledge_file_info(
+    *,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    file_id: int,
+    knowledge_file_service=Depends(get_knowledge_file_service),
+):
     """
     Get knowledge base file information
     Args:
@@ -1106,12 +1162,17 @@ async def get_knowledge_file_info(*,
 
 
 # Adding Metadata Fields to the Knowledge Base
-@router.post('/add_metadata_fields', description="Adding Metadata Fields to the Knowledge Base",
-             response_model=UnifiedResponseModel)
-async def add_metadata_fields(*,
-                              login_user: UserPayload = Depends(UserPayload.get_login_user),
-                              req_data: AddKnowledgeMetadataFieldsReq,
-                              knowledge_service=Depends(get_knowledge_service)):
+@router.post(
+    "/add_metadata_fields",
+    description="Adding Metadata Fields to the Knowledge Base",
+    response_model=UnifiedResponseModel,
+)
+async def add_metadata_fields(
+    *,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    req_data: AddKnowledgeMetadataFieldsReq,
+    knowledge_service=Depends(get_knowledge_service),
+):
     """
     Adding Metadata Fields to the Knowledge Base
     """
@@ -1122,14 +1183,16 @@ async def add_metadata_fields(*,
 
 
 # Modify Knowledge Base Metadata Fields
-@router.put('/update_metadata_fields', description="Modify Knowledge Base Metadata Fields",
-            response_model=UnifiedResponseModel)
-async def update_metadata_fields(*,
-                                 login_user: UserPayload = Depends(UserPayload.get_login_user),
-                                 req_data: UpdateKnowledgeMetadataFieldsReq,
-                                 knowledge_service=Depends(get_knowledge_service),
-                                 background_tasks: BackgroundTasks
-                                 ):
+@router.put(
+    "/update_metadata_fields", description="Modify Knowledge Base Metadata Fields", response_model=UnifiedResponseModel
+)
+async def update_metadata_fields(
+    *,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    req_data: UpdateKnowledgeMetadataFieldsReq,
+    knowledge_service=Depends(get_knowledge_service),
+    background_tasks: BackgroundTasks,
+):
     """
     Modify Knowledge Base Metadata Fields
     Args:
@@ -1148,15 +1211,17 @@ async def update_metadata_fields(*,
 
 
 # Delete Knowledge Base Metadata Field
-@router.delete('/delete_metadata_fields', description="Delete Knowledge Base Metadata Field",
-               response_model=UnifiedResponseModel)
-async def delete_metadata_fields(*,
-                                 login_user: UserPayload = Depends(UserPayload.get_login_user),
-                                 knowledge_id: int = Body(..., embed=True, description="The knowledge base uponID"),
-                                 field_names: List[str] = Body(..., embed=True,
-                                                               description="List of field names to delete"),
-                                 knowledge_service=Depends(get_knowledge_service),
-                                 background_tasks: BackgroundTasks):
+@router.delete(
+    "/delete_metadata_fields", description="Delete Knowledge Base Metadata Field", response_model=UnifiedResponseModel
+)
+async def delete_metadata_fields(
+    *,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    knowledge_id: int = Body(..., embed=True, description="The knowledge base uponID"),
+    field_names: List[str] = Body(..., embed=True, description="List of field names to delete"),
+    knowledge_service=Depends(get_knowledge_service),
+    background_tasks: BackgroundTasks,
+):
     """
     Delete Knowledge Base Metadata Field
     Args:
@@ -1170,19 +1235,25 @@ async def delete_metadata_fields(*,
         UnifiedResponseModel
     """
 
-    knowledge_model = await knowledge_service.delete_metadata_fields(login_user, knowledge_id, field_names,
-                                                                     background_tasks)
+    knowledge_model = await knowledge_service.delete_metadata_fields(
+        login_user, knowledge_id, field_names, background_tasks
+    )
 
     return resp_200(data=knowledge_model)
 
 
 # Modify Knowledge Base File User Custom Metadata
-@router.put('/file/user_metadata', description="Modify Knowledge Base File User Custom Metadata",
-            response_model=UnifiedResponseModel)
-async def modify_file_user_metadata(*,
-                                    login_user: UserPayload = Depends(UserPayload.get_login_user),
-                                    req_data: ModifyKnowledgeFileMetaDataReq,
-                                    knowledge_file_service=Depends(get_knowledge_file_service)):
+@router.put(
+    "/file/user_metadata",
+    description="Modify Knowledge Base File User Custom Metadata",
+    response_model=UnifiedResponseModel,
+)
+async def modify_file_user_metadata(
+    *,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    req_data: ModifyKnowledgeFileMetaDataReq,
+    knowledge_file_service=Depends(get_knowledge_file_service),
+):
     """
     Modify Knowledge Base File User Custom Metadata
     Args:

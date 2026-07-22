@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { Outlined } from "bisheng-icons";
+import { useRecoilValue, useSetRecoilState } from "recoil";
 import { copyTrackingApi, disLikeCommentApi, likeChatApi } from "~/api/apps";
 import { MessageFeedbackButtons } from "~/components/Chat/MessageFeedbackButtons";
 import { TextToSpeechButton } from "~/components/Voice/TextToSpeechButton";
+import { chatIdState, chatsState } from "../store/atoms";
 
 // Shared action-icon button — matches ExportSelectionButton (size-6 hit area,
 // 14px bisheng-icons Outlined glyph, #818181 idle / brand-500 active) so the
@@ -12,6 +14,29 @@ const ACTION_BTN =
 
 export default function MessageButtons({ id, text, onCopy, data, children = null }) {
     const [copied, setCopied] = useState(false)
+    const chatId = useRecoilValue(chatIdState)
+    const setChats = useSetRecoilState(chatsState)
+
+    // Messages live in the chatsState cache and are NOT refetched when the user
+    // switches back to this conversation, so the new verdict must be written back
+    // to the cached message or the highlight is lost on conversation switch.
+    const handleLike = (liked: number) => {
+        likeChatApi(id, liked)
+        if (!chatId) return
+        setChats((prev) => {
+            const chat = prev[chatId]
+            if (!chat?.messages) return prev
+            return {
+                ...prev,
+                [chatId]: {
+                    ...chat,
+                    messages: chat.messages.map((msg) =>
+                        msg.id === id ? { ...msg, liked } : msg
+                    ),
+                },
+            }
+        })
+    }
 
     const handleCopy = (e) => {
         setCopied(true)
@@ -39,7 +64,7 @@ export default function MessageButtons({ id, text, onCopy, data, children = null
         </button>
         <MessageFeedbackButtons
             liked={data}
-            onLike={(liked) => likeChatApi(id, liked)}
+            onLike={handleLike}
             onDislikeComment={(comment) => disLikeCommentApi(id, comment)}
         />
     </div>

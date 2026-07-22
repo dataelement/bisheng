@@ -11,9 +11,12 @@ import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { cn } from "@/util/utils";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import useKnowledgeStore from "../useKnowledgeStore";
 import PreviewFile from "./PreviewFile";
 import PreviewParagraph from "./PreviewParagraph";
+import { buildMediaUploadPreviewData, isMediaUploadSuffix, type RichPreviewData } from "./RichPreviewFile";
+import { resolveKnowledgeParseFailure } from "../knowledgeParseFailureMessage";
 
 interface IProps {
   rules: any;
@@ -34,12 +37,15 @@ export default function PreviewResult({
   showPreview, previewCount, rules, resultFiles, step, applyEachCell, cellGeneralConfig, kId, handlePreviewResult, onDeleteFile
 }: IProps) {
   const { id } = useParams()
+  const { t } = useTranslation(['knowledge', 'bs']);
 
   const [chunks, setChunks] = useState([]) // 当前文件分块
   const [partitions, setPartitions] = useState<Partition>(null) // 当前文件分区
   const [selectId, setSelectId] = useState(''); // 当前选择文件id
   const [syncChunksSelectId, setSelectIdSyncChunks] = useState(''); // 当前选择文件id(与chunk更新保持同步)
   const [etl, setEtl] = useState<string>('')
+  const [mediaPreviewData, setMediaPreviewData] = useState<RichPreviewData | null>(null)
+  const [previewErrorMessage, setPreviewErrorMessage] = useState('')
   useEffect(() => {
     const file = rules.fileList[0]
     setSelectId(file.id)
@@ -74,6 +80,8 @@ export default function PreviewResult({
     }, 0);
     setFileViewUrl({ load: true, url: '' });
     setChunks([]);
+    setMediaPreviewData(null);
+    setPreviewErrorMessage('');
 
     // 合并配置（与原逻辑一致）
     const { fileList, pageHeaderFooter, chunkOverlap, chunkSize, enableFormula, forceOcr, knowledgeId, retainImages, separator, separatorRule, splitMode, hierarchyLevel, appendTitle, maxChunkSize } = rules;
@@ -119,6 +127,7 @@ export default function PreviewResult({
             break;
           case 'completed':
             setEtl(data.parse_type)
+            setPreviewErrorMessage('');
             // 记录该文件已在当前 previewCount 下解析过,下次切回时走缓存
             prevPreviewCountMapRef.current[currentFile.id] = previewCount;
             // 解析完成：处理结果（对应原 .then(res) 逻辑）
@@ -135,13 +144,26 @@ export default function PreviewResult({
             })));
             setSelectIdSyncChunks(selectId);
             setFileViewUrl({ load: false, url: data.file_url });
+            if (currentFile?.suffix && isMediaUploadSuffix(currentFile.suffix)) {
+              setMediaPreviewData(buildMediaUploadPreviewData(
+                currentFile.filePath,
+                data.file_url,
+                currentFile.suffix,
+              ));
+            } else {
+              setMediaPreviewData(null);
+            }
             setPartitions(data.partitions);
             setLoading(false);
             break;
           case 'error':
             // 解析错误：处理错误（对应原 error 回调逻辑）
             handlePreviewResult(false);
+            setMediaPreviewData(null);
             setFileViewUrl({ load: false, url: '' });
+            setPreviewErrorMessage(
+              resolveKnowledgeParseFailure(data, t) ?? t('previewFailed', { ns: 'knowledge' }),
+            );
             setLoading(false);
             // 原错误处理逻辑：支持的文件类型显示原文件预览
             if (["pdf", "txt", "md", "html", "docx", "png", "jpg", "jpeg", "bmp"].includes(currentFile.suffix)) {
@@ -209,6 +231,8 @@ export default function PreviewResult({
       chunks={chunks}
       setChunks={setChunks}
       partitions={partitions}
+      previewData={mediaPreviewData ?? undefined}
+      previewErrorMessage={previewErrorMessage}
     />}
     <div className={cn('relative', "w-full")}>
       {/* 下拉框 - 右上角 */}
@@ -236,7 +260,7 @@ export default function PreviewResult({
         fileId={syncChunksSelectId}
         fileSuffix={currentFile?.suffix}
         previewCount={previewCount}
-        className="h-[calc(100vh-284px)]"
+        className="h-[calc(100vh-284px-var(--license-banner-h,0px))]"
         edit={step === 3 || (step === 2 && !showPreview)}
         loading={loading}
         chunks={chunks}

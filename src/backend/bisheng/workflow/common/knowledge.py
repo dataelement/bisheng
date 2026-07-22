@@ -221,6 +221,9 @@ class RagUtils(BaseNode):
             return str(timestamp)
 
     def retrieve_question(self, question: str) -> list[Document]:
+        # F041: knowledge spaces go through the F029 view_file-filtered path.
+        if self._knowledge_type == "space":
+            return self._retrieve_space_question(question)
         # 1: retrieve documents from multi retrievers
         knowledge_retriever_tool = KnowledgeRetrieverTool(
             vector_retriever=self._multi_milvus_retriever,
@@ -274,8 +277,67 @@ class RagUtils(BaseNode):
     def init_multi_retriever(self):
         if self._knowledge_type == "knowledge":
             self.init_knowledge_retriever()
+        elif self._knowledge_type == "space":
+            # F041: knowledge spaces build their own retriever per-space inside
+            # aretrieve_space_documents (with the F029 view_file filter), so there
+            # is nothing to pre-build here.
+            pass
         else:
             self.init_file_retriever()
+
+    def _space_metadata_filter(self, space: Knowledge):
+        """Per-space metadata filter (AC-08, built-in fields) → (milvus_expr, es_clauses).
+
+        Conditions are keyed by knowledge_id, so each space resolves only its own
+        conditions. Returns ``(None, None)`` when no filter is configured.
+        """
+        milvus_str, es_filter = self._metadata_filter.get_knowledge_filter(knowledge=space, parent_node=self)
+        es_clauses = es_filter.get("filter") if es_filter else None
+        return (milvus_str or None), es_clauses
+
+    async def _aretrieve_space_docs(self, question: str) -> list[Document]:
+        from bisheng.core.database import get_async_db_session
+        from bisheng.knowledge.domain.repositories.implementations.knowledge_document_version_repository_impl import (
+            KnowledgeDocumentVersionRepositoryImpl,
+        )
+        from bisheng.knowledge.domain.services.space_flow_retrieval import (
+            abuild_scoped_login_user,
+            aretrieve_space_documents,
+        )
+
+        # Identity: toggle ON → runtime user; OFF → config author (flow creator).
+        identity_user_id = self.user_id if self._knowledge_auth else self.flow_user_id
+        identity_user = await abuild_scoped_login_user(identity_user_id, self.tenant_id)
+        async with get_async_db_session() as session:
+            version_repo = KnowledgeDocumentVersionRepositoryImpl(session)
+            return await aretrieve_space_documents(
+                space_ids=self._knowledge_value,
+                query=question,
+                identity_user=identity_user,
+                max_content=self._max_chunk_size,
+                metadata_filter_fn=self._space_metadata_filter,
+                rrf_weights=[self._vector_weight, self._keyword_weight],
+                rerank=self._rerank_model,
+                version_repo=version_repo,
+                access_scope="per_user" if self._knowledge_auth else "shared",
+            )
+
+    def _retrieve_space_question(self, question: str) -> list[Document]:
+        """F041: knowledge-space retrieval for workflow nodes (sync entry).
+
+        Runs the async F029-filtered retrieval on the single persistent background
+        loop (``run_async_safe``) — never ``asyncio.run`` — so the OpenFGA /
+        aiomysql singletons are not torn down (design gotcha 5.2).
+        """
+        from bisheng.utils.async_utils import run_async_safe
+
+        finally_docs = run_async_safe(self._aretrieve_space_docs(question), timeout=120)
+        for one in finally_docs:
+            if "upload_time" in one.metadata:
+                one.metadata["upload_time"] = self.format_timestamp(one.metadata["upload_time"])
+            if "update_time" in one.metadata:
+                one.metadata["update_time"] = self.format_timestamp(one.metadata["update_time"])
+        return finally_docs
 
     def _fetch_non_primary_file_ids(self, knowledge_ids: list[int]) -> list[int]:
         """Best-effort sync fetch of non-primary file ids for the given knowledges.

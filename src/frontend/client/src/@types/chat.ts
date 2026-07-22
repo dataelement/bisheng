@@ -38,7 +38,8 @@ export type ChatMessageType = {
   sender?: string;
   /** @某人 */
   receiver?: any;
-  liked?: boolean;
+  /** Feedback verdict: 0 none / 1 thumbs up / 2 thumbs down (mirrors chatmessage.liked). */
+  liked?: number;
   extra?: string;
   create_time: string;
   update_time: string;
@@ -114,6 +115,8 @@ export type BishengConfig = {
   enable_registration: boolean;
   /** 最大上传文件大小 mb */
   uploaded_files_maximum_size: number;
+  /** 音视频单文件最大上传大小 mb */
+  uploaded_media_maximum_size?: number;
   /** System YAML `env.workbench_menu_unavailable_message` — plain text on /menu-unavailable */
   workbench_menu_unavailable_message?: string;
   /** 是否部署 ETL4LM  */

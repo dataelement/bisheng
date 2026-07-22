@@ -133,6 +133,7 @@ async def test_channel_detail_returns_current_user_relation():
     channel_repository = SimpleNamespace(find_channels_by_ids=AsyncMock(return_value=[channel]))
     member_repository = SimpleNamespace(
         find_membership=AsyncMock(return_value=membership),
+        find_membership_split=AsyncMock(return_value=(membership, membership)),
         find_members_by_role=AsyncMock(return_value=[creator]),
         count_channel_members=AsyncMock(return_value=2),
     )
@@ -309,18 +310,16 @@ async def test_update_channel_denied_when_no_rebac_can_edit():
     member_repository = SimpleNamespace(find_membership=AsyncMock(return_value=None))
     service = _service(channel_repository, member_repository)
 
-    with (
-        patch(
-            "bisheng.channel.domain.services.channel_service.PermissionService.check",
-            new=AsyncMock(return_value=False),
-        ),
-        pytest.raises(ChannelPermissionDeniedError),
+    with patch(
+        "bisheng.channel.domain.services.channel_service.PermissionService.check",
+        new=AsyncMock(return_value=False),
     ):
-        await service.update_channel(
-            "channel-1",
-            UpdateChannelRequest(name="新频道"),
-            _LoginUser(),
-        )
+        with pytest.raises(ChannelPermissionDeniedError):
+            await service.update_channel(
+                "channel-1",
+                UpdateChannelRequest(name="新频道"),
+                _LoginUser(),
+            )
 
     channel_repository.update.assert_not_awaited()
 

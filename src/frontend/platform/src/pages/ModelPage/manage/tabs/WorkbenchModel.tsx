@@ -14,6 +14,7 @@ import { useTranslation } from "react-i18next";
 import { useQuery } from "react-query";
 import { useModel } from "..";
 import { ModelManagement } from "@/pages/BuildPage/bench/ModelManagement";
+import { hasValidWorkbenchEmbeddingModelId } from "./workbenchModelValidation";
 
 export const ModelSelect = ({ required = false, close = false, label, tooltipText = '', value, options, onChange, placeholder = '' }) => {
     const defaultValue = useMemo(() => {
@@ -87,20 +88,8 @@ export default function WorkbenchModel({ onBack }) {
         return '';
     };
 
-    const handleSave = async () => {
+    const submitConfig = async () => {
         const { linsightDefaultModelId, sourceModelId, asrModelId, ttsModelId, chatTitleLlmId, models } = form;
-        const errors = [];
-        if (!models.length) {
-            errors.push('请至少配置一个对话模型');
-        }
-        // Reject blank rows: a model without an id serializes to `{ id: '' }`,
-        // which reaches the client model picker as <SelectItem value="">
-        // (empty string) and crashes the whole page in Radix. Force the admin
-        // to pick a model or remove the empty row before saving.
-        if (models.some((m) => !m.id)) {
-            errors.push('存在未选择模型的对话模型行，请选择模型或删除该行');
-        }
-        if (errors.length) return message({ variant: 'error', description: errors });
         setSaveLoad(true);
         try {
             const data = {
@@ -159,7 +148,26 @@ export default function WorkbenchModel({ onBack }) {
         return lastEmbeddingId !== currentEmbeddingId;
     };
 
-    const handleSaveWithConfirm = () => {
+    const handleSave = () => {
+        const errors = [];
+        if (!form.models.length) {
+            errors.push('请至少配置一个对话模型');
+        }
+        // Reject blank rows: a model without an id serializes to `{ id: '' }`,
+        // which reaches the client model picker as <SelectItem value="">
+        // (empty string) and crashes the whole page in Radix. Force the admin
+        // to pick a model or remove the empty row before saving.
+        if (form.models.some((model) => !model.id)) {
+            errors.push('存在未选择模型的对话模型行，请选择模型或删除该行');
+        }
+        if (!hasValidWorkbenchEmbeddingModelId(form.sourceModelId)) {
+            errors.push(t('model.workVectorModel') + t('bs:required'));
+        }
+        if (errors.length) {
+            message({ variant: 'error', description: errors });
+            return;
+        }
+
         if (checkEmbeddingModified()) {
             bsConfirm({
                 title: t('model.tip'),
@@ -168,12 +176,12 @@ export default function WorkbenchModel({ onBack }) {
                 okTxt: t('model.confirm'),
                 canelTxt: t('model.cancel'),
                 onOk(next) {
-                    handleSave().then(next);
+                    submitConfig().then(next);
                 },
                 onCancel() { }
             });
         } else {
-            handleSave();
+            submitConfig();
         }
     };
 
@@ -308,7 +316,7 @@ export default function WorkbenchModel({ onBack }) {
                 <Button
                     className="px-10"
                     disabled={saveload}
-                    onClick={handleSaveWithConfirm}
+                    onClick={handleSave}
                 >
                     {saveload && <LoadIcon className="mr-2" />}
                     {t('model.save')}

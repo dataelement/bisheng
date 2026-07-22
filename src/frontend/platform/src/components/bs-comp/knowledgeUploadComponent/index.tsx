@@ -6,6 +6,18 @@ import { useTranslation } from "react-i18next";
 import DropZone from "./DropZone";
 import ProgressItem from "./ProgressItem";
 
+const MEDIA_FILE_EXTENSIONS = new Set([
+    'mp3', 'wav', 'm4a', 'aac', 'flac', 'ogg',
+    'mp4', 'mov', 'avi', 'mkv', 'webm',
+]);
+
+function getKnowledgeUploadSizeLimitMB(file: File, appConfig: { uploadFileMaxSize?: number; uploadMediaMaxSize?: number }) {
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    return ext && MEDIA_FILE_EXTENSIONS.has(ext)
+        ? (appConfig.uploadMediaMaxSize ?? 1024)
+        : (appConfig.uploadFileMaxSize ?? 50);
+}
+
 export interface Progress {
     id: string,
     file: File,
@@ -75,13 +87,11 @@ const KnowledgeUploadComponent = ({
 
     // beforeupload
     const handleDrop = (acceptedFiles) => {
-        const sizeLimit = appConfig.uploadFileMaxSize * 1024 * 1024;
-
         const [bigFiles, files] = acceptedFiles.reduce(
             ([big, small], file) => {
                 if (progressList.some(pros => pros.fileName === file.name)) return [big, small];
-                // 大小校验
-                return file.size < sizeLimit
+                const sizeLimit = getKnowledgeUploadSizeLimitMB(file, appConfig) * 1024 * 1024;
+                return file.size <= sizeLimit
                     ? [big, [...small, file]] // 合法文件
                     : [[...big, file.name], small]; // 超大小文件
             },
@@ -92,7 +102,7 @@ const KnowledgeUploadComponent = ({
         if (bigFiles.length > 0) {
             message({
                 title: t('prompt'),
-                description: bigFiles.map(str => `${t('code.file')}: ${str} ${t('code.sizeExceedsLimit', { size: appConfig.uploadFileMaxSize + 'MB' })}`).join('；'),
+                description: bigFiles.map(str => `${t('code.file')}: ${str} ${t('code.sizeExceedsLimit', { size: getKnowledgeUploadSizeLimitMB({ name: str } as File, appConfig) + 'MB' })}`).join('；'),
                 variant: 'error'
             });
         }

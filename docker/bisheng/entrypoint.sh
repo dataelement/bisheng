@@ -79,10 +79,11 @@ elif [ "$start_mode" = "worker" ]; then
 #    # 处理工作流相关任务的worker
 #    start_workflow &
 #    # 处理linsight相关任务的worker
-#    start_linsight &
 #    # 默认其他任务的执行worker，目前是定时统计埋点数据
 #    start_default &
+
     start_min_worker &
+    start_linsight &
     start_beat
 
     echo "All workers started successfully."

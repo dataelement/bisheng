@@ -173,9 +173,11 @@ def delete_minio_files(file: KnowledgeFile):
     # Delete ConvertedpdfDoc.
     minio_client.remove_object_sync(bucket_name=minio_client.bucket, object_name=f"{file.id}")
 
-    # Delete preview file
-    preview_object_name = KnowledgeUtils.get_knowledge_preview_file_object_name(
-        file.id, file.file_name
+    # Delete preview file. Prefer the persisted object name because generated
+    # previews such as media transcripts and web pages are not always derivable
+    # from the user-facing filename.
+    preview_object_name = KnowledgeUtils.resolve_preview_object_name(
+        file.id, file.file_name, file.preview_file_object_name
     )
     if preview_object_name:
         minio_client.remove_object_sync(bucket_name=minio_client.bucket, object_name=preview_object_name)

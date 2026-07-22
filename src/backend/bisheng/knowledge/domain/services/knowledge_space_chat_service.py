@@ -14,6 +14,14 @@ from bisheng.api.services.workstation import WorkStationService
 from bisheng.api.v1.schema.chat_schema import ChatMessageHistoryResponse
 from bisheng.api.v1.schemas import ChatResponse, KnowledgeSpaceConfig
 from bisheng.chat_session.domain.chat import ChatSessionService
+from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema
+from bisheng.citation.domain.services.citation_prompt_helper import (
+    annotate_rag_documents_with_citations,
+    cache_citation_registry_items,
+    collect_rag_citation_registry_items,
+    save_message_citations,
+    select_registry_items_for_persistence,
+)
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import NotFoundError
@@ -30,11 +38,14 @@ from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
 from bisheng.knowledge.domain.models.knowledge_space_file import SpaceFileDao
+from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
 from bisheng.knowledge.rag.version_filter import build_primary_only_filter
 from bisheng.llm.domain import LLMService
 from bisheng.llm.domain.utils import extract_reasoning_content
 from bisheng.tool.domain.langchain.knowledge import KnowledgeRetrieverTool
 from bisheng.utils import generate_uuid
+
+_background_tasks: set[asyncio.Task[Any]] = set()
 
 
 class KnowledgeSpaceChatService:
@@ -90,6 +101,16 @@ class KnowledgeSpaceChatService:
         file_record = await svc._require_file_relation(file_id, "can_read", space_id=space_id)
         await svc._require_permission_id("knowledge_file", file_id, "view_file", space_id=space_id)
         return file_record
+
+    @staticmethod
+    async def _prepare_rag_citation_context(
+        documents: list[Document],
+    ) -> tuple[str, list[CitationRegistryItemSchema]]:
+        annotated_documents = annotate_rag_documents_with_citations(documents)
+        citation_items = collect_rag_citation_registry_items(annotated_documents)
+        await cache_citation_registry_items(citation_items)
+        context = "\n".join(KnowledgeUtils.format_retrieved_chunk(doc) for doc in annotated_documents)
+        return context, citation_items
 
     @classmethod
     def generate_flow_id_for_file(cls, knowledge_id: int, file_id: int) -> str:
@@ -162,9 +183,7 @@ class KnowledgeSpaceChatService:
         )
         finally_docs: list[Document] = await retriever_tool.ainvoke(query)
         logger.debug(f"retrieved_finally_docs: {len(finally_docs)}")
-        file_content = ""
-        for one in finally_docs:
-            file_content += one.page_content + "\n"
+        file_content, citation_items = await self._prepare_rag_citation_context(finally_docs)
 
         prompt_service = await get_prompt_manager()
 
@@ -240,8 +259,15 @@ class KnowledgeSpaceChatService:
             ),
         ]
         await ChatMessageDao.ainsert_batch(messages)
+        cited_items = select_registry_items_for_persistence(citation_items, answer)
+        await save_message_citations(
+            message_id=messages[1].id,
+            items=cited_items,
+            chat_id=session.chat_id,
+            flow_id=session.flow_id,
+        )
         if not session.name:
-            asyncio.create_task(
+            title_task = asyncio.create_task(
                 self.generate_conversation(
                     user_id=self.login_user.user_id,
                     chat_id=session.chat_id,
@@ -249,6 +275,8 @@ class KnowledgeSpaceChatService:
                     answer=answer,
                 )
             )
+            _background_tasks.add(title_task)
+            title_task.add_done_callback(_background_tasks.discard)
 
         yield ChatResponse(
             category=MessageCategory.STREAM,
@@ -262,11 +290,12 @@ class KnowledgeSpaceChatService:
                 # before a page refresh was lost, since it hit the placeholder id).
                 "message_id": messages[1].id,
             },
+            citations=cited_items,
             type="end",
         )
 
     @staticmethod
-    async def generate_conversation(user_id: int, chat_id: str, question: str, answer: str = None):
+    async def generate_conversation(user_id: int, chat_id: str, question: str, answer: str | None = None):
         llm_conf = await LLMService.get_workbench_llm()
         if not llm_conf or not llm_conf.chat_title_llm or not llm_conf.chat_title_llm.id:
             logger.debug("not found chat title llm")
@@ -551,9 +580,7 @@ class KnowledgeSpaceChatService:
         """
         llm, space_conf = await self.get_space_llm_config(model_id=model_id)
         logger.debug(f"retrieved_finally_docs: {len(finally_docs)}")
-        file_content = ""
-        for one in finally_docs:
-            file_content += one.page_content + "\n"
+        file_content, citation_items = await self._prepare_rag_citation_context(finally_docs)
 
         prompt_service = await get_prompt_manager()
 
@@ -629,8 +656,15 @@ class KnowledgeSpaceChatService:
             ),
         ]
         await ChatMessageDao.ainsert_batch(messages)
+        cited_items = select_registry_items_for_persistence(citation_items, answer)
+        await save_message_citations(
+            message_id=messages[1].id,
+            items=cited_items,
+            chat_id=session.chat_id,
+            flow_id=session.flow_id,
+        )
         if not session.name:
-            asyncio.create_task(
+            title_task = asyncio.create_task(
                 self.generate_conversation(
                     user_id=self.login_user.user_id,
                     chat_id=session.chat_id,
@@ -638,6 +672,8 @@ class KnowledgeSpaceChatService:
                     answer=answer,
                 )
             )
+            _background_tasks.add(title_task)
+            title_task.add_done_callback(_background_tasks.discard)
 
         yield ChatResponse(
             category=MessageCategory.STREAM,
@@ -651,6 +687,7 @@ class KnowledgeSpaceChatService:
                 # before a page refresh was lost, since it hit the placeholder id).
                 "message_id": messages[1].id,
             },
+            citations=cited_items,
             type="end",
         )
 

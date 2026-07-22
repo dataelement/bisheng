@@ -10,6 +10,7 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFile,
     KnowledgeFileDao,
     KnowledgeFileStatus,
+    PORTAL_USER_UPLOAD_FILE_SOURCES,
 )
 
 # F027 AD-14: file extension priority for "file_type" sort order.
@@ -344,7 +345,7 @@ class SpaceFileDao(KnowledgeFileDao):
         statement = select(func.sum(KnowledgeFile.file_size)).where(
             KnowledgeFile.user_id == user_id,
             KnowledgeFile.file_type == 1,
-            col(KnowledgeFile.file_source).in_([FileSource.SPACE_UPLOAD.value, FileSource.CHANNEL.value]),
+            col(KnowledgeFile.file_source).in_([*PORTAL_USER_UPLOAD_FILE_SOURCES, FileSource.CHANNEL.value]),
         )
         async with get_async_db_session() as session:
             return await session.scalar(statement) or 0

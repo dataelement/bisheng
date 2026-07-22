@@ -657,6 +657,15 @@ const workflowTemplate = [
                             "type": "knowledge",
                             "value": []
                         }
+                    },
+                    {
+                        // F041: 用户知识库权限校验 — default OFF; ON gates knowledge-space
+                        // retrieval by the runtime user's view_file, OFF by the config author's.
+                        "key": "user_auth",
+                        "label": "true",
+                        "type": "switch",
+                        "value": false,
+                        "help": "true"
                     }
                 ]
             },

@@ -33,6 +33,7 @@ import { captureAndAlertRequestErrorHoc } from "../controllers/request";
 import { User } from "../types/api/user";
 import { getBrandAssetUrl } from "../utils/brand";
 import HeaderMenu from "./HeaderMenu";
+import { LicenseBanner } from "./LicenseBanner";
 
 export default function MainLayout() {
     const { dark, setDark } = useContext(darkContext);
@@ -68,16 +69,16 @@ export default function MainLayout() {
         navigator('/reset')
     }
 
-    // 系统超管（租户超管仍走自定义角色 web_menu；部门管理员由服务端合并全量菜单）
+    // Super admins and child tenant admins receive the full admin menu.
+    // Tenant management remains super-admin-only; department admins receive menus from the backend.
     const isSuperAdmin = useMemo(() => user.role === "admin", [user])
     const isDeptAdmin = Boolean(user.is_department_admin)
     const isChildAdmin = Boolean(user.is_child_admin)
     const canManageWorkbenchConfig = isSuperAdmin || isChildAdmin
-    // 侧栏：数据集 / 日志 — 超管与部门管理员
-    const isFullAdminShell = isSuperAdmin || isDeptAdmin
-    // 侧栏：系统管理 — 超管 / 部门管理员 / Child Admin。SystemPage 内部按
-    // PRD §3.3 已为 Child Admin 分了 Tab 视角（组织 + 角色）
-    const showSystemNav = isFullAdminShell || isChildAdmin
+    // Covers admin entries such as datasets that have no independent web_menu route key.
+    const isFullAdminShell = isSuperAdmin || isDeptAdmin || isChildAdmin
+    // SystemPage limits each admin type to the tabs it can manage.
+    const showSystemNav = isFullAdminShell
     // 审批管理 — 仅超管 / Child Admin（部门管理员不可见）
     const showApprovalNav = isSuperAdmin || isChildAdmin
     // Admin-area approval scope (falls back to the legacy global flag for
@@ -95,7 +96,7 @@ export default function MainLayout() {
                 || user.web_menu?.includes('frontend')
                 || canManageWorkbenchConfig
         }
-        return user.web_menu?.includes(menu) || isSuperAdmin
+        return user.web_menu?.includes(menu) || isSuperAdmin || isChildAdmin
     }
 
     const u = user as User
@@ -112,8 +113,9 @@ export default function MainLayout() {
         isMenu(menu) || (menuApprovalMode && hasAdminEntry && APPROVAL_MENUS.has(menu))
 
     return <div className="flex">
-        <div className="bg-background-main w-full h-screen">
-            <div className="flex justify-between h-[64px] bg-background-main relative z-[21]">
+        <div className="bg-background-main w-full h-screen flex flex-col">
+            {isSuperAdmin && <LicenseBanner />}
+            <div className="flex justify-between h-[64px] shrink-0 bg-background-main relative z-[21]">
                 <div className="flex h-9 my-[14px]">
                     <div className="inline-block" >
                         {/* @ts-ignore */}
@@ -174,9 +176,9 @@ export default function MainLayout() {
                     </div>
                 </div>
             </div>
-            <div className="flex" style={{ height: "calc(100vh - 64px)" }}>
+            <div className="flex flex-1 min-h-0">
                 <div className="relative z-10 bg-background-main h-full w-[184px] min-w-[184px] px-3  shadow-x1 flex justify-between text-center ">
-                    <nav className="overflow-y-auto overflow-x-hidden" style={{ maxHeight: "calc(100vh - 64px - 90px)" }}>
+                    <nav className="overflow-y-auto overflow-x-hidden" style={{ maxHeight: "calc(100vh - 64px - 90px - var(--license-banner-h, 0px))" }}>
                         {/* <NavLink to='/' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
                             <ApplicationIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.app')}</span>
                         </NavLink> */}

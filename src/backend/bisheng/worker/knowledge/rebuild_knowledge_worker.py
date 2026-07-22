@@ -1,18 +1,13 @@
-from typing import List
-
 from loguru import logger
 
+from bisheng.common.constants.vectorstore_metadata import KNOWLEDGE_RAG_METADATA_SCHEMA
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import ServerError
 from bisheng.common.errcode.knowledge import KnowledgeFileFailedError
 from bisheng.core.logger import trace_id_var
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao, KnowledgeState
-from bisheng.knowledge.domain.models.knowledge_file import (
-    KnowledgeFile,
-    KnowledgeFileDao,
-    KnowledgeFileStatus
-)
+from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile, KnowledgeFileDao, KnowledgeFileStatus
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.llm.domain import LLMService
 from bisheng.worker.main import bisheng_celery
@@ -22,16 +17,16 @@ from bisheng.worker.main import bisheng_celery
 def rebuild_knowledge_celery(knowledge_id: int, new_model_id: int, invoke_user_id: int) -> str:
     """
     Asynchronous task to rebuild knowledge base
-    
+
     Args:
         knowledge_id: The knowledge base uponID
         new_model_id: New.. embeddingModelsID
         invoke_user_id: Call UserID
-        
+
     Returns:
         str: Task Execution Results
     """
-    trace_id_var.set(f'rebuild_knowledge_{knowledge_id}')
+    trace_id_var.set(f"rebuild_knowledge_{knowledge_id}")
     logger.info(f"rebuild_knowledge_celery start knowledge_id={knowledge_id} new_model_id={new_model_id}")
     try:
         # Get Knowledge Base Information
@@ -42,8 +37,7 @@ def rebuild_knowledge_celery(knowledge_id: int, new_model_id: int, invoke_user_i
 
         # 1. according knowledge_id Found knowledgefile All in the tablestatus=2Andstatus=4File, put thestatusto4
         files = KnowledgeFileDao.get_files_by_multiple_status(
-            knowledge_id,
-            [KnowledgeFileStatus.SUCCESS.value, KnowledgeFileStatus.REBUILDING.value]
+            knowledge_id, [KnowledgeFileStatus.SUCCESS.value, KnowledgeFileStatus.REBUILDING.value]
         )
         # 2. According to thecollection_namewentmilvusDelete Vector Store in
         KnowledgeService.delete_knowledge_file_in_vector(knowledge=knowledge, del_es=False)
@@ -76,7 +70,6 @@ def rebuild_knowledge_celery(knowledge_id: int, new_model_id: int, invoke_user_i
 
         # 5. Update knowledge base status
         if failed_files:
-
             # DeleteesIndex andmilvusCollections to avoid data inconsistencies
             _delete_es_files(knowledge, failed_files)
 
@@ -91,7 +84,7 @@ def rebuild_knowledge_celery(knowledge_id: int, new_model_id: int, invoke_user_i
         return f"knowledge {knowledge_id} rebuild completed"
 
     except Exception as e:
-        logger.exception(f"rebuild_knowledge_celery error: {str(e)}")
+        logger.exception(f"rebuild_knowledge_celery error: {e!s}")
         # Unexpected handles during asynchronous tasksknowledgeSet to4
         try:
             knowledge = KnowledgeDao.query_by_id(knowledge_id)
@@ -99,12 +92,12 @@ def rebuild_knowledge_celery(knowledge_id: int, new_model_id: int, invoke_user_i
                 knowledge.state = KnowledgeState.FAILED.value
                 KnowledgeDao.update_one(knowledge)
         except Exception as e2:
-            logger.exception(f"Failed to update knowledge state after error: {str(e2)}")
+            logger.exception(f"Failed to update knowledge state after error: {e2!s}")
 
         raise e
 
 
-def _delete_es_files(knowledge: Knowledge, file_ids: List[int]):
+def _delete_es_files(knowledge: Knowledge, file_ids: list[int]):
     """DeleteESFile data in"""
     try:
         index_name = knowledge.index_name or knowledge.collection_name
@@ -115,23 +108,18 @@ def _delete_es_files(knowledge: Knowledge, file_ids: List[int]):
             return
 
         for file_id in file_ids:
-            delete_query = {
-                "query": {
-                    "match": {
-                        "metadata.document_id": file_id
-                    }
-                }
-            }
+            delete_query = {"query": {"match": {"metadata.document_id": file_id}}}
             response = es_client.client.delete_by_query(index=index_name, body=delete_query)
             deleted = response.get("deleted", 0)
             logger.info(f"Deleted {deleted} documents from ES for file_id={file_id}")
 
     except Exception as e:
-        logger.exception(f"Failed to delete ES files for knowledge_id={knowledge.id}: {str(e)}")
+        logger.exception(f"Failed to delete ES files for knowledge_id={knowledge.id}: {e!s}")
 
 
-def _rebuild_embeddings(knowledge: Knowledge, files: List[KnowledgeFile], new_model_id: int, invoke_user_id: int) -> \
-        tuple[List[int], List[int]]:
+def _rebuild_embeddings(
+    knowledge: Knowledge, files: list[KnowledgeFile], new_model_id: int, invoke_user_id: int
+) -> tuple[list[int], list[int]]:
     """
     Rebuildembeddings
 
@@ -149,24 +137,30 @@ def _rebuild_embeddings(knowledge: Knowledge, files: List[KnowledgeFile], new_mo
 
         # Get newembeddingModel and createMilvusClient
         logger.info(f"[DEBUG] Begin initializing newembeddingModelsmodel_id={new_model_id}")
-        new_embeddings = LLMService.get_bisheng_knowledge_embedding_sync(model_id=new_model_id,
-                                                                         invoke_user_id=invoke_user_id)
+        new_embeddings = LLMService.get_bisheng_knowledge_embedding_sync(
+            model_id=new_model_id, invoke_user_id=invoke_user_id
+        )
         logger.info(
-            f"[DEBUG] Slider Created Successfully.embeddingModel Instance: {type(new_embeddings).__name__}, model_id={getattr(new_embeddings, 'model_id', 'unknown')}")
+            f"[DEBUG] Slider Created Successfully.embeddingModel Instance: {type(new_embeddings).__name__}, model_id={getattr(new_embeddings, 'model_id', 'unknown')}"
+        )
 
         # TestembeddingIs the model available
         try:
             test_result = new_embeddings.embed_query("Test text")
             logger.info(
-                f"[DEBUG] EmbeddingModel tested successfully, dimension returned: {len(test_result) if test_result else 'None'}")
+                f"[DEBUG] EmbeddingModel tested successfully, dimension returned: {len(test_result) if test_result else 'None'}"
+            )
         except Exception as e:
-            logger.error(f"[DEBUG] EmbeddingModel Test Failed: {str(e)}")
+            logger.error(f"[DEBUG] EmbeddingModel Test Failed: {e!s}")
             # Model test failure should terminate the entire process, not continue
-            raise Exception(f"EmbeddingModel not available: {str(e)}")
+            raise Exception(f"EmbeddingModel not available: {e!s}")
 
-        vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(invoke_user_id=invoke_user_id,
-                                                                            knowledge=knowledge,
-                                                                            embeddings=new_embeddings)
+        vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(
+            invoke_user_id=invoke_user_id,
+            knowledge=knowledge,
+            embeddings=new_embeddings,
+            metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA,
+        )
         logger.info(f"[DEBUG] Slider Created Successfully.MilvusClientcollection_name={knowledge.collection_name}")
 
         # OthersESWhether the index is present (check in advance, avoid double-checking in the loop)
@@ -186,11 +180,11 @@ def _rebuild_embeddings(knowledge: Knowledge, files: List[KnowledgeFile], new_mo
                 else:
                     failed_files.append(file.id)
             except Exception as e:
-                logger.exception(f"Failed to rebuild embeddings for file_id={file.id}: {str(e)}")
+                logger.exception(f"Failed to rebuild embeddings for file_id={file.id}: {e!s}")
                 failed_files.append(file.id)
 
     except Exception as e:
-        logger.exception(f"Failed to rebuild embeddings: {str(e)}")
+        logger.exception(f"Failed to rebuild embeddings: {e!s}")
         # If the entire process fails, all unsuccessful files are marked as failed
         failed_files.extend([f.id for f in files if f.id not in success_files])
 
@@ -202,14 +196,7 @@ def _process_single_file(file, es_client, index_name, vector_client):
     logger.info(f"Rebuilding embeddings for file_id={file.id}")
 
     # FROMESGet all of this file inchunks
-    search_query = {
-        "query": {
-            "match": {
-                "metadata.document_id": file.id
-            }
-        },
-        "size": 10000
-    }
+    search_query = {"query": {"match": {"metadata.document_id": file.id}}, "size": 10000}
 
     logger.debug(f"ES search query: {search_query}")
 
@@ -237,23 +224,20 @@ def _process_single_file(file, es_client, index_name, vector_client):
     logger.info(f"Found {len(texts)} chunks for file_id={file.id}")
 
     # Insert data intoMilvus
-    logger.info(f"[DEBUG] Upcoming Callsvector_client.add_texts，textsQuantity={len(texts)}")
+    logger.info(f"[DEBUG] Upcoming Callsvector_client.add_texts, textsQuantity={len(texts)}")
     logger.info(f"[DEBUG] First text example: {texts[0][:100] if texts else 'No texts'}...")
 
     try:
         vector_client.add_texts(texts=texts, metadatas=metadatas)
-        logger.info(f"[DEBUG] vector_client.add_textsCall successful")
+        logger.info("[DEBUG] vector_client.add_textsCall successful")
         return True
     except Exception as add_error:
-        logger.error(f"[DEBUG] vector_client.add_textsCall failed: {str(add_error)}")
+        logger.error(f"[DEBUG] vector_client.add_textsCall failed: {add_error!s}")
         raise add_error
 
 
 def get_all_es_chunks(es_client, index_name, query):
-    result = es_client.search(index=index_name,
-                              body=query,
-                              size=5000,
-                              scroll="1m")
+    result = es_client.search(index=index_name, body=query, size=5000, scroll="1m")
     res = []
 
     def handle_hits(hits):
@@ -261,14 +245,14 @@ def get_all_es_chunks(es_client, index_name, query):
             res.append(hit)
 
     handle_hits(result.get("hits", {}).get("hits", []))
-    scroll_id = result.get('_scroll_id')
+    scroll_id = result.get("_scroll_id")
     while scroll_id:
-        result = es_client.scroll(scroll_id=scroll_id, scroll='1m')
-        tmp_hits = result.get('hits', {}).get('hits', [])
+        result = es_client.scroll(scroll_id=scroll_id, scroll="1m")
+        tmp_hits = result.get("hits", {}).get("hits", [])
         if not tmp_hits:
             break
         handle_hits(tmp_hits)
-        scroll_id = result.get('_scroll_id')
+        scroll_id = result.get("_scroll_id")
     if scroll_id:
         es_client.clear_scroll(scroll_id=scroll_id)
     return res
@@ -287,9 +271,10 @@ def rebuild_knowledge_file_chunk(file_id: int):
     except BaseErrorCode as e:
         KnowledgeFileDao.update_file_status([db_file.id], KnowledgeFileStatus.FAILED, e.to_json_str())
     except Exception as e:
-        logger.exception(f"Failed to rebuild knowledge file chunk: {str(e)}")
-        KnowledgeFileDao.update_file_status([db_file.id], KnowledgeFileStatus.FAILED,
-                                            ServerError(exception=e).to_json_str())
+        logger.exception(f"Failed to rebuild knowledge file chunk: {e!s}")
+        KnowledgeFileDao.update_file_status(
+            [db_file.id], KnowledgeFileStatus.FAILED, ServerError(exception=e).to_json_str()
+        )
 
 
 def _rebuild_knowledge_file_chunk(db_file: KnowledgeFile):
@@ -298,17 +283,11 @@ def _rebuild_knowledge_file_chunk(db_file: KnowledgeFile):
     es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(db_knowledge)
 
     index_name = db_knowledge.index_name or db_knowledge.collection_name
-    query = {
-        "query": {
-            "match": {
-                "metadata.document_id": db_file.id
-            }
-        }
-    }
+    query = {"query": {"match": {"metadata.document_id": db_file.id}}}
 
     chunks = get_all_es_chunks(es_client.client, index_name, query)
     if not chunks:
-        logger.warning(f"No chunks found for")
+        logger.warning("No chunks found for")
         return
 
     logger.info(f"Found {len(chunks)} chunks in ES for file_id={db_file.id}")
@@ -351,7 +330,7 @@ def _rebuild_knowledge_file_chunk(db_file: KnowledgeFile):
         try:
             milvus_client.col.delete(f"pk in {pks_to_delete}")
         except Exception as e:
-            logger.warning(f"Failed to delete old pk(s) from Milvus: {str(e)}")
+            logger.warning(f"Failed to delete old pk(s) from Milvus: {e!s}")
 
     # Re-insert into Milvus and ES
     logger.info(f"Re-inserting {len(texts)} chunks for file_id={db_file.id} into vector stores")

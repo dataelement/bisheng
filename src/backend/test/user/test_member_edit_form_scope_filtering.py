@@ -105,8 +105,9 @@ async def test_department_in_admin_writable_scope_rejects_inactive_dept():
 @pytest.mark.asyncio
 async def test_aget_member_edit_form_drops_foreign_affiliate_dept():
     """End-to-end: a sub-tenant admin opens the edit dialog for a member who
-    has an affiliate row in a foreign subtree. Pre-fix this raised 21009;
-    post-fix the foreign affiliate row is silently filtered out.
+    has a foreign affiliate row and an orphaned user-group link. Pre-fix the
+    affiliate raised 21009 and the orphan was round-tripped back on save;
+    post-fix both inaccessible records are silently filtered out.
     """
     from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
 
@@ -181,7 +182,7 @@ async def test_aget_member_edit_form_drops_foreign_affiliate_dept():
         new_callable=AsyncMock, return_value=[],
     ), patch(
         'bisheng.database.models.user_group.UserGroupDao.aget_user_group',
-        new_callable=AsyncMock, return_value=[],
+        new_callable=AsyncMock, return_value=[SimpleNamespace(group_id=177)],
     ), patch(
         'bisheng.database.models.user_group.UserGroupDao.aget_user_admin_group',
         new_callable=AsyncMock, return_value=[SimpleNamespace(group_id=55)],
@@ -209,8 +210,68 @@ async def test_aget_member_edit_form_drops_foreign_affiliate_dept():
     assert result['primary_department']['dept_id'] == 'BS@ctx'
     assert result['current_group_ids'] == [55]
     assert result['locked_group_ids'] == [55]
+    assert 177 not in result['current_group_ids']
     assert result['manageable_groups'] == [{
         'id': 55,
         'group_name': '创建者私密组',
         'visibility': 'private',
     }]
+
+
+@pytest.mark.asyncio
+async def test_aapply_member_edit_preserves_user_group_permission_error():
+    """A user-group scope error must remain 23006 instead of becoming 21009."""
+    from contextlib import asynccontextmanager
+
+    from bisheng.common.errcode.user_group import UserGroupPermissionDeniedError
+    from bisheng.department.domain.schemas.department_schema import (
+        DepartmentMemberEditApply,
+    )
+
+    ctx_dept = SimpleNamespace(
+        id=10, dept_id='BS@ctx', name='本部门', status='active', path='/1/10/',
+    )
+    target_user = SimpleNamespace(
+        user_id=99, user_name='00070', source='local', delete=0,
+    )
+    primary_ud = SimpleNamespace(
+        id=1, user_id=99, department_id=10, is_primary=1,
+    )
+
+    class _MemResult:
+        def first(self):
+            return primary_ud
+
+    class _FakeSession:
+        async def exec(self, _stmt):
+            return _MemResult()
+
+    @asynccontextmanager
+    async def _session_cm():
+        yield _FakeSession()
+
+    data = DepartmentMemberEditApply(group_ids=[177])
+    group_error = UserGroupPermissionDeniedError()
+
+    with patch(
+        'bisheng.department.domain.services.department_service.get_async_db_session',
+        side_effect=_session_cm,
+    ), patch.object(
+        m, '_get_dept_and_check_permission',
+        new_callable=AsyncMock, return_value=ctx_dept,
+    ), patch(
+        'bisheng.user.domain.models.user.UserDao.aget_user',
+        new_callable=AsyncMock, return_value=target_user,
+    ), patch(
+        'bisheng.user.domain.models.user_role.UserRoleDao.get_user_roles',
+        return_value=[],
+    ), patch(
+        'bisheng.user_group.domain.services.user_group_service.UserGroupService.areplace_user_memberships',
+        new_callable=AsyncMock, side_effect=group_error,
+    ):
+        with pytest.raises(UserGroupPermissionDeniedError) as exc_info:
+            await m.DepartmentService.aapply_member_edit(
+                'BS@ctx', 99, data, _user(user_id=10, tenant_id=5),
+            )
+
+    assert exc_info.value.code == 23006

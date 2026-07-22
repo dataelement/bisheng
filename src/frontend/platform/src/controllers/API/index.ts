@@ -489,6 +489,14 @@ export async function subUploadLibFile(data: DefaultUploadFileFc): Promise<any>;
 export async function subUploadLibFile(data: UploadFileFc | DefaultUploadFileFc) {
     return await axios.post(`/api/v1/knowledge/process`, data);
 }
+
+export async function importKnowledgeWebLinkApi(
+    knowledgeId: string | number,
+    data: { url: string; title?: string; overwrite?: boolean }
+) {
+    return await axios.post(`/api/v1/knowledge/space/${knowledgeId}/web-links`, data, { silent: true } as any);
+}
+
 //调整分段策略
 export async function rebUploadFile(data) {
     return await axios.post(`/api/v1/knowledge/process/rebuild`, data);
@@ -533,7 +541,9 @@ export function previewFileSplitApi(
     const emitError = (payload) => {
         onEvent('error', {
             code: payload?.code || 10952,
-            message: payload?.message || '文档解析失败'
+            message: payload?.message || '文档解析失败',
+            data: payload?.data,
+            ...payload,
         });
     };
 

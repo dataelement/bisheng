@@ -22,14 +22,32 @@
         <!-- window.APP_CONFIG.baseUrl -->
         <!-- style -->
         <script>
+            var defaultThemeStyle = {
+                comp: {},
+                bg: ''
+            }
+            // The application can render before the request below finishes. Keep a
+            // usable value available even when the saved configuration is invalid.
+            window.ThemeStyle = defaultThemeStyle
+
             fetch('<%- baseUrl %>/api/v1/web/config').then(function (res) {
                 return res.json()
             }).then(function (res) {
                 console.log('res :>> ', res.data);
-                var styleStr = res.data ? res.data.value : ''
-                var style = styleStr ? JSON.parse(styleStr) : {
-                    comp: {},
-                    bg: ''
+                var styleStr = res.data && res.data.value
+                var style = defaultThemeStyle
+                if (styleStr) {
+                    try {
+                        var savedStyle = JSON.parse(styleStr)
+                        if (savedStyle && typeof savedStyle === 'object') {
+                            style = {
+                                comp: savedStyle.comp && typeof savedStyle.comp === 'object' ? savedStyle.comp : {},
+                                bg: typeof savedStyle.bg === 'string' ? savedStyle.bg : ''
+                            }
+                        }
+                    } catch (error) {
+                        console.warn('Invalid web theme configuration, using defaults.', error)
+                    }
                 }
                 window.ThemeStyle = style
                 Object.keys(style.comp).forEach(key => {
@@ -37,6 +55,8 @@
                     var hslStr = `${hsl.h} ${hsl.s * 100}% ${hsl.l * 100}%`
                     document.documentElement.style.setProperty(key, hslStr);
                 });
+            }).catch(function (error) {
+                console.warn('Unable to load web theme configuration, using defaults.', error)
             })
             // 兼容历史
         </script>

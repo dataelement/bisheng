@@ -1,14 +1,17 @@
 import logging
 from logging.config import fileConfig
 
-from sqlalchemy import inspect, text
-
 from alembic import context
 from alembic.ddl.impl import DefaultImpl
+from sqlalchemy import inspect, text
 
 from bisheng.common.models.base import SQLModelSerializable
+from bisheng.core.database.alembic_helpers import mysql_impl as _mysql_impl  # noqa: F401
+from bisheng.core.database.alembic_helpers.indexes import find_equivalent_index
 from bisheng.core.database.alembic_helpers.online import (
+    create_missing_model_tables,
     finalize_online_migration_connection,
+    should_create_model_tables,
 )
 
 logger = logging.getLogger("alembic.dm")
@@ -41,27 +44,31 @@ def _patch_dm_get_indexes_rows() -> None:
         return  # not running on a DaMeng-capable platform
 
     @_refl.cache  # preserve the original LRU cache decoration
-    def _get_indexes_rows(self, connection, schema, filter_names,
-                          scope, dblink=None, **kw):
+    def _get_indexes_rows(self, connection, schema, filter_names, scope, dblink=None, **kw):
         if isinstance(filter_names, str):
             filter_names = [filter_names]
 
         schema = self.denormalize_name(schema or self.default_schema_name)
-        flag = (schema is not None
-                and schema.upper() == self.default_schema_name.upper())
+        flag = schema is not None and schema.upper() == self.default_schema_name.upper()
 
         params = {"param_0": schema}
         col_query = (
             'SELECT table_name as "table_name", index_name as "index_name", '
             'table_owner as "table_owner", column_name as "column_name" '
-            'FROM ALL_IND_COLUMNS '
-            'WHERE TABLE_OWNER = :param_0 AND TABLE_NAME IN ('
+            "FROM ALL_IND_COLUMNS "
+            "WHERE TABLE_OWNER = :param_0 AND TABLE_NAME IN ("
         )
         query_tail = ") ORDER BY index_name"
 
         if filter_names is None:
             all_objects = self._get_all_objects(
-                connection, schema, scope, None, filter_names, dblink, **kw,
+                connection,
+                schema,
+                scope,
+                None,
+                filter_names,
+                dblink,
+                **kw,
             )
         else:
             all_objects = [self.denormalize_name(n) for n in filter_names]
@@ -70,7 +77,12 @@ def _patch_dm_get_indexes_rows() -> None:
         col_query = col_query % {"dblink": dblink or ""}
 
         col_result = self._run_batches(
-            connection, all_objects, col_query, query_tail, dblink, params,
+            connection,
+            all_objects,
+            col_query,
+            query_tail,
+            dblink,
+            params,
         )
 
         idx_query = (
@@ -94,7 +106,12 @@ def _patch_dm_get_indexes_rows() -> None:
         idx_query = idx_query % {"dblink": dblink or ""}
 
         index_result = self._run_batches(
-            connection, all_objects, idx_query, query_tail, dblink, params,
+            connection,
+            all_objects,
+            idx_query,
+            query_tail,
+            dblink,
+            params,
         )
 
         idx_meta = {
@@ -118,8 +135,7 @@ def _patch_dm_get_indexes_rows() -> None:
         }
         merged = []
         for col_row in col_result:
-            key = (col_row["table_name"], col_row["index_name"],
-                   col_row["table_owner"])
+            key = (col_row["table_name"], col_row["index_name"], col_row["table_owner"])
             base = {
                 "table_name": col_row["table_name"],
                 "index_name": col_row["index_name"],
@@ -135,7 +151,12 @@ def _patch_dm_get_indexes_rows() -> None:
         pks = {
             row["cons_name"]
             for row in self.get_multi_constraint_data(
-                connection, schema, filter_names, scope, None, dblink,
+                connection,
+                schema,
+                filter_names,
+                scope,
+                None,
+                dblink,
             )
             if row["constraint_type"] == "P"
         }
@@ -175,55 +196,36 @@ class DaMengImpl(DefaultImpl):
           same selectivity — so behaviour is preserved.
         """
         try:
-            cols = [str(c.name) for c in index.expressions
-                    if hasattr(c, "name")]
-            table_name = index.table.name if index.table is not None else None
-            index_name = (index.name or "").lower()
-            if cols and table_name:
-                bind = self.connection
-                if bind is not None:
-                    insp = inspect(bind)
-                    existing_indexes = insp.get_indexes(table_name)
-                    for existing_idx in existing_indexes:
-                        same_name = (existing_idx.get("name") or "").lower() == index_name
-                        same_cols = list(existing_idx.get("column_names") or []) == cols
-                        if same_name or same_cols:
-                            logger.warning(
-                                "[dm] Skip create_index %s on %s(%s): "
-                                "already present as index %s",
-                                index.name, table_name, ",".join(cols),
-                                existing_idx.get("name"),
-                            )
-                            return
-                    # A unique INDEX (create_index unique=True) collides with an
-                    # existing UNIQUE CONSTRAINT of the same name or same column
-                    # set, even though they live in different reflection lists.
-                    if index.unique:
-                        existing_uqs = insp.get_unique_constraints(table_name)
-                        for ex in existing_uqs:
-                            same_name = (ex.get("name") or "").lower() == index_name
-                            same_cols = list(ex.get("column_names") or []) == cols
-                            if same_name or same_cols:
-                                logger.warning(
-                                    "[dm] Skip create_index UNIQUE %s on %s(%s): "
-                                    "equivalent UNIQUE constraint %s already present",
-                                    index.name, table_name, ",".join(cols),
-                                    ex.get("name"),
-                                )
-                                return
+            equivalent, existing_name = find_equivalent_index(self.connection, index)
+            if equivalent:
+                logger.warning(
+                    "[dm] Skip create_index %s on %s: equivalent index %s already exists",
+                    index.name,
+                    index.table.name if index.table is not None else "<unknown>",
+                    existing_name or "<unnamed>",
+                )
+                return None
         except Exception:
-            logger.exception(
-                "[dm] create_index pre-check failed; falling back to default"
-            )
+            logger.exception("[dm] create_index pre-check failed; falling back to default")
         return super().create_index(index, **kw)
 
     def alter_column(  # type: ignore[override]
-        self, table_name, column_name, nullable=None,
-        server_default=False, name=None, type_=None,
-        schema=None, autoincrement=None, comment=False,
-        existing_comment=None, existing_type=None,
-        existing_server_default=None, existing_nullable=None,
-        existing_autoincrement=None, **kw,
+        self,
+        table_name,
+        column_name,
+        nullable=None,
+        server_default=False,
+        name=None,
+        type_=None,
+        schema=None,
+        autoincrement=None,
+        comment=False,
+        existing_comment=None,
+        existing_type=None,
+        existing_server_default=None,
+        existing_nullable=None,
+        existing_autoincrement=None,
+        **kw,
     ):
         """Emit DM8-compatible ALTER COLUMN DDL.
 
@@ -242,12 +244,11 @@ class DaMengImpl(DefaultImpl):
         """
         if type_ is not None:
             from sqlalchemy.schema import Column
+
             tmp_col = Column(column_name, type_)
             compiled_type = type_.compile(dialect=self.dialect)
             stmt = (
-                f"ALTER TABLE {table_name} MODIFY "
-                f"{self.dialect.identifier_preparer.quote(column_name)} "
-                f"{compiled_type}"
+                f"ALTER TABLE {table_name} MODIFY {self.dialect.identifier_preparer.quote(column_name)} {compiled_type}"
             )
             self._exec(text(stmt))
             # Re-enter for remaining attribute changes (nullable/default/etc.)
@@ -255,14 +256,21 @@ class DaMengImpl(DefaultImpl):
             existing_type = tmp_col.type
 
         return super().alter_column(
-            table_name, column_name,
-            nullable=nullable, server_default=server_default,
-            name=name, type_=type_, schema=schema,
-            autoincrement=autoincrement, comment=comment,
-            existing_comment=existing_comment, existing_type=existing_type,
+            table_name,
+            column_name,
+            nullable=nullable,
+            server_default=server_default,
+            name=name,
+            type_=type_,
+            schema=schema,
+            autoincrement=autoincrement,
+            comment=comment,
+            existing_comment=existing_comment,
+            existing_type=existing_type,
             existing_server_default=existing_server_default,
             existing_nullable=existing_nullable,
-            existing_autoincrement=existing_autoincrement, **kw,
+            existing_autoincrement=existing_autoincrement,
+            **kw,
         )
 
     def add_constraint(self, const, **kw):  # type: ignore[override]
@@ -279,6 +287,7 @@ class DaMengImpl(DefaultImpl):
           insensitive — DM8 normalizes to uppercase) or the column set.
         """
         from sqlalchemy.schema import UniqueConstraint
+
         try:
             if isinstance(const, UniqueConstraint):
                 cols = [str(c.name) for c in const.columns]
@@ -293,17 +302,17 @@ class DaMengImpl(DefaultImpl):
                             same_cols = list(ex.get("column_names") or []) == cols
                             if same_name or same_cols:
                                 logger.warning(
-                                    "[dm] Skip add UNIQUE %s on %s(%s): "
-                                    "equivalent constraint %s already present",
-                                    const.name, table_name, ",".join(cols),
+                                    "[dm] Skip add UNIQUE %s on %s(%s): equivalent constraint %s already present",
+                                    const.name,
+                                    table_name,
+                                    ",".join(cols),
                                     ex.get("name"),
                                 )
                                 return
         except Exception:
-            logger.exception(
-                "[dm] add_constraint pre-check failed; falling back to default"
-            )
+            logger.exception("[dm] add_constraint pre-check failed; falling back to default")
         return super().add_constraint(const, **kw)
+
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -332,29 +341,21 @@ def ensure_alembic_version_table(connection) -> None:
 
     Uses SQLAlchemy Inspector — dialect-agnostic, works on MySQL and DaMeng.
     """
-    from bisheng.core.database.dialect_helpers import table_exists, get_version_num_length
+    from bisheng.core.database.dialect_helpers import get_version_num_length, table_exists
 
     dialect_name = connection.dialect.name
     if dialect_name not in ("mysql", "dm"):
         return
 
     if not table_exists(connection, "alembic_version"):
-        connection.execute(
-            text(
-                "CREATE TABLE alembic_version ("
-                "version_num VARCHAR(255) NOT NULL PRIMARY KEY"
-                ")"
-            )
-        )
+        connection.execute(text("CREATE TABLE alembic_version (version_num VARCHAR(255) NOT NULL PRIMARY KEY)"))
         return
 
     length = get_version_num_length(connection)
     if length is not None and int(length) < 255:
         # Column resize has no dialect-agnostic Alembic API outside a migration
         # context. Both MySQL and DaMeng support MODIFY syntax for ALTER TABLE.
-        connection.execute(
-            text("ALTER TABLE alembic_version MODIFY version_num VARCHAR(255) NOT NULL")
-        )
+        connection.execute(text("ALTER TABLE alembic_version MODIFY version_num VARCHAR(255) NOT NULL"))
 
 
 def run_migrations_online() -> None:
@@ -366,13 +367,25 @@ def run_migrations_online() -> None:
     """
 
     from bisheng.core.database.manager import sync_get_database_connection
-    database_conn_manager = sync_get_database_connection()
+    from bisheng.core.database.model_discovery import import_all_sqlmodel_models
 
+    database_conn_manager = sync_get_database_connection()
+    import_all_sqlmodel_models()
+
+    is_online_upgrade = False
     with database_conn_manager.engine.connect() as connection:
         ensure_alembic_version_table(connection)
-        context.configure(
-            connection=connection, target_metadata=target_metadata
-        )
+        context.configure(connection=connection, target_metadata=target_metadata)
+        migration_context = context.get_context()
+        is_online_upgrade = should_create_model_tables(migration_context)
+        if is_online_upgrade:
+            created_tables = create_missing_model_tables(connection, target_metadata)
+            if created_tables:
+                logger.info(
+                    "Created %d missing model tables before replaying Alembic revisions: %s",
+                    len(created_tables),
+                    ", ".join(created_tables),
+                )
 
         with context.begin_transaction():
             context.run_migrations()
@@ -381,6 +394,9 @@ def run_migrations_online() -> None:
         # MySQL even when Alembic treats DDL as non-transactional. Commit
         # it explicitly so backfills and alembic_version updates persist.
         finalize_online_migration_connection(connection)
+
+    if is_online_upgrade:
+        database_conn_manager.ensure_dialect_schema_objects()
 
 
 run_migrations_online()

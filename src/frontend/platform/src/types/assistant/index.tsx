@@ -33,8 +33,10 @@ export interface AssistantDetail {
     tool_list?: AssistantTool[];
     /** 助手的技能ID列表，为None则不更新 */
     flow_list?: FlowType[];
-    /** 知识库ID列表，为None则不更新 */
-    knowledge_list?: { id: number, name: string, index_name: string }[];
+    /** 知识库ID列表，为None则不更新；type 区分文档知识库(0)与知识空间(3, KnowledgeTypeEnum.SPACE) (F041) */
+    knowledge_list?: { id: number, name: string, index_name?: string, type?: number }[];
+    /** F041: 用户知识库权限校验开关，默认关；开=按运行使用者 view_file 过滤知识空间检索，关=按配置者可见范围 */
+    knowledge_auth?: boolean;
     max_token: number;
 }
 

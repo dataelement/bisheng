@@ -102,8 +102,8 @@ export default function Subscribe({ scopeVersion = 0 }: { scopeVersion?: number 
     return (
         <div className=" h-full overflow-y-scroll scrollbar-hide relative border-t">
             <div className="pt-4 relative">
-                <CardContent className="pt-4 relative">
-                    <div className="w-full  max-h-[calc(100vh-180px)] overflow-y-scroll scrollbar-hide">
+                <CardContent className="pt-4 pb-0 relative">
+                    <div className="w-full  max-h-[calc(100vh-180px-var(--license-banner-h,0px))] overflow-y-scroll scrollbar-hide">
                         <ConfigInheritanceBanner meta={configMeta} />
                         <div className="mb-6">
                             <div className="flex items-center mb-2">

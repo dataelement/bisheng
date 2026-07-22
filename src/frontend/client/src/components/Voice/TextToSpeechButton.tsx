@@ -17,7 +17,7 @@ interface TextToSpeechButtonProps {
 }
 
 export const TextToSpeechButton = ({ messageId, text, className }: TextToSpeechButtonProps) => {
-    const { activeMessageId, isLoadingAudio, isPlaying, playAudio, setActiveMessageId, pauseAudio, resumeAudio, stopAudio, setIsLoadingAudio } = useAudioPlayer()
+    const { activeMessageId, isLoadingAudio, isPlaying, playAudio, pauseAudio, resumeAudio } = useAudioPlayer()
     const { showToast } = useToastContext()
 
     // Check current message playback state
@@ -69,25 +69,20 @@ export const TextToSpeechButton = ({ messageId, text, className }: TextToSpeechB
                 return
             }
 
-            setActiveMessageId(messageId)
-            setIsLoadingAudio(true)
-            // If this is a new message, fetch audio and play
-            const audioUrl = await fetchAudioUrl(text)
-            playAudio(messageId, audioUrl)
+            // New message: the store stops any currently-playing audio at once,
+            // fetches, then plays — discarding the result if the user starts
+            // another playback while this fetch is in flight (token guard).
+            await playAudio(messageId, () => fetchAudioUrl(text))
         } catch (error) {
             console.error("Failed to play audio:", error)
             // A backend business error (e.g. TTS synthesis failure, code 10026)
             // already got its localized toast from the request interceptor
             // (skip403Redirect path) — only show the generic fallback here for
             // errors that never reached that path (network failure, malformed
-            // response, etc.), so the user doesn't see two toasts.
+            // response, etc.), so the user doesn't see two toasts. State reset
+            // on error is handled inside the store.
             if (!(error as any)?.status_code) {
                 showToast({ message: "播放功能不可用，请联系管理员", status: "error" })
-            }
-
-            // Clean up state on error
-            if (isCurrentMessage) {
-                stopAudio()
             }
         }
     }

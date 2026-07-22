@@ -71,55 +71,79 @@ class CitationResolveService:
             grouped[int(space_id)].add(int(file_id))
         return grouped
 
-    async def _filter_visible_rag_items(
+    async def _permitted_file_ids(
         self,
         items: list[CitationRegistryItemSchema],
         login_user: UserPayload | None,
-    ) -> list[CitationRegistryItemSchema]:
-        """Drop RAG citations whose documentId fails ``view_file``.
+    ) -> set[int] | None:
+        """Return the flat set of RAG documentIds the user holds ``view_file`` on.
 
-        Anonymous callers (``login_user is None``) bypass the filter — this
-        preserves the legacy share-link behaviour spec'd in AC-20. Web
-        citations always pass through (AC-19). Admin users always pass
-        through (handled by the underlying service short-circuit).
+        Returns ``None`` for anonymous callers (``login_user is None``) — meaning
+        "no gating" (legacy share-link behaviour, AC-20). Admin short-circuits to
+        the full input set inside ``post_filter_visible_files``. document_id is
+        globally unique, so a flat set is sufficient across spaces.
         """
         if login_user is None or not items:
-            return list(items)
-
+            return None
         grouped = await self._resolve_rag_space_pairs(items)
         if not grouped:
-            # No RAG items needing a filter — return as-is.
-            return list(items)
+            return set()
 
         from bisheng.knowledge.domain.services.knowledge_file_visibility_service import (
             KnowledgeFileVisibilityService,
         )
 
         visibility = KnowledgeFileVisibilityService(request=None, login_user=login_user)
-
-        permitted: dict[int, set[int]] = {}
+        allowed: set[int] = set()
         for space_id, file_ids in grouped.items():
             if space_id == 0 or not file_ids:
-                permitted[space_id] = set()
                 continue
-            permitted[space_id] = await visibility.post_filter_visible_files(space_id, file_ids)
+            allowed |= await visibility.post_filter_visible_files(space_id, file_ids)
+        return allowed
 
+    @staticmethod
+    def _rag_url_allowed(item: CitationRegistryItemSchema, permitted: set[int] | None) -> bool:
+        """Whether the viewer may receive full-file preview/download URLs (view_file)."""
+        if item.type != CitationType.RAG or permitted is None:  # web / anonymous → allowed
+            return True
+        payload = RagCitationPayloadSchema.model_validate(item.sourcePayload)
+        return payload.documentId is not None and int(payload.documentId) in permitted
+
+    def _apply_tier_filter(
+        self,
+        items: list[CitationRegistryItemSchema],
+        permitted: set[int] | None,
+    ) -> list[CitationRegistryItemSchema]:
+        """F041 tiered gate. Web citations always pass. ``per_user`` RAG citations
+        are dropped when the file fails ``view_file``. ``shared`` RAG citations
+        (toggle-OFF knowledge-space sources) are kept regardless — their full-file
+        URLs are gated later in enrichment. ``permitted is None`` (anonymous) keeps
+        everything (AC-19/20/21).
+        """
+        if permitted is None:
+            return list(items)
         filtered: list[CitationRegistryItemSchema] = []
         for item in items:
             if item.type != CitationType.RAG:
                 filtered.append(item)
                 continue
-            payload = RagCitationPayloadSchema.model_validate(item.sourcePayload)
-            file_id = payload.documentId
-            if file_id is None:
-                continue
-            space_id = payload.knowledgeId
-            if space_id is None:
-                file_info = await asyncio.to_thread(KnowledgeFileDao.query_by_id_sync, file_id)
-                space_id = int(file_info.knowledge_id) if file_info is not None else 0
-            if int(file_id) in permitted.get(int(space_id), set()):
+            if item.accessScope == "shared" or self._rag_url_allowed(item, permitted):
                 filtered.append(item)
         return filtered
+
+    async def _filter_visible_rag_items(
+        self,
+        items: list[CitationRegistryItemSchema],
+        login_user: UserPayload | None,
+    ) -> list[CitationRegistryItemSchema]:
+        """Resolve view_file permission and apply the tiered filter in one step.
+
+        Kept as the single-call entry (used by ``resolve_citation`` and existing
+        F029 tests); ``resolve_citations`` computes ``permitted`` once and reuses it
+        for both filtering and enrichment URL gating.
+        """
+        permitted = await self._permitted_file_ids(items, login_user)
+        return self._apply_tier_filter(items, permitted)
 
     # ------------------------------------------------------------------
     # Enrichment
@@ -142,15 +166,17 @@ class CitationResolveService:
         self,
         item: CitationRegistryItemSchema,
         login_user: UserPayload | None,
+        url_allowed: bool = True,
     ) -> CitationRegistryItemSchema:
-        """Enrich a RAG citation with file share URLs and best-effort bbox details.
+        """Enrich a RAG citation with source metadata and (when permitted) file URLs.
 
-        F029: by the time enrichment runs the upstream ``_filter_visible_rag_items``
-        has already removed citations the user cannot see; URLs / bbox are
-        therefore always populated for surviving items (anonymous callers
-        too, preserving the share-link behaviour).
+        F029: ``per_user`` survivors are always ``url_allowed`` (the filter dropped
+        the rest). F041: a ``shared`` citation (toggle-OFF space source) can survive
+        the filter while ``url_allowed`` is False — then we fill source metadata
+        (documentName / knowledgeId) but withhold the full-file preview/download URLs
+        and bbox (AC-21).
         """
-        del login_user  # filter step already enforced visibility
+        del login_user  # filter step already enforced view_file for per_user
         payload = RagCitationPayloadSchema.model_validate(item.sourcePayload)
         file_id = payload.documentId
 
@@ -172,17 +198,18 @@ class CitationResolveService:
                     payload.knowledgeId = payload.knowledgeId or file_info.knowledge_id
                     payload.documentName = payload.documentName or file_info.file_name
 
-                    download_url, preview_url = await asyncio.to_thread(
-                        KnowledgeService.get_file_share_url,
-                        None,
-                        file_info,
-                    )
-                    payload.downloadUrl = download_url or payload.downloadUrl
-                    payload.previewUrl = preview_url or payload.previewUrl
-                    if payload.items:
-                        first_item = payload.items[0]
-                        resolved_bbox = await self._resolve_bbox(file_info.id, first_item.bbox)
-                        payload.items[0] = first_item.model_copy(update={"bbox": resolved_bbox})
+                    if url_allowed:
+                        download_url, preview_url = await asyncio.to_thread(
+                            KnowledgeService.get_file_share_url,
+                            None,
+                            file_info,
+                        )
+                        payload.downloadUrl = download_url or payload.downloadUrl
+                        payload.previewUrl = preview_url or payload.previewUrl
+                        if payload.items:
+                            first_item = payload.items[0]
+                            resolved_bbox = await self._resolve_bbox(file_info.id, first_item.bbox)
+                            payload.items[0] = first_item.model_copy(update={"bbox": resolved_bbox})
 
         return item.model_copy(update={"sourcePayload": payload})
 
@@ -197,10 +224,11 @@ class CitationResolveService:
         self,
         item: CitationRegistryItemSchema,
         login_user: UserPayload | None,
+        url_allowed: bool = True,
     ) -> CitationRegistryItemSchema:
         """Enrich a citation item based on its type."""
         if item.type == CitationType.RAG:
-            return await self._enrich_rag_item(item, login_user)
+            return await self._enrich_rag_item(item, login_user, url_allowed=url_allowed)
         return self._enrich_web_item(item)
 
     # ------------------------------------------------------------------
@@ -224,12 +252,15 @@ class CitationResolveService:
             item = await self.registry_service.get_citation(citation_id)
         if item is None:
             raise NotFoundError()
+        url_allowed = True
         if item.type == CitationType.RAG and login_user is not None:
-            visible = await self._filter_visible_rag_items([item], login_user)
-            if not visible:
+            permitted = await self._permitted_file_ids([item], login_user)
+            url_allowed = self._rag_url_allowed(item, permitted)
+            # per_user + no view_file → not found (AC-18); shared survives with
+            # metadata but no full-file URL (AC-21).
+            if not url_allowed and item.accessScope != "shared":
                 raise NotFoundError()
-            item = visible[0]
-        return await self._enrich_item(item, login_user)
+        return await self._enrich_item(item, login_user, url_allowed=url_allowed)
 
     async def resolve_citations(
         self,
@@ -250,8 +281,11 @@ class CitationResolveService:
         if missing_ids:
             items.extend(await self.registry_service.list_citations_by_ids(missing_ids))
 
-        items = await self._filter_visible_rag_items(items, login_user)
+        permitted = await self._permitted_file_ids(items, login_user)
+        items = self._apply_tier_filter(items, permitted)
 
-        enriched_items = await asyncio.gather(*(self._enrich_item(item, login_user) for item in items))
+        enriched_items = await asyncio.gather(
+            *(self._enrich_item(item, login_user, url_allowed=self._rag_url_allowed(item, permitted)) for item in items)
+        )
         item_map: dict[str, CitationRegistryItemSchema] = {item.citationId: item for item in enriched_items}
         return [item_map[citation_id] for citation_id in citation_ids if citation_id in item_map]

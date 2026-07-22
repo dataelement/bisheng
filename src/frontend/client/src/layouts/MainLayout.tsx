@@ -22,7 +22,7 @@ const systemNoticeTodayKey = () => {
 };
 import { cn } from '~/utils';
 import { getPlatformAdminPanelUrl } from '~/utils/platformAdminUrl';
-import { canOpenWorkbench } from '~/utils/platformAccess';
+import { canOpenWorkbench, canShowPlatformAdminEntry } from '~/utils/platformAccess';
 import { UserPopMenu } from './UserPopMenu';
 import WorkbenchAccessGuard from './WorkbenchAccessGuard';
 import { appsSectionLinkTarget, lastSectionPaths } from './appModuleNavPaths';
@@ -131,15 +131,15 @@ function Sidebar({
   const showHomeTab = showWorkbenchItem('home');
   const showAppsTab = showWorkbenchItem('apps');
 
-  // The 管理后台 entry mirrors the 「管理后台」 parent toggle in the role dialog,
-  // which is keyed on the new `admin` menu only — NOT the deprecated `backend`
-  // alias or any admin child menu. So we deliberately do not use has_admin_console
-  // here (it also counts `backend` + child menus). Super/dept admins always have
-  // it. The admin approval scope only governs menus *inside* the console.
-  const showAdminEntry =
-    user?.role === 'admin'
-    || Boolean((user as { is_department_admin?: boolean } | null)?.is_department_admin)
-    || Boolean(plugins?.includes('admin'));
+  // Prefer the backend-computed effective area permission. This includes tenant
+  // admins whose role still carries the compatible `backend` key rather than the
+  // newer `admin` parent key. Older servers fall back to parent-menu semantics.
+  const showAdminEntry = canShowPlatformAdminEntry({
+    role: user?.role,
+    plugins,
+    is_department_admin: user?.is_department_admin,
+    has_admin_console: user?.has_admin_console,
+  });
 
   // --- Sidebar link definitions with dynamic `to` for KeepAlive restoration ---
   const links = useMemo<Array<{

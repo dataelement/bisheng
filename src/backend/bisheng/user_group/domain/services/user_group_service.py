@@ -29,17 +29,14 @@ AdminRole = 1
 
 
 def purge_user_group_residual_sync(group_id: int) -> None:
-    """删组的同步残留副作用：清理组管理员行 + 推送网关 `delete_group` 通知。
+    """Notify the gateway of a user-group deletion.
 
-    资源与角色均已与用户组解耦，删组不再迁移资源、不清理 group_resource，
-    也不级联删除角色。新旧两套删组路径共用此函数以避免重复实现。
+    Group membership rows are deleted transactionally by ``GroupDao`` together
+    with the group row. Resources and roles remain decoupled from user groups.
     """
     import json
 
     from bisheng.core.cache.redis_manager import get_redis_client_sync
-    from bisheng.database.models.user_group import UserGroupDao
-
-    UserGroupDao.delete_group_all_admin(group_id)
 
     delete_message = json.dumps({'id': group_id})
     redis_client = get_redis_client_sync()

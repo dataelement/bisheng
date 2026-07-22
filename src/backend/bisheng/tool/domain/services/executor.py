@@ -28,6 +28,15 @@ from bisheng_langchain.gpts.load_tools import load_tools
 from bisheng_langchain.gpts.tools.api_tools.openapi import OpenApiTools
 
 
+class ToolInitializationError(RuntimeError):
+    """Add a safe tool identity to an initialization failure."""
+
+    def __init__(self, tool: GptsTools, cause: Exception):
+        tool_id = getattr(tool, "id", None)
+        tool_name = getattr(tool, "name", None) or getattr(tool, "tool_key", None) or "unknown"
+        super().__init__(f'Tool "{tool_name}" (id={tool_id}) initialization failed: {type(cause).__name__}: {cause}')
+
+
 def wrapper_tool(func):
     @functools.wraps(func)
     async def inner(*args, **kwargs):
@@ -224,6 +233,33 @@ class ToolExecutor(BaseTool):
         )
 
     @classmethod
+    def _init_by_tool_and_type_with_context(
+        cls,
+        tool: GptsTools,
+        tool_type: GptsToolsType,
+        *,
+        app_id: str,
+        app_name: str,
+        app_type: ApplicationTypeEnum,
+        user_id: int,
+        **kwargs,
+    ) -> BaseTool:
+        try:
+            return cls._init_by_tool_and_type(
+                tool=tool,
+                tool_type=tool_type,
+                app_id=app_id,
+                app_name=app_name,
+                app_type=app_type,
+                user_id=user_id,
+                **kwargs,
+            )
+        except ToolInitializationError:
+            raise
+        except Exception as exc:
+            raise ToolInitializationError(tool, exc) from exc
+
+    @classmethod
     async def init_by_tool_id(
         cls,
         tool_id: int = None,
@@ -245,7 +281,7 @@ class ToolExecutor(BaseTool):
         if not tool_type:
             raise ValueError(f"Tool type with id {tool.type} not found.")
         await cls._ensure_use_permission_async(tool_type, user_id)
-        return cls._init_by_tool_and_type(
+        return cls._init_by_tool_and_type_with_context(
             tool=tool,
             tool_type=tool_type,
             app_id=app_id,
@@ -276,7 +312,7 @@ class ToolExecutor(BaseTool):
             if enforce_permission:
                 cls._ensure_use_permission_sync(tool_type, user_id)
             result.append(
-                cls._init_by_tool_and_type(
+                cls._init_by_tool_and_type_with_context(
                     tool=tool,
                     tool_type=tool_type,
                     app_id=app_id,
@@ -353,7 +389,7 @@ class ToolExecutor(BaseTool):
             raise ValueError(f"Tool type with id {tool.type} not found.")
         cls._ensure_use_permission_sync(tool_type, user_id)
 
-        return cls._init_by_tool_and_type(
+        return cls._init_by_tool_and_type_with_context(
             tool=tool,
             tool_type=tool_type,
             app_id=app_id,

@@ -14,7 +14,13 @@ from loguru import logger
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import NotFoundError, ServerError
-from bisheng.common.errcode.llm import ModelNameRepeatError, ServerAddAllError, ServerAddError, ServerExistError
+from bisheng.common.errcode.llm import (
+    ModelNameRepeatError,
+    ServerAddAllError,
+    ServerAddError,
+    ServerExistError,
+    WorkbenchEmbeddingError,
+)
 from bisheng.common.errcode.llm_tenant import (
     LLMModelNotAccessibleError,
     LLMSystemConfigForbiddenError,
@@ -1043,7 +1049,13 @@ class LLMService:
         """Update default model configuration for knowledge base"""
         target = _resolve_tenant_id(tenant_id)
         await avalidate_system_model_refs(
-            [data.embedding_model_id, data.source_model_id, data.extract_title_model_id, data.qa_similar_model_id],
+            [
+                data.embedding_model_id,
+                data.source_model_id,
+                data.extract_title_model_id,
+                data.qa_similar_model_id,
+                data.asr_model_id,
+            ],
             target,
         )
         await cls._base_update_llm_config(
@@ -1333,6 +1345,12 @@ class LLMService:
             ``None`` falls back to the admin-scope ContextVar then Root.
         :return:
         """
+        if config_obj.embedding_model is not None:
+            embedding_model_id = _coerce_model_id(config_obj.embedding_model.id)
+            if embedding_model_id is None:
+                raise WorkbenchEmbeddingError()
+            config_obj.embedding_model.id = str(embedding_model_id)
+
         # Delay imports to avoid looping imports
         from bisheng.worker.knowledge.rebuild_knowledge_worker import rebuild_knowledge_celery
 

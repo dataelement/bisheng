@@ -38,7 +38,7 @@ const invoices = [
 export default function Example(params) {
     const { t } = useTranslation(); // Initialize translation hook
 
-    return <div className="h-[calc(100vh-220px)] overflow-y-auto py-10 pl-2 pr-10">
+    return <div className="h-[calc(100vh-220px-var(--license-banner-h,0px))] overflow-y-auto py-10 pl-2 pr-10">
         <Label className="mt-10">{t('example.buttons')}</Label>
         <div className="flex gap-2 mb-6">
             <Button variant="default">{t('example.button')}</Button>

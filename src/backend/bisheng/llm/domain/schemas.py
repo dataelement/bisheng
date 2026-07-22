@@ -131,6 +131,7 @@ class KnowledgeLLMConfig(BaseModel):
         None, description="Documentation Knowledge Base Extraction Header Model'sID"
     )
     qa_similar_model_id: int | None = Field(None, description="QAThe Knowledge Base Similarity Question Model'sID")
+    asr_model_id: int | None = Field(None, description="Knowledge base media transcription ASR model ID")
     abstract_enabled: bool = Field(default=True, description="Whether to generate file summaries after parsing")
     auto_tag_enabled: bool = Field(default=True, description="Whether to generate file tags after upload parsing")
     abstract_prompt: str | None = Field(None, description="Summary Prompt")

@@ -83,34 +83,32 @@ class InitLlmError(BaseErrorCode):
 
 class NoAsrModelConfigError(BaseErrorCode):
     Code: int = 10014
-    Msg: str = "No bulkpost found in Trashasrmodel config"
+    Msg: str = 'Knowledge base ASR model is not configured'
 
 
 class AsrModelConfigDeletedError(BaseErrorCode):
     Code: int = 10015
-    Msg: str = "asrModel configuration has been deleted, please reconfigure the model"
+    Msg: str = 'Knowledge base ASR model configuration has been deleted'
 
 
 class AsrProviderDeletedError(BaseErrorCode):
     Code: int = 10016
-    Msg: str = "Service provider configuration has been deleted, please reconfigureasrModels"
+    Msg: str = 'Knowledge base ASR provider has been deleted'
 
 
 class AsrModelTypeError(BaseErrorCode):
     Code: int = 10017
-    Msg: str = "Support onlyASRModel of type, not supported{model_type}Type of model"
+    Msg: str = 'Only ASR-type models are supported for knowledge base media transcription, got {model_type}'
 
 
 class AsrModelOfflineError(BaseErrorCode):
     Code: int = 10018
-    Msg: str = "{server_name}under{model_name}The model is offline, please contact the administrator to launch the corresponding model"
+    Msg: str = 'Knowledge base ASR model {model_name} under {server_name} is offline'
 
 
 class InitAsrError(BaseErrorCode):
     Code: int = 10019
-    Msg: str = (
-        "InisialisasiasrFailed, please check the configuration or contact the administrator.Error message:{exception}"
-    )
+    Msg: str = 'Failed to initialize knowledge base ASR. Error: {exception}'
 
 
 class NoTtsModelConfigError(BaseErrorCode):

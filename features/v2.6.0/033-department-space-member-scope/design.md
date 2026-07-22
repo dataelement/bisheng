@@ -121,14 +121,14 @@
 
 | # | 位置 | 做什么 / 不做什么 |
 |---|------|------|
-| B1 | 新增 `_resolve_department_space_scope(resource_type, resource_id)` | 仅 `resource_type=='knowledge_space'` 时查 `DepartmentKnowledgeSpaceDao.aget_by_space_id`；命中则 `DepartmentDao.aget_by_id` 取绑定部门，复用 `DepartmentDao.aget_subtree_ids(path)`（已含 `status='active'` + path 前缀）得 `subtree_dept_ids`，返回 frozen dataclass `_DepartmentSpaceScope{department_id, subtree_dept_ids: frozenset}`；否则 `None`。**单一判定来源**。〔实现修订：去掉原稿的 `path` 字段，对外只用 `subtree_dept_ids`；见 tasks.md 偏差记录〕 |
+| B1 | 新增 `_resolve_department_space_scope(resource_type, resource_id, *, load_subtree_ids=True)` | 仅 `resource_type=='knowledge_space'` 时查 `DepartmentKnowledgeSpaceDao.aget_by_space_id`；命中则 `DepartmentDao.aget_by_id` 取绑定部门，返回 frozen dataclass `_DepartmentSpaceScope{department_id, department_path, subtree_dept_ids}`。授权写入校验保留默认 `load_subtree_ids=True`，复用 `DepartmentDao.aget_subtree_ids(path)` 得到严格 ID 集；候选列表等只读路径传 `False`，直接使用 `department_path`，不展开整棵子树。否则返回 `None`。**单一判定来源**。〔2026-07-15 性能修订：恢复 path 字段并按调用场景按需加载 ID，见 tasks.md 偏差记录〕 |
 | B2 | `_list_knowledge_space_grant_departments` | 增 `restrict_dept_ids: set|None` 入参；非空时在既有 `stmt` 上追加 `Department.id.in_(restrict_dept_ids)`（仍复用既有建树/计数/排序，仅缩小集合）。 |
-| B3 | `_list_knowledge_space_grant_users` | 增 `restrict_dept_ids: set|None` 入参；非空时 `join UserDepartment` 并 `where UserDepartment.department_id.in_(restrict_dept_ids)`（多部门用户命中任一即可，`distinct`）。keyword/分页逻辑不变。 |
-| B4 | `get_grant_subject_users` / `get_grant_subject_departments` 端点 | 调 B1 得 scope；把 `scope.subtree_dept_ids`（或 None）透传给 B3/B2。 |
+| B3 | `_list_knowledge_space_grant_users` | 增 `restrict_dept_path: str|None` 入参；非空时以相关 `EXISTS` 联结 `UserDepartment → Department`，按 `Department.path LIKE '<bound_path>%'` 判断子树成员（多部门用户命中任一即可）。租户成员资格同样使用 `UserTenant EXISTS`；只投影接口需要的用户字段，不再 JOIN `Tenant`、展开大 ID 集或依赖 `distinct`。keyword/分页逻辑不变。 |
+| B4 | `get_grant_subject_users` / `get_grant_subject_departments` 端点 | 调 B1 得 scope；用户候选端点透传 `scope.department_path` 给 B3，授权部门懒加载端点同样使用 path 前缀；归档/缺失绑定部门返回空。 |
 | B5 | `get_grant_subject_user_groups` 端点 | 调 B1；scope 命中 → 直接 `resp_200([])`（不查库）；否则原逻辑。 |
 | B6 | `authorize_resource` | 调 B1；scope 命中时，对 `request.grants` 逐条准入：`user_group` 拒、子树外 `user`/`department` 拒（复用 B1 的 `subtree_dept_ids`；user 命中需该 user 在子树成员集，可复用 B3 的成员查询抽出的 `_subtree_user_ids(scope)`）；**revokes 不校验**。校验对**所有身份生效（含 super_admin / 租户管理员）**，故必须放在既有 `if not login_user.is_admin()` 管理权豁免分支**之外**——紧跟 `_is_invalid_owner_subject` 块之后、写入之前。 |
 
-> 说明：B2/B3 的 `restrict_dept_ids=None` 即现状路径——**普通知识空间与其它资源零行为变化**，这是"不影响普通空间"的代码级保证。
+> 说明：B3 的 `restrict_dept_path=None` 即普通资源路径——**普通知识空间与其它资源零行为变化**，这是“不影响普通空间”的代码级保证。旧 B2 整树端点已由 F038 懒加载端点替代。
 
 ### 4.4 前端改动（client，仅授权 UI 隐藏用户组 tab）
 
@@ -153,8 +153,8 @@
 1. **判定必须在后端、不能信前端 flag** —— 前端 `isDepartmentSpace` 只控制 tab 显隐；列表收敛与 authorize 准入都必须独立用 B1 判定，否则直接调 API 可越权（绕过隐藏的 tab）。这是双层落地的根因。
 2. **revoke 不能被收敛拦截** —— 准入校验只作用于 `grants`。若把 revoke 也拦了，历史用户组授权将无法在 UI/脚本里撤销，与决策 4 冲突。
 3. **默认 viewer 授权的 `include_children=False` 与新可选范围不一致是预期的** —— 建空间时只给"绑定部门本级"viewer（`_grant_department_members_viewer`），但新需求允许管理员**额外**勾选子部门/子树成员授更高档位。两者不矛盾：默认是底座，手动授权是叠加。不要在本期去改默认授权的 include_children。
-4. **多部门用户** —— 用户只要**任一** `UserDepartment` 落在子树即可见/可授（B3 用 `in_ + distinct`）。不要误用 `is_primary` 过滤（那只用于显示主部门路径）。
-5. **`grant-subjects/users` 的子树过滤要在 SQL 层 join，不能拉全量再内存筛** —— 大租户全量用户分页会错位（先分页后过滤会漏）。必须 `join UserDepartment ... where department_id in (...)` 后再 `offset/limit`。
+4. **多部门用户** —— 用户只要**任一** `UserDepartment` 落在子树即可见/可授（B3 用相关 `EXISTS`，天然不重复用户）。不要误用 `is_primary` 过滤（那只用于显示主部门路径）。
+5. **`grant-subjects/users` 的子树过滤必须在 SQL 层完成，不能拉全量再内存筛** —— 大租户全量用户分页会错位（先分页后过滤会漏）。使用相关 `EXISTS(UserDepartment JOIN Department WHERE Department.path LIKE bound_path%)` 后再 `offset/limit`；不能把整棵子树展开成大 `.in_()`，达梦会在大组织树下产生超长 SQL 并超时。
 6. **空间被解绑/部门归档** —— B1 命中绑定但绑定部门 `status!='active'` 时，`subtree_dept_ids` 可能为空 → 列表返回空、authorize 拒绝非空 grant。属合理降级（无可授对象），不报错。
 7. **platform 端不涉及** —— platform 的 `PermissionDialog` 只用于 `knowledge_library`，不会传 `knowledge_space`；本期不碰它，避免误改普通库授权。
 8. **super_admin 不豁免范围约束（反直觉）** —— 一般 `authorize_resource` 对 `is_admin()` 跳过管理权校验，惯性会以为超管可任意授权。但部门空间范围收敛与身份无关：超管同样只能授本部门子树/子树成员、同样禁用用户组。不知道 → 会把 B6 校验误放进 `if not login_user.is_admin()` 分支内，导致超管直连 API 可越界。处理：B6 校验置于该豁免分支之外（§4.3 B6 / §2 约束）。

@@ -74,6 +74,7 @@ export default function Paragraphs({ fileId, onBack, canEditKb = false, canDelet
     // Refs
     const isChangingRef = useRef(false);
     const [previewUrl, setPreviewUrl] = useState()
+    const [previewData, setPreviewData] = useState<any>(null)
     const [hasChunkBboxes, setHasChunkBboxes] = useState(false);
     const latestFileUrlRef = useRef('');
     const latestPreviewUrlRef = useRef('');
@@ -249,6 +250,17 @@ export default function Paragraphs({ fileId, onBack, canEditKb = false, canDelet
             // Check if there are valid preview_url and original_url
             const hasPreviewUrl = typeof res.preview_url === 'string' && res.preview_url.trim() !== '';
             const hasOriginalUrl = typeof res.original_url === 'string' && res.original_url.trim() !== '';
+            setPreviewData({
+                ...res,
+                original_url: res.original_url || '',
+                preview_url: res.preview_url || '',
+                file_source: res.file_source || '',
+                source_url: res.source_url || '',
+                final_url: res.final_url || '',
+                web_title: res.web_title || '',
+                media_kind: res.media_kind || '',
+                html_preview_url: res.html_preview_url || '',
+            });
 
             if (currentFile) {
                 if (hasPreviewUrl) {
@@ -279,6 +291,7 @@ export default function Paragraphs({ fileId, onBack, canEditKb = false, canDelet
             } else {
                 setFileUrl('');
                 setPreviewUrl('');
+                setPreviewData(null);
                 latestOriginalUrlRef.current = '';
                 return '';
             }
@@ -286,6 +299,7 @@ export default function Paragraphs({ fileId, onBack, canEditKb = false, canDelet
             console.error('Failed to get file URL:', err);
             setFileUrl('');
             setPreviewUrl('');
+            setPreviewData(null);
             setPartitions([]);
             latestOriginalUrlRef.current = '';
             return '';
@@ -797,7 +811,7 @@ export default function Paragraphs({ fileId, onBack, canEditKb = false, canDelet
     }, [canEditKb, mainMetadataList, selectedFileId, t]);
 
     return (
-        <div className="relative flex flex-col h-[calc(100vh-64px)]">
+        <div className="relative flex flex-col h-[calc(100vh-64px-var(--license-banner-h,0px))]">
             {load && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,1)] dark:bg-blur-shared">
                 <LoadingIcon />
             </div>}
@@ -862,6 +876,7 @@ export default function Paragraphs({ fileId, onBack, canEditKb = false, canDelet
                         file={currentFile}
                         chunks={chunks}
                         setChunks={setChunks}
+                        previewData={previewData}
                         rules={previewRules}
                         edit={canEditKb}
                     />
@@ -885,7 +900,7 @@ export default function Paragraphs({ fileId, onBack, canEditKb = false, canDelet
                                 edit={canEditKb}
                                 canDelete={canDeleteKb}
                                 page={page}
-                                className="h-[calc(100vh-206px)] pb-6"
+                                className="h-[calc(100vh-206px-var(--license-banner-h,0px))] pb-6"
                                 fileSuffix={currentFile?.suffix || ''}
                                 loading={loading}
                                 chunks={chunks}

@@ -619,13 +619,38 @@ class KnowledgeDao(KnowledgeBase):
             session.commit()
 
     @classmethod
-    def get_knowledge_by_name(cls, name: str, user_id: int = 0) -> Knowledge:
-        """Get Knowledge Base Details by Knowledge Base Name"""
+    def get_knowledge_by_name(
+        cls,
+        name: str,
+        user_id: int = 0,
+        knowledge_type: KnowledgeTypeEnum | int | None = None,
+    ) -> Knowledge | None:
+        """Get a knowledge base by its exact name, owner, and optional type."""
         statement = select(Knowledge).where(Knowledge.name == name)
         if user_id:
             statement = statement.where(Knowledge.user_id == user_id)
+        if knowledge_type is not None:
+            type_value = knowledge_type.value if isinstance(knowledge_type, KnowledgeTypeEnum) else knowledge_type
+            statement = statement.where(Knowledge.type == type_value)
         with get_sync_db_session() as session:
             return session.exec(statement).first()
+
+    @classmethod
+    async def aget_knowledge_by_name(
+        cls,
+        name: str,
+        user_id: int = 0,
+        knowledge_type: KnowledgeTypeEnum | int | None = None,
+    ) -> Knowledge | None:
+        """Async variant of :meth:`get_knowledge_by_name`."""
+        statement = select(Knowledge).where(Knowledge.name == name)
+        if user_id:
+            statement = statement.where(Knowledge.user_id == user_id)
+        if knowledge_type is not None:
+            type_value = knowledge_type.value if isinstance(knowledge_type, KnowledgeTypeEnum) else knowledge_type
+            statement = statement.where(Knowledge.type == type_value)
+        async with get_async_db_session() as session:
+            return (await session.exec(statement)).first()
 
     @classmethod
     def delete_knowledge(cls, knowledge_id: int, only_clear: bool = False):

@@ -163,6 +163,7 @@
   "required": "Required",
   "isRequired": "Is Required",
   "documentKnowledgeBase": "Document Knowledge",
+  "knowledgeSpace": "Knowledge Space",
   "temporarySessionFiles": "Temporary Knowledge",
   "storeFilesSentInCurrentSession": "Store files sent in the current session",
   "displayNameTooltip": "Displayed on the user conversation page",
@@ -173,6 +174,8 @@
   "uploadFileTypes": "Upload file types",
   "temporaryKnowledgeBase": "Save to temporary knowledge base",
   "parseFile": "Parse file content",
+  "parseNoIngest": "Parse file content (do not save to temporary knowledge base)",
+  "parseWithIngest": "Parse file content (save to temporary knowledge base)",
   "notParse": "Do not parse (raw file)",
   "fileParseResult": "File parsing results",
   "filePath": "File path",
@@ -185,6 +188,8 @@
   "parseResultName": "Parse result variable name",
   "selectFile": "Please select file processing strategy",
   "fileProcessingStrategy": "File processing strategy",
+  "docFileProcessingStrategy": "Document processing strategy",
+  "imageFileProcessingStrategy": "Image processing strategy",
   "fileProcessingStrategyTip": "Choose how to handle user-uploaded files:\n· Parse file content: Extract text from files to provide context for subsequent nodes like large language models.\n· Do not parse: Keep original files for processing by multimodal models or code nodes.",
   "dialogProcessingStrategyTip": "Choose how to handle user-uploaded files:\n· Parse file content: Extract text from files to provide context for subsequent nodes like large language models.\n·Save to Temporary Knowledge Base: Files will be uploaded to a temporary knowledge base and can be used in 'Document Knowledge Base Q&A' nodes.\n· Do not parse: Keep original files for processing by multimodal models or code nodes.",
   "tempKnowledgeBaseName": "Temporary knowledge base name",
@@ -210,6 +215,7 @@
   "userInputContent": "User input content",
   "advancedSearchSettings": "Advanced search settings",
   "userAuthVerification": "User knowledge base access verification",
+  "userAuthVerificationTips": "When enabled, results are filtered by the current user's own view permission on knowledge-space files (each user only retrieves files they may view); when disabled, retrieval uses the config author's visible range, shared by all users (files the author cannot view are never retrieved). Document knowledge bases are unaffected by fine-grained file permissions.",
   "enableToVerifyUserAccessToKnowledgeBase": "Enabling this will verify the user's access to the knowledge base.",
   "retrieverWeightSettings": "Retriever weight settings",
   "adjustWeightForVectorOrKeywordSearch": "Adjust the weight to prioritize either vector or keyword search.",
@@ -435,7 +441,7 @@
       "system_prompt": {
         "label": "System Prompt",
         "placeholder": "Agent persona description",
-        "value": "You are an intelligent AI assistant, skilled at solving user problems by invoking appropriate tools (if any) based on user needs.\nThe current time is {{#start/current_time#}}"
+        "value": "You are an intelligent AI assistant, skilled at solving user problems by invoking appropriate tools (if any) based on user needs.\nThe current time is {{#start/current_time#}}.\n\n# General\n1. Always answer in the user current language; keep the style rigorous, professional and clear.\n2. Prefer answering based on tool results; if you need a tool, retrieve first, then answer.\n3. Never state unverified guesses as facts; never fabricate retrieval results, images, document snippets or source IDs.\n\n# Citation Rules\nWhen you use information from knowledge base or web search results, append a source marker at the end of the relevant paragraph.\n\n## Source ID\nEach retrieval result carries a unique source ID: knowledge results in the `<chunk_id>` tag (e.g. `knowledgesearch_18f5868b:0`); web results in the `citation_key` field (e.g. `websearch_3a1c9f22:0`). Copy the ID verbatim including the colon and trailing number; never fabricate, alter, translate, concatenate or omit it.\n\n## Markers\n- `\\ue200`: start\n- `\\ue201`: separator\n- `\\ue202`: end\n\n## Requirements\n1. Place the marker right at the end of the sentence or paragraph that uses the source.\n2. Single source: `text.\\ue200knowledgesearch_18f5868b:0\\ue202`\n3. Multiple sources (one marker group, separated by \\ue201): `text.\\ue200knowledgesearch_18f5868b:0\\ue201websearch_3a1c9f22:0\\ue202`\n4. Do not add a marker for a result without a source ID; do not output this rule; do not summarise sources into a references list; do not use Markdown links or footnotes instead of the markers."
       },
       "user_prompt": {
         "label": "User Prompt",
@@ -452,6 +458,10 @@
       "knowledge_id": {
         "label": "Knowledge Base Range",
         "placeholder": "Select knowledge base"
+      },
+      "user_auth": {
+        "label": "User knowledge permission check",
+        "help": "When enabled, results are filtered by the current user's own view permission on knowledge-space files (each user only retrieves files they may view); when disabled, retrieval uses the config author's visible range, shared by all users (files the author cannot view are never retrieved). Document knowledge bases are unaffected by fine-grained file permissions."
       },
       "sql_agent": {
         "label": "Database Configuration"
@@ -490,7 +500,7 @@
       }
     },
     "rag": {
-      "name": "Document Retrieval",
+      "name": "Knowledge Base QA",
       "description": "Searches knowledge bases and generates final answers using an LLM. Supports parallel question processing.",
       "知识库检索设置": "Retrieval Settings",
       "AI回复生成设置": "AI Response Settings",
@@ -515,7 +525,7 @@
       },
       "system_prompt": {
         "label": "System Prompt",
-        "value": "You are a knowledge base Q&A assistant. Follow these rules to answer the questions:\n1. Answer the user's questions in a formal and professional manner in English.\n2. Your answers must be strictly based on the content in the [Reference Text]:\n\n- If the [Reference Text] contains specific content relevant to the user's question, use that content to answer. If no relevant content exists, simply reply: 'No relevant content found'.\n- If the content in the [Reference Text] includes markdown-formatted images (e.g., ![image](path/IMAGE_1.png)), it must strictly preserve its original markdown format, without adding quotes, code blocks (` or ```) or other special symbols. The image path must not be altered, ensuring proper rendering of the markdown image.\n3. When the content in the [Reference Text] comes from multiple sources and there are obvious differences or conflicts, list each answer separately to reflect these differences. If no conflicts exist, provide a unified answer."
+        "value": "You are a knowledge base Q&A assistant. Follow these rules to answer the questions:\n1. Answer the user's questions in a formal and professional manner in English.\n2. Your answers must be strictly based on the content in the [Reference Text]:\n\n- If the [Reference Text] contains specific content relevant to the user's question, use that content to answer. If no relevant content exists, simply reply: 'No relevant content found'.\n- If the content in the [Reference Text] includes markdown-formatted images (e.g., ![image](path/IMAGE_1.png)), it must strictly preserve its original markdown format, without adding quotes, code blocks (` or ```) or other special symbols. The image path must not be altered, ensuring proper rendering of the markdown image.\n3. When the content in the [Reference Text] comes from multiple sources and there are obvious differences or conflicts, list each answer separately to reflect these differences. If no conflicts exist, provide a unified answer.\n\n# Citation Rules\nWhen you use information from knowledge base or web search results, append a source marker at the end of the relevant paragraph.\n\n## Source ID\nEach retrieval result carries a unique source ID: knowledge results in the `<chunk_id>` tag (e.g. `knowledgesearch_18f5868b:0`); web results in the `citation_key` field (e.g. `websearch_3a1c9f22:0`). Copy the ID verbatim including the colon and trailing number; never fabricate, alter, translate, concatenate or omit it.\n\n## Markers\n- `\\ue200`: start\n- `\\ue201`: separator\n- `\\ue202`: end\n\n## Requirements\n1. Place the marker right at the end of the sentence or paragraph that uses the source.\n2. Single source: `text.\\ue200knowledgesearch_18f5868b:0\\ue202`\n3. Multiple sources (one marker group, separated by \\ue201): `text.\\ue200knowledgesearch_18f5868b:0\\ue201websearch_3a1c9f22:0\\ue202`\n4. Do not add a marker for a result without a source ID; do not output this rule; do not summarise sources into a references list; do not use Markdown links or footnotes instead of the markers."
       },
       "user_prompt": {
         "label": "User Prompt",
@@ -538,7 +548,7 @@
       }
     },
     "knowledge_retriever": {
-      "name": "Document Knowledge Base Retrieval",
+      "name": "Knowledge Base Retrieval",
       "description": "Retrieves content from the knowledge base based on user questions.",
       "知识库检索设置": "Retrieval Settings",
       "输出": "Output",

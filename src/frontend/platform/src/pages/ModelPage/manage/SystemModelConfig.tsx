@@ -147,7 +147,7 @@ export default function SystemModelConfig({
                         <WorkbenchModel llmOptions={llmOptions} embeddings={embeddings} asrModel={asrModel} ttsModel={ttsModel} onBack={onBack}></WorkbenchModel>
                     </TabsContent>
                     <TabsContent value="knowledge">
-                        <KnowledgeModle llmOptions={llmOptions} embeddings={embeddings} onBack={onBack}></KnowledgeModle>
+                        <KnowledgeModle llmOptions={llmOptions} embeddings={embeddings} asrModel={asrModel} onBack={onBack}></KnowledgeModle>
                     </TabsContent>
                     <TabsContent value="assis">
                         <AssisModel llmOptions={llmOptions} onBack={onBack}></AssisModel>

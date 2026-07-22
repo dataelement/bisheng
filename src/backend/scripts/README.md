@@ -440,44 +440,6 @@ bash scripts/backfill_user_tenant_associations.sh          # dry-run
 bash scripts/backfill_user_tenant_associations.sh apply    # 写入
 ```
 
-### `backfill_departments_under_single_root.py`
-
-把所有"误挂为根"的部门收编到默认组织根部门(`BS@root`)下，保证全平台只有一个根部门。
-
-背景：历史上 SSO 网关同步的顶层部门(`parent_external_id` 为空)被挂为 `parent_id=None`，变成与"默认组织"平级的兄弟根，导致出现多个根、且其 `path` 不以默认组织根 path 为前缀(按 `path LIKE '{root_path}%'` 圈定租户成员时被漏算)。同步逻辑已修复(顶层部门改挂默认组织根下)，但增量推送未重推的存量部门需本脚本一次性收编。
-
-做什么：默认租户下、除默认组织根外的所有 active 根部门(`parent_id IS NULL`)，设 `parent_id=默认组织根.id` 并级联重写整棵子树 `path`。不区分 source，不触碰挂载状态。幂等：收编后 `parent_id` 不再为空，重复运行被自然跳过。
-
-Usage (from `src/backend/`):
-
-```bash
-config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/backfill_departments_under_single_root.py            # dry-run（默认，不写库）
-config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/backfill_departments_under_single_root.py --apply    # 写入
-
-# 或用 shell 包装（自动探测解释器 / PYTHONPATH / config）：
-bash scripts/backfill_departments_under_single_root.sh          # dry-run
-bash scripts/backfill_departments_under_single_root.sh apply    # 写入
-```
-
-### `backfill_user_tenant_associations.py`
-
-把缺失/未激活的默认租户归属回填到 `user_tenant` 表。这段逻辑原先挂在服务启动流程 `init_default_data()` 的 `_init_default_tenant` 里，每次进程启动都会全表扫描 `users`/`user_tenant`（一次反连接 + 一次"把全部 `is_active=1` 行读进内存"），在大用户量部署下属于把数据维护塞进了热路径。已从启动流剥离——启动只保证默认租户(id=1)存在。
-
-运行期不依赖这张回填表：`UserPayload` 租户解析在用户无 `user_tenant` 行时回退到 `DEFAULT_TENANT_ID`，多租户登录还会惰性补挂，故缺行不会阻塞登录/查询，本回填是纯数据一致性维护，按需运行一次即可。
-
-做什么（两步，与原启动逻辑等价、幂等）：①对没有任何 `user_tenant` 行的用户插入默认租户行 `(tenant_id=1, is_default=1, is_active=1, status='active')`；②对 `tenant_id=1 / is_default=1 / status='active' / is_active IS NULL` 且该用户当前无任何 `is_active=1` 行的孤儿默认行，置 `is_active=1`（每用户只激活一条）。只新增/激活，不删除、不 demote。
-
-Usage (from `src/backend/`):
-
-```bash
-config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/backfill_user_tenant_associations.py            # dry-run（默认，不写库）
-config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/backfill_user_tenant_associations.py --apply    # 写入
-
-# 或用 shell 包装（自动探测解释器 / PYTHONPATH / config）：
-bash scripts/backfill_user_tenant_associations.sh          # dry-run
-bash scripts/backfill_user_tenant_associations.sh apply    # 写入
-```
-
 ### `backfill_department_parent_tuples.py`
 
 把 DB 部门树的父子关系回填成 OpenFGA 的 `department#parent` 继承边（additive，只加不删，幂等）。

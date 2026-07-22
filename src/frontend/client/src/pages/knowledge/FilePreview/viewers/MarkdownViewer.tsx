@@ -3,6 +3,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
 import { useLocalize } from "~/hooks";
+import { resolveKnowledgePreviewUrl } from "../previewUrlUtils";
 
 interface MarkdownViewerProps {
     fileUrl: string;
@@ -19,7 +20,7 @@ export function MarkdownViewer({ fileUrl, zoomLevel }: MarkdownViewerProps) {
         const fetchMarkdown = async () => {
             try {
                 setLoading(true);
-                const response = await fetch(fileUrl);
+                const response = await fetch(resolveKnowledgePreviewUrl(fileUrl));
                 if (!response.ok) throw new Error(localize("com_knowledge.failure_status", { 0: response.status }));
                 const text = await response.text();
                 setContent(text);

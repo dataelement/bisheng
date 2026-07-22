@@ -15,6 +15,7 @@ export default function HeaderMenu({ }) {
         return user.role === 'admin'
     }, [user])
     const canOpenBuild = isAdmin
+        || Boolean(user.is_child_admin)
         || Boolean(user.web_menu?.includes('build'))
         || Boolean(user.web_menu?.includes('create_app'))
     const canManageWorkbench = canManageWorkbenchConfig(user)

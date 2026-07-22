@@ -30,7 +30,7 @@ from bisheng.database.models.flow import Flow, FlowDao
 
 
 def _compiled_sql(stmt) -> str:
-    return str(stmt.compile(compile_kwargs={'literal_binds': True}))
+    return str(stmt.compile(compile_kwargs={"literal_binds": True}))
 
 
 def _reset_tenant_context(tenant_token, visible_token):
@@ -51,8 +51,8 @@ class TestBuildAppsSubquery:
         finally:
             _reset_tenant_context(tenant_token, visible_token)
 
-        assert 'flow.tenant_id IN (1, 5)' in sql
-        assert 'assistant.tenant_id IN (1, 5)' in sql
+        assert "flow.tenant_id IN (1, 5)" in sql
+        assert "assistant.tenant_id IN (1, 5)" in sql
 
     def test_root_tenant_with_no_visible_emits_equality(self):
         # Super admin shape: current=1, visible=None. Event listener falls
@@ -64,8 +64,8 @@ class TestBuildAppsSubquery:
         finally:
             _reset_tenant_context(tenant_token, visible_token)
 
-        assert 'flow.tenant_id = 1' in sql
-        assert 'assistant.tenant_id = 1' in sql
+        assert "flow.tenant_id = 1" in sql
+        assert "assistant.tenant_id = 1" in sql
 
     def test_bypass_emits_no_tenant_predicate(self):
         tenant_token = set_current_tenant_id(1)
@@ -76,7 +76,22 @@ class TestBuildAppsSubquery:
         finally:
             _reset_tenant_context(tenant_token, visible_token)
 
-        assert 'tenant_id' not in sql
+        assert "tenant_id" not in sql
+
+
+class TestBuildUserLastUsedSubquery:
+    def test_ranked_app_session_subquery_has_explicit_tenant_filter(self):
+        tenant_token = set_current_tenant_id(5)
+        visible_token = set_visible_tenant_ids(frozenset({5, 1}))
+        try:
+            subquery = FlowDao._build_user_last_used_subquery(user_id=7)
+            sql = _compiled_sql(select(subquery.c.flow_id))
+        finally:
+            _reset_tenant_context(tenant_token, visible_token)
+
+        assert "message_session.user_id = 7" in sql
+        assert "message_session.tenant_id IN (1, 5)" in sql
+        assert "GROUP BY message_session.flow_id, message_session.flow_type" in sql
 
 
 class TestBuildTenantFilterClause:
@@ -112,5 +127,5 @@ class TestBuildTenantFilterClause:
         finally:
             _reset_tenant_context(tenant_token, visible_token)
 
-        sql = str(clause.compile(compile_kwargs={'literal_binds': True}))
-        assert sql == 'assistant.tenant_id = 1'
+        sql = str(clause.compile(compile_kwargs={"literal_binds": True}))
+        assert sql == "assistant.tenant_id = 1"
