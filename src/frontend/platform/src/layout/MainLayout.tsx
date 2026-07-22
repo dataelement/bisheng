@@ -69,16 +69,13 @@ export default function MainLayout() {
         navigator('/reset')
     }
 
-    // Super admins and child tenant admins receive the full admin menu.
-    // Tenant management remains super-admin-only; department admins receive menus from the backend.
+    // Global super admins and Child Admins bypass business-menu checks.
+    // Department admins receive only the system entry by identity.
     const isSuperAdmin = useMemo(() => user.role === "admin", [user])
     const isDeptAdmin = Boolean(user.is_department_admin)
     const isChildAdmin = Boolean(user.is_child_admin)
     const canManageWorkbenchConfig = isSuperAdmin || isChildAdmin
-    // Covers admin entries such as datasets that have no independent web_menu route key.
-    const isFullAdminShell = isSuperAdmin || isDeptAdmin || isChildAdmin
-    // SystemPage limits each admin type to the tabs it can manage.
-    const showSystemNav = isFullAdminShell
+    const showSystemNav = isSuperAdmin || isDeptAdmin || isChildAdmin
     // 审批管理 — 仅超管 / Child Admin（部门管理员不可见）
     const showApprovalNav = isSuperAdmin || isChildAdmin
     // Admin-area approval scope (falls back to the legacy global flag for
@@ -202,7 +199,7 @@ export default function MainLayout() {
                             </NavLink>
                         }
                         {
-                            isFullAdminShell && <>
+                            isMenu('dataset') && <>
                                 <NavLink to='/dataset' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
                                     <DatasetIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.dataset')}</span>
                                 </NavLink>

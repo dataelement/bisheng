@@ -262,7 +262,7 @@ async def test_get_roles_web_menu_includes_personal_menu_grants():
 
 
 @pytest.mark.asyncio
-async def test_get_roles_web_menu_keeps_department_admin_full_menu():
+async def test_get_roles_web_menu_gives_department_admin_only_system_identity_menu():
     LoginUser = importlib.reload(auth_module).LoginUser
     user = SimpleNamespace(user_id=9, tenant_id=1)
 
@@ -275,16 +275,14 @@ async def test_get_roles_web_menu_keeps_department_admin_full_menu():
         patch(
             "bisheng.user.domain.services.auth.RoleAccessDao.aget_role_access",
             new_callable=AsyncMock,
-            return_value=[],
+            return_value=[SimpleNamespace(third_id="workstation")],
         ),
         patch(
             "bisheng.user.domain.services.auth.UserMenuAccessService.list_effective_menu_grants",
             new_callable=AsyncMock,
-            return_value=[],
+            return_value=["home"],
         ),
     ):
         _, web_menu = await LoginUser.get_roles_web_menu(user, is_department_admin=True)
 
-    assert "system_config" in web_menu
-    assert "sys" in web_menu
-    assert "workstation" in web_menu
+    assert set(web_menu) == {"admin", "system_config", "sys", "workstation", "home"}

@@ -31,7 +31,6 @@ export function canShowPlatformAdminEntry(user?: PlatformAccessUserLike | null):
 export function canOpenWorkbench(user?: PlatformAccessUserLike | null): boolean {
   if (!user) return false;
   if (user.role === 'admin') return true;
-  if (user.is_department_admin) return true;
   if (!Array.isArray(user.plugins)) return false;
   return WORKBENCH_ENTRY_KEYS.some((key) => user.plugins?.includes(key));
 }
