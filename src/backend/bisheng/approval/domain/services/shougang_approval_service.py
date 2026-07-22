@@ -40,7 +40,10 @@ from bisheng.approval.domain.services.shougang_approval_handler import (
     ensure_file_publish_business_domain_matches,
 )
 from bisheng.common.errcode.approval import ApprovalScenarioDisabledError
-from bisheng.common.errcode.knowledge_space import SpacePermissionDeniedError
+from bisheng.common.errcode.knowledge_space import (
+    SpaceNamePendingApprovalError,
+    SpacePermissionDeniedError,
+)
 from bisheng.database.models.department import UserDepartmentDao
 from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum, KnowledgeDao, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_file import (
@@ -158,6 +161,26 @@ class ShougangApprovalService:
         if self._is_personal_space_create(params):
             return not await self._is_create_approval_exempt(login_user)
         return True
+
+    async def _ensure_space_name_not_in_pending_approval(
+        self,
+        *,
+        tenant_id: int,
+        space_level: Any,
+        name: str,
+        applicant_user_id: int,
+        active_statuses: list[str]
+    ) -> None:
+        business_resource_id = f"{space_level}:{name}"
+        pending = await ApprovalInstanceRepository.find_pending_instance_by_business_resource_id(
+            tenant_id=tenant_id,
+            scenario_code=KNOWLEDGE_SPACE_CREATE_SCENARIO,
+            business_resource_id=business_resource_id,
+            exclude_applicant_user_id=applicant_user_id,
+            active_statuses=active_statuses,
+        )
+        if pending:
+            raise SpaceNamePendingApprovalError(msg=f"已经有同名知识库在审批中了")
 
     async def _task_approver_user_ids(self, task_ids: list[int]) -> list[int]:
         approver_user_ids: list[int] = []
@@ -332,6 +355,13 @@ class ShougangApprovalService:
             }
 
         applicant_department_id = await self._get_primary_department_id(login_user)
+        await self._ensure_space_name_not_in_pending_approval(
+            tenant_id=login_user.tenant_id,
+            space_level=params.get('space_level'),
+            name=params.get('name'),
+            applicant_user_id=None,
+            active_statuses=None,
+        )
         approval_req = ApprovalGateRequest(
             tenant_id=login_user.tenant_id,
             scenario_code=KNOWLEDGE_SPACE_CREATE_SCENARIO,

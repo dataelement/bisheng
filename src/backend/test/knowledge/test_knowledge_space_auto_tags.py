@@ -32,6 +32,35 @@ def test_auto_tag_parse_accepts_strict_json_and_json_fence():
     assert KnowledgeSpaceAutoTagService._parse_llm_tags("not-json") == []
 
 
+def test_build_auto_tag_system_prompt_appends_business_domain_and_file_category():
+    db_file = KnowledgeFile(
+        id=1,
+        split_rule='{"file_category_code": "STD", "business_domain_code": "PP"}',
+        file_subcategory_code="STD_A",
+    )
+    prompt = KnowledgeSpaceAutoTagService._build_auto_tag_system_prompt("base prompt", db_file)
+    assert "base prompt" in prompt
+    assert "业务域：PP（生产）" in prompt
+    assert "文件分类：STD / STD_A" in prompt
+    assert "请结合上述业务域、文件分类与文件内容" in prompt
+
+
+def test_build_auto_tag_system_prompt_falls_back_to_file_encoding_for_category():
+    db_file = KnowledgeFile(
+        id=2,
+        file_encoding="SG-STD-PP-0001",
+    )
+    prompt = KnowledgeSpaceAutoTagService._build_auto_tag_system_prompt("base prompt", db_file)
+    assert "业务域：PP（生产）" in prompt
+    assert "文件分类：STD" in prompt
+
+
+def test_build_auto_tag_system_prompt_without_metadata_keeps_base_prompt():
+    db_file = KnowledgeFile(id=3)
+    prompt = KnowledgeSpaceAutoTagService._build_auto_tag_system_prompt("base prompt", db_file)
+    assert prompt == "base prompt"
+
+
 def test_auto_tag_match_only_uses_library_tags_and_limits_result_count():
     selected = ["政策", "未知", "制度", "项目", "市场", "财务", "培训"]
     library_tags = ["政策", "制度", "项目", "市场", "财务", "培训"]

@@ -56,7 +56,8 @@ export const ModelSelect = ({ required = false, close = false, label, tooltipTex
 // server-side `DEFAULT_AUTO_TAG_SYSTEM_PROMPT` so the textarea opens
 // with a sensible starting value when the tenant has not customised it.
 export const defaultAutoTagPrompt = `你是文件自动标签分类器。只能从候选标签中选择最相关的标签，最多返回 5 个标签。
-输出格要求严格遵循 JSON 格式： {"tags": ["标签名"]}。`;
+请结合文件的业务域、文件分类与文件内容选择标签。
+输出格式要求严格遵循 JSON：有合适标签时输出 {"tags": ["标签名"]}；没有合适标签时输出 {"tags": []}。`;
 
 const PromptDialog = ({ value, onChange, onRestore, onSave, label, children }) => {
     const { t } = useTranslation('model')

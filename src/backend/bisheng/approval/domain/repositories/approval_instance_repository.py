@@ -6,6 +6,7 @@ from bisheng.approval.domain.models.approval_instance import (
     ApprovalActionLog,
     ApprovalException,
     ApprovalInstance,
+    ApprovalInstanceStatus,
     ApprovalOutbox,
     ApprovalTask,
 )
@@ -69,6 +70,28 @@ class ApprovalInstanceRepository:
             ApprovalInstance.applicant_user_id == applicant_user_id,
             ApprovalInstance.status.in_(statuses),
         ).order_by(ApprovalInstance.id.desc())
+        async with get_async_db_session() as session:
+            return (await session.exec(statement)).first()
+
+    @classmethod
+    async def find_pending_instance_by_business_resource_id(
+        cls,
+        *,
+        tenant_id: int,
+        scenario_code: str,
+        business_resource_id: str,
+        exclude_applicant_user_id: int | None = None,
+        active_statuses: list[str] | tuple[str, ...] | None = None,
+    ) -> ApprovalInstance | None:
+        statuses = tuple(active_statuses) if active_statuses is not None else cls._DUPLICATE_ACTIVE_STATUSES
+        statement = select(ApprovalInstance).where(
+            ApprovalInstance.tenant_id == tenant_id,
+            ApprovalInstance.scenario_code == scenario_code,
+            ApprovalInstance.business_resource_id == business_resource_id,
+            ApprovalInstance.status.in_(statuses),
+        )
+        if exclude_applicant_user_id is not None:
+            statement = statement.where(ApprovalInstance.applicant_user_id == exclude_applicant_user_id)
         async with get_async_db_session() as session:
             return (await session.exec(statement)).first()
 
