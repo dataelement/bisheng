@@ -83,10 +83,10 @@ describe("KnowledgePreviewWatermark", () => {
 
         const normalLayout = calculateKnowledgePreviewWatermarkPatternLayout([240, 220]);
         const longLayout = calculateKnowledgePreviewWatermarkPatternLayout([760, 320]);
-        expect(normalLayout.cellWidth).toBe(384);
-        expect(normalLayout.cellHeight).toBe(267);
-        expect(normalLayout.patternHeight).toBe(534);
-        expect(normalLayout.secondRowOffsetX).toBe(192);
+        expect(normalLayout.cellWidth).toBe(320);
+        expect(normalLayout.cellHeight).toBe(240);
+        expect(normalLayout.patternHeight).toBe(480);
+        expect(normalLayout.secondRowOffsetX).toBe(160);
         expect(normalLayout.rotation).toBe(-35);
         expect(normalLayout.fontSize).toBe(16);
         expect(normalLayout.opacity).toBe(0.11);

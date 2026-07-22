@@ -115,8 +115,8 @@ def test_watermark_spec_uses_two_lines_and_pdf_visual_baseline() -> None:
     assert spec.rotation == -35.0
     assert spec.opacity == 0.11
     assert spec.font_size == 12.0
-    assert spec.horizontal_gap == 288.0
-    assert spec.vertical_gap == 200.0
+    assert spec.horizontal_gap == 240.0
+    assert spec.vertical_gap == 180.0
     assert spec.color == (0.45, 0.45, 0.45)
     assert all("songti" not in candidate.lower() for candidate in _CJK_FONT_CANDIDATES)
     assert any("zenhei" in candidate.lower() or "heiti" in candidate.lower() for candidate in _CJK_FONT_CANDIDATES)
@@ -135,17 +135,17 @@ def test_watermark_layout_uses_rotated_bounds_clearance_and_staggered_rows() -> 
     )
     layout = _calculate_watermark_layout(page_rect, legacy_spacing_spec, font)
 
-    assert layout.horizontal_step == 288.0
-    assert layout.vertical_step >= 200.0
-    assert layout.horizontal_step >= layout.rotated_width + 48.0
-    assert layout.vertical_step >= layout.rotated_height + 36.0
+    assert layout.horizontal_step == pytest.approx(layout.rotated_width + 48.0)
+    assert layout.vertical_step == pytest.approx(layout.rotated_height + 36.0)
+    assert layout.horizontal_step >= 240.0
+    assert layout.vertical_step >= 180.0
 
     positions = _tile_positions(page_rect, layout)
     rows: dict[float, list[float]] = {}
     for position in positions:
         rows.setdefault(position.y, []).append(position.x)
 
-    assert len(positions) in range(8, 11)
+    assert len(positions) in range(12, 15)
     assert len(rows) >= 2
     first_row, second_row = list(rows.values())[:2]
     assert second_row[0] - first_row[0] == pytest.approx(layout.horizontal_step / 2.0)
