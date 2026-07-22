@@ -30,14 +30,26 @@ def test_build_review_tag_system_prompt_appends_business_domain_and_file_categor
         split_rule='{"file_category_code": "STD", "business_domain_code": "PP"}',
         file_subcategory_code="STD_A",
     )
-    prompt = KnowledgeSpaceAutoTagService._build_file_context_system_prompt(
-        "base prompt",
-        db_file,
-        REVIEW_TAG_CONTEXT_INSTRUCTION,
-    )
+    document_types = [
+        {
+            "code": "STD",
+            "label": "标准规范",
+            "children": [{"code": "STD_A", "label": "安全规程"}],
+        }
+    ]
+    with patch.object(
+        KnowledgeSpaceAutoTagService,
+        "_load_document_types_for_tenant",
+        return_value=document_types,
+    ):
+        prompt = KnowledgeSpaceAutoTagService._build_file_context_system_prompt(
+            "base prompt",
+            db_file,
+            REVIEW_TAG_CONTEXT_INSTRUCTION,
+        )
     assert "base prompt" in prompt
     assert "业务域：PP（生产）" in prompt
-    assert "文件分类：STD / STD_A" in prompt
+    assert "文件分类：标准规范 / 安全规程" in prompt
     assert "生成不在标签库中的新标签" in prompt
 
 

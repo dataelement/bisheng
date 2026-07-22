@@ -64,7 +64,7 @@ DEFAULT_REVIEW_TAG_SYSTEM_PROMPT = (
     '{"tags": ["会议纪要", "季度业务", "销售目标", "市场推广", "新产品上市", "团队组建", "决策事项"]}\n\n'
 )
 REVIEW_TAG_CONTEXT_INSTRUCTION = (
-    '请结合上述业务域、文件分类与文件内容，生成不在标签库中的新标签；若无合适新标签则输出 {"tags": []}。'
+    '请结合上述业务域、文件分类与文件内容，生成不在标签库中的新标签。'
 )
 
 
@@ -133,6 +133,7 @@ class KnowledgeSpaceReviewTagService:
                 REVIEW_TAG_CONTEXT_INSTRUCTION,
             )
 
+            logger.info("review_tag_system_prompt space_id={} file_id={} system_prompt={}", knowledge.id, db_file.id, system_prompt)
             tags_list = list(dict.fromkeys(tag for tag in manual_tags + ai_tags if tag))
 
             selected = cls._invoke_llm(llm, text, tags_list, system_prompt)
