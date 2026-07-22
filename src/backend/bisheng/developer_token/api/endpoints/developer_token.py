@@ -81,6 +81,24 @@ async def update_developer_token_global_config(
     return resp_200(data=data)
 
 
+@router.get("/config/file-sync-options")
+async def get_developer_token_file_sync_options(
+    tenant_id: int = Query(..., gt=0),
+    space_page: int = Query(1, ge=1),
+    space_limit: int = Query(50, ge=1, le=200),
+    space_keyword: str | None = Query(None, max_length=200),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    data = await DeveloperTokenService.get_file_sync_options(
+        login_user,
+        tenant_id=tenant_id,
+        space_page=space_page,
+        space_limit=space_limit,
+        space_keyword=space_keyword,
+    )
+    return resp_200(data=data)
+
+
 @router.get("/{token_id}")
 async def get_developer_token_detail(
     token_id: int,

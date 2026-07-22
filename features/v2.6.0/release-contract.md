@@ -23,6 +23,7 @@
 | PortalCourseVideoProgress | F062-portal-course-management | 按租户、登录用户和视频唯一覆盖的播放进度及完成终态 |
 | PortalCourseMediaCleanup | F062-portal-course-management | 课程上传对象的 provisional、替换、删除清理任务及最终一致重试 |
 | KnowledgeFilePdfArtifact | F063-unified-pdf-artifact | 知识文件统一 PDF 派生产物的当前 generation、独立处理状态、对象引用、重试信息和删除清理；不拥有 KnowledgeFile 解析状态、预览或下载行为 |
+| DeveloperToken.file_sync_rule（扩展） | F066-token-configured-filelib-sync | 每个开发者 Token 最多一份完整的文件同步业务配置；只保存稳定分类/业务域编码、知识空间 ID、可空目录 ID、固定/动态模式及动态来源，不保存路径快照，不取得门户配置、部门、知识空间、目录或文件的所有权 |
 
 **规则**：
 - 非 Owner Feature 的 AC 中不得出现其他对象的"创建/修改/删除"行为，只能"读取"或"调用" Owner 的 Service
@@ -42,6 +43,9 @@
 | INV-4 | 菜单权限申请通过后只写用户级菜单授权，不修改角色菜单权限；用户有效菜单 = 角色菜单 ∪ 个人授权 ∪ 管理员权限 | UserMenuAccess, RoleAccess | F025 |
 | INV-5 | 流程变更采用版本快照模型；已发起实例继续使用其创建时的流程版本，新配置仅影响后续新申请 | ApprovalFlowVersion, ApprovalInstance | F025 |
 | INV-6 | 走 ReBAC 过滤的高频列表接口采用 cursor-based 分页：请求用 `cursor` 透传上一页位置，响应含 `has_more: bool` 与 `next_cursor: string\|null`，**不再返 `total` / `page_num`**；后端不得为算 total 而扫描全部 batch；cursor 编码统一走 `common/cursor.py`（schema `{"v":1, "k":[...]}`，base64url）；cursor 解析失败必须明确报错（`*InvalidCursorError`），不得静默 fallback 首页 | 所有走 ReBAC 过滤的列表接口 | F027 |
+| INV-7 | `DeveloperToken.file_sync_rule` 只决定文件分类、业务域和目标知识空间/目录的解析方式，不授予任何资源权限；管理选项、保存和统一同步运行时均按 Token 绑定用户校验最终空间根目录或目录的 `upload_file` 权限，且请求仍须先通过 Token 状态、IP、路由白名单和限流 | DeveloperToken, Knowledge, KnowledgeFile | F066 |
+| INV-8 | 动态业务域只读取当前租户首钢门户聚合配置中的 `domains[].department_ids`；Token 仅保存业务域编码引用，不复制部门与业务域映射，不建立第二配置事实源 | DeveloperToken.file_sync_rule, ShougangPortalAdminConfig | F066 |
+| INV-9 | 文件同步配置缺失、不完整、空间/目录引用失效、跨租户、目录不属于所选空间、绑定用户无目标节点上传权限、动态来源参数缺失、动态解析无唯一结果或业务域与目标空间未绑定时必须失败关闭；不得回退到根目录、请求中的其他 ID、调用人默认值、任意知识空间或旧接口固定规则 | DeveloperToken.file_sync_rule, Department, Knowledge, KnowledgeFile | F066 |
 
 **规则**：
 - 新增不变量：先在此表追加，再写 AC
@@ -61,6 +65,7 @@
 | F062-portal-course-management | F012, F017, F019 | 依赖租户解析、租户共享存储与管理员租户范围基线；复用现有首钢门户会话/BFF |
 | F063-unified-pdf-artifact | F017, F056 | 依赖租户共享存储路径与 Celery 单循环运行时基线；新增独立 PDF Artifact，不修改知识解析、预览或下载契约 |
 | F064-portal-watermarked-pdf-download | F063 | 只读 F063 提供的当前有效 `KnowledgeFilePdfArtifact` 引用；不创建、更新或删除统一 PDF 产物，不取得其写所有权 |
+| F066-token-configured-filelib-sync | F044, F047, F060 | 扩展开发者 Token 配置，收口 F047 的 11 个固定规则接口，复用 F060 动态空间解析器、Knowledge 目录只读契约与 PermissionService；不复制门户业务域配置或授权事实 |
 
 ---
 
@@ -72,7 +77,8 @@
 |----------------|------|---------------|
 | 181 | approval | F025（沿用现有 `common/errcode/approval.py`，扩展为统一审批中心错误码） |
 | 190 | channel / bisheng_information | F026 沿用现有 `common/errcode/channel.py`，扩展频道授权错误码时不得与既有 190xx 冲突 |
-| 198 | developer_token | F044 开发者 Token 管理与认证错误码 |
+| 198 | developer_token | F044 开发者 Token 管理与认证错误码；F066 在该模块追加文件同步规则 19813 与目标树游标 19814 |
+| 199 | filelib_sync | F047 文件同步既有错误码；F066 只在该模块内追加 Token 文件同步配置缺失等运行时错误码 |
 | 250 | portal_course | F062 门户课程管理、媒体校验与播放进度错误码 |
 
 ---
@@ -89,3 +95,5 @@
 | 2026-07-18 | 登记 F062 门户课程、视频、学习进度、媒体清理领域归属，依赖关系及 250 模块错误码；标签确认为 PortalCourse 内值对象，不建立独立实体/表 | F062 |
 | 2026-07-20 | 登记 F063 知识文件统一 PDF 产物的领域归属与 F017/F056 依赖；明确其不拥有解析状态、预览和下载行为 | F063 |
 | 2026-07-21 | 登记 F064 门户带水印 PDF 下载依赖 F063；明确仅通过 accessor 读取统一 PDF 产物，不取得 `KnowledgeFilePdfArtifact` 写所有权 | F064, F063 |
+| 2026-07-22 | 登记 F066 的 `DeveloperToken.file_sync_rule` 扩展所有权、F044/F047/F060 依赖、199 错误码边界及权限不扩张、门户配置单一事实源和失败关闭不变量 | F066, F044, F047, F060 |
+| 2026-07-22 | 扩展 F066 固定目标到知识空间根目录或目录；明确选项、保存和运行时按 Token 绑定用户过滤/复核 `upload_file`，目录失效或无权不得回退根目录 | F066, Knowledge, Permission |

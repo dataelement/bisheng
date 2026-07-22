@@ -1,36 +1,32 @@
 import { PlusIcon, SearchIcon } from "@/components/bs-icons"
 import DepartmentUsersSelect, { DepartmentUserOption } from "@/components/bs-comp/selectComponent/DepartmentUsersSelect"
-import { Badge } from "@/components/bs-ui/badge"
 import { Button } from "@/components/bs-ui/button"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog"
 import { Input } from "@/components/bs-ui/input"
 import { Switch } from "@/components/bs-ui/switch"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table"
 import { toast } from "@/components/bs-ui/toast/use-toast"
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
 import {
   createDeveloperTokenApi,
   deleteDeveloperTokenApi,
   DeveloperTokenDetail,
-  DeveloperTokenGlobalConfig,
+  DeveloperTokenFileSyncOptions,
+  DeveloperTokenFileSyncRule,
   DeveloperTokenPayload,
   DeveloperTokenRecord,
   DeveloperTokenRouteRule,
   getDeveloperTokenDetailApi,
-  getDeveloperTokenGlobalConfigApi,
+  getDeveloperTokenFileSyncOptionsApi,
   listDeveloperTokensApi,
   updateDeveloperTokenApi,
-  updateDeveloperTokenGlobalConfigApi,
   viewDeveloperTokenSecretApi,
 } from "@/controllers/API/developerToken"
 import { userContext } from "@/contexts/userContext"
-import { formatIsoDateTime } from "@/util/utils"
 import type { ClipboardEvent, CompositionEvent, FormEvent, KeyboardEvent } from "react"
-import { useContext, useEffect, useMemo, useState } from "react"
+import { useContext, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
   findInvalidIpWhitelistRule,
-  formatLimitInput,
   isRateLimitControlKey,
   isRateLimitInputAllowed,
   isRateLimitValueValid,
@@ -39,6 +35,13 @@ import {
 } from "./developerTokenValidation"
 import DeveloperTokenRouteAllowlist from "./DeveloperTokenRouteAllowlist"
 import { findInvalidDeveloperTokenRouteRule, normalizeDeveloperTokenRouteWhitelist } from "./developerTokenRouteValidation"
+import DeveloperTokenFileSyncRuleEditor from "./DeveloperTokenFileSyncRule"
+import {
+  findInvalidFileSyncRule,
+  normalizeFileSyncRule,
+} from "./developerTokenFileSyncRuleValidation"
+import DeveloperTokenGlobalSettings from "./DeveloperTokenGlobalSettings"
+import DeveloperTokenTable from "./DeveloperTokenTable"
 
 const PAGE_SIZE = 20
 
@@ -53,18 +56,19 @@ interface TokenFormState {
   override_rate_limit: boolean
   rate_limit_per_minute: string
   route_whitelist: DeveloperTokenRouteRule[]
-}
-
-const emptyConfig: DeveloperTokenGlobalConfig = {
-  ip_whitelist: "",
-  rate_limit_per_minute: null,
+  tenant_id: number | null
+  file_sync_rule: DeveloperTokenFileSyncRule | null
 }
 
 function toForm(row?: DeveloperTokenDetail): TokenFormState {
   return {
     id: row?.id,
     name: row?.name || "",
-    user: row?.user_id ? [{ label: row.user_name || String(row.user_id), value: Number(row.user_id) }] : [],
+    user: row?.user_id ? [{
+      label: row.user_name || String(row.user_id),
+      value: Number(row.user_id),
+      tenant_id: row.tenant_id,
+    }] : [],
     binding_changed: false,
     enabled: row?.enabled ?? true,
     override_ip_whitelist: row?.override_ip_whitelist ?? false,
@@ -72,6 +76,8 @@ function toForm(row?: DeveloperTokenDetail): TokenFormState {
     override_rate_limit: row?.override_rate_limit ?? false,
     rate_limit_per_minute: row?.rate_limit_per_minute != null ? String(row.rate_limit_per_minute) : "",
     route_whitelist: row?.route_whitelist || [],
+    tenant_id: row?.tenant_id ?? null,
+    file_sync_rule: row?.file_sync_rule ?? null,
   }
 }
 
@@ -84,6 +90,7 @@ function asPayload(form: TokenFormState): DeveloperTokenPayload {
     override_rate_limit: form.override_rate_limit,
     rate_limit_per_minute: parseLimit(form.rate_limit_per_minute),
     route_whitelist: normalizeDeveloperTokenRouteWhitelist(form.route_whitelist),
+    file_sync_rule: normalizeFileSyncRule(form.file_sync_rule),
   }
   if (!form.id || form.binding_changed) {
     const selected = form.user[0]
@@ -99,13 +106,6 @@ function hasSelectedBindingContext(form: TokenFormState): boolean {
   return Boolean(selected && (selected.department_id != null || selected.dept_id))
 }
 
-function StatusBadge({ enabled }: { enabled: boolean }) {
-  const { t } = useTranslation()
-  return enabled
-    ? <Badge variant="default">{t("system.developerToken.enabled")}</Badge>
-    : <Badge variant="destructive">{t("system.developerToken.disabled")}</Badge>
-}
-
 export default function DeveloperToken() {
   const { t } = useTranslation()
   const { user } = useContext(userContext)
@@ -116,14 +116,15 @@ export default function DeveloperToken() {
   const [page, setPage] = useState(1)
   const [keyword, setKeyword] = useState("")
   const [loading, setLoading] = useState(false)
-  const [config, setConfig] = useState<DeveloperTokenGlobalConfig>(emptyConfig)
-  const [globalRateLimit, setGlobalRateLimit] = useState("")
-  const [configSaving, setConfigSaving] = useState(false)
   const [formOpen, setFormOpen] = useState(false)
   const [form, setForm] = useState<TokenFormState>(() => toForm())
   const [saving, setSaving] = useState(false)
   const [secretOpen, setSecretOpen] = useState(false)
   const [secret, setSecret] = useState("")
+  const [fileSyncOptions, setFileSyncOptions] = useState<DeveloperTokenFileSyncOptions | null>(null)
+  const [fileSyncOptionsLoading, setFileSyncOptionsLoading] = useState(false)
+  const [fileSyncOptionsError, setFileSyncOptionsError] = useState<string | null>(null)
+  const fileSyncTenantIdRef = useRef<number | null>(null)
 
   const maxPage = useMemo(() => Math.max(1, Math.ceil(total / PAGE_SIZE)), [total])
 
@@ -143,17 +144,38 @@ export default function DeveloperToken() {
     }
   }
 
-  const loadConfig = async () => {
-    if (!isSuperAdmin) return
-    const result = await getDeveloperTokenGlobalConfigApi()
-    setConfig(result)
-    setGlobalRateLimit(formatLimitInput(result.rate_limit_per_minute))
-  }
-
   useEffect(() => {
     loadList(1)
-    loadConfig()
   }, [])
+
+  useEffect(() => {
+    const tenantId = form.tenant_id
+    fileSyncTenantIdRef.current = tenantId
+    if (!formOpen || !tenantId) {
+      setFileSyncOptions(null)
+      setFileSyncOptionsError(null)
+      setFileSyncOptionsLoading(false)
+      return
+    }
+    let active = true
+    setFileSyncOptions(null)
+    setFileSyncOptionsError(null)
+    setFileSyncOptionsLoading(true)
+    void getDeveloperTokenFileSyncOptionsApi({
+      tenant_id: tenantId,
+      space_page: 1,
+      space_limit: 200,
+    }).then((result) => {
+      if (active && result.tenant_id === tenantId) setFileSyncOptions(result)
+    }).catch(() => {
+      if (active) setFileSyncOptionsError("load_failed")
+    }).finally(() => {
+      if (active) setFileSyncOptionsLoading(false)
+    })
+    return () => {
+      active = false
+    }
+  }, [form.tenant_id, formOpen])
 
   const handleOpenCreate = () => {
     setForm(toForm())
@@ -164,6 +186,63 @@ export default function DeveloperToken() {
     const detail = await getDeveloperTokenDetailApi(row.id)
     setForm(toForm(detail))
     setFormOpen(true)
+  }
+
+  const handleBindingChange = (value: DepartmentUserOption[]) => {
+    const selectedTenantId = Number(value[0]?.tenant_id ?? user?.tenant_id) || null
+    const tenantChanged = selectedTenantId !== form.tenant_id
+    fileSyncTenantIdRef.current = selectedTenantId
+    setForm({
+      ...form,
+      user: value,
+      binding_changed: true,
+      tenant_id: selectedTenantId,
+      file_sync_rule: tenantChanged ? null : form.file_sync_rule,
+    })
+    if (tenantChanged) {
+      setFileSyncOptions(null)
+      setFileSyncOptionsError(null)
+    }
+  }
+
+  const handleSearchFileSyncSpaces = async (spaceKeyword: string) => {
+    if (!form.tenant_id) return
+    setFileSyncOptionsLoading(true)
+    setFileSyncOptionsError(null)
+    try {
+      const result = await getDeveloperTokenFileSyncOptionsApi({
+        tenant_id: form.tenant_id,
+        space_page: 1,
+        space_limit: 200,
+        space_keyword: spaceKeyword || undefined,
+      })
+      if (result.tenant_id === fileSyncTenantIdRef.current) {
+        setFileSyncOptions((current) => {
+          if (!current || !spaceKeyword) return result
+          const spaces = new Map(current.knowledge_spaces.data.map((item) => [item.id, item]))
+          result.knowledge_spaces.data.forEach((item) => spaces.set(item.id, item))
+          return {
+            ...result,
+            knowledge_spaces: {
+              data: Array.from(spaces.values()),
+              total: Math.max(current.knowledge_spaces.total, result.knowledge_spaces.total),
+            },
+          }
+        })
+      }
+    } catch {
+      setFileSyncOptionsError("load_failed")
+    } finally {
+      setFileSyncOptionsLoading(false)
+    }
+  }
+
+  const fileSyncSummaryLabels = {
+    notConfigured: t("system.developerToken.fileSync.summary.notConfigured"),
+    businessDomain: t("system.developerToken.fileSync.summary.businessDomain"),
+    targetSpace: t("system.developerToken.fileSync.summary.targetSpace"),
+    dynamicDepartment: t("system.developerToken.fileSync.summary.dynamicDepartment"),
+    dynamicResponsiblePerson: t("system.developerToken.fileSync.summary.dynamicResponsiblePerson"),
   }
 
   const showRateLimitError = () => {
@@ -255,6 +334,27 @@ export default function DeveloperToken() {
       })
       return
     }
+    if (form.file_sync_rule) {
+      if (fileSyncOptionsLoading || fileSyncOptionsError || !fileSyncOptions) {
+        toast({
+          title: t("prompt"),
+          variant: "error",
+          description: t("system.developerToken.fileSync.optionsRequiredError"),
+        })
+        return
+      }
+      const invalidFileSyncRule = findInvalidFileSyncRule(form.file_sync_rule, fileSyncOptions)
+      if (invalidFileSyncRule) {
+        toast({
+          title: t("prompt"),
+          variant: "error",
+          description: t("system.developerToken.fileSync.invalidError", {
+            field: t(`system.developerToken.fileSync.errorFields.${invalidFileSyncRule.field}`),
+          }),
+        })
+        return
+      }
+    }
     setSaving(true)
     try {
       if (form.id) {
@@ -293,74 +393,9 @@ export default function DeveloperToken() {
     setSecretOpen(true)
   }
 
-  const handleSaveConfig = async () => {
-    const invalidIpRule = findInvalidIpWhitelistRule(config.ip_whitelist)
-    if (invalidIpRule) {
-      showIpWhitelistError(invalidIpRule)
-      return
-    }
-    if (!isRateLimitValueValid(globalRateLimit)) {
-      showRateLimitError()
-      return
-    }
-    setConfigSaving(true)
-    try {
-      const result = await updateDeveloperTokenGlobalConfigApi({
-        ip_whitelist: config.ip_whitelist || "",
-        rate_limit_per_minute: parseLimit(globalRateLimit),
-      })
-      setConfig(result)
-      setGlobalRateLimit(formatLimitInput(result.rate_limit_per_minute))
-      toast({
-        title: t("prompt"),
-        variant: "success",
-        description: t("system.developerToken.saved"),
-      })
-    } finally {
-      setConfigSaving(false)
-    }
-  }
-
   return (
     <div className="flex h-full min-h-0 flex-col gap-4 overflow-auto p-4">
-      {isSuperAdmin && (
-        <div className="space-y-3 border-b pb-4">
-          <div className="grid gap-3 md:grid-cols-[1fr_220px_auto]">
-            <label className="space-y-1 text-sm">
-              <span>{t("system.developerToken.globalWhitelist")}</span>
-              <textarea
-                className="min-h-20 w-full rounded-md border bg-search-input px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
-                value={config.ip_whitelist}
-                onChange={(event) => setConfig({ ...config, ip_whitelist: event.target.value })}
-                placeholder={t("system.developerToken.ipWhitelistPlaceholder")}
-              />
-              <div className="text-xs text-muted-foreground">
-                {t("system.developerToken.ipWhitelistHelp")}
-              </div>
-            </label>
-            <label className="space-y-1 text-sm">
-              <span>{t("system.developerToken.globalRateLimit")}</span>
-              <Input
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                placeholder={t("system.developerToken.globalRateLimitPlaceholder")}
-                value={globalRateLimit}
-                onBeforeInput={handleRateLimitBeforeInput}
-                onKeyDown={handleRateLimitKeyDown}
-                onPaste={handleRateLimitPaste}
-                onCompositionEnd={(event) => handleRateLimitCompositionEnd(event, setGlobalRateLimit)}
-                onChange={(event) => handleRateLimitChange(event.target.value, setGlobalRateLimit)}
-              />
-            </label>
-            <div className="flex items-end">
-              <Button disabled={configSaving} onClick={handleSaveConfig}>
-                {t("system.developerToken.saveConfig")}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+      {isSuperAdmin && <DeveloperTokenGlobalSettings />}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-72 items-center gap-2">
@@ -386,84 +421,14 @@ export default function DeveloperToken() {
         </Button>
       </div>
 
-      <div className="min-h-0 overflow-x-auto rounded-md border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>{t("system.developerToken.columns.name")}</TableHead>
-              <TableHead>{t("system.developerToken.columns.prefix")}</TableHead>
-              <TableHead>{t("system.developerToken.columns.binding")}</TableHead>
-              <TableHead>{t("system.developerToken.columns.status")}</TableHead>
-              <TableHead>{t("system.developerToken.columns.controls")}</TableHead>
-              <TableHead>{t("system.developerToken.columns.routes")}</TableHead>
-              <TableHead>{t("system.developerToken.columns.lastUsed")}</TableHead>
-              <TableHead className="text-right">{t("system.developerToken.columns.actions")}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {loading && rows.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={8} className="text-center text-muted-foreground">
-                  {t("system.developerToken.loading")}
-                </TableCell>
-              </TableRow>
-            ) : rows.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={8} className="text-center text-muted-foreground">
-                  {t("system.developerToken.empty")}
-                </TableCell>
-              </TableRow>
-            ) : (
-              rows.map((row) => (
-                <TableRow key={row.id}>
-                  <TableCell className="font-medium">{row.name}</TableCell>
-                  <TableCell className="font-mono text-xs">{row.token_prefix}</TableCell>
-                  <TableCell className="text-xs">
-                    <div>{row.user_name || row.user_id}</div>
-                    <div className="text-muted-foreground">{row.tenant_name || row.tenant_id}</div>
-                  </TableCell>
-                  <TableCell>
-                    <StatusBadge enabled={row.enabled} />
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
-                    <div>
-                      {row.override_ip_whitelist
-                        ? t("system.developerToken.overrideIp")
-                        : t("system.developerToken.globalIp")}
-                    </div>
-                    <div>
-                      {row.override_rate_limit
-                        ? t("system.developerToken.overrideRate")
-                        : t("system.developerToken.globalRate")}
-                      {row.rate_limit_per_minute ? ` ${row.rate_limit_per_minute}/min` : ""}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-xs">
-                    {row.route_rule_count > 0
-                      ? t("system.developerToken.routeRules.count", { count: row.route_rule_count })
-                      : t("system.developerToken.routeRules.allRoutes")}
-                  </TableCell>
-                  <TableCell className="text-xs">
-                    <div>{row.last_used_time ? formatIsoDateTime(row.last_used_time) : "-"}</div>
-                    <div className="text-muted-foreground">{row.last_used_ip || "-"}</div>
-                  </TableCell>
-                  <TableCell className="space-x-2 text-right">
-                    <Button size="sm" variant="outline" onClick={() => handleOpenEdit(row)}>
-                      {t("system.developerToken.edit")}
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={() => handleViewSecret(row)}>
-                      {t("system.developerToken.viewSecret")}
-                    </Button>
-                    <Button size="sm" variant="destructive" onClick={() => handleDelete(row)}>
-                      {t("system.developerToken.delete")}
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
+      <DeveloperTokenTable
+        rows={rows}
+        loading={loading}
+        fileSyncSummaryLabels={fileSyncSummaryLabels}
+        onEdit={handleOpenEdit}
+        onViewSecret={handleViewSecret}
+        onDelete={handleDelete}
+      />
 
       {total > 0 && (
         <div className="flex items-center justify-between text-sm text-muted-foreground">
@@ -490,7 +455,7 @@ export default function DeveloperToken() {
       )}
 
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {form.id ? t("system.developerToken.edit") : t("system.developerToken.create")}
@@ -506,7 +471,7 @@ export default function DeveloperToken() {
               <DepartmentUsersSelect
                 multiple={false}
                 value={form.user}
-                onChange={(value) => setForm({ ...form, user: value, binding_changed: true })}
+                onChange={handleBindingChange}
                 placeholder={t("system.developerToken.selectUser")}
                 searchPlaceholder={t("system.developerToken.searchUser")}
               />
@@ -568,6 +533,14 @@ export default function DeveloperToken() {
             <DeveloperTokenRouteAllowlist
               value={form.route_whitelist}
               onChange={(route_whitelist) => setForm({ ...form, route_whitelist })}
+            />
+            <DeveloperTokenFileSyncRuleEditor
+              value={form.file_sync_rule}
+              onChange={(file_sync_rule) => setForm({ ...form, file_sync_rule })}
+              options={fileSyncOptions}
+              loading={fileSyncOptionsLoading}
+              error={fileSyncOptionsError}
+              onSearchSpaces={handleSearchFileSyncSpaces}
             />
           </div>
           <DialogFooter>

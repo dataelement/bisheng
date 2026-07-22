@@ -179,6 +179,47 @@
           "PREFIX": "パスプレフィックス"
         }
       },
+      "fileSync": {
+        "title": "統合ファイル同期業務",
+        "enabled": "ファイル同期業務設定を有効化",
+        "disabledHelp": "無効の場合、この Token で統合ファイル同期 API を呼び出すと 403/19906 が返ります。その他の許可済み API には影響しません。",
+        "optionsLoading": "このテナントのカテゴリ、業務ドメイン、ナレッジスペースを読み込んでいます…",
+        "optionsError": "設定候補の読み込みに失敗しました。再試行してから保存してください。",
+        "selectBindingFirst": "設定対象テナントを確定するため、先に Token の紐づけユーザーを選択してください。",
+        "optionsRequiredError": "ファイル同期の設定候補が読み込まれていません。再試行してから保存してください。",
+        "invalidError": "ファイル同期設定の「{{field}}」が無効または失効しています。確認して再試行してください。",
+        "category": "親カテゴリ",
+        "subcategory": "子カテゴリ",
+        "businessDomain": "業務ドメイン",
+        "targetSpace": "対象ナレッジスペース",
+        "dynamicSource": "動的業務ソース",
+        "select": "選択してください",
+        "stale": "保存済みの値は失効しています。再選択するまで元の値を保持します。",
+        "spaceSearchPlaceholder": "ナレッジスペース名を検索",
+        "searchSpace": "スペースを検索",
+        "modes": {
+          "fixed": "固定設定",
+          "dynamic": "実行時に動的取得"
+        },
+        "sources": {
+          "departmentId": "department_id を使用",
+          "responsiblePersonId": "responsible_person_id の主所属部署を使用"
+        },
+        "errorFields": {
+          "category": "親カテゴリ",
+          "subcategory": "子カテゴリ",
+          "businessDomain": "業務ドメイン",
+          "targetSpace": "対象ナレッジスペース",
+          "dynamicSource": "動的業務ソース"
+        },
+        "summary": {
+          "notConfigured": "未設定",
+          "businessDomain": "業務ドメイン",
+          "targetSpace": "対象",
+          "dynamicDepartment": "動的(department_id)",
+          "dynamicResponsiblePerson": "動的(responsible_person_id の主所属部署)"
+        }
+      },
       "saveConfig": "設定を保存",
       "search": "検索",
       "create": "Token を作成",
@@ -211,6 +252,7 @@
         "status": "状態",
         "controls": "アクセス制御",
         "routes": "ルート範囲",
+        "fileSync": "ファイル同期業務",
         "lastUsed": "最終使用",
         "actions": "操作"
       },
