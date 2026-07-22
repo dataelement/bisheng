@@ -19,14 +19,20 @@ class KnowledgeSpacePinRepositoryImpl(BaseRepositoryImpl[UserLink, int], Knowled
     async def lock_user(self, user_id: int) -> None:
         await self.session.exec(select(_USER_TABLE.c.user_id).where(_USER_TABLE.c.user_id == user_id).with_for_update())
 
-    async def list_for_user(self, user_id: int) -> set[int]:
+    async def list_for_user(self, user_id: int) -> list[int]:
         result = await self.session.exec(
-            select(UserLink.type_detail).where(
+            select(UserLink.type_detail)
+            .where(
                 UserLink.user_id == user_id,
                 UserLink.type == KNOWLEDGE_SPACE_PIN_TYPE,
             )
+            .order_by(UserLink.create_time.desc(), UserLink.id.desc())
         )
-        return {int(type_detail) for type_detail in result.all() if str(type_detail).isdigit()}
+        ordered: list[int] = []
+        for type_detail in result.all():
+            if str(type_detail).isdigit():
+                ordered.append(int(type_detail))
+        return ordered
 
     async def add_pin(self, user_id: int, space_id: int) -> bool:
         existing = await self.session.exec(

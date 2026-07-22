@@ -12,6 +12,7 @@ import { NotificationSeverity } from "~/common";
 import { useToastContext } from "~/Providers";
 import { useLocalize } from "~/hooks";
 import { extractKnowledgeActionErrorMessage } from "../errorUtils";
+import { applyPinOrderToSpaceList } from "../sidebar/spaceSort";
 
 interface UseSpaceActionsOptions {
     activeSpaceId?: string;
@@ -142,9 +143,10 @@ export function useSpaceActions({
             return;
         }
 
-        // Optimistic update
-        const updater = (list: KnowledgeSpace[]) => list.map(s => s.id === spaceId ? { ...s, isPinned: pinned } : s);
-        updateAllCaches(updater);
+        const previousGrouped = queryClient.getQueryData<GroupedKnowledgeSpaces>(["knowledgeSpaces", "grouped"]);
+
+        // Optimistic update: newly pinned spaces move to the front of the pinned block.
+        updateAllCaches((list) => applyPinOrderToSpaceList(list, spaceId, pinned));
 
         if (activeSpaceId === spaceId) {
             const space = targetList.find(s => s.id === spaceId);
@@ -156,9 +158,11 @@ export function useSpaceActions({
             queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
             showToast({ message: pinned ? localize("com_knowledge.pinned") : localize("com_knowledge.unpinned"), severity: NotificationSeverity.SUCCESS });
         } catch {
-            // Rollback
-            const rollback = (list: KnowledgeSpace[]) => list.map(s => s.id === spaceId ? { ...s, isPinned: !pinned } : s);
-            updateAllCaches(rollback);
+            if (previousGrouped) {
+                queryClient.setQueryData(["knowledgeSpaces", "grouped"], previousGrouped);
+            } else {
+                updateAllCaches((list) => applyPinOrderToSpaceList(list, spaceId, !pinned));
+            }
             if (activeSpaceId === spaceId) {
                 const space = targetList.find(s => s.id === spaceId);
                 if (space) onSpaceSelect({ ...space, isPinned: !pinned });

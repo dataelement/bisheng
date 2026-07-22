@@ -463,12 +463,35 @@ export default function PortalKnowledgeWorkbench() {
             showToast({ message: "最多置顶 5 个知识库", severity: NotificationSeverity.INFO });
             return;
         }
+        const queryKey = ["knowledgeSpaces", "level", group.level];
+        const previousSpaces = queryClient.getQueryData<KnowledgeSpace[]>(queryKey);
+        if (previousSpaces) {
+            const target = previousSpaces.find((item) => item.id === space.id);
+            if (target) {
+                const updated = { ...target, isPinned: pinned };
+                const others = previousSpaces.filter((item) => item.id !== space.id);
+                queryClient.setQueryData<KnowledgeSpace[]>(
+                    queryKey,
+                    pinned
+                        ? [updated, ...others]
+                        : [
+                            ...others.filter((item) => item.isPinned),
+                            updated,
+                            ...others.filter((item) => !item.isPinned),
+                        ],
+                );
+            }
+        }
+        setActiveSpace((prev) => prev?.id === space.id ? { ...prev, isPinned: pinned } : prev);
         try {
             await pinSpaceApi(space.id, pinned);
-            setActiveSpace((prev) => prev?.id === space.id ? { ...prev, isPinned: pinned } : prev);
             await queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
             showToast({ message: pinned ? "已置顶" : "已取消置顶", severity: NotificationSeverity.SUCCESS });
         } catch {
+            if (previousSpaces) {
+                queryClient.setQueryData(queryKey, previousSpaces);
+            }
+            setActiveSpace((prev) => prev?.id === space.id ? { ...prev, isPinned: !pinned } : prev);
             showToast({ message: "操作失败", severity: NotificationSeverity.ERROR });
         }
     }, [queryClient, showToast]);
