@@ -106,13 +106,13 @@ const privateRouter = [
       { path: "log", element: <LogPage />, permission: "log" },
       { path: "log/chatlog/:fid/:cid/:type", element: <AppChatDetail />, permission: "log" },
       { path: "log/chatlog/:cid", element: <DailyChatDetail />, permission: "log" },
-      { path: "evaluation", element: <EvaluatingPage /> },
-      { path: "evaluation/create", element: <EvaluatingCreate /> },
-      { path: "dataset", element: <DataSetPage /> },
+      { path: "evaluation", element: <EvaluatingPage />, permission: 'evaluation' },
+      { path: "evaluation/create", element: <EvaluatingCreate />, permission: 'evaluation' },
+      { path: "dataset", element: <DataSetPage />, permission: 'dataset' },
       { path: "label", element: <LabelPage />, permission: 'mark_task' },
       { path: "label/:id", element: <TaskApps />, permission: 'mark_task' },
       { path: "label/chat/:id/:fid/:cid/:type", element: <TaskAppChats />, permission: 'mark_task' },
-      { path: "dashboard", element: <Dashboard /> },
+      { path: "dashboard", element: <Dashboard />, permission: 'board' },
       { path: "tenant", element: <TenantPage />, permission: 'sys' },
       { path: "department", element: <Navigate to="/sys" replace /> },
       { path: "menu-pending", element: <MenuPermissionPlaceholder /> },
@@ -175,7 +175,6 @@ function hasRoutePermission(permissions: string[], key: string) {
 /**
  * Convert the backend web_menu value into route permissions.
  *
- * - Department admins receive a create_app fallback when the backend omits it.
  * - Child tenant admins receive every admin route except tenant management. Their backend web_menu
  *   still comes from a regular role, while business APIs retain tenant and resource authorization.
  */
@@ -198,14 +197,28 @@ export function resolveRoutePermissions(user: {
   is_child_admin?: boolean | null
 }): string[] {
   let perms = user.web_menu ?? []
-  if (user.is_department_admin && !perms.includes("create_app")) {
-    perms = [...perms, "create_app"]
-  }
   if (user.is_child_admin) {
     const missing = CHILD_ADMIN_ROUTE_PERMISSIONS.filter((permission) => !perms.includes(permission))
     if (missing.length) perms = [...perms, ...missing]
   }
   return perms
+}
+
+const ADMIN_LANDING_ROUTES = [
+  { key: "board", path: "/dashboard" },
+  { key: "build", path: "/build/apps" },
+  { key: "knowledge", path: "/filelib" },
+  { key: "dataset", path: "/dataset" },
+  { key: "model", path: "/model/management" },
+  { key: "evaluation", path: "/evaluation" },
+  { key: "mark_task", path: "/label" },
+  { key: "sys", path: "/sys" },
+] as const
+
+export function resolveAdminLandingPath(permissions: string[], menuApprovalMode: boolean): string {
+  const target = ADMIN_LANDING_ROUTES.find((item) => permissions.includes(item.key))
+  if (target) return target.path
+  return menuApprovalMode ? "/menu-pending?menu=board" : "/menu-pending"
 }
 
 export const getPrivateRouter = (

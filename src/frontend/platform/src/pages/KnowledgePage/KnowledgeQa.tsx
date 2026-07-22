@@ -302,7 +302,6 @@ export default function KnowledgeQa(params) {
         hasListPermission(el, 'delete_kb');
     const canCreateLibrary =
         user.role === 'admin' ||
-        Boolean(user.is_department_admin) ||
         (user.web_menu || []).includes('create_knowledge');
     const canReadRow = (el: any) =>
         hasListPermission(el, 'view_kb');
