@@ -265,3 +265,26 @@ body {
 .aside-link-text {
   font-size: var(--text-body-sm) !important;
 }
+
+/* Left sidebar + right TOC: hover / active are marked by TEXT COLOR only — no
+   background pill. rspress fills the active item and the hover state with
+   --rp-c-brand-tint (brand 12%); drop every background on these controls and
+   let the text color carry the state (hover → 主文字色, active → 品牌色, both
+   already applied by rspress via --rp-c-brand / text tokens). Hashed CSS-module
+   class names (menuLink_xxx / menuItem_xxx) are matched by attribute substring
+   so a theme rebuild that re-hashes them can't break these rules. */
+.rspress-sidebar [class*="menuLink"],
+.rspress-sidebar [class*="menuLink"]:hover,
+.rspress-sidebar [class*="menuItem"],
+.rspress-sidebar [class*="menuItem"]:hover {
+  background-color: transparent !important;
+}
+/* Non-active items still give hover feedback via a text-color lift (skip the
+   active item so it keeps its brand color while hovered). */
+.rspress-sidebar [class*="menuItem"]:not([class*="menuItemActive"]):hover {
+  color: rgb(var(--text-1)) !important;
+}
+.aside-link.aside-active,
+.aside-link:hover {
+  background-color: transparent !important;
+}
