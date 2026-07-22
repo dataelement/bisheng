@@ -21,31 +21,41 @@ from bisheng.common.models.config import ConfigDao
 from bisheng.common.schemas.api import resp_200
 from bisheng.permission.domain.application_permission_template import (
     APPLICATION_PERMISSION_TEMPLATE,
+)
+from bisheng.permission.domain.application_permission_template import (
     default_permission_ids_for_relation as default_application_permissions,
 )
 from bisheng.permission.domain.channel_permission_template import (
     CHANNEL_PERMISSION_TEMPLATE,
+)
+from bisheng.permission.domain.channel_permission_template import (
     default_permission_ids_for_relation as default_channel_permissions,
 )
 from bisheng.permission.domain.knowledge_library_permission_template import (
     KNOWLEDGE_LIBRARY_PERMISSION_TEMPLATE,
+)
+from bisheng.permission.domain.knowledge_library_permission_template import (
     default_permission_ids_for_relation as default_knowledge_library_permissions,
 )
 from bisheng.permission.domain.knowledge_space_permission_template import (
     KNOWLEDGE_SPACE_PERMISSION_TEMPLATE,
+)
+from bisheng.permission.domain.knowledge_space_permission_template import (
     default_permission_ids_for_relation as default_knowledge_space_permissions,
 )
 from bisheng.permission.domain.schemas.permission_schema import (
     VALID_RESOURCE_TYPES,
     AuthorizeRequest,
     PermissionLevel,
-    ResourcePermissionItem,
     RelationModelCreateRequest,
     RelationModelItem,
     RelationModelUpdateRequest,
+    ResourcePermissionItem,
 )
 from bisheng.permission.domain.tool_permission_template import (
     TOOL_PERMISSION_TEMPLATE,
+)
+from bisheng.permission.domain.tool_permission_template import (
     default_permission_ids_for_relation as default_tool_permissions,
 )
 
@@ -70,55 +80,56 @@ def _enqueue_recommendation_projection_resource_refreshes(
             )
     except Exception as e:
         logger.warning(
-            'recommendation projection resource refresh enqueue failed resources=%s error=%s',
+            "recommendation projection resource refresh enqueue failed resources=%s error=%s",
             sorted(resources),
             e,
         )
 
+
 # Grantable role relations mapped to their required minimum level
-_GRANT_RELATIONS = {'owner': 'owner', 'manager': 'can_manage', 'editor': 'can_edit', 'viewer': 'can_read'}
-_GRANT_TIER_VALUES = frozenset({'owner', 'manager', 'usage'})
+_GRANT_RELATIONS = {"owner": "owner", "manager": "can_manage", "editor": "can_edit", "viewer": "can_read"}
+_GRANT_TIER_VALUES = frozenset({"owner", "manager", "usage"})
 _MANAGE_PERMISSION_BY_RESOURCE_TIER = {
-    'workflow': {
-        'owner': 'manage_app_owner',
-        'manager': 'manage_app_manager',
-        'usage': 'manage_app_viewer',
+    "workflow": {
+        "owner": "manage_app_owner",
+        "manager": "manage_app_manager",
+        "usage": "manage_app_viewer",
     },
-    'assistant': {
-        'owner': 'manage_app_owner',
-        'manager': 'manage_app_manager',
-        'usage': 'manage_app_viewer',
+    "assistant": {
+        "owner": "manage_app_owner",
+        "manager": "manage_app_manager",
+        "usage": "manage_app_viewer",
     },
-    'tool': {
-        'owner': 'manage_tool_owner',
-        'manager': 'manage_tool_manager',
-        'usage': 'manage_tool_viewer',
+    "tool": {
+        "owner": "manage_tool_owner",
+        "manager": "manage_tool_manager",
+        "usage": "manage_tool_viewer",
     },
-    'knowledge_library': {
-        'owner': 'manage_kb_owner',
-        'manager': 'manage_kb_manager',
-        'usage': 'manage_kb_viewer',
+    "knowledge_library": {
+        "owner": "manage_kb_owner",
+        "manager": "manage_kb_manager",
+        "usage": "manage_kb_viewer",
     },
-    'channel': {
-        'owner': 'manage_channel_owner',
-        'manager': 'manage_channel_manager',
-        'usage': 'manage_channel_user',
+    "channel": {
+        "owner": "manage_channel_owner",
+        "manager": "manage_channel_manager",
+        "usage": "manage_channel_user",
     },
 }
 _MANAGE_PERMISSION_BY_RESOURCE = {
-    'knowledge_space': 'manage_space_relation',
-    'folder': 'manage_folder_relation',
-    'knowledge_file': 'manage_file_relation',
+    "knowledge_space": "manage_space_relation",
+    "folder": "manage_folder_relation",
+    "knowledge_file": "manage_file_relation",
 }
-_KNOWLEDGE_PERMISSION_RESOURCE_TYPES = {'knowledge_space', 'folder', 'knowledge_file'}
+_KNOWLEDGE_PERMISSION_RESOURCE_TYPES = {"knowledge_space", "folder", "knowledge_file"}
 _PERMISSION_LEVEL_TO_RELATION = {
-    PermissionLevel.owner.value: 'owner',
-    PermissionLevel.can_manage.value: 'manager',
-    PermissionLevel.can_edit.value: 'editor',
-    PermissionLevel.can_read.value: 'viewer',
+    PermissionLevel.owner.value: "owner",
+    PermissionLevel.can_manage.value: "manager",
+    PermissionLevel.can_edit.value: "editor",
+    PermissionLevel.can_read.value: "viewer",
 }
-_RELATION_MODELS_KEY = 'permission_relation_models_v1'
-_RELATION_MODEL_BINDINGS_KEY = 'permission_relation_model_bindings_v1'
+_RELATION_MODELS_KEY = "permission_relation_models_v1"
+_RELATION_MODEL_BINDINGS_KEY = "permission_relation_model_bindings_v1"
 _PERMISSION_TEMPLATES = (
     KNOWLEDGE_SPACE_PERMISSION_TEMPLATE,
     APPLICATION_PERMISSION_TEMPLATE,
@@ -127,39 +138,39 @@ _PERMISSION_TEMPLATES = (
     CHANNEL_PERMISSION_TEMPLATE,
 )
 _RELATION_MODEL_NAME_PREFIX_PAIRS = tuple(
-    (template.get('title') or '', item.get('label') or '')
+    (template.get("title") or "", item.get("label") or "")
     for template in _PERMISSION_TEMPLATES
-    for column in template.get('columns', [])
-    for item in column.get('items', [])
+    for column in template.get("columns", [])
+    for item in column.get("items", [])
 )
 
 
 def _infer_grant_tier_from_relation(relation: str) -> str:
-    if relation == 'owner':
-        return 'owner'
-    if relation == 'manager':
-        return 'manager'
-    return 'usage'
+    if relation == "owner":
+        return "owner"
+    if relation == "manager":
+        return "manager"
+    return "usage"
 
 
 def _validate_tier_relation(grant_tier: str, relation: str) -> bool:
-    if grant_tier == 'owner':
-        return relation == 'owner'
-    if grant_tier == 'manager':
-        return relation == 'manager'
-    if grant_tier == 'usage':
-        return relation in ('editor', 'viewer')
+    if grant_tier == "owner":
+        return relation == "owner"
+    if grant_tier == "manager":
+        return relation == "manager"
+    if grant_tier == "usage":
+        return relation in ("editor", "viewer")
     return False
 
 
 def _is_invalid_owner_subject(subject_type: str | None, relation: str | None) -> bool:
-    return relation == 'owner' and subject_type != 'user'
+    return relation == "owner" and subject_type != "user"
 
 
 def _normalize_relation_model_name(name: str | None) -> str:
-    text = (name or '').strip()
+    text = (name or "").strip()
     for title, label in _RELATION_MODEL_NAME_PREFIX_PAIRS:
-        if title and label and text == f'{title}{label}':
+        if title and label and text == f"{title}{label}":
             return label
     return text
 
@@ -169,46 +180,65 @@ def _relation_model_name_exists(models: list[dict], name: str | None, exclude_mo
     if not normalized_name:
         return False
     return any(
-        m.get('id') != exclude_model_id
-        and _normalize_relation_model_name(m.get('name')) == normalized_name
+        m.get("id") != exclude_model_id and _normalize_relation_model_name(m.get("name")) == normalized_name
         for m in models
     )
 
 
 def _normalize_model_dict(m: dict) -> dict:
     out = dict(m)
-    out['name'] = _normalize_relation_model_name(out.get('name'))
-    gt = out.get('grant_tier')
+    out["name"] = _normalize_relation_model_name(out.get("name"))
+    gt = out.get("grant_tier")
     if gt not in _GRANT_TIER_VALUES:
-        out['grant_tier'] = _infer_grant_tier_from_relation(out.get('relation') or '')
-    if not _validate_tier_relation(out['grant_tier'], out.get('relation') or ''):
-        out['grant_tier'] = _infer_grant_tier_from_relation(out.get('relation') or '')
-    if 'permissions_explicit' not in out:
-        permissions = out.get('permissions') or []
-        if out.get('is_system'):
-            out['permissions_explicit'] = False
+        out["grant_tier"] = _infer_grant_tier_from_relation(out.get("relation") or "")
+    if not _validate_tier_relation(out["grant_tier"], out.get("relation") or ""):
+        out["grant_tier"] = _infer_grant_tier_from_relation(out.get("relation") or "")
+    if "permissions_explicit" not in out:
+        permissions = out.get("permissions") or []
+        if out.get("is_system"):
+            out["permissions_explicit"] = False
         else:
-            out['permissions_explicit'] = bool(permissions)
+            out["permissions_explicit"] = bool(permissions)
     return out
 
 
 def _default_relation_models() -> list[dict]:
     return [
         {
-            'id': 'owner', 'name': '所有者', 'relation': 'owner',
-            'grant_tier': 'owner', 'permissions': [], 'permissions_explicit': False, 'is_system': True,
+            "id": "owner",
+            "name": "所有者",
+            "relation": "owner",
+            "grant_tier": "owner",
+            "permissions": [],
+            "permissions_explicit": False,
+            "is_system": True,
         },
         {
-            'id': 'manager', 'name': '可管理', 'relation': 'manager',
-            'grant_tier': 'manager', 'permissions': [], 'permissions_explicit': False, 'is_system': True,
+            "id": "manager",
+            "name": "可管理",
+            "relation": "manager",
+            "grant_tier": "manager",
+            "permissions": [],
+            "permissions_explicit": False,
+            "is_system": True,
         },
         {
-            'id': 'editor', 'name': '可编辑', 'relation': 'editor',
-            'grant_tier': 'usage', 'permissions': [], 'permissions_explicit': False, 'is_system': True,
+            "id": "editor",
+            "name": "可编辑",
+            "relation": "editor",
+            "grant_tier": "usage",
+            "permissions": [],
+            "permissions_explicit": False,
+            "is_system": True,
         },
         {
-            'id': 'viewer', 'name': '可查看', 'relation': 'viewer',
-            'grant_tier': 'usage', 'permissions': [], 'permissions_explicit': False, 'is_system': True,
+            "id": "viewer",
+            "name": "可查看",
+            "relation": "viewer",
+            "grant_tier": "usage",
+            "permissions": [],
+            "permissions_explicit": False,
+            "is_system": True,
         },
     ]
 
@@ -216,12 +246,12 @@ def _default_relation_models() -> list[dict]:
 async def _get_relation_models() -> list[dict]:
     """只读；若库中无记录则初始化默认四条，禁止每次读取都覆盖已保存的自定义模型。"""
     row = await ConfigDao.aget_config_by_key(_RELATION_MODELS_KEY)
-    if not row or not (row.value or '').strip():
+    if not row or not (row.value or "").strip():
         models = _default_relation_models()
         await _save_relation_models(models)
         return models
     try:
-        models = json.loads(row.value or '[]')
+        models = json.loads(row.value or "[]")
     except Exception:
         models = _default_relation_models()
         await _save_relation_models(models)
@@ -243,10 +273,10 @@ async def _save_relation_models(models: list[dict]) -> None:
 async def _get_bindings() -> list[dict]:
     """只读；禁止每次读取都把绑定表写回空数组。"""
     row = await ConfigDao.aget_config_by_key(_RELATION_MODEL_BINDINGS_KEY)
-    if not row or not (row.value or '').strip():
+    if not row or not (row.value or "").strip():
         return []
     try:
-        bindings = json.loads(row.value or '[]')
+        bindings = json.loads(row.value or "[]")
     except Exception:
         return []
     normalized = await _migrate_legacy_knowledge_library_bindings(bindings)
@@ -264,10 +294,9 @@ async def _save_bindings(bindings: list[dict]) -> None:
 
 async def _migrate_legacy_knowledge_library_bindings(bindings: list[dict]) -> list[dict]:
     legacy_ids = {
-        int(binding.get('resource_id'))
+        int(binding.get("resource_id"))
         for binding in bindings
-        if binding.get('resource_type') == 'knowledge_space'
-           and str(binding.get('resource_id', '')).isdigit()
+        if binding.get("resource_type") == "knowledge_space" and str(binding.get("resource_id", "")).isdigit()
     }
     if not legacy_ids:
         return bindings
@@ -280,26 +309,26 @@ async def _migrate_legacy_knowledge_library_bindings(bindings: list[dict]) -> li
     normalized: list[dict] = []
     for binding in bindings:
         migrated = dict(binding)
-        resource_type = migrated.get('resource_type')
-        resource_id = migrated.get('resource_id')
-        if resource_type == 'knowledge_space' and str(resource_id).isdigit():
+        resource_type = migrated.get("resource_type")
+        resource_id = migrated.get("resource_id")
+        if resource_type == "knowledge_space" and str(resource_id).isdigit():
             knowledge_type = knowledge_type_map.get(int(resource_id))
             if knowledge_type is not None and knowledge_type != KnowledgeTypeEnum.SPACE.value:
-                migrated['resource_type'] = 'knowledge_library'
-                migrated['key'] = _binding_key_with_scope(
-                    'knowledge_library',
+                migrated["resource_type"] = "knowledge_library"
+                migrated["key"] = _binding_key_with_scope(
+                    "knowledge_library",
                     str(resource_id),
-                    migrated.get('subject_type'),
-                    int(migrated.get('subject_id')),
-                    migrated.get('relation'),
-                    migrated.get('include_children'),
+                    migrated.get("subject_type"),
+                    int(migrated.get("subject_id")),
+                    migrated.get("relation"),
+                    migrated.get("include_children"),
                 )
         normalized.append(migrated)
     return normalized
 
 
 def _normalize_binding_include_children(subject_type: str, include_children) -> bool | None:
-    if subject_type != 'department':
+    if subject_type != "department":
         return None
     return bool(include_children)
 
@@ -310,9 +339,9 @@ def _space_member_role_for_direct_relations(relations: set[str]):
 
     from bisheng.common.models.space_channel_member import UserRoleEnum
 
-    if relations & {'owner', 'manager'}:
+    if relations & {"owner", "manager"}:
         return UserRoleEnum.ADMIN
-    if relations & {'editor', 'viewer'}:
+    if relations & {"editor", "viewer"}:
         return UserRoleEnum.MEMBER
     return None
 
@@ -331,13 +360,13 @@ async def _sync_knowledge_space_direct_user_memberships(
     `space_channel_member`，避免权限页已移除但广场仍显示“已加入”。
     部门/用户组授权不展开写成员表，保持 ReBAC 群体授权语义。
     """
-    if resource_type != 'knowledge_space' or not str(resource_id).isdigit():
+    if resource_type != "knowledge_space" or not str(resource_id).isdigit():
         return
 
     direct_user_ids = {
         int(item.subject_id)
         for item in [*(request.grants or []), *(request.revokes or [])]
-        if item.subject_type == 'user'
+        if item.subject_type == "user"
     }
     if not direct_user_ids:
         return
@@ -356,10 +385,10 @@ async def _sync_knowledge_space_direct_user_memberships(
     if not space or space.type != KnowledgeTypeEnum.SPACE.value:
         return
 
-    creator_user_id = int(getattr(space, 'user_id', 0) or 0)
+    creator_user_id = int(getattr(space, "user_id", 0) or 0)
     direct_grant_relations: dict[int, set[str]] = {}
     for grant in request.grants or []:
-        if grant.subject_type != 'user':
+        if grant.subject_type != "user":
             continue
         direct_grant_relations.setdefault(int(grant.subject_id), set()).add(grant.relation)
 
@@ -368,13 +397,13 @@ async def _sync_knowledge_space_direct_user_memberships(
             continue
 
         relations = {
-            binding.get('relation')
+            binding.get("relation")
             for binding in bindings_map.values()
-            if binding.get('resource_type') == 'knowledge_space'
-            and str(binding.get('resource_id')) == str(space_id)
-            and binding.get('subject_type') == 'user'
-            and int(binding.get('subject_id') or 0) == user_id
-            and binding.get('relation')
+            if binding.get("resource_type") == "knowledge_space"
+            and str(binding.get("resource_id")) == str(space_id)
+            and binding.get("subject_type") == "user"
+            and int(binding.get("subject_id") or 0) == user_id
+            and binding.get("relation")
         }
         relations.update(direct_grant_relations.get(user_id, set()))
         role = _space_member_role_for_direct_relations(relations)
@@ -392,7 +421,7 @@ async def _sync_knowledge_space_direct_user_memberships(
                     user_id=user_id,
                     user_role=role,
                     status=MembershipStatusEnum.ACTIVE,
-                    membership_source='rebac',
+                    membership_source="rebac",
                 )
             )
             continue
@@ -416,20 +445,29 @@ def _binding_key_with_scope(
     include_children,
 ) -> str:
     normalized = _normalize_binding_include_children(subject_type, include_children)
-    scope = '-' if normalized is None else ('1' if normalized else '0')
-    return f'{resource_type}:{resource_id}:{subject_type}:{subject_id}:{relation}:{scope}'
+    scope = "-" if normalized is None else ("1" if normalized else "0")
+    return f"{resource_type}:{resource_id}:{subject_type}:{subject_id}:{relation}:{scope}"
 
 
 def _binding_key(resource_type: str, resource_id: str, subject_type: str, subject_id: int, relation: str) -> str:
     return _binding_key_with_scope(
-        resource_type, resource_id, subject_type, subject_id, relation, None,
+        resource_type,
+        resource_id,
+        subject_type,
+        subject_id,
+        relation,
+        None,
     )
 
 
 def _legacy_binding_key(
-    resource_type: str, resource_id: str, subject_type: str, subject_id: int, relation: str,
+    resource_type: str,
+    resource_id: str,
+    subject_type: str,
+    subject_id: int,
+    relation: str,
 ) -> str:
-    return f'{resource_type}:{resource_id}:{subject_type}:{subject_id}:{relation}'
+    return f"{resource_type}:{resource_id}:{subject_type}:{subject_id}:{relation}"
 
 
 def _binding_lookup_keys(
@@ -442,10 +480,19 @@ def _binding_lookup_keys(
 ) -> list[str]:
     return [
         _binding_key_with_scope(
-            resource_type, resource_id, subject_type, subject_id, relation, include_children,
+            resource_type,
+            resource_id,
+            subject_type,
+            subject_id,
+            relation,
+            include_children,
         ),
         _legacy_binding_key(
-            resource_type, resource_id, subject_type, subject_id, relation,
+            resource_type,
+            resource_id,
+            subject_type,
+            subject_id,
+            relation,
         ),
     ]
 
@@ -460,7 +507,12 @@ def _binding_from_map(
     include_children,
 ):
     for key in _binding_lookup_keys(
-        resource_type, resource_id, subject_type, subject_id, relation, include_children,
+        resource_type,
+        resource_id,
+        subject_type,
+        subject_id,
+        relation,
+        include_children,
     ):
         binding = bindings_map.get(key)
         if binding:
@@ -485,26 +537,22 @@ async def _apply_binding_metadata_to_permissions(
         return permissions
 
     collapse_inherited_department_rows = any(
-        binding.get('resource_type') in _KNOWLEDGE_PERMISSION_RESOURCE_TYPES
-        for binding in bindings
+        binding.get("resource_type") in _KNOWLEDGE_PERMISSION_RESOURCE_TYPES for binding in bindings
     )
 
-    item_map = {
-        (p.subject_type, int(p.subject_id), p.relation): p
-        for p in permissions
-    }
+    item_map = {(p.subject_type, int(p.subject_id), p.relation): p for p in permissions}
     bound_keys = {
-        (b.get('subject_type'), int(b.get('subject_id')), b.get('relation'))
+        (b.get("subject_type"), int(b.get("subject_id")), b.get("relation"))
         for b in bindings
-        if b.get('subject_id') is not None
+        if b.get("subject_id") is not None
     }
 
     for binding in bindings:
-        subject_type = binding.get('subject_type')
-        if binding.get('subject_id') is None:
+        subject_type = binding.get("subject_type")
+        if binding.get("subject_id") is None:
             continue
-        subject_id = int(binding.get('subject_id'))
-        relation = binding.get('relation')
+        subject_id = int(binding.get("subject_id"))
+        relation = binding.get("relation")
         key = (subject_type, subject_id, relation)
         item = item_map.get(key)
         if item is None:
@@ -516,25 +564,25 @@ async def _apply_binding_metadata_to_permissions(
             )
             item_map[key] = item
 
-        binding_include_children = binding.get('include_children')
-        binding_model_id = binding.get('model_id')
-        binding_model_name = model_map.get(binding_model_id, {}).get('name')
+        binding_include_children = binding.get("include_children")
+        binding_model_id = binding.get("model_id")
+        binding_model_name = model_map.get(binding_model_id, {}).get("name")
         item.include_children = binding_include_children
         item.model_id = binding_model_id
         item.model_name = binding_model_name
 
-        if subject_type == 'department' and binding_include_children:
+        if subject_type == "department" and binding_include_children:
             try:
                 from bisheng.database.models.department import DepartmentDao
 
                 dept = await DepartmentDao.aget_by_id(subject_id)
                 subtree_ids = await DepartmentDao.aget_subtree_ids(dept.path) if dept else [subject_id]
             except Exception as e:
-                logger.warning('Failed to expand department permission subtree metadata: %s', e)
+                logger.warning("Failed to expand department permission subtree metadata: %s", e)
                 subtree_ids = [subject_id]
 
             for dept_id in subtree_ids:
-                child_key = ('department', int(dept_id), relation)
+                child_key = ("department", int(dept_id), relation)
                 if child_key == key or child_key in bound_keys:
                     continue
                 if collapse_inherited_department_rows:
@@ -552,26 +600,26 @@ async def _apply_binding_metadata_to_permissions(
 
 def _tuple_signature(item) -> tuple:
     return (
-        getattr(item, 'subject_type', None),
-        getattr(item, 'subject_id', None),
-        getattr(item, 'relation', None),
+        getattr(item, "subject_type", None),
+        getattr(item, "subject_id", None),
+        getattr(item, "relation", None),
         _normalize_binding_include_children(
-            getattr(item, 'subject_type', None),
-            getattr(item, 'include_children', None),
+            getattr(item, "subject_type", None),
+            getattr(item, "include_children", None),
         ),
     )
 
 
 def _default_permission_ids_for_relation(resource_type: str, relation: str) -> set[str]:
-    if resource_type in {'workflow', 'assistant'}:
+    if resource_type in {"workflow", "assistant"}:
         return default_application_permissions(relation)
-    if resource_type == 'tool':
+    if resource_type == "tool":
         return default_tool_permissions(relation)
-    if resource_type == 'channel':
+    if resource_type == "channel":
         return default_channel_permissions(relation)
-    if resource_type == 'knowledge_library':
+    if resource_type == "knowledge_library":
         return default_knowledge_library_permissions(relation)
-    if resource_type in {'knowledge_space', 'folder', 'knowledge_file'}:
+    if resource_type in {"knowledge_space", "folder", "knowledge_file"}:
         return default_knowledge_space_permissions(relation)
     return set()
 
@@ -580,33 +628,29 @@ def _resource_permission_universe(resource_type: str) -> set[str]:
     # The owner defaults cover the full canonical permission set for each
     # resource type, so they can be used as the scope filter for explicit
     # relation-model permissions persisted in DB.
-    return _default_permission_ids_for_relation(resource_type, 'owner')
+    return _default_permission_ids_for_relation(resource_type, "owner")
 
 
 def _permission_ids_for_model(resource_type: str, relation: str, model: dict | None) -> set[str]:
     if model is None:
         return _default_permission_ids_for_relation(resource_type, relation)
     scope = _resource_permission_universe(resource_type)
-    permissions = model.get('permissions') or []
-    if model.get('permissions_explicit') is True:
+    permissions = model.get("permissions") or []
+    if model.get("permissions_explicit") is True:
         return set(permissions) & scope
-    if model.get('is_system'):
-        return _default_permission_ids_for_relation(resource_type, model.get('relation') or relation)
+    if model.get("is_system"):
+        return _default_permission_ids_for_relation(resource_type, model.get("relation") or relation)
     return set(permissions)
 
 
 def _model_matches_relation(relation: str, model: dict | None) -> bool:
-    return model is None or model.get('relation') == relation
+    return model is None or model.get("relation") == relation
 
 
 def _is_system_usage_relation_model(relation: str, model: dict | None) -> bool:
-    if relation not in {'editor', 'viewer'} or not model:
+    if relation not in {"editor", "viewer"} or not model:
         return False
-    return (
-        bool(model.get('is_system'))
-        and model.get('id') == relation
-        and model.get('relation') == relation
-    )
+    return bool(model.get("is_system")) and model.get("id") == relation and model.get("relation") == relation
 
 
 def _requires_knowledge_owner_delegation(
@@ -617,9 +661,9 @@ def _requires_knowledge_owner_delegation(
 ) -> bool:
     if resource_type not in _KNOWLEDGE_PERMISSION_RESOURCE_TYPES:
         return False
-    if relation in {'owner', 'manager'}:
+    if relation in {"owner", "manager"}:
         return True
-    if relation not in {'editor', 'viewer'}:
+    if relation not in {"editor", "viewer"}:
         return True
     if _is_system_usage_relation_model(relation, model):
         return False
@@ -634,7 +678,7 @@ def _caller_has_knowledge_owner_delegation(
     resource_type: str,
     caller_permission_ids: set[str],
 ) -> bool:
-    owner_permission_ids = _default_permission_ids_for_relation(resource_type, 'owner')
+    owner_permission_ids = _default_permission_ids_for_relation(resource_type, "owner")
     return bool(owner_permission_ids) and owner_permission_ids.issubset(caller_permission_ids)
 
 
@@ -646,6 +690,11 @@ def _can_grant_relation_model(
     caller_permission_ids: set[str],
 ) -> bool:
     if not _model_matches_relation(relation, model):
+        return False
+
+    # Knowledge resources: only admin may grant/revoke owner (admin bypasses this
+    # helper in authorize/grantable). Space owners may still grant manager+.
+    if resource_type in _KNOWLEDGE_PERMISSION_RESOURCE_TYPES and relation == "owner":
         return False
 
     if _requires_knowledge_owner_delegation(
@@ -665,20 +714,16 @@ def _can_grant_relation_model(
     tier_map = _MANAGE_PERMISSION_BY_RESOURCE_TIER.get(resource_type)
     if tier_map:
         grant_tier = (
-            model.get('grant_tier')
-            if model and model.get('grant_tier') in _GRANT_TIER_VALUES
+            model.get("grant_tier")
+            if model and model.get("grant_tier") in _GRANT_TIER_VALUES
             else _infer_grant_tier_from_relation(relation)
         )
-        required_manage_permissions = {
-            permission_id
-            for tier, permission_id in tier_map.items()
-            if tier == grant_tier
-        }
+        required_manage_permissions = {permission_id for tier, permission_id in tier_map.items() if tier == grant_tier}
 
         # Custom or explicitly edited models may themselves carry management
         # permissions. Require the caller to already hold those management
         # capabilities so a "usage" grant cannot smuggle owner-management power.
-        if model and (not model.get('is_system') or model.get('permissions_explicit') is True):
+        if model and (not model.get("is_system") or model.get("permissions_explicit") is True):
             model_permission_ids = _permission_ids_for_model(resource_type, relation, model)
             required_manage_permissions.update(model_permission_ids & set(tier_map.values()))
 
@@ -705,7 +750,7 @@ async def _knowledge_space_membership_permission_ids(
     resource_id: str,
 ) -> set[str]:
     """Fallback for legacy space-member roles when ReBAC metadata drifts."""
-    if resource_type != 'knowledge_space' or not str(resource_id).isdigit():
+    if resource_type != "knowledge_space" or not str(resource_id).isdigit():
         return set()
 
     from bisheng.common.models.space_channel_member import SpaceChannelMemberDao, UserRoleEnum
@@ -717,16 +762,16 @@ async def _knowledge_space_membership_permission_ids(
         )
     except Exception as exc:
         logger.debug(
-            'Could not resolve space membership fallback for user=%s space=%s: %s',
+            "Could not resolve space membership fallback for user=%s space=%s: %s",
             login_user.user_id,
             resource_id,
             exc,
         )
         return set()
     if role == UserRoleEnum.CREATOR:
-        return default_knowledge_space_permissions('owner')
+        return default_knowledge_space_permissions("owner")
     if role == UserRoleEnum.ADMIN:
-        return default_knowledge_space_permissions('manager')
+        return default_knowledge_space_permissions("manager")
     return set()
 
 
@@ -761,7 +806,7 @@ async def _get_caller_grant_permission_ids(
     except Exception:
         implicit_level = None
 
-    implicit_relation = _PERMISSION_LEVEL_TO_RELATION.get(implicit_level or '')
+    implicit_relation = _PERMISSION_LEVEL_TO_RELATION.get(implicit_level or "")
     if implicit_relation:
         caller_permission_ids.update(
             _default_permission_ids_for_relation(resource_type, implicit_relation),
@@ -778,7 +823,7 @@ async def _get_caller_grant_permission_ids(
 
 
 def _lineage_binding_can_override(resource_type: str) -> bool:
-    return resource_type in {'folder', 'knowledge_file'}
+    return resource_type in {"folder", "knowledge_file"}
 
 
 async def _has_resource_permission_management_access(
@@ -810,7 +855,7 @@ async def _has_resource_permission_management_access(
 
     return await PermissionService.check(
         user_id=login_user.user_id,
-        relation='can_edit',
+        relation="can_edit",
         object_type=resource_type,
         object_id=resource_id,
         login_user=login_user,
@@ -821,8 +866,8 @@ def _attach_default_model_metadata(item: ResourcePermissionItem, model_map: dict
     model = model_map.get(item.relation)
     if not model:
         return
-    item.model_id = model.get('id') or item.relation
-    item.model_name = model.get('name')
+    item.model_id = model.get("id") or item.relation
+    item.model_name = model.get("name")
 
 
 def _permission_subject_key(item: ResourcePermissionItem) -> tuple[str, int, str]:
@@ -853,18 +898,20 @@ async def _list_knowledge_space_grant_users(
                 .join(Tenant, Tenant.id == UserTenant.tenant_id)
                 .where(
                     UserTenant.tenant_id == tenant_id,
-                    UserTenant.status == 'active',
-                    Tenant.status == 'active',
+                    UserTenant.status == "active",
+                    Tenant.status == "active",
                     User.delete == 0,
                 )
                 .order_by(User.user_id.desc())
             )
             if keyword:
-                keyword_pattern = f'%{keyword}%'
-                stmt = stmt.where(or_(
-                    User.user_name.like(keyword_pattern),
-                    User.external_id.like(keyword_pattern),
-                ))
+                keyword_pattern = f"%{keyword}%"
+                stmt = stmt.where(
+                    or_(
+                        User.user_name.like(keyword_pattern),
+                        User.external_id.like(keyword_pattern),
+                    )
+                )
             if page and page_size:
                 stmt = stmt.offset((page - 1) * page_size).limit(page_size)
             result = await session.exec(stmt)
@@ -873,43 +920,34 @@ async def _list_knowledge_space_grant_users(
     if not active_users:
         return []
 
-    user_ids = [
-        int(user.user_id) for user in active_users
-        if getattr(user, 'user_id', None) is not None
-    ]
+    user_ids = [int(user.user_id) for user in active_users if getattr(user, "user_id", None) is not None]
     dept_rows = await UserDepartmentDao.aget_by_user_ids(user_ids)
     departments = await DepartmentDao.aget_active_by_tenant(tenant_id)
-    dept_map = {
-        int(dept.id): dept for dept in departments
-        if getattr(dept, 'id', None) is not None
-    }
+    dept_map = {int(dept.id): dept for dept in departments if getattr(dept, "id", None) is not None}
 
     def _department_display_path(dept) -> str | None:
         if dept is None:
             return None
         path_ids: list[int] = []
-        for part in str(getattr(dept, 'path', '') or '').split('/'):
+        for part in str(getattr(dept, "path", "") or "").split("/"):
             part = part.strip()
             if part.isdigit():
                 path_ids.append(int(part))
-        labels = [
-            getattr(dept_map.get(dept_id), 'name', f'#{dept_id}')
-            for dept_id in path_ids
-        ]
-        current_name = getattr(dept, 'name', None)
+        labels = [getattr(dept_map.get(dept_id), "name", f"#{dept_id}") for dept_id in path_ids]
+        current_name = getattr(dept, "name", None)
         if current_name and current_name not in labels:
             labels.append(current_name)
-        return '/'.join(labels) if labels else current_name
+        return "/".join(labels) if labels else current_name
 
     dept_paths_by_user: dict[int, list[str]] = {}
     primary_by_user = {}
     for row in dept_rows:
-        user_id = int(getattr(row, 'user_id', 0) or 0)
-        dept_id = int(getattr(row, 'department_id', 0) or 0)
+        user_id = int(getattr(row, "user_id", 0) or 0)
+        dept_id = int(getattr(row, "department_id", 0) or 0)
         if not user_id or not dept_id:
             continue
         dept = dept_map.get(dept_id)
-        if int(getattr(row, 'is_primary', 0) or 0) == 1:
+        if int(getattr(row, "is_primary", 0) or 0) == 1:
             primary_by_user[user_id] = dept
         path_label = _department_display_path(dept)
         if path_label:
@@ -928,13 +966,13 @@ async def _list_knowledge_space_grant_users(
 
     return [
         {
-            'user_id': int(user.user_id),
-            'user_name': user.user_name,
-            'external_id': getattr(user, 'external_id', None),
-            'primary_department_path': _department_display_path(
+            "user_id": int(user.user_id),
+            "user_name": user.user_name,
+            "external_id": getattr(user, "external_id", None),
+            "primary_department_path": _department_display_path(
                 primary_by_user.get(int(user.user_id)),
             ),
-            'department_paths': dept_paths_by_user.get(int(user.user_id), []),
+            "department_paths": dept_paths_by_user.get(int(user.user_id), []),
         }
         for user in active_users
     ]
@@ -955,7 +993,7 @@ async def _list_knowledge_space_grant_departments(*, tenant_id: int) -> list[dic
                 await session.exec(
                     select(Tenant).where(
                         Tenant.id == tenant_id,
-                        Tenant.status == 'active',
+                        Tenant.status == "active",
                     )
                 )
             ).first()
@@ -963,20 +1001,20 @@ async def _list_knowledge_space_grant_departments(*, tenant_id: int) -> list[dic
                 return []
 
             root_dept = None
-            if getattr(tenant, 'root_dept_id', None):
+            if getattr(tenant, "root_dept_id", None):
                 root_dept = (
                     await session.exec(
                         select(Department).where(
                             Department.id == int(tenant.root_dept_id),
-                            Department.status == 'active',
+                            Department.status == "active",
                         )
                     )
                 ).first()
 
             if root_dept is not None:
                 stmt = select(Department).where(
-                    Department.path.like(f'{root_dept.path}%'),
-                    Department.status == 'active',
+                    Department.path.like(f"{root_dept.path}%"),
+                    Department.status == "active",
                 )
                 if tenant_id == ROOT_TENANT_ID:
                     child_roots = (
@@ -985,30 +1023,24 @@ async def _list_knowledge_space_grant_departments(*, tenant_id: int) -> list[dic
                                 Department.is_tenant_root == 1,
                                 Department.mounted_tenant_id.is_not(None),
                                 Department.mounted_tenant_id != ROOT_TENANT_ID,
-                                Department.status == 'active',
+                                Department.status == "active",
                             )
                         )
                     ).all()
                     for child_path in child_roots:
-                        stmt = stmt.where(~Department.path.like(f'{child_path}%'))
+                        stmt = stmt.where(~Department.path.like(f"{child_path}%"))
             else:
                 stmt = select(Department).where(
                     Department.tenant_id == tenant_id,
-                    Department.status == 'active',
+                    Department.status == "active",
                 )
 
-            result = await session.exec(
-                stmt.order_by(Department.sort_order, Department.id)
-            )
+            result = await session.exec(stmt.order_by(Department.sort_order, Department.id))
             departments = list(result.all())
     if not departments:
         return []
 
-    dept_ids = [
-        int(dept.id)
-        for dept in departments
-        if getattr(dept, 'id', None) is not None
-    ]
+    dept_ids = [int(dept.id) for dept in departments if getattr(dept, "id", None) is not None]
     with bypass_tenant_filter():
         async with get_async_db_session() as session:
             count_result = await session.exec(
@@ -1019,40 +1051,37 @@ async def _list_knowledge_space_grant_departments(*, tenant_id: int) -> list[dic
                 .where(UserDepartment.department_id.in_(dept_ids))
                 .group_by(UserDepartment.department_id)
             )
-            count_map = {
-                int(dept_id): int(count)
-                for dept_id, count in count_result.all()
-            }
+            count_map = {int(dept_id): int(count) for dept_id, count in count_result.all()}
 
     nodes = {
         int(dept.id): {
-            'id': int(dept.id),
-            'dept_id': dept.dept_id,
-            'name': dept.name,
-            'parent_id': int(dept.parent_id) if getattr(dept, 'parent_id', None) is not None else None,
-            'path': dept.path,
-            'sort_order': int(getattr(dept, 'sort_order', 0) or 0),
-            'source': dept.source,
-            'status': dept.status,
-            'member_count': count_map.get(int(dept.id), 0),
-            'children': [],
+            "id": int(dept.id),
+            "dept_id": dept.dept_id,
+            "name": dept.name,
+            "parent_id": int(dept.parent_id) if getattr(dept, "parent_id", None) is not None else None,
+            "path": dept.path,
+            "sort_order": int(getattr(dept, "sort_order", 0) or 0),
+            "source": dept.source,
+            "status": dept.status,
+            "member_count": count_map.get(int(dept.id), 0),
+            "children": [],
         }
         for dept in departments
-        if getattr(dept, 'id', None) is not None
+        if getattr(dept, "id", None) is not None
     }
 
     roots: list[dict] = []
     for node in nodes.values():
-        parent_id = node['parent_id']
+        parent_id = node["parent_id"]
         if parent_id and parent_id in nodes:
-            nodes[parent_id]['children'].append(node)
+            nodes[parent_id]["children"].append(node)
         else:
             roots.append(node)
 
     def _sort_tree(items: list[dict]) -> list[dict]:
-        items.sort(key=lambda item: (item['sort_order'], item['name']))
+        items.sort(key=lambda item: (item["sort_order"], item["name"]))
         for item in items:
-            item['children'] = _sort_tree(item['children'])
+            item["children"] = _sort_tree(item["children"])
         return items
 
     return _sort_tree(roots)
@@ -1082,9 +1111,7 @@ async def _list_knowledge_space_grant_user_groups(
             login_user.user_id,
         )
         viewer_group_ids = {
-            int(x[0]) if isinstance(x, tuple) else int(x)
-            for x in raw_visible_group_ids or []
-            if x is not None
+            int(x[0]) if isinstance(x, tuple) else int(x) for x in raw_visible_group_ids or [] if x is not None
         }
 
     with bypass_tenant_filter():
@@ -1094,7 +1121,7 @@ async def _list_knowledge_space_grant_user_groups(
                 .join(Tenant, Tenant.id == Group.tenant_id)
                 .where(
                     Group.tenant_id == tenant_id,
-                    Tenant.status == 'active',
+                    Tenant.status == "active",
                     col(Group.group_name).notin_(LEGACY_HIDDEN_USER_GROUP_NAMES),
                 )
                 .order_by(Group.update_time.desc())
@@ -1103,30 +1130,25 @@ async def _list_knowledge_space_grant_user_groups(
             if not can_view_all:
                 if viewer_group_ids:
                     stmt = stmt.where(
-                        (
-                            (Group.visibility == 'public')
+
+                            (Group.visibility == "public")
                             | (Group.create_user == login_user.user_id)
                             | (Group.id.in_(viewer_group_ids))
-                        )
+
                     )
                 else:
-                    stmt = stmt.where(
-                        (
-                            (Group.visibility == 'public')
-                            | (Group.create_user == login_user.user_id)
-                        )
-                    )
+                    stmt = stmt.where((Group.visibility == "public") | (Group.create_user == login_user.user_id))
             if keyword:
-                stmt = stmt.where(Group.group_name.like(f'%{keyword}%'))
+                stmt = stmt.where(Group.group_name.like(f"%{keyword}%"))
             result = await session.exec(stmt)
             groups = list(result.all())
     return [
         {
-            'id': int(group.id),
-            'group_name': group.group_name,
+            "id": int(group.id),
+            "group_name": group.group_name,
         }
         for group in groups
-        if getattr(group, 'id', None) is not None
+        if getattr(group, "id", None) is not None
     ]
 
 
@@ -1135,11 +1157,11 @@ def _filter_department_tree_by_ids(nodes: list[dict], allowed_ids: set[int]) -> 
         return []
     filtered: list[dict] = []
     for node in nodes:
-        children = _filter_department_tree_by_ids(node.get('children') or [], allowed_ids)
-        node_id = int(node['id'])
+        children = _filter_department_tree_by_ids(node.get("children") or [], allowed_ids)
+        node_id = int(node["id"])
         if node_id in allowed_ids:
             cloned = dict(node)
-            cloned['children'] = children
+            cloned["children"] = children
             filtered.append(cloned)
         else:
             filtered.extend(children)
@@ -1151,27 +1173,27 @@ def _collect_department_tree_ids(nodes: list[dict]) -> set[int]:
     stack = list(nodes)
     while stack:
         node = stack.pop()
-        if node.get('id') is not None:
-            ids.add(int(node['id']))
-        stack.extend(node.get('children') or [])
+        if node.get("id") is not None:
+            ids.add(int(node["id"]))
+        stack.extend(node.get("children") or [])
     return ids
 
 
 def _is_team_knowledge_space_level(space_level) -> bool:
-    return getattr(space_level, 'value', space_level) == 'team'
+    return getattr(space_level, "value", space_level) == "team"
 
 
 async def _resolve_child_resource_space_id_for_grant_scope(resource_type: str, resource_id: str) -> str | None:
-    if resource_type not in {'folder', 'knowledge_file'} or not str(resource_id).isdigit():
+    if resource_type not in {"folder", "knowledge_file"} or not str(resource_id).isdigit():
         return None
     try:
         from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
 
         file_record = await KnowledgeFileDao.query_by_id(int(resource_id))
     except Exception as e:
-        logger.debug('Could not resolve knowledge space for %s:%s grant subjects: %s', resource_type, resource_id, e)
+        logger.debug("Could not resolve knowledge space for %s:%s grant subjects: %s", resource_type, resource_id, e)
         return None
-    if file_record is None or getattr(file_record, 'knowledge_id', None) is None:
+    if file_record is None or getattr(file_record, "knowledge_id", None) is None:
         return None
     return str(file_record.knowledge_id)
 
@@ -1180,10 +1202,10 @@ async def _department_subtree_ids(department_id: int) -> set[int]:
     from bisheng.database.models.department import DepartmentDao
 
     dept = await DepartmentDao.aget_by_id(int(department_id))
-    if dept is None or getattr(dept, 'id', None) is None:
+    if dept is None or getattr(dept, "id", None) is None:
         return set()
     ids = {int(dept.id)}
-    if getattr(dept, 'path', None):
+    if getattr(dept, "path", None):
         ids.update(int(i) for i in await DepartmentDao.aget_subtree_ids(dept.path))
     return ids
 
@@ -1193,21 +1215,21 @@ async def _knowledge_space_grant_department_ids(
     resource_id: str,
     login_user: UserPayload,
 ) -> set[int]:
+    from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
     from bisheng.knowledge.domain.models.department_knowledge_space import DepartmentKnowledgeSpaceDao
     from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceOwnerTypeEnum
-    from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
 
     ids: set[int] = set()
 
     user_departments = await UserDepartmentDao.aget_user_departments(login_user.user_id)
     for row in user_departments or []:
-        if getattr(row, 'department_id', None) is None:
+        if getattr(row, "department_id", None) is None:
             continue
         ids.update(await _department_subtree_ids(int(row.department_id)))
 
     admin_departments = await DepartmentDao.aget_user_admin_departments(login_user.user_id)
     for dept in admin_departments:
-        if getattr(dept, 'id', None) is None:
+        if getattr(dept, "id", None) is None:
             continue
         ids.update(await _department_subtree_ids(int(dept.id)))
 
@@ -1232,18 +1254,14 @@ async def _knowledge_space_grant_user_group_ids(
     from bisheng.database.models.group import GroupDao
     from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceOwnerTypeEnum
 
-    visible_groups, _ = await GroupDao.aget_visible_groups(login_user.user_id, 1, 2000, '')
-    ids = {
-        int(group.id)
-        for group in visible_groups or []
-        if getattr(group, 'id', None) is not None
-    }
+    visible_groups, _ = await GroupDao.aget_visible_groups(login_user.user_id, 1, 2000, "")
+    ids = {int(group.id) for group in visible_groups or [] if getattr(group, "id", None) is not None}
 
     scope = await _get_knowledge_space_scope(resource_id)
     if (
         scope is not None
         and scope.owner_type == KnowledgeSpaceOwnerTypeEnum.USER_GROUP
-        and getattr(scope, 'owner_id', None) is not None
+        and getattr(scope, "owner_id", None) is not None
     ):
         ids.add(int(scope.owner_id))
 
@@ -1276,12 +1294,12 @@ async def _resolve_grant_subject_tenant_id(
 
     tenant_id = await PermissionService._resolve_resource_tenant(resource_type, resource_id)
     if tenant_id is None:
-        tenant_id = get_current_tenant_id() or getattr(login_user, 'tenant_id', None)
+        tenant_id = get_current_tenant_id() or getattr(login_user, "tenant_id", None)
     if tenant_id is None:
         return None
 
     tenant = await TenantDao.aget_by_id(int(tenant_id))
-    if tenant is None or getattr(tenant, 'status', None) != 'active':
+    if tenant is None or getattr(tenant, "status", None) != "active":
         return None
     return int(tenant_id)
 
@@ -1303,7 +1321,7 @@ async def _get_knowledge_space_level(resource_id: str):
         if binding is not None:
             return KnowledgeSpaceLevelEnum.DEPARTMENT
     except Exception as e:
-        logger.debug('Could not load knowledge space level for %s: %s', resource_id, e)
+        logger.debug("Could not load knowledge space level for %s: %s", resource_id, e)
         return None
     return KnowledgeSpaceLevelEnum.PERSONAL
 
@@ -1316,7 +1334,7 @@ async def _get_knowledge_space_scope(resource_id: str):
     try:
         return await KnowledgeSpaceScopeDao.aget_by_space_id(int(resource_id))
     except Exception as e:
-        logger.debug('Could not load knowledge space scope for %s: %s', resource_id, e)
+        logger.debug("Could not load knowledge space scope for %s: %s", resource_id, e)
         return None
 
 
@@ -1324,10 +1342,10 @@ def _allowed_subject_types_for_space_level(space_level) -> set[str]:
     from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
 
     if space_level == KnowledgeSpaceLevelEnum.DEPARTMENT:
-        return {'user', 'department'}
+        return {"user", "department"}
     if space_level == KnowledgeSpaceLevelEnum.TEAM:
-        return {'user', 'department'}
-    return {'user', 'department', 'user_group'}
+        return {"user", "department"}
+    return {"user", "department", "user_group"}
 
 
 async def _validate_knowledge_space_authorize_scope(
@@ -1337,7 +1355,7 @@ async def _validate_knowledge_space_authorize_scope(
     request: AuthorizeRequest,
     login_user: UserPayload,
 ):
-    if resource_type != 'knowledge_space':
+    if resource_type != "knowledge_space":
         return None
 
     from bisheng.common.errcode.knowledge_space import (
@@ -1356,7 +1374,7 @@ async def _validate_knowledge_space_authorize_scope(
     if login_user.is_admin():
         return None
 
-    department_items = [item for item in items if item.subject_type == 'department']
+    department_items = [item for item in items if item.subject_type == "department"]
     if department_items and not await _can_view_all_grant_subject_departments(login_user):
         if _is_team_knowledge_space_level(level):
             tenant_id = await _resolve_grant_subject_tenant_id(
@@ -1379,7 +1397,7 @@ async def _validate_knowledge_space_authorize_scope(
         if any(int(item.subject_id) not in allowed_department_ids for item in department_items):
             return SpaceAuthorizeScopeDeniedError
 
-    group_items = [item for item in items if item.subject_type == 'user_group']
+    group_items = [item for item in items if item.subject_type == "user_group"]
     if group_items and not await _can_view_all_grant_subject_user_groups(login_user):
         allowed_group_ids = await _knowledge_space_grant_user_group_ids(
             resource_id=resource_id,
@@ -1393,9 +1411,9 @@ async def _validate_knowledge_space_authorize_scope(
 
 def _is_self_owner_revoke(revoke, login_user: UserPayload) -> bool:
     return (
-        getattr(revoke, 'subject_type', None) == 'user'
-        and int(getattr(revoke, 'subject_id', 0) or 0) == int(login_user.user_id)
-        and getattr(revoke, 'relation', None) == 'owner'
+        getattr(revoke, "subject_type", None) == "user"
+        and int(getattr(revoke, "subject_id", 0) or 0) == int(login_user.user_id)
+        and getattr(revoke, "relation", None) == "owner"
     )
 
 
@@ -1412,16 +1430,8 @@ async def _can_remove_self_owner_relation(
         object_type=resource_type,
         object_id=resource_id,
     )
-    owner_signatures = {
-        _tuple_signature(item)
-        for item in permissions
-        if getattr(item, 'relation', None) == 'owner'
-    }
-    revoke_signatures = {
-        _tuple_signature(item)
-        for item in revokes
-        if getattr(item, 'relation', None) == 'owner'
-    }
+    owner_signatures = {_tuple_signature(item) for item in permissions if getattr(item, "relation", None) == "owner"}
+    revoke_signatures = {_tuple_signature(item) for item in revokes if getattr(item, "relation", None) == "owner"}
     remaining_owner_count = len(owner_signatures - revoke_signatures)
     return remaining_owner_count > 0
 
@@ -1443,7 +1453,7 @@ async def _add_implicit_permission_entries(
     without synthesizing department viewer rows that look like stored grants.
     """
     out = list(permissions)
-    if resource_type != 'knowledge_space' or not str(resource_id).isdigit():
+    if resource_type != "knowledge_space" or not str(resource_id).isdigit():
         return out
 
     try:
@@ -1451,14 +1461,13 @@ async def _add_implicit_permission_entries(
 
         binding = await DepartmentKnowledgeSpaceDao.aget_by_space_id(int(resource_id))
     except Exception as e:
-        logger.debug('Could not load department-space binding for %s: %s', resource_id, e)
+        logger.debug("Could not load department-space binding for %s: %s", resource_id, e)
         return out
     if binding is None:
         return out
 
     user_has_list_entry = any(
-        item.subject_type == 'user' and int(item.subject_id) == int(login_user.user_id)
-        for item in out
+        item.subject_type == "user" and int(item.subject_id) == int(login_user.user_id) for item in out
     )
     if not login_user.is_admin() and not user_has_list_entry:
         from bisheng.permission.domain.services.permission_service import PermissionService
@@ -1469,19 +1478,19 @@ async def _add_implicit_permission_entries(
             object_id=resource_id,
             login_user=login_user,
         )
-        relation = _PERMISSION_LEVEL_TO_RELATION.get(implicit_level or '')
+        relation = _PERMISSION_LEVEL_TO_RELATION.get(implicit_level or "")
         if relation:
-            user_name = getattr(login_user, 'user_name', None)
+            user_name = getattr(login_user, "user_name", None)
             if not user_name:
                 try:
                     from bisheng.user.domain.models.user import UserDao
 
                     user = await UserDao.aget_user(login_user.user_id)
-                    user_name = getattr(user, 'user_name', None) if user else None
+                    user_name = getattr(user, "user_name", None) if user else None
                 except Exception as e:
-                    logger.debug('Could not resolve user %s for permission list: %s', login_user.user_id, e)
+                    logger.debug("Could not resolve user %s for permission list: %s", login_user.user_id, e)
             item = ResourcePermissionItem(
-                subject_type='user',
+                subject_type="user",
                 subject_id=login_user.user_id,
                 subject_name=user_name,
                 relation=relation,
@@ -1514,9 +1523,7 @@ async def _add_creator_owner_entry(
 
     creator_id = int(creator_id)
     has_creator_owner = any(
-        item.subject_type == 'user'
-        and int(item.subject_id) == creator_id
-        and item.relation == 'owner'
+        item.subject_type == "user" and int(item.subject_id) == creator_id and item.relation == "owner"
         for item in permissions
     )
     if has_creator_owner:
@@ -1527,21 +1534,21 @@ async def _add_creator_owner_entry(
         from bisheng.user.domain.models.user import UserDao
 
         user = await UserDao.aget_user(creator_id)
-        user_name = getattr(user, 'user_name', None) if user else None
+        user_name = getattr(user, "user_name", None) if user else None
     except Exception as e:
-        logger.debug('Could not resolve creator %s for permission list: %s', creator_id, e)
+        logger.debug("Could not resolve creator %s for permission list: %s", creator_id, e)
 
     item = ResourcePermissionItem(
-        subject_type='user',
+        subject_type="user",
         subject_id=creator_id,
         subject_name=user_name,
-        relation='owner',
+        relation="owner",
     )
     _attach_default_model_metadata(item, model_map)
     return [*permissions, item]
 
 
-@router.post('/resources/{resource_type}/{resource_id}/authorize')
+@router.post("/resources/{resource_type}/{resource_id}/authorize")
 async def authorize_resource(
     resource_type: str,
     resource_id: str,
@@ -1555,7 +1562,7 @@ async def authorize_resource(
     """
     if resource_type not in VALID_RESOURCE_TYPES:
         return PermissionInvalidResourceError.return_resp()
-    if resource_type == 'channel':
+    if resource_type == "channel":
         return PermissionDeniedError.return_resp()
     if any(_is_invalid_owner_subject(grant.subject_type, grant.relation) for grant in (request.grants or [])):
         return PermissionDeniedError.return_resp()
@@ -1572,10 +1579,11 @@ async def authorize_resource(
 
     if not login_user.is_admin():
         raw_models = await _get_relation_models()
-        model_map = {m['id']: _normalize_model_dict(m) for m in raw_models}
+        model_map = {m["id"]: _normalize_model_dict(m) for m in raw_models}
         binding_map = {
-            b.get('key'): b for b in await _get_bindings()
-            if b.get('resource_type') == resource_type and str(b.get('resource_id')) == str(resource_id)
+            b.get("key"): b
+            for b in await _get_bindings()
+            if b.get("resource_type") == resource_type and str(b.get("resource_id")) == str(resource_id)
         }
         management_permission_ids = _management_permission_ids(resource_type)
         caller_permission_ids = set()
@@ -1590,9 +1598,9 @@ async def authorize_resource(
         if management_permission_ids and not (management_permission_ids & caller_permission_ids):
             return PermissionDeniedError.return_resp()
 
-        for grant in (request.grants or []):
-            model = model_map.get(getattr(grant, 'model_id', None)) if getattr(grant, 'model_id', None) else None
-            if getattr(grant, 'model_id', None) and model is None:
+        for grant in request.grants or []:
+            model = model_map.get(getattr(grant, "model_id", None)) if getattr(grant, "model_id", None) else None
+            if getattr(grant, "model_id", None) and model is None:
                 return PermissionDeniedError.return_resp()
             if not _can_grant_relation_model(
                 resource_type=resource_type,
@@ -1602,7 +1610,7 @@ async def authorize_resource(
             ):
                 return PermissionDeniedError.return_resp()
 
-        for revoke in (request.revokes or []):
+        for revoke in request.revokes or []:
             binding = _binding_from_map(
                 binding_map,
                 resource_type,
@@ -1610,10 +1618,10 @@ async def authorize_resource(
                 revoke.subject_type,
                 revoke.subject_id,
                 revoke.relation,
-                getattr(revoke, 'include_children', None),
+                getattr(revoke, "include_children", None),
             )
-            model = model_map.get(binding.get('model_id')) if binding and binding.get('model_id') else None
-            if binding and binding.get('model_id') and model is None:
+            model = model_map.get(binding.get("model_id")) if binding and binding.get("model_id") else None
+            if binding and binding.get("model_id") and model is None:
                 return PermissionDeniedError.return_resp()
             if not _can_grant_relation_model(
                 resource_type=resource_type,
@@ -1630,23 +1638,19 @@ async def authorize_resource(
     # Same subject/relation changes are model rebinds. Do not delete the tuple,
     # but still issue an idempotent write so stale DB-only bindings are repaired.
     rebind_only_grants = [
-        grant for grant in (request.grants or [])
-        if _tuple_signature(grant) in rebind_only_signatures
+        grant for grant in (request.grants or []) if _tuple_signature(grant) in rebind_only_signatures
     ]
     tuple_grants = [
-                       grant for grant in (request.grants or [])
-                       if _tuple_signature(grant) not in rebind_only_signatures
-                   ] + rebind_only_grants
+        grant for grant in (request.grants or []) if _tuple_signature(grant) not in rebind_only_signatures
+    ] + rebind_only_grants
     tuple_revokes = [
-        revoke for revoke in (request.revokes or [])
+        revoke
+        for revoke in (request.revokes or [])
         if _tuple_signature(revoke) not in rebind_only_signatures
-           and not _is_invalid_owner_subject(revoke.subject_type, revoke.relation)
+        and not _is_invalid_owner_subject(revoke.subject_type, revoke.relation)
     ]
 
-    self_owner_revokes = [
-        revoke for revoke in tuple_revokes
-        if _is_self_owner_revoke(revoke, login_user)
-    ]
+    self_owner_revokes = [revoke for revoke in tuple_revokes if _is_self_owner_revoke(revoke, login_user)]
     if self_owner_revokes:
         if not await _can_remove_self_owner_relation(
             resource_type=resource_type,
@@ -1668,8 +1672,12 @@ async def authorize_resource(
             revokes=tuple_revokes,
         )
         logger.info(
-            'resource_authorize start actor=%s resource=%s:%s grants=%d revokes=%d',
-            login_user.user_id, resource_type, resource_id, len(tuple_grants), len(tuple_revokes),
+            "resource_authorize start actor=%s resource=%s:%s grants=%d revokes=%d",
+            login_user.user_id,
+            resource_type,
+            resource_id,
+            len(tuple_grants),
+            len(tuple_revokes),
         )
         try:
             await PermissionService.authorize(
@@ -1681,23 +1689,24 @@ async def authorize_resource(
             )
         except Exception as e:
             logger.error(
-                'resource_authorize failed actor=%s resource=%s:%s grants=%d revokes=%d error=%s',
-                login_user.user_id, resource_type, resource_id, len(tuple_grants), len(tuple_revokes), e,
+                "resource_authorize failed actor=%s resource=%s:%s grants=%d revokes=%d error=%s",
+                login_user.user_id,
+                resource_type,
+                resource_id,
+                len(tuple_grants),
+                len(tuple_revokes),
+                e,
             )
-            return PermissionTupleWriteError.return_resp(data={'exception': str(e)})
+            return PermissionTupleWriteError.return_resp(data={"exception": str(e)})
 
     # Persist relation-model bindings for UI display and model deletion cascade.
     bindings = await _get_bindings()
-    bindings_map = {b.get('key'): b for b in bindings if b.get('key')}
-    for revoke in (request.revokes or []):
-        include_children = getattr(revoke, 'include_children', None)
+    bindings_map = {b.get("key"): b for b in bindings if b.get("key")}
+    for revoke in request.revokes or []:
+        include_children = getattr(revoke, "include_children", None)
         include_children_values = [include_children]
-        if (
-            revoke.subject_type == 'department'
-            and (
-            include_children is True
-            or _is_invalid_owner_subject(revoke.subject_type, revoke.relation)
-        )
+        if revoke.subject_type == "department" and (
+            include_children is True or _is_invalid_owner_subject(revoke.subject_type, revoke.relation)
         ):
             include_children_values = [True, False]
         for include_children in include_children_values:
@@ -1710,11 +1719,12 @@ async def authorize_resource(
                 include_children,
             ):
                 bindings_map.pop(key, None)
-    for grant in (request.grants or []):
-        if not getattr(grant, 'model_id', None):
+    for grant in request.grants or []:
+        if not getattr(grant, "model_id", None):
             continue
         normalized_include_children = _normalize_binding_include_children(
-            grant.subject_type, getattr(grant, 'include_children', None),
+            grant.subject_type,
+            getattr(grant, "include_children", None),
         )
         key = _binding_key_with_scope(
             resource_type,
@@ -1725,17 +1735,17 @@ async def authorize_resource(
             normalized_include_children,
         )
         bindings_map[key] = {
-            'key': key,
-            'resource_type': resource_type,
-            'resource_id': str(resource_id),
-            'subject_type': grant.subject_type,
-            'subject_id': grant.subject_id,
-            'relation': grant.relation,
-            'include_children': normalized_include_children,
-            'model_id': grant.model_id,
+            "key": key,
+            "resource_type": resource_type,
+            "resource_id": str(resource_id),
+            "subject_type": grant.subject_type,
+            "subject_id": grant.subject_id,
+            "relation": grant.relation,
+            "include_children": normalized_include_children,
+            "model_id": grant.model_id,
         }
     await _save_bindings(list(bindings_map.values()))
-    if resource_type in {'knowledge_space', 'knowledge_library', 'folder', 'knowledge_file'}:
+    if resource_type in {"knowledge_space", "knowledge_library", "folder", "knowledge_file"}:
         try:
             from bisheng.worker.knowledge.portal_recommendation import (
                 enqueue_portal_recommendation_resource_refresh,
@@ -1747,7 +1757,7 @@ async def authorize_resource(
             )
         except Exception as e:
             logger.warning(
-                'recommendation projection ACL refresh enqueue failed resource=%s:%s error=%s',
+                "recommendation projection ACL refresh enqueue failed resource=%s:%s error=%s",
                 resource_type,
                 resource_id,
                 e,
@@ -1761,10 +1771,13 @@ async def authorize_resource(
         )
     except Exception as e:
         logger.error(
-            'resource_authorize membership sync failed actor=%s resource=%s:%s error=%s',
-            login_user.user_id, resource_type, resource_id, e,
+            "resource_authorize membership sync failed actor=%s resource=%s:%s error=%s",
+            login_user.user_id,
+            resource_type,
+            resource_id,
+            e,
         )
-        return PermissionTupleWriteError.return_resp(data={'exception': str(e)})
+        return PermissionTupleWriteError.return_resp(data={"exception": str(e)})
 
     if permission_notify_context is not None:
         from bisheng.permission.domain.services.resource_permission_notification_service import (
@@ -1774,21 +1787,25 @@ async def authorize_resource(
         await ResourcePermissionNotificationService.dispatch_after_authorize(
             context=permission_notify_context,
             operator_user_id=login_user.user_id,
-            operator_user_name=getattr(login_user, 'user_name', None),
+            operator_user_name=getattr(login_user, "user_name", None),
         )
     logger.info(
-        'resource_authorize success actor=%s resource=%s:%s grants=%d revokes=%d bindings=%d',
-        login_user.user_id, resource_type, resource_id, len(request.grants or []), len(request.revokes or []),
+        "resource_authorize success actor=%s resource=%s:%s grants=%d revokes=%d bindings=%d",
+        login_user.user_id,
+        resource_type,
+        resource_id,
+        len(request.grants or []),
+        len(request.revokes or []),
         len(bindings_map),
     )
     return resp_200(None)
 
 
-@router.get('/resources/{resource_type}/{resource_id}/grant-subjects/users')
+@router.get("/resources/{resource_type}/{resource_id}/grant-subjects/users")
 async def get_grant_subject_users(
     resource_type: str,
     resource_id: str,
-    keyword: str = '',
+    keyword: str = "",
     page: int = Query(1, ge=1),
     page_size: int = Query(1000, ge=1, le=2000),
     login_user: UserPayload = Depends(UserPayload.get_login_user),
@@ -1808,15 +1825,17 @@ async def get_grant_subject_users(
     )
     if tenant_id is None:
         return resp_200([])
-    return resp_200(await _list_knowledge_space_grant_users(
-        tenant_id=tenant_id,
-        keyword=keyword,
-        page=page,
-        page_size=page_size,
-    ))
+    return resp_200(
+        await _list_knowledge_space_grant_users(
+            tenant_id=tenant_id,
+            keyword=keyword,
+            page=page,
+            page_size=page_size,
+        )
+    )
 
 
-@router.get('/resources/{resource_type}/{resource_id}/grant-subjects/departments')
+@router.get("/resources/{resource_type}/{resource_id}/grant-subjects/departments")
 async def get_grant_subject_departments(
     resource_type: str,
     resource_id: str,
@@ -1838,30 +1857,25 @@ async def get_grant_subject_departments(
     if tenant_id is None:
         return resp_200([])
     scope_space_id = await _resolve_child_resource_space_id_for_grant_scope(resource_type, resource_id)
-    if resource_type in {'folder', 'knowledge_file'} and scope_space_id is None:
+    if resource_type in {"folder", "knowledge_file"} and scope_space_id is None:
         return resp_200([])
-    grant_scope_space_id = scope_space_id or (resource_id if resource_type == 'knowledge_space' else None)
+    grant_scope_space_id = scope_space_id or (resource_id if resource_type == "knowledge_space" else None)
     scope_space_level = None
     if scope_space_id is not None:
         scope_space_level = await _get_knowledge_space_level(scope_space_id)
-        if (
-            scope_space_level is not None
-            and 'department' not in _allowed_subject_types_for_space_level(scope_space_level)
+        if scope_space_level is not None and "department" not in _allowed_subject_types_for_space_level(
+            scope_space_level
         ):
             return resp_200([])
     resource_space_level = None
-    if resource_type == 'knowledge_space':
+    if resource_type == "knowledge_space":
         resource_space_level = await _get_knowledge_space_level(resource_id)
-        if (
-            resource_space_level is not None
-            and 'department' not in _allowed_subject_types_for_space_level(resource_space_level)
+        if resource_space_level is not None and "department" not in _allowed_subject_types_for_space_level(
+            resource_space_level
         ):
             return resp_200([])
     tree = await _list_knowledge_space_grant_departments(tenant_id=tenant_id)
-    if (
-        _is_team_knowledge_space_level(scope_space_level)
-        or _is_team_knowledge_space_level(resource_space_level)
-    ):
+    if _is_team_knowledge_space_level(scope_space_level) or _is_team_knowledge_space_level(resource_space_level):
         return resp_200(tree)
     if grant_scope_space_id is not None and not await _can_view_all_grant_subject_departments(login_user):
         allowed_ids = await _knowledge_space_grant_department_ids(
@@ -1872,11 +1886,11 @@ async def get_grant_subject_departments(
     return resp_200(tree)
 
 
-@router.get('/resources/{resource_type}/{resource_id}/grant-subjects/user-groups')
+@router.get("/resources/{resource_type}/{resource_id}/grant-subjects/user-groups")
 async def get_grant_subject_user_groups(
     resource_type: str,
     resource_id: str,
-    keyword: str = '',
+    keyword: str = "",
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     if resource_type not in VALID_RESOURCE_TYPES:
@@ -1895,20 +1909,19 @@ async def get_grant_subject_user_groups(
     if tenant_id is None:
         return resp_200([])
     scope_space_id = await _resolve_child_resource_space_id_for_grant_scope(resource_type, resource_id)
-    if resource_type in {'folder', 'knowledge_file'} and scope_space_id is None:
+    if resource_type in {"folder", "knowledge_file"} and scope_space_id is None:
         return resp_200([])
-    grant_scope_space_id = scope_space_id or (resource_id if resource_type == 'knowledge_space' else None)
+    grant_scope_space_id = scope_space_id or (resource_id if resource_type == "knowledge_space" else None)
     scope_space_level = None
     if scope_space_id is not None:
         scope_space_level = await _get_knowledge_space_level(scope_space_id)
-        if (
-            scope_space_level is not None
-            and 'user_group' not in _allowed_subject_types_for_space_level(scope_space_level)
+        if scope_space_level is not None and "user_group" not in _allowed_subject_types_for_space_level(
+            scope_space_level
         ):
             return resp_200([])
-    if resource_type == 'knowledge_space':
+    if resource_type == "knowledge_space":
         level = await _get_knowledge_space_level(resource_id)
-        if level is not None and 'user_group' not in _allowed_subject_types_for_space_level(level):
+        if level is not None and "user_group" not in _allowed_subject_types_for_space_level(level):
             return resp_200([])
     groups = await _list_knowledge_space_grant_user_groups(
         tenant_id=tenant_id,
@@ -1920,26 +1933,23 @@ async def get_grant_subject_user_groups(
             resource_id=grant_scope_space_id,
             login_user=login_user,
         )
-        return resp_200([
-            group for group in groups
-            if int(group['id']) in allowed_ids
-        ])
+        return resp_200([group for group in groups if int(group["id"]) in allowed_ids])
     return resp_200(groups)
 
 
-@router.get('/knowledge-spaces/{space_id}/grant-subjects/departments')
+@router.get("/knowledge-spaces/{space_id}/grant-subjects/departments")
 async def get_knowledge_space_grant_subject_departments(
     space_id: str,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     if not await _has_resource_permission_management_access(
-        resource_type='knowledge_space',
+        resource_type="knowledge_space",
         resource_id=space_id,
         login_user=login_user,
     ):
         return PermissionDeniedError.return_resp()
     tenant_id = await _resolve_grant_subject_tenant_id(
-        resource_type='knowledge_space',
+        resource_type="knowledge_space",
         resource_id=space_id,
         login_user=login_user,
     )
@@ -1947,7 +1957,7 @@ async def get_knowledge_space_grant_subject_departments(
         return resp_200([])
 
     level = await _get_knowledge_space_level(space_id)
-    if level is not None and 'department' not in _allowed_subject_types_for_space_level(level):
+    if level is not None and "department" not in _allowed_subject_types_for_space_level(level):
         return resp_200([])
 
     tree = await _list_knowledge_space_grant_departments(tenant_id=tenant_id)
@@ -1963,20 +1973,20 @@ async def get_knowledge_space_grant_subject_departments(
     return resp_200(_filter_department_tree_by_ids(tree, allowed_ids))
 
 
-@router.get('/knowledge-spaces/{space_id}/grant-subjects/user-groups')
+@router.get("/knowledge-spaces/{space_id}/grant-subjects/user-groups")
 async def get_knowledge_space_grant_subject_user_groups(
     space_id: str,
-    keyword: str = '',
+    keyword: str = "",
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     if not await _has_resource_permission_management_access(
-        resource_type='knowledge_space',
+        resource_type="knowledge_space",
         resource_id=space_id,
         login_user=login_user,
     ):
         return PermissionDeniedError.return_resp()
     tenant_id = await _resolve_grant_subject_tenant_id(
-        resource_type='knowledge_space',
+        resource_type="knowledge_space",
         resource_id=space_id,
         login_user=login_user,
     )
@@ -1984,7 +1994,7 @@ async def get_knowledge_space_grant_subject_user_groups(
         return resp_200([])
 
     level = await _get_knowledge_space_level(space_id)
-    if level is not None and 'user_group' not in _allowed_subject_types_for_space_level(level):
+    if level is not None and "user_group" not in _allowed_subject_types_for_space_level(level):
         return resp_200([])
 
     groups = await _list_knowledge_space_grant_user_groups(
@@ -1999,13 +2009,10 @@ async def get_knowledge_space_grant_subject_user_groups(
         resource_id=space_id,
         login_user=login_user,
     )
-    return resp_200([
-        group for group in groups
-        if int(group['id']) in allowed_ids
-    ])
+    return resp_200([group for group in groups if int(group["id"]) in allowed_ids])
 
 
-@router.get('/resources/{resource_type}/{resource_id}/permissions')
+@router.get("/resources/{resource_type}/{resource_id}/permissions")
 async def get_resource_permissions(
     resource_type: str,
     resource_id: str,
@@ -2033,10 +2040,11 @@ async def get_resource_permissions(
         object_id=resource_id,
     )
     models = await _get_relation_models()
-    model_map = {m['id']: _normalize_model_dict(m) for m in models}
+    model_map = {m["id"]: _normalize_model_dict(m) for m in models}
     binding_map = {
-        b.get('key'): b for b in await _get_bindings()
-        if b.get('resource_type') == resource_type and str(b.get('resource_id')) == str(resource_id)
+        b.get("key"): b
+        for b in await _get_bindings()
+        if b.get("resource_type") == resource_type and str(b.get("resource_id")) == str(resource_id)
     }
     bindings = list(binding_map.values())
     visible_permissions = []
@@ -2048,12 +2056,12 @@ async def get_resource_permissions(
             p.subject_type,
             p.subject_id,
             p.relation,
-            getattr(p, 'include_children', None),
+            getattr(p, "include_children", None),
         )
         if matched:
-            p.model_id = matched.get('model_id')
-            p.model_name = model_map.get(p.model_id, {}).get('name')
-            p.include_children = matched.get('include_children')
+            p.model_id = matched.get("model_id")
+            p.model_name = model_map.get(p.model_id, {}).get("name")
+            p.include_children = matched.get("include_children")
 
         visible_permissions.append(p)
     permissions = visible_permissions
@@ -2074,7 +2082,7 @@ async def get_resource_permissions(
     return resp_200(permissions)
 
 
-@router.get('/relation-models')
+@router.get("/relation-models")
 async def get_relation_models(
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
@@ -2082,7 +2090,7 @@ async def get_relation_models(
     return resp_200(models)
 
 
-@router.get('/relation-models/grantable')
+@router.get("/relation-models/grantable")
 async def get_grantable_relation_models(
     object_type: str,
     object_id: str,
@@ -2112,7 +2120,7 @@ async def get_grantable_relation_models(
     for m in raw:
         if _can_grant_relation_model(
             resource_type=object_type,
-            relation=m.get('relation') or '',
+            relation=m.get("relation") or "",
             model=m,
             caller_permission_ids=caller_permission_ids,
         ):
@@ -2120,7 +2128,7 @@ async def get_grantable_relation_models(
     return resp_200(out)
 
 
-@router.post('/relation-models')
+@router.post("/relation-models")
 async def create_relation_model(
     request: RelationModelCreateRequest,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
@@ -2132,21 +2140,23 @@ async def create_relation_model(
     models = await _get_relation_models()
     if _relation_model_name_exists(models, request.name):
         return PermissionRelationModelNameExistsError.return_resp()
-    model_id = f'custom_{uuid.uuid4().hex[:8]}'
-    models.append({
-        'id': model_id,
-        'name': _normalize_relation_model_name(request.name),
-        'relation': request.relation,
-        'grant_tier': _infer_grant_tier_from_relation(request.relation),
-        'permissions': request.permissions or [],
-        'permissions_explicit': True,
-        'is_system': False,
-    })
+    model_id = f"custom_{uuid.uuid4().hex[:8]}"
+    models.append(
+        {
+            "id": model_id,
+            "name": _normalize_relation_model_name(request.name),
+            "relation": request.relation,
+            "grant_tier": _infer_grant_tier_from_relation(request.relation),
+            "permissions": request.permissions or [],
+            "permissions_explicit": True,
+            "is_system": False,
+        }
+    )
     await _save_relation_models(models)
-    return resp_200({'id': model_id})
+    return resp_200({"id": model_id})
 
 
-@router.put('/relation-models/{model_id}')
+@router.put("/relation-models/{model_id}")
 async def update_relation_model(
     model_id: str,
     request: RelationModelUpdateRequest,
@@ -2159,13 +2169,13 @@ async def update_relation_model(
         return PermissionRelationModelNameExistsError.return_resp()
     updated = False
     for m in models:
-        if m.get('id') != model_id:
+        if m.get("id") != model_id:
             continue
         if request.name is not None:
-            m['name'] = _normalize_relation_model_name(request.name)
+            m["name"] = _normalize_relation_model_name(request.name)
         if request.permissions is not None:
-            m['permissions'] = request.permissions
-            m['permissions_explicit'] = True
+            m["permissions"] = request.permissions
+            m["permissions_explicit"] = True
         updated = True
         break
     if not updated:
@@ -2174,7 +2184,7 @@ async def update_relation_model(
     return resp_200(None)
 
 
-@router.delete('/relation-models/{model_id}')
+@router.delete("/relation-models/{model_id}")
 async def delete_relation_model(
     model_id: str,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
@@ -2182,80 +2192,89 @@ async def delete_relation_model(
     if not login_user.is_admin():
         return PermissionDeniedError.return_resp()
     models = await _get_relation_models()
-    target = next((m for m in models if m.get('id') == model_id), None)
+    target = next((m for m in models if m.get("id") == model_id), None)
     if target is None:
         return PermissionInvalidResourceError.return_resp()
-    if target.get('is_system'):
+    if target.get("is_system"):
         return PermissionDeniedError.return_resp()
 
     # Remove model and revoke all tuples bound to this model.
-    remain_models = [m for m in models if m.get('id') != model_id]
+    remain_models = [m for m in models if m.get("id") != model_id]
     bindings = await _get_bindings()
-    to_remove = [b for b in bindings if b.get('model_id') == model_id]
+    to_remove = [b for b in bindings if b.get("model_id") == model_id]
 
     from bisheng.permission.domain.schemas.permission_schema import AuthorizeRevokeItem
+    from bisheng.permission.domain.services.permission_service import PermissionService
     from bisheng.permission.domain.services.resource_permission_notification_service import (
         ResourcePermissionNotificationService,
     )
-    from bisheng.permission.domain.services.permission_service import PermissionService
+
     notify_contexts = []
     try:
         for b in to_remove:
-            if _is_invalid_owner_subject(b.get('subject_type'), b.get('relation')):
+            if _is_invalid_owner_subject(b.get("subject_type"), b.get("relation")):
                 logger.warning(
-                    'delete_relation_model skip impossible owner revoke model=%s subject=%s:%s resource=%s:%s',
-                    model_id, b.get('subject_type'), b.get('subject_id'),
-                    b.get('resource_type'), b.get('resource_id'),
+                    "delete_relation_model skip impossible owner revoke model=%s subject=%s:%s resource=%s:%s",
+                    model_id,
+                    b.get("subject_type"),
+                    b.get("subject_id"),
+                    b.get("resource_type"),
+                    b.get("resource_id"),
                 )
                 continue
             revoke_item = AuthorizeRevokeItem(
-                subject_type=b.get('subject_type'),
-                subject_id=int(b.get('subject_id')),
-                relation=b.get('relation'),
-                include_children=bool(b.get('include_children')),
+                subject_type=b.get("subject_type"),
+                subject_id=int(b.get("subject_id")),
+                relation=b.get("relation"),
+                include_children=bool(b.get("include_children")),
             )
             notify_context = await ResourcePermissionNotificationService.build_context(
-                resource_type=b.get('resource_type'),
-                resource_id=str(b.get('resource_id')),
+                resource_type=b.get("resource_type"),
+                resource_id=str(b.get("resource_id")),
                 grants=[],
                 revokes=[revoke_item],
             )
             if notify_context is not None:
                 notify_contexts.append(notify_context)
             await PermissionService.authorize(
-                object_type=b.get('resource_type'),
-                object_id=str(b.get('resource_id')),
+                object_type=b.get("resource_type"),
+                object_id=str(b.get("resource_id")),
                 grants=[],
                 revokes=[revoke_item],
                 enforce_fga_success=True,
             )
     except Exception as e:
-        logger.error('delete_relation_model failed to revoke model=%s bindings=%d error=%s', model_id, len(to_remove),
-                     e)
-        return PermissionTupleWriteError.return_resp(data={'exception': str(e)})
+        logger.error(
+            "delete_relation_model failed to revoke model=%s bindings=%d error=%s", model_id, len(to_remove), e
+        )
+        return PermissionTupleWriteError.return_resp(data={"exception": str(e)})
 
-    remain_bindings = [b for b in bindings if b.get('model_id') != model_id]
+    remain_bindings = [b for b in bindings if b.get("model_id") != model_id]
     await _save_relation_models(remain_models)
     await _save_bindings(remain_bindings)
     affected_resources = {
-        (str(binding.get('resource_type')), int(binding.get('resource_id')))
+        (str(binding.get("resource_type")), int(binding.get("resource_id")))
         for binding in to_remove
-        if binding.get('resource_type') in {
-            'knowledge_space', 'knowledge_library', 'folder', 'knowledge_file',
+        if binding.get("resource_type")
+        in {
+            "knowledge_space",
+            "knowledge_library",
+            "folder",
+            "knowledge_file",
         }
-        and str(binding.get('resource_id', '')).isdigit()
+        and str(binding.get("resource_id", "")).isdigit()
     }
     _enqueue_recommendation_projection_resource_refreshes(affected_resources)
     for notify_context in notify_contexts:
         await ResourcePermissionNotificationService.dispatch_after_authorize(
             context=notify_context,
             operator_user_id=login_user.user_id,
-            operator_user_name=getattr(login_user, 'user_name', None),
+            operator_user_name=getattr(login_user, "user_name", None),
         )
     return resp_200(None)
 
 
-@router.get('/rebac-schema')
+@router.get("/rebac-schema")
 async def rebac_schema_summary(
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
@@ -2267,16 +2286,16 @@ async def rebac_schema_summary(
 
     model = get_authorization_model()
     types_out = []
-    for td in model.get('type_definitions', []):
-        tname = td.get('type')
-        rels = sorted(list((td.get('relations') or {}).keys()))
-        types_out.append({'type': tname, 'relations': rels})
+    for td in model.get("type_definitions", []):
+        tname = td.get("type")
+        rels = sorted(list((td.get("relations") or {}).keys()))
+        types_out.append({"type": tname, "relations": rels})
     return resp_200(
-        {'schema_version': model.get('schema_version'), 'model_version': MODEL_VERSION, 'types': types_out},
+        {"schema_version": model.get("schema_version"), "model_version": MODEL_VERSION, "types": types_out},
     )
 
 
-@router.get('/permission-templates/knowledge-space')
+@router.get("/permission-templates/knowledge-space")
 async def get_knowledge_space_permission_template(
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
@@ -2290,7 +2309,7 @@ async def get_knowledge_space_permission_template(
     return resp_200(KNOWLEDGE_SPACE_PERMISSION_TEMPLATE)
 
 
-@router.get('/permission-templates/application')
+@router.get("/permission-templates/application")
 async def get_application_permission_template(
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
@@ -2300,7 +2319,7 @@ async def get_application_permission_template(
     return resp_200(APPLICATION_PERMISSION_TEMPLATE)
 
 
-@router.get('/permission-templates/knowledge-library')
+@router.get("/permission-templates/knowledge-library")
 async def get_knowledge_library_permission_template(
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
@@ -2310,7 +2329,7 @@ async def get_knowledge_library_permission_template(
     return resp_200(KNOWLEDGE_LIBRARY_PERMISSION_TEMPLATE)
 
 
-@router.get('/permission-templates/tool')
+@router.get("/permission-templates/tool")
 async def get_tool_permission_template(
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
@@ -2320,7 +2339,7 @@ async def get_tool_permission_template(
     return resp_200(TOOL_PERMISSION_TEMPLATE)
 
 
-@router.get('/permission-templates/channel')
+@router.get("/permission-templates/channel")
 async def get_channel_permission_template(
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):

@@ -2,7 +2,7 @@ import json
 from datetime import datetime
 from io import BytesIO
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, Mock, call, patch
 
 import pytest
 from fastapi import FastAPI, UploadFile
@@ -16,6 +16,7 @@ from bisheng.common.errcode.filelib_sync import (
 )
 from bisheng.common.errcode.knowledge_space import DepartmentKnowledgeSpaceAmbiguousError
 from bisheng.database.models.department import Department, UserDepartment
+from bisheng.developer_token.domain.schemas import DeveloperTokenFileSyncRule
 from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
@@ -23,11 +24,13 @@ from bisheng.knowledge.rag.pipeline.transformer.file_encoding import FileEncodin
 from bisheng.open_endpoints.api.dependencies import get_filelib_sync_service
 from bisheng.open_endpoints.api.endpoints.filelib_sync import _sync_file, router
 from bisheng.open_endpoints.domain.schemas.filelib_sync import (
-    FILELIB_SYNC_RULES,
     FilelibSyncParams,
     FilelibSyncResponseData,
 )
-from bisheng.open_endpoints.domain.services.filelib_sync_service import FilelibSyncService
+from bisheng.open_endpoints.domain.services.filelib_sync_service import (
+    FilelibSyncService,
+    ResolvedFileSyncTarget,
+)
 from bisheng.shougang_portal_config.domain.schemas.portal_config_schema import PortalDomainConfig
 
 
@@ -40,6 +43,17 @@ def _department(department_id: int, name: str, path: str) -> Department:
     )
 
 
+def _rule() -> DeveloperTokenFileSyncRule:
+    return DeveloperTokenFileSyncRule.model_validate(
+        {
+            "category": {"code": "POLICY", "subcategory_code": "MGMT_POLICY"},
+            "business_domain": {"mode": "fixed", "code": "IT"},
+            "target_space": {"mode": "fixed", "knowledge_id": 8},
+            "dynamic_source": None,
+        }
+    )
+
+
 def _service(repository=None, knowledge_space_service=None) -> FilelibSyncService:
     login_user = UserPayload(
         user_id=1,
@@ -49,21 +63,24 @@ def _service(repository=None, knowledge_space_service=None) -> FilelibSyncServic
     )
     return FilelibSyncService(
         login_user=login_user,
+        token_id=42,
+        file_sync_rule=_rule(),
         repository=repository or SimpleNamespace(),
         knowledge_space_service=knowledge_space_service or SimpleNamespace(),
     )
 
 
-def test_all_fixed_sync_rules_are_registered_as_literal_routes():
-    expected_codes = {"03", "04", "05", "06", "07", "09", "10", "11", "12", "14", "15"}
-    assert set(FILELIB_SYNC_RULES) == expected_codes
+def test_only_unified_sync_route_is_registered():
+    old_codes = {"03", "04", "05", "06", "07", "09", "10", "11", "12", "14", "15"}
     paths = {route.path for route in router.routes}
-    assert {f"/filelib/file/sync/{code}" for code in expected_codes} <= paths
+    assert "/filelib/file/sync" in paths
+    assert not {f"/filelib/file/sync/{code}" for code in old_codes} & paths
 
 
-def test_slash_in_subcategory_is_literal():
-    assert FILELIB_SYNC_RULES["14"].subcategory_name == "故障诊断/协作案例"
-    assert FILELIB_SYNC_RULES["15"].subcategory_name == "国家/行业法规"
+def test_static_numbered_rules_are_removed_from_runtime_schema():
+    from bisheng.open_endpoints.domain.schemas import filelib_sync
+
+    assert not hasattr(filelib_sync, "FILELIB_SYNC_RULES")
 
 
 @pytest.mark.parametrize(
@@ -112,40 +129,6 @@ def test_portal_domain_config_preserves_department_bindings():
     assert domain.department_ids == [3, 5]
 
 
-def test_dynamic_business_domain_uses_first_enabled_config_item():
-    first = SimpleNamespace(
-        enabled=True,
-        code="PP",
-        name="生产",
-        department_ids=[3],
-    )
-    second = SimpleNamespace(
-        enabled=True,
-        code="IT",
-        name="信息",
-        department_ids=[3],
-    )
-    config = SimpleNamespace(portal=SimpleNamespace(domains=[first, second]))
-    result = FilelibSyncService._resolve_business_domain(
-        config,
-        FILELIB_SYNC_RULES["03"],
-        3,
-    )
-    assert result is first
-
-
-def test_document_type_resolution_matches_literal_child_label():
-    child = SimpleNamespace(code="CAS-01", label="故障诊断/协作案例")
-    parent = SimpleNamespace(code="CAS", label="案例", children=[child])
-    config = SimpleNamespace(portal=SimpleNamespace(document_types=[parent]))
-    resolved_parent, resolved_child = FilelibSyncService._resolve_document_type(
-        config,
-        FILELIB_SYNC_RULES["14"],
-    )
-    assert resolved_parent is parent
-    assert resolved_child is child
-
-
 def test_department_chain_starts_at_self_and_walks_to_root():
     department = _department(3, "三级部门", "/1/2/3/")
     assert FilelibSyncService._department_chain(department) == [3, 2, 1]
@@ -154,7 +137,7 @@ def test_department_chain_starts_at_self_and_walks_to_root():
 async def test_other_responsible_name_without_id_is_rejected():
     caller_department = _department(10, "调用人部门", "/10/")
     repository = SimpleNamespace(
-        find_primary_department=AsyncMock(return_value=UserDepartment(user_id=1, department_id=10, is_primary=1)),
+        find_primary_departments=AsyncMock(return_value=[UserDepartment(user_id=1, department_id=10, is_primary=1)]),
         find_department_by_id=AsyncMock(return_value=caller_department),
     )
     params = FilelibSyncParams(
@@ -169,7 +152,7 @@ async def test_other_responsible_name_without_id_is_rejected():
 async def test_main_department_name_without_id_must_match_caller_department():
     caller_department = _department(10, "调用人部门", "/10/")
     repository = SimpleNamespace(
-        find_primary_department=AsyncMock(return_value=UserDepartment(user_id=1, department_id=10, is_primary=1)),
+        find_primary_departments=AsyncMock(return_value=[UserDepartment(user_id=1, department_id=10, is_primary=1)]),
         find_department_by_id=AsyncMock(return_value=caller_department),
     )
     params = FilelibSyncParams(
@@ -187,8 +170,7 @@ async def test_nearest_department_binding_is_selected():
         find_knowledge_by_id=AsyncMock(return_value=Knowledge(id=22, name="二级部门库", type=3)),
     )
     with patch(
-        "bisheng.open_endpoints.domain.services.filelib_sync_service."
-        "DepartmentSpaceTargetResolver.resolve",
+        "bisheng.open_endpoints.domain.services.filelib_sync_service.DepartmentSpaceTargetResolver.resolve",
         new=AsyncMock(return_value=22),
     ) as resolve:
         space = await _service(repository)._find_nearest_department_space(department)
@@ -200,8 +182,7 @@ async def test_ambiguous_department_binding_is_rejected_before_space_lookup():
     department = _department(3, "三级部门", "/1/2/3/")
     repository = SimpleNamespace(find_knowledge_by_id=AsyncMock())
     with patch(
-        "bisheng.open_endpoints.domain.services.filelib_sync_service."
-        "DepartmentSpaceTargetResolver.resolve",
+        "bisheng.open_endpoints.domain.services.filelib_sync_service.DepartmentSpaceTargetResolver.resolve",
         new=AsyncMock(side_effect=DepartmentKnowledgeSpaceAmbiguousError()),
     ):
         with pytest.raises(FilelibSyncConflictError, match="multiple target"):
@@ -269,7 +250,6 @@ def test_regular_upload_keeps_enqueue_processing_enabled_by_default():
 
 async def test_missing_multipart_fields_returns_actual_422():
     response = await _sync_file(
-        "03",
         file=None,
         params=None,
         service=SimpleNamespace(),
@@ -283,7 +263,6 @@ async def test_missing_multipart_fields_returns_actual_422():
 async def test_missing_params_closes_uploaded_file():
     upload = UploadFile(filename="a.pdf", file=BytesIO(b"content"), size=7)
     response = await _sync_file(
-        "03",
         file=upload,
         params=None,
         service=SimpleNamespace(),
@@ -298,11 +277,31 @@ def test_fastapi_route_returns_actual_422_for_missing_params():
     app.dependency_overrides[get_filelib_sync_service] = lambda: SimpleNamespace()
     with TestClient(app) as client:
         response = client.post(
-            "/api/v2/filelib/file/sync/03",
+            "/api/v2/filelib/file/sync",
             files={"file": ("a.pdf", b"content", "application/pdf")},
         )
     assert response.status_code == 422
     assert response.json()["data"]["error_code"] == 19905
+
+
+@pytest.mark.parametrize("code", ["03", "04", "05", "06", "07", "09", "10", "11", "12", "14", "15"])
+def test_numbered_routes_return_404_without_calling_service(code):
+    service = SimpleNamespace(sync=AsyncMock())
+    app = FastAPI()
+    app.include_router(router, prefix="/api/v2")
+    app.dependency_overrides[get_filelib_sync_service] = lambda: service
+
+    with TestClient(app) as client:
+        response = client.post(
+            f"/api/v2/filelib/file/sync/{code}",
+            files={
+                "file": ("a.pdf", b"content", "application/pdf"),
+                "params": (None, '{"external_file_id":"ext-1","file_name":"a.pdf"}'),
+            },
+        )
+
+    assert response.status_code == 404
+    service.sync.assert_not_awaited()
 
 
 async def test_sync_endpoint_returns_success_payload_and_closes_file():
@@ -317,7 +316,6 @@ async def test_sync_endpoint_returns_success_payload_and_closes_file():
     )
     service = SimpleNamespace(sync=AsyncMock(return_value=result))
     response = await _sync_file(
-        "03",
         file=upload,
         params='{"external_file_id":"ext-1","file_name":"a.pdf"}',
         service=service,
@@ -331,7 +329,6 @@ async def test_sync_endpoint_returns_actual_business_http_status():
     upload = UploadFile(filename="a.pdf", file=BytesIO(b"content"), size=7)
     service = SimpleNamespace(sync=AsyncMock(side_effect=FilelibSyncNotFoundError(msg="knowledge space not found")))
     response = await _sync_file(
-        "03",
         file=upload,
         params='{"external_file_id":"ext-1","file_name":"a.pdf"}',
         service=service,
@@ -355,12 +352,16 @@ async def test_sync_orchestration_allows_repeated_external_id_and_writes_source_
         add_file=AsyncMock(return_value=[SimpleNamespace(id=9, status=5)]),
         enqueue_file_processing=Mock(),
     )
+    events = Mock()
+    events.attach_mock(repository.update, "persist")
+    events.attach_mock(knowledge_space_service.enqueue_file_processing, "enqueue")
     service = _service(repository, knowledge_space_service)
     identity = SimpleNamespace(
         responsible_user_id=2,
         responsible_user_name="owner",
         responsible_department=_department(20, "责任人部门", "/20/"),
         main_department=_department(10, "主责单位", "/10/"),
+        selected_department=None,
     )
     category = SimpleNamespace(code="POL")
     subcategory = SimpleNamespace(code="POL-MGMT")
@@ -385,7 +386,9 @@ async def test_sync_orchestration_allows_repeated_external_id_and_writes_source_
     service._get_portal_config = AsyncMock(return_value=SimpleNamespace())
     service._resolve_document_type = Mock(return_value=(category, subcategory))
     service._resolve_business_domain = Mock(return_value=domain)
-    service._resolve_target_space = AsyncMock(return_value=target_space)
+    service._resolve_target_space = AsyncMock(
+        return_value=ResolvedFileSyncTarget(space=target_space, folder_id=None)
+    )
     service._ensure_domain_bound = Mock()
     service._require_upload_permission = AsyncMock()
     service._save_temporary_file = AsyncMock(return_value="temporary-url")
@@ -401,12 +404,10 @@ async def test_sync_orchestration_allows_repeated_external_id_and_writes_source_
         side_effect=_generate_fixed_encoding,
     ):
         result = await service.sync(
-            rule=FILELIB_SYNC_RULES["03"],
             raw_params='{"external_file_id":"ext-1","file_name":"a.pdf"}',
             upload_file=upload,
         )
         repeated_result = await service.sync(
-            rule=FILELIB_SYNC_RULES["03"],
             raw_params='{"external_file_id":"ext-1","file_name":"a.pdf"}',
             upload_file=UploadFile(filename="a.pdf", file=BytesIO(b"content"), size=7),
         )
@@ -417,11 +418,29 @@ async def test_sync_orchestration_allows_repeated_external_id_and_writes_source_
         "department_id": 10,
         "responsible_person": "owner",
         "responsible_person_id": 2,
-        "filelib_sync_endpoint": "03",
+        "filelib_sync_endpoint": "sync",
     }
     assert repository.update.await_count == 2
     assert knowledge_space_service.add_file.await_count == 2
     assert knowledge_space_service.enqueue_file_processing.call_count == 2
+    add_kwargs = knowledge_space_service.add_file.await_args_list[0].kwargs
+    assert add_kwargs == {
+        "knowledge_id": 8,
+        "file_path": ["temporary-url"],
+        "parent_id": None,
+        "file_category_code": "POLICY",
+        "file_subcategory_code": "MGMT_POLICY",
+        "business_domain_code": "IT",
+        "skip_approval": True,
+        "enqueue_processing": False,
+    }
+    assert events.method_calls == [
+        call.persist(knowledge_file),
+        call.enqueue([knowledge_file], ["cache-key"]),
+        call.persist(knowledge_file),
+        call.enqueue([knowledge_file], ["cache-key"]),
+    ]
+    assert "token_id" not in knowledge_file.user_metadata
     assert result.file_encoding == "SGGF-POL-IT-20260700000001"
     assert repeated_result.external_file_id == "ext-1"
 

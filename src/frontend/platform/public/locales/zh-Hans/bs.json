@@ -180,6 +180,63 @@
           "PREFIX": "路径前缀"
         }
       },
+      "fileSync": {
+        "title": "统一文件同步业务",
+        "enabled": "启用文件同步业务配置",
+        "disabledHelp": "关闭后，该 Token 调用统一文件同步接口将返回 403/19906，其他已授权接口不受影响。",
+        "optionsLoading": "正在加载当前租户的分类、业务域和知识空间…",
+        "optionsError": "配置选项加载失败，请重试后再保存。",
+        "selectBindingFirst": "请先选择 Token 绑定用户，以确定配置所属租户。",
+        "optionsRequiredError": "文件同步配置选项尚未成功加载，请重试后再保存。",
+        "invalidError": "文件同步配置中的“{{field}}”无效或已失效，请检查后重试。",
+        "category": "一级分类",
+        "subcategory": "二级分类",
+        "businessDomain": "业务域",
+        "targetSpace": "目标知识库",
+        "dynamicSource": "动态业务来源",
+        "select": "请选择",
+        "stale": "当前保存值已失效；该原值会保留，重新选择后才会替换。",
+        "spaceSearchPlaceholder": "搜索知识空间名称",
+        "searchSpace": "搜索知识空间",
+        "targetTree": {
+          "groups": {
+            "public": "公共空间",
+            "department": "部门空间"
+          },
+          "root": "空间根目录",
+          "navigationOnly": "仅用于导航，不可选择",
+          "loading": "正在加载目标空间…",
+          "error": "目标空间加载失败，请重试。",
+          "empty": "未找到可用的公共或部门空间。",
+          "noPermission": "绑定用户没有可上传的空间根目录或目录。",
+          "stale": "当前目标已失效，请重新选择。",
+          "loadingChildren": "正在加载目录…",
+          "childrenError": "目录加载失败，请重新展开。",
+          "loadMore": "加载更多目录"
+        },
+        "modes": {
+          "fixed": "固定配置",
+          "dynamic": "运行时动态获取"
+        },
+        "sources": {
+          "departmentId": "使用 department_id",
+          "responsiblePersonId": "使用 responsible_person_id 的主部门"
+        },
+        "errorFields": {
+          "category": "一级分类",
+          "subcategory": "二级分类",
+          "businessDomain": "业务域",
+          "targetSpace": "目标知识库",
+          "dynamicSource": "动态业务来源"
+        },
+        "summary": {
+          "notConfigured": "未配置",
+          "businessDomain": "业务域",
+          "targetSpace": "目标库",
+          "dynamicDepartment": "动态(department_id)",
+          "dynamicResponsiblePerson": "动态(responsible_person_id 主部门)"
+        }
+      },
       "saveConfig": "保存配置",
       "search": "搜索",
       "create": "新建 Token",
@@ -212,6 +269,7 @@
         "status": "状态",
         "controls": "访问控制",
         "routes": "路由范围",
+        "fileSync": "文件同步业务",
         "lastUsed": "最近使用",
         "actions": "操作"
       },

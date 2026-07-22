@@ -288,3 +288,8 @@ sg_test.sh
 sg-sync-api-preview.md
 sg-sync-api-内部.md
 mdf_file_read_count.sh
+.dev-stack/
+
+# Local-only 门户联调 (do not commit)
+.cursor/rules/local-portal-dev-stack.mdc
+scripts/dev-stack.sh

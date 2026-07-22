@@ -29,6 +29,7 @@ from bisheng.approval.domain.services.knowledge_space_subscribe_scenario_handler
     KnowledgeSpaceSubscribeScenarioHandler,
 )
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
+from bisheng.common.cursor import CursorDecodeError, decode_cursor, encode_cursor
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
 from bisheng.common.errcode.knowledge import KnowledgeInvalidCursorError, KnowledgeSpaceTagLibraryInvalidError
@@ -139,6 +140,12 @@ from bisheng.knowledge.domain.models.knowledge_space_tag_library import (
     KnowledgeSpaceTagLibraryDao,
 )
 from bisheng.knowledge.domain.models.knowledge_tag_library_link import KnowledgeTagLibraryLinkDao
+from bisheng.knowledge.domain.repositories.implementations.knowledge_file_repository_impl import (
+    KnowledgeFileRepositoryImpl,
+)
+from bisheng.knowledge.domain.repositories.implementations.knowledge_repository_impl import (
+    KnowledgeRepositoryImpl,
+)
 from bisheng.knowledge.domain.repositories.implementations.portal_recommendation_redis_repository import (
     PortalRecommendationRedisRepositoryImpl,
 )
@@ -304,6 +311,7 @@ SPACE_ADMIN_REVOKED_MESSAGE = "revoked_knowledge_space_admin"
 SPACE_MEMBER_REMOVED_MESSAGE = "removed_knowledge_space_member"
 SPACE_MADE_PRIVATE_MESSAGE = "knowledge_space_made_private"
 SPACE_DELETED_MESSAGE = "knowledge_space_deleted"
+FOLDER_DELETED_MESSAGE = "knowledge_folder_deleted"
 _SPACE_MEMBER_ROLE_TO_RELATION = {
     UserRoleEnum.CREATOR: "owner",
     UserRoleEnum.ADMIN: "manager",
@@ -454,6 +462,54 @@ def _increment_portal_search_perf(field: str, amount: int = 1) -> None:
         setattr(perf, field, getattr(perf, field) + amount)
 
 
+@dataclass(frozen=True)
+class FileSyncTargetAccess:
+    root_space_ids: set[int] | None
+    selectable_folder_ids: set[int] | None
+    visible_folder_ids: set[int] | None
+    folder_space_ids: set[int] | None
+
+
+@dataclass(frozen=True)
+class FileSyncTargetSpaceItem:
+    id: int
+    name: str
+    space_type: str
+    selectable: bool
+    has_children: bool
+
+
+@dataclass(frozen=True)
+class FileSyncTargetSpacePage:
+    items: list[FileSyncTargetSpaceItem]
+    has_more: bool
+    next_cursor: str | None
+
+
+@dataclass(frozen=True)
+class FileSyncTargetFolderItem:
+    id: int
+    name: str
+    selectable: bool
+    has_children: bool
+
+
+@dataclass(frozen=True)
+class FileSyncTargetFolderPage:
+    items: list[FileSyncTargetFolderItem]
+    has_more: bool
+    next_cursor: str | None
+
+
+@dataclass(frozen=True)
+class FileSyncTargetDisplayData:
+    knowledge_id: int
+    knowledge_name: str | None
+    folder_id: int | None
+    folder_path: list[tuple[int, str]]
+    stale: bool
+
+
 class KnowledgeSpaceService(KnowledgeUtils):
     """Service for Knowledge Space operations.
     Instance-based; each method receives login_user as an argument.
@@ -489,6 +545,361 @@ class KnowledgeSpaceService(KnowledgeUtils):
         # captured file-level (respects the actual granted permissions, no tier
         # fallback) during the per-file visibility check, so search matches preview.
         self._portal_file_download_map: dict[int, bool] = {}
+
+    @staticmethod
+    def _coerce_file_sync_permission_ids(values: list[str] | None) -> set[int] | None:
+        if values is None:
+            return None
+        result: set[int] = set()
+        for value in values:
+            try:
+                parsed = int(value)
+            except (TypeError, ValueError):
+                continue
+            if parsed > 0:
+                result.add(parsed)
+        return result
+
+    @staticmethod
+    def _expand_file_sync_folder_visibility(
+        selectable_folders: list[KnowledgeFile],
+    ) -> tuple[set[int], set[int], set[int]]:
+        selectable_ids: set[int] = set()
+        visible_ids: set[int] = set()
+        space_ids: set[int] = set()
+        for folder in selectable_folders:
+            if folder.id is None:
+                continue
+            folder_id = int(folder.id)
+            selectable_ids.add(folder_id)
+            visible_ids.add(folder_id)
+            visible_ids.update(
+                int(part)
+                for part in str(folder.file_level_path or "").split("/")
+                if part.isdigit() and int(part) > 0
+            )
+            space_ids.add(int(folder.knowledge_id))
+        return selectable_ids, visible_ids, space_ids
+
+    @classmethod
+    async def _load_file_sync_target_access(
+        cls,
+        *,
+        login_user: UserPayload,
+        file_repository: KnowledgeFileRepositoryImpl,
+    ) -> FileSyncTargetAccess:
+        root_values, folder_values = await asyncio.gather(
+            PermissionService.list_accessible_ids(
+                int(login_user.user_id),
+                "upload_file",
+                "knowledge_space",
+                login_user=login_user,
+            ),
+            PermissionService.list_accessible_ids(
+                int(login_user.user_id),
+                "upload_file",
+                "folder",
+                login_user=login_user,
+            ),
+        )
+        root_space_ids = cls._coerce_file_sync_permission_ids(root_values)
+        folder_ids = cls._coerce_file_sync_permission_ids(folder_values)
+        if folder_ids is None:
+            return FileSyncTargetAccess(
+                root_space_ids=root_space_ids,
+                selectable_folder_ids=None,
+                visible_folder_ids=None,
+                folder_space_ids=None,
+            )
+        folders = await file_repository.find_file_sync_folders_by_ids(folder_ids)
+        selectable_ids, visible_ids, space_ids = cls._expand_file_sync_folder_visibility(folders)
+        return FileSyncTargetAccess(
+            root_space_ids=root_space_ids,
+            selectable_folder_ids=selectable_ids,
+            visible_folder_ids=visible_ids,
+            folder_space_ids=space_ids,
+        )
+
+    @classmethod
+    async def list_file_sync_target_spaces(
+        cls,
+        *,
+        login_user: UserPayload,
+        cursor: str | None,
+        page_size: int,
+        keyword: str | None,
+    ) -> FileSyncTargetSpacePage:
+        context = (
+            "developer-token-file-sync-spaces"
+            f"|tenant={get_current_tenant_id()}|user={login_user.user_id}|keyword={keyword or ''}"
+        )
+        cursor_key = decode_cursor(
+            cursor,
+            expected_key_len=3,
+            expected_context=context,
+        )
+        after = None
+        if cursor_key is not None:
+            try:
+                after = (int(cursor_key[0]), str(cursor_key[1]), int(cursor_key[2]))
+            except (TypeError, ValueError) as exc:
+                raise CursorDecodeError("file sync space cursor key is invalid") from exc
+
+        async with get_async_db_session() as session:
+            knowledge_repository = KnowledgeRepositoryImpl(session)
+            file_repository = KnowledgeFileRepositoryImpl(session)
+            access = await cls._load_file_sync_target_access(
+                login_user=login_user,
+                file_repository=file_repository,
+            )
+            if access.root_space_ids is None or access.folder_space_ids is None:
+                allowed_space_ids = None
+            else:
+                allowed_space_ids = access.root_space_ids | access.folder_space_ids
+            rows = await knowledge_repository.find_file_sync_spaces(
+                allowed_space_ids=allowed_space_ids,
+                keyword=keyword,
+                after=after,
+                limit=page_size + 1,
+            )
+            page_rows = list(rows[:page_size])
+            page_space_ids = {int(space.id) for space, _level in page_rows if space.id is not None}
+            spaces_with_children = await file_repository.find_file_sync_space_ids_with_folders(
+                space_ids=page_space_ids,
+                visible_folder_ids=access.visible_folder_ids,
+            )
+
+        items = [
+            FileSyncTargetSpaceItem(
+                id=int(space.id),
+                name=str(space.name or ""),
+                space_type=level,
+                selectable=access.root_space_ids is None or int(space.id) in access.root_space_ids,
+                has_children=int(space.id) in spaces_with_children,
+            )
+            for space, level in page_rows
+        ]
+        has_more = len(rows) > page_size
+        next_cursor = None
+        if has_more and page_rows:
+            last_space, last_level = page_rows[-1]
+            level_rank = 0 if last_level == KnowledgeSpaceLevelEnum.PUBLIC.value else 1
+            next_cursor = encode_cursor(
+                [level_rank, str(last_space.name or ""), int(last_space.id)],
+                context=context,
+            )
+        return FileSyncTargetSpacePage(
+            items=items,
+            has_more=has_more,
+            next_cursor=next_cursor,
+        )
+
+    @classmethod
+    async def list_file_sync_target_folders(
+        cls,
+        *,
+        login_user: UserPayload,
+        knowledge_id: int,
+        parent_id: int | None,
+        cursor: str | None,
+        page_size: int,
+    ) -> FileSyncTargetFolderPage:
+        context = (
+            "developer-token-file-sync-folders"
+            f"|tenant={get_current_tenant_id()}|user={login_user.user_id}"
+            f"|space={knowledge_id}|parent={parent_id or 0}"
+        )
+        cursor_key = decode_cursor(
+            cursor,
+            expected_key_len=2,
+            expected_context=context,
+        )
+        after = None
+        if cursor_key is not None:
+            try:
+                after = (str(cursor_key[0]), int(cursor_key[1]))
+            except (TypeError, ValueError) as exc:
+                raise CursorDecodeError("file sync folder cursor key is invalid") from exc
+
+        async with get_async_db_session() as session:
+            knowledge_repository = KnowledgeRepositoryImpl(session)
+            file_repository = KnowledgeFileRepositoryImpl(session)
+            spaces = await knowledge_repository.find_file_sync_spaces_by_ids({knowledge_id})
+            if not spaces:
+                raise SpaceNotFoundError()
+            access = await cls._load_file_sync_target_access(
+                login_user=login_user,
+                file_repository=file_repository,
+            )
+            parent_path = ""
+            if parent_id is not None:
+                parent_records = await file_repository.find_file_sync_folders_by_ids({parent_id})
+                parent = parent_records[0] if parent_records else None
+                if (
+                    parent is None
+                    or int(parent.knowledge_id) != knowledge_id
+                    or (
+                        access.visible_folder_ids is not None
+                        and parent_id not in access.visible_folder_ids
+                    )
+                ):
+                    raise SpaceFolderNotFoundError()
+                parent_path = f"{parent.file_level_path or ''}/{parent_id}"
+
+            rows = await file_repository.list_file_sync_direct_children(
+                knowledge_id=knowledge_id,
+                parent_path=parent_path,
+                visible_folder_ids=access.visible_folder_ids,
+                after=after,
+                limit=page_size + 1,
+            )
+            page_rows = list(rows[:page_size])
+            child_paths = {
+                f"{folder.file_level_path or ''}/{int(folder.id)}"
+                for folder in page_rows
+                if folder.id is not None
+            }
+            paths_with_children = await file_repository.find_file_sync_parent_paths_with_children(
+                knowledge_id=knowledge_id,
+                parent_paths=child_paths,
+                visible_folder_ids=access.visible_folder_ids,
+            )
+
+        items = [
+            FileSyncTargetFolderItem(
+                id=int(folder.id),
+                name=str(folder.file_name or ""),
+                selectable=(
+                    access.selectable_folder_ids is None
+                    or int(folder.id) in access.selectable_folder_ids
+                ),
+                has_children=f"{folder.file_level_path or ''}/{int(folder.id)}" in paths_with_children,
+            )
+            for folder in page_rows
+        ]
+        has_more = len(rows) > page_size
+        next_cursor = None
+        if has_more and page_rows:
+            last = page_rows[-1]
+            next_cursor = encode_cursor(
+                [str(last.file_name or ""), int(last.id)],
+                context=context,
+            )
+        return FileSyncTargetFolderPage(
+            items=items,
+            has_more=has_more,
+            next_cursor=next_cursor,
+        )
+
+    @classmethod
+    async def validate_file_sync_target(
+        cls,
+        *,
+        login_user: UserPayload,
+        knowledge_id: int,
+        folder_id: int | None,
+    ) -> Knowledge:
+        async with get_async_db_session() as session:
+            knowledge_repository = KnowledgeRepositoryImpl(session)
+            file_repository = KnowledgeFileRepositoryImpl(session)
+            spaces = await knowledge_repository.find_file_sync_spaces_by_ids({knowledge_id})
+            if not spaces:
+                raise SpaceNotFoundError()
+            space = spaces[0][0]
+            object_type = "knowledge_space"
+            object_id = knowledge_id
+            if folder_id is not None:
+                folders = await file_repository.find_file_sync_folders_by_ids({folder_id})
+                folder = folders[0] if folders else None
+                if folder is None or int(folder.knowledge_id) != knowledge_id:
+                    raise SpaceFolderNotFoundError()
+                object_type = "folder"
+                object_id = folder_id
+        allowed = await PermissionService.check(
+            int(login_user.user_id),
+            "upload_file",
+            object_type,
+            str(object_id),
+            login_user=login_user,
+        )
+        if not allowed:
+            raise SpacePermissionDeniedError()
+        return space
+
+    @classmethod
+    async def resolve_file_sync_target_displays(
+        cls,
+        targets: dict[int, tuple[int, int | None]],
+    ) -> dict[int, FileSyncTargetDisplayData]:
+        if not targets:
+            return {}
+        space_ids = {knowledge_id for knowledge_id, _folder_id in targets.values()}
+        target_folder_ids = {
+            folder_id
+            for _knowledge_id, folder_id in targets.values()
+            if folder_id is not None
+        }
+        async with get_async_db_session() as session:
+            knowledge_repository = KnowledgeRepositoryImpl(session)
+            file_repository = KnowledgeFileRepositoryImpl(session)
+            spaces = await knowledge_repository.find_file_sync_spaces_by_ids(space_ids)
+            target_folders = await file_repository.find_file_sync_folders_by_ids(target_folder_ids)
+            ancestor_ids = {
+                int(part)
+                for folder in target_folders
+                for part in str(folder.file_level_path or "").split("/")
+                if part.isdigit() and int(part) > 0
+            }
+            ancestors = await file_repository.find_file_sync_folders_by_ids(ancestor_ids)
+
+        space_map = {int(space.id): space for space, _level in spaces if space.id is not None}
+        folder_map = {
+            int(folder.id): folder
+            for folder in [*target_folders, *ancestors]
+            if folder.id is not None
+        }
+        displays: dict[int, FileSyncTargetDisplayData] = {}
+        for token_id, (knowledge_id, folder_id) in targets.items():
+            space = space_map.get(knowledge_id)
+            if folder_id is None:
+                displays[token_id] = FileSyncTargetDisplayData(
+                    knowledge_id=knowledge_id,
+                    knowledge_name=str(space.name or "") if space else None,
+                    folder_id=None,
+                    folder_path=[],
+                    stale=space is None,
+                )
+                continue
+            folder = folder_map.get(folder_id)
+            path_ids = [
+                int(part)
+                for part in str(getattr(folder, "file_level_path", "") or "").split("/")
+                if part.isdigit() and int(part) > 0
+            ]
+            path_ids.append(folder_id)
+            path_records = [folder_map.get(path_id) for path_id in path_ids]
+            stale = (
+                space is None
+                or folder is None
+                or int(getattr(folder, "knowledge_id", 0) or 0) != knowledge_id
+                or any(
+                    record is None
+                    or int(getattr(record, "knowledge_id", 0) or 0) != knowledge_id
+                    for record in path_records
+                )
+            )
+            displays[token_id] = FileSyncTargetDisplayData(
+                knowledge_id=knowledge_id,
+                knowledge_name=str(space.name or "") if space else None,
+                folder_id=folder_id,
+                folder_path=[
+                    (int(record.id), str(record.file_name or ""))
+                    for record in path_records
+                    if record is not None and record.id is not None
+                ],
+                stale=stale,
+            )
+        return displays
 
     def _ensure_space_async_task_tenant_consistency(self, space: Knowledge, operation: str) -> None:
         current_tid = get_current_tenant_id()
@@ -8550,6 +8961,40 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 space_id,
             )
 
+    async def _notify_folder_deleted(self, *, folder_name: str, space_id: int) -> None:
+        """Best-effort inbox notify to department admins after a folder delete."""
+        if not self.message_service:
+            return
+        try:
+            from bisheng.approval.domain.services.approver_resolver import (
+                resolve_folder_delete_notify_recipients,
+            )
+
+            receiver_user_ids = await resolve_folder_delete_notify_recipients(self.login_user.user_id)
+            if not receiver_user_ids:
+                return
+            await self.message_service.send_generic_notify(
+                sender=self.login_user.user_id,
+                receiver_user_ids=receiver_user_ids,
+                content_item_list=build_notify_content(
+                    action_code=FOLDER_DELETED_MESSAGE,
+                    target_name=folder_name,
+                    business_type="knowledge_space_id",
+                    business_id=space_id,
+                    actor_user_id=self.login_user.user_id,
+                    actor_user_name=getattr(self.login_user, "user_name", None),
+                    navigable=False,
+                ),
+                action_code=FOLDER_DELETED_MESSAGE,
+            )
+        except Exception:
+            # Notification must not fail the folder delete itself.
+            _logger.exception(
+                "failed to send folder-deleted notification: space_id=%s folder_name=%s",
+                space_id,
+                folder_name,
+            )
+
     async def _notify_favorite_source_changed(
         self,
         *,
@@ -9905,6 +10350,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if not space:
             raise SpaceNotFoundError()
         self._ensure_space_async_task_tenant_consistency(space, "delete_folder")
+        folder_name = str(getattr(folder, "file_name", None) or folder_id)
 
         prefix = f"{folder.file_level_path}/{folder.id}"
         children = await SpaceFileDao.get_children_by_prefix(folder.knowledge_id, prefix)
@@ -9977,6 +10423,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         await KnowledgeDao.async_update_knowledge_update_time_by_id(folder.knowledge_id)
         self._enqueue_recommendation_deleted_files(expanded_file_ids)
+        await self._notify_folder_deleted(folder_name=folder_name, space_id=space_id)
 
     async def get_folder_file_parent(self, space_id: int, file_id: int) -> list[dict]:
         file_record = await self._require_file_or_folder_relation(space_id, file_id, "can_read")

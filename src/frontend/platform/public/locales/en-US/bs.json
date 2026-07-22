@@ -180,6 +180,63 @@
           "PREFIX": "Path prefix"
         }
       },
+      "fileSync": {
+        "title": "Unified file-sync business",
+        "enabled": "Enable file-sync business configuration",
+        "disabledHelp": "When disabled, this token receives 403/19906 from the unified file-sync endpoint. Other authorized endpoints are unaffected.",
+        "optionsLoading": "Loading categories, business domains, and knowledge spaces for this tenant…",
+        "optionsError": "Configuration options failed to load. Retry before saving.",
+        "selectBindingFirst": "Select the token's bound user first to determine the configuration tenant.",
+        "optionsRequiredError": "File-sync configuration options are not loaded. Retry before saving.",
+        "invalidError": "The file-sync field “{{field}}” is invalid or stale. Check it and try again.",
+        "category": "Parent category",
+        "subcategory": "Subcategory",
+        "businessDomain": "Business domain",
+        "targetSpace": "Target knowledge space",
+        "dynamicSource": "Dynamic business source",
+        "select": "Select",
+        "stale": "The saved value is stale. Its original value is retained until you select a replacement.",
+        "spaceSearchPlaceholder": "Search knowledge-space names",
+        "searchSpace": "Search spaces",
+        "targetTree": {
+          "groups": {
+            "public": "Public spaces",
+            "department": "Department spaces"
+          },
+          "root": "Space root",
+          "navigationOnly": "Navigation only; cannot be selected",
+          "loading": "Loading target spaces…",
+          "error": "Failed to load target spaces. Please retry.",
+          "empty": "No public or department spaces found.",
+          "noPermission": "The bound user cannot upload to any listed root or folder.",
+          "stale": "The current target is unavailable. Select another target.",
+          "loadingChildren": "Loading folders…",
+          "childrenError": "Failed to load folders. Expand again to retry.",
+          "loadMore": "Load more folders"
+        },
+        "modes": {
+          "fixed": "Fixed configuration",
+          "dynamic": "Resolve at runtime"
+        },
+        "sources": {
+          "departmentId": "Use department_id",
+          "responsiblePersonId": "Use the primary department of responsible_person_id"
+        },
+        "errorFields": {
+          "category": "parent category",
+          "subcategory": "subcategory",
+          "businessDomain": "business domain",
+          "targetSpace": "target knowledge space",
+          "dynamicSource": "dynamic business source"
+        },
+        "summary": {
+          "notConfigured": "Not configured",
+          "businessDomain": "Domain",
+          "targetSpace": "Target",
+          "dynamicDepartment": "Dynamic(department_id)",
+          "dynamicResponsiblePerson": "Dynamic(responsible person's primary department)"
+        }
+      },
       "saveConfig": "Save config",
       "search": "Search",
       "create": "Create token",
@@ -212,6 +269,7 @@
         "status": "Status",
         "controls": "Access controls",
         "routes": "Route scope",
+        "fileSync": "File-sync business",
         "lastUsed": "Last used",
         "actions": "Actions"
       },

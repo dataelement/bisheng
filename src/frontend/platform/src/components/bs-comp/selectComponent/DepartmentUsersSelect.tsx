@@ -15,6 +15,8 @@ export type DepartmentUserOption = {
   value: number
   department_id?: number
   dept_id?: string
+  /** Derived from tenant mounts for option loading only; the backend still authorizes independently. */
+  tenant_id?: number
   /** Login credential (external_id). Falls back to value (user_id) when absent. */
   external_id?: string | null
   /** 选人时由组织树节点解析，供编辑页即时展示部门路径 */
@@ -77,6 +79,20 @@ function findSubtreeRoot(
     if (found) return found
   }
   return null
+}
+
+function findMountedTenantId(
+  nodes: DepartmentTreeNode[],
+  departmentId: number,
+  inheritedTenantId?: number
+): number | undefined {
+  for (const node of nodes) {
+    const tenantId = node.mounted_tenant_id ?? inheritedTenantId
+    if (node.id === departmentId) return tenantId ?? undefined
+    const childTenantId = findMountedTenantId(node.children || [], departmentId, tenantId ?? undefined)
+    if (childTenantId != null) return childTenantId
+  }
+  return undefined
 }
 
 export default function DepartmentUsersSelect({
@@ -157,6 +173,7 @@ export default function DepartmentUsersSelect({
         label: u.user_name,
         department_id: did,
         dept_id: node.dept_id,
+        tenant_id: findMountedTenantId(tree, did),
         external_id: u.person_id ?? null,
       }))
       setDeptUsersMap((prev) => ({ ...prev, [did]: users }))
@@ -167,7 +184,7 @@ export default function DepartmentUsersSelect({
         return next
       })
     }
-  }, [deptUsersMap, loadingDeptIds])
+  }, [deptUsersMap, loadingDeptIds, tree])
 
   useEffect(() => {
     if (!open) return
@@ -294,6 +311,7 @@ export default function DepartmentUsersSelect({
         label: u.user_name,
         department_id: did,
         dept_id: deptNodeByTreeId.get(did)?.dept_id,
+        tenant_id: findMountedTenantId(tree, did),
         external_id: u.external_id ?? null,
       }
       const arr = map.get(did) || []
@@ -301,7 +319,7 @@ export default function DepartmentUsersSelect({
       map.set(did, arr)
     }
     return map
-  }, [deptBusinessKeyToId, deptNodeByTreeId, keywordTrim, searchedUsers])
+  }, [deptBusinessKeyToId, deptNodeByTreeId, keywordTrim, searchedUsers, tree])
 
   /** 有搜索词时：只按「用户名」命中（getUsersApi 的 name + 返回行的 department_id / dept_id 挂树），不按部门名过滤 */
   const nodeMatches = useCallback((n: DepartmentTreeNode): boolean => {

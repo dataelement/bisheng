@@ -17,6 +17,9 @@ import {
     hasKnowledgeSpacePermission,
     useKnowledgeSpaceActionPermissions,
 } from "../hooks/useKnowledgeSpacePermissions";
+import { sortKnowledgeSpacesForSection } from "./spaceSort";
+
+export { applyPinOrderToSpaceList, sortKnowledgeSpacesForSection } from "./spaceSort";
 
 interface KnowledgeSpaceSidebarProps {
     activeSpaceId?: string;
@@ -62,23 +65,6 @@ const DEFAULT_SECTION_SORTS: Record<SpaceLevel, SpaceSortType> = {
 
 function getSortLabel(sort: SpaceSortType, localize: any) {
     return sort === SpaceSortType.NAME ? localize("com_knowledge.name") : localize("com_knowledge.recently_updated");
-}
-
-export function sortKnowledgeSpacesForSection(
-    spaces: KnowledgeSpace[],
-    sortBy: SpaceSortType,
-): KnowledgeSpace[] {
-    return [...spaces].sort((a, b) => {
-        if (a.isPinned !== b.isPinned) {
-            return a.isPinned ? -1 : 1;
-        }
-        if (sortBy === SpaceSortType.NAME) {
-            return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" });
-        }
-        const timeA = Date.parse(a.updatedAt || "") || 0;
-        const timeB = Date.parse(b.updatedAt || "") || 0;
-        return timeB - timeA;
-    });
 }
 
 export function getNextSectionSorts(

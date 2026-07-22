@@ -13,6 +13,84 @@ export interface DeveloperTokenRouteRule {
   path: string
 }
 
+export type DeveloperTokenFileSyncMode = "fixed" | "dynamic"
+
+export type DeveloperTokenFileSyncDynamicSource =
+  | "department_id"
+  | "responsible_person_id"
+
+export interface DeveloperTokenFileSyncRule {
+  category: {
+    code: string
+    subcategory_code: string
+  }
+  business_domain: {
+    mode: DeveloperTokenFileSyncMode
+    code: string | null
+  }
+  target_space: {
+    mode: DeveloperTokenFileSyncMode
+    knowledge_id: number | null
+    folder_id: number | null
+  }
+  dynamic_source: DeveloperTokenFileSyncDynamicSource | null
+}
+
+export interface DeveloperTokenFileSyncCategoryOption {
+  code: string
+  label: string
+  children: Array<{ code: string; label: string }>
+}
+
+export interface DeveloperTokenFileSyncBusinessDomainOption {
+  code: string
+  name: string
+}
+
+export interface DeveloperTokenFileSyncTargetSpaceOption {
+  id: number
+  name: string
+  selectable: boolean
+  has_children: boolean
+}
+
+export interface DeveloperTokenFileSyncTargetSpaceGroup {
+  space_type: "public" | "department"
+  spaces: DeveloperTokenFileSyncTargetSpaceOption[]
+}
+
+export interface DeveloperTokenFileSyncCursorPage<T> {
+  data: T[]
+  has_more: boolean
+  next_cursor: string | null
+  page_size: number
+}
+
+export interface DeveloperTokenFileSyncTargetFolderOption {
+  id: number
+  name: string
+  selectable: boolean
+  navigation_only: boolean
+  has_children: boolean
+}
+
+export interface DeveloperTokenFileSyncTargetDisplay {
+  knowledge_id: number
+  knowledge_name?: string | null
+  target_type: "root" | "folder"
+  folder_id?: number | null
+  folder_path: Array<{ id: number; name: string }>
+  stale: boolean
+}
+
+export interface DeveloperTokenFileSyncOptions {
+  tenant_id: number
+  user_id: number
+  categories: DeveloperTokenFileSyncCategoryOption[]
+  business_domains: DeveloperTokenFileSyncBusinessDomainOption[]
+  target_space_groups: DeveloperTokenFileSyncCursorPage<DeveloperTokenFileSyncTargetSpaceGroup>
+}
+
 export interface DeveloperTokenRecord {
   id: number
   tenant_id: number
@@ -26,6 +104,8 @@ export interface DeveloperTokenRecord {
   override_rate_limit: boolean
   rate_limit_per_minute?: number | null
   route_rule_count: number
+  file_sync_rule?: DeveloperTokenFileSyncRule | null
+  file_sync_target_display?: DeveloperTokenFileSyncTargetDisplay | null
   last_used_time?: string | null
   last_used_ip?: string | null
   created_by?: number | null
@@ -55,6 +135,7 @@ export interface DeveloperTokenPayload {
   override_rate_limit: boolean
   rate_limit_per_minute?: number | null
   route_whitelist?: DeveloperTokenRouteRule[] | null
+  file_sync_rule?: DeveloperTokenFileSyncRule | null
 }
 
 export interface DeveloperTokenCreateResponse {
@@ -118,4 +199,38 @@ export async function updateDeveloperTokenGlobalConfigApi(
   data: DeveloperTokenGlobalConfig
 ): Promise<DeveloperTokenGlobalConfig> {
   return await axios.put("/api/v1/admin/developer-tokens/config/global", data)
+}
+
+export async function getDeveloperTokenFileSyncOptionsApi(params: {
+  tenant_id: number
+  user_id: number
+  space_cursor?: string
+  space_page_size?: number
+  space_keyword?: string
+  signal?: AbortSignal
+}): Promise<DeveloperTokenFileSyncOptions> {
+  const { signal, ...query } = params
+  return await axios.get("/api/v1/admin/developer-tokens/config/file-sync-options", {
+    params: { space_page_size: 50, ...query },
+    ...(signal ? { signal } : {}),
+  })
+}
+
+export async function getDeveloperTokenFileSyncTargetChildrenApi(params: {
+  tenant_id: number
+  user_id: number
+  knowledge_id: number
+  parent_id?: number
+  cursor?: string
+  page_size?: number
+  signal?: AbortSignal
+}): Promise<DeveloperTokenFileSyncCursorPage<DeveloperTokenFileSyncTargetFolderOption>> {
+  const { signal, ...query } = params
+  return await axios.get(
+    "/api/v1/admin/developer-tokens/config/file-sync-target-children",
+    {
+      params: { page_size: 50, ...query },
+      ...(signal ? { signal } : {}),
+    }
+  )
 }

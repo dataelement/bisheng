@@ -420,6 +420,7 @@
   "com_notifications_action_knowledge_space_made_private": "Changed knowledge space「{{target}}」to private. You can no longer access it",
   "com_notifications_action_channel_dismissed": "Dismissed channel「{{target}}」",
   "com_notifications_action_knowledge_space_deleted": "Deleted knowledge space「{{target}}」",
+  "com_notifications_action_knowledge_folder_deleted": "Deleted the folder named「{{target}}」",
   "com_notifications_action_favorite_source_renamed": "renamed your favorited file「{{target}}」",
   "com_notifications_action_favorite_source_moved": "moved your favorited file「{{target}}」",
   "com_notifications_action_favorite_source_tags_updated": "updated the tags of your favorited file「{{target}}」",
