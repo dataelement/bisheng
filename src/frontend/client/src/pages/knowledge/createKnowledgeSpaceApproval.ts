@@ -42,6 +42,7 @@ export function mapCreateFormToShougangApprovalPayload(
         auto_tag_enabled: form.autoTagEnabled,
         ...buildAutoTagLibraryPayload(form.autoTagLibraryIds),
         reason: form.reason,
+        is_clinic: form.isClinic,
     };
 }
 

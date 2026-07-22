@@ -78,6 +78,7 @@ async def create_space(
         space_level=req.space_level,
         department_id=req.department_id,
         user_group_id=req.user_group_id,
+        is_clinic=req.is_clinic,
         auto_tag_enabled=req.auto_tag_enabled,
         auto_tag_library_id=req.auto_tag_library_id,
         auto_tag_library_ids=req.auto_tag_library_ids,

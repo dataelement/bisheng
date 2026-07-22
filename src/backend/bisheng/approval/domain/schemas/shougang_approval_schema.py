@@ -21,6 +21,14 @@ class ShougangKnowledgeSpaceCreateBase(BaseModel):
     space_level: KnowledgeSpaceLevelEnum = KnowledgeSpaceLevelEnum.PERSONAL
     department_id: int | None = None
     user_group_id: int | None = None
+    is_clinic: bool = Field(
+        default=False,
+        description=(
+            "When true, a department-bound space is created as a team-level space "
+            "(displayed under team/clinic spaces) and a department_knowledge_space "
+            "binding is written. Only used when creating from the clinic context."
+        ),
+    )
     auto_tag_enabled: bool = False
     auto_tag_library_id: int | None = None
     auto_tag_library_ids: list[int] | None = None

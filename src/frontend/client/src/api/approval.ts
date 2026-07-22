@@ -247,6 +247,7 @@ export interface ShougangKnowledgeSpaceCreateApprovalPayload {
   auto_tag_library_id?: number | null;
   auto_tag_library_ids?: number[];
   reason?: string;
+  is_clinic?: boolean;
 }
 
 export interface ShougangApprovalSubmitResult {

@@ -832,8 +832,24 @@ class KnowledgeSpaceService(KnowledgeUtils):
         department_id: int | None,
         user_group_id: int | None,
         approval_request: bool = False,
+        is_clinic: bool = False,
     ) -> tuple[KnowledgeSpaceLevelEnum, KnowledgeSpaceOwnerTypeEnum, int]:
         level = self._normalize_space_level(space_level)
+
+        # Clinic spaces are created from the team-space entry but bound to a
+        # department. They are stored as TEAM-level spaces (so they appear under
+        # "团队/科室知识库") with an additional department_knowledge_space row.
+        if is_clinic:
+            if user_group_id is not None:
+                raise SpaceInvalidScopeOwnerError()
+            if department_id is None:
+                raise SpaceInvalidScopeOwnerError()
+            dept = await DepartmentDao.aget_by_id(int(department_id))
+            if dept is None or getattr(dept, "status", "active") != "active":
+                raise SpaceInvalidScopeOwnerError(msg="Department does not exist or is archived")
+            if not await self._can_bind_department_on_create(int(department_id)):
+                raise SpaceCreateDepartmentDeniedError()
+            return KnowledgeSpaceLevelEnum.TEAM, KnowledgeSpaceOwnerTypeEnum.USER, int(self.login_user.user_id)
 
         if level == KnowledgeSpaceLevelEnum.PUBLIC:
             if department_id is not None or user_group_id is not None:
@@ -2529,6 +2545,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         auto_tag_custom_tags: list[str] | None = None,
         skip_user_limit: bool = False,
         approval_request: bool = False,
+        is_clinic: bool = False,
     ) -> tuple[KnowledgeSpaceLevelEnum, KnowledgeSpaceOwnerTypeEnum, int]:
         name = self._normalize_space_name(name)
         workbench_llm = await LLMService.get_workbench_llm()
@@ -2540,6 +2557,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             department_id=department_id,
             user_group_id=user_group_id,
             approval_request=approval_request,
+            is_clinic=is_clinic,
         )
         await self._ensure_space_name_unique_in_scope(
             name=name,
@@ -2579,6 +2597,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         space_level: KnowledgeSpaceLevelEnum | str | None = KnowledgeSpaceLevelEnum.PERSONAL,
         department_id: int | None = None,
         user_group_id: int | None = None,
+        is_clinic: bool = False,
         auto_tag_enabled: bool = False,
         auto_tag_library_id: int | None = None,
         auto_tag_library_ids: list[int] | None = None,
@@ -2622,6 +2641,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             space_level=space_level,
             department_id=department_id,
             user_group_id=user_group_id,
+            is_clinic=is_clinic,
         )
         await self._ensure_space_name_unique_in_scope(
             name=name,
@@ -2722,6 +2742,26 @@ class KnowledgeSpaceService(KnowledgeUtils):
         )
         self._created_space_scope_by_id[int(knowledge_space.id)] = (level, owner_type, owner_id)
         log_perf_stage("scope_create")
+
+        # Clinic spaces are team-level spaces bound to a department; write the
+        # binding row so they appear under "团队/科室知识库" and department-scoped
+        # queries can find them.
+        if is_clinic and department_id is not None and level == KnowledgeSpaceLevelEnum.TEAM:
+            try:
+                await DepartmentKnowledgeSpaceDao.acreate(
+                    tenant_id=int(self.login_user.tenant_id),
+                    department_id=int(department_id),
+                    space_id=int(knowledge_space.id),
+                    created_by=int(self.login_user.user_id),
+                )
+                log_perf_stage("department_binding")
+            except Exception as e:
+                _logger.warning(
+                    "Failed to write department_knowledge_space binding for clinic space %s: %s",
+                    knowledge_space.id,
+                    e,
+                )
+
         self._enqueue_default_scope_permissions(
             level=level,
             owner_id=owner_id,

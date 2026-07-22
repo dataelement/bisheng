@@ -166,8 +166,10 @@ async def test_regular_user_public_level_space_create_is_rejected_without_approv
         space_level=KnowledgeSpaceLevelEnum.PUBLIC.value,
         department_id=None,
         user_group_id=None,
+        is_clinic=False,
         auto_tag_enabled=False,
         auto_tag_library_id=None,
+        auto_tag_library_ids=None,
         auto_tag_custom_tags=None,
         approval_request=False,
     )
@@ -440,8 +442,10 @@ async def test_regular_user_department_space_create_is_rejected_without_approval
         space_level=KnowledgeSpaceLevelEnum.DEPARTMENT.value,
         department_id=9,
         user_group_id=None,
+        is_clinic=False,
         auto_tag_enabled=False,
         auto_tag_library_id=None,
+        auto_tag_library_ids=None,
         auto_tag_custom_tags=None,
         approval_request=False,
     )
