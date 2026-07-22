@@ -42,7 +42,7 @@ const buttonStyles = cva(
   // combo colors and legacy className overrides, hence the `!` importants.
   // `relative` anchors the .btn-touch-hit ::after hot zone (style.css).
   // Weight 400 across all sizes/types (§3.1) — heavier weights are not a knob.
-  'relative inline-flex items-center justify-center whitespace-nowrap font-normal transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:!border-btn-disabled-border disabled:!bg-black/[0.04] disabled:!text-black/25 [&_svg]:shrink-0',
+  'relative inline-flex items-center justify-center whitespace-nowrap font-normal transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:!border-btn-disabled-border disabled:!bg-btn-disabled-bg disabled:!text-btn-disabled-text [&_svg]:shrink-0',
   {
     variants: {
       // Color axis only carries what is combo-independent (focus ring, §5.2).
@@ -53,7 +53,10 @@ const buttonStyles = cva(
       },
       variant: {
         solid: '',
-        outlined: 'border bg-white',
+        // bg-bg-page (not bg-white) so the opaque fill follows the theme:
+        // white in light, #121212 in dark — else outlined = a white chip on
+        // the dark page and its neutral text drops to unreadable.
+        outlined: 'border bg-bg-page',
         filled: '',
         text: '',
         link: 'underline-offset-4',
@@ -102,17 +105,22 @@ const buttonStyles = cva(
         variant: 'outlined',
         // Outlined hover is a faint tint of the button's own palette, border/
         // text unchanged (§5.2) — same shape as default outlined's gray tint.
-        class: 'border-blue-500 text-blue-500 hover:bg-blue-50 coarse-pointer:active:bg-blue-100',
+        // Dark: the solid blue-50 tint would be a light chip on #121212, so
+        // switch to a brand-alpha tint (same technique as danger filled).
+        class:
+          'border-blue-500 text-blue-500 hover:bg-blue-50 coarse-pointer:active:bg-blue-100 dark:hover:bg-blue-500/15 dark:coarse-pointer:active:bg-blue-500/25',
       },
       {
         color: 'primary',
         variant: 'filled',
-        class: 'bg-blue-50 text-blue-600 hover:bg-blue-100 coarse-pointer:active:bg-blue-200',
+        class:
+          'bg-blue-50 text-blue-600 hover:bg-blue-100 coarse-pointer:active:bg-blue-200 dark:bg-blue-500/15 dark:text-blue-400 dark:hover:bg-blue-500/25 dark:coarse-pointer:active:bg-blue-500/[0.35]',
       },
       {
         color: 'primary',
         variant: 'text',
-        class: 'text-blue-500 hover:bg-blue-50 coarse-pointer:active:bg-blue-100',
+        class:
+          'text-blue-500 hover:bg-blue-50 coarse-pointer:active:bg-blue-100 dark:hover:bg-blue-500/15 dark:coarse-pointer:active:bg-blue-500/25',
       },
       {
         color: 'primary',
@@ -123,8 +131,10 @@ const buttonStyles = cva(
       {
         color: 'default',
         variant: 'solid',
+        // Fill uses its own token (not gray-text) so dark flips the text role
+        // light while the solid fill stays a mid-gray that keeps white legible.
         class:
-          'bg-btn-gray-text text-white hover:bg-btn-gray-text/90 coarse-pointer:active:bg-btn-gray-text/80',
+          'bg-btn-gray-solid-bg text-white hover:bg-btn-gray-solid-bg/90 coarse-pointer:active:bg-btn-gray-solid-bg/80',
       },
       {
         color: 'default',

@@ -171,6 +171,7 @@ module.exports = {
         // RGB-channel vars defined in src/style.css :root; channel form keeps
         // `/<alpha>` modifiers working. Neutral fill ramp is shared Arco grays.
         'btn-gray-text': 'rgb(var(--btn-gray-text) / <alpha-value>)',
+        'btn-gray-solid-bg': 'rgb(var(--btn-gray-solid-bg) / <alpha-value>)',
         'btn-gray-border': 'rgb(var(--btn-gray-border) / <alpha-value>)',
         'btn-fill-1': 'rgb(var(--btn-fill-1) / <alpha-value>)',
         'btn-fill-2': 'rgb(var(--btn-fill-2) / <alpha-value>)',
@@ -179,6 +180,8 @@ module.exports = {
         'btn-danger': 'rgb(var(--btn-danger) / <alpha-value>)',
         'btn-danger-hover': 'rgb(var(--btn-danger-hover) / <alpha-value>)',
         'btn-danger-active': 'rgb(var(--btn-danger-active) / <alpha-value>)',
+        'btn-disabled-bg': 'rgb(var(--btn-disabled-bg) / <alpha-value>)',
+        'btn-disabled-text': 'rgb(var(--btn-disabled-text) / <alpha-value>)',
         'btn-disabled-border': 'rgb(var(--btn-disabled-border) / <alpha-value>)',
         // Arco color tokens (docs-ui-refactor/基础-色彩规范.md §2/§3/§7) — semantic
         // layer only; the --arco-gray-* primitives are intentionally NOT wired so
@@ -198,6 +201,8 @@ module.exports = {
         'fill-4': 'rgb(var(--fill-4) / <alpha-value>)',
         'border-base': 'rgb(var(--border-base) / <alpha-value>)',
         'border-deep': 'rgb(var(--border-deep) / <alpha-value>)',
+        // Page surface (bg-bg-page): white in light, #121212 in dark.
+        'bg-page': 'rgb(var(--bg-page) / <alpha-value>)',
         success: {
           DEFAULT: 'rgb(var(--success) / <alpha-value>)',
           hover: 'rgb(var(--success-hover) / <alpha-value>)',
