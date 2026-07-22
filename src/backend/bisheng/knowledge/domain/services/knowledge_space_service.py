@@ -304,6 +304,7 @@ SPACE_ADMIN_REVOKED_MESSAGE = "revoked_knowledge_space_admin"
 SPACE_MEMBER_REMOVED_MESSAGE = "removed_knowledge_space_member"
 SPACE_MADE_PRIVATE_MESSAGE = "knowledge_space_made_private"
 SPACE_DELETED_MESSAGE = "knowledge_space_deleted"
+FOLDER_DELETED_MESSAGE = "knowledge_folder_deleted"
 _SPACE_MEMBER_ROLE_TO_RELATION = {
     UserRoleEnum.CREATOR: "owner",
     UserRoleEnum.ADMIN: "manager",
@@ -8373,6 +8374,40 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 space_id,
             )
 
+    async def _notify_folder_deleted(self, *, folder_name: str, space_id: int) -> None:
+        """Best-effort inbox notify to department admins after a folder delete."""
+        if not self.message_service:
+            return
+        try:
+            from bisheng.approval.domain.services.approver_resolver import (
+                resolve_folder_delete_notify_recipients,
+            )
+
+            receiver_user_ids = await resolve_folder_delete_notify_recipients(self.login_user.user_id)
+            if not receiver_user_ids:
+                return
+            await self.message_service.send_generic_notify(
+                sender=self.login_user.user_id,
+                receiver_user_ids=receiver_user_ids,
+                content_item_list=build_notify_content(
+                    action_code=FOLDER_DELETED_MESSAGE,
+                    target_name=folder_name,
+                    business_type="knowledge_space_id",
+                    business_id=space_id,
+                    actor_user_id=self.login_user.user_id,
+                    actor_user_name=getattr(self.login_user, "user_name", None),
+                    navigable=False,
+                ),
+                action_code=FOLDER_DELETED_MESSAGE,
+            )
+        except Exception:
+            # Notification must not fail the folder delete itself.
+            _logger.exception(
+                "failed to send folder-deleted notification: space_id=%s folder_name=%s",
+                space_id,
+                folder_name,
+            )
+
     async def _notify_favorite_source_changed(
         self,
         *,
@@ -9728,6 +9763,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if not space:
             raise SpaceNotFoundError()
         self._ensure_space_async_task_tenant_consistency(space, "delete_folder")
+        folder_name = str(getattr(folder, "file_name", None) or folder_id)
 
         prefix = f"{folder.file_level_path}/{folder.id}"
         children = await SpaceFileDao.get_children_by_prefix(folder.knowledge_id, prefix)
@@ -9799,6 +9835,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         await KnowledgeDao.async_update_knowledge_update_time_by_id(folder.knowledge_id)
         self._enqueue_recommendation_deleted_files(expanded_file_ids)
+        await self._notify_folder_deleted(folder_name=folder_name, space_id=space_id)
 
     async def get_folder_file_parent(self, space_id: int, file_id: int) -> list[dict]:
         file_record = await self._require_file_or_folder_relation(space_id, file_id, "can_read")

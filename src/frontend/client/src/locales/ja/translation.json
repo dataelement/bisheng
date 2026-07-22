@@ -405,6 +405,7 @@
   "com_notifications_action_knowledge_space_made_private": "ナレッジスペース「{{target}}」を非公開に変更しました。アクセスできなくなりました",
   "com_notifications_action_channel_dismissed": "チャンネル「{{target}}」を解散しました",
   "com_notifications_action_knowledge_space_deleted": "ナレッジスペース「{{target}}」を削除しました",
+  "com_notifications_action_knowledge_folder_deleted": "「{{target}}」という名前のフォルダを削除しました",
   "com_notifications_delete": "削除",
   "com_notifications_empty": "メッセージはありません",
   "com_notifications_empty_requests": "リクエストはありません",

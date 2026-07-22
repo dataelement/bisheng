@@ -45,66 +45,73 @@ async def resolve_approvers_from_sources(sources: list[dict], req: Any) -> list[
             result.append(uid)
 
     for source in sources:
-        source_type = source.get('type', '')
+        source_type = source.get("type", "")
 
-        if source_type == 'direct_user':
-            for uid in (source.get('user_ids') or []):
+        if source_type == "direct_user":
+            for uid in source.get("user_ids") or []:
                 try:
                     _add(int(uid))
                 except (TypeError, ValueError):
-                    logger.warning('approver_resolver: invalid user_id %r in direct_user source', uid)
+                    logger.warning("approver_resolver: invalid user_id %r in direct_user source", uid)
 
-        elif source_type == 'department_admin':
-            dept_id = getattr(req, 'applicant_department_id', None)
+        elif source_type == "department_admin":
+            dept_id = getattr(req, "applicant_department_id", None)
             if dept_id:
                 try:
                     ids = await _resolve_department_admins_with_ancestor_fallback(int(dept_id))
                     for uid in ids:
                         _add(uid)
                 except Exception:
-                    logger.exception('approver_resolver: failed to resolve department_admin for dept_id=%s', dept_id)
+                    logger.exception("approver_resolver: failed to resolve department_admin for dept_id=%s", dept_id)
 
-        elif source_type == 'role_user':
+        elif source_type == "role_user":
             role_ids: list[int] = []
-            for rid in (source.get('role_ids') or []):
+            for rid in source.get("role_ids") or []:
                 try:
                     role_ids.append(int(rid))
                 except (TypeError, ValueError):
-                    logger.warning('approver_resolver: invalid role_id %r in role_user source', rid)
+                    logger.warning("approver_resolver: invalid role_id %r in role_user source", rid)
             if role_ids:
                 try:
                     from bisheng.user.domain.models.user_role import UserRoleDao
+
                     rows = await UserRoleDao.aget_roles_user(role_ids)
                     for row in rows:
                         _add(int(row.user_id))
                 except Exception:
-                    logger.exception('approver_resolver: failed to resolve role_user for role_ids=%s', role_ids)
+                    logger.exception("approver_resolver: failed to resolve role_user for role_ids=%s", role_ids)
 
-        elif source_type == 'tenant_admin':
+        elif source_type == "tenant_admin":
             # Resolve tenant admins via system AdminRole users.
             # Full FGA-based resolution would require a list_users call; using
             # AdminRole (role_id=1) as a pragmatic approximation.
             try:
                 from bisheng.database.constants import AdminRole
                 from bisheng.user.domain.models.user_role import UserRoleDao
+
                 rows = await UserRoleDao.aget_roles_user([AdminRole])
                 for row in rows:
                     _add(int(row.user_id))
             except Exception:
-                logger.exception('approver_resolver: failed to resolve tenant_admin')
+                logger.exception("approver_resolver: failed to resolve tenant_admin")
 
         elif source_type in (
-            'knowledge_space_owner', 'knowledge_space_manager', 'space_admin',
-            'target_knowledge_space_owner', 'target_knowledge_space_manager',
-            'target_knowledge_space_owner_department_admin',
-            'target_knowledge_space_manager_department_admin',
-            'channel_admin', 'channel_owner', 'channel_manager',
+            "knowledge_space_owner",
+            "knowledge_space_manager",
+            "space_admin",
+            "target_knowledge_space_owner",
+            "target_knowledge_space_manager",
+            "target_knowledge_space_owner_department_admin",
+            "target_knowledge_space_manager_department_admin",
+            "channel_admin",
+            "channel_owner",
+            "channel_manager",
         ):
             # These must be resolved by the scenario handler itself.
             pass
 
         else:
-            logger.warning('approver_resolver: unknown source type %r, skipping', source_type)
+            logger.warning("approver_resolver: unknown source type %r, skipping", source_type)
 
     return result
 
@@ -114,7 +121,7 @@ def _department_hierarchy_ids_from_path(path: str | None, dept_id: int) -> list[
     seen: set[int] = set()
     malformed_parts: list[str] = []
 
-    for part in (path or '').split('/'):
+    for part in (path or "").split("/"):
         if not part:
             continue
         if not part.isdigit():
@@ -127,8 +134,10 @@ def _department_hierarchy_ids_from_path(path: str | None, dept_id: int) -> list[
 
     if malformed_parts:
         logger.warning(
-            'approver_resolver: malformed department path for dept_id=%s: %r (non-numeric: %s)',
-            dept_id, path, malformed_parts,
+            "approver_resolver: malformed department path for dept_id=%s: %r (non-numeric: %s)",
+            dept_id,
+            path,
+            malformed_parts,
         )
         return [dept_id]
 
@@ -143,12 +152,92 @@ async def _resolve_department_admins_with_ancestor_fallback(dept_id: int) -> lis
     from bisheng.database.models.department_admin_grant import DepartmentAdminGrantDao
 
     dept = await DepartmentDao.aget_by_id(dept_id)
-    hierarchy_ids = _department_hierarchy_ids_from_path(getattr(dept, 'path', None), dept_id)
+    hierarchy_ids = _department_hierarchy_ids_from_path(getattr(dept, "path", None), dept_id)
 
     for candidate_dept_id in reversed(hierarchy_ids):
         ids = await DepartmentAdminGrantDao.aget_user_ids_by_department(candidate_dept_id)
         if ids:
             return [int(uid) for uid in ids]
+
+    return []
+
+
+async def resolve_folder_delete_notify_recipients(operator_user_id: int) -> list[int]:
+    """Resolve department admins to notify when *operator_user_id* deletes a folder.
+
+    Walks the operator's primary-department path from leaf to root:
+
+    - If the operator is a grant admin of the candidate department, skip the
+      entire level (including co-admins) and continue to the parent.
+    - Otherwise return that level's grant admins, excluding the operator.
+    - If no level yields recipients, return an empty list.
+    """
+    from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
+    from bisheng.database.models.department_admin_grant import DepartmentAdminGrantDao
+
+    try:
+        operator_id = int(operator_user_id)
+    except (TypeError, ValueError):
+        logger.warning(
+            "approver_resolver: invalid operator_user_id %r for folder delete notify",
+            operator_user_id,
+        )
+        return []
+
+    try:
+        membership = await UserDepartmentDao.aget_user_primary_department(operator_id)
+    except Exception:
+        logger.exception(
+            "approver_resolver: failed to load primary department for operator_user_id=%s",
+            operator_id,
+        )
+        return []
+
+    if membership is None:
+        return []
+
+    try:
+        dept_id = int(membership.department_id)
+    except (TypeError, ValueError):
+        logger.warning(
+            "approver_resolver: invalid primary department for operator_user_id=%s membership=%r",
+            operator_id,
+            membership,
+        )
+        return []
+
+    try:
+        dept = await DepartmentDao.aget_by_id(dept_id)
+    except Exception:
+        logger.exception(
+            "approver_resolver: failed to load department %s for folder delete notify",
+            dept_id,
+        )
+        return []
+
+    if dept is None:
+        return []
+
+    hierarchy_ids = _department_hierarchy_ids_from_path(getattr(dept, "path", None), dept_id)
+
+    for candidate_dept_id in reversed(hierarchy_ids):
+        try:
+            grant_ids = [
+                int(uid) for uid in await DepartmentAdminGrantDao.aget_user_ids_by_department(candidate_dept_id)
+            ]
+        except Exception:
+            logger.exception(
+                "approver_resolver: failed to load department admins for dept_id=%s",
+                candidate_dept_id,
+            )
+            continue
+
+        if not grant_ids:
+            continue
+        if operator_id in grant_ids:
+            # Operator is an admin of this level — skip the whole level.
+            continue
+        return [uid for uid in grant_ids if uid != operator_id]
 
     return []
 
@@ -163,7 +252,7 @@ async def resolve_department_admins_for_user_ids(user_ids: list[int]) -> list[in
         try:
             normalized_user_id = int(user_id)
         except (TypeError, ValueError):
-            logger.warning('approver_resolver: invalid user_id %r in department_admin source', user_id)
+            logger.warning("approver_resolver: invalid user_id %r in department_admin source", user_id)
             continue
         if normalized_user_id not in seen_users:
             seen_users.add(normalized_user_id)
@@ -175,19 +264,21 @@ async def resolve_department_admins_for_user_ids(user_ids: list[int]) -> list[in
     try:
         memberships = await UserDepartmentDao.aget_by_user_ids(ordered_user_ids)
     except Exception:
-        logger.exception('approver_resolver: failed to batch load primary departments for user_ids=%s', ordered_user_ids)
+        logger.exception(
+            "approver_resolver: failed to batch load primary departments for user_ids=%s", ordered_user_ids
+        )
         return []
 
     primary_dept_by_user: dict[int, int] = {}
     for membership in memberships:
         try:
-            if int(getattr(membership, 'is_primary', 0)) != 1:
+            if int(getattr(membership, "is_primary", 0)) != 1:
                 continue
-            user_id = int(getattr(membership, 'user_id'))
+            user_id = int(membership.user_id)
             if user_id not in primary_dept_by_user:
-                primary_dept_by_user[user_id] = int(getattr(membership, 'department_id'))
+                primary_dept_by_user[user_id] = int(membership.department_id)
         except (TypeError, ValueError):
-            logger.warning('approver_resolver: invalid user department row %r', membership)
+            logger.warning("approver_resolver: invalid user department row %r", membership)
 
     ordered_dept_ids: list[int] = []
     seen_depts: set[int] = set()
@@ -203,10 +294,10 @@ async def resolve_department_admins_for_user_ids(user_ids: list[int]) -> list[in
     try:
         departments = await DepartmentDao.aget_by_ids(ordered_dept_ids)
     except Exception:
-        logger.exception('approver_resolver: failed to batch load departments for dept_ids=%s', ordered_dept_ids)
+        logger.exception("approver_resolver: failed to batch load departments for dept_ids=%s", ordered_dept_ids)
         return []
 
-    department_by_id = {int(getattr(dept, 'id')): dept for dept in departments if getattr(dept, 'id', None) is not None}
+    department_by_id = {int(dept.id): dept for dept in departments if getattr(dept, "id", None) is not None}
     hierarchy_by_user: dict[int, list[int]] = {}
     all_candidate_dept_ids: list[int] = []
     seen_candidates: set[int] = set()
@@ -217,9 +308,11 @@ async def resolve_department_admins_for_user_ids(user_ids: list[int]) -> list[in
             continue
         dept = department_by_id.get(dept_id)
         if dept is None:
-            logger.warning('approver_resolver: primary department not found for user_id=%s dept_id=%s', user_id, dept_id)
+            logger.warning(
+                "approver_resolver: primary department not found for user_id=%s dept_id=%s", user_id, dept_id
+            )
             continue
-        hierarchy_ids = _department_hierarchy_ids_from_path(getattr(dept, 'path', None), dept_id)
+        hierarchy_ids = _department_hierarchy_ids_from_path(getattr(dept, "path", None), dept_id)
         hierarchy_by_user[user_id] = hierarchy_ids
         for candidate_dept_id in hierarchy_ids:
             if candidate_dept_id not in seen_candidates:
@@ -233,7 +326,7 @@ async def resolve_department_admins_for_user_ids(user_ids: list[int]) -> list[in
         admin_ids_by_department = await DepartmentAdminGrantDao.aget_user_ids_by_departments(all_candidate_dept_ids)
     except Exception:
         logger.exception(
-            'approver_resolver: failed to batch load department admins for dept_ids=%s',
+            "approver_resolver: failed to batch load department admins for dept_ids=%s",
             all_candidate_dept_ids,
         )
         return []

@@ -120,6 +120,7 @@ const NOTIFICATION_ACTION_TEXT_KEYS: Record<string, string> = {
     knowledge_space_made_private: "com_notifications_action_knowledge_space_made_private",
     channel_dismissed: "com_notifications_action_channel_dismissed",
     knowledge_space_deleted: "com_notifications_action_knowledge_space_deleted",
+    knowledge_folder_deleted: "com_notifications_action_knowledge_folder_deleted",
     qa_expert_invited: "com_notifications_action_qa_expert_invited",
     qa_expert_answered: "com_notifications_action_qa_expert_answered",
     qa_answer_commented: "com_notifications_action_qa_answer_commented",
