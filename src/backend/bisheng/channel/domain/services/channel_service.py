@@ -1240,7 +1240,7 @@ class ChannelService:
         - Supports fuzzy search by channel name and description
         - Unsubscribed/unapplied channels are shown first
         - Subscribed/applied channels are shown last
-        - Within each group, sorted by update_time descending
+        - Within each group, sorted by unique active subscriber count descending
         """
         # 1. Multi-table join query for channels with subscription info
         rows = await self.channel_repository.find_square_channels(
