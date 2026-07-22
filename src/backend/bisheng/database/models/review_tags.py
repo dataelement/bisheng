@@ -175,46 +175,56 @@ class ReviewTagDao(ReviewTag):
             return True
 
     @classmethod
-    def get_tags_by_resource_batch(
+    async def acleanup_for_deleted_space_files(
         cls,
-        resource_types: list[ResourceTypeEnum],
-        resource_ids: list[str],
+        file_ids: list[int],
         *,
-        tenant_id: int | None = None,
-    ) -> dict[str, list[ReviewTag]]:
-        """Query all review tags linked to resources (sync, for batch file listing)."""
-        if not resource_ids:
-            return {}
-        with get_sync_db_session() as session:
-            statement = (
-                select(
-                    ReviewTag.id,
-                    ReviewTag.name,
-                    ReviewTagLink.resource_id,
-                    ReviewTag.resource_type,
-                    ReviewTag.review_status,
-                )
-                .join(
-                    ReviewTagLink,
-                    and_(
-                        ReviewTag.id == ReviewTagLink.tag_id,
+        resource_type: ResourceTypeEnum = ResourceTypeEnum.SPACE_FILE,
+    ) -> None:
+        """Hard-delete review tag links for deleted files and drop orphan review tags."""
+        normalized_ids = list(dict.fromkeys(int(file_id) for file_id in file_ids if file_id))
+        if not normalized_ids:
+            return
+
+        resource_ids = [str(file_id) for file_id in normalized_ids]
+        resource_type_value = resource_type.value
+
+        async with get_async_db_session() as session:
+            affected_tag_rows = (
+                await session.exec(
+                    select(ReviewTagLink.tag_id).where(
                         ReviewTagLink.resource_id.in_(resource_ids),
-                        ReviewTagLink.resource_type.in_([item.value for item in resource_types]),
-                        ReviewTagLink.is_deleted == False,
-                    ),
+                        ReviewTagLink.resource_type == resource_type_value,
+                    )
                 )
-                .where(ReviewTag.is_deleted == False)
+            ).all()
+            affected_tag_ids = list(dict.fromkeys(int(tag_id) for tag_id in affected_tag_rows))
+
+            await session.exec(
+                delete(ReviewTagLink).where(
+                    ReviewTagLink.resource_id.in_(resource_ids),
+                    ReviewTagLink.resource_type == resource_type_value,
+                )
             )
-            if tenant_id is not None:
-                statement = statement.where(ReviewTagLink.tenant_id == tenant_id)
-            result = session.exec(statement).all()
-            ret: dict[str, list[ReviewTag]] = {}
-            for row in result:
-                resource_id = row[2]
-                if resource_id not in ret:
-                    ret[resource_id] = []
-                ret[resource_id].append(ReviewTag(id=row[0], name=row[1], resource_type=row[3], review_status=row[4]))
-            return ret
+
+            if not affected_tag_ids:
+                await session.commit()
+                return
+
+            still_linked_rows = (
+                await session.exec(
+                    select(ReviewTagLink.tag_id).where(
+                        ReviewTagLink.tag_id.in_(affected_tag_ids),
+                        ReviewTagLink.is_deleted == False,  # noqa: E712
+                    )
+                )
+            ).all()
+            still_linked_ids = {int(tag_id) for tag_id in still_linked_rows}
+            orphan_tag_ids = [tag_id for tag_id in affected_tag_ids if tag_id not in still_linked_ids]
+            if orphan_tag_ids:
+                await session.exec(delete(ReviewTag).where(ReviewTag.id.in_(orphan_tag_ids)))
+
+            await session.commit()
 
     @classmethod
     def get_tags_by_resource_batch(
