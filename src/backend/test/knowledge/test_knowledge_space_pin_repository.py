@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta
 from unittest.mock import AsyncMock
 
 import pytest
@@ -34,11 +35,42 @@ async def test_list_add_and_remove_are_scoped_and_idempotent(session: AsyncSessi
 
     assert await repository.add_pin(1, 10) is True
     assert await repository.add_pin(1, 10) is False
-    assert await repository.list_for_user(1) == {10}
+    assert await repository.list_for_user(1) == [10]
 
     assert await repository.remove_pin(1, 999) is False
     assert await repository.remove_pin(1, 10) is True
-    assert await repository.list_for_user(1) == set()
+    assert await repository.list_for_user(1) == []
+
+
+@pytest.mark.asyncio
+async def test_list_for_user_orders_by_create_time_desc(session: AsyncSession):
+    repository = KnowledgeSpacePinRepositoryImpl(session)
+    now = datetime.now()
+    session.add_all(
+        [
+            UserLink(
+                user_id=1,
+                type="knowledge_space_pin",
+                type_detail="10",
+                create_time=now - timedelta(minutes=2),
+            ),
+            UserLink(
+                user_id=1,
+                type="knowledge_space_pin",
+                type_detail="11",
+                create_time=now - timedelta(minutes=1),
+            ),
+            UserLink(
+                user_id=1,
+                type="knowledge_space_pin",
+                type_detail="12",
+                create_time=now,
+            ),
+        ]
+    )
+    await session.commit()
+
+    assert await repository.list_for_user(1) == [12, 11, 10]
 
 
 @pytest.mark.asyncio

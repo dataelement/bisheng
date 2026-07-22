@@ -9,7 +9,8 @@ class KnowledgeSpacePinRepository(BaseRepository[Any, int], ABC):
     async def lock_user(self, user_id: int) -> None: ...
 
     @abstractmethod
-    async def list_for_user(self, user_id: int) -> set[int]: ...
+    async def list_for_user(self, user_id: int) -> list[int]:
+        """Return pinned space ids ordered by create_time DESC (most recent first)."""
 
     @abstractmethod
     async def add_pin(self, user_id: int, space_id: int) -> bool: ...

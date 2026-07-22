@@ -42,14 +42,14 @@ async def test_stale_cached_pin_is_reset_before_return():
         ),
         patch.object(
             KnowledgeSpacePinService,
-            "get_pinned_space_ids",
-            new=AsyncMock(return_value=set()),
-        ) as get_pins,
+            "list_pinned_space_ids",
+            new=AsyncMock(return_value=[]),
+        ) as list_pins,
     ):
         result = await service._list_accessible_spaces()
 
     assert result[0].is_pinned is False
-    get_pins.assert_awaited_once_with(7, {10})
+    list_pins.assert_awaited_once_with(7, {10})
 
 
 @pytest.mark.asyncio
@@ -63,8 +63,8 @@ async def test_personal_residual_link_never_marks_list_item_pinned():
     ]
     with patch.object(
         KnowledgeSpacePinService,
-        "get_pinned_space_ids",
-        new=AsyncMock(return_value={10}),
+        "list_pinned_space_ids",
+        new=AsyncMock(return_value=[10]),
     ):
         result = await KnowledgeSpacePinService.apply_pins(spaces, user_id=7)
 
