@@ -39,7 +39,10 @@ from bisheng.approval.domain.services.shougang_approval_handler import (
     KnowledgeSpaceFilePublishApprovalHandler,
     ensure_file_publish_business_domain_matches,
 )
-from bisheng.common.errcode.approval import ApprovalScenarioDisabledError
+from bisheng.common.errcode.approval import (
+    ApprovalDuplicatePendingError,
+    ApprovalScenarioDisabledError,
+)
 from bisheng.common.errcode.knowledge_space import (
     SpaceNamePendingApprovalError,
     SpacePermissionDeniedError,
@@ -181,6 +184,25 @@ class ShougangApprovalService:
         )
         if pending:
             raise SpaceNamePendingApprovalError(msg=f"已经有同名知识库在审批中了")
+
+    async def _ensure_file_publish_not_in_pending_approval(
+        self,
+        *,
+        tenant_id: int,
+        source_file_id: int,
+        target_space_id: int,
+    ) -> None:
+        """Raise when the same file-to-space publish is already pending or execute-failed."""
+        business_resource_id = f"{source_file_id}:{target_space_id}"
+        pending = await ApprovalInstanceRepository.find_pending_instance_by_business_resource_id(
+            tenant_id=tenant_id,
+            scenario_code=FILE_PUBLISH_SCENARIO,
+            business_resource_id=business_resource_id,
+            exclude_applicant_user_id=None,
+            active_statuses=None,
+        )
+        if pending:
+            raise ApprovalDuplicatePendingError(msg="已经发布过的文档还在审批中")
 
     async def _task_approver_user_ids(self, task_ids: list[int]) -> list[int]:
         approver_user_ids: list[int] = []
@@ -754,6 +776,15 @@ class ShougangApprovalService:
                 raise HTTPException(status_code=400, detail='目标文档不可用于发布')
             target_document_title = matched_document.title
         performance['target_validation_ms'] = (perf_counter() - stage_started_at) * 1000
+
+        performance['failed_stage'] = 'pending_check'
+        stage_started_at = perf_counter()
+        await self._ensure_file_publish_not_in_pending_approval(
+            tenant_id=login_user.tenant_id,
+            source_file_id=int(source_file.id),
+            target_space_id=int(target_space.id),
+        )
+        performance['pending_check_ms'] = (perf_counter() - stage_started_at) * 1000
 
         performance['failed_stage'] = 'approval_create'
         stage_started_at = perf_counter()
