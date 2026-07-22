@@ -630,7 +630,6 @@ describe("CreateKnowledgeSpaceDrawer", () => {
 
         expect(await screen.findByTestId("department-selector")).toHaveTextContent("炼铁部");
         expect(screen.getByText("科室知识库 - 炼铁部")).toBeInTheDocument();
-        expect(screen.getByText("所属科室：炼铁部")).toBeInTheDocument();
         fireEvent.click(await screen.findByRole("button", { name: "选择炼钢部" }));
         expect(screen.getByText("科室知识库 - 炼钢部")).toBeInTheDocument();
         await selectDefaultTagLibrary();

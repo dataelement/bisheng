@@ -851,11 +851,6 @@ export function CreateKnowledgeSpaceDrawer({
                                         {Math.ceil(getFullWidthLength(name))}/{MAX_SPACE_NAME}
                                     </span>
                                 </div>
-                                {isEditingClinic && (
-                                    <div className="text-[14px] text-[#4E5969]">
-                                        所属科室：{editingSpace?.departmentName || selectedDepartmentName || "-"}
-                                    </div>
-                                )}
                             </div>
 
                             {shouldShowDepartmentSelector && (
