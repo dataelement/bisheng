@@ -60,9 +60,11 @@ export default function KnowledgePreviewWatermark() {
 
     return (
         <div className={styles.overlay} aria-hidden="true">
-            {Array.from({ length: WATERMARK_TILE_COUNT }, (_, index) => (
-                <div className={styles.tile} key={index}>
-                    {lines.map((line) => <span key={line}>{line}</span>)}
+            {Array.from({ length: WATERMARK_TILE_COUNT }, (_, tileIndex) => (
+                <div className={styles.tile} key={tileIndex}>
+                    {lines.map((line: string, lineIndex: number) => (
+                        <span key={`${tileIndex}-${lineIndex}`}>{line}</span>
+                    ))}
                 </div>
             ))}
         </div>
