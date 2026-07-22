@@ -168,7 +168,7 @@ function CopyButton({ text }: { text: string }) {
         <button
             type="button"
             onClick={handleCopy}
-            className="flex size-6 items-center justify-center rounded-[6px] backdrop-blur-[4px] transition-colors hover:bg-[#F7F7F7]"
+            className="flex size-6 items-center justify-center rounded-md backdrop-blur-[4px] transition-colors hover:bg-[#F7F7F7]"
             title="复制"
             aria-label="复制"
         >
@@ -448,7 +448,7 @@ function UserBubble({
                                 // sizing the box to a long unbreakable URL and max-width
                                 // can't clamp it — `anywhere` reduces min-content so the
                                 // box shrinks and the URL wraps inside max-w-full.
-                                "w-fit max-w-full px-3 py-2 whitespace-pre-wrap [overflow-wrap:anywhere] rounded-[8px]",
+                                "w-fit max-w-full px-3 py-2 whitespace-pre-wrap [overflow-wrap:anywhere] rounded-lg",
                                 knowledgeChatLayout
                                     ? "bg-[#F2F3F5] text-[#4E5969] text-[14px] leading-[22px]"
                                     : "rounded-[10px] bg-blue-500/[0.07] text-[#1d2129] text-sm"
@@ -769,7 +769,7 @@ function AssistantBubble({
                                         />
                                     )}
                                     <TextToSpeechButton
-                                        className="flex size-6 items-center justify-center rounded-[6px] backdrop-blur-[4px] transition-colors hover:bg-[#F7F7F7]"
+                                        className="flex size-6 items-center justify-center rounded-md backdrop-blur-[4px] transition-colors hover:bg-[#F7F7F7]"
                                         messageId={message.messageId || ""}
                                         text={regularContent}
                                     />

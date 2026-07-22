@@ -113,7 +113,7 @@ export function KnowledgeSpaceShareDialog({
             className="flex min-h-0 flex-1 flex-col"
         >
             <div className="flex items-center justify-between gap-3">
-                <TabsList className="w-fit shrink-0 rounded-[6px] border border-[#ECECEC] bg-white p-[3px] shadow-none">
+                <TabsList className="w-fit shrink-0 rounded-md border border-[#ECECEC] bg-white p-[3px] shadow-none">
                     {SUBJECT_TABS.map((tab) => (
                         <TabsTrigger
                             key={tab.value}
@@ -127,7 +127,7 @@ export function KnowledgeSpaceShareDialog({
 
                 <Button
                     type="button"
-                    className="h-8 shrink-0 rounded-[6px] px-3 text-[14px] leading-[22px]"
+                    className="h-8 shrink-0 rounded-md px-3 text-[14px] leading-[22px]"
                     onClick={() => {
                         setGrantSubjectType(currentSubjectType);
                         setGrantIncludeChildren(true);
@@ -181,7 +181,7 @@ export function KnowledgeSpaceShareDialog({
 
                     <div className="user-manger mt-4 flex min-h-0 flex-1 flex-col overflow-hidden">
                         <div className="flex items-center gap-3">
-                            <div className="inline-flex w-fit shrink-0 items-center justify-center rounded-[6px] border border-[#ECECEC] bg-white p-[3px]">
+                            <div className="inline-flex w-fit shrink-0 items-center justify-center rounded-md border border-[#ECECEC] bg-white p-[3px]">
                                 {SUBJECT_TABS.map((tab) => (
                                     <button
                                         key={tab.value}

@@ -18,7 +18,7 @@ export function SearchInput({ value, onChange, placeholder, className }: SearchI
     // Only recolor the resting border to #ECECEC; leave the focused border
     // (#DDDDDD) untouched so focus still shows a border-color change.
     const resolvedContainerClassName = cn(
-        "rounded-[6px] [&:not(:focus-within)]:border-[#ECECEC]",
+        "rounded-md [&:not(:focus-within)]:border-[#ECECEC]",
         shouldUseCollapsedSearch ? "min-w-0" : className,
     );
 

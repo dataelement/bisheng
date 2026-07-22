@@ -798,7 +798,7 @@ export function NotificationsDialog({
                         side="left"
                         hideArrow
                         className="shrink-0"
-                        tooltipClassName="box-border flex h-[64px] w-[151px] flex-col justify-center overflow-hidden rounded-[8px] border border-solid border-[#EBECF0] bg-white p-0 opacity-100 shadow-[0_4px_12px_rgba(0,0,0,0.08)] z-[100]"
+                        tooltipClassName="box-border flex h-[64px] w-[151px] flex-col justify-center overflow-hidden rounded-lg border border-solid border-[#EBECF0] bg-white p-0 opacity-100 shadow-[0_4px_12px_rgba(0,0,0,0.08)] z-[100]"
                         description={
                             <div className="flex h-full w-full flex-col justify-center px-3 py-2">
                                 <div className="truncate text-[14px] font-normal leading-tight text-[#1D2129]">
@@ -953,7 +953,7 @@ export function NotificationsDialog({
                             <button
                                 type="button"
                                 onClick={(e) => { e.stopPropagation(); handleDelete(id); }}
-                                className="absolute right-0 top-1/2 h-7 -translate-y-1/2 appearance-none px-3 inline-flex items-center gap-1.5 text-[14px] text-[#4e5969] bg-white border border-[#e5e6eb] rounded-[6px] hover:text-[#f53f3f] hover:border-[#f53f3f] transition-colors active:translate-y-0"
+                                className="absolute right-0 top-1/2 h-7 -translate-y-1/2 appearance-none px-3 inline-flex items-center gap-1.5 text-[14px] text-[#4e5969] bg-white border border-[#e5e6eb] rounded-md hover:text-[#f53f3f] hover:border-[#f53f3f] transition-colors active:translate-y-0"
                                 title={localize("com_notifications_delete")}
                             >
                                 <Trash2 className="size-4" />
@@ -968,7 +968,7 @@ export function NotificationsDialog({
                         <button
                             type="button"
                             disabled
-                            className="h-7 cursor-default rounded-[6px] border border-[#E5E6EB] bg-[#F7F8FA] px-3 text-[14px] text-[#86909C]"
+                            className="h-7 cursor-default rounded-md border border-[#E5E6EB] bg-[#F7F8FA] px-3 text-[14px] text-[#86909C]"
                         >
                             {isApprovedStatus(approvalStatus)
                                 ? localize("com_notifications_approved")
@@ -1079,8 +1079,8 @@ export function NotificationsDialog({
                                                     onClick={() => setOnlyUnread((v) => !v)}
                                                     className={
                                                         onlyUnread
-                                                            ? "h-8 rounded-[6px] border border-transparent bg-[rgb(var(--brand-500)/0.2)] px-3 py-0 text-[14px] font-normal leading-none text-blue-500 [backdrop-filter:blur(4px)] hover:bg-[rgb(var(--brand-500)/0.28)] hover:text-blue-600 active:translate-y-0"
-                                                            : "h-8 rounded-[6px] border border-[#e5e6eb] px-3 py-0 text-[14px] font-normal leading-none text-[#4e5969] hover:bg-[#f7f8fa] active:translate-y-0"
+                                                            ? "h-8 rounded-md border border-transparent bg-[rgb(var(--brand-500)/0.2)] px-3 py-0 text-[14px] font-normal leading-none text-blue-500 [backdrop-filter:blur(4px)] hover:bg-[rgb(var(--brand-500)/0.28)] hover:text-blue-600 active:translate-y-0"
+                                                            : "h-8 rounded-md border border-[#e5e6eb] px-3 py-0 text-[14px] font-normal leading-none text-[#4e5969] hover:bg-[#f7f8fa] active:translate-y-0"
                                                     }
                                                 >
                                                     {localize("com_notifications_unread_only")}
@@ -1092,7 +1092,7 @@ export function NotificationsDialog({
                                                         handleMarkAllAsRead();
                                                     }}
                                                     variant="outline"
-                                                    className="h-8 rounded-[6px] border-transparent bg-[#F8F8F8] px-3 py-0 text-[14px] font-normal leading-none text-[#4e5969] [backdrop-filter:blur(4px)] hover:bg-[#f0f0f0] active:translate-y-0"
+                                                    className="h-8 rounded-md border-transparent bg-[#F8F8F8] px-3 py-0 text-[14px] font-normal leading-none text-[#4e5969] [backdrop-filter:blur(4px)] hover:bg-[#f0f0f0] active:translate-y-0"
                                                 >
                                                     {localize("com_notifications_mark_all_read")}
                                                 </Button>
@@ -1121,8 +1121,8 @@ export function NotificationsDialog({
                                             onClick={() => setOnlyUnread((v) => !v)}
                                             className={
                                                 onlyUnread
-                                                    ? "h-8 shrink-0 rounded-[6px] border border-transparent bg-[rgb(var(--brand-500)/0.2)] px-4 py-[5px] text-[14px] font-normal text-blue-500 [backdrop-filter:blur(8px)]"
-                                                    : "h-8 shrink-0 rounded-[6px] border border-[#EBECF0] bg-white/50 px-4 py-[5px] text-[14px] font-normal text-[#212121] [backdrop-filter:blur(8px)]"
+                                                    ? "h-8 shrink-0 rounded-md border border-transparent bg-[rgb(var(--brand-500)/0.2)] px-4 py-[5px] text-[14px] font-normal text-blue-500 [backdrop-filter:blur(8px)]"
+                                                    : "h-8 shrink-0 rounded-md border border-[#EBECF0] bg-white/50 px-4 py-[5px] text-[14px] font-normal text-[#212121] [backdrop-filter:blur(8px)]"
                                             }
                                         >
                                             {localize("com_notifications_unread_only")}
@@ -1134,7 +1134,7 @@ export function NotificationsDialog({
                                                 handleMarkAllAsRead();
                                             }}
                                             variant="outline"
-                                            className="h-8 shrink-0 rounded-[6px] border-transparent bg-[#F8F8F8] px-4 py-[5px] text-[14px] font-normal text-[#212121] [backdrop-filter:blur(8px)]"
+                                            className="h-8 shrink-0 rounded-md border-transparent bg-[#F8F8F8] px-4 py-[5px] text-[14px] font-normal text-[#212121] [backdrop-filter:blur(8px)]"
                                         >
                                             {localize("com_notifications_mark_all_read")}
                                         </Button>

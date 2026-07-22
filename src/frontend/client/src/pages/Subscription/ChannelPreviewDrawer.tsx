@@ -333,7 +333,7 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onSubscrip
                                         variant={btnConfig.variant}
                                         disabled={btnConfig.disabled || subscribing}
                                         onClick={handleSubscribe}
-                                        className={`h-8 rounded-[6px] px-4 py-[5px] text-[14px] font-normal leading-[22px] flex-shrink-0 ${effectiveSubscribeStatus === "subscribed"
+                                        className={`h-8 rounded-md px-4 py-[5px] text-[14px] font-normal leading-[22px] flex-shrink-0 ${effectiveSubscribeStatus === "subscribed"
                                             ? "bg-[#f2f3f5] text-[#86909c] border-[#e5e6eb] cursor-default"
                                             : effectiveSubscribeStatus === "pending" || effectiveSubscribeStatus === "rejected"
                                                 ? "bg-[#f2f3f5] text-[#c9cdd4] border-[#e5e6eb] cursor-not-allowed"

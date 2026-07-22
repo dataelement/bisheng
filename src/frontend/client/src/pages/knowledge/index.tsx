@@ -801,7 +801,7 @@ export default function Knowledge() {
                                     setShowKnowledgeSquare(true);
                                     setSpaceListDrawerOpen(false);
                                 }}
-                                className="h-8 flex-1 gap-1 rounded-[6px] border border-[#e3e3e3] bg-white px-3 py-[5px] text-sm font-normal leading-[22px] text-[#666666] hover:bg-[#F4F4F4]"
+                                className="h-8 flex-1 gap-1 rounded-md border border-[#e3e3e3] bg-white px-3 py-[5px] text-sm font-normal leading-[22px] text-[#666666] hover:bg-[#F4F4F4]"
                             >
                                 <Outlined.BlocksAndArrows className="size-4" />
                                 {localize("com_knowledge.go_to_square")}
@@ -812,7 +812,7 @@ export default function Knowledge() {
                                     handleCreateSpace();
                                     setSpaceListDrawerOpen(false);
                                 }}
-                                className="h-8 flex-1 gap-1 rounded-[6px] bg-blue-100 px-3 py-[5px] text-sm font-normal leading-[22px] text-blue-main hover:bg-blue-200"
+                                className="h-8 flex-1 gap-1 rounded-md bg-blue-100 px-3 py-[5px] text-sm font-normal leading-[22px] text-blue-main hover:bg-blue-200"
                             >
                                 <Plus className="size-4" />
                                 {localize("com_knowledge.create_knowledge_space")}
@@ -961,7 +961,7 @@ export default function Knowledge() {
                                 <Button
                                     variant="secondary"
                                     onClick={() => setShowKnowledgeSquare(true)}
-                                    className="h-8 w-full gap-1 rounded-[6px] border border-[#e3e3e3] bg-white px-3 py-[5px] text-sm font-normal leading-[22px] text-[#666666] hover:bg-[#F4F4F4]"
+                                    className="h-8 w-full gap-1 rounded-md border border-[#e3e3e3] bg-white px-3 py-[5px] text-sm font-normal leading-[22px] text-[#666666] hover:bg-[#F4F4F4]"
                                 >
                                     <Outlined.BlocksAndArrows className="size-4" />
                                     {localize("com_knowledge.go_to_square")}

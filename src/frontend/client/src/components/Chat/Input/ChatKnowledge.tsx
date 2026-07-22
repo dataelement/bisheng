@@ -227,7 +227,7 @@ const KnowledgeListPanel = ({
       <div className="relative shrink-0">
         <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
         <Input
-          className="h-[28px] text-sm bg-white border border-[#ECECEC] rounded-[6px] pl-8 focus-visible:ring-1 focus-visible:ring-blue-500/20"
+          className="h-[28px] text-sm bg-white border border-[#ECECEC] rounded-md pl-8 focus-visible:ring-1 focus-visible:ring-blue-500/20"
           placeholder={placeholder}
           value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
@@ -275,7 +275,7 @@ const KnowledgeListPanel = ({
                 e.preventDefault();
                 onToggle(item);
               }}
-              className="flex items-center gap-2 px-2 py-[5px] cursor-pointer rounded-[6px] data-[highlighted]:bg-[#f2f3f5] focus:bg-[#f2f3f5] outline-none transition-colors"
+              className="flex items-center gap-2 px-2 py-[5px] cursor-pointer rounded-md data-[highlighted]:bg-[#f2f3f5] focus:bg-[#f2f3f5] outline-none transition-colors"
             >
               <Checkbox
                 checked={isChecked}
@@ -649,7 +649,7 @@ export const ChatKnowledge = ({
         sticky={isMobile ? 'partial' : undefined}
         onCloseAutoFocus={(e) => e.preventDefault()}
         className={cn(
-          'flex flex-col gap-0 rounded-[8px] border-0 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]',
+          'flex flex-col gap-0 rounded-lg border-0 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]',
           // variant-aware width/padding: the pill (knowledge) shows a list
           // directly, so it needs the wider list layout; the "+" menu stays
           // compact for its short action items.
@@ -688,7 +688,7 @@ export const ChatKnowledge = ({
               if (fileUploadDisabled) return;
               onFileUploadClick?.();
             }}
-            className="flex cursor-pointer items-center gap-2 rounded-[6px] px-2 py-[5px] outline-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-40"
+            className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-[5px] outline-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-40"
           >
             <Outlined.Attachment size={16} className="text-[#999]" />
             <span className="text-[14px] font-normal text-slate-700">{localize('com_ui_upload_files')}</span>
@@ -752,7 +752,7 @@ export const ChatKnowledge = ({
             <DropdownMenuSubTrigger
               data-sub-key="org"
               className={cn(
-                'mt-0.5 flex cursor-pointer items-center justify-between rounded-[6px] px-2 py-[5px] outline-none',
+                'mt-0.5 flex cursor-pointer items-center justify-between rounded-md px-2 py-[5px] outline-none',
               )}
             >
               <div className="flex items-center gap-2">
@@ -769,7 +769,7 @@ export const ChatKnowledge = ({
             <DropdownMenuSubContent
               alignOffset={orgLayout.alignOffset}
               collisionPadding={BOTTOM_GAP}
-              className="ml-2 flex w-[240px] flex-col overflow-hidden rounded-[8px] border-slate-100 bg-white pt-2 px-2 pb-0 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]"
+              className="ml-2 flex w-[240px] flex-col overflow-hidden rounded-lg border-slate-100 bg-white pt-2 px-2 pb-0 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]"
               style={
                 {
                   '--tw-enter-duration': '0.35s',
@@ -804,7 +804,7 @@ export const ChatKnowledge = ({
               e.preventDefault();
               setMobilePanel('org');
             }}
-            className="mt-0.5 flex cursor-pointer items-center justify-between gap-2 rounded-[6px] px-2 py-[5px] outline-none"
+            className="mt-0.5 flex cursor-pointer items-center justify-between gap-2 rounded-md px-2 py-[5px] outline-none"
           >
             <div className="flex min-w-0 items-center gap-2">
               <div className="relative shrink-0">
@@ -867,7 +867,7 @@ export const ChatKnowledge = ({
                 setRootOpen(false);
                 onEnterTaskMode?.();
               }}
-              className="flex cursor-pointer items-center gap-2 rounded-[6px] px-2 py-[5px] outline-none"
+              className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-[5px] outline-none"
             >
               <Outlined.Binoculars size={16} className={taskModeActive ? 'text-blue-600' : 'text-[#999]'} />
               <span className={cn('flex-1 text-[14px] font-normal', taskModeActive ? 'text-blue-600' : 'text-slate-700')}>
@@ -883,7 +883,7 @@ export const ChatKnowledge = ({
                 <DropdownMenuSub>
                   <DropdownMenuSubTrigger
                     className={cn(
-                      'flex cursor-pointer items-center justify-between rounded-[6px] px-2 py-[5px] outline-none',
+                      'flex cursor-pointer items-center justify-between rounded-md px-2 py-[5px] outline-none',
                     )}
                   >
                     <div className="flex items-center gap-2">
@@ -894,7 +894,7 @@ export const ChatKnowledge = ({
                     </div>
                   </DropdownMenuSubTrigger>
                   {/* Layout mirrors the knowledge panel shell (variant === 'knowledge' above). */}
-                  <DropdownMenuSubContent className="ml-2 flex max-h-[256px] w-[240px] flex-col gap-0 overflow-hidden rounded-[8px] border-0 bg-white px-2 pb-0 pt-2 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]">
+                  <DropdownMenuSubContent className="ml-2 flex max-h-[256px] w-[240px] flex-col gap-0 overflow-hidden rounded-lg border-0 bg-white px-2 pb-0 pt-2 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]">
                     {renderSkillSubmenu(() => setRootOpen(false))}
                   </DropdownMenuSubContent>
                 </DropdownMenuSub>
@@ -904,7 +904,7 @@ export const ChatKnowledge = ({
                     e.preventDefault();
                     setMobilePanel('skill');
                   }}
-                  className="flex cursor-pointer items-center justify-between gap-2 rounded-[6px] px-2 py-[5px] outline-none"
+                  className="flex cursor-pointer items-center justify-between gap-2 rounded-md px-2 py-[5px] outline-none"
                 >
                   <div className="flex min-w-0 items-center gap-2">
                     <Outlined.Newspaper size={16} className={skillSelected ? 'text-blue-600' : 'text-[#999]'} />

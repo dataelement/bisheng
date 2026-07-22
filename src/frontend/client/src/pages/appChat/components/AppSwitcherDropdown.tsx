@@ -53,11 +53,11 @@ export function AppSwitcherDropdown() {
       <PopoverContent
         align="start"
         sideOffset={6}
-        className="w-[240px] p-0 bg-white shadow-[0px_4px_16px_rgba(0,0,0,0.08)] border border-[#ebecf0] rounded-[8px] flex flex-col overflow-hidden"
+        className="w-[240px] p-0 bg-white shadow-[0px_4px_16px_rgba(0,0,0,0.08)] border border-[#ebecf0] rounded-lg flex flex-col overflow-hidden"
       >
         {/* Search input */}
         <div className="px-[12px] pt-[12px] pb-[8px] shrink-0">
-          <div className="flex items-center gap-[6px] h-[28px] px-[8px] border border-[#ebecf0] rounded-[6px] focus-within:border-[#DDDDDD] focus-within:shadow-[0_0_0_2px_#F1F5F9] transition-[border-color,box-shadow]">
+          <div className="flex items-center gap-[6px] h-[28px] px-[8px] border border-[#ebecf0] rounded-md focus-within:border-[#DDDDDD] focus-within:shadow-[0_0_0_2px_#F1F5F9] transition-[border-color,box-shadow]">
             <Search size={14} className="text-[#a9aeb8] shrink-0" />
             <input
               value={searchQuery}
@@ -92,7 +92,7 @@ export function AppSwitcherDropdown() {
                   key={app.id}
                   onClick={() => switchApp(app)}
                   className={cn(
-                    'w-full flex items-center justify-between h-[32px] px-[4px] py-[5px] rounded-[6px] transition-colors group cursor-pointer text-left fine-pointer:hover:bg-[#f2f3f5]',
+                    'w-full flex items-center justify-between h-[32px] px-[4px] py-[5px] rounded-md transition-colors group cursor-pointer text-left fine-pointer:hover:bg-[#f2f3f5]',
                     isActive && 'bg-[#f2f3f5]'
                   )}
                 >

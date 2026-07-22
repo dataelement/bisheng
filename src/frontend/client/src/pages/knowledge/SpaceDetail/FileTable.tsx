@@ -45,7 +45,7 @@ const renderHighlightedName = (text: string, keyword?: string) => {
 
 /** 状态列悬停：下载 / 更多 — 白底、细灰边、8px 圆角 */
 const FILE_ROW_ACTION_BTN_CLASS =
-    "size-7 shrink-0 flex items-center justify-center rounded-[8px] border border-[#ECECEC] bg-white text-[#4e5969] hover:bg-[#f7f7f7] transition-colors";
+    "size-7 shrink-0 flex items-center justify-center rounded-lg border border-[#ECECEC] bg-white text-[#4e5969] hover:bg-[#f7f7f7] transition-colors";
 
 // ============================================================
 // 列定义：key、最小宽度、初始宽度

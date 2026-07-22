@@ -238,7 +238,7 @@ export function EditTagsModal({
                 <div className="flex flex-1 flex-col gap-4 px-5 py-3 max-md:px-4 max-md:py-4">
                     {/* Tags Input Box */}
                     <div
-                        className="relative flex min-h-8 cursor-text flex-wrap items-center gap-1 rounded-[8px] border border-[#EBECF0] bg-white px-3 py-[5px] pr-[40px] transition-[border-color,box-shadow] focus-within:border-[#ddd] focus-within:shadow-[0_0_0_2px_#f1f5f9]"
+                        className="relative flex min-h-8 cursor-text flex-wrap items-center gap-1 rounded-lg border border-[#EBECF0] bg-white px-3 py-[5px] pr-[40px] transition-[border-color,box-shadow] focus-within:border-[#ddd] focus-within:shadow-[0_0_0_2px_#f1f5f9]"
                         onClick={() => document.getElementById("tag-input")?.focus()}
                     >
                         {selectedTags.map((tag) => (
@@ -322,13 +322,13 @@ export function EditTagsModal({
                 <DialogFooter className="flex h-14 shrink-0 items-center justify-end gap-3 border-none px-5 py-3 max-md:!mt-auto max-md:!h-auto max-md:!flex-row max-md:!justify-stretch max-md:border-t max-md:border-[#ECECEC] max-md:px-4 max-md:py-3 sm:space-x-0">
                     <Button
                         variant="outline"
-                        className="h-8 min-w-[60px] rounded-[6px] border-[#ebecf0] bg-white/50 px-4 font-normal text-[#070038] backdrop-blur-[8px] hover:bg-white/70 max-md:flex-1"
+                        className="h-8 min-w-[60px] rounded-md border-[#ebecf0] bg-white/50 px-4 font-normal text-[#070038] backdrop-blur-[8px] hover:bg-white/70 max-md:flex-1"
                         onClick={handleClose}
                     >
                         {localize("com_knowledge.cancel")}</Button>
                     <Button
                         variant="default"
-                        className="h-8 min-w-[60px] rounded-[6px] px-4 font-normal max-md:flex-1"
+                        className="h-8 min-w-[60px] rounded-md px-4 font-normal max-md:flex-1"
                         onClick={handleSave}
                         disabled={loading}
                     >

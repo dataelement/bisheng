@@ -578,7 +578,7 @@ export function KnowledgeSpaceSidebar({
                         <Button
                             variant="secondary"
                             onClick={() => onKnowledgeSquare?.()}
-                            className="h-8 w-full gap-1 rounded-[6px] border border-[#e3e3e3] bg-white px-3 py-[5px] text-sm font-normal leading-[22px] text-[#666666] hover:bg-[#F4F4F4]"
+                            className="h-8 w-full gap-1 rounded-md border border-[#e3e3e3] bg-white px-3 py-[5px] text-sm font-normal leading-[22px] text-[#666666] hover:bg-[#F4F4F4]"
                         >
                             <Outlined.BlocksAndArrows className="size-4" />
                             {localize("com_knowledge.go_to_knowledge_square")}

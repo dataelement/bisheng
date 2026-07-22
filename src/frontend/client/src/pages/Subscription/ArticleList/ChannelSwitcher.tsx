@@ -146,7 +146,7 @@ export function ChannelSwitcher({
             <button
                 type="button"
                 onClick={() => setGroup((g) => (g === "created" ? "subscribed" : "created"))}
-                className="flex items-center gap-1 rounded-[6px] p-1 text-[12px] font-medium leading-5 text-[#999] transition-colors fine-pointer:hover:bg-[#F7F7F7]"
+                className="flex items-center gap-1 rounded-md p-1 text-[12px] font-medium leading-5 text-[#999] transition-colors fine-pointer:hover:bg-[#F7F7F7]"
             >
                 <span>
                     {group === "created"
@@ -188,7 +188,7 @@ export function ChannelSwitcher({
             <button
                 type="button"
                 onClick={() => { onCreateChannel(); setOpen(false); }}
-                className="flex w-full shrink-0 items-center justify-center gap-1 rounded-[8px] border border-[#E3E3E3] bg-white px-3 py-[5px] text-[14px] leading-[22px] text-[#212121] transition-colors fine-pointer:hover:bg-[#F7F8FA]"
+                className="flex w-full shrink-0 items-center justify-center gap-1 rounded-lg border border-[#E3E3E3] bg-white px-3 py-[5px] text-[14px] leading-[22px] text-[#212121] transition-colors fine-pointer:hover:bg-[#F7F8FA]"
             >
                 <Outlined.Plus className="size-4 text-[#86909C]" />
                 {localize("com_subscription.create_channel")}
@@ -325,7 +325,7 @@ export function ChannelSwitcher({
                     align="center"
                     sideOffset={8}
                     collisionPadding={{ left: collisionLeft, bottom: 40 }}
-                    className="flex max-h-[var(--radix-popover-content-available-height)] w-[320px] flex-col gap-2 rounded-[8px] border-0 bg-white p-3 shadow-[0px_4px_20px_0px_rgba(23,0,176,0.1)]"
+                    className="flex max-h-[var(--radix-popover-content-available-height)] w-[320px] flex-col gap-2 rounded-lg border-0 bg-white p-3 shadow-[0px_4px_20px_0px_rgba(23,0,176,0.1)]"
                 >
                     {renderSectionHeader()}
                     {renderChannelList()}
