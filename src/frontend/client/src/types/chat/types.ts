@@ -114,6 +114,8 @@ export type TUser = {
   avatar: string;
   role: string;
   departmentName?: string;
+  /** 登录账号/员工号（对应后端 external_id） */
+  employeeId?: string;
   provider: string;
   plugins?: string[];
   is_department_admin?: boolean;

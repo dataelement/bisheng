@@ -26,9 +26,8 @@ def _create_source(path: Path) -> None:
 def _spec() -> PdfWatermarkSpec:
     return PdfWatermarkSpec(
         lines=(
-            "敏感部门-敏感姓名",
-            "2026-07-21",
-            "首钢集团内部资料",
+            "敏感部门-敏感姓名--SECRET-001-2026-07-21",
+            "首钢股份内部资料，严禁外传，违者必究",
         )
     )
 
@@ -152,7 +151,7 @@ def test_worker_cli_rejects_invalid_stdin_without_echoing_sensitive_text(tmp_pat
     source = tmp_path / "source.pdf"
     output = tmp_path / "output.pdf"
     _create_source(source)
-    payload = '{"lines":["敏感姓名","SECRET-001"]}'
+    payload = '{"lines":["敏感姓名"]}'
 
     completed = subprocess.run(
         [

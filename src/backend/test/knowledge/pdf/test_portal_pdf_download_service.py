@@ -477,9 +477,9 @@ async def test_on_demand_failure_maps_to_safe_download_error(tmp_path: Path, err
 @pytest.mark.parametrize(
     ("user", "expected_identity"),
     [
-        (_user(), "设备管理部-张三"),
-        (_user(primary_department_name=""), "张三"),
-        (_user(user_name="", primary_department_name=None), "client-name-must-not-be-used"),
+        (_user(), "设备管理部-张三--SG001-2026-07-21"),
+        (_user(primary_department_name=""), "张三--SG001-2026-07-21"),
+        (_user(user_name="", external_id="", primary_department_name=None), "client-name-must-not-be-used-2026-07-21"),
     ],
 )
 async def test_watermark_identity_comes_from_server_user_record(
@@ -495,10 +495,8 @@ async def test_watermark_identity_comes_from_server_user_record(
     lines = runner.calls[0]["spec"].lines
     assert lines == (
         expected_identity,
-        "2026-07-21",
-        "首钢集团内部资料",
+        "首钢股份内部资料，严禁外传，违者必究",
     )
-    assert all("SG001" not in line for line in lines)
     await prepared.close()
 
 

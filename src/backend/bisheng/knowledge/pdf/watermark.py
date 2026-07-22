@@ -15,18 +15,18 @@ class PdfWatermarkError(ValueError):
 
 @dataclass(frozen=True)
 class PdfWatermarkSpec:
-    lines: tuple[str, str, str]
+    lines: tuple[str, str]
     rotation: float = -35.0
     opacity: float = 0.16
     font_size: float = 12.0
-    horizontal_gap: float = 180.0
-    vertical_gap: float = 120.0
+    horizontal_gap: float = 120.0
+    vertical_gap: float = 80.0
     color: tuple[float, float, float] = (0.45, 0.45, 0.45)
 
     def __post_init__(self) -> None:
         normalized = tuple(str(line).strip() for line in self.lines)
-        if len(normalized) != 3 or any(not line for line in normalized):
-            raise PdfWatermarkError("watermark requires three non-empty lines")
+        if len(normalized) != 2 or any(not line for line in normalized):
+            raise PdfWatermarkError("watermark requires two non-empty lines")
         if not 0 < self.opacity < 1:
             raise PdfWatermarkError("watermark opacity must be between zero and one")
         if self.font_size <= 0 or self.horizontal_gap <= 0 or self.vertical_gap <= 0:

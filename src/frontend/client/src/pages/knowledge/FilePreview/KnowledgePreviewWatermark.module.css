@@ -1,11 +1,11 @@
 .overlay {
     position: absolute;
     z-index: 20;
-    inset: -18%;
+    inset: -12%;
     display: grid;
     grid-template-columns: repeat(4, minmax(210px, 1fr));
     align-content: space-around;
-    gap: 64px 42px;
+    gap: 36px 24px;
     overflow: hidden;
     pointer-events: none;
     user-select: none;
@@ -28,6 +28,6 @@
 @media (max-width: 900px) {
     .overlay {
         grid-template-columns: repeat(3, minmax(190px, 1fr));
-        gap: 56px 32px;
+        gap: 28px 20px;
     }
 }

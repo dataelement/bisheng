@@ -8,7 +8,7 @@ import styles from "./KnowledgePreviewWatermark.module.css";
 const BEIJING_TIME_ZONE = "Asia/Shanghai";
 const WATERMARK_TILE_COUNT = 24;
 
-type KnowledgePreviewWatermarkUser = Pick<TUser, "name" | "username" | "departmentName">;
+type KnowledgePreviewWatermarkUser = Pick<TUser, "name" | "username" | "departmentName" | "employeeId">;
 
 const KnowledgePreviewWatermarkContext = createContext<string[] | null>(null);
 
@@ -29,10 +29,15 @@ export function buildKnowledgePreviewWatermarkLines(
 ): string[] {
     const name = user.name.trim() || user.username.trim() || "未知用户";
     const departmentName = user.departmentName?.trim() || "";
+    const account = user.employeeId?.trim() || "";
+    const dateStr = formatKnowledgePreviewWatermarkTime(viewedAt);
+    const identityBase = departmentName ? `${departmentName}-${name}` : name;
+    const identityLine = account
+        ? `${identityBase}--${account}-${dateStr}`
+        : `${identityBase}-${dateStr}`;
     return [
-        departmentName ? `${departmentName}-${name}` : name,
-        formatKnowledgePreviewWatermarkTime(viewedAt),
-        "首钢集团内部资料",
+        identityLine,
+        "首钢股份内部资料，严禁外传，违者必究",
     ];
 }
 

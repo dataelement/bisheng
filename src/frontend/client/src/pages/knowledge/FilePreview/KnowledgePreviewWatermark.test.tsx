@@ -18,6 +18,7 @@ const currentUser = {
     avatar: "",
     role: "member",
     departmentName: "设备管理部",
+    employeeId: "SG001",
     provider: "local",
     createdAt: "",
     updatedAt: "",
@@ -48,16 +49,15 @@ describe("KnowledgePreviewWatermark", () => {
     test("uses the current Bisheng user and keeps the mount-time Beijing clock", () => {
         expect(formatKnowledgePreviewWatermarkTime(new Date())).toBe("2026-07-21");
         expect(buildKnowledgePreviewWatermarkLines(currentUser, new Date())).toEqual([
-            "设备管理部-张三",
-            "2026-07-21",
-            "首钢集团内部资料",
+            "设备管理部-张三--SG001-2026-07-21",
+            "首钢股份内部资料，严禁外传，违者必究",
         ]);
 
         const { container, rerender } = renderWatermark();
         expect(container.querySelector('[aria-hidden="true"]')).toBeInTheDocument();
-        expect(container.textContent).toContain("设备管理部-张三");
-        expect(container.textContent).toContain("2026-07-21");
-        expect(container.textContent).not.toContain("工号/账号");
+        expect(container.textContent).toContain("设备管理部-张三--SG001-2026-07-21");
+        expect(container.textContent).toContain("首钢股份内部资料，严禁外传，违者必究");
+        expect(container.textContent).not.toContain("首钢集团内部资料");
 
         jest.setSystemTime(new Date("2026-07-21T04:10:06.000Z"));
         rerender(
@@ -75,9 +75,9 @@ describe("KnowledgePreviewWatermark", () => {
 
     test("falls back to username and clips overlays to document surfaces", () => {
         expect(buildKnowledgePreviewWatermarkLines(
-            { ...currentUser, name: "", username: "lisi", departmentName: "" },
+            { ...currentUser, name: "", username: "lisi", departmentName: "", employeeId: "" },
             new Date(),
-        )[0]).toBe("lisi");
+        )[0]).toBe("lisi-2026-07-21");
 
         const styleSource = readFileSync(
             path.resolve(process.cwd(), "src/pages/knowledge/FilePreview/KnowledgePreviewWatermark.module.css"),
