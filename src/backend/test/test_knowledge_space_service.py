@@ -33,6 +33,7 @@ from bisheng.knowledge.domain.models.knowledge import (
     KnowledgeState,
     KnowledgeTypeEnum,
 )
+from bisheng.knowledge.domain.models.department_knowledge_space import DepartmentKnowledgeSpaceDao
 from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFile, KnowledgeFileStatus
 from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum, KnowledgeSpaceOwnerTypeEnum
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
@@ -936,6 +937,211 @@ async def test_create_department_space_enqueues_default_scope_permissions():
         owner_id=99,
         space_id=11,
     )
+
+
+@pytest.mark.asyncio
+async def test_create_clinic_space_uses_team_level_and_writes_department_binding():
+    """Clinic spaces are team-level spaces bound to a department."""
+    KnowledgeSpaceService = _load_service_class()
+    login_user = _make_login_user(user_id=7, is_admin=False)
+    svc = KnowledgeSpaceService(request=SimpleNamespace(), login_user=login_user)
+    svc._ensure_space_name_unique_in_scope = AsyncMock(return_value=None)
+    svc._is_auto_tag_feature_visible = AsyncMock(return_value=False)
+    created_space = _make_space(
+        space_id=11,
+        user_id=7,
+        space_level=KnowledgeSpaceLevelEnum.TEAM,
+    )
+    department = SimpleNamespace(id=99, status="active")
+
+    with (
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_count_spaces_by_user",
+            new_callable=AsyncMock,
+            return_value=0,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.LLMService.get_workbench_llm",
+            new_callable=AsyncMock,
+            return_value=SimpleNamespace(embedding_model=SimpleNamespace(id="embedding-1")),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.DepartmentDao.aget_by_id",
+            new_callable=AsyncMock,
+            return_value=department,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeService.acreate_knowledge_base",
+            new_callable=AsyncMock,
+            return_value=created_space,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_insert_member",
+            new_callable=AsyncMock,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.OwnerService.write_owner_tuple",
+            new_callable=AsyncMock,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceScopeDao.acreate",
+            new_callable=AsyncMock,
+        ) as mock_scope_create,
+        patch.object(
+            KnowledgeSpaceService,
+            "_enqueue_default_scope_permissions",
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeAuditTelemetryService.audit_create_knowledge_space",
+            new_callable=AsyncMock,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceTagLibraryService.validate_bindable_libraries",
+            new_callable=AsyncMock,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_space",
+            new_callable=AsyncMock,
+            return_value=created_space,
+        ),
+        patch.object(
+            svc,
+            "_apply_auto_tag_binding",
+            new_callable=AsyncMock,
+            return_value=(False, 1),
+        ),
+        patch.object(
+            svc,
+            "_can_bind_department_on_create",
+            new_callable=AsyncMock,
+            return_value=True,
+        ),
+        patch.object(
+            DepartmentKnowledgeSpaceDao,
+            "acreate",
+            new_callable=AsyncMock,
+        ) as mock_binding_create,
+    ):
+        result = await svc.create_knowledge_space(
+            name="科室空间",
+            space_level=KnowledgeSpaceLevelEnum.DEPARTMENT,
+            department_id=99,
+            is_clinic=True,
+            auto_tag_library_ids=[1],
+        )
+
+    assert result.id == 11
+    mock_scope_create.assert_awaited_once_with(
+        tenant_id=1,
+        space_id=11,
+        level=KnowledgeSpaceLevelEnum.TEAM,
+        owner_type=KnowledgeSpaceOwnerTypeEnum.USER,
+        owner_id=7,
+        created_by=7,
+    )
+    mock_binding_create.assert_awaited_once_with(
+        tenant_id=1,
+        department_id=99,
+        space_id=11,
+        created_by=7,
+    )
+
+
+@pytest.mark.asyncio
+async def test_create_department_space_does_not_write_clinic_binding():
+    """Regular department spaces must not create a department_knowledge_space binding."""
+    KnowledgeSpaceService = _load_service_class()
+    login_user = _make_login_user(user_id=7, is_admin=True)
+    svc = KnowledgeSpaceService(request=SimpleNamespace(), login_user=login_user)
+    svc._ensure_space_name_unique_in_scope = AsyncMock(return_value=None)
+    svc._is_auto_tag_feature_visible = AsyncMock(return_value=False)
+    created_space = _make_space(
+        space_id=11,
+        user_id=7,
+        space_level=KnowledgeSpaceLevelEnum.DEPARTMENT,
+    )
+    department = SimpleNamespace(id=99, status="active")
+
+    with (
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_count_spaces_by_user",
+            new_callable=AsyncMock,
+            return_value=0,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.LLMService.get_workbench_llm",
+            new_callable=AsyncMock,
+            return_value=SimpleNamespace(embedding_model=SimpleNamespace(id="embedding-1")),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.DepartmentDao.aget_by_id",
+            new_callable=AsyncMock,
+            return_value=department,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeService.acreate_knowledge_base",
+            new_callable=AsyncMock,
+            return_value=created_space,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_insert_member",
+            new_callable=AsyncMock,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.OwnerService.write_owner_tuple",
+            new_callable=AsyncMock,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceScopeDao.acreate",
+            new_callable=AsyncMock,
+        ) as mock_scope_create,
+        patch.object(
+            KnowledgeSpaceService,
+            "_enqueue_default_scope_permissions",
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeAuditTelemetryService.audit_create_knowledge_space",
+            new_callable=AsyncMock,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceTagLibraryService.validate_bindable_libraries",
+            new_callable=AsyncMock,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_space",
+            new_callable=AsyncMock,
+            return_value=created_space,
+        ),
+        patch.object(
+            svc,
+            "_apply_auto_tag_binding",
+            new_callable=AsyncMock,
+            return_value=(False, 1),
+        ),
+        patch.object(
+            DepartmentKnowledgeSpaceDao,
+            "acreate",
+            new_callable=AsyncMock,
+        ) as mock_binding_create,
+    ):
+        result = await svc.create_knowledge_space(
+            name="部门空间",
+            space_level=KnowledgeSpaceLevelEnum.DEPARTMENT,
+            department_id=99,
+            is_clinic=False,
+            auto_tag_library_ids=[1],
+        )
+
+    assert result.id == 11
+    mock_scope_create.assert_awaited_once_with(
+        tenant_id=1,
+        space_id=11,
+        level=KnowledgeSpaceLevelEnum.DEPARTMENT,
+        owner_type=KnowledgeSpaceOwnerTypeEnum.DEPARTMENT,
+        owner_id=99,
+        created_by=7,
+    )
+    mock_binding_create.assert_not_awaited()
 
 
 @pytest.mark.asyncio

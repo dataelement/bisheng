@@ -446,41 +446,44 @@ def _print_scan_report(report: ScanReport, *, tag_name: str, target_category_cod
 
 
 async def run(args: argparse.Namespace) -> int:
-    report = await scan_mismatched_links(
-        tag_name=args.tag_name,
-        target_category_code=args.category_code,
-        include_review_tags=args.include_review_tags,
-        tenant_id=args.tenant_id,
-        space_id=args.space_id,
-        file_id=args.file_id,
-        batch_size=args.batch_size,
-        limit=args.limit,
-    )
-    _print_scan_report(
-        report,
-        tag_name=args.tag_name,
-        target_category_code=args.category_code,
-        apply=args.apply,
-    )
+    try:
+        report = await scan_mismatched_links(
+            tag_name=args.tag_name,
+            target_category_code=args.category_code,
+            include_review_tags=args.include_review_tags,
+            tenant_id=args.tenant_id,
+            space_id=args.space_id,
+            file_id=args.file_id,
+            batch_size=args.batch_size,
+            limit=args.limit,
+        )
+        _print_scan_report(
+            report,
+            tag_name=args.tag_name,
+            target_category_code=args.category_code,
+            apply=args.apply,
+        )
 
-    total_remove = len(report.to_remove) + len(report.review_to_remove)
-    if total_remove == 0 or not args.apply:
+        total_remove = len(report.to_remove) + len(report.review_to_remove)
+        if total_remove == 0 or not args.apply:
+            return 0
+
+        answer = input("确认删除以上关联记录？输入 y 继续，其他键退出: ").strip().lower()
+        if answer != "y":
+            print("已取消。")
+            return 0
+
+        deleted = await apply_removals(
+            to_remove=report.to_remove,
+            review_to_remove=report.review_to_remove,
+        )
+        print()
+        print(f"  已删除 tag_link        : {deleted.tag_links_deleted}")
+        print(f"  已删除 review_tag_link : {deleted.review_tag_links_deleted}")
+        print("清理完成。")
         return 0
-
-    answer = input("确认删除以上关联记录？输入 y 继续，其他键退出: ").strip().lower()
-    if answer != "y":
-        print("已取消。")
-        return 0
-
-    deleted = await apply_removals(
-        to_remove=report.to_remove,
-        review_to_remove=report.review_to_remove,
-    )
-    print()
-    print(f"  已删除 tag_link        : {deleted.tag_links_deleted}")
-    print(f"  已删除 review_tag_link : {deleted.review_tag_links_deleted}")
-    print("清理完成。")
-    return 0
+    finally:
+        await close_app_context()
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:

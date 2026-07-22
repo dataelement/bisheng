@@ -1585,6 +1585,7 @@ export async function createSpaceApi(data: {
     space_level?: SpaceLevel;
     department_id?: number;
     user_group_id?: number;
+    is_clinic?: boolean;
     auto_tag_enabled?: boolean;
     auto_tag_library_id?: number | null;
     auto_tag_library_ids?: number[];

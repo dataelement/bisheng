@@ -33,6 +33,14 @@ class KnowledgeSpaceCreateReq(BaseModel):
     )
     department_id: int | None = Field(None, description="Department id for department spaces")
     user_group_id: int | None = Field(None, description="User group id for team spaces")
+    is_clinic: bool = Field(
+        default=False,
+        description=(
+            "When true, a department-bound space is created as a team-level space "
+            "(displayed under team/clinic spaces) and a department_knowledge_space "
+            "binding is written. Only used when creating from the clinic context."
+        ),
+    )
     auto_tag_enabled: bool = Field(default=False, description="Whether uploaded files participate in auto tagging")
     auto_tag_library_id: int | None = Field(
         default=None, description="Bound knowledge-space tag library ID (legacy single binding)"

@@ -133,6 +133,7 @@ export interface CreateKnowledgeSpaceFormData {
     spaceLevel: SpaceLevel;
     departmentId?: number;
     userGroupId?: number;
+    isClinic?: boolean;
     autoTagEnabled: boolean;
     autoTagLibraryIds: number[];
 }
@@ -653,6 +654,7 @@ export function CreateKnowledgeSpaceDrawer({
             return;
         }
         const effectiveJoinPolicy: JoinPolicy = mode === "edit" ? originalEditJoinPolicy : "review";
+        const isClinicSpace = isClinicContext && spaceLevel === SpaceLevel.DEPARTMENT;
         const payload: CreateKnowledgeSpaceFormData = {
             name: name.trim(),
             description: description.trim(),
@@ -662,6 +664,7 @@ export function CreateKnowledgeSpaceDrawer({
             spaceLevel,
             departmentId: shouldShowDepartmentSelector ? selectedDepartmentId : undefined,
             userGroupId: undefined,
+            isClinic: isClinicSpace,
             autoTagEnabled: effectiveAutoTagEnabled,
             autoTagLibraryIds,
         };
