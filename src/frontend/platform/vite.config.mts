@@ -94,6 +94,10 @@ export default defineConfig(({ command, mode }) => {
 
   return {
     base: app_env.BASE_URL || '/',
+    // Strip all console.* / debugger from production bundles so no debug data
+    // (API payloads, tokens, filenames) leaks to the browser console — same
+    // policy as the client app's terser drop_console. Dev keeps them.
+    esbuild: command === 'build' ? { drop: ['console', 'debugger'] } : undefined,
     build: {
       outDir: "build",
       rollupOptions: {
