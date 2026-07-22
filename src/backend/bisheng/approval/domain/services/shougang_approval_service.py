@@ -357,7 +357,7 @@ class ShougangApprovalService:
             tenant_id=login_user.tenant_id,
             space_level=params.get('space_level'),
             name=params.get('name'),
-            applicant_user_id=login_user.user_id,
+            applicant_user_id=None,
         )
         approval_req = ApprovalGateRequest(
             tenant_id=login_user.tenant_id,
