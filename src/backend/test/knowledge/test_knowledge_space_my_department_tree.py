@@ -44,12 +44,50 @@ def mock_session():
     session = MagicMock()
     exec_result = MagicMock()
     exec_result.all.return_value = []
-    session.exec.return_value = exec_result
+    session.exec = AsyncMock(return_value=exec_result)
 
     context_manager = MagicMock()
     context_manager.__aenter__ = AsyncMock(return_value=session)
     context_manager.__aexit__ = AsyncMock(return_value=False)
     return context_manager
+
+
+@pytest.mark.asyncio
+async def test_admin_sees_all_departments(mock_session) -> None:
+    login_user = _login_user(is_admin=True)
+    svc = KnowledgeSpaceService(request=None, login_user=login_user)
+
+    departments = [
+        _department(1, name="研发部", path="/1/"),
+        _department(2, name="前端组", parent_id=1, path="/1/2/"),
+        _department(3, name="市场部", path="/3/"),
+    ]
+
+    with (
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.UserDepartmentDao.aget_user_departments",
+            new=AsyncMock(return_value=[]),
+        ) as mock_user_depts,
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.DepartmentDao.aget_active_by_tenant",
+            new=AsyncMock(return_value=departments),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.DepartmentKnowledgeSpaceDao.aget_by_department_ids",
+            new=AsyncMock(return_value=[]),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.get_async_db_session",
+            return_value=mock_session,
+        ),
+    ):
+        result = await svc.get_my_department_tree_for_create()
+
+    mock_user_depts.assert_not_awaited()
+    assert result["bound_department_ids"] == []
+    assert len(result["data"]) == 2
+    ids = {node["id"] for node in result["data"]}
+    assert ids == {1, 3}
 
 
 @pytest.mark.asyncio

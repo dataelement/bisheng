@@ -653,14 +653,40 @@ class KnowledgeSpaceService(KnowledgeUtils):
             names = [dept.name]
         return "/".join(names) if names else None
 
+    async def _visible_departments_for_create(self, *, approval_request: bool = False) -> list[Any]:
+        """Return departments visible to the current user for space creation.
+
+        Global admins (and approval delegates) see every active department in the
+        tenant; other users only see the departments they belong to plus their
+        descendants.
+        """
+        if self.login_user.is_admin() or approval_request:
+            return await DepartmentDao.aget_active_by_tenant(int(self.login_user.tenant_id))
+
+        user_departments = await UserDepartmentDao.aget_user_departments(self.login_user.user_id)
+        user_department_ids = {
+            int(ud.department_id) for ud in user_departments if getattr(ud, "department_id", None) is not None
+        }
+        if not user_department_ids:
+            return []
+
+        all_departments = await DepartmentDao.aget_active_by_tenant(int(self.login_user.tenant_id))
+        user_dept_paths = {
+            dept.path for dept in all_departments if dept.id in user_department_ids and getattr(dept, "path", None)
+        }
+        if not user_dept_paths:
+            return []
+
+        return [
+            dept
+            for dept in all_departments
+            if getattr(dept, "path", None) and any(dept.path.startswith(path) for path in user_dept_paths)
+        ]
+
     async def _department_options_for_create(
         self, *, approval_request: bool = False
     ) -> list[KnowledgeSpaceCreateOptionDepartment]:
-        if self.login_user.is_admin() or approval_request:
-            departments = await DepartmentDao.aget_active_by_tenant(int(self.login_user.tenant_id))
-        else:
-            department_ids = await self._admin_department_ids()
-            departments = await DepartmentDao.aget_by_ids(list(department_ids)) if department_ids else []
+        departments = await self._visible_departments_for_create(approval_request=approval_request)
 
         dept_name_map = {int(dept.id): dept.name for dept in departments if getattr(dept, "id", None) is not None}
         options = [
@@ -675,11 +701,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         return sorted(options, key=lambda item: (item.path_name or item.name or "", item.id))
 
     async def _department_tree_for_create(self, *, approval_request: bool = False) -> list[dict]:
-        if self.login_user.is_admin() or approval_request:
-            departments = await DepartmentDao.aget_active_by_tenant(int(self.login_user.tenant_id))
-        else:
-            department_ids = await self._admin_department_ids()
-            departments = await DepartmentDao.aget_by_ids(list(department_ids)) if department_ids else []
+        departments = await self._visible_departments_for_create(approval_request=approval_request)
         return await self._build_department_tree(departments)
 
     async def _build_department_tree(self, departments: list[Any]) -> list[dict]:
@@ -739,20 +761,25 @@ class KnowledgeSpaceService(KnowledgeUtils):
     ) -> set[int]:
         """Return department IDs already bound to knowledge spaces.
 
-        When ``exclude_space_id`` is provided, the binding for that space is
-        ignored so the caller can re-select the currently bound department.
+        When ``exclude_space_id`` is provided, only departments bound *solely*
+        to that space are treated as unbound, so the caller can re-select the
+        currently bound department while still seeing other bindings.
         """
         if not department_ids:
             return set()
         bindings = await DepartmentKnowledgeSpaceDao.aget_by_department_ids(list(department_ids))
         bound = {int(binding.department_id) for binding in bindings}
         if exclude_space_id is not None:
-            excluded = {
-                int(binding.department_id)
-                for binding in bindings
-                if int(binding.space_id) == int(exclude_space_id)
+            excluded_id = int(exclude_space_id)
+            space_ids_by_department: dict[int, set[int]] = {}
+            for binding in bindings:
+                dept_id = int(binding.department_id)
+                space_id = int(binding.space_id)
+                space_ids_by_department.setdefault(dept_id, set()).add(space_id)
+            only_excluded = {
+                dept_id for dept_id, space_ids in space_ids_by_department.items() if space_ids == {excluded_id}
             }
-            bound -= excluded
+            bound -= only_excluded
         return bound
 
     async def get_my_department_tree_for_create(
@@ -762,39 +789,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
     ) -> dict[str, Any]:
         """Return the current user's organization departments and their subordinates,
         with IDs of departments already bound to other knowledge spaces.
+
+        Global admins see every active department in the tenant; other users only
+        see the departments they belong to plus their descendants.
         """
-        user_departments = await UserDepartmentDao.aget_user_departments(self.login_user.user_id)
-        user_department_ids = {
-            int(ud.department_id)
-            for ud in user_departments
-            if getattr(ud, "department_id", None) is not None
-        }
-        if not user_department_ids:
-            return {"data": [], "bound_department_ids": []}
+        departments = await self._visible_departments_for_create()
+        tree = await self._build_department_tree(departments)
 
-        all_departments = await DepartmentDao.aget_active_by_tenant(int(self.login_user.tenant_id))
-        user_dept_paths = {
-            dept.path
-            for dept in all_departments
-            if dept.id in user_department_ids and getattr(dept, "path", None)
-        }
-        if not user_dept_paths:
-            return {"data": [], "bound_department_ids": []}
-
-        filtered_departments = [
-            dept
-            for dept in all_departments
-            if getattr(dept, "path", None)
-            and any(dept.path.startswith(path) for path in user_dept_paths)
-        ]
-
-        tree = await self._build_department_tree(filtered_departments)
-
-        filtered_ids = {
-            int(dept.id)
-            for dept in filtered_departments
-            if getattr(dept, "id", None) is not None
-        }
+        filtered_ids = {int(dept.id) for dept in departments if getattr(dept, "id", None) is not None}
         bound_ids = await self._bound_department_ids(
             filtered_ids,
             exclude_space_id=exclude_space_id,
@@ -811,6 +813,17 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if getattr(group, "id", None) is not None
         ]
         return sorted(options, key=lambda item: item.group_name or "")
+
+    async def _can_bind_department_on_create(self, department_id: int) -> bool:
+        """Return True if the current user may bind the given department on create.
+
+        Global admins may bind any department; other users may only bind departments
+        they belong to or their descendants.
+        """
+        if self.login_user.is_admin():
+            return True
+        visible = await self._visible_departments_for_create()
+        return any(int(getattr(dept, "id", None)) == int(department_id) for dept in visible)
 
     async def _resolve_space_scope_on_create(
         self,
@@ -841,7 +854,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             dept = await DepartmentDao.aget_by_id(int(department_id))
             if dept is None or getattr(dept, "status", "active") != "active":
                 raise SpaceInvalidScopeOwnerError(msg="Department does not exist or is archived")
-            if not self.login_user.is_admin():
+            if not await self._can_bind_department_on_create(int(department_id)):
                 raise SpaceCreateDepartmentDeniedError()
             return level, KnowledgeSpaceOwnerTypeEnum.DEPARTMENT, int(department_id)
 
@@ -1009,9 +1022,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
             raise
 
     async def get_create_options(self) -> KnowledgeSpaceCreateOptionsResp:
+        # Department-level spaces are available to global admins as well as
+        # department admins (e.g. clinic knowledge bases created from the team
+        # entry). Regular users only see team/personal options.
+        can_create_department = bool(self.login_user.is_admin() or await self._admin_department_ids())
         return KnowledgeSpaceCreateOptionsResp(
             can_create_public=bool(self.login_user.is_admin()),
-            can_create_department=bool(self.login_user.is_admin()),
+            can_create_department=can_create_department,
             can_create_team=True,
             can_create_personal=True,
             departments=[],

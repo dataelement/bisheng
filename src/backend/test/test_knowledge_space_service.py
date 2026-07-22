@@ -285,7 +285,7 @@ def _load_service_class():
     return module.KnowledgeSpaceService
 
 
-def _make_login_user(user_id: int = 7, user_name: str = "tester") -> SimpleNamespace:
+def _make_login_user(user_id: int = 7, user_name: str = "tester", is_admin: bool = False) -> SimpleNamespace:
     async def _get_user_group_ids(_user_id: int):
         return []
 
@@ -293,7 +293,7 @@ def _make_login_user(user_id: int = 7, user_name: str = "tester") -> SimpleNames
         user_id=user_id,
         user_name=user_name,
         tenant_id=1,
-        is_admin=lambda: False,
+        is_admin=lambda: is_admin,
         get_user_group_ids=_get_user_group_ids,
     )
 
@@ -380,7 +380,7 @@ async def test_create_options_allow_team_space_without_user_groups():
 
 
 @pytest.mark.asyncio
-async def test_create_options_disallow_department_space_for_department_admin():
+async def test_create_options_allow_department_space_for_department_admin():
     KnowledgeSpaceService = _load_service_class()
     login_user = _make_login_user(user_id=7)
     svc = KnowledgeSpaceService(request=SimpleNamespace(), login_user=login_user)
@@ -392,11 +392,44 @@ async def test_create_options_disallow_department_space_for_department_admin():
     ):
         options = await svc.get_create_options()
 
+    assert options.can_create_department is True
+
+
+@pytest.mark.asyncio
+async def test_create_options_allow_department_space_for_global_admin():
+    KnowledgeSpaceService = _load_service_class()
+    login_user = _make_login_user(user_id=7, is_admin=True)
+    svc = KnowledgeSpaceService(request=SimpleNamespace(), login_user=login_user)
+
+    with patch(
+        "bisheng.knowledge.domain.services.knowledge_space_service.DepartmentDao.aget_user_admin_departments",
+        new_callable=AsyncMock,
+        return_value=[],
+    ) as mock_admin_depts:
+        options = await svc.get_create_options()
+
+    assert options.can_create_department is True
+    mock_admin_depts.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_create_options_disallow_department_space_for_regular_user():
+    KnowledgeSpaceService = _load_service_class()
+    login_user = _make_login_user(user_id=7)
+    svc = KnowledgeSpaceService(request=SimpleNamespace(), login_user=login_user)
+
+    with patch(
+        "bisheng.knowledge.domain.services.knowledge_space_service.DepartmentDao.aget_user_admin_departments",
+        new_callable=AsyncMock,
+        return_value=[],
+    ):
+        options = await svc.get_create_options()
+
     assert options.can_create_department is False
 
 
 @pytest.mark.asyncio
-async def test_validate_department_space_create_rejects_department_admin_approval_request():
+async def test_validate_department_space_create_allows_department_admin_in_scope():
     KnowledgeSpaceService = _load_service_class()
     login_user = _make_login_user(user_id=7)
     svc = KnowledgeSpaceService(request=SimpleNamespace(), login_user=login_user)
@@ -415,12 +448,17 @@ async def test_validate_department_space_create_rejects_department_admin_approva
         patch(
             "bisheng.knowledge.domain.services.knowledge_space_service.DepartmentDao.aget_by_id",
             new_callable=AsyncMock,
-            return_value=SimpleNamespace(id=9, status="active"),
+            return_value=SimpleNamespace(id=9, status="active", path="/9/"),
         ),
         patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service.DepartmentDao.aget_user_admin_departments",
+            "bisheng.knowledge.domain.services.knowledge_space_service.UserDepartmentDao.aget_user_departments",
             new_callable=AsyncMock,
-            return_value=[SimpleNamespace(id=9, name="业务域")],
+            return_value=[SimpleNamespace(department_id=9)],
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.DepartmentDao.aget_active_by_tenant",
+            new_callable=AsyncMock,
+            return_value=[SimpleNamespace(id=9, status="active", path="/9/")],
         ),
         patch.object(
             svc,
@@ -433,13 +471,73 @@ async def test_validate_department_space_create_rejects_department_admin_approva
             new_callable=AsyncMock,
             return_value=False,
         ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceTagLibraryService.validate_bindable_libraries",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
+    ):
+        level, owner_type, owner_id = await svc.validate_knowledge_space_create(
+            name="部门资料库",
+            space_level=KnowledgeSpaceLevelEnum.DEPARTMENT,
+            department_id=9,
+            approval_request=True,
+            auto_tag_library_ids=[1],
+        )
+
+    assert level == KnowledgeSpaceLevelEnum.DEPARTMENT
+    assert owner_type == KnowledgeSpaceOwnerTypeEnum.DEPARTMENT
+    assert owner_id == 9
+
+
+@pytest.mark.asyncio
+async def test_validate_department_space_create_rejects_department_admin_out_of_scope():
+    KnowledgeSpaceService = _load_service_class()
+    login_user = _make_login_user(user_id=7)
+    svc = KnowledgeSpaceService(request=SimpleNamespace(), login_user=login_user)
+
+    with (
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_count_spaces_by_user",
+            new_callable=AsyncMock,
+            return_value=0,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.LLMService.get_workbench_llm",
+            new_callable=AsyncMock,
+            return_value=SimpleNamespace(embedding_model="embedding-1"),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.DepartmentDao.aget_by_id",
+            new_callable=AsyncMock,
+            return_value=SimpleNamespace(id=10, status="active", path="/10/"),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.UserDepartmentDao.aget_user_departments",
+            new_callable=AsyncMock,
+            return_value=[SimpleNamespace(department_id=9)],
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.DepartmentDao.aget_active_by_tenant",
+            new_callable=AsyncMock,
+            return_value=[
+                SimpleNamespace(id=9, status="active", path="/9/"),
+                SimpleNamespace(id=10, status="active", path="/10/"),
+            ],
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceTagLibraryService.validate_bindable_libraries",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
     ):
         with pytest.raises(SpaceCreateDepartmentDeniedError):
             await svc.validate_knowledge_space_create(
                 name="部门资料库",
                 space_level=KnowledgeSpaceLevelEnum.DEPARTMENT,
-                department_id=9,
+                department_id=10,
                 approval_request=True,
+                auto_tag_library_ids=[1],
             )
 
 
@@ -10756,8 +10854,7 @@ class TestFormatAccessibleSpacesCharacterization:
     @pytest.mark.asyncio
     async def test_large_active_membership_list_skips_redundant_effective_permission_checks(self, service):
         spaces = [
-            _make_space(space_id=space_id, user_id=88, auth_type=AuthTypeEnum.PRIVATE)
-            for space_id in range(1000, 1150)
+            _make_space(space_id=space_id, user_id=88, auth_type=AuthTypeEnum.PRIVATE) for space_id in range(1000, 1150)
         ]
         memberships = [
             _make_member(
@@ -10813,8 +10910,7 @@ class TestFormatAccessibleSpacesCharacterization:
     async def test_global_admin_list_skips_per_space_permission_resolution(self, service):
         service.login_user.is_admin = lambda: True
         spaces = [
-            _make_space(space_id=space_id, user_id=88, auth_type=AuthTypeEnum.PRIVATE)
-            for space_id in range(2000, 2150)
+            _make_space(space_id=space_id, user_id=88, auth_type=AuthTypeEnum.PRIVATE) for space_id in range(2000, 2150)
         ]
 
         with (
