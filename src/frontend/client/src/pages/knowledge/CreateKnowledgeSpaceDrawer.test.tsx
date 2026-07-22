@@ -23,6 +23,7 @@ jest.mock("~/hooks", () => ({
             "com_knowledge.department_spaces": "部门知识库",
             "com_knowledge.team_spaces": "团队/科室知识库",
             "com_knowledge.clinic_space": "科室知识库",
+            "com_knowledge.department_space": "部门知识库",
             "com_knowledge.team_space": "团队知识库",
             "com_knowledge.personal_spaces": "个人知识库",
             "com_knowledge.space_create_success": "知识库创建成功",
@@ -290,22 +291,22 @@ describe("CreateKnowledgeSpaceDrawer", () => {
         expect(screen.queryByRole("radio", { name: "个人知识库" })).not.toBeInTheDocument();
     });
 
-    test("科室知识库创建需要选择部门并提交部门", async () => {
+    test("部门知识库创建需要选择部门并提交部门", async () => {
         const onConfirm = jest.fn().mockResolvedValue({ showSuccess: false });
         jest.mocked(getCreateSpaceOptionsApi).mockResolvedValue({
             canCreatePublic: false,
             canCreateDepartment: true,
             canCreateTeam: false,
-            canCreatePersonal: true,
+            canCreatePersonal: false,
             departments: [],
             userGroups: [],
-            defaultSpaceLevel: SpaceLevel.PERSONAL,
+            defaultSpaceLevel: SpaceLevel.DEPARTMENT,
         });
 
         renderDrawer({ initialSpaceLevel: SpaceLevel.DEPARTMENT, onConfirm });
 
         await waitFor(() => expect(getCreateSpaceOptionsApi).toHaveBeenCalled());
-        expect(screen.getByRole("radio", { name: "科室知识库" })).toHaveAttribute("aria-checked", "true");
+        expect(screen.getByRole("radio", { name: "部门知识库" })).toHaveAttribute("aria-checked", "true");
         expect(screen.getByTestId("department-selector")).toBeInTheDocument();
 
         fireEvent.change(screen.getByPlaceholderText("请输入知识库名称"), {
@@ -328,7 +329,7 @@ describe("CreateKnowledgeSpaceDrawer", () => {
         }));
     });
 
-    test("科室知识库创建加载租户全部激活部门时请求参数符合后端限制", async () => {
+    test("部门知识库创建加载租户全部激活部门时请求参数符合后端限制", async () => {
         jest.mocked(getCreateSpaceOptionsApi).mockResolvedValue({
             canCreatePublic: false,
             canCreateDepartment: true,
@@ -451,7 +452,7 @@ describe("CreateKnowledgeSpaceDrawer", () => {
         }));
     });
 
-    test("编辑科室层级知识库时显示科室知识库", async () => {
+    test("编辑部门层级知识库时显示部门知识库", async () => {
         renderDrawer({
             mode: "edit",
             editingSpace: {
@@ -467,10 +468,10 @@ describe("CreateKnowledgeSpaceDrawer", () => {
         });
 
         expect(screen.getByText("编辑知识库")).toBeInTheDocument();
-        expect(screen.getByText("科室知识库")).toBeInTheDocument();
+        expect(screen.getByText("部门知识库")).toBeInTheDocument();
     });
 
-    test("系统管理员编辑科室知识库时可回显并修改所属科室", async () => {
+    test("系统管理员编辑部门知识库时可回显并修改所属部门", async () => {
         const onConfirm = jest.fn().mockResolvedValue(true);
         jest.mocked(getCreateSpaceOptionsApi).mockResolvedValue({
             canCreatePublic: true,
@@ -506,9 +507,9 @@ describe("CreateKnowledgeSpaceDrawer", () => {
         });
 
         expect(await screen.findByTestId("department-selector")).toHaveTextContent("炼铁部");
-        expect(screen.getByText("科室知识库 - 炼铁部")).toBeInTheDocument();
+        expect(screen.getByText("部门知识库 - 炼铁部")).toBeInTheDocument();
         fireEvent.click(await screen.findByRole("button", { name: "选择炼钢部" }));
-        expect(screen.getByText("科室知识库 - 炼钢部")).toBeInTheDocument();
+        expect(screen.getByText("部门知识库 - 炼钢部")).toBeInTheDocument();
         await selectDefaultTagLibrary();
         fireEvent.click(screen.getByRole("button", { name: "保存" }));
 
@@ -519,7 +520,7 @@ describe("CreateKnowledgeSpaceDrawer", () => {
         }));
     });
 
-    test("非系统管理员编辑科室知识库时所属科室保持只读", () => {
+    test("非系统管理员编辑部门知识库时所属部门保持只读", () => {
         renderDrawer({
             mode: "edit",
             canEditDepartmentBinding: false,
@@ -541,7 +542,7 @@ describe("CreateKnowledgeSpaceDrawer", () => {
         expect(screen.getByText(/炼铁部/)).toBeInTheDocument();
     });
 
-    test("系统管理员编辑非科室知识库时不展示科室选择器", () => {
+    test("系统管理员编辑非部门知识库时不展示部门选择器", () => {
         renderDrawer({
             mode: "edit",
             canEditDepartmentBinding: true,

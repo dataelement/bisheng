@@ -269,6 +269,19 @@ export function CreateKnowledgeSpaceDrawer({
         enabled: open && mode === "create",
     });
 
+    const isClinicContext = useMemo(
+        () => mode === "create" && initialSpaceLevel === SpaceLevel.TEAM && Boolean(createOptions?.canCreateDepartment),
+        [mode, initialSpaceLevel, createOptions?.canCreateDepartment],
+    );
+    const departmentLevelLabel = useMemo(
+        () => isClinicContext
+            ? localize("com_knowledge.clinic_space", "科室知识库")
+            : localize("com_knowledge.department_space", "部门知识库"),
+        [isClinicContext, localize],
+    );
+    const bindDepartmentLabel = isClinicContext ? "绑定科室" : "绑定部门";
+    const bindDepartmentPlaceholder = isClinicContext ? "请选择绑定科室" : "请选择绑定部门";
+
     const levelOptions = useMemo(() => ([
         {
             value: SpaceLevel.PUBLIC,
@@ -277,7 +290,7 @@ export function CreateKnowledgeSpaceDrawer({
         },
         {
             value: SpaceLevel.DEPARTMENT,
-            label: localize("com_knowledge.clinic_space", "科室知识库"),
+            label: departmentLevelLabel,
             enabled: createOptions?.canCreateDepartment ?? false,
         },
         {
@@ -291,7 +304,7 @@ export function CreateKnowledgeSpaceDrawer({
             // Personal knowledge bases are system-managed; users cannot create them.
             enabled: false,
         },
-    ]), [createOptions, localize]);
+    ]), [createOptions, departmentLevelLabel, localize]);
     const enabledLevelOptions = useMemo(
         () => levelOptions.filter((option) => option.enabled),
         [levelOptions],
@@ -813,7 +826,7 @@ export function CreateKnowledgeSpaceDrawer({
                                 <div className="space-y-2">
                                     <Label className="text-sm text-[#1D2129] font-medium">
                                         <span className="text-[#F53F3F] mr-1">*</span>
-                                        绑定科室
+                                        {bindDepartmentLabel}
                                     </Label>
                                     <Popover open={departmentDropdownOpen} onOpenChange={setDepartmentDropdownOpen}>
                                         <PopoverTrigger asChild>
@@ -822,12 +835,12 @@ export function CreateKnowledgeSpaceDrawer({
                                                 className="flex h-8 w-full items-center justify-between rounded-[6px] border border-[#E5E6EB] bg-white px-3 text-[14px] text-[#212121] outline-none transition-colors hover:border-[#C9CDD4] focus:border-[#165DFF]"
                                             >
                                                 <span className={cn(!selectedDepartmentName && "text-[#86909C]")}>
-                                                    {selectedDepartmentName || "请选择绑定科室"}
+                                                    {selectedDepartmentName || bindDepartmentPlaceholder}
                                                 </span>
                                                 <ChevronDown className="size-4 text-[#86909C]" />
                                             </button>
                                         </PopoverTrigger>
-                                        <PopoverContent className="w-[360px] p-0" align="start">
+                                        <PopoverContent className="w-[360px] bg-white p-0" align="start">
                                             <div className="h-[320px] p-3">
                                                 <SubjectSearchDepartment
                                                     value={departmentSelection}
