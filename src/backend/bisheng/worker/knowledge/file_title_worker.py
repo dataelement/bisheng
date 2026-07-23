@@ -15,7 +15,7 @@ from bisheng.utils.file import download_minio_file
 from bisheng.worker.main import bisheng_celery
 
 
-def _extract_and_generate_alias(file_id: int) -> str | None:
+def extract_and_generate_alias(file_id: int) -> str | None:
     """Download the file, extract its title, generate an AI alias, and persist it.
 
     Returns the generated alias name, or ``None`` if no alias was generated. All
@@ -94,7 +94,7 @@ def extract_knowledge_file_title_celery(
         preview_cache_key,
     )
     try:
-        _extract_and_generate_alias(file_id)
+        extract_and_generate_alias(file_id)
     except Exception as e:
         # Defensive catch: _extract_and_generate_alias already swallows its own
         # errors, but we keep this guard so the downstream parse task is never

@@ -12310,16 +12310,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
     ) -> None:
         """Enqueue title extraction and AI alias generation before formal parsing."""
         from bisheng.worker.knowledge.file_title_worker import (
-            extract_knowledge_file_title_celery,
+            extract_and_generate_alias,
         )
 
         if len(process_files) != len(preview_cache_keys):
             raise ValueError("process_files and preview_cache_keys length mismatch")
         for index, knowledge_file in enumerate(process_files):
-            extract_knowledge_file_title_celery.delay(
-                knowledge_file.id,
-                preview_cache_keys[index],
-            )
+            extract_and_generate_alias(knowledge_file.id)
 
     @staticmethod
     def enqueue_file_processing(
