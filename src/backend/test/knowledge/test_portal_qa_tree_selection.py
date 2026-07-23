@@ -5,11 +5,11 @@ import pytest
 
 from bisheng.core import database as core_database
 from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFileStatus
+from bisheng.knowledge.domain.services import knowledge_space_service as svc_mod
 from bisheng.knowledge.domain.services.department_file_view_access_service import (
     DepartmentFileAccessDecision,
     DepartmentFileAccessStatus,
 )
-from bisheng.knowledge.domain.services import knowledge_space_service as svc_mod
 
 
 def _file(
@@ -277,6 +277,70 @@ async def test_portal_qa_folder_scope_filters_to_authorized_department_files(
     )
 
     assert result == {7103: [9301]}
+
+
+@pytest.mark.asyncio
+async def test_portal_department_folder_stats_separate_discoverable_and_authorized_counts(
+    monkeypatch,
+):
+    service = svc_mod.KnowledgeSpaceService(
+        request=SimpleNamespace(headers={}),
+        login_user=SimpleNamespace(user_id=7, user_name="tester"),
+    )
+    folder = _file(3001, space_id=7103, folder=True)
+    allowed_file = _file(9301, space_id=7103, path="/3001")
+    denied_file = _file(9302, space_id=7103, path="/3001")
+    service.department_file_view_access_service = SimpleNamespace(
+        evaluate_files=AsyncMock(
+            return_value={
+                9301: DepartmentFileAccessDecision(
+                    file_id=9301,
+                    space_id=7103,
+                    status=DepartmentFileAccessStatus.ALLOWED,
+                    source="approval_grant",
+                    department_id=33,
+                ),
+                9302: DepartmentFileAccessDecision(
+                    file_id=9302,
+                    space_id=7103,
+                    status=DepartmentFileAccessStatus.APPROVAL_REQUIRED,
+                    department_id=33,
+                ),
+            }
+        )
+    )
+    monkeypatch.setattr(
+        service,
+        "_get_shougang_portal_qa_space",
+        AsyncMock(return_value=(SimpleNamespace(id=7103), True)),
+    )
+    monkeypatch.setattr(
+        svc_mod.KnowledgeFileDao,
+        "aget_file_by_ids",
+        AsyncMock(return_value=[folder]),
+    )
+    monkeypatch.setattr(
+        svc_mod.SpaceFileDao,
+        "get_children_by_prefix",
+        AsyncMock(return_value=[allowed_file, denied_file]),
+    )
+
+    result = await service.get_shougang_portal_qa_folder_stats(
+        space_id=7103,
+        folder_ids=[3001],
+        discovery_scope="public_and_department",
+    )
+
+    assert result == {
+        "stats": [
+            {
+                "folder_id": 3001,
+                "file_num": 2,
+                "success_file_num": 2,
+                "resolved_file_count": 1,
+            }
+        ]
+    }
 
 
 @pytest.mark.asyncio

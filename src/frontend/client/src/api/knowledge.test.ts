@@ -12,6 +12,7 @@ import {
   getSpaceInfoApi,
   getPortalDiscoverableSpacesApi,
   getPortalFilePreviewApi,
+  getPortalSpaceFolderStatsApi,
   getPortalSpaceChildrenApi,
   getSquareSpacesApi,
   getSpaceFolderStatsApi,
@@ -237,6 +238,51 @@ describe("getSpaceFolderStatsApi", () => {
         successFileNum: 1,
         visibleSuccessFileNum: 1,
         processingFileNum: 1,
+      },
+    ]);
+  });
+});
+
+describe("getPortalSpaceFolderStatsApi", () => {
+  beforeEach(() => {
+    mockPost.mockReset();
+  });
+
+  it("loads discoverable department folder counts from the portal-safe endpoint", async () => {
+    mockPost.mockResolvedValue({
+      data: {
+        stats: [
+          {
+            folder_id: 101,
+            file_num: 5,
+            success_file_num: 5,
+            resolved_file_count: 2,
+          },
+        ],
+      },
+    });
+
+    const result = await getPortalSpaceFolderStatsApi({
+      space_id: "88",
+      folder_ids: ["101", "101"],
+    });
+
+    expect(mockPost).toHaveBeenCalledWith(
+      "/api/v1/knowledge/shougang-portal/qa/spaces/88/folder-stats",
+      { folder_ids: [101] },
+      {
+        params: {
+          discovery_scope: "public_and_department",
+        },
+      },
+    );
+    expect(result).toEqual([
+      {
+        folderId: "101",
+        fileNum: 5,
+        successFileNum: 5,
+        visibleSuccessFileNum: 2,
+        processingFileNum: 0,
       },
     ]);
   });

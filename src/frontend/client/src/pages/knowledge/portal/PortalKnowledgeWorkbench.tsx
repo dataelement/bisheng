@@ -18,6 +18,7 @@ import {
     downloadWatermarkedKnowledgeFileApi,
     getFilePreviewApi,
     getPortalFilePreviewApi,
+    getPortalSpaceFolderStatsApi,
     getPortalSpaceChildrenApi,
     getPublicSpaceFilePermissionsApi,
     getSpaceChildrenApi,
@@ -134,6 +135,19 @@ async function getPortalWorkbenchChildren(
         });
     }
     return getSpaceChildrenApi(params);
+}
+
+async function getPortalWorkbenchFolderStats(
+    space: KnowledgeSpace | null,
+    params: Parameters<typeof getSpaceFolderStatsApi>[0],
+) {
+    if (isReadOnlyDepartmentDiscoverySpace(space)) {
+        return getPortalSpaceFolderStatsApi({
+            space_id: params.space_id,
+            folder_ids: params.folder_ids,
+        });
+    }
+    return getSpaceFolderStatsApi(params);
 }
 
 type PublicFilePermissionState = {
@@ -931,7 +945,7 @@ export default function PortalKnowledgeWorkbench() {
             if (searchMode && searchTagIds.length) {
                 statsRequest.tag_ids = searchTagIds;
             }
-            const stats = await getSpaceFolderStatsApi(statsRequest);
+            const stats = await getPortalWorkbenchFolderStats(activeSpace, statsRequest);
             if (activeSpaceIdRef.current !== spaceId) return;
             const statsById = new Map(stats.map((item) => [item.folderId, item]));
             folderIds.forEach((folderId) => {
@@ -964,7 +978,7 @@ export default function PortalKnowledgeWorkbench() {
                 }));
             });
         }
-    }, [patchFileById, searchMode, searchTagIds, searchText, statusFilterNumbers]);
+    }, [activeSpace, patchFileById, searchMode, searchTagIds, searchText, statusFilterNumbers]);
 
     const loadRootTree = useCallback(async (page = 1, append = false, spaceId = activeSpace?.id) => {
         if (!spaceId) {

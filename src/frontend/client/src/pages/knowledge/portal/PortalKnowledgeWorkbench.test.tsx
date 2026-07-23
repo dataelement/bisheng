@@ -35,6 +35,7 @@ import {
     getFilePreviewApi,
     getPortalDiscoverableSpacesApi,
     getPortalFilePreviewApi,
+    getPortalSpaceFolderStatsApi,
     getPortalSpaceChildrenApi,
     getFileStatsApi,
     getGroupedSpacesApi,
@@ -439,6 +440,7 @@ jest.mock("~/api/knowledge", () => ({
     getFilePreviewApi: jest.fn(),
     getPortalDiscoverableSpacesApi: jest.fn(),
     getPortalFilePreviewApi: jest.fn(),
+    getPortalSpaceFolderStatsApi: jest.fn(),
     getPortalSpaceChildrenApi: jest.fn(),
     getFileStatsApi: jest.fn(),
     groupSpaceTagsByLibrary: jest.fn(() => []),
@@ -657,6 +659,7 @@ describe("PortalKnowledgeWorkbench", () => {
         jest.mocked(getPortalDiscoverableSpacesApi).mockResolvedValue([]);
         jest.mocked(getSpaceChildrenApi).mockImplementation(() => new Promise(() => undefined) as any);
         jest.mocked(getPortalSpaceChildrenApi).mockImplementation(() => new Promise(() => undefined) as any);
+        jest.mocked(getPortalSpaceFolderStatsApi).mockResolvedValue([] as any);
         jest.mocked(getSpaceFolderStatsApi).mockResolvedValue([] as any);
         jest.mocked(searchSpaceChildrenApi).mockResolvedValue({ data: [], total: 0 } as any);
         jest.mocked(importWebLinkApi).mockResolvedValue(makeFile("web-1", "网页链接", {
@@ -855,6 +858,59 @@ describe("PortalKnowledgeWorkbench", () => {
                 "项目查阅",
             );
         });
+    });
+
+    test("ordinary department spaces lazy load folder counts from the portal-safe endpoint", async () => {
+        const favoriteSpace = makeDefaultFavoriteSpace();
+        const departmentSpace = makeSpace("department-1", "炼钢部知识库", {
+            role: SpaceRole.MEMBER,
+            spaceLevel: SpaceLevel.DEPARTMENT,
+        });
+        const folder = makeFile("101", "技术文档", {
+            type: FileType.FOLDER,
+            spaceId: "department-1",
+            successFileNum: undefined,
+            fileNum: undefined,
+            processingFileNum: undefined,
+        });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [],
+            personalSpaces: [favoriteSpace],
+        } as any);
+        jest.mocked(getPortalDiscoverableSpacesApi).mockResolvedValue([departmentSpace] as any);
+        jest.mocked(getPortalSpaceChildrenApi).mockResolvedValue({
+            data: [folder],
+            page_size: 20,
+            has_more: false,
+            next_cursor: null,
+        });
+        jest.mocked(getPortalSpaceFolderStatsApi).mockResolvedValue([{
+            folderId: "101",
+            successFileNum: 5,
+            fileNum: 5,
+            visibleSuccessFileNum: 2,
+            processingFileNum: 0,
+        }] as any);
+
+        renderWorkbench();
+
+        fireEvent.click(await screen.findByRole("button", { name: "展开部门知识库" }));
+        const departmentRow = await screen.findByTestId("space-row-department-1");
+        fireEvent.click(within(departmentRow).getByRole("button", { name: "炼钢部知识库" }));
+
+        const folderRow = await screen.findByTestId("file-tree-row-101");
+        await waitFor(() => {
+            expect(getPortalSpaceFolderStatsApi).toHaveBeenCalledWith({
+                space_id: "department-1",
+                folder_ids: ["101"],
+            });
+            expect(folderRow).toHaveTextContent(/5\s*\/\s*5/);
+        });
+        expect(getSpaceFolderStatsApi).not.toHaveBeenCalledWith(expect.objectContaining({
+            space_id: "department-1",
+        }));
     });
 
     test("department space managers keep the generic management file tree", async () => {

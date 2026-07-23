@@ -5175,6 +5175,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
             "stats": [
                 {
                     "folder_id": folder_id,
+                    "file_num": counts.get(folder_id, (0, 0))[0],
+                    "success_file_num": counts.get(folder_id, (0, 0))[0],
                     "resolved_file_count": counts.get(folder_id, (0, 0))[1],
                 }
                 for folder_id in unique_folder_ids
