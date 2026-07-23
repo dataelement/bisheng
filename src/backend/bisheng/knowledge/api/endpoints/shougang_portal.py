@@ -9,6 +9,7 @@ from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.knowledge_space import (
+    DailyDownloadLimitExceededError,
     PortalPdfArtifactUnavailableError,
     PortalPdfDownloadBusyError,
     PortalPdfDownloadGenerationError,
@@ -78,6 +79,7 @@ _PORTAL_PDF_DOWNLOAD_STATUS = {
     SpaceFileNotFoundError: 404,
     PortalPdfArtifactUnavailableError: 409,
     PortalPdfDownloadBusyError: 429,
+    DailyDownloadLimitExceededError: 429,
     PortalPdfDownloadServiceUnavailableError: 503,
     PortalPdfDownloadTimeoutError: 504,
     PortalPdfDownloadGenerationError: 500,

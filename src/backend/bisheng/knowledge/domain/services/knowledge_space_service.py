@@ -7,7 +7,6 @@ import logging
 import os
 import re
 import secrets
-import tempfile
 import time
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta, timezone
@@ -35,6 +34,7 @@ from bisheng.common.errcode.knowledge import KnowledgeInvalidCursorError, Knowle
 from bisheng.common.errcode.knowledge_space import (
     DepartmentKnowledgeSpaceAmbiguousError,
     FavoriteSpaceProtectedError,
+    FolderOrBatchDownloadNotAllowedError,
     FreeSpaceMigratingError,
     FreeSpaceMigrationEmbeddingMismatchError,
     FreeSpaceMigrationTargetNotFoundError,
@@ -276,7 +276,7 @@ from bisheng.shougang_portal_config.domain.services.portal_config_service import
 )
 from bisheng.telemetry.domain.mid_table.knowledge_space_content import KnowledgeSpaceContentStat
 from bisheng.user.domain.models.user import UserDao
-from bisheng.utils import generate_uuid, get_request_ip
+from bisheng.utils import get_request_ip
 from bisheng.worker.knowledge import file_worker
 from bisheng.worker.knowledge.space_migrate_worker import space_migrate_celery
 from bisheng.workstation.domain.services.workstation_service import WorkStationService
@@ -11262,6 +11262,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
             logger.exception("Failed to log knowledge space file preview telemetry.")
 
     async def get_file_download(self, file_id: int, *, space_id: int | None = None) -> dict:
+        from bisheng.knowledge.domain.services.knowledge_space_daily_download import (
+            enforce_knowledge_space_daily_download,
+            record_knowledge_space_daily_download,
+        )
+
         file_record = await self._get_file_for_action(file_id, space_id=space_id)
         await self._require_permission_id(
             "knowledge_file",
@@ -11270,8 +11275,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
             space_id=file_record.knowledge_id,
         )
 
+        await enforce_knowledge_space_daily_download(self.login_user)
+
         original_url, preview_url = KnowledgeService.get_file_share_url(file_id)
         if original_url or preview_url:
+            await record_knowledge_space_daily_download(self.login_user)
             asyncio.create_task(self._log_portal_document_download_success(file_record))  # noqa: RUF006
 
         return {
@@ -11987,166 +11995,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
             await KnowledgeDao.async_update_knowledge_update_time_by_id(knowledge.id)
 
     async def batch_download(self, space_id: int, file_ids: list[int], folder_ids: list[int]) -> str:
+        """Folder and multi-file ZIP download is disabled product-wide.
+
+        Kept as an endpoint stub so existing clients receive a clear business error
+        instead of a silent UI-only hide.
         """
-        Download selected files and folders, preserving the original directory structure,
-        compress into a zip archive, upload to the MinIO tmp bucket, and return a
-        presigned URL (valid for 7 days).
-
-        Directory structure is reconstructed from file_level_path (e.g. '/7/42') by
-        resolving each segment id to the corresponding folder name.
-        """
-        space = await KnowledgeDao.aquery_by_id(space_id)
-        if not space or space.type != KnowledgeTypeEnum.SPACE.value:
-            raise SpaceNotFoundError()
-
-        # ── 1. Collect all file records to include ────────────────────────────
-        # Explicit files requested directly
-        direct_files = []
-        for file_id in self._dedupe_ids(file_ids):
-            file_record = await self._get_file_for_action(file_id, space_id=space_id)
-            await self._require_permission_id("knowledge_file", file_id, "download_file", space_id=space_id)
-            direct_files.append(file_record)
-
-        # Files & sub-folders under every requested folder_id
-        folder_db_records: list[KnowledgeFile] = []
-        for folder_id in self._dedupe_ids(folder_ids):
-            folder = await self._get_folder_for_action(space_id, folder_id)
-            await self._require_permission_id("folder", folder_id, "download_folder", space_id=space_id)
-            prefix = f"{folder.file_level_path}/{folder.id}"
-            descendants = await SpaceFileDao.get_children_by_prefix(folder.knowledge_id, prefix)
-            for descendant in descendants:
-                if descendant.file_type == FileType.DIR.value:
-                    await self._require_permission_id("folder", descendant.id, "download_folder", space_id=space_id)
-                else:
-                    await self._require_permission_id(
-                        "knowledge_file",
-                        descendant.id,
-                        "download_file",
-                        space_id=space_id,
-                    )
-            folder_db_records.append(folder)
-            folder_db_records.extend(descendants)
-
-        # All KnowledgeFile objects this download touches
-        all_records: list[KnowledgeFile] = direct_files + folder_db_records
-
-        # ── 2. Build id→name map for every folder encountered ─────────────────
-        #       We need this to translate '/7/42' → 'Reports/Q1'
-        folder_id_to_name: dict[int, str] = {}
-        for rec in all_records:
-            if rec.file_type == FileType.DIR.value:
-                folder_id_to_name[rec.id] = rec.file_name
-
-        # Collect any ancestor folder IDs referenced in file_level_path but not yet known
-        missing_ids: set[int] = set()
-        for rec in all_records:
-            if not rec.file_level_path:
-                continue
-            for part in rec.file_level_path.split("/"):
-                if not part:
-                    continue
-                try:
-                    fid = int(part)
-                    if fid not in folder_id_to_name:
-                        missing_ids.add(fid)
-                except ValueError:
-                    pass
-
-        if missing_ids:
-            extra_folders = await KnowledgeFileDao.aget_file_by_ids(list(missing_ids))
-            for f in extra_folders:
-                if f.file_type == FileType.DIR.value:
-                    folder_id_to_name[f.id] = f.file_name
-
-        def resolve_dir_path(file_level_path: str | None) -> str:
-            """Convert '/7/42' to 'FolderA/SubFolderB' using the name map."""
-            if not file_level_path:
-                return ""
-            parts = [p for p in file_level_path.split("/") if p]
-            names = []
-            for part in parts:
-                try:
-                    fid = int(part)
-                    names.append(folder_id_to_name.get(fid, str(fid)))
-                except ValueError:
-                    names.append(part)
-            return "/".join(names)
-
-        # ── 3. Download files from MinIO and write into a temp dir ────────────
-        from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
-
-        minio = get_minio_storage_sync()
-
-        import os
-        import zipfile
-        from datetime import datetime
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            for rec in all_records:
-                rel_dir = resolve_dir_path(rec.file_level_path)
-                local_dir = os.path.join(tmp_dir, rel_dir) if rel_dir else tmp_dir
-                os.makedirs(local_dir, exist_ok=True)
-                local_path = os.path.join(local_dir, rec.file_name)
-
-                if rec.file_type == FileType.DIR.value:
-                    # Create the folder explicitly so empty folders exist in tmp_dir
-                    os.makedirs(local_path, exist_ok=True)
-                    continue
-
-                target_object_name = rec.object_name
-                # If file source is CHANNEL, use preview_object_name to download the HTML file
-                if rec.file_source == FileSource.CHANNEL.value and rec.preview_file_object_name:
-                    target_object_name = rec.preview_file_object_name
-                    name, _ = os.path.splitext(rec.file_name)
-                    local_path = os.path.join(local_dir, f"{name}.html")
-
-                if not target_object_name:  # no stored object – skip
-                    continue
-
-                try:
-                    response = minio.download_object_sync(object_name=target_object_name)
-                    with open(local_path, "wb") as f:
-                        for one in response.stream(65536):
-                            f.write(one)
-                except Exception:
-                    # Skip files that cannot be fetched (e.g. not yet parsed)
-                    continue
-                finally:
-                    response.close()
-                    response.release_conn()
-
-            # ── 4. Create zip archive ─────────────────────────────────────────
-            timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-            zip_folder = generate_uuid()
-            zip_name = f"{timestamp}_{zip_folder[:6]}.zip"
-            zip_path = os.path.join(tmp_dir, zip_name)
-
-            with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
-                for root, dirs, files in os.walk(tmp_dir):
-                    # Add directories to ensure empty directories are included in the zip
-                    for dirname in dirs:
-                        dir_path = os.path.join(root, dirname)
-                        arcname = os.path.relpath(dir_path, tmp_dir)
-                        zf.write(dir_path, arcname)
-                    # Add files
-                    for filename in files:
-                        if filename == zip_name:
-                            continue  # don't zip the zip itself
-                        full_path = os.path.join(root, filename)
-                        arcname = os.path.relpath(full_path, tmp_dir)
-                        zf.write(full_path, arcname)
-
-            # ── 5. Upload zip to MinIO tmp bucket & return presigned URL ──────
-            minio_object_name = f"download/{zip_folder}/{zip_name}"
-            await minio.put_object_tmp(minio_object_name, Path(zip_path), content_type="application/zip")
-            share_url = await minio.get_share_link(
-                minio_object_name,
-                bucket=minio.tmp_bucket,
-                clear_host=True,
-                expire_days=7,
-            )
-
-        return share_url
+        raise FolderOrBatchDownloadNotAllowedError()
 
     # ──────────────────────────── Subscribe ───────────────────────────────────
 

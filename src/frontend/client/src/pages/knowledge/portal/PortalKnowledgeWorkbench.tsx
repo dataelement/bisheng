@@ -2255,8 +2255,12 @@ export default function PortalKnowledgeWorkbench() {
                 return;
             }
             triggerUrlDownload(downloadUrl, selectedFile.name);
-        } catch {
-            showToast({ message: "下载地址获取失败", severity: NotificationSeverity.ERROR });
+        } catch (err) {
+            const message =
+                err instanceof Error && err.message
+                    ? err.message
+                    : "下载地址获取失败";
+            showToast({ message, severity: NotificationSeverity.ERROR });
         }
     }, [activeSpace, selectedFile, showToast]);
 

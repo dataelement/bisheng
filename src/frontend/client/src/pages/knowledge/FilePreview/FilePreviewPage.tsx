@@ -228,8 +228,13 @@ export default function FilePreviewPage() {
             document.body.removeChild(link);
         } catch (err) {
             console.error("Failed to download file:", err);
+            const message =
+                err instanceof Error && err.message
+                    ? err.message
+                    : localize("com_knowledge.download_failed");
+            window.showToast?.({ message, status: "error" });
         }
-    }, [canDownload, fileId, fileName, spaceId]);
+    }, [canDownload, fileId, fileName, localize, spaceId]);
 
     // --- AI Assistant state ---
     const [showAiAssistant, setShowAiAssistant] = useState(false);

@@ -408,6 +408,8 @@
     "knowledgeSpaceFileUploadLimit": "知识空间文件上传上限",
     "knowledgeSpaceFileLimitDesc": "限制用户在知识空间中最大可上传的文件容量",
     "knowledgeSpaceFileQuotaInvalid": "请输入 0.1～999 之间的容量（GB），最多一位小数",
+    "knowledgeSpaceDownloadDailyLimit": "日下载次数上限",
+    "knowledgeSpaceDownloadDailyLimitDesc": "限制普通用户每日可下载水印 PDF 的次数（默认 20；超级管理员与租户管理员不受限）",
     "maxTotalUpload": "最高累计可上传",
     "workbenchMenuAuthorization": "工作台菜单",
     "adminMenuAuthorization": "管理后台菜单",

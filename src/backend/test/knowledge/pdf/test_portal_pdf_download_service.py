@@ -9,8 +9,9 @@ from types import SimpleNamespace
 import fitz
 import pytest
 
-from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.knowledge_space import (
+    DailyDownloadLimitExceededError,
+    FolderOrBatchDownloadNotAllowedError,
     PortalPdfArtifactUnavailableError,
     PortalPdfDownloadBusyError,
     PortalPdfDownloadGenerationError,
@@ -133,6 +134,24 @@ class FakeUserLock:
         self.release_calls.append((tenant_id, user_id, token))
 
 
+class FakeDailyDownloadCounter:
+    def __init__(self, initial: int = 0) -> None:
+        self.counts: dict[tuple[int, int], int] = {}
+        self.initial = initial
+        self.get_calls: list[tuple[int, int]] = []
+        self.increment_calls: list[tuple[int, int]] = []
+
+    async def get_count(self, *, tenant_id: int, user_id: int) -> int:
+        self.get_calls.append((tenant_id, user_id))
+        return self.counts.get((tenant_id, user_id), self.initial)
+
+    async def increment(self, *, tenant_id: int, user_id: int) -> int:
+        self.increment_calls.append((tenant_id, user_id))
+        key = (tenant_id, user_id)
+        self.counts[key] = self.counts.get(key, self.initial) + 1
+        return self.counts[key]
+
+
 class CapturingRunner:
     def __init__(self, error: Exception | None = None) -> None:
         self.error = error
@@ -180,8 +199,17 @@ def _user(**overrides):
     return SimpleNamespace(**payload)
 
 
-def _login_user() -> UserPayload:
-    return UserPayload(user_id=7, user_name="client-name-must-not-be-used", tenant_id=5)
+def _login_user(*, is_admin: bool = False, is_tenant_admin: bool = False):
+    async def _has_tenant_admin(_tenant_id: int) -> bool:
+        return is_tenant_admin
+
+    return SimpleNamespace(
+        user_id=7,
+        user_name="client-name-must-not-be-used",
+        tenant_id=5,
+        is_admin=lambda: is_admin,
+        has_tenant_admin=_has_tenant_admin,
+    )
 
 
 def _request(**overrides) -> PortalPdfDownloadRequest:
@@ -206,6 +234,8 @@ def _build_service(
     runner: CapturingRunner | None = None,
     telemetry: list | None = None,
     grant_service=None,
+    daily_download_counter: FakeDailyDownloadCounter | None = None,
+    daily_limit: int = -1,
 ) -> tuple[PortalPdfDownloadService, dict]:
     selected_file = file if file is not None else _file()
     selected_user = user if user is not None else _user()
@@ -216,9 +246,13 @@ def _build_service(
     selected_capacity = capacity or PortalPdfDownloadProcessCapacity(2)
     selected_runner = runner or CapturingRunner()
     telemetry_events = telemetry if telemetry is not None else []
+    selected_counter = daily_download_counter or FakeDailyDownloadCounter()
 
     async def artifact_accessor(_file_record):
         return selected_artifact
+
+    async def _resolve_limit(_login_user) -> int:
+        return daily_limit
 
     service = PortalPdfDownloadService(
         config=KnowledgePdfWatermarkConf(),
@@ -234,6 +268,8 @@ def _build_service(
         telemetry_recorder=telemetry_events.append,
         temp_root=tmp_path,
         now_provider=lambda: datetime(2026, 7, 21, 17, 30, 0),
+        daily_download_counter=selected_counter,
+        daily_limit_resolver=_resolve_limit,
     )
     return service, {
         "authorization": selected_authorization,
@@ -242,6 +278,7 @@ def _build_service(
         "capacity": selected_capacity,
         "runner": selected_runner,
         "telemetry": telemetry_events,
+        "daily_counter": selected_counter,
         "grant": service.share_grant_service,
     }
 
@@ -538,3 +575,109 @@ async def test_redis_user_lock_failure_is_fail_closed_service_unavailable() -> N
 
     with pytest.raises(PortalPdfDownloadServiceUnavailableError):
         await lock.acquire(tenant_id=5, user_id=7, ttl_seconds=90)
+
+
+@pytest.mark.asyncio
+async def test_daily_limit_blocks_when_used_reaches_cap(tmp_path: Path) -> None:
+    counter = FakeDailyDownloadCounter(initial=20)
+    service, fakes = _build_service(tmp_path, daily_download_counter=counter, daily_limit=20)
+
+    with pytest.raises(DailyDownloadLimitExceededError):
+        await service.prepare_download(_request(), _login_user())
+
+    assert fakes["daily_counter"].increment_calls == []
+    assert fakes["lock"].acquire_calls == []
+
+
+@pytest.mark.asyncio
+async def test_daily_limit_increments_only_after_success(tmp_path: Path) -> None:
+    counter = FakeDailyDownloadCounter(initial=0)
+    service, fakes = _build_service(tmp_path, daily_download_counter=counter, daily_limit=20)
+
+    await service.prepare_download(_request(), _login_user())
+
+    assert fakes["daily_counter"].get_calls == [(5, 7)]
+    assert fakes["daily_counter"].increment_calls == [(5, 7)]
+    assert fakes["daily_counter"].counts[(5, 7)] == 1
+
+
+@pytest.mark.asyncio
+async def test_daily_limit_skips_increment_on_failure(tmp_path: Path) -> None:
+    counter = FakeDailyDownloadCounter(initial=3)
+    service, fakes = _build_service(
+        tmp_path,
+        daily_download_counter=counter,
+        daily_limit=20,
+        runner=CapturingRunner(error=PdfWatermarkWorkerTimeout("slow")),
+    )
+
+    with pytest.raises(PortalPdfDownloadTimeoutError):
+        await service.prepare_download(_request(), _login_user())
+
+    assert fakes["daily_counter"].get_calls == [(5, 7)]
+    assert fakes["daily_counter"].increment_calls == []
+
+
+@pytest.mark.asyncio
+async def test_daily_limit_skipped_for_super_admin(tmp_path: Path) -> None:
+    counter = FakeDailyDownloadCounter(initial=99)
+    service, fakes = _build_service(tmp_path, daily_download_counter=counter, daily_limit=20)
+
+    await service.prepare_download(_request(), _login_user(is_admin=True))
+
+    assert fakes["daily_counter"].get_calls == []
+    assert fakes["daily_counter"].increment_calls == []
+
+
+@pytest.mark.asyncio
+async def test_daily_limit_skipped_for_tenant_admin(tmp_path: Path) -> None:
+    counter = FakeDailyDownloadCounter(initial=99)
+    service, fakes = _build_service(tmp_path, daily_download_counter=counter, daily_limit=20)
+
+    await service.prepare_download(_request(), _login_user(is_tenant_admin=True))
+
+    assert fakes["daily_counter"].get_calls == []
+    assert fakes["daily_counter"].increment_calls == []
+
+
+@pytest.mark.asyncio
+async def test_daily_limit_skipped_for_share_grant(tmp_path: Path) -> None:
+    counter = FakeDailyDownloadCounter(initial=99)
+    service, fakes = _build_service(tmp_path, daily_download_counter=counter, daily_limit=20)
+
+    await service.prepare_download(
+        _request(share_access_grant="grant-token"),
+        _login_user(),
+    )
+
+    assert fakes["daily_counter"].get_calls == []
+    assert fakes["daily_counter"].increment_calls == []
+    assert fakes["authorization"].share_calls
+
+
+@pytest.mark.asyncio
+async def test_daily_limit_unlimited_does_not_count(tmp_path: Path) -> None:
+    counter = FakeDailyDownloadCounter(initial=0)
+    service, fakes = _build_service(tmp_path, daily_download_counter=counter, daily_limit=-1)
+
+    await service.prepare_download(_request(), _login_user())
+
+    assert fakes["daily_counter"].get_calls == []
+    assert fakes["daily_counter"].increment_calls == []
+
+
+def test_validate_quota_config_accepts_download_daily() -> None:
+    from bisheng.role.domain.services.quota_service import QuotaService
+
+    QuotaService.validate_quota_config({"knowledge_space_download_daily": 20})
+    QuotaService.validate_quota_config({"knowledge_space_download_daily": -1})
+    QuotaService.validate_quota_config({"knowledge_space_download_daily": 0})
+
+
+@pytest.mark.asyncio
+async def test_batch_download_hard_rejected() -> None:
+    from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
+
+    svc = KnowledgeSpaceService.__new__(KnowledgeSpaceService)
+    with pytest.raises(FolderOrBatchDownloadNotAllowedError):
+        await svc.batch_download(12, [1], [2])

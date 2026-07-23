@@ -407,6 +407,8 @@
     "knowledgeSpaceFileUploadLimit": "ナレッジスペースのファイルアップロード上限",
     "knowledgeSpaceFileLimitDesc": "ユーザーがナレッジスペースにアップロードできる最大ファイル容量を制限します",
     "knowledgeSpaceFileQuotaInvalid": "0.1～999 GB の範囲で入力してください（小数は第1位まで）",
+    "knowledgeSpaceDownloadDailyLimit": "1日あたりダウンロード上限",
+    "knowledgeSpaceDownloadDailyLimitDesc": "一般ユーザーが1日にダウンロードできる透かし付き PDF の回数を制限します（既定 20；スーパー管理者とテナント管理者は対象外）",
     "maxTotalUpload": "最大累計アップロード",
     "workbenchMenuAuthorization": "ワークベンチメニュー",
     "adminMenuAuthorization": "管理メニュー",

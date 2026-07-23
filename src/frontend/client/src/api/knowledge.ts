@@ -2680,7 +2680,9 @@ export async function batchDownloadApi(
         data
     );
     if (res?.status_code !== undefined && res.status_code !== 200) {
-        throw new Error(res.status_message || res.message || res.msg || "batch download failed");
+        throw new Error(
+            formatApiErrorMessage(res) || res.status_message || res.message || res.msg || "batch download failed",
+        );
     }
     // Response: { status_code, data: { url: "/tmp-dir/..." } }
     return res?.data?.url ?? res?.url ?? "";
@@ -2771,6 +2773,11 @@ export async function getFileDownloadApi(
 ): Promise<{ original_url: string; preview_url: string }> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const res = await request.get<any>(`/api/v1/knowledge/space/${space_id}/files/${file_id}/download`);
+    if (res?.status_code !== undefined && res.status_code !== 200) {
+        throw new Error(
+            formatApiErrorMessage(res) || res.status_message || res.message || res.msg || "get file download failed",
+        );
+    }
     const data = res?.data ?? res;
     return {
         original_url: data?.original_url ?? "",

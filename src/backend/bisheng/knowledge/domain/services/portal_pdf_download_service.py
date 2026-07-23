@@ -32,6 +32,13 @@ from bisheng.knowledge.domain.schemas.portal_pdf_download_schema import (
     PortalPdfDownloadRequest,
     PreparedPortalPdfDownload,
 )
+from bisheng.knowledge.domain.services.knowledge_space_daily_download import (
+    KnowledgeSpaceDailyDownloadCounter,
+    enforce_knowledge_space_daily_download,
+    record_knowledge_space_daily_download,
+    resolve_knowledge_space_daily_download_limit,
+    should_enforce_knowledge_space_daily_download,
+)
 from bisheng.knowledge.pdf.validator import PdfValidationError, validate_pdf
 from bisheng.knowledge.pdf.watermark import PdfWatermarkSpec
 from bisheng.knowledge.pdf.watermark_worker import (
@@ -146,6 +153,8 @@ class PortalPdfDownloadService:
         temp_root: str | Path | None = None,
         now_provider: Callable[[], datetime] | None = None,
         monotonic: Callable[[], float] = time.monotonic,
+        daily_download_counter: Any | None = None,
+        daily_limit_resolver: Callable[[Any], Awaitable[int]] | None = None,
     ) -> None:
         self.config = config
         self.file_repository = file_repository
@@ -161,6 +170,38 @@ class PortalPdfDownloadService:
         self.temp_root = Path(temp_root).resolve() if temp_root is not None else None
         self.now_provider = now_provider or (lambda: datetime.now(ZoneInfo("Asia/Shanghai")))
         self.monotonic = monotonic
+        self.daily_download_counter = daily_download_counter or KnowledgeSpaceDailyDownloadCounter(
+            now_provider=self.now_provider,
+        )
+        self.daily_limit_resolver = daily_limit_resolver
+
+    async def _resolve_daily_limit(self, login_user: Any) -> int:
+        if self.daily_limit_resolver is not None:
+            return int(await self.daily_limit_resolver(login_user))
+        return await resolve_knowledge_space_daily_download_limit(login_user)
+
+    async def _should_enforce_daily_limit(self, request: PortalPdfDownloadRequest, login_user: Any) -> bool:
+        if request.share_access_grant:
+            return False
+        return await should_enforce_knowledge_space_daily_download(login_user)
+
+    async def _enforce_daily_download_limit(self, request: PortalPdfDownloadRequest, login_user: Any) -> None:
+        if request.share_access_grant:
+            return
+        await enforce_knowledge_space_daily_download(
+            login_user,
+            counter=self.daily_download_counter,
+            limit_resolver=self._resolve_daily_limit,
+        )
+
+    async def _record_daily_download(self, request: PortalPdfDownloadRequest, login_user: Any) -> None:
+        if request.share_access_grant:
+            return
+        await record_knowledge_space_daily_download(
+            login_user,
+            counter=self.daily_download_counter,
+            limit_resolver=self._resolve_daily_limit,
+        )
 
     async def prepare_download(
         self,
@@ -196,6 +237,8 @@ class PortalPdfDownloadService:
                 space_id=request.space_id,
                 file_id=request.file_id,
             )
+
+        await self._enforce_daily_download_limit(request, login_user)
 
         user_record = await self.user_repository.find_by_id(user_id)
         if user_record is None:
@@ -308,6 +351,8 @@ class PortalPdfDownloadService:
             result = self.telemetry_recorder(payload)
             if inspect.isawaitable(result):
                 await result
+
+        await self._record_daily_download(request, login_user)
 
         return PreparedPortalPdfDownload(
             path=output_path,
