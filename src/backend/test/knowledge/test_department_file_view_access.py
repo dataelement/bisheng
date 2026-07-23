@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import json
 from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
@@ -600,10 +601,11 @@ def test_unauthorized_metadata_projection_uses_allowlist() -> None:
         "file_ext": "pdf",
         "file_subcategory_code": "policy",
         "tags": ["制度", "安全"],
-        "updated_at": datetime(2026, 7, 23, 12, 0, 0),
+        "updated_at": "2026-07-23T12:00:00",
         "content_access": DepartmentFileAccessStatus.APPROVAL_REQUIRED,
         "can_download": True,
     }
+    json.dumps(projected)
     assert {
         "abstract",
         "summary",
@@ -613,3 +615,29 @@ def test_unauthorized_metadata_projection_uses_allowlist() -> None:
         "preview_file_object_name",
         "bbox_object_name",
     }.isdisjoint(projected)
+
+
+@pytest.mark.parametrize(
+    ("raw_updated_at", "expected"),
+    [
+        ("2026-07-23T12:00:00", "2026-07-23T12:00:00"),
+        (None, ""),
+    ],
+)
+def test_safe_metadata_updated_at_preserves_strings_and_handles_empty_values(
+    raw_updated_at,
+    expected: str,
+) -> None:
+    file_record = _file()
+    file_record.update_time = raw_updated_at
+
+    projected = DepartmentFileViewAccessService.project_safe_metadata(
+        file_record=file_record,
+        space_name="炼钢部知识库",
+        decision=SimpleNamespace(
+            status=DepartmentFileAccessStatus.APPROVAL_REQUIRED,
+            can_download=False,
+        ),
+    )
+
+    assert projected["updated_at"] == expected

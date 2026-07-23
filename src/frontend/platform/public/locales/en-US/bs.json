@@ -2603,7 +2603,6 @@
     "spaceLevel": {
       "public": "Public",
       "department": "Department",
-      "team_ks": "Section",
       "team": "Team",
       "personal": "Personal"
     },

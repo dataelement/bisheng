@@ -150,7 +150,7 @@ describe("KnowledgePreviewWatermark", () => {
         expect(compactLayout.cellHeight).toBe(180);
         expect(normalLayout.rotation).toBe(-35);
         expect(normalLayout.fontSize).toBe(16);
-        expect(normalLayout.opacity).toBe(0.31);
+        expect(normalLayout.opacity).toBe(0.11);
         expect(normalLayout.cellWidth).toBeGreaterThan(compactLayout.cellWidth);
         expect(normalLayout.cellHeight).toBeGreaterThan(compactLayout.cellHeight);
         expect(longLayout.cellWidth).toBeGreaterThan(normalLayout.cellWidth);

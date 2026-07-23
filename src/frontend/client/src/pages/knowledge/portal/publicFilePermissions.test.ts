@@ -28,4 +28,14 @@ describe("buildPublicFileActionPermissions", () => {
         expect(result.moveEntryIds).toEqual(new Set(["101", "201"]));
         expect(result.permissionEntryIds).toEqual(new Set(["101", "201"]));
     });
+
+    test("grants public downloads without granting any other file action", () => {
+        const result = buildPublicFileActionPermissions({}, undefined, ["101", "201"]);
+
+        expect(result.downloadEntryIds).toEqual(new Set(["101", "201"]));
+        expect(result.renameEntryIds).toEqual(new Set());
+        expect(result.deleteEntryIds).toEqual(new Set());
+        expect(result.moveEntryIds).toEqual(new Set());
+        expect(result.permissionEntryIds).toEqual(new Set());
+    });
 });

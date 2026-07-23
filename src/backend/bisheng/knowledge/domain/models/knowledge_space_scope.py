@@ -15,16 +15,7 @@ class KnowledgeSpaceLevelEnum(str, Enum):
     PUBLIC = 'public'
     DEPARTMENT = 'department'
     TEAM = 'team'
-    TEAM_KS = 'team_ks'  # Clinic-level space: stored distinctly but grouped with TEAM
     PERSONAL = 'personal'
-
-    @classmethod
-    def is_team_level(cls, level: KnowledgeSpaceLevelEnum | str | None) -> bool:
-        """Return True for levels that should be grouped with team spaces."""
-        if level is None:
-            return False
-        value = getattr(level, 'value', level)
-        return value in (cls.TEAM.value, cls.TEAM_KS.value)
 
 
 class KnowledgeSpaceOwnerTypeEnum(str, Enum):
@@ -54,7 +45,7 @@ class KnowledgeSpaceScopeBase(SQLModelSerializable):
         ),
     )
     level: KnowledgeSpaceLevelEnum = Field(
-        sa_column=Column(String(32), nullable=False, comment='public/department/team/team_ks/personal'),
+        sa_column=Column(String(32), nullable=False, comment='public/department/team/personal'),
     )
     owner_type: KnowledgeSpaceOwnerTypeEnum = Field(
         sa_column=Column(String(64), nullable=False, comment='Scope owner type'),
@@ -138,20 +129,10 @@ class KnowledgeSpaceScopeDao(KnowledgeSpaceScopeBase):
 
     @classmethod
     async def aget_space_ids_by_level(cls, level: KnowledgeSpaceLevelEnum | str) -> List[int]:
-        return await cls.aget_space_ids_by_levels([level])
-
-    @classmethod
-    async def aget_space_ids_by_levels(
-        cls, levels: List[KnowledgeSpaceLevelEnum | str]
-    ) -> List[int]:
-        if not levels:
-            return []
-        level_values = [str(getattr(level, "value", level)) for level in levels]
+        level_value = getattr(level, "value", level)
         async with get_async_db_session() as session:
             result = await session.exec(
-                select(KnowledgeSpaceScope.space_id).where(
-                    KnowledgeSpaceScope.level.in_(level_values)
-                )
+                select(KnowledgeSpaceScope.space_id).where(KnowledgeSpaceScope.level == str(level_value))
             )
             return [int(space_id) for space_id in result.all()]
 
@@ -159,22 +140,3 @@ class KnowledgeSpaceScopeDao(KnowledgeSpaceScopeBase):
     async def aget_map_by_space_ids(cls, space_ids: List[int]) -> Dict[int, KnowledgeSpaceScope]:
         rows = await cls.aget_by_space_ids(space_ids)
         return {int(row.space_id): row for row in rows}
-
-    @classmethod
-    async def aupdate_level(
-        cls,
-        space_id: int,
-        level: KnowledgeSpaceLevelEnum,
-    ) -> KnowledgeSpaceScope:
-        async with get_async_db_session() as session:
-            result = await session.exec(
-                select(KnowledgeSpaceScope).where(KnowledgeSpaceScope.space_id == space_id)
-            )
-            row = result.first()
-            if row is None:
-                raise ValueError(f"KnowledgeSpaceScope not found for space_id={space_id}")
-            row.level = level
-            session.add(row)
-            await session.commit()
-            await session.refresh(row)
-            return row

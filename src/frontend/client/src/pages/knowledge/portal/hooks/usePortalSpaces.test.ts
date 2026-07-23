@@ -1,5 +1,5 @@
 import { SpaceLevel, SpaceRole, type KnowledgeSpace } from "~/api/knowledge";
-import { resolveSpacePermissions } from "./usePortalSpaces";
+import { mergeDepartmentSpaces, resolveSpacePermissions } from "./usePortalSpaces";
 
 const makeSpace = (overrides: Partial<KnowledgeSpace> = {}): KnowledgeSpace =>
     ({
@@ -45,5 +45,34 @@ describe("resolveSpacePermissions（个人知识库只有编辑功能）", () =>
         );
         expect(perms.canDeleteSpace).toBe(true);
         expect(perms.canManageMembers).toBe(true);
+    });
+});
+
+describe("mergeDepartmentSpaces", () => {
+    it("普通用户可见发现空间，同时保留原可管理空间的角色和元数据", () => {
+        const discoverableOnly = makeSpace({
+            id: "10",
+            name: "全员可见部门库",
+            role: SpaceRole.MEMBER,
+            spaceLevel: SpaceLevel.DEPARTMENT,
+        });
+        const discoverableManaged = makeSpace({
+            id: "11",
+            name: "发现接口名称",
+            role: SpaceRole.MEMBER,
+            spaceLevel: SpaceLevel.DEPARTMENT,
+        });
+        const managed = makeSpace({
+            id: "11",
+            name: "管理接口名称",
+            role: SpaceRole.ADMIN,
+            spaceLevel: SpaceLevel.DEPARTMENT,
+            departmentName: "炼钢部",
+        });
+
+        expect(mergeDepartmentSpaces([discoverableOnly, discoverableManaged], [managed])).toEqual([
+            discoverableOnly,
+            managed,
+        ]);
     });
 });
