@@ -125,6 +125,10 @@ class KnowledgeLLMConfig(BaseModel):
     source_model_id: Optional[int] = Field(None, description="the Knowledge Base Traceability Model'sID")
     extract_title_model_id: Optional[int] = Field(None,
                                                   description="Documentation Knowledge Base Extraction Header Model'sID")
+    file_alias_model_id: Optional[int] = Field(
+        None,
+        description="Model ID used for generating AI file alias names after knowledge file upload",
+    )
     qa_similar_model_id: Optional[int] = Field(None, description="QAThe Knowledge Base Similarity Question Model'sID")
     abstract_enabled: bool = Field(default=True, description='Whether to generate file summaries after parsing')
     auto_tag_enabled: bool = Field(default=True, description='Whether to generate file tags after upload parsing')

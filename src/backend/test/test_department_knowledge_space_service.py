@@ -220,7 +220,7 @@ def _make_department(*, dept_id: int = 10, name: str = '财务部'):
 
 
 @pytest.mark.asyncio
-async def test_batch_create_spaces_creates_binding_and_returns_infos():
+async def test_batch_create_spaces_reuses_core_binding_and_returns_infos():
     DepartmentKnowledgeSpaceService = _load_service_class()
     req = DepartmentKnowledgeSpaceBatchCreateReq(
         items=[DepartmentKnowledgeSpaceBatchItem(department_id=10)]
@@ -272,12 +272,7 @@ async def test_batch_create_spaces_creates_binding_and_returns_infos():
         )
 
     assert result == [created_info]
-    mock_binding_create.assert_awaited_once_with(
-        tenant_id=1,
-        department_id=10,
-        space_id=101,
-        created_by=1,
-    )
+    mock_binding_create.assert_not_awaited()
     mock_grant_department_viewer.assert_awaited_once_with(space_id=101, department_id=10)
     mock_grant_admins.assert_awaited_once()
 
@@ -338,10 +333,7 @@ async def test_batch_create_spaces_allows_multiple_spaces_for_same_department():
         )
 
     assert result == created_infos
-    assert [one.kwargs for one in create_binding.await_args_list] == [
-        {'tenant_id': 1, 'department_id': 10, 'space_id': 101, 'created_by': 1},
-        {'tenant_id': 1, 'department_id': 10, 'space_id': 102, 'created_by': 1},
-    ]
+    create_binding.assert_not_awaited()
 
 
 @pytest.mark.asyncio

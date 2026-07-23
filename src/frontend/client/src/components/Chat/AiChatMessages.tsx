@@ -18,6 +18,7 @@ import store from "~/store";
 import HeaderTitle from "./HeaderTitle";
 import { QueryKeys } from "~/types/chat";
 import type { ConversationData } from "~/types/chat/queries";
+import { CurrentUserWatermarkSurface } from "~/pages/knowledge/FilePreview/KnowledgePreviewWatermark";
 
 interface AiChatMessagesProps {
     messages: ChatMessage[];
@@ -41,6 +42,8 @@ interface AiChatMessagesProps {
     emptyStateHint?: string;
     /** Optional width utility classes for the inner message column */
     contentWidthClassName?: string;
+    /** 登录态问答正文水印；共享/访客入口保持默认关闭 */
+    watermarkEnabled?: boolean;
     onPresetClick?: (question: string) => void;
     onRegenerate?: (parentMessageId: string) => void;
     onOpenCitationPanel?: (payload: CitationReferencesDesktopPayload) => void;
@@ -148,6 +151,7 @@ export default function AiChatMessages({
     flatMode = false,
     knowledgeChatLayout = false,
     portalDrawerLayout = false,
+    watermarkEnabled = false,
     emptyStateHint,
     contentWidthClassName,
     onPresetClick,
@@ -251,53 +255,63 @@ export default function AiChatMessages({
     // --- Empty state ---
     if (!hasMessages && !isLoading) {
         return (
-            <div
-                ref={emptyScrollRevealRef}
-                className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto px-5 py-4 scrollbar-on-scroll"
-                style={{
-                    transitionProperty: 'background-color',
-                    transitionDuration: '350ms',
-                    transitionTimingFunction: 'ease-in-out'
-                }}
+            <CurrentUserWatermarkSurface
+                enabled={watermarkEnabled}
+                className="flex min-h-0 flex-1"
             >
-                <div className="mb-6">
-                    <img
-                        className="size-[80px] object-contain mx-auto block"
-                        src={`${__APP_ENV__.BASE_URL}/assets/channel/ai-home.png`}
-                        alt="AI Assistant"
-                    />
-                    <p className="mt-[22px] text-center text-sm text-[#86909c]">
-                        {emptyStateHint ?? localize("com_knowledge.qa_current_article")}
-                    </p>
-                    {presetQuestions.length > 0 && (
-                        <div className="w-full flex flex-col gap-3 pt-[22px]">
-                            {presetQuestions.map((q, i) => (
-                                <Button
-                                    key={i}
-                                    variant="ghost"
-                                    className="bg-gray-50 px-3 py-1 text-left text-sm font-normal text-[#86909c] transition-colors hover:bg-[#E6EDFC] hover:text-[#165DFF] active:bg-[#E6EDFC] rounded-lg flex items-center gap-1 group w-fit"
-                                    onClick={() => onPresetClick?.(q)}
-                                >
-                                    <div className="size-4 flex items-center justify-center">
-                                        <span className="w-1.5 h-1.5 rounded-full bg-primary group-hover:hidden group-active:hidden" />
-                                        <CornerDownRightIcon className="size-4 text-primary hidden group-hover:block group-active:block" />
-                                    </div>
-                                    {q}
-                                </Button>
-                            ))}
-                        </div>
-                    )}
+                <div
+                    ref={emptyScrollRevealRef}
+                    className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto px-5 py-4 scrollbar-on-scroll"
+                    style={{
+                        transitionProperty: 'background-color',
+                        transitionDuration: '350ms',
+                        transitionTimingFunction: 'ease-in-out'
+                    }}
+                >
+                    <div className="mb-6">
+                        <img
+                            className="size-[80px] object-contain mx-auto block"
+                            src={`${__APP_ENV__.BASE_URL}/assets/channel/ai-home.png`}
+                            alt="AI Assistant"
+                        />
+                        <p className="mt-[22px] text-center text-sm text-[#86909c]">
+                            {emptyStateHint ?? localize("com_knowledge.qa_current_article")}
+                        </p>
+                        {presetQuestions.length > 0 && (
+                            <div className="w-full flex flex-col gap-3 pt-[22px]">
+                                {presetQuestions.map((q, i) => (
+                                    <Button
+                                        key={i}
+                                        variant="ghost"
+                                        className="bg-gray-50 px-3 py-1 text-left text-sm font-normal text-[#86909c] transition-colors hover:bg-[#E6EDFC] hover:text-[#165DFF] active:bg-[#E6EDFC] rounded-lg flex items-center gap-1 group w-fit"
+                                        onClick={() => onPresetClick?.(q)}
+                                    >
+                                        <div className="size-4 flex items-center justify-center">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-primary group-hover:hidden group-active:hidden" />
+                                            <CornerDownRightIcon className="size-4 text-primary hidden group-hover:block group-active:block" />
+                                        </div>
+                                        {q}
+                                    </Button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
                 </div>
-            </div>
+            </CurrentUserWatermarkSurface>
         );
     }
 
     // --- Loading state ---
     if (isLoading) {
         return (
-            <div className="flex min-h-0 flex-1 items-center justify-center">
-                <div className="animate-spin rounded-full h-6 w-6 border-2 border-primary border-t-transparent" />
-            </div>
+            <CurrentUserWatermarkSurface
+                enabled={watermarkEnabled}
+                className="flex min-h-0 flex-1"
+            >
+                <div className="flex min-h-0 flex-1 items-center justify-center">
+                    <div className="animate-spin rounded-full h-6 w-6 border-2 border-primary border-t-transparent" />
+                </div>
+            </CurrentUserWatermarkSurface>
         );
     }
 
@@ -311,69 +325,74 @@ export default function AiChatMessages({
                     conversation={{ title: headerTitleText, flowId: "", conversationId, flowType: 15 }}
                 />
             )}
-            <div
-                ref={(el) => {
-                    scrollRef.current = el;
-                    messagesScrollRevealRef(el);
-                }}
-                className={cn(
-                    "min-h-0 flex-1 overflow-y-auto scrollbar-on-scroll",
-                    hideHeaderTitle
-                        ? "pt-2"
-                        : isNarrowViewport
-                            ? "pt-11"
-                            : "pt-14",
-                )}
-                onScroll={handleScroll}
+            <CurrentUserWatermarkSurface
+                enabled={watermarkEnabled}
+                className="flex min-h-0 flex-1"
             >
                 <div
+                    ref={(el) => {
+                        scrollRef.current = el;
+                        messagesScrollRevealRef(el);
+                    }}
                     className={cn(
-                        "flex min-h-full w-full flex-col py-2",
-                        contentWidthClassName ?? (knowledgeChatLayout ? "max-w-none" : "max-w-[768px] mx-auto")
+                        "min-h-0 flex-1 overflow-y-auto scrollbar-on-scroll",
+                        hideHeaderTitle
+                            ? "pt-2"
+                            : isNarrowViewport
+                                ? "pt-11"
+                                : "pt-14",
                     )}
+                    onScroll={handleScroll}
                 >
-                    {flatMode ? (
-                        /* Flat mode: render messages as a simple list */
-                        messages.map((message, idx) => {
-                            const isLast = idx === messages.length - 1;
-                            const isLastBot = isLast && !message.isCreatedByUser;
-                            return (
-                                <AiMessageBubble
-                                    key={message.messageId}
-                                    message={message}
-                                    isLatest={isLastBot}
-                                    isStreaming={isStreaming && isLastBot}
-                                    onRegenerate={
-                                        !message.isCreatedByUser && isLastBot && !isStreaming
-                                            ? () => onRegenerate?.(message.parentMessageId)
-                                            : undefined
-                                    }
+                    <div
+                        className={cn(
+                            "flex min-h-full w-full flex-col py-2",
+                            contentWidthClassName ?? (knowledgeChatLayout ? "max-w-none" : "max-w-[768px] mx-auto")
+                        )}
+                    >
+                        {flatMode ? (
+                            /* Flat mode: render messages as a simple list */
+                            messages.map((message, idx) => {
+                                const isLast = idx === messages.length - 1;
+                                const isLastBot = isLast && !message.isCreatedByUser;
+                                return (
+                                    <AiMessageBubble
+                                        key={message.messageId}
+                                        message={message}
+                                        isLatest={isLastBot}
+                                        isStreaming={isStreaming && isLastBot}
+                                        onRegenerate={
+                                            !message.isCreatedByUser && isLastBot && !isStreaming
+                                                ? () => onRegenerate?.(message.parentMessageId)
+                                                : undefined
+                                        }
+                                        knowledgeChatLayout={knowledgeChatLayout}
+                                        portalDrawerLayout={portalDrawerLayout}
+                                        onOpenCitationPanel={onOpenCitationPanel}
+                                        activeCitationMessageId={activeCitationMessageId}
+                                    />
+                                );
+                            })
+                        ) : (
+                            /* Tree mode: render messages as tree with sibling navigation */
+                            tree.length > 0 && (
+                                <MessageTreeNode
+                                    siblings={tree}
+                                    isStreaming={isStreaming}
+                                    totalMessages={messages.length}
+                                    currentIndex={0}
+                                    onRegenerate={onRegenerate}
                                     knowledgeChatLayout={knowledgeChatLayout}
                                     portalDrawerLayout={portalDrawerLayout}
                                     onOpenCitationPanel={onOpenCitationPanel}
                                     activeCitationMessageId={activeCitationMessageId}
                                 />
-                            );
-                        })
-                    ) : (
-                        /* Tree mode: render messages as tree with sibling navigation */
-                        tree.length > 0 && (
-                            <MessageTreeNode
-                                siblings={tree}
-                                isStreaming={isStreaming}
-                                totalMessages={messages.length}
-                                currentIndex={0}
-                                onRegenerate={onRegenerate}
-                                knowledgeChatLayout={knowledgeChatLayout}
-                                portalDrawerLayout={portalDrawerLayout}
-                                onOpenCitationPanel={onOpenCitationPanel}
-                                activeCitationMessageId={activeCitationMessageId}
-                            />
-                        )
-                    )}
-                    <div ref={endRef} className="h-0 shrink-0" />
+                            )
+                        )}
+                        <div ref={endRef} className="h-0 shrink-0" />
+                    </div>
                 </div>
-            </div>
+            </CurrentUserWatermarkSurface>
             {/* Scroll to bottom button */}
             {showScrollBtn && (
                 <div className="absolute -bottom-4 w-full h-0 flex justify-center z-10">

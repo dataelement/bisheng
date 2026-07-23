@@ -10,6 +10,10 @@ import {
   deleteSpaceApi,
   downloadWatermarkedKnowledgeFileApi,
   getSpaceInfoApi,
+  getPortalDiscoverableSpacesApi,
+  getPortalFilePreviewApi,
+  getPortalSpaceFolderStatsApi,
+  getPortalSpaceChildrenApi,
   getSquareSpacesApi,
   getSpaceFolderStatsApi,
   listMyUploadedFilesApi,
@@ -234,6 +238,51 @@ describe("getSpaceFolderStatsApi", () => {
         successFileNum: 1,
         visibleSuccessFileNum: 1,
         processingFileNum: 1,
+      },
+    ]);
+  });
+});
+
+describe("getPortalSpaceFolderStatsApi", () => {
+  beforeEach(() => {
+    mockPost.mockReset();
+  });
+
+  it("loads discoverable department folder counts from the portal-safe endpoint", async () => {
+    mockPost.mockResolvedValue({
+      data: {
+        stats: [
+          {
+            folder_id: 101,
+            file_num: 5,
+            success_file_num: 5,
+            resolved_file_count: 2,
+          },
+        ],
+      },
+    });
+
+    const result = await getPortalSpaceFolderStatsApi({
+      space_id: "88",
+      folder_ids: ["101", "101"],
+    });
+
+    expect(mockPost).toHaveBeenCalledWith(
+      "/api/v1/knowledge/shougang-portal/qa/spaces/88/folder-stats",
+      { folder_ids: [101] },
+      {
+        params: {
+          discovery_scope: "public_and_department",
+        },
+      },
+    );
+    expect(result).toEqual([
+      {
+        folderId: "101",
+        fileNum: 5,
+        successFileNum: 5,
+        visibleSuccessFileNum: 2,
+        processingFileNum: 0,
       },
     ]);
   });
@@ -716,6 +765,108 @@ describe("mapChild", () => {
     );
 
     expect(file.name).toBe("首钢官网");
+  });
+
+  it("maps portal department access flags without manufacturing content fields", () => {
+    const file = mapChild(
+      {
+        id: 1004,
+        knowledge_id: 88,
+        file_name: "部门制度.pdf",
+        file_type: 1,
+        status: 2,
+        content_access: "approval_required",
+        can_download: false,
+        is_department_file: true,
+      },
+      "88",
+    );
+
+    expect(file).toMatchObject({
+      id: "1004",
+      contentAccess: "approval_required",
+      canDownload: false,
+      isDepartmentFile: true,
+      summary: "",
+    });
+    expect(file.size).toBeUndefined();
+  });
+});
+
+describe("portal workbench discovery api", () => {
+  beforeEach(() => {
+    mockGet.mockReset();
+  });
+
+  it("loads all logged-in discoverable spaces and maps the department safe tree", async () => {
+    mockGet
+      .mockResolvedValueOnce({
+        status_code: 200,
+        data: {
+          spaces: [{ id: 88, name: "炼钢部知识库", space_level: "department" }],
+        },
+      })
+      .mockResolvedValueOnce({
+        status_code: 200,
+        data: {
+          data: [{
+            id: 1004,
+            knowledge_id: 88,
+            file_name: "部门制度.pdf",
+            file_type: 1,
+            status: 2,
+            content_access: "approval_required",
+            can_download: false,
+            is_department_file: true,
+          }],
+          page_size: 20,
+          has_more: false,
+          next_cursor: null,
+        },
+      })
+      .mockResolvedValueOnce({
+        status_code: 200,
+        data: {
+          preview_url: "/portal-preview.pdf",
+          can_download: false,
+        },
+      });
+
+    await expect(getPortalDiscoverableSpacesApi()).resolves.toEqual([
+      expect.objectContaining({
+        id: "88",
+        name: "炼钢部知识库",
+        spaceLevel: SpaceLevel.DEPARTMENT,
+      }),
+    ]);
+    await expect(getPortalSpaceChildrenApi({
+      space_id: "88",
+      page_size: 20,
+    })).resolves.toEqual(expect.objectContaining({
+      data: [expect.objectContaining({
+        id: "1004",
+        contentAccess: "approval_required",
+      })],
+    }));
+    await expect(getPortalFilePreviewApi("88", "1004")).resolves.toMatchObject({
+      preview_url: "/portal-preview.pdf",
+      can_download: false,
+    });
+
+    expect(mockGet).toHaveBeenNthCalledWith(
+      1,
+      "/api/v1/knowledge/shougang-portal/spaces",
+      { params: { discovery_scope: "public_and_department" } },
+    );
+    expect(mockGet).toHaveBeenNthCalledWith(
+      2,
+      "/api/v1/knowledge/shougang-portal/qa/spaces/88/children",
+      { params: { discovery_scope: "public_and_department", parent_id: undefined, cursor: undefined, page_size: 20 } },
+    );
+    expect(mockGet).toHaveBeenNthCalledWith(
+      3,
+      "/api/v1/knowledge/shougang-portal/files/88/1004/preview",
+    );
   });
 });
 

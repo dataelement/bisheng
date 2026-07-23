@@ -2,10 +2,30 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
+from sqlmodel.ext.asyncio.session import AsyncSession
 
+from bisheng.approval.domain.schemas.approval_center_schema import (
+    DepartmentFileViewApplyRequest,
+)
 from bisheng.approval.domain.services.approval_center_service import ApprovalCenterService
+from bisheng.approval.domain.services.department_file_view_approval_service import (
+    DepartmentFileViewApprovalService,
+)
+from bisheng.approval.domain.services.fixed_scenario_provisioner import (
+    FixedScenarioProvisioner,
+)
+from bisheng.common.dependencies.core_deps import get_db_session
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.schemas.api import resp_200
+from bisheng.knowledge.domain.repositories.implementations.department_file_view_grant_repository_impl import (
+    DepartmentFileViewGrantRepositoryImpl,
+)
+from bisheng.knowledge.domain.repositories.implementations.knowledge_file_repository_impl import (
+    KnowledgeFileRepositoryImpl,
+)
+from bisheng.knowledge.domain.services.department_file_view_access_service import (
+    DepartmentFileViewAccessService,
+)
 from bisheng.utils import get_request_ip
 
 router = APIRouter(prefix='/approval', tags=['approval'])
@@ -28,6 +48,23 @@ class MenuAccessApplyReq(BaseModel):
     menu_key: str
     menu_name: str
     reason: str | None = Field(default=None, max_length=2000)
+
+
+def _build_department_file_view_service(
+    session: AsyncSession,
+) -> DepartmentFileViewApprovalService:
+    file_repository = KnowledgeFileRepositoryImpl(session)
+    grant_repository = DepartmentFileViewGrantRepositoryImpl(session)
+    access_service = DepartmentFileViewAccessService(
+        session=session,
+        grant_repository=grant_repository,
+    )
+    return DepartmentFileViewApprovalService(
+        session=session,
+        file_repository=file_repository,
+        access_service=access_service,
+        provisioner=FixedScenarioProvisioner(session),
+    )
 
 
 @router.get('/my-tasks')
@@ -146,5 +183,52 @@ async def revoke_menu_grant(
         operator_user_name=login_user.user_name,
         reason=req.reason,
         ip_address=get_request_ip(request),
+    )
+    return resp_200(data)
+
+
+@router.get('/department-file-view/status')
+async def get_department_file_view_status(
+    space_id: int,
+    file_id: int,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    session: AsyncSession = Depends(get_db_session),
+):
+    data = await _build_department_file_view_service(session).status(
+        login_user=login_user,
+        space_id=space_id,
+        file_id=file_id,
+    )
+    return resp_200(data)
+
+
+@router.post('/department-file-view/apply')
+async def apply_department_file_view(
+    req: DepartmentFileViewApplyRequest,
+    request: Request,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    session: AsyncSession = Depends(get_db_session),
+):
+    data = await _build_department_file_view_service(session).apply(
+        login_user=login_user,
+        space_id=req.space_id,
+        file_id=req.file_id,
+        reason=req.reason,
+        ip_address=get_request_ip(request),
+    )
+    return resp_200(data)
+
+
+@router.post('/department-file-view/{instance_id}/revoke-grant')
+async def revoke_department_file_view_grant(
+    instance_id: int,
+    req: ApprovalRevokeReq,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    session: AsyncSession = Depends(get_db_session),
+):
+    data = await _build_department_file_view_service(session).revoke(
+        login_user=login_user,
+        instance_id=instance_id,
+        reason=req.reason,
     )
     return resp_200(data)

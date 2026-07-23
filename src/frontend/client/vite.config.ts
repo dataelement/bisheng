@@ -73,6 +73,7 @@ export default defineConfig(({ command, mode }) => {
   const env = loadEnv(mode, path.join(__dirname, '..'));
   const minioTarget = env.VITE_DEV_MINIO_TARGET || 'http://192.168.106.171:9100';
   const apiTarget = env.VITE_DEV_API_TARGET || 'http://127.0.0.1:7860';
+  const bishengMinioSignedHost = env.BISHENG_MINIO_SIGNED_HOST || 'http://192.168.106.171:9100';
 
   return {
   base: app_env.BASE_URL || '/',
@@ -92,6 +93,11 @@ export default defineConfig(({ command, mode }) => {
         rewrite: (path) => {
           return path.replace(/^\/workspace/, '');
         },
+        configure: (proxy, options) => {
+          proxy.on('proxyReq', (proxyReq, req, res) => {
+            proxyReq.setHeader('host', bishengMinioSignedHost.replace(/^https?:\/\//, ''));
+          });
+        }
       },
       '/workspace/api': {
         target: apiTarget,
@@ -114,6 +120,11 @@ export default defineConfig(({ command, mode }) => {
         rewrite: (path) => {
           return path.replace(/^\/workspace/, '');
         },
+        configure: (proxy, options) => {
+          proxy.on('proxyReq', (proxyReq, req, res) => {
+            proxyReq.setHeader('host', bishengMinioSignedHost.replace(/^https?:\/\//, ''));
+          });
+        }
       },
     },
   },

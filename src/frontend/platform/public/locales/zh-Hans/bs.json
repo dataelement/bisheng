@@ -466,6 +466,8 @@
     "knowledgeSpaceFileUploadLimit": "知识空间文件上传上限",
     "knowledgeSpaceFileLimitDesc": "限制用户在知识空间中最大可上传的文件容量",
     "knowledgeSpaceFileQuotaInvalid": "请输入 0.1～999 之间的容量（GB），最多一位小数",
+    "knowledgeSpaceDownloadDailyLimit": "日下载次数上限",
+    "knowledgeSpaceDownloadDailyLimitDesc": "限制普通用户每日可下载水印 PDF 的次数（默认 20；超级管理员与租户管理员不受限）",
     "maxTotalUpload": "最高累计可上传",
     "workbenchMenuAuthorization": "工作台菜单",
     "adminMenuAuthorization": "管理后台菜单",
@@ -2475,6 +2477,7 @@
     "approverIdsRequired": "请至少输入一个有效的审批人 ID",
     "routeFallback": "流程分支",
     "enabled": "启用",
+    "systemManagedReadOnly": "系统内置，流程结构只读",
     "disabled": "未启用",
     "emptyScenarios": "当前还没有审批场景",
     "emptyRoutes": "当前场景还没有配置条件分支",
@@ -2536,7 +2539,8 @@
       "target_knowledge_space_owner": "目标知识空间 Owner",
       "target_knowledge_space_manager": "目标知识空间 Manager",
       "target_knowledge_space_owner_department_admin": "目标知识空间 Owner 的部门管理员",
-      "target_knowledge_space_manager_department_admin": "目标知识空间 Manager 的部门管理员"
+      "target_knowledge_space_manager_department_admin": "目标知识空间 Manager 的部门管理员",
+      "department_file_approvers": "文件所属部门管理员"
     },
     "roleValue": {
       "admin": "系统管理员",
@@ -2551,7 +2555,6 @@
     "spaceLevel": {
       "public": "公共",
       "department": "部门",
-      "team_ks": "科室",
       "team": "团队",
       "personal": "个人"
     },

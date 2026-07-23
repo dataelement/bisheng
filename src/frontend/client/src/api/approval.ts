@@ -234,6 +234,97 @@ export async function revokeMenuAccessGrantApi(
   return unwrapPayload(response);
 }
 
+export async function revokeDepartmentFileViewGrantApi(
+  instanceId: number,
+  data: { reason: string },
+): Promise<Record<string, any>> {
+  const response = await request.post<ApiResponse<Record<string, any>>>(
+    `/api/v1/approval/department-file-view/${instanceId}/revoke-grant`,
+    data,
+  );
+  return unwrapPayload(response);
+}
+
+export type DepartmentFileViewStatus =
+  | "allowed"
+  | "approval_required"
+  | "pending"
+  | "rejected"
+  | "withdrawn"
+  | "scenario_disabled"
+  | "approver_unavailable"
+  | "invalid_binding";
+
+export interface DepartmentFileViewAccess {
+  spaceId: string;
+  fileId: string;
+  status: DepartmentFileViewStatus;
+  contentAccess: string;
+  accessSource?: string;
+  canDownload: boolean;
+  instanceId?: number;
+  latestInstanceStatus?: string;
+  safeMetadata: Record<string, unknown>;
+}
+
+interface DepartmentFileViewAccessDto {
+  space_id: number;
+  file_id: number;
+  status: DepartmentFileViewStatus;
+  content_access: string;
+  access_source?: string | null;
+  can_download?: boolean;
+  instance_id?: number | null;
+  latest_instance_status?: string | null;
+  safe_metadata?: Record<string, unknown>;
+}
+
+function mapDepartmentFileViewAccess(dto: DepartmentFileViewAccessDto): DepartmentFileViewAccess {
+  return {
+    spaceId: String(dto.space_id),
+    fileId: String(dto.file_id),
+    status: dto.status,
+    contentAccess: dto.content_access,
+    accessSource: dto.access_source ?? undefined,
+    canDownload: Boolean(dto.can_download),
+    instanceId: dto.instance_id ?? undefined,
+    latestInstanceStatus: dto.latest_instance_status ?? undefined,
+    safeMetadata: dto.safe_metadata ?? {},
+  };
+}
+
+export async function getDepartmentFileViewStatusApi(
+  spaceId: string,
+  fileId: string,
+): Promise<DepartmentFileViewAccess> {
+  const response = await request.get<ApiResponse<DepartmentFileViewAccessDto>>(
+    "/api/v1/approval/department-file-view/status",
+    {
+      params: {
+        space_id: Number(spaceId),
+        file_id: Number(fileId),
+      },
+    },
+  );
+  return mapDepartmentFileViewAccess(unwrapPayload(response));
+}
+
+export async function applyDepartmentFileViewApi(
+  spaceId: string,
+  fileId: string,
+  reason: string,
+): Promise<DepartmentFileViewAccess> {
+  const response = await request.post(
+    "/api/v1/approval/department-file-view/apply",
+    {
+      space_id: Number(spaceId),
+      file_id: Number(fileId),
+      reason: reason.trim(),
+    },
+  ) as ApiResponse<DepartmentFileViewAccessDto>;
+  return mapDepartmentFileViewAccess(unwrapPayload(response));
+}
+
 export interface ShougangKnowledgeSpaceCreateApprovalPayload {
   name: string;
   description?: string;

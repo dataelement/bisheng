@@ -103,10 +103,10 @@ class ExpertService:
             introduction=request.introduction,
             depart_ment=request.depart_ment,
             user_id=request.user_id,
-            major = request.major,
-            position = request.position,
-            job_family = request.job_family,
-            job_category = request.job_category,
+            major=request.major,
+            position=request.position,
+            job_family=request.job_family,
+            job_category=request.job_category,
         )
         temp_expert = await self.repository.create(expert)
         depart = await DepartmentDao.aget_by_id(temp_expert.depart_ment)
@@ -134,27 +134,107 @@ class ExpertService:
         return expert_dict
 
     async def list_experts(
-        self, keyword: Optional[str] = None, skip: int = 0, limit: int = 20
+        self,
+        keyword: Optional[str] = None,
+        department_id: Optional[str] = None,
+        job_family: Optional[str] = None,
+        job_category: Optional[str] = None,
+        position: Optional[str] = None,
+        major: Optional[str] = None,
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
+        skip: int = 0,
+        limit: int = 20,
     ) -> tuple[List[dict], int]:
         """列表查询专家"""
-        experts, total = await self.repository.list_all(keyword=keyword, skip=skip, limit=limit)
+        sort_by_department = sort_by == "department"
+        experts, total = await self.repository.list_all(
+            keyword=keyword,
+            department_id=department_id,
+            job_family=job_family,
+            job_category=job_category,
+            position=position,
+            major=major,
+            sort_by=sort_by,
+            sort_order=sort_order,
+            skip=0 if sort_by_department else skip,
+            limit=None if sort_by_department else limit,
+        )
+        experts_all = await self._build_expert_rows(experts)
+        if sort_by_department:
+            populated = [item for item in experts_all if str(item.get("depart_ment") or "").strip()]
+            empty = [item for item in experts_all if not str(item.get("depart_ment") or "").strip()]
+            populated.sort(
+                key=lambda item: (
+                    str(item.get("depart_ment") or "").casefold(),
+                    str(item.get("expert_name") or "").casefold(),
+                    int(item.get("id") or 0),
+                ),
+                reverse=sort_order == "desc",
+            )
+            experts_all = (populated + empty)[skip : skip + limit]
+        return experts_all, total
+
+    async def list_filter_options(self) -> dict[str, object]:
+        """获取专家管理页部门及四个职业维度的筛选项。"""
+        options = await self.repository.list_filter_options()
+        department_ids = []
+        for value in options.get("department_ids", []):
+            try:
+                department_ids.append(int(value))
+            except (TypeError, ValueError):
+                continue
+
+        departments = await DepartmentDao.aget_by_ids(department_ids)
+        department_options = sorted(
+            (
+                {"id": str(department.id), "name": department.name}
+                for department in departments
+                if department.id is not None and str(department.name or "").strip()
+            ),
+            key=lambda item: (str(item["name"]).casefold(), str(item["id"])),
+        )
+        return {
+            "departments": department_options,
+            "job_families": options.get("job_families", []),
+            "job_categories": options.get("job_categories", []),
+            "positions": options.get("positions", []),
+            "majors": options.get("majors", []),
+        }
+
+    async def _build_expert_rows(self, experts: List[Expert]) -> List[dict]:
+        department_ids: set[int] = set()
+        for expert in experts:
+            try:
+                if expert.depart_ment:
+                    department_ids.add(int(expert.depart_ment))
+            except (TypeError, ValueError):
+                pass
+
+        departments = await DepartmentDao.aget_by_ids(sorted(department_ids))
+        department_names = {
+            int(department.id): department.name for department in departments if department.id is not None
+        }
+
         experts_all = []
         for expert in experts:
             expert_dict = expert.model_dump()
             expert_dict["department_id"] = expert.depart_ment
-            department = await DepartmentDao.aget_by_id(expert.depart_ment)
-            if department:
-                expert_dict["depart_ment"] = department.name
-            else:
-                expert_dict["depart_ment"] = None
+            try:
+                department_id = int(expert.depart_ment) if expert.depart_ment else None
+            except (TypeError, ValueError):
+                department_id = None
+            expert_dict["depart_ment"] = department_names.get(department_id)
+            expert_dict["expert_score"] = (
+                int(expert.answer_count or 0) + int(expert.adoption_count or 0) * 5 + int(expert.vote_count or 0) * 2
+            )
             experts_all.append(expert_dict)
-        return experts_all, total
+        return experts_all
 
     async def delete_expert(self, expert_id: int) -> bool:
         """删除专家"""
         return await self.repository.delete(expert_id)
-    
-    
+
     async def get_expertinfo(self, expert_name: str) -> Optional[Expert]:
         """获取专家信息"""
         expert = await self.repository.get_expertinfo(expert_name)
@@ -165,8 +245,7 @@ class ExpertService:
             else:
                 expert.depart_ment = None
         return expert
-    
-        
+
     async def get_expertinfobyid(self, user_id: int) -> bool:
         """获取专家信息"""
         return await self.repository.get_expertinfo_userid(user_id)
@@ -199,8 +278,8 @@ class QuestionService:
 
         question = await self.repository.create(question)
         # 发送邀请通知
-        await self._send_expert_invitation_inbox_notice(question, user_id,user_name)
-    
+        await self._send_expert_invitation_inbox_notice(question, user_id, user_name)
+
         logger.info(f"Question created: {question.id} by user {user_id}")
         return question
 
@@ -223,7 +302,13 @@ class QuestionService:
                     return [], 0
                 expert_id = expert.id
         questions, total = await self.repository.list_all(
-            business_domain=business_domain, status=status, sort_by=sort_by, user_id=user_id, skip=skip, limit=limit, expert_id=expert_id
+            business_domain=business_domain,
+            status=status,
+            sort_by=sort_by,
+            user_id=user_id,
+            skip=skip,
+            limit=limit,
+            expert_id=expert_id,
         )
         if questions and len(questions) > 0:
             for question in questions:
@@ -241,7 +326,6 @@ class QuestionService:
         question.view_count += 1
         await self.repository.update(question_id, view_count=question.view_count)
         return question
-
 
     async def adopt_answer(self, question_id: int, answer_id: int, operator_id: int) -> Question:
         """采纳最佳回答"""
@@ -262,20 +346,17 @@ class QuestionService:
 
         # 更新问题状态
         question.adopted_answer_id = answer_id
-        question.status =1  # 已解决    
+        question.status = 1  # 已解决
         await self.repository.update(question_id, adopted_answer_id=answer_id, status=1)
 
         # 更新回答状态
         answer.status = 1  # 已采纳
-        await self.answer_repo.update(answer_id, status=1,adopted=True)
+        await self.answer_repo.update(answer_id, status=1, adopted=True)
         # 增加采纳采纳数
         await self.expert_repo.increment_adoption_count(answer.expert_id, count=1)
 
         # 发送采纳通知
-        await self._send_adoption_notification(
-            question,
-            answer
-        )
+        await self._send_adoption_notification(question, answer)
 
         logger.info(f"Answer {answer_id} adopted for question {question_id}")
         return question
@@ -318,8 +399,12 @@ class QuestionService:
 
         from bisheng.core.database import get_async_db_session
         from bisheng.message.domain.models.inbox_message import MessageStatusEnum, MessageTypeEnum
-        from bisheng.message.domain.repositories.implementations.inbox_message_read_repository_impl import InboxMessageReadRepositoryImpl
-        from bisheng.message.domain.repositories.implementations.inbox_message_repository_impl import InboxMessageRepositoryImpl
+        from bisheng.message.domain.repositories.implementations.inbox_message_read_repository_impl import (
+            InboxMessageReadRepositoryImpl,
+        )
+        from bisheng.message.domain.repositories.implementations.inbox_message_repository_impl import (
+            InboxMessageRepositoryImpl,
+        )
         from bisheng.message.domain.services.message_service import MessageService
 
         content = [
@@ -363,11 +448,11 @@ class QuestionService:
     async def get_answer_count_by_domain(self) -> list[dict]:
         """获取每个业务域的回答数"""
         return await self.repository.get_answer_count_by_domain()
-    
+
     async def delete_question(self, question_id: int) -> bool:
         """删除问题"""
         return await self.repository.delete(question_id)
-    
+
     async def update_question(self, question_id: int, request: QuestionUpdateRequest) -> Question:
         """更新问题信息"""
         question = await self.repository.get_by_id(question_id)
@@ -378,21 +463,17 @@ class QuestionService:
         new_question = await self.repository.update(question_id, **update_data)
         # 发送邀请通知
         # await self._send_expert_invitation_inbox_notice(new_question, user_id,user_name)
-    
+
         # logger.info(f"Question updated: {new_question.id} by user {user_id}")
         return new_question
-    
+
     async def _send_expert_invitation_inbox_notice(
         self,
         question: Question,
         sender_id: int,
         sender_name: str,
     ):
-        expert_ids = [
-            int(item)
-            for item in (question.invited_experts or "").split(";")
-            if item.strip().isdigit()
-        ]
+        expert_ids = [int(item) for item in (question.invited_experts or "").split(";") if item.strip().isdigit()]
         if not expert_ids:
             return
 
@@ -408,8 +489,12 @@ class QuestionService:
 
         from bisheng.core.database import get_async_db_session
         from bisheng.message.domain.models.inbox_message import MessageStatusEnum, MessageTypeEnum
-        from bisheng.message.domain.repositories.implementations.inbox_message_read_repository_impl import InboxMessageReadRepositoryImpl
-        from bisheng.message.domain.repositories.implementations.inbox_message_repository_impl import InboxMessageRepositoryImpl
+        from bisheng.message.domain.repositories.implementations.inbox_message_read_repository_impl import (
+            InboxMessageReadRepositoryImpl,
+        )
+        from bisheng.message.domain.repositories.implementations.inbox_message_repository_impl import (
+            InboxMessageRepositoryImpl,
+        )
         from bisheng.message.domain.services.message_service import MessageService
 
         content = [
@@ -495,24 +580,24 @@ class AnswerService:
         await self.expert_repo.increment_answer_count(expert.id, count=1)
 
         # 发送回答通知给提问者
-        await self._send_answer_notification(
-             question,
-             answer
-        )
+        await self._send_answer_notification(question, answer)
 
         logger.info(f"Answer created: {answer.id} for question {request.question_id}")
         return answer
 
-    async def get_answers(self, question_id: int, skip: int = 0, limit: int = 100, sort_by: Optional[str] = None) -> tuple[List[Answer], int]:
+    async def get_answers(
+        self, question_id: int, skip: int = 0, limit: int = 100, sort_by: Optional[str] = None
+    ) -> tuple[List[Answer], int]:
         """获取问题的回答列表"""
         return await self.repository.get_by_question_id(question_id, skip=skip, limit=limit, sort_by=sort_by)
 
-
-    async def get_by_expertname(self,  expert_name: str,question_id: int,) -> Optional[Answer]:
+    async def get_by_expertname(
+        self,
+        expert_name: str,
+        question_id: int,
+    ) -> Optional[Answer]:
         """获取问题的回答列表"""
-        return await self.repository.get_by_expertname(expert_name,question_id)
-
-
+        return await self.repository.get_by_expertname(expert_name, question_id)
 
     async def update_answer(
         self,
@@ -553,19 +638,19 @@ class AnswerService:
 
         return await self.repository.delete(answer_id)
 
-    async def _send_answer_notification(
-        self,
-        question: Question,
-        answer: Answer
-    ):
+    async def _send_answer_notification(self, question: Question, answer: Answer):
         """发送回答通知到 inbox_message"""
         if not question:
             return
 
         from bisheng.core.database import get_async_db_session
         from bisheng.message.domain.models.inbox_message import MessageStatusEnum, MessageTypeEnum
-        from bisheng.message.domain.repositories.implementations.inbox_message_read_repository_impl import InboxMessageReadRepositoryImpl
-        from bisheng.message.domain.repositories.implementations.inbox_message_repository_impl import InboxMessageRepositoryImpl
+        from bisheng.message.domain.repositories.implementations.inbox_message_read_repository_impl import (
+            InboxMessageReadRepositoryImpl,
+        )
+        from bisheng.message.domain.repositories.implementations.inbox_message_repository_impl import (
+            InboxMessageRepositoryImpl,
+        )
         from bisheng.message.domain.services.message_service import MessageService
 
         content = [
@@ -665,10 +750,7 @@ class CommentService:
         return comment
 
     async def get_comments(
-        self, answer_id: Optional[int] = None,
-        question_id: Optional[int] = None,
-        skip: int = 0, 
-        limit: int = 100
+        self, answer_id: Optional[int] = None, question_id: Optional[int] = None, skip: int = 0, limit: int = 100
     ) -> tuple[List[Comment], int]:
         """获取回答的评论"""
         return await self.repository.get_by_answer_id(answer_id, question_id=question_id, skip=skip, limit=limit)
@@ -687,8 +769,12 @@ class CommentService:
 
         from bisheng.core.database import get_async_db_session
         from bisheng.message.domain.models.inbox_message import MessageStatusEnum, MessageTypeEnum
-        from bisheng.message.domain.repositories.implementations.inbox_message_read_repository_impl import InboxMessageReadRepositoryImpl
-        from bisheng.message.domain.repositories.implementations.inbox_message_repository_impl import InboxMessageRepositoryImpl
+        from bisheng.message.domain.repositories.implementations.inbox_message_read_repository_impl import (
+            InboxMessageReadRepositoryImpl,
+        )
+        from bisheng.message.domain.repositories.implementations.inbox_message_repository_impl import (
+            InboxMessageRepositoryImpl,
+        )
         from bisheng.message.domain.services.message_service import MessageService
 
         content = [

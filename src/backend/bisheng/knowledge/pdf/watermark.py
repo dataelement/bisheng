@@ -17,11 +17,11 @@ class PdfWatermarkError(ValueError):
 @dataclass(frozen=True)
 class PdfWatermarkSpec:
     lines: tuple[str, str]
-    rotation: float = -35.0
-    opacity: float = 0.11
+    rotation: float = 35.0
+    opacity: float = 0.31
     font_size: float = 12.0
-    horizontal_gap: float = 240.0
-    vertical_gap: float = 180.0
+    horizontal_gap: float = 180.0
+    vertical_gap: float = 135.0
     color: tuple[float, float, float] = (0.45, 0.45, 0.45)
 
     def __post_init__(self) -> None:
@@ -79,10 +79,10 @@ def _resolve_cjk_font(candidates: Sequence[str] = _CJK_FONT_CANDIDATES) -> _Font
     raise PdfWatermarkError("CJK watermark font is unavailable")
 
 
-_HORIZONTAL_CLEARANCE = 48.0
-_VERTICAL_CLEARANCE = 36.0
-_MIN_HORIZONTAL_STEP = 240.0
-_MIN_VERTICAL_STEP = 180.0
+_HORIZONTAL_CLEARANCE = 36.0
+_VERTICAL_CLEARANCE = 27.0
+_MIN_HORIZONTAL_STEP = 180.0
+_MIN_VERTICAL_STEP = 135.0
 
 
 def _calculate_watermark_layout(

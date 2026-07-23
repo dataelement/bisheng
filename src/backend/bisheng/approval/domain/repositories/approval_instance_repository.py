@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+from datetime import datetime
+
 from sqlmodel import select
 
 from bisheng.approval.domain.models.approval_instance import (
@@ -8,9 +11,26 @@ from bisheng.approval.domain.models.approval_instance import (
     ApprovalInstance,
     ApprovalInstanceStatus,
     ApprovalOutbox,
+    ApprovalOutboxStatus,
     ApprovalTask,
+    ApprovalTaskStatus,
+)
+from bisheng.common.errcode.approval import (
+    ApprovalRequestAlreadyProcessedError,
+    ApprovalRequestNotFoundError,
+    ApprovalRequestPermissionDeniedError,
 )
 from bisheng.core.database import get_async_db_session
+from bisheng.database.models.audit_log import AuditLog
+
+
+@dataclass(frozen=True)
+class FixedOrNodeDecisionResult:
+    instance_id: int
+    applicant_user_id: int
+    business_name: str
+    instance_status: str
+    outbox_id: int | None
 
 
 class ApprovalInstanceRepository:
@@ -238,3 +258,168 @@ class ApprovalInstanceRepository:
         )
         async with get_async_db_session() as session:
             return list((await session.exec(statement)).all())
+
+    @classmethod
+    async def get_instance_ids_with_action(
+        cls,
+        instance_ids: list[int],
+        action: str,
+    ) -> set[int]:
+        if not instance_ids:
+            return set()
+        statement = select(ApprovalActionLog.instance_id).where(
+            ApprovalActionLog.instance_id.in_(instance_ids),
+            ApprovalActionLog.action == action,
+        )
+        async with get_async_db_session() as session:
+            return {
+                int(instance_id)
+                for instance_id in (await session.exec(statement)).all()
+            }
+
+    @classmethod
+    async def decide_fixed_or_node_atomic(
+        cls,
+        *,
+        task_id: int,
+        action: str,
+        operator_user_id: int,
+        operator_user_name: str,
+        operator_tenant_id: int,
+        operator_is_admin: bool = False,
+        comment: str | None = None,
+        ip_address: str | None = None,
+    ) -> FixedOrNodeDecisionResult:
+        if action not in {"approve", "reject"}:
+            raise ValueError(f"unsupported approval action: {action}")
+
+        async with get_async_db_session() as session:
+            try:
+                task_result = await session.execute(
+                    select(ApprovalTask)
+                    .where(ApprovalTask.id == task_id)
+                    .with_for_update()
+                )
+                task = task_result.scalars().first()
+                if task is None:
+                    raise ApprovalRequestNotFoundError()
+
+                instance_result = await session.execute(
+                    select(ApprovalInstance)
+                    .where(ApprovalInstance.id == task.instance_id)
+                    .with_for_update()
+                )
+                instance = instance_result.scalars().first()
+                if instance is None:
+                    raise ApprovalRequestNotFoundError()
+                if (
+                    instance.scenario_code != "department_file_view_request"
+                    or task.node_mode != "or"
+                ):
+                    raise ValueError("task is not a fixed department-file OR-node task")
+                if instance.tenant_id != operator_tenant_id:
+                    raise ApprovalRequestPermissionDeniedError()
+                if (
+                    not operator_is_admin
+                    and task.approver_user_id != operator_user_id
+                ):
+                    raise ApprovalRequestPermissionDeniedError()
+                if (
+                    instance.status != ApprovalInstanceStatus.PENDING
+                    or task.status != ApprovalTaskStatus.PENDING
+                ):
+                    raise ApprovalRequestAlreadyProcessedError()
+
+                siblings_result = await session.execute(
+                    select(ApprovalTask)
+                    .where(
+                        ApprovalTask.instance_id == instance.id,
+                        ApprovalTask.node_code == task.node_code,
+                    )
+                    .with_for_update()
+                )
+                sibling_tasks = list(siblings_result.scalars().all())
+                acted_at = datetime.utcnow()
+                approved = action == "approve"
+                task.status = (
+                    ApprovalTaskStatus.APPROVED
+                    if approved
+                    else ApprovalTaskStatus.REJECTED
+                )
+                task.comment = comment
+                task.acted_at = acted_at
+                for sibling in sibling_tasks:
+                    if (
+                        sibling.id != task.id
+                        and sibling.status == ApprovalTaskStatus.PENDING
+                    ):
+                        sibling.status = ApprovalTaskStatus.SKIPPED
+                        sibling.acted_at = acted_at
+
+                instance.status = (
+                    ApprovalInstanceStatus.APPROVED
+                    if approved
+                    else ApprovalInstanceStatus.REJECTED
+                )
+                instance.current_node_name = None
+                instance.latest_approver_user_id = operator_user_id
+
+                session.add(
+                    ApprovalActionLog(
+                        tenant_id=instance.tenant_id,
+                        instance_id=instance.id,
+                        action="approved" if approved else "rejected",
+                        operator_user_id=operator_user_id,
+                        operator_user_name=operator_user_name,
+                        detail={"task_id": task.id, "comment": comment},
+                    )
+                )
+                session.add(
+                    AuditLog(
+                        tenant_id=instance.tenant_id,
+                        operator_id=operator_user_id,
+                        operator_name=operator_user_name,
+                        operator_tenant_id=operator_tenant_id,
+                        action=(
+                            "approval.task.approve"
+                            if approved
+                            else "approval.task.reject"
+                        ),
+                        target_type="approval_task",
+                        target_id=str(task.id),
+                        reason=comment,
+                        audit_metadata={
+                            "instance_id": instance.id,
+                            "task_id": task.id,
+                            "scenario_code": instance.scenario_code,
+                            "handler": instance.handler_key,
+                        },
+                        ip_address=ip_address,
+                        object_name=instance.business_name,
+                    )
+                )
+
+                outbox: ApprovalOutbox | None = None
+                if approved:
+                    outbox = ApprovalOutbox(
+                        tenant_id=instance.tenant_id,
+                        instance_id=instance.id,
+                        handler_key=instance.handler_key,
+                        status=ApprovalOutboxStatus.PENDING,
+                        payload_snapshot=instance.payload_snapshot,
+                    )
+                    session.add(outbox)
+
+                await session.flush()
+                result = FixedOrNodeDecisionResult(
+                    instance_id=int(instance.id),
+                    applicant_user_id=instance.applicant_user_id,
+                    business_name=instance.business_name,
+                    instance_status=instance.status,
+                    outbox_id=int(outbox.id) if outbox is not None else None,
+                )
+                await session.commit()
+                return result
+            except Exception:
+                await session.rollback()
+                raise

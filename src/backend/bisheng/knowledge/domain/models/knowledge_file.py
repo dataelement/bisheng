@@ -70,6 +70,11 @@ class KnowledgeFileBase(SQLModelSerializable):
     knowledge_id: int = Field(index=True)
     thumbnails: Optional[str] = Field(default=None, description='File thumbnails in Stored object name')
     file_name: str = Field(max_length=200, index=True)
+    alias_name: Optional[str] = Field(
+        default=None,
+        max_length=200,
+        description='AI-generated display alias for the file; falls back to file_name when null',
+    )
     file_type: int = Field(default=FileType.FILE.value, description='File type. 0: dir; 1: file')
     file_source: Optional[str] = Field(default=FileSource.UPLOAD.value, description='File source')
     level: Optional[int] = Field(default=0)

@@ -18,6 +18,11 @@ router.add_api_route("/stats", endpoints.get_qa_expert_stats, methods=["GET"])
 
 # 专家管理
 router.add_api_route("/experts", endpoints.list_experts, methods=["GET"])
+router.add_api_route(
+    "/experts/filter-options",
+    endpoints.list_expert_filter_options,
+    methods=["GET"],
+)
 router.add_api_route("/experts", endpoints.create_expert, methods=["POST"])
 router.add_api_route("/experts/{expert_id}", endpoints.update_expert, methods=["PUT"])
 router.add_api_route("/experts/{expert_id}", endpoints.delete_expert, methods=["DELETE"])
@@ -36,7 +41,6 @@ router.add_api_route("/questions/{question_id}", endpoints.update_question, meth
 router.add_api_route("/questions/{question_id}", endpoints.get_question_detail, methods=["GET"])
 router.add_api_route("/questions/{question_id}/adopt", endpoints.adopt_answer, methods=["POST"])
 router.add_api_route("/questions/{question_id}", endpoints.delete_question, methods=["DELETE"])
-
 
 
 # 回答管理

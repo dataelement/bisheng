@@ -307,12 +307,6 @@ class DepartmentKnowledgeSpaceService:
                 department_id=dept.id,
                 skip_user_limit=True,
             )
-            await DepartmentKnowledgeSpaceDao.acreate(
-                tenant_id=login_user.tenant_id,
-                department_id=dept.id,
-                space_id=space.id,
-                created_by=login_user.user_id,
-            )
             await cls._grant_department_members_viewer(
                 space_id=space.id,
                 department_id=dept.id,

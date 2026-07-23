@@ -8,6 +8,8 @@ import PortalKnowledgeWorkbench from "./PortalKnowledgeWorkbench";
 import {
     getShougangFilePublishSimilarCandidatesApi,
     getShougangFilePublishTargetSpacesApi,
+    applyDepartmentFileViewApi,
+    getDepartmentFileViewStatusApi,
     searchShougangFilePublishDocumentsApi,
     submitShougangFilePublishApprovalApi,
     submitShougangKnowledgeSpaceCreateApprovalApi,
@@ -31,6 +33,10 @@ import {
     getCreateSpaceOptionsApi,
     getDepartmentSpacesApi,
     getFilePreviewApi,
+    getPortalDiscoverableSpacesApi,
+    getPortalFilePreviewApi,
+    getPortalSpaceFolderStatsApi,
+    getPortalSpaceChildrenApi,
     getFileStatsApi,
     getGroupedSpacesApi,
     getJoinedSpacesApi,
@@ -107,6 +113,15 @@ jest.mock("~/Providers", () => ({
         showToast: mockShowToast,
     }),
     useConfirm: () => mockConfirm,
+}));
+
+jest.mock("~/hooks", () => ({
+    useAuthContext: () => ({ user: { role: "user" } }),
+    useLocalize: () => (key: string) => key,
+    useMediaQuery: () => false,
+    usePrefersMobileLayout: () => false,
+    useScrollRevealRef: () => jest.fn(),
+    useVersionManagementEnabled: () => false,
 }));
 
 jest.mock("~/hooks/queries/endpoints/queries", () => ({
@@ -295,6 +310,7 @@ jest.mock("../CreateKnowledgeSpaceDrawer", () => ({
 
 jest.mock("../hooks/useKnowledgeSpacePermissions", () => ({
     useKnowledgeSpaceActionPermissions: (...args: any[]) => mockUseKnowledgeSpaceActionPermissions(...args),
+    isSystemAdmin: (role?: string) => role === "admin",
     hasKnowledgeSpacePermission: (
         permissions: Record<string, string[]>,
         spaceId: string | number,
@@ -330,6 +346,8 @@ jest.mock("~/api/permission", () => ({
 }));
 
 jest.mock("~/api/approval", () => ({
+    applyDepartmentFileViewApi: jest.fn(),
+    getDepartmentFileViewStatusApi: jest.fn(),
     submitShougangKnowledgeSpaceCreateApprovalApi: jest.fn(),
     getShougangFilePublishTargetSpacesApi: jest.fn(),
     getShougangFilePublishSimilarCandidatesApi: jest.fn(),
@@ -420,6 +438,10 @@ jest.mock("~/api/knowledge", () => ({
     checkSensitiveWordsApi: jest.fn(),
     downloadWatermarkedKnowledgeFileApi: jest.fn(),
     getFilePreviewApi: jest.fn(),
+    getPortalDiscoverableSpacesApi: jest.fn(),
+    getPortalFilePreviewApi: jest.fn(),
+    getPortalSpaceFolderStatsApi: jest.fn(),
+    getPortalSpaceChildrenApi: jest.fn(),
     getFileStatsApi: jest.fn(),
     groupSpaceTagsByLibrary: jest.fn(() => []),
     updateFileEncoding: jest.fn(),
@@ -634,7 +656,10 @@ describe("PortalKnowledgeWorkbench", () => {
         } as any);
         jest.mocked(getGroupedSpacesApi).mockResolvedValue(makeGroupedSpaces() as any);
         jest.mocked(getSpacesByLevelApi).mockImplementation(resolveMockSpacesByLevel as any);
+        jest.mocked(getPortalDiscoverableSpacesApi).mockResolvedValue([]);
         jest.mocked(getSpaceChildrenApi).mockImplementation(() => new Promise(() => undefined) as any);
+        jest.mocked(getPortalSpaceChildrenApi).mockImplementation(() => new Promise(() => undefined) as any);
+        jest.mocked(getPortalSpaceFolderStatsApi).mockResolvedValue([] as any);
         jest.mocked(getSpaceFolderStatsApi).mockResolvedValue([] as any);
         jest.mocked(searchSpaceChildrenApi).mockResolvedValue({ data: [], total: 0 } as any);
         jest.mocked(importWebLinkApi).mockResolvedValue(makeFile("web-1", "网页链接", {
@@ -644,6 +669,28 @@ describe("PortalKnowledgeWorkbench", () => {
         jest.mocked(getFilePreviewApi).mockResolvedValue({
             preview_url: "/preview.md",
             original_url: "/origin.md",
+        } as any);
+        jest.mocked(getPortalFilePreviewApi).mockResolvedValue({
+            preview_url: "/portal-preview.md",
+            original_url: "/portal-origin.md",
+            can_download: false,
+        } as any);
+        jest.mocked(getDepartmentFileViewStatusApi).mockResolvedValue({
+            spaceId: "department-1",
+            fileId: "department-file-1",
+            status: "approval_required",
+            contentAccess: "approval_required",
+            canDownload: false,
+            safeMetadata: { file_name: "部门制度.md" },
+        } as any);
+        jest.mocked(applyDepartmentFileViewApi).mockResolvedValue({
+            spaceId: "department-1",
+            fileId: "department-file-1",
+            status: "pending",
+            contentAccess: "approval_required",
+            canDownload: false,
+            instanceId: 901,
+            safeMetadata: { file_name: "部门制度.md" },
         } as any);
         jest.mocked(getFileStatsApi).mockResolvedValue({ views: 0, downloads: 0 } as any);
         jest.mocked(updateFileEncoding).mockResolvedValue(makeFile("201", "后端开发.md", {
@@ -744,6 +791,220 @@ describe("PortalKnowledgeWorkbench", () => {
         });
         await waitFor(() => expect(within(publicGroup).getByText("公共空间01")).toBeInTheDocument());
         expect(screen.getByRole("button", { name: "收起公共知识库" })).toBeInTheDocument();
+    });
+
+    test("ordinary users discover department spaces, load the safe file tree, and apply explicitly", async () => {
+        const favoriteSpace = makeDefaultFavoriteSpace();
+        const departmentSpace = makeSpace("department-1", "炼钢部知识库", {
+            role: SpaceRole.MEMBER,
+            spaceLevel: SpaceLevel.DEPARTMENT,
+        });
+        const departmentFile = makeFile("department-file-1", "部门制度.md", {
+            spaceId: "department-1",
+            size: undefined,
+            summary: "",
+            contentAccess: "approval_required",
+            canDownload: false,
+            isDepartmentFile: true,
+        });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [],
+            personalSpaces: [favoriteSpace],
+        } as any);
+        jest.mocked(getPortalDiscoverableSpacesApi).mockResolvedValue([departmentSpace] as any);
+        jest.mocked(getPortalSpaceChildrenApi).mockResolvedValue({
+            data: [departmentFile],
+            page_size: 20,
+            has_more: false,
+            next_cursor: null,
+        });
+
+        renderWorkbench();
+
+        fireEvent.click(await screen.findByRole("button", { name: "展开部门知识库" }));
+        const departmentRow = await screen.findByTestId("space-row-department-1");
+        fireEvent.click(within(departmentRow).getByRole("button", { name: "炼钢部知识库" }));
+
+        await waitFor(() => {
+            expect(getPortalSpaceChildrenApi).toHaveBeenCalledWith(expect.objectContaining({
+                space_id: "department-1",
+            }));
+        });
+        expect(getSpaceChildrenApi).not.toHaveBeenCalledWith(expect.objectContaining({
+            space_id: "department-1",
+        }));
+
+        const workspace = await screen.findByTestId("portal-file-workspace");
+        fireEvent.click(within(workspace).getByRole("button", { name: "打开部门制度.md" }));
+
+        const gate = await screen.findByTestId("department-file-access-gate");
+        expect(getDepartmentFileViewStatusApi).toHaveBeenCalledWith(
+            "department-1",
+            "department-file-1",
+        );
+        expect(applyDepartmentFileViewApi).not.toHaveBeenCalled();
+
+        fireEvent.change(within(gate).getByLabelText("申请原因"), {
+            target: { value: "  项目查阅  " },
+        });
+        fireEvent.click(within(gate).getByRole("button", { name: "提交查看申请" }));
+
+        await waitFor(() => {
+            expect(applyDepartmentFileViewApi).toHaveBeenCalledWith(
+                "department-1",
+                "department-file-1",
+                "项目查阅",
+            );
+        });
+    });
+
+    test("ordinary department spaces lazy load folder counts from the portal-safe endpoint", async () => {
+        const favoriteSpace = makeDefaultFavoriteSpace();
+        const departmentSpace = makeSpace("department-1", "炼钢部知识库", {
+            role: SpaceRole.MEMBER,
+            spaceLevel: SpaceLevel.DEPARTMENT,
+        });
+        const folder = makeFile("101", "技术文档", {
+            type: FileType.FOLDER,
+            spaceId: "department-1",
+            successFileNum: undefined,
+            fileNum: undefined,
+            processingFileNum: undefined,
+        });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [],
+            personalSpaces: [favoriteSpace],
+        } as any);
+        jest.mocked(getPortalDiscoverableSpacesApi).mockResolvedValue([departmentSpace] as any);
+        jest.mocked(getPortalSpaceChildrenApi).mockResolvedValue({
+            data: [folder],
+            page_size: 20,
+            has_more: false,
+            next_cursor: null,
+        });
+        jest.mocked(getPortalSpaceFolderStatsApi).mockResolvedValue([{
+            folderId: "101",
+            successFileNum: 5,
+            fileNum: 5,
+            visibleSuccessFileNum: 2,
+            processingFileNum: 0,
+        }] as any);
+
+        renderWorkbench();
+
+        fireEvent.click(await screen.findByRole("button", { name: "展开部门知识库" }));
+        const departmentRow = await screen.findByTestId("space-row-department-1");
+        fireEvent.click(within(departmentRow).getByRole("button", { name: "炼钢部知识库" }));
+
+        const folderRow = await screen.findByTestId("file-tree-row-101");
+        await waitFor(() => {
+            expect(getPortalSpaceFolderStatsApi).toHaveBeenCalledWith({
+                space_id: "department-1",
+                folder_ids: ["101"],
+            });
+            expect(folderRow).toHaveTextContent(/5\s*\/\s*5/);
+        });
+        expect(getSpaceFolderStatsApi).not.toHaveBeenCalledWith(expect.objectContaining({
+            space_id: "department-1",
+        }));
+    });
+
+    test("department space managers keep the generic management file tree", async () => {
+        const favoriteSpace = makeDefaultFavoriteSpace();
+        const departmentSpace = makeSpace("department-admin-1", "炼钢部管理库", {
+            role: SpaceRole.ADMIN,
+            spaceLevel: SpaceLevel.DEPARTMENT,
+        });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [departmentSpace],
+            teamSpaces: [],
+            personalSpaces: [favoriteSpace],
+        } as any);
+        jest.mocked(getPortalDiscoverableSpacesApi).mockResolvedValue([departmentSpace] as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({
+            data: [makeFile("failed-file-1", "解析失败文档.md", {
+                spaceId: "department-admin-1",
+                status: FileStatus.FAILED,
+            })],
+            page_size: 20,
+            has_more: false,
+            next_cursor: null,
+        } as any);
+
+        renderWorkbench();
+
+        fireEvent.click(await screen.findByRole("button", { name: "展开部门知识库" }));
+        const departmentRow = await screen.findByTestId("space-row-department-admin-1");
+        fireEvent.click(within(departmentRow).getByRole("button", { name: "炼钢部管理库" }));
+
+        await waitFor(() => {
+            expect(getSpaceChildrenApi).toHaveBeenCalledWith(expect.objectContaining({
+                space_id: "department-admin-1",
+            }));
+        });
+        expect(getPortalSpaceChildrenApi).not.toHaveBeenCalledWith(expect.objectContaining({
+            space_id: "department-admin-1",
+        }));
+        expect(await screen.findByText("解析失败文档.md")).toBeInTheDocument();
+    });
+
+    test("approved department files use the portal preview endpoint", async () => {
+        const favoriteSpace = makeDefaultFavoriteSpace();
+        const departmentSpace = makeSpace("department-allowed-1", "已授权部门库", {
+            role: SpaceRole.MEMBER,
+            spaceLevel: SpaceLevel.DEPARTMENT,
+        });
+        const departmentFile = makeFile("department-file-allowed-1", "已授权制度.md", {
+            spaceId: "department-allowed-1",
+            contentAccess: "allowed",
+            canDownload: false,
+            isDepartmentFile: true,
+        });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [],
+            personalSpaces: [favoriteSpace],
+        } as any);
+        jest.mocked(getPortalDiscoverableSpacesApi).mockResolvedValue([departmentSpace] as any);
+        jest.mocked(getPortalSpaceChildrenApi).mockResolvedValue({
+            data: [departmentFile],
+            page_size: 20,
+            has_more: false,
+            next_cursor: null,
+        });
+        jest.mocked(getDepartmentFileViewStatusApi).mockResolvedValue({
+            spaceId: "department-allowed-1",
+            fileId: "department-file-allowed-1",
+            status: "allowed",
+            contentAccess: "allowed",
+            canDownload: false,
+            safeMetadata: { file_name: "已授权制度.md" },
+        } as any);
+
+        renderWorkbench();
+
+        fireEvent.click(await screen.findByRole("button", { name: "展开部门知识库" }));
+        const departmentRow = await screen.findByTestId("space-row-department-allowed-1");
+        fireEvent.click(within(departmentRow).getByRole("button", { name: "已授权部门库" }));
+        const workspace = await screen.findByTestId("portal-file-workspace");
+        fireEvent.click(within(workspace).getByRole("button", { name: "打开已授权制度.md" }));
+
+        await waitFor(() => {
+            expect(getPortalFilePreviewApi).toHaveBeenCalledWith(
+                "department-allowed-1",
+                "department-file-allowed-1",
+            );
+        });
+        expect(getFilePreviewApi).not.toHaveBeenCalledWith(
+            "department-allowed-1",
+            "department-file-allowed-1",
+        );
     });
 
     test("opens favorite source file with enriched detail metadata", async () => {

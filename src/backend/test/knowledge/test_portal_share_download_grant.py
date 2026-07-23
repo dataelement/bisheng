@@ -9,8 +9,16 @@ import jwt
 import pytest
 
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode.knowledge import (
+    KnowledgeDepartmentFileViewApprovalRequiredError,
+    KnowledgeDepartmentShareLoginRequiredError,
+)
 from bisheng.common.errcode.knowledge_space import PortalShareDownloadGrantInvalidError
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import ShougangPortalShareLinkVerifyReq
+from bisheng.knowledge.domain.services.department_file_view_access_service import (
+    DepartmentFileAccessDecision,
+    DepartmentFileAccessStatus,
+)
 from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
 from bisheng.knowledge.domain.services.portal_share_download_grant_service import (
     PortalShareDownloadGrantService,
@@ -160,7 +168,14 @@ def test_share_download_grant_rejects_expired_and_view_only_issuance() -> None:
         _issue(_service(), allow_download=False)
 
 
-def _share_link(*, status="active", expires_in=300, allow_download=True, visibility="public"):
+def _share_link(
+    *,
+    status="active",
+    expires_in=300,
+    allow_download=True,
+    visibility="public",
+    guarded=False,
+):
     return SimpleNamespace(
         share_token="share-token",
         resource_type="knowledge_space_file",
@@ -174,6 +189,7 @@ def _share_link(*, status="active", expires_in=300, allow_download=True, visibil
             "visibility": visibility,
             "permissions": {"view": True, "download": allow_download, "upload": False},
             "department_id": 33,
+            "department_file_view_guarded": guarded,
         },
     )
 
@@ -312,6 +328,152 @@ async def test_share_download_live_recheck_rechecks_department_scope() -> None:
             "_require_shougang_portal_share_department_access",
             new_callable=AsyncMock,
             side_effect=RuntimeError("department changed"),
+        ),
+    ):
+        with pytest.raises(PortalShareDownloadGrantInvalidError):
+            await service.require_shougang_portal_share_download(
+                share_token="share-token",
+                space_id=12,
+                file_id=1580,
+            )
+
+
+@pytest.mark.asyncio
+async def test_department_file_share_meta_requires_login_before_returning_filename() -> None:
+    service = KnowledgeSpaceService(
+        MagicMock(),
+        UserPayload(user_id=0, user_name="访客", tenant_id=5),
+    )
+    with patch.object(
+        service,
+        "_get_shougang_portal_share_link",
+        new_callable=AsyncMock,
+        return_value=_share_link(guarded=True),
+    ):
+        with pytest.raises(KnowledgeDepartmentShareLoginRequiredError):
+            await service.get_shougang_portal_share_link_meta(
+                "share-token",
+                for_anonymous_portal=True,
+            )
+
+
+@pytest.mark.asyncio
+async def test_department_file_share_verify_rejects_recipient_without_view_grant() -> None:
+    access_service = SimpleNamespace(
+        evaluate_file=AsyncMock(
+            return_value=DepartmentFileAccessDecision(
+                file_id=1580,
+                space_id=12,
+                status=DepartmentFileAccessStatus.APPROVAL_REQUIRED,
+                department_id=33,
+            )
+        )
+    )
+    service = KnowledgeSpaceService(
+        MagicMock(),
+        UserPayload(user_id=7, user_name="张三", tenant_id=5),
+    )
+    service.department_file_view_access_service = access_service
+    with (
+        patch.object(
+            service,
+            "_get_shougang_portal_share_link",
+            new_callable=AsyncMock,
+            return_value=_share_link(guarded=True),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service."
+            "KnowledgeFileDao.query_by_id",
+            new_callable=AsyncMock,
+            return_value=SimpleNamespace(id=1580, knowledge_id=12, file_type=1),
+        ),
+    ):
+        with pytest.raises(KnowledgeDepartmentFileViewApprovalRequiredError):
+            await service.verify_shougang_portal_share_link(
+                "share-token",
+                ShougangPortalShareLinkVerifyReq(issue_download_grant=True),
+            )
+
+
+@pytest.mark.asyncio
+async def test_department_file_share_verify_never_adds_download_permission() -> None:
+    access_service = SimpleNamespace(
+        evaluate_file=AsyncMock(
+            return_value=DepartmentFileAccessDecision(
+                file_id=1580,
+                space_id=12,
+                status=DepartmentFileAccessStatus.ALLOWED,
+                source="approval_grant",
+                can_download=True,
+                department_id=33,
+            )
+        )
+    )
+    service = KnowledgeSpaceService(
+        MagicMock(),
+        UserPayload(user_id=7, user_name="张三", tenant_id=5),
+    )
+    service.department_file_view_access_service = access_service
+    with (
+        patch.object(
+            service,
+            "_get_shougang_portal_share_link",
+            new_callable=AsyncMock,
+            return_value=_share_link(guarded=True, allow_download=True),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service."
+            "KnowledgeFileDao.query_by_id",
+            new_callable=AsyncMock,
+            return_value=SimpleNamespace(id=1580, knowledge_id=12, file_type=1),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.portal_share_download_grant_service."
+            "PortalShareDownloadGrantService.issue",
+        ) as issue,
+    ):
+        access = await service.verify_shougang_portal_share_link(
+            "share-token",
+            ShougangPortalShareLinkVerifyReq(issue_download_grant=True),
+        )
+
+    assert access.allow_download is False
+    assert access.download_grant == ""
+    assert access.download_grant_expires_at is None
+    issue.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_department_file_share_download_is_always_rejected() -> None:
+    access_service = SimpleNamespace(
+        evaluate_file=AsyncMock(
+            return_value=DepartmentFileAccessDecision(
+                file_id=1580,
+                space_id=12,
+                status=DepartmentFileAccessStatus.ALLOWED,
+                source="approval_grant",
+                can_download=True,
+                department_id=33,
+            )
+        )
+    )
+    service = KnowledgeSpaceService(
+        MagicMock(),
+        UserPayload(user_id=7, user_name="张三", tenant_id=5),
+    )
+    service.department_file_view_access_service = access_service
+    with (
+        patch.object(
+            service,
+            "_get_shougang_portal_share_link",
+            new_callable=AsyncMock,
+            return_value=_share_link(guarded=True, allow_download=True),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service."
+            "KnowledgeFileDao.query_by_id",
+            new_callable=AsyncMock,
+            return_value=SimpleNamespace(id=1580, knowledge_id=12, file_type=1),
         ),
     ):
         with pytest.raises(PortalShareDownloadGrantInvalidError):
