@@ -130,6 +130,7 @@ export enum SpaceLevel {
     PUBLIC = "public",
     DEPARTMENT = "department",
     TEAM = "team",
+    TEAM_KS = "team_ks",
     PERSONAL = "personal",
 }
 

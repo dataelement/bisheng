@@ -942,7 +942,7 @@ async def test_create_department_space_enqueues_default_scope_permissions():
 
 @pytest.mark.asyncio
 async def test_create_clinic_space_uses_team_level_and_writes_department_binding():
-    """Clinic spaces are team-level spaces bound to a department."""
+    """Clinic spaces are stored as TEAM_KS but grouped with team spaces."""
     KnowledgeSpaceService = _load_service_class()
     login_user = _make_login_user(user_id=7, is_admin=False)
     svc = KnowledgeSpaceService(request=SimpleNamespace(), login_user=login_user)
@@ -1035,7 +1035,7 @@ async def test_create_clinic_space_uses_team_level_and_writes_department_binding
     mock_scope_create.assert_awaited_once_with(
         tenant_id=1,
         space_id=11,
-        level=KnowledgeSpaceLevelEnum.TEAM,
+        level=KnowledgeSpaceLevelEnum.TEAM_KS,
         owner_type=KnowledgeSpaceOwnerTypeEnum.USER,
         owner_id=7,
         created_by=7,
