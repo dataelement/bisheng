@@ -388,7 +388,7 @@ export default function FilesUpload() {
 
               {/* Step 3: Original text comparison */}
               {currentStep === 3 && segmentRules && (
-                <div className="block"> {/* When step 3 is displayed, step 2 is hidden but not unmounted */}
+                <div className="block h-full pb-16"> {/* pb-16 clears the fixed prev/next footer; step 2 stays mounted but hidden */}
                   <PreviewResult
                     rules={segmentRules.rules}
                     resultFiles={resultFiles}

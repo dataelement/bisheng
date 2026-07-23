@@ -4,8 +4,8 @@ import { Download, FileText, Loader2, X } from "lucide-react";
 import FileView from "@/components/bs-comp/FileView";
 import { cname } from "@/components/bs-ui/utils";
 import { FileIcon } from "@/components/bs-icons/file";
+import { ExcelPreview } from "@bisheng/file-viewers";
 import DocxPreview from "@/pages/KnowledgePage/components/DocxFileViewer";
-import ExcelPreview from "@/pages/KnowledgePage/components/ExcelPreview";
 import TxtFileViewer from "@/pages/KnowledgePage/components/TxtFileViewer";
 import { getCitationDetail, type ChatCitation } from "@/controllers/API";
 import {

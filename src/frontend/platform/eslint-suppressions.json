@@ -3120,29 +3120,6 @@
       "count": 7
     }
   },
-  "src/pages/KnowledgePage/components/ExcelPreview.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 4
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 5
-    },
-    "no-console": {
-      "count": 3
-    },
-    "no-restricted-imports": {
-      "count": 2
-    },
-    "no-restricted-syntax": {
-      "count": 8
-    },
-    "no-useless-escape": {
-      "count": 4
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 1
-    }
-  },
   "src/pages/KnowledgePage/components/FileSelector.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 1

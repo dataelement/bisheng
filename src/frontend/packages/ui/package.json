@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "description": "BiSheng shared UI component library — presentation-only components + design tokens. No state management, no HTTP, no i18n keys, no routing (contract, see README).",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
     "./tokens.css": "./src/styles/tokens.css",

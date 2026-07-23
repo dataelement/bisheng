@@ -72,6 +72,9 @@ importers:
       '@ariakit/react-core':
         specifier: ^0.4.15
         version: 0.4.26(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@bisheng/file-viewers':
+        specifier: workspace:*
+        version: link:../packages/file-viewers
       '@bisheng/ui':
         specifier: workspace:*
         version: link:../packages/ui
@@ -503,6 +506,28 @@ importers:
         specifier: ^0.21.2
         version: 0.21.2(vite@6.4.1(@types/node@20.19.43)(jiti@1.21.7)(sass-embedded@1.100.0)(sass@1.100.0)(terser@5.49.0))(workbox-build@7.4.1(@types/babel__core@7.20.5))(workbox-window@7.4.1)
 
+  packages/file-viewers:
+    dependencies:
+      react:
+        specifier: '>=18'
+        version: 18.3.1
+      react-i18next:
+        specifier: '>=13'
+        version: 15.7.4(i18next@24.2.3(typescript@5.9.3))(react@18.3.1)(typescript@5.9.3)
+      xlsx:
+        specifier: ^0.18.5
+        version: 0.18.5
+      xlsx-populate:
+        specifier: ^1.21.0
+        version: 1.21.0
+    devDependencies:
+      '@types/react':
+        specifier: 'catalog:'
+        version: 18.3.31
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+
   packages/locales: {}
 
   packages/ui:
@@ -544,6 +569,9 @@ importers:
 
   platform:
     dependencies:
+      '@bisheng/file-viewers':
+        specifier: workspace:*
+        version: link:../packages/file-viewers
       '@headlessui/react':
         specifier: ^2.0.4
         version: 2.2.10(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -19270,6 +19298,15 @@ snapshots:
       react: 18.3.1
     optionalDependencies:
       react-dom: 18.3.1(react@18.3.1)
+      typescript: 5.9.3
+
+  react-i18next@15.7.4(i18next@24.2.3(typescript@5.9.3))(react@18.3.1)(typescript@5.9.3):
+    dependencies:
+      '@babel/runtime': 7.29.7
+      html-parse-stringify: 3.0.1
+      i18next: 24.2.3(typescript@5.9.3)
+      react: 18.3.1
+    optionalDependencies:
       typescript: 5.9.3
 
   react-is@16.13.1: {}

@@ -9,8 +9,8 @@ import useKnowledgeStore from "../useKnowledgeStore";
 import DocxPreview from "./DocxFileViewer";
 import { convertJsonData } from "./ParagraphEdit";
 import { Partition } from "./PreviewResult";
+import { ExcelPreview } from "@bisheng/file-viewers";
 import TxtFileViewer from "./TxtFileViewer";
-import ExcelPreview from "./ExcelPreview";
 import RichPreviewFile, { isRichKnowledgePreview } from "./RichPreviewFile";
 
 export default function PreviewFile({
@@ -289,7 +289,7 @@ export default function PreviewFile({
       case 'et':
       case 'csv':
         return (
-          <div>
+          <div className="h-full">
             <ExcelPreview filePath={previewUrl || url} />
           </div>
         )
@@ -351,8 +351,11 @@ export default function PreviewFile({
     : richPreview
       ? 'overflow-hidden'
       : 'overflow-y-auto';
+  // Match the paragraph column's breathing room (page furniture is px-6, cards pt-3).
+  // PDF keeps its own full-bleed viewer layout.
+  const previewPaddingClass = file.suffix === 'pdf' ? '' : 'pl-6 pt-3';
 
-  return <div className={cn('relative', step === 3 ? "w-full max-w-[50%]" : "w-1/2", step === 2 ? "-mt-9 w-full max-w-[50%]" : "")} onClick={e => {
+  return <div className={cn('relative', step === 3 ? "w-full max-w-[50%] h-full flex flex-col" : "w-1/2", step === 2 ? "-mt-9 w-full max-w-[50%]" : "")} onClick={e => {
     e.stopPropagation()
   }}>
     <div className={`${edit ? 'absolute -top-8 right-0 z-10' : 'relative'} flex justify-center items-center mb-2 text-sm h-10`}>
@@ -362,7 +365,11 @@ export default function PreviewFile({
         <span className="text-primary cursor-pointer" onClick={handleOvergap}>{t('overwriteSegment')}</span>
       </div>
     </div>
-    <div className={`relative ${previewScrollClass}  ${edit ? 'h-[calc(100vh-206px-var(--license-banner-h,0px))]' : 'h-[calc(100vh-284px-var(--license-banner-h,0px))]'}`}>
+    <div className={`relative ${previewScrollClass} ${previewPaddingClass} ${step === 3
+      // Upload step 3 lives in a bounded flex card — fill it instead of guessing
+      // the viewport offset (the fixed calc left dead space under the preview).
+      ? 'flex-1 min-h-0'
+      : edit ? 'h-[calc(100vh-206px-var(--license-banner-h,0px))]' : 'h-[calc(100vh-284px-var(--license-banner-h,0px))]'}`}>
       {render(file.suffix)}
     </div>
   </div>

@@ -42,6 +42,22 @@ const TARGETS = [
       content: data, // merged under the translation resource by locales/i18n.ts
     }),
   },
+  {
+    domain: 'shared',
+    app: 'platform',
+    emit: (lang, data) => ({
+      file: path.join(WORKSPACE, 'platform', 'public', 'locales', PLATFORM_LANG[lang], 'shared.json'),
+      content: data, // lazy i18next namespace, addressed as shared:<key>
+    }),
+  },
+  {
+    domain: 'shared',
+    app: 'client',
+    emit: (lang, data) => ({
+      file: path.join(WORKSPACE, 'client', 'src', 'locales', lang, 'shared.gen.json'),
+      content: data, // registered as the 'shared' namespace by locales/i18n.ts
+    }),
+  },
 ];
 
 function readSource(domain, lang) {

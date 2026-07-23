@@ -235,7 +235,8 @@ export default function PreviewResult({
       previewData={mediaPreviewData ?? undefined}
       previewErrorMessage={previewErrorMessage}
     />}
-    <div className={cn('relative', "w-full")}>
+    {/* pr-6 pt-3 mirrors the preview column's padding (PreviewFile). */}
+    <div className={cn('relative pr-6 pt-3 h-full min-h-0 flex flex-col', "w-full")}>
       {/* 下拉框 - 右上角 */}
       {(step === 3 || (step === 2 && showPreview)) && (
         <div className="flex justify-end">
@@ -261,7 +262,7 @@ export default function PreviewResult({
         fileId={syncChunksSelectId}
         fileSuffix={currentFile?.suffix}
         previewCount={previewCount}
-        className="h-[calc(100vh-284px-var(--license-banner-h,0px))]"
+        className="flex-1 min-h-0"
         edit={step === 3 || (step === 2 && !showPreview)}
         loading={loading}
         chunks={chunks}

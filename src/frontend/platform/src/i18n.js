@@ -41,8 +41,8 @@ i18n.use(Backend)
         // (don't-overwrite) addResourceBundle, a stale model.json snapshot
         // already in the store will starve any newly-deployed key (the
         // historical bug that made systemConfig* keys render as raw strings).
-        // 'api_errors' is generated from packages/locales (shared error-code copy).
-        ns: ['bs', 'flow', 'permission', 'orgSync', 'model', 'api_errors'],
+        // 'api_errors' and 'shared' are generated from packages/locales (cross-app copy).
+        ns: ['bs', 'flow', 'permission', 'orgSync', 'model', 'api_errors', 'shared'],
         defaultNS: 'bs',
         lng: userLanguage,
         fallbackLng: 'en-US',

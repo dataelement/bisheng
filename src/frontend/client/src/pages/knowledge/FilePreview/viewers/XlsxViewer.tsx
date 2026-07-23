@@ -1,4 +1,4 @@
-import ExcelPreview from "./ExcelPreview";
+import { ExcelPreview } from "@bisheng/file-viewers";
 
 interface XlsxViewerProps {
     fileUrl: string;

@@ -35,6 +35,7 @@
   "dependencies": {
     "@ariakit/react": "^0.4.15",
     "@ariakit/react-core": "^0.4.15",
+    "@bisheng/file-viewers": "workspace:*",
     "@bisheng/ui": "workspace:*",
     "@codesandbox/sandpack-react": "^2.19.10",
     "@dicebear/collection": "^7.0.4",
