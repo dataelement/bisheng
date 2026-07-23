@@ -24,6 +24,7 @@ from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpace
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     BatchDeleteReq,
     BatchDownloadReq,
+    BatchMoveReq,
     ChatFolderReq,
     ChatReq,
     DepartmentBindingReq,
@@ -928,6 +929,16 @@ async def batch_delete(
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
     await svc.batch_delete(space_id, req.file_ids, req.folder_ids)
+    return resp_200()
+
+
+@router.post("/{space_id}/files/batch-move")
+async def batch_move(
+    space_id: int,
+    req: BatchMoveReq,
+    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    await svc.batch_move(space_id, req.file_ids, req.folder_ids, req.target_folder_id)
     return resp_200()
 
 

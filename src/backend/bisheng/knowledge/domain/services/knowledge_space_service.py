@@ -12446,6 +12446,69 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
     # ──────────────────────────── Batch Ops ───────────────────────────────────
 
+    @staticmethod
+    def _folder_descendant_prefix(folder_path: str, folder_id: int) -> str:
+        return f"{folder_path}/{folder_id}" if folder_path else f"/{folder_id}"
+
+    @staticmethod
+    def _is_path_under_folder_prefix(file_level_path: str, prefix: str) -> bool:
+        normalized_path = file_level_path or ""
+        return normalized_path == prefix or normalized_path.startswith(f"{prefix}/")
+
+    async def _resolve_top_level_move_folders(
+        self,
+        space_id: int,
+        folder_ids: list[int],
+    ) -> tuple[list[int], dict[int, KnowledgeFile]]:
+        folder_records: dict[int, KnowledgeFile] = {}
+        for folder_id in folder_ids:
+            folder = await KnowledgeFileDao.query_by_id(folder_id)
+            folder_records[folder_id] = self._ensure_space_folder(folder, space_id)
+
+        top_level_folder_ids: list[int] = []
+        for folder_id, folder in folder_records.items():
+            ancestor_ids = [int(part) for part in (folder.file_level_path or "").split("/") if part]
+            if any(ancestor_id in folder_records for ancestor_id in ancestor_ids):
+                continue
+            top_level_folder_ids.append(folder_id)
+        return top_level_folder_ids, folder_records
+
+    async def batch_move(
+        self,
+        space_id: int,
+        file_ids: list[int],
+        folder_ids: list[int],
+        target_folder_id: int | None,
+    ) -> None:
+        unique_folder_ids = self._dedupe_ids(folder_ids or [])
+        unique_file_ids = self._dedupe_ids(file_ids or [])
+        if not unique_folder_ids and not unique_file_ids:
+            return
+
+        top_level_folder_ids, folder_records = await self._resolve_top_level_move_folders(
+            space_id,
+            unique_folder_ids,
+        )
+        folder_prefixes = [
+            self._folder_descendant_prefix(folder_records[folder_id].file_level_path or "", folder_id)
+            for folder_id in top_level_folder_ids
+        ]
+
+        move_file_ids: list[int] = []
+        for file_id in unique_file_ids:
+            file_record = await KnowledgeFileDao.query_by_id(file_id)
+            file_record = self._ensure_space_file(file_record, space_id)
+            file_path = file_record.file_level_path or ""
+            if any(self._is_path_under_folder_prefix(file_path, prefix) for prefix in folder_prefixes):
+                continue
+            move_file_ids.append(file_id)
+
+        for folder_id in top_level_folder_ids:
+            await self.move_folder(space_id, folder_id, target_folder_id)
+
+        for file_id in move_file_ids:
+            await self.move_file_folder(space_id, file_id, target_folder_id)
+
     async def batch_delete(self, knowledge_id: int, file_ids: list[int], folder_ids: list[int]):
         from bisheng.knowledge.domain.services.knowledge_pdf_artifact_service import (
             get_pdf_artifact_deletion_snapshots,

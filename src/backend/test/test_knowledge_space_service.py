@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.errcode.knowledge_space import (
     SpaceCreateDepartmentDeniedError,
+    SpaceFileNameDuplicateError,
     SpaceFileNotFoundError,
     SpaceFileSizeLimitError,
     SpaceFolderNotFoundError,
@@ -2081,6 +2082,94 @@ async def test_move_file_folder_replaces_permission_parent_tuple(service):
         ("delete", "folder:11", "parent", "knowledge_file:501"),
         ("write", "folder:37", "parent", "knowledge_file:501"),
     ]
+
+
+@pytest.mark.asyncio
+async def test_batch_move_invokes_folder_and_file_moves(service):
+    parent_folder = _make_file(
+        file_id=11,
+        knowledge_id=10,
+        file_type=FileType.DIR.value,
+        file_name="parent",
+        file_level_path="",
+        level=0,
+    )
+    child_folder = _make_file(
+        file_id=37,
+        knowledge_id=10,
+        file_type=FileType.DIR.value,
+        file_name="child",
+        file_level_path="/11",
+        level=1,
+    )
+    nested_file = _make_file(
+        file_id=501,
+        knowledge_id=10,
+        file_name="nested.pdf",
+        file_level_path="/11/37",
+        level=2,
+    )
+    standalone_file = _make_file(
+        file_id=601,
+        knowledge_id=10,
+        file_name="root.pdf",
+        file_level_path="",
+        level=0,
+    )
+
+    async def fake_query_by_id(file_id):
+        return {
+            11: parent_folder,
+            37: child_folder,
+            501: nested_file,
+            601: standalone_file,
+        }.get(file_id)
+
+    with (
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.query_by_id",
+            new_callable=AsyncMock,
+            side_effect=fake_query_by_id,
+        ),
+        patch.object(service, "move_folder", new_callable=AsyncMock) as mock_move_folder,
+        patch.object(service, "move_file_folder", new_callable=AsyncMock) as mock_move_file_folder,
+    ):
+        await service.batch_move(10, [501, 601], [11, 37], 99)
+
+    mock_move_folder.assert_awaited_once_with(10, 11, 99)
+    mock_move_file_folder.assert_awaited_once_with(10, 601, 99)
+
+
+@pytest.mark.asyncio
+async def test_batch_move_fail_fast_on_move_error(service):
+    standalone_file = _make_file(
+        file_id=601,
+        knowledge_id=10,
+        file_name="root.pdf",
+        file_level_path="",
+        level=0,
+    )
+
+    async def fake_query_by_id(file_id):
+        return {601: standalone_file}.get(file_id)
+
+    with (
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.query_by_id",
+            new_callable=AsyncMock,
+            side_effect=fake_query_by_id,
+        ),
+        patch.object(service, "move_folder", new_callable=AsyncMock) as mock_move_folder,
+        patch.object(
+            service, "move_file_folder", new_callable=AsyncMock, side_effect=SpaceFileNameDuplicateError()
+        ) as mock_move_file_folder,
+    ):
+        with pytest.raises(BaseErrorCode) as exc_info:
+            await service.batch_move(10, [601], [], 99)
+
+    assert exc_info.value.Code == 18023
+    mock_move_folder.assert_not_awaited()
+    mock_move_file_folder.assert_awaited_once_with(10, 601, 99)
 
 
 @pytest.mark.asyncio

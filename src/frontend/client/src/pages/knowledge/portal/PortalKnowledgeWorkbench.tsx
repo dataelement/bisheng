@@ -2562,6 +2562,7 @@ export default function PortalKnowledgeWorkbench() {
                                                         await reloadFiles();
                                                     }}
                                                     onMoveDialogFolderCreated={() => void reloadFiles()}
+                                                    onAfterBatchMove={() => reloadFiles()}
                                                     onEditTags={(fileId) => void fileUpload.handleEditTags(fileId)}
                                                     onRetryFile={() => void reloadFiles()}
                                                     canRetryFile={canRetryPortalFailedFile}
