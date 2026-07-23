@@ -125,6 +125,10 @@ _APPROVER_SOURCE_OPTIONS: dict[str, ApprovalPresetApproverSource] = {
         source_type='target_knowledge_space_manager_department_admin',
         label='目标知识空间 Manager 的部门管理员',
     ),
+    'department_file_approvers': ApprovalPresetApproverSource(
+        source_type='department_file_approvers',
+        label='文件所属部门管理员',
+    ),
 }
 
 
@@ -207,6 +211,15 @@ class ApprovalRegistry:
                     'target_knowledge_space_owner_department_admin',
                     'target_knowledge_space_manager_department_admin',
                 ],
+            )
+        )
+        registry.register_preset(
+            ApprovalScenarioPreset(
+                scenario_code='department_file_view_request',
+                scenario_name='部门文件查看审批',
+                handler_key='department_file_view_request',
+                condition_fields=[],
+                approver_source_types=['department_file_approvers'],
             )
         )
         return registry

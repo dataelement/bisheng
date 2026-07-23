@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 import { ApprovalCenterDialog } from "./ApprovalCenterDialog";
 import {
@@ -6,6 +7,7 @@ import {
   getMyApprovalTaskDetailApi,
   listMyApprovalRequestsApi,
   listMyApprovalTasksApi,
+  revokeDepartmentFileViewGrantApi,
 } from "~/api/approval";
 
 jest.mock("~/hooks/useLocalize", () => ({
@@ -22,6 +24,11 @@ jest.mock("~/hooks/useLocalize", () => ({
       com_approval_field_source_file_name: "源文件",
       com_approval_field_target_space_name: "目标知识库",
       com_approval_field_target_document_title: "目标文档",
+      com_approval_field_file_name: "文件",
+      com_approval_field_space_name: "知识库",
+      com_approval_field_department_name: "文件所属部门",
+      com_approval_field_file_extension: "文件类型",
+      com_approval_node_mode_or: "任意一人通过",
       com_approval_business_type_knowledge_space_create: "新建知识库",
       com_approval_business_type_knowledge_space_file_publish: "发布文件",
       com_approval_space_level_team: "团队/科室知识库",
@@ -46,6 +53,7 @@ jest.mock("~/api/approval", () => ({
   decideApprovalTaskApi: jest.fn(),
   withdrawApprovalInstanceApi: jest.fn(),
   revokeMenuAccessGrantApi: jest.fn(),
+  revokeDepartmentFileViewGrantApi: jest.fn(),
 }));
 
 jest.mock("~/components/ui/Dialog", () => ({
@@ -233,5 +241,130 @@ describe("ApprovalCenterDialog", () => {
 
     expect(await screen.findByText("custom_field")).toBeInTheDocument();
     expect(screen.getByText("自定义值")).toBeInTheDocument();
+  });
+
+  it("renders department file details and OR approval mode", async () => {
+    jest.mocked(listMyApprovalTasksApi).mockResolvedValue({
+      data: [
+        {
+          task_id: 61,
+          instance_id: 161,
+          business_name: "安全制度.pdf",
+          status: "pending",
+          scenario_code: "department_file_view_request",
+        },
+      ],
+      total: 1,
+    });
+    jest.mocked(getMyApprovalTaskDetailApi).mockResolvedValue({
+      task_id: 61,
+      instance_id: 161,
+      business_name: "安全制度.pdf",
+      status: "pending",
+      scenario_code: "department_file_view_request",
+      reason: "项目协作",
+      detail_snapshot: {
+        file_name: "安全制度.pdf",
+        space_name: "安全部知识库",
+        department_name: "安全部",
+        file_extension: "pdf",
+        file_id: 901,
+        space_id: 801,
+        department_id: 701,
+      },
+      flow_nodes: [
+        {
+          node_code: "department_file_owner_approvers",
+          node_name: "文件所属部门管理员审批",
+          node_order: 0,
+          node_mode: "or",
+        },
+      ],
+      tasks: [
+        {
+          task_id: 61,
+          node_name: "文件所属部门管理员审批",
+          node_order: 0,
+          node_mode: "or",
+          status: "pending",
+          approver_user_name: "审批人A",
+        },
+      ],
+    } as any);
+
+    render(
+      <ApprovalCenterDialog
+        open
+        onOpenChange={jest.fn()}
+        target={{ tab: "my_tasks", taskId: 61 }}
+      />,
+    );
+
+    expect(await screen.findByText("文件")).toBeInTheDocument();
+    expect(screen.getAllByText("安全制度.pdf").length).toBeGreaterThan(0);
+    expect(screen.getByText("知识库")).toBeInTheDocument();
+    expect(screen.getByText("安全部知识库")).toBeInTheDocument();
+    expect(screen.getByText("文件所属部门")).toBeInTheDocument();
+    expect(screen.getByText("安全部")).toBeInTheDocument();
+    expect(screen.getByText("任意一人通过")).toBeInTheDocument();
+    expect(screen.queryByText("file_id")).not.toBeInTheDocument();
+    expect(screen.queryByText("department_id")).not.toBeInTheDocument();
+  });
+
+  it("lets an approver revoke an executed department-file grant", async () => {
+    const user = userEvent.setup();
+    jest.mocked(listMyApprovalTasksApi).mockResolvedValue({
+      data: [
+        {
+          task_id: 62,
+          instance_id: 162,
+          business_name: "安全制度.pdf",
+          status: "approved",
+          instance_status: "executed",
+          scenario_code: "department_file_view_request",
+        },
+      ],
+      total: 1,
+    });
+    jest.mocked(getMyApprovalTaskDetailApi).mockResolvedValue({
+      task_id: 62,
+      instance_id: 162,
+      business_name: "安全制度.pdf",
+      status: "approved",
+      instance_status: "executed",
+      scenario_code: "department_file_view_request",
+      grant_revoked: false,
+    } as any);
+    jest.mocked(revokeDepartmentFileViewGrantApi).mockResolvedValue({
+      instance_id: 162,
+      grant_status: "revoked",
+    });
+
+    render(
+      <ApprovalCenterDialog
+        open
+        onOpenChange={jest.fn()}
+        target={{ tab: "my_tasks", taskId: 62 }}
+      />,
+    );
+
+    const revokeButton = await screen.findByRole("button", {
+      name: "com_approval_action_revoke_grant",
+    });
+    await user.click(revokeButton);
+    await user.type(
+      screen.getByPlaceholderText("com_approval_revoke_reason_placeholder"),
+      "权限回收",
+    );
+    const confirmButtons = screen.getAllByRole("button", {
+      name: "com_approval_action_revoke_grant",
+    });
+    await user.click(confirmButtons[confirmButtons.length - 1]);
+
+    await waitFor(() => {
+      expect(revokeDepartmentFileViewGrantApi).toHaveBeenCalledWith(162, {
+        reason: "权限回收",
+      });
+    });
   });
 });

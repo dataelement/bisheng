@@ -274,7 +274,7 @@ class PortalPdfDownloadService:
                 await self._copy_and_validate_artifact(artifact, input_path, readiness_deadline)
 
             deadline = self.monotonic() + float(self.config.timeout_seconds)
-            watermark_date = self.now_provider().strftime("%Y-%m-%d")
+            watermark_date = self.now_provider().strftime("%Y/%m/%d")
             spec = PdfWatermarkSpec(
                 lines=(
                     f"{identity_prefix}--{account}-{watermark_date}",

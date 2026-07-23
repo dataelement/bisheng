@@ -12,11 +12,72 @@ from bisheng.approval.domain.models.approval_scenario import (
 from bisheng.approval.domain.repositories.approval_query_repository import ApprovalQueryRepository
 from bisheng.approval.domain.repositories.approval_scenario_repository import ApprovalScenarioRepository
 from bisheng.approval.domain.services.approval_registry import ApprovalRegistry
-from bisheng.common.errcode.approval import ApprovalFlowInUseByRoutesError
+from bisheng.common.errcode.approval import (
+    ApprovalFixedScenarioStructureLockedError,
+    ApprovalFlowInUseByRoutesError,
+)
 from bisheng.database.models.audit_log import AuditLogDao
 
 
 class ApprovalScenarioAdminService:
+    FIXED_SCENARIO_CODES = frozenset({"department_file_view_request"})
+
+    @classmethod
+    def _is_fixed_scenario(cls, scenario) -> bool:
+        return bool(
+            scenario
+            and getattr(scenario, "scenario_code", None)
+            in cls.FIXED_SCENARIO_CODES
+        )
+
+    @classmethod
+    async def _assert_scenario_structure_mutable(
+        cls,
+        *,
+        tenant_id: int,
+        scenario_id: int,
+    ):
+        scenario = await ApprovalScenarioRepository.get_scenario(scenario_id)
+        if scenario is None or scenario.tenant_id != tenant_id:
+            raise ValueError(f'scenario not found: {scenario_id}')
+        if cls._is_fixed_scenario(scenario):
+            raise ApprovalFixedScenarioStructureLockedError()
+        return scenario
+
+    @classmethod
+    async def _assert_route_structure_mutable(
+        cls,
+        *,
+        tenant_id: int,
+        route_rule_id: int,
+    ):
+        route = await ApprovalScenarioRepository.get_route_rule(route_rule_id)
+        if route is None or route.tenant_id != tenant_id:
+            raise ValueError(f'route not found: {route_rule_id}')
+        await cls._assert_scenario_structure_mutable(
+            tenant_id=tenant_id,
+            scenario_id=route.scenario_id,
+        )
+        return route
+
+    @classmethod
+    async def _assert_flow_structure_mutable(
+        cls,
+        *,
+        tenant_id: int,
+        flow_definition_id: int,
+    ):
+        flow = await ApprovalScenarioRepository.get_flow_definition(
+            flow_definition_id
+        )
+        if flow is None or flow.tenant_id != tenant_id:
+            raise ValueError(f'flow not found: {flow_definition_id}')
+        await cls._assert_scenario_structure_mutable(
+            tenant_id=tenant_id,
+            scenario_id=flow.scenario_id,
+        )
+        return flow
+
     @classmethod
     async def list_presets(cls):
         return [item.model_dump() for item in ApprovalRegistry.with_default_presets().list_presets()]
@@ -24,7 +85,14 @@ class ApprovalScenarioAdminService:
     @classmethod
     async def list_scenarios(cls, *, tenant_id: int):
         rows = await ApprovalScenarioRepository.list_scenarios(tenant_id)
-        return [row.model_dump() for row in rows]
+        return [
+            {
+                **row.model_dump(),
+                'system_managed': cls._is_fixed_scenario(row),
+                'structure_locked': cls._is_fixed_scenario(row),
+            }
+            for row in rows
+        ]
 
     @classmethod
     async def create_scenario(
@@ -36,6 +104,8 @@ class ApprovalScenarioAdminService:
         operator_user_name: str | None = None,
     ):
         scenario_code = str(payload['scenario_code'])
+        if scenario_code in cls.FIXED_SCENARIO_CODES:
+            raise ApprovalFixedScenarioStructureLockedError()
         existing = await ApprovalScenarioRepository.get_scenario_by_code(tenant_id, scenario_code)
         if existing:
             return existing.model_dump()
@@ -75,6 +145,10 @@ class ApprovalScenarioAdminService:
         row = await ApprovalScenarioRepository.get_scenario(scenario_id)
         if row is None or row.tenant_id != tenant_id:
             raise ValueError(f'scenario not found: {scenario_id}')
+        if cls._is_fixed_scenario(row):
+            extra_fields = set(payload) - {'enabled', 'toggle_reason'}
+            if extra_fields:
+                raise ApprovalFixedScenarioStructureLockedError()
         before_enabled = row.enabled
         if payload.get('scenario_name'):
             row.scenario_name = payload['scenario_name']
@@ -120,6 +194,10 @@ class ApprovalScenarioAdminService:
         scenario_id: int,
         payload: dict,
     ):
+        await cls._assert_scenario_structure_mutable(
+            tenant_id=tenant_id,
+            scenario_id=scenario_id,
+        )
         row = await ApprovalScenarioRepository.create_route_rule(
             ApprovalRouteRule(
                 tenant_id=tenant_id,
@@ -141,9 +219,10 @@ class ApprovalScenarioAdminService:
         route_rule_id: int,
         payload: dict,
     ):
-        row = await ApprovalScenarioRepository.get_route_rule(route_rule_id)
-        if row is None or row.tenant_id != tenant_id:
-            raise ValueError(f'route not found: {route_rule_id}')
+        row = await cls._assert_route_structure_mutable(
+            tenant_id=tenant_id,
+            route_rule_id=route_rule_id,
+        )
         if payload.get('route_name'):
             row.route_name = payload['route_name']
         if payload.get('route_type'):
@@ -172,6 +251,10 @@ class ApprovalScenarioAdminService:
         scenario_id: int,
         payload: dict,
     ):
+        await cls._assert_scenario_structure_mutable(
+            tenant_id=tenant_id,
+            scenario_id=scenario_id,
+        )
         flow = await ApprovalScenarioRepository.create_flow_definition(
             ApprovalFlowDefinition(
                 tenant_id=tenant_id,
@@ -200,9 +283,10 @@ class ApprovalScenarioAdminService:
         flow_definition_id: int,
         payload: dict,
     ):
-        row = await ApprovalScenarioRepository.get_flow_definition(flow_definition_id)
-        if row is None or row.tenant_id != tenant_id:
-            raise ValueError(f'flow not found: {flow_definition_id}')
+        row = await cls._assert_flow_structure_mutable(
+            tenant_id=tenant_id,
+            flow_definition_id=flow_definition_id,
+        )
         if payload.get('flow_name'):
             row.flow_name = payload['flow_name']
         # flow_code is auto-generated and not user-editable
@@ -224,20 +308,26 @@ class ApprovalScenarioAdminService:
 
     @classmethod
     async def delete_scenario(cls, *, tenant_id: int, scenario_id: int) -> None:
-        row = await ApprovalScenarioRepository.get_scenario(scenario_id)
-        if row is None or row.tenant_id != tenant_id:
-            raise ValueError(f'scenario not found: {scenario_id}')
+        await cls._assert_scenario_structure_mutable(
+            tenant_id=tenant_id,
+            scenario_id=scenario_id,
+        )
         await ApprovalScenarioRepository.delete_scenario(scenario_id)
 
     @classmethod
     async def delete_route(cls, *, tenant_id: int, route_rule_id: int) -> None:
-        row = await ApprovalScenarioRepository.get_route_rule(route_rule_id)
-        if row is None or row.tenant_id != tenant_id:
-            raise ValueError(f'route not found: {route_rule_id}')
+        await cls._assert_route_structure_mutable(
+            tenant_id=tenant_id,
+            route_rule_id=route_rule_id,
+        )
         await ApprovalScenarioRepository.delete_route_rule(route_rule_id)
 
     @classmethod
     async def reorder_routes(cls, *, tenant_id: int, scenario_id: int, ordered_route_ids: list[int]) -> None:
+        await cls._assert_scenario_structure_mutable(
+            tenant_id=tenant_id,
+            scenario_id=scenario_id,
+        )
         existing = await ApprovalScenarioRepository.list_route_rules(tenant_id, scenario_id)
         existing_ids = {r.id for r in existing}
         for rid in ordered_route_ids:
@@ -247,9 +337,10 @@ class ApprovalScenarioAdminService:
 
     @classmethod
     async def delete_flow(cls, *, tenant_id: int, flow_definition_id: int) -> None:
-        row = await ApprovalScenarioRepository.get_flow_definition(flow_definition_id)
-        if row is None or row.tenant_id != tenant_id:
-            raise ValueError(f'flow not found: {flow_definition_id}')
+        await cls._assert_flow_structure_mutable(
+            tenant_id=tenant_id,
+            flow_definition_id=flow_definition_id,
+        )
         referencing_routes = await ApprovalScenarioRepository.list_route_rules_by_flow_definition(
             tenant_id, flow_definition_id
         )
@@ -279,9 +370,10 @@ class ApprovalScenarioAdminService:
         operator_user_name: str | None = None,
         ip_address: str | None = None,
     ):
-        flow = await ApprovalScenarioRepository.get_flow_definition(flow_definition_id)
-        if flow is None or flow.tenant_id != tenant_id:
-            raise ValueError(f'flow not found: {flow_definition_id}')
+        flow = await cls._assert_flow_structure_mutable(
+            tenant_id=tenant_id,
+            flow_definition_id=flow_definition_id,
+        )
         current_version = await ApprovalScenarioRepository.get_active_flow_version(tenant_id, flow_definition_id)
         before_snapshot: dict | None = None
         if current_version:

@@ -19,6 +19,7 @@ import {
     TooltipTrigger,
 } from "~/components/ui/Tooltip2";
 import AiChatMessages from "~/components/Chat/AiChatMessages";
+import { CurrentUserWatermarkSurface } from "~/pages/knowledge/FilePreview/KnowledgePreviewWatermark";
 import useFolderChat from "~/hooks/useFolderChat";
 import type { FolderChatTag } from "~/hooks/useFolderChat";
 import { KnowledgeAiInput } from "./KnowledgeAiInput";
@@ -182,14 +183,19 @@ export function KnowledgeAiPanel({
             {/* Messages Area */}
             {messages.length === 0 && !activeChatId ? (
                 // Welcome screen：占满标题下剩余高度，避免把输入区顶到视窗中部
-                <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 overflow-y-auto px-6 text-center">
-                    <img
-                        className="mx-auto block size-[80px] object-contain"
-                        src={`${__APP_ENV__.BASE_URL}/assets/channel/ai-home.png`}
-                        alt="AI Assistant"
-                    />
-                    <p className="text-sm text-[#86909c]">{folderQaHint}</p>
-                </div>
+                <CurrentUserWatermarkSurface
+                    enabled
+                    className="flex min-h-0 flex-1"
+                >
+                    <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 overflow-y-auto px-6 text-center">
+                        <img
+                            className="mx-auto block size-[80px] object-contain"
+                            src={`${__APP_ENV__.BASE_URL}/assets/channel/ai-home.png`}
+                            alt="AI Assistant"
+                        />
+                        <p className="text-sm text-[#86909c]">{folderQaHint}</p>
+                    </div>
+                </CurrentUserWatermarkSurface>
             ) : (
                 <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
                     <AiChatMessages
@@ -203,6 +209,7 @@ export function KnowledgeAiPanel({
                         hideHeaderTitle
                         flatMode
                         knowledgeChatLayout
+                        watermarkEnabled
                         contentWidthClassName="max-w-none px-4"
                         emptyStateHint={folderQaHint}
                         onPresetClick={() => { }}

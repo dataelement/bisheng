@@ -77,6 +77,16 @@ export function FilePublishTargetTree({
 }: FilePublishTargetTreeProps) {
     const { showToast } = useToastContext();
     const [targetFolderTrees, setTargetFolderTrees] = useState<Record<string, SpaceFolderTreeState>>({});
+    // Collapse state for top-level groups (公共/部门/团队/个人). Groups default to expanded.
+    const [collapsedGroups, setCollapsedGroups] = useState<Record<PublishTargetLevel, boolean>>({
+        public: false,
+        department: false,
+        team: false,
+        personal: false,
+    });
+    const handleToggleGroup = (level: PublishTargetLevel) => {
+        setCollapsedGroups((prev) => ({ ...prev, [level]: !prev[level] }));
+    };
 
     const targetSpaceGroups = useMemo(() => {
         const grouped = new Map<PublishTargetLevel, ShougangFilePublishTargetSpace[]>();
@@ -252,12 +262,25 @@ export function FilePublishTargetTree({
 
     return (
         <div className="space-y-3">
-            {targetSpaceGroups.map((group) => (
+            {targetSpaceGroups.map((group) => {
+                const collapsed = collapsedGroups[group.level];
+                return (
                 <div key={group.level} className="space-y-1">
-                    <div className="px-1 text-xs font-medium text-[#86909c]">
-                        {TARGET_LEVEL_LABELS[group.level]}
-                    </div>
-                    {group.spaces.map((space) => {
+                    <button
+                        type="button"
+                        aria-expanded={!collapsed}
+                        aria-label={`${collapsed ? "展开" : "收起"}${TARGET_LEVEL_LABELS[group.level]}分组`}
+                        className="flex w-full items-center gap-1 rounded px-1 py-0.5 text-left text-xs font-medium text-[#86909c] hover:bg-[#f2f3f5]"
+                        onClick={() => handleToggleGroup(group.level)}
+                    >
+                        <ChevronRight
+                            size={12}
+                            className={collapsed ? "transition-transform" : "rotate-90 transition-transform"}
+                        />
+                        <span>{TARGET_LEVEL_LABELS[group.level]}</span>
+                        <span className="ml-1 text-[#c9cdd4]">({group.spaces.length})</span>
+                    </button>
+                    {!collapsed && group.spaces.map((space) => {
                         const spaceId = String(space.id);
                         const tree = targetFolderTrees[spaceId];
                         const rootSelected = targetSpaceId === spaceId && targetFolderId === null;
@@ -301,7 +324,8 @@ export function FilePublishTargetTree({
                         );
                     })}
                 </div>
-            ))}
+                );
+            })}
         </div>
     );
 }

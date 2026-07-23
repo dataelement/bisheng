@@ -48,6 +48,7 @@ vi.mock("react-i18next", () => ({
         "approvalPage.conditionLabel": "可用条件字段",
         "approvalPage.approverSourceLabel": "可用审批人来源",
         "approvalPage.enabled": "启用",
+        "approvalPage.systemManagedReadOnly": "系统内置，流程结构只读",
         "approvalPage.routeTitle": "条件分支",
         "approvalPage.createRoute": "新增分支",
         "approvalPage.addRoute": "新增条件分支",
@@ -363,6 +364,75 @@ describe("ApprovalPage", () => {
 
     await waitFor(() => {
       expect(updateApprovalScenarioApi).toHaveBeenCalledWith(1, { enabled: true });
+    });
+  });
+
+  it("keeps the fixed department-file scenario structure read-only", async () => {
+    const user = userEvent.setup();
+    listApprovalScenariosApi.mockResolvedValue([
+      {
+        id: 66,
+        scenario_code: "department_file_view_request",
+        scenario_name: "部门文件查看审批",
+        enabled: true,
+        system_managed: true,
+        structure_locked: true,
+      },
+    ]);
+    listApprovalRoutesApi.mockResolvedValue([
+      {
+        ...ROUTE,
+        id: 67,
+        route_name: "固定部门审批分支",
+      },
+    ]);
+    listApprovalFlowsApi.mockResolvedValue([
+      {
+        ...FLOW,
+        id: 68,
+        flow_name: "固定部门文件审批流",
+      },
+    ]);
+    listApprovalNodesApi.mockResolvedValue([
+      {
+        ...NODE,
+        id: 69,
+        node_name: "文件所属部门管理员审批",
+        approver_config: {
+          sources: [
+            {
+              type: "department_file_approvers",
+              label: "文件所属部门管理员",
+            },
+          ],
+        },
+      },
+    ]);
+
+    render(<ApprovalPage />);
+
+    expect(
+      await screen.findByText("系统内置，流程结构只读"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("固定部门审批分支")).toBeInTheDocument();
+    expect(screen.getByText("文件所属部门管理员审批")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /新增分支/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /编辑节点/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /新建流程/ }),
+    ).not.toBeInTheDocument();
+
+    const switches = screen.getAllByRole("switch");
+    expect(switches).toHaveLength(1);
+    await user.click(switches[0]);
+    await waitFor(() => {
+      expect(updateApprovalScenarioApi).toHaveBeenCalledWith(66, {
+        enabled: false,
+      });
     });
   });
 
