@@ -1169,5 +1169,6 @@ def test_registry_exposes_default_presets():
         "knowledge_space_subscribe_request",
         "knowledge_space_create_request",
         "knowledge_space_file_publish_request",
+        "department_file_view_request",
     }
     assert presets["menu_access_request"].handler_key == "menu_access_request"

@@ -199,3 +199,18 @@ class BackendProcessingError(BaseErrorCode):
 class KnowledgeInvalidCursorError(BaseErrorCode):
     Code: int = 10991
     Msg: str = 'Invalid pagination cursor'
+
+
+class KnowledgeDepartmentFileViewApprovalRequiredError(BaseErrorCode):
+    Code: int = 10992
+    Msg: str = '查看该部门文件需要先完成审批'
+
+
+class KnowledgeDepartmentFileUnavailableError(BaseErrorCode):
+    Code: int = 10993
+    Msg: str = '当前文件暂不可查看'
+
+
+class KnowledgeDepartmentShareLoginRequiredError(BaseErrorCode):
+    Code: int = 10994
+    Msg: str = '部门文件分享需要登录后访问'

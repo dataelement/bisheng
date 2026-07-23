@@ -234,6 +234,17 @@ export async function revokeMenuAccessGrantApi(
   return unwrapPayload(response);
 }
 
+export async function revokeDepartmentFileViewGrantApi(
+  instanceId: number,
+  data: { reason: string },
+): Promise<Record<string, any>> {
+  const response = await request.post<ApiResponse<Record<string, any>>>(
+    `/api/v1/approval/department-file-view/${instanceId}/revoke-grant`,
+    data,
+  );
+  return unwrapPayload(response);
+}
+
 export interface ShougangKnowledgeSpaceCreateApprovalPayload {
   name: string;
   description?: string;

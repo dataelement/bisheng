@@ -8,6 +8,21 @@ from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 class KnowledgeFileRepository(BaseRepository[KnowledgeFile, int], ABC):
     """Knowledge Base File Repository Interface Class"""
 
+    async def find_by_id_for_update(self, entity_id: int) -> KnowledgeFile | None:
+        """锁定文件行，用于串行化申请创建与绑定校验。"""
+        ...
+
+    async def find_by_ids_for_update(
+        self,
+        entity_ids: list[int],
+    ) -> list[KnowledgeFile]:
+        """批量锁定文件行，供删除与归属变更事务复核。"""
+        ...
+
+    async def prepare_delete_by_ids(self, entity_ids: list[int]) -> int:
+        """在当前 session 暂存批量删除；只 flush，不提交。"""
+        ...
+
     async def get_user_metadata_by_knowledge_file_ids(
         self, knowledge_id: int, knowledge_file_ids: list[int]
     ) -> dict[int | None, list[dict[str, Any]] | None]:

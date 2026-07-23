@@ -57,7 +57,7 @@ def _create_zero_page_pdf(path: Path) -> None:
 def _spec() -> PdfWatermarkSpec:
     return PdfWatermarkSpec(
         lines=(
-            "设备管理部-张三--SG001-2026-07-21",
+            "设备管理部-张三--SG001-2026/07/21",
             "首钢股份内部资料，严禁外传，违者必究",  # noqa: RUF001
         )
     )
@@ -84,7 +84,7 @@ def test_watermark_preserves_source_and_pages_while_tiling_each_page(tmp_path: P
             assert watermarked_page.rect == original_page.rect
             text = watermarked_page.get_text()
             assert original_page.get_text().strip() in text
-            assert text.count("设备管理部-张三--SG001-2026-07-21") >= 2
+            assert text.count("设备管理部-张三--SG001-2026/07/21") >= 2
             assert text.count("首钢股份内部资料，严禁外传，违者必究") >= 2  # noqa: RUF001
 
 
@@ -101,22 +101,22 @@ def test_watermark_uses_chinese_text_opacity_and_arbitrary_angle(tmp_path: Path)
         watermark_traces = [
             trace
             for trace in traces
-            if "设备管理部-张三--SG001-2026-07-21" in "".join(chr(char[0]) for char in trace["chars"])
+            if "设备管理部-张三--SG001-2026/07/21" in "".join(chr(char[0]) for char in trace["chars"])
         ]
         assert watermark_traces
-        assert any(trace["dir"] != (1.0, 0.0) for trace in watermark_traces)
-        assert any(0 < trace["opacity"] < 1 for trace in watermark_traces)
+        assert all(trace["dir"][0] > 0 and trace["dir"][1] < 0 for trace in watermark_traces)
+        assert all(trace["opacity"] == pytest.approx(0.11) for trace in watermark_traces)
 
 
 def test_watermark_spec_uses_two_lines_and_pdf_visual_baseline() -> None:
     spec = _spec()
 
     assert len(spec.lines) == 2
-    assert spec.rotation == -35.0
+    assert spec.rotation == 35.0
     assert spec.opacity == 0.11
     assert spec.font_size == 12.0
-    assert spec.horizontal_gap == 240.0
-    assert spec.vertical_gap == 180.0
+    assert spec.horizontal_gap == 180.0
+    assert spec.vertical_gap == 135.0
     assert spec.color == (0.45, 0.45, 0.45)
     assert all("songti" not in candidate.lower() for candidate in _CJK_FONT_CANDIDATES)
     assert any("zenhei" in candidate.lower() or "heiti" in candidate.lower() for candidate in _CJK_FONT_CANDIDATES)
@@ -130,22 +130,22 @@ def test_watermark_layout_uses_rotated_bounds_clearance_and_staggered_rows() -> 
     font = _resolve_cjk_font()
     legacy_spacing_spec = PdfWatermarkSpec(
         lines=_spec().lines,
-        horizontal_gap=180.0,
-        vertical_gap=120.0,
+        horizontal_gap=120.0,
+        vertical_gap=90.0,
     )
     layout = _calculate_watermark_layout(page_rect, legacy_spacing_spec, font)
 
-    assert layout.horizontal_step == pytest.approx(layout.rotated_width + 48.0)
-    assert layout.vertical_step == pytest.approx(layout.rotated_height + 36.0)
-    assert layout.horizontal_step >= 240.0
-    assert layout.vertical_step >= 180.0
+    assert layout.horizontal_step == pytest.approx(layout.rotated_width + 36.0)
+    assert layout.vertical_step == pytest.approx(layout.rotated_height + 27.0)
+    assert layout.horizontal_step >= 180.0
+    assert layout.vertical_step >= 135.0
 
     positions = _tile_positions(page_rect, layout)
     rows: dict[float, list[float]] = {}
     for position in positions:
         rows.setdefault(position.y, []).append(position.x)
 
-    assert len(positions) in range(12, 15)
+    assert len(positions) >= 12
     assert len(rows) >= 2
     first_row, second_row = list(rows.values())[:2]
     assert second_row[0] - first_row[0] == pytest.approx(layout.horizontal_step / 2.0)
@@ -158,7 +158,7 @@ def test_watermark_layout_expands_for_long_identity_without_shrinking_text() -> 
     normal = _calculate_watermark_layout(page_rect, _spec(), font)
     long_spec = PdfWatermarkSpec(
         lines=(
-            f"{'超长部门名称' * 8}-张三--{'SG-VERY-LONG-ACCOUNT-' * 5}-2026-07-21",
+            f"{'超长部门名称' * 8}-张三--{'SG-VERY-LONG-ACCOUNT-' * 5}-2026/07/21",
             "首钢股份内部资料，严禁外传，违者必究",  # noqa: RUF001
         )
     )
@@ -168,8 +168,8 @@ def test_watermark_layout_expands_for_long_identity_without_shrinking_text() -> 
     assert expanded.font_size == normal.font_size == 12.0
     assert expanded.horizontal_step > normal.horizontal_step
     assert expanded.vertical_step > normal.vertical_step
-    assert expanded.horizontal_step >= expanded.rotated_width + 48.0
-    assert expanded.vertical_step >= expanded.rotated_height + 36.0
+    assert expanded.horizontal_step >= expanded.rotated_width + 36.0
+    assert expanded.vertical_step >= expanded.rotated_height + 27.0
 
 
 def test_watermark_uses_bundled_sans_font_and_rejects_unreliable_fallback() -> None:

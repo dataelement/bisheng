@@ -122,6 +122,71 @@ async def test_resolve_user_kb_file_filters_uses_knowledge_space_service(monkeyp
 
 
 @pytest.mark.asyncio
+async def test_portal_context_uses_portal_authorized_scope_resolver(
+    monkeypatch,
+):
+    data = APIChatCompletion(
+        clientTimestamp="2026-07-23T10:00:00",
+        model="10",
+        text="部门文件问答",
+        use_knowledge_base=UseKnowledgeBaseParam(
+            knowledge_space_ids=[7103],
+            knowledge_scope={
+                "mode": "files",
+                "folder_refs": [],
+                "file_refs": [
+                    {
+                        "knowledge_space_id": 7103,
+                        "file_id": 9301,
+                    }
+                ],
+            },
+        ),
+    )
+    access_service = SimpleNamespace()
+
+    class _FakeKnowledgeSpaceService:
+        def __init__(self, request, login_user):
+            self.request = request
+            self.login_user = login_user
+            self.department_file_view_access_service = None
+
+        async def resolve_shougang_portal_qa_scope_file_ids(
+            self,
+            *,
+            mode,
+            knowledge_space_ids,
+            folder_refs,
+            file_refs,
+            max_files,
+        ):
+            assert self.department_file_view_access_service is access_service
+            assert mode == "files"
+            assert knowledge_space_ids == [7103]
+            assert file_refs[0].file_id == 9301
+            assert folder_refs == []
+            assert max_files == 20
+            return {7103: [9301]}
+
+    monkeypatch.setattr(
+        chat_service,
+        "KnowledgeSpaceService",
+        _FakeKnowledgeSpaceService,
+        raising=False,
+    )
+
+    result = await chat_service._resolve_user_kb_file_filters(
+        request=SimpleNamespace(),
+        data=data,
+        login_user=_login_user(),
+        portal_context=True,
+        department_file_view_access_service=access_service,
+    )
+
+    assert result == {7103: [9301]}
+
+
+@pytest.mark.asyncio
 async def test_query_chunks_applies_file_filter_to_vector_and_es_and_post_filters(monkeypatch):
     captured_kwargs = {'milvus': [], 'es': []}
 

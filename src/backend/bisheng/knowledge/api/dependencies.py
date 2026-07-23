@@ -8,6 +8,9 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.knowledge.domain.repositories.implementations.department_space_binding_repository_impl import (
     DepartmentSpaceBindingRepositoryImpl,
 )
+from bisheng.knowledge.domain.repositories.implementations.department_file_view_grant_repository_impl import (
+    DepartmentFileViewGrantRepositoryImpl,
+)
 from bisheng.knowledge.domain.repositories.implementations.knowledge_document_repository_impl import (
     KnowledgeDocumentRepositoryImpl,
 )
@@ -32,7 +35,16 @@ from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_similarity_
     KnowledgeFileSimilarityCandidateRepository,
 )
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_repository import KnowledgeRepository
+from bisheng.knowledge.domain.repositories.interfaces.department_file_view_grant_repository import (
+    DepartmentFileViewGrantRepository,
+)
 from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import KnowledgeAuditTelemetryService
+from bisheng.knowledge.domain.services.department_file_view_access_service import (
+    DepartmentFileViewAccessService,
+)
+from bisheng.knowledge.domain.services.department_file_view_lifecycle_service import (
+    DepartmentFileViewLifecycleService,
+)
 from bisheng.knowledge.domain.services.knowledge_metadata_service import KnowledgeMetadataService
 from bisheng.knowledge.domain.services.knowledge_permission_service import KnowledgePermissionService
 from bisheng.message.api.dependencies import get_message_service as _get_message_service
@@ -60,6 +72,25 @@ async def get_knowledge_file_repository(
     """DapatkanKnowledgeFileRepositoryInstance Dependencies"""
 
     return KnowledgeFileRepositoryImpl(session)
+
+
+async def get_department_file_view_grant_repository(
+    session: AsyncSession = Depends(get_db_session),
+) -> DepartmentFileViewGrantRepository:
+    return DepartmentFileViewGrantRepositoryImpl(session)
+
+
+async def get_department_file_view_access_service(
+    session: AsyncSession = Depends(get_db_session),
+    grant_repository: DepartmentFileViewGrantRepository = Depends(
+        get_department_file_view_grant_repository
+    ),
+) -> DepartmentFileViewAccessService:
+    return DepartmentFileViewAccessService(
+        session=session,
+        grant_repository=grant_repository,
+        persist_stale_grant_revalidation=True,
+    )
 
 
 async def get_knowledge_document_repository(
@@ -133,6 +164,9 @@ async def get_knowledge_space_service(
     similar_candidate_repo: KnowledgeFileSimilarityCandidateRepository = Depends(
         get_knowledge_file_similarity_candidate_repository
     ),
+    department_file_view_access_service: DepartmentFileViewAccessService = Depends(
+        get_department_file_view_access_service
+    ),
 ) -> "KnowledgeSpaceService":
     """Get KnowledgeSpaceService instance, bound to the current request and login user"""
     from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService as _SvcClass
@@ -144,6 +178,14 @@ async def get_knowledge_space_service(
     service.version_repo = version_repo
     service.doc_repo = doc_repo
     service.similar_candidate_repo = similar_candidate_repo
+    service.department_file_view_access_service = department_file_view_access_service
+    service.department_file_view_lifecycle_service = (
+        DepartmentFileViewLifecycleService(
+            session=session,
+            file_repository=KnowledgeFileRepositoryImpl(session),
+            grant_repository=department_file_view_access_service.grant_repository,
+        )
+    )
     return service
 
 
@@ -206,12 +248,18 @@ async def get_knowledge_space_chat_service(
     session: AsyncSession = Depends(get_db_session),
     login_user: UserPayload = Depends(UserPayload.get_login_user),
     version_repo: KnowledgeDocumentVersionRepository = Depends(get_knowledge_document_version_repository),
+    department_file_view_access_service: DepartmentFileViewAccessService = Depends(
+        get_department_file_view_access_service
+    ),
 ) -> "KnowledgeSpaceChatService":
     """Get KnowledgeSpaceChatService instance, bound to the current request and login user."""
     from bisheng.knowledge.domain.services.knowledge_space_chat_service import KnowledgeSpaceChatService as _SvcClass
 
     service = _SvcClass(request=request, login_user=login_user)
     service.version_repo = version_repo
+    service.department_file_view_access_service = (
+        department_file_view_access_service
+    )
     return service
 
 

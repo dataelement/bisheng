@@ -17,6 +17,12 @@ from bisheng.core.database import get_async_db_session
 
 
 async def build_runtime_handler(scenario_code: str) -> Any:
+    if scenario_code == 'department_file_view_request':
+        from bisheng.approval.domain.services.department_file_view_handler import (
+            DepartmentFileViewApprovalHandler,
+        )
+
+        return DepartmentFileViewApprovalHandler()
     if scenario_code == 'menu_access_request':
         return MenuAccessApprovalHandler()
     if scenario_code == 'channel_subscribe_request':

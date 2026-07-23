@@ -70,6 +70,17 @@ class ApprovalCenterService:
             if inst.scenario_code == 'menu_access_request' and inst.status == 'executed'
         ]
         revoked_instance_ids = await UserMenuAccessRepository.get_revoked_instance_ids(menu_executed_ids)
+        department_instance_ids = [
+            inst.id
+            for inst in instances
+            if inst.scenario_code == 'department_file_view_request'
+        ]
+        revoked_instance_ids.update(
+            await ApprovalInstanceRepository.get_instance_ids_with_action(
+                department_instance_ids,
+                'revoke_grant',
+            )
+        )
 
         data = []
         for task in tasks:
@@ -144,6 +155,11 @@ class ApprovalCenterService:
             from bisheng.approval.domain.repositories.user_menu_access_repository import UserMenuAccessRepository
             revoked_ids = await UserMenuAccessRepository.get_revoked_instance_ids([instance.id])
             grant_revoked = instance.id in revoked_ids
+        elif instance.scenario_code == 'department_file_view_request':
+            grant_revoked = any(
+                log.action == 'revoke_grant'
+                for log in action_logs
+            )
 
         return {
             'task_id': task.id,
@@ -282,6 +298,17 @@ class ApprovalCenterService:
             if r.scenario_code == 'menu_access_request' and r.status == 'executed'
         ]
         revoked_instance_ids = await UserMenuAccessRepository.get_revoked_instance_ids(menu_executed_ids)
+        department_instance_ids = [
+            row.id
+            for row in rows
+            if row.scenario_code == 'department_file_view_request'
+        ]
+        revoked_instance_ids.update(
+            await ApprovalInstanceRepository.get_instance_ids_with_action(
+                department_instance_ids,
+                'revoke_grant',
+            )
+        )
 
         data = [
             {
@@ -354,12 +381,27 @@ class ApprovalCenterService:
                 for nd in node_defs
             ]
 
+        grant_revoked = (
+            instance.scenario_code == 'department_file_view_request'
+            and any(log.action == 'revoke_grant' for log in action_logs)
+        )
+        if (
+            instance.scenario_code == 'menu_access_request'
+            and instance.status == 'executed'
+        ):
+            from bisheng.approval.domain.repositories.user_menu_access_repository import UserMenuAccessRepository
+            revoked_ids = await UserMenuAccessRepository.get_revoked_instance_ids(
+                [instance.id]
+            )
+            grant_revoked = instance.id in revoked_ids
+
         return {
             'instance_id': instance.id,
             'scenario_code': instance.scenario_code,
             'scenario_name': instance.scenario_name,
             'business_name': instance.business_name,
             'status': instance.status,
+            'grant_revoked': grant_revoked,
             'reason': instance.reason,
             'payload_snapshot': instance.payload_snapshot,
             'detail_snapshot': instance.detail_snapshot,
@@ -692,6 +734,33 @@ class ApprovalCenterService:
             raise ApprovalRequestPermissionDeniedError()
         if task.status != ApprovalTaskStatus.PENDING:
             raise ApprovalRequestAlreadyProcessedError()
+
+        if instance.scenario_code == 'department_file_view_request':
+            result = await self.instance_repository.decide_fixed_or_node_atomic(
+                task_id=task_id,
+                action=action,
+                operator_user_id=operator_user_id,
+                operator_user_name=operator_user_name,
+                operator_tenant_id=operator_tenant_id,
+                operator_is_admin=operator_is_admin,
+                comment=comment,
+                ip_address=ip_address,
+            )
+            if result.outbox_id is not None:
+                self.__class__._dispatch_outbox(result.outbox_id)
+            await self.__class__._send_approval_notify(
+                sender=operator_user_id,
+                receiver_user_ids=[result.applicant_user_id],
+                action_code=(
+                    'approval_instance_approved'
+                    if result.instance_status == ApprovalInstanceStatus.APPROVED
+                    else 'approval_task_rejected'
+                ),
+                business_name=result.business_name,
+                instance_id=result.instance_id,
+                reason=comment,
+            )
+            return
 
         sibling_tasks = await self.instance_repository.list_tasks(instance.id)
         same_node_tasks = [one for one in sibling_tasks if one.node_code == task.node_code]

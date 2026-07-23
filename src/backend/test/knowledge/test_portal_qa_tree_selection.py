@@ -5,6 +5,10 @@ import pytest
 
 from bisheng.core import database as core_database
 from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFileStatus
+from bisheng.knowledge.domain.services.department_file_view_access_service import (
+    DepartmentFileAccessDecision,
+    DepartmentFileAccessStatus,
+)
 from bisheng.knowledge.domain.services import knowledge_space_service as svc_mod
 
 
@@ -98,6 +102,180 @@ async def test_resolve_qa_scope_file_ids_rejects_more_than_twenty_files(monkeypa
             file_refs=[],
             max_files=20,
         )
+
+
+@pytest.mark.asyncio
+async def test_portal_qa_tree_keeps_unauthorized_department_file_disabled(
+    monkeypatch,
+):
+    service = svc_mod.KnowledgeSpaceService(
+        request=SimpleNamespace(headers={}),
+        login_user=SimpleNamespace(user_id=7, user_name="tester"),
+    )
+    denied_file = _file(9301, space_id=7103)
+    service.department_file_view_access_service = SimpleNamespace(
+        evaluate_files=AsyncMock(
+            return_value={
+                9301: DepartmentFileAccessDecision(
+                    file_id=9301,
+                    space_id=7103,
+                    status=DepartmentFileAccessStatus.APPROVAL_REQUIRED,
+                    department_id=33,
+                )
+            }
+        )
+    )
+    monkeypatch.setattr(
+        service,
+        "_get_shougang_portal_qa_space",
+        AsyncMock(return_value=(SimpleNamespace(id=7103), True)),
+    )
+    monkeypatch.setattr(
+        service,
+        "_resolve_shougang_portal_source_paths",
+        AsyncMock(return_value=({9301: "部门库/检修"}, {})),
+    )
+    monkeypatch.setattr(
+        svc_mod.SpaceFileDao,
+        "async_list_children",
+        AsyncMock(return_value=[denied_file]),
+    )
+
+    result = await service.list_shougang_portal_qa_children(
+        space_id=7103,
+        parent_id=None,
+        cursor=None,
+        page_size=10,
+        discovery_scope="public_and_department",
+    )
+
+    assert result["data"] == [
+        {
+            "id": 9301,
+            "knowledge_id": 7103,
+            "parent_id": None,
+            "file_name": "file-9301.md",
+            "file_type": FileType.FILE.value,
+            "status": KnowledgeFileStatus.SUCCESS.value,
+            "folder_path": "部门库/检修",
+            "file_ext": "md",
+            "selectable": False,
+            "disabled_reason": "申请后可用于问答",
+            "has_children": False,
+            "resolved_file_count": 0,
+            "content_access": "approval_required",
+            "is_department_file": True,
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_portal_qa_explicit_department_file_ref_is_rejected(
+    monkeypatch,
+):
+    service = svc_mod.KnowledgeSpaceService(
+        request=SimpleNamespace(headers={}),
+        login_user=SimpleNamespace(user_id=7, user_name="tester"),
+    )
+    denied_file = _file(9301, space_id=7103)
+    service.department_file_view_access_service = SimpleNamespace(
+        evaluate_files=AsyncMock(
+            return_value={
+                9301: DepartmentFileAccessDecision(
+                    file_id=9301,
+                    space_id=7103,
+                    status=DepartmentFileAccessStatus.APPROVAL_REQUIRED,
+                    department_id=33,
+                )
+            }
+        )
+    )
+    monkeypatch.setattr(
+        service,
+        "_get_shougang_portal_qa_space",
+        AsyncMock(return_value=(SimpleNamespace(id=7103), True)),
+    )
+    monkeypatch.setattr(
+        svc_mod.KnowledgeFileDao,
+        "aget_file_by_ids",
+        AsyncMock(return_value=[denied_file]),
+    )
+
+    with pytest.raises(ValueError, match="所选部门文件尚未获得查看权限"):
+        await service.resolve_shougang_portal_qa_scope_file_ids(
+            mode="files",
+            knowledge_space_ids=[7103],
+            folder_refs=[],
+            file_refs=[
+                SimpleNamespace(
+                    knowledge_space_id=7103,
+                    file_id=9301,
+                )
+            ],
+            max_files=20,
+        )
+
+
+@pytest.mark.asyncio
+async def test_portal_qa_folder_scope_filters_to_authorized_department_files(
+    monkeypatch,
+):
+    service = svc_mod.KnowledgeSpaceService(
+        request=SimpleNamespace(headers={}),
+        login_user=SimpleNamespace(user_id=7, user_name="tester"),
+    )
+    folder = _file(3001, space_id=7103, folder=True)
+    allowed_file = _file(9301, space_id=7103, path="/3001")
+    denied_file = _file(9302, space_id=7103, path="/3001")
+    service.department_file_view_access_service = SimpleNamespace(
+        evaluate_files=AsyncMock(
+            return_value={
+                9301: DepartmentFileAccessDecision(
+                    file_id=9301,
+                    space_id=7103,
+                    status=DepartmentFileAccessStatus.ALLOWED,
+                    source="approval_grant",
+                    department_id=33,
+                ),
+                9302: DepartmentFileAccessDecision(
+                    file_id=9302,
+                    space_id=7103,
+                    status=DepartmentFileAccessStatus.APPROVAL_REQUIRED,
+                    department_id=33,
+                ),
+            }
+        )
+    )
+    monkeypatch.setattr(
+        service,
+        "_get_shougang_portal_qa_space",
+        AsyncMock(return_value=(SimpleNamespace(id=7103), True)),
+    )
+    monkeypatch.setattr(
+        svc_mod.KnowledgeFileDao,
+        "aget_file_by_ids",
+        AsyncMock(return_value=[folder]),
+    )
+    monkeypatch.setattr(
+        svc_mod.SpaceFileDao,
+        "get_children_by_prefix",
+        AsyncMock(return_value=[allowed_file, denied_file]),
+    )
+
+    result = await service.resolve_shougang_portal_qa_scope_file_ids(
+        mode="files",
+        knowledge_space_ids=[7103],
+        folder_refs=[
+            SimpleNamespace(
+                knowledge_space_id=7103,
+                folder_id=3001,
+            )
+        ],
+        file_refs=[],
+        max_files=20,
+    )
+
+    assert result == {7103: [9301]}
 
 
 @pytest.mark.asyncio

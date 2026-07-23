@@ -5,6 +5,7 @@ import {
   getMyApprovalTaskDetailApi,
   listMyApprovalRequestsApi,
   listMyApprovalTasksApi,
+  revokeDepartmentFileViewGrantApi,
   revokeMenuAccessGrantApi,
   type ApprovalCenterTab,
   type ApprovalInstanceDetail,
@@ -146,6 +147,7 @@ function formatTitle(
 const DETAIL_INTERNAL_KEYS = new Set(["menu_key", "space_id", "channel_id", "applicant_user_id", "applicant_user_name"]);
 const KNOWLEDGE_SPACE_CREATE_SCENARIO = "knowledge_space_create_request";
 const FILE_PUBLISH_SCENARIO = "knowledge_space_file_publish_request";
+const DEPARTMENT_FILE_VIEW_SCENARIO = "department_file_view_request";
 
 type BusinessContentRow = [string, string];
 
@@ -251,6 +253,15 @@ function buildFilePublishRows(snapshot: Record<string, any>, localize: ReturnTyp
   return rows;
 }
 
+function buildDepartmentFileViewRows(snapshot: Record<string, any>, localize: ReturnType<typeof useLocalize>): BusinessContentRow[] {
+  const rows: BusinessContentRow[] = [];
+  pushBusinessRow(rows, localize("com_approval_field_file_name" as any), snapshot.file_name);
+  pushBusinessRow(rows, localize("com_approval_field_space_name" as any), snapshot.space_name);
+  pushBusinessRow(rows, localize("com_approval_field_department_name" as any), snapshot.department_name);
+  pushBusinessRow(rows, localize("com_approval_field_file_extension" as any), snapshot.file_extension);
+  return rows;
+}
+
 function buildBusinessContentRows(
   scenarioCode: string | undefined,
   snapshot: Record<string, any> | null | undefined,
@@ -262,6 +273,9 @@ function buildBusinessContentRows(
   }
   if (scenarioCode === FILE_PUBLISH_SCENARIO) {
     return buildFilePublishRows(data, localize);
+  }
+  if (scenarioCode === DEPARTMENT_FILE_VIEW_SCENARIO) {
+    return buildDepartmentFileViewRows(data, localize);
   }
   return buildDefaultBusinessContentRows(data, localize);
 }
@@ -464,17 +478,29 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
     }
     setRevokeDialogOpen(false);
     setActionLoading(true);
-    try { await revokeMenuAccessGrantApi(instanceId, { reason }); await loadTasks(selectedTaskId); toast(true); }
+    try {
+      if (taskDetail?.scenario_code === DEPARTMENT_FILE_VIEW_SCENARIO) {
+        await revokeDepartmentFileViewGrantApi(instanceId, { reason });
+      } else {
+        await revokeMenuAccessGrantApi(instanceId, { reason });
+      }
+      await loadTasks(selectedTaskId);
+      toast(true);
+    }
     catch { toast(false); } finally { setActionLoading(false); }
   };
 
   const isTaskPending = activeTab === "my_tasks" && taskDetail?.status === "pending";
   const isInstancePending = activeTab === "my_requests" && requestDetail?.status === "pending";
-  // Only the approver (my_tasks) can revoke a granted menu permission, and only if not already revoked
+  // 只向当前任务审批人展示撤销入口；服务端会再次按实时部门绑定校验权限。
+  const revokableScenario = String(taskDetail?.scenario_code ?? "").toLowerCase();
   const canRevoke =
     activeTab === "my_tasks" &&
-    String(taskDetail?.scenario_code ?? "").toLowerCase() === "menu_access_request" &&
-    ["approved", "executed"].includes(String(taskDetail?.instance_status ?? "").toLowerCase()) &&
+    (
+      revokableScenario === "menu_access_request" ||
+      revokableScenario === DEPARTMENT_FILE_VIEW_SCENARIO
+    ) &&
+    String(taskDetail?.instance_status ?? "").toLowerCase() === "executed" &&
     !taskDetail?.grant_revoked;
 
   const dialogTitle = activeTab === "my_tasks" ? localize("com_approval_my_approval") : localize("com_approval_my_requests");
@@ -857,6 +883,11 @@ function TaskDetailPanel({ detail, localize }: { detail: ApprovalTaskDetail; loc
                           {nodeBadgeMap[s].text}
                         </span>
                       )}
+                      {node.node_mode && (
+                        <span className="rounded-full bg-[#f7f8fa] px-2 py-0.5 text-[11px] text-[#86909c]">
+                          {localize(node.node_mode === "or" ? "com_approval_node_mode_or" : "com_approval_node_mode_and")}
+                        </span>
+                      )}
                     </div>
                     {matchedTasks.length > 0 && (
                       <div className="mt-2 space-y-1.5">
@@ -1027,6 +1058,11 @@ function RequestDetailPanel({ detail, localize }: { detail: ApprovalInstanceDeta
                       {!isNotStarted && nodeBadgeMap[s] && (
                         <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium", nodeBadgeMap[s].cls)}>
                           {nodeBadgeMap[s].text}
+                        </span>
+                      )}
+                      {node.node_mode && (
+                        <span className="rounded-full bg-[#f7f8fa] px-2 py-0.5 text-[11px] text-[#86909c]">
+                          {localize(node.node_mode === "or" ? "com_approval_node_mode_or" : "com_approval_node_mode_and")}
                         </span>
                       )}
                     </div>

@@ -203,6 +203,7 @@ export function AiAssistantPanel({
                 flatMode={isSimpleMode}
                 knowledgeChatLayout
                 portalDrawerLayout={portalDrawer}
+                watermarkEnabled={Boolean(user)}
                 contentWidthClassName={portalDrawer ? "max-w-none px-4 pt-4" : "max-w-none px-4"}
                 onPresetClick={(q) => setInputText(q)}
                 onRegenerate={regenerate}

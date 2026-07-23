@@ -6,6 +6,7 @@ import { useRecoilState } from 'recoil';
 import { getRecommendedAppsApi } from '~/api/apps';
 import { writeAppChatOrigin, writeAppChatReturnTo } from '~/pages/appChat/appChatOrigin';
 import { getFeaturedCases } from '~/api/linsight';
+import { CurrentUserWatermarkSurface } from '~/pages/knowledge/FilePreview/KnowledgePreviewWatermark';
 import AiChatInput from '~/components/Chat/AiChatInput';
 import AiChatMessages from '~/components/Chat/AiChatMessages';
 import { useCitationReferencePanel } from '~/components/Chat/Messages/Content/useCitationReferencePanel';
@@ -39,6 +40,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
 
   const { data: bsConfig } = useGetBsConfig();
   const { user } = useAuthContext();
+  const watermarkEnabled = Boolean(user && !shareToken);
   const [chatModel, setChatModel] = useRecoilState(store.chatModel);
   const [selectedOrgKbs, setSelectedOrgKbs] = useRecoilState(store.selectedOrgKbs);
   const [selectedAgentTools, setSelectedAgentTools] = useRecoilState(store.selectedAgentTools);
@@ -261,9 +263,12 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
               )}>
                 {/* Content area: Split into Chat Main and Citation Sidebar */}
                 {isLoading && conversationId !== 'new' ? (
-                  <div className="flex h-screen items-center justify-center">
+                  <CurrentUserWatermarkSurface
+                    enabled={watermarkEnabled}
+                    className="flex h-screen items-center justify-center"
+                  >
                     <Spinner className="opacity-0" />
-                  </div>
+                  </CurrentUserWatermarkSurface>
                 ) : hasMessages ? (
                   <div className="flex min-h-0 flex-1 overflow-hidden">
                     {/* Left: Chat Main (Messages + Input) */}
@@ -276,6 +281,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                           isLoading={false}
                           isStreaming={isStreaming}
                           shareToken={shareToken}
+                          watermarkEnabled={watermarkEnabled}
                           knowledgeChatLayout
                           contentWidthClassName="w-full max-w-[800px] mx-auto px-4 touch-mobile:max-w-full"
                           onRegenerate={regenerate}
@@ -346,14 +352,17 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                      apps are absent or fill multiple rows. Apps follow
                      directly after the input with only their own mt-4 gap. */
                   <div className="flex flex-col min-h-[calc(100vh-200px)] touch-mobile:min-h-[calc(100dvh-240px)] pt-[25vh] touch-mobile:pt-[20vh]">
-                    <div className="shrink-0">
+                    <CurrentUserWatermarkSurface
+                      enabled={watermarkEnabled}
+                      className="shrink-0"
+                    >
                       <Landing
                         lingsi={isLingsi}
                         lingsiEntry={(bsConfig as any)?.linsightConfig?.linsight_entry ?? true}
                         setLingsi={setIsLingsi}
                         isNew={isNew}
                       />
-                    </div>
+                    </CurrentUserWatermarkSurface>
 
                     {/* Input area for landing page */}
                     {!shareToken && (

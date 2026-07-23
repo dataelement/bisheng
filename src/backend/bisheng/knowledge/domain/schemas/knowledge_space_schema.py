@@ -406,6 +406,14 @@ class ShougangPortalDomainBindableSpacesResp(BaseModel):
 
 
 class ShougangPortalFileBrowseReq(BaseModel):
+    discovery_scope: Literal[
+        "legacy",
+        "public",
+        "public_and_department",
+    ] = Field(
+        default="legacy",
+        description="Server-derived portal discovery scope",
+    )
     tag: str | None = Field(default=None, description="Space tag name")
     space_ids: list[int] = Field(default_factory=list, max_length=1000, description="Candidate knowledge space IDs")
     space_level: KnowledgeSpaceLevelEnum | None = Field(default=None, description="Knowledge space level filter")
@@ -489,6 +497,13 @@ class ShougangPortalFileItemResp(BaseModel):
         "same per-space effective 'download_file' permission the download endpoint "
         "enforces, so the portal can hide the download entry for view-only users.",
     )
+    content_access: Literal[
+        "allowed",
+        "approval_required",
+        "unavailable",
+    ] = "allowed"
+    access_source: str | None = None
+    is_department_file: bool = False
 
 
 class ShougangPortalFileSearchResp(BaseModel):
@@ -508,6 +523,11 @@ class ShougangPortalRelatedFilesResp(BaseModel):
 
 class ShougangPortalQaFileSearchReq(BaseModel):
     q: str = Field(..., min_length=1, description="File name keyword")
+    discovery_scope: Literal[
+        "legacy",
+        "public",
+        "public_and_department",
+    ] = "legacy"
     space_ids: list[int] = Field(default_factory=list, max_length=200, description="Candidate knowledge space IDs")
     page: int = Field(default=1, ge=1)
     page_size: int = Field(default=20, ge=1, le=100)
@@ -527,6 +547,11 @@ class ShougangPortalHomeSectionReq(BaseModel):
 
 
 class ShougangPortalHomeReq(BaseModel):
+    discovery_scope: Literal[
+        "legacy",
+        "public",
+        "public_and_department",
+    ] = "legacy"
     space_ids: list[int] = Field(default_factory=list, max_length=200, description="Candidate knowledge space IDs")
     space_level: KnowledgeSpaceLevelEnum | None = Field(default=None, description="Knowledge space level filter")
     sections: list[ShougangPortalHomeSectionReq] = Field(default_factory=list, max_length=20)
