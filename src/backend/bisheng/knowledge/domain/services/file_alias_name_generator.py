@@ -52,7 +52,11 @@ class FileAliasNameGeneratorService:
         }
     )
 
-    _JSON_BLOCK_RE = re.compile(r"\{.*\}", re.DOTALL)
+    # Extract a JSON object from free-form LLM output. Non-greedy so it stops
+    # at the first closing brace and avoids swallowing trailing explanation text.
+    _JSON_BLOCK_RE = re.compile(r"\{.*?\}", re.DOTALL)
+    # Extract JSON that is wrapped in a markdown code block.
+    _CODE_BLOCK_RE = re.compile(r"```(?:json)?\s*(.*?)\s*```", re.DOTALL)
 
     @classmethod
     def generate_alias_name(
@@ -66,15 +70,30 @@ class FileAliasNameGeneratorService:
         """Return an LLM-generated alias (with original extension) or ``None``."""
         try:
             knowledge_llm = LLMService.get_knowledge_llm(tenant_id=tenant_id)
-            if not knowledge_llm or not knowledge_llm.file_alias_model_id:
-                logger.debug(
-                    "file_alias_model_id not configured tenant_id={}",
+            file_alias_model_id = (
+                knowledge_llm.file_alias_model_id
+                if knowledge_llm and knowledge_llm.file_alias_model_id
+                else None
+            )
+            # Fallback to the extract-title model when no alias model is configured.
+            if not file_alias_model_id and knowledge_llm and knowledge_llm.extract_title_model_id:
+                file_alias_model_id = knowledge_llm.extract_title_model_id
+            logger.info(
+                "alias generation config tenant_id={} file_alias_model_id={} extract_title_model_id={} resolved_model_id={}",
+                tenant_id,
+                getattr(knowledge_llm, "file_alias_model_id", None) if knowledge_llm else None,
+                getattr(knowledge_llm, "extract_title_model_id", None) if knowledge_llm else None,
+                file_alias_model_id,
+            )
+            if not file_alias_model_id:
+                logger.warning(
+                    "file_alias_model_id not configured and no extract_title_model_id fallback tenant_id={}",
                     tenant_id,
                 )
                 return None
 
             llm = LLMService.get_bisheng_llm_sync(
-                model_id=knowledge_llm.file_alias_model_id,
+                model_id=file_alias_model_id,
                 app_id=ApplicationTypeEnum.KNOWLEDGE_BASE.value,
                 app_name=ApplicationTypeEnum.KNOWLEDGE_BASE.value,
                 app_type=ApplicationTypeEnum.KNOWLEDGE_BASE,
@@ -101,11 +120,21 @@ class FileAliasNameGeneratorService:
             ]
             response = llm.invoke(messages)
             content = response.content.strip() if response.content else ""
+            logger.info(
+                "alias generation llm response file_name={} content={}",
+                file_name,
+                content,
+            )
             if not content:
                 logger.warning("LLM returned empty alias generation response")
                 return None
 
             raw_alias = cls._parse_llm_json(content)
+            logger.info(
+                "alias generation parsed raw_alias={} file_name={}",
+                raw_alias,
+                file_name,
+            )
             if not raw_alias:
                 return None
 
@@ -138,21 +167,29 @@ class FileAliasNameGeneratorService:
     @classmethod
     def _parse_llm_json(cls, content: str) -> str | None:
         """Parse the LLM JSON response and return the raw new_file_name."""
-        # Try direct JSON parsing first.
-        try:
-            data = json.loads(content)
-            return cls._extract_alias_from_dict(data)
-        except json.JSONDecodeError:
-            pass
+        # Strategy: markdown code block -> direct JSON -> first JSON object in text.
+        candidates = []
 
-        # Fall back to extracting the first JSON object with a regex.
-        match = cls._JSON_BLOCK_RE.search(content)
-        if match:
+        code_match = cls._CODE_BLOCK_RE.search(content)
+        if code_match:
+            candidates.append(code_match.group(1).strip())
+
+        candidates.append(content.strip())
+
+        json_match = cls._JSON_BLOCK_RE.search(content)
+        if json_match:
+            candidates.append(json_match.group(0))
+
+        for candidate in candidates:
+            if not candidate:
+                continue
             try:
-                data = json.loads(match.group(0))
-                return cls._extract_alias_from_dict(data)
+                data = json.loads(candidate)
+                alias = cls._extract_alias_from_dict(data)
+                if alias is not None:
+                    return alias
             except json.JSONDecodeError:
-                pass
+                continue
 
         logger.warning("failed to parse alias JSON from LLM response: {}", content)
         return None
@@ -160,11 +197,14 @@ class FileAliasNameGeneratorService:
     @classmethod
     def _extract_alias_from_dict(cls, data: dict) -> str | None:
         """Validate the parsed JSON dict and return the new file name."""
-        if data.get("status") != "success":
-            logger.debug("LLM returned status=%s", data.get("status"))
-            return None
+        status = data.get("status")
         new_name = data.get("new_file_name")
+        logger.info("alias extract from dict status=%s new_file_name=%s", status, new_name)
+        if status != "success":
+            logger.info("LLM returned non-success status=%s", status)
+            return None
         if not isinstance(new_name, str) or not new_name.strip():
+            logger.info("LLM returned empty or invalid new_file_name")
             return None
         return new_name.strip()
 
@@ -174,13 +214,20 @@ class FileAliasNameGeneratorService:
         original_ext = os.path.splitext(original_file_name)[1].lower()
         alias_base, alias_ext = os.path.splitext(raw_alias)
         alias_base = alias_base.strip()
+        logger.info(
+            "alias normalize raw_alias=%s original_ext=%s alias_base=%s",
+            raw_alias,
+            original_ext,
+            alias_base,
+        )
         if not alias_base:
+            logger.info("alias normalize skipped, empty base")
             return None
 
         # Always keep the original extension for consistency with file_name.
         ext = original_ext if original_ext else alias_ext.lower()
         max_base_length = 200 - len(ext)
         safe_base = sanitize_file_name(alias_base, max_length=max(max_base_length, 1))
-        if not safe_base:
-            return None
-        return f"{safe_base}{ext}"
+        result = f"{safe_base}{ext}" if safe_base else None
+        logger.info("alias normalize result=%s", result)
+        return result

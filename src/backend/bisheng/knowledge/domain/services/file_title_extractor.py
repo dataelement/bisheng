@@ -585,14 +585,23 @@ class FileTitleExtractorService:
         file name.
         """
         if not file_path or not os.path.exists(file_path):
+            logger.info("title extraction skipped, file missing file_path={}", file_path)
             return None
         ext = os.path.splitext(file_path)[1].lower().lstrip(".")
         extractor = cls._EXTRACTORS.get(ext)
+        logger.info("title extraction dispatch file_path={} extension={} extractor={}", file_path, ext, type(extractor).__name__ if extractor else None)
         if extractor is None:
-            logger.debug("no title extractor for extension: {}", ext)
+            logger.info("no title extractor for extension: {}", ext)
             return None
         try:
-            return extractor.extract(file_path)
+            title = extractor.extract(file_path)
+            logger.info(
+                "title extraction done file_path={} extension={} title={}",
+                file_path,
+                ext,
+                title,
+            )
+            return title
         except Exception as e:
             # Title extraction is best-effort; a parse failure should not block parsing.
             logger.warning("title extraction failed for {}: {}", file_path, e)

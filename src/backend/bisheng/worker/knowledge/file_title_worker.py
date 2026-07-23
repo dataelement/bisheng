@@ -27,6 +27,25 @@ def extract_and_generate_alias(file_id: int) -> str | None:
         logger.warning("title extraction skipped, file not found file_id={}", file_id)
         return None
 
+    logger.info(
+        "title extraction preparing file_id={} file_name={} status={} object_name={} tenant_id={}",
+        file_id,
+        db_file.file_name,
+        db_file.status,
+        db_file.object_name,
+        db_file.tenant_id,
+    )
+    if db_file.status != KnowledgeFileStatus.WAITING.value:
+        logger.info(
+            "title extraction skipped, file status={} is not WAITING file_id={}",
+            db_file.status,
+            file_id,
+        )
+        return None
+    if not db_file.object_name:
+        logger.warning("title extraction skipped, missing object_name file_id={}", file_id)
+        return None
+
     try:
         with tempfile.TemporaryDirectory() as tmp_dir:
             local_path, _ = download_minio_file(
@@ -34,11 +53,23 @@ def extract_and_generate_alias(file_id: int) -> str | None:
                 root_dir=tmp_dir,
                 calc_sha256=False,
             )
+            logger.info(
+                "title extraction downloaded file_id={} local_path={} exists={}",
+                file_id,
+                local_path,
+                os.path.exists(local_path) if local_path else False,
+            )
             if not local_path or not os.path.exists(local_path):
                 logger.warning("title extraction skipped, download failed file_id={}", file_id)
                 return None
 
             raw_title = FileTitleExtractorService.extract_title(local_path)
+            logger.info(
+                "title extraction result file_id={} file_name={} raw_title={}",
+                file_id,
+                db_file.file_name,
+                raw_title,
+            )
             if not raw_title:
                 logger.info("no title extracted file_id={} file_name={}", file_id, db_file.file_name)
                 return None
@@ -49,6 +80,12 @@ def extract_and_generate_alias(file_id: int) -> str | None:
                 extracted_title=raw_title,
                 invoke_user_id=db_file.user_id or 0,
                 tenant_id=db_file.tenant_id or 1,
+            )
+            logger.info(
+                "alias generation result file_id={} file_name={} alias_name={}",
+                file_id,
+                db_file.file_name,
+                alias_name,
             )
             if alias_name and alias_name != db_file.alias_name:
                 db_file.alias_name = alias_name

@@ -36,6 +36,34 @@
 | D | Task executed but skipped because preconditions not met. | Medium | Low | Worker log shows `title extraction skipped, ...` with reason (status, missing object_name, no title extracted). |
 | E | Redis broker contains stale messages or API/worker code versions are inconsistent. | Low | Medium | Old error `module 'bisheng.worker.knowledge.file_worker' has no attribute 'extract_knowledge_file_title_celery'` still appears in worker logs after API restart. |
 
+**Code Changes Made (Instrumentation / Logging)**:
+
+To make root-cause identification easier in the testing environment, the following logging-only changes were applied (no business logic changed):
+
+1. [src/backend/bisheng/worker/knowledge/file_title_worker.py](file:///Users/xuhualiang/ai_coding/shougang/online/bisheng/src/backend/bisheng/worker/knowledge/file_title_worker.py)
+   - Added `title extraction preparing ...` log showing `status`, `object_name`, `tenant_id`.
+   - Added `title extraction skipped, file status=... is not WAITING` guard (precondition check).
+   - Added `title extraction downloaded ... local_path=... exists=...` log.
+   - Added `title extraction result ... raw_title=...` log.
+   - Added `alias generation result ... alias_name=...` log.
+
+2. [src/backend/bisheng/knowledge/domain/services/file_alias_name_generator.py](file:///Users/xuhualiang/ai_coding/shougang/online/bisheng/src/backend/bisheng/knowledge/domain/services/file_alias_name_generator.py)
+   - Added `alias generation config ... file_alias_model_id=...` log.
+   - Upgraded `file_alias_model_id not configured` from `debug` to `warning`.
+   - Added `alias generation llm response ... content=...` log.
+   - Added `alias generation parsed raw_alias=...` log.
+
+3. [src/backend/bisheng/knowledge/domain/services/file_title_extractor.py](file:///Users/xuhualiang/ai_coding/shougang/online/bisheng/src/backend/bisheng/knowledge/domain/services/file_title_extractor.py)
+   - Added `title extraction dispatch ... extension=... extractor=...` log.
+   - Added `title extraction done ... title=...` log.
+
+4. [src/backend/bisheng/knowledge/domain/services/file_alias_name_generator.py](file:///Users/xuhualiang/ai_coding/shougang/online/bisheng/src/backend/bisheng/knowledge/domain/services/file_alias_name_generator.py) — robustness & fallback improvements
+   - Changed `_JSON_BLOCK_RE` from greedy `{.*}` to non-greedy `{.*?}` so it does not swallow trailing explanation text.
+   - Added `_CODE_BLOCK_RE` to support JSON wrapped in markdown code blocks (e.g. ```json {...} ```).
+   - Refactored `_parse_llm_json` to try: code block -> direct JSON -> first JSON object.
+   - Added detailed logs in `_extract_alias_from_dict` and `_normalize_alias_name`.
+   - **Added fallback logic**: when `file_alias_model_id` is empty, use `extract_title_model_id` instead. Only return `None` when both are missing.
+
 **Verification Commands (run in testing env)**:
 
 1. Check task registration:
@@ -58,7 +86,11 @@
 
 4. Check worker logs for title extraction logs after uploading a file:
    - Look for `extract_knowledge_file_title_celery start file_id=...`
-   - Look for `title extraction skipped, ...`
+   - Look for `title extraction preparing ...`
+   - Look for `title extraction dispatch ... extension=... extractor=...`
+   - Look for `title extraction result ... raw_title=...`
+   - Look for `alias generation config ... file_alias_model_id=...`
+   - Look for `alias generation llm response ...`
    - Look for `file alias generated file_id=... alias_name=...`
    - Look for any traceback after the start line.
 
@@ -68,3 +100,5 @@
    FROM knowledge_file
    WHERE id = <file_id>;
    ```
+
+**Mandatory Deployment Note**: Because new files (`file_title_worker.py`, `file_title_extractor.py`, `file_alias_name_generator.py`, `gen_title.yaml`) were added, the Docker image **must be rebuilt** and the API + Celery Worker containers **must be restarted** for any of these changes to take effect in the testing environment.
