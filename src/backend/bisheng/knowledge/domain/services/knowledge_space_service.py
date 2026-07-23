@@ -11508,7 +11508,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 logger.warning(f"Failed to cleanup files after knowledge space upload error: {cleanup_exc}")
             raise
         if enqueue_processing:
-            self.enqueue_file_processing(process_files, preview_cache_keys)
+            self.enqueue_file_title_extraction(process_files, preview_cache_keys)
         if not enqueue_processing:
             for process_file in process_files:
                 await enqueue_current_pdf_artifact(
@@ -11518,6 +11518,20 @@ class KnowledgeSpaceService(KnowledgeUtils):
         await self.update_folder_update_time(file_level_path)
         await KnowledgeDao.async_update_knowledge_update_time_by_id(knowledge_id)
         return failed_files + process_files
+
+    @staticmethod
+    def enqueue_file_title_extraction(
+        process_files: list[KnowledgeFile],
+        preview_cache_keys: list[str],
+    ) -> None:
+        """Enqueue title extraction and AI alias generation before formal parsing."""
+        if len(process_files) != len(preview_cache_keys):
+            raise ValueError("process_files and preview_cache_keys length mismatch")
+        for index, knowledge_file in enumerate(process_files):
+            file_worker.extract_knowledge_file_title_celery.delay(
+                knowledge_file.id,
+                preview_cache_keys[index],
+            )
 
     @staticmethod
     def enqueue_file_processing(

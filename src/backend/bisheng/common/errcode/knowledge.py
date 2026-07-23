@@ -103,6 +103,16 @@ class KnowledgeWebLinkImportError(BaseErrorCode):
     Msg: str = 'Web link import failed'
 
 
+class KnowledgeFileTitleExtractError(BaseErrorCode):
+    Code: int = 10956
+    Msg: str = 'File title extraction failed, will continue parsing with original name'
+
+
+class KnowledgeFileAliasGenerateError(BaseErrorCode):
+    Code: int = 10957
+    Msg: str = 'AI file alias generation failed, file_name remains unchanged'
+
+
 # Is notQAThe knowledge base upon
 class KnowledgeNotQAError(BaseErrorCode):
     Code: int = 10960
