@@ -278,12 +278,12 @@ export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBefo
                 setInputLock({ locked: true, reason: data.message.message })
             } else {
                 // 特殊状态吗支持输入框展示reason
-                const reason = [10421, 13002, 13010].includes(status_code) ? t(`errors.${status_code}`, params) : ' '
+                const reason = [10421, 13002, 13010].includes(status_code) ? t(`api_errors:${status_code}`, params) : ' '
                 setInputLock({ locked: true, reason })
             }
 
             // 记录
-            const errorMsg = status_code == 500 ? status_message || data.message.message : t(`errors.${status_code}`, params)
+            const errorMsg = status_code == 500 ? status_message || data.message.message : t(`api_errors:${status_code}`, params)
             addNotification({
                 type: 'error',
                 title: 'runtime error',

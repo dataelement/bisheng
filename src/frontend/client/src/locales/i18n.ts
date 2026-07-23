@@ -6,13 +6,17 @@ import LanguageDetector from 'i18next-browser-languagedetector';
 import translationEn from './en/translation.json';
 import translationJa from './ja/translation.json';
 import translationZh_Hans from './zh-Hans/translation.json';
+// Generated from packages/locales (shared error-code copy) — never edit by hand.
+import apiErrorsEn from './en/api_errors.gen.json';
+import apiErrorsJa from './ja/api_errors.gen.json';
+import apiErrorsZh_Hans from './zh-Hans/api_errors.gen.json';
 
 export const defaultNS = 'translation';
 
 export const resources = {
-  'en': { translation: translationEn },
-  'zh-Hans': { translation: translationZh_Hans },
-  'ja': { translation: translationJa },
+  'en': { translation: { ...translationEn, api_errors: apiErrorsEn } },
+  'zh-Hans': { translation: { ...translationZh_Hans, api_errors: apiErrorsZh_Hans } },
+  'ja': { translation: { ...translationJa, api_errors: apiErrorsJa } },
 } as const;
 
 const config = window.BRAND_CONFIG || {};

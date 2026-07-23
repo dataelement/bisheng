@@ -503,6 +503,8 @@ importers:
         specifier: ^0.21.2
         version: 0.21.2(vite@6.4.1(@types/node@20.19.43)(jiti@1.21.7)(sass-embedded@1.100.0)(sass@1.100.0)(terser@5.49.0))(workbox-build@7.4.1(@types/babel__core@7.20.5))(workbox-window@7.4.1)
 
+  packages/locales: {}
+
   packages/ui:
     dependencies:
       '@radix-ui/react-slot':

@@ -56,7 +56,7 @@ function resolve10954Message(
   if (statusMessage.includes("asr request failed")) {
     return t("mediaAsrRequestFailed", { ns: "knowledge" });
   }
-  return t("bs:errors.10954", errorData);
+  return t("api_errors:10954", errorData);
 }
 
 /** Resolve knowledge file parse failure messages, including knowledge-base ASR errors. */
@@ -86,15 +86,15 @@ export function resolveKnowledgeParseFailure(input: unknown, t: TranslateFn): st
   }
 
   if (ASR_ERROR_CODES.has(statusCode)) {
-    return t(`bs:errors.${statusCode}`, errorData);
+    return t(`api_errors:${statusCode}`, errorData);
   }
 
   if (statusCode === 10954) {
     return resolve10954Message(parsed, errorData, t);
   }
 
-  const translated = t(`bs:errors.${statusCode}`, errorData);
-  if (translated && translated !== `bs:errors.${statusCode}`) {
+  const translated = t(`api_errors:${statusCode}`, errorData);
+  if (translated && translated !== `api_errors:${statusCode}`) {
     return translated;
   }
 

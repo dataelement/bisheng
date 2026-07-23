@@ -56,31 +56,31 @@ function decodeEnvelopeMessage(envelope: any) {
     const statusCode = envelope?.status_code
     const statusMessage = coerceErrorMessage(envelope?.status_message)
     // Without defaultValue, an unregistered status_code renders as the literal
-    // key string "errors.<num>". Fall back to status_message so the user at
+    // key string "api_errors:<num>". Fall back to status_message so the user at
     // least sees the backend's raw text instead of a debug-looking key.
-    const i18Msg = i18next.t(`errors.${statusCode}`, { ...(envelope?.data || {}), defaultValue: statusMessage })
+    const i18Msg = i18next.t(`api_errors:${statusCode}`, { ...(envelope?.data || {}), defaultValue: statusMessage })
 
     const statusMessageKeyMap: Record<string, string> = {
-        "person id is required": "errors.21013",
-        "person id already exists": "errors.personIdAlreadyExists",
-        "person id already belongs to a deleted account. please restore the original account.": "errors.21020",
-        "department name already exists at this level": "errors.21001",
-        "department not found": "errors.21000",
-        "cannot delete department with children": "errors.21002",
-        "cannot delete department with members": "errors.21003",
-        "cannot move department to its own subtree": "errors.21004",
-        "third-party synced department is read-only": "errors.21005",
-        "root department already exists for this tenant": "errors.21006",
-        "user is already a member of this department": "errors.21007",
-        "user is not a member of this department": "errors.21008",
-        "no permission for this department operation": "errors.21009",
-        "password must be at least 8 characters and include upper, lower, digit and symbol": "errors.21010",
-        "one or more roles are not assignable in this department": "errors.21011",
-        "cannot delete user while data assets exist": "errors.21014",
-        "only local accounts may be deleted from organization management": "errors.21015",
-        "only archived departments can be permanently deleted": "errors.21016",
-        "archived departments cannot be modified": "errors.21017",
-        "cannot restore department while parent department is archived": "errors.21018",
+        "person id is required": "api_errors:21013",
+        "person id already exists": "api_errors:personIdAlreadyExists",
+        "person id already belongs to a deleted account. please restore the original account.": "api_errors:21020",
+        "department name already exists at this level": "api_errors:21001",
+        "department not found": "api_errors:21000",
+        "cannot delete department with children": "api_errors:21002",
+        "cannot delete department with members": "api_errors:21003",
+        "cannot move department to its own subtree": "api_errors:21004",
+        "third-party synced department is read-only": "api_errors:21005",
+        "root department already exists for this tenant": "api_errors:21006",
+        "user is already a member of this department": "api_errors:21007",
+        "user is not a member of this department": "api_errors:21008",
+        "no permission for this department operation": "api_errors:21009",
+        "password must be at least 8 characters and include upper, lower, digit and symbol": "api_errors:21010",
+        "one or more roles are not assignable in this department": "api_errors:21011",
+        "cannot delete user while data assets exist": "api_errors:21014",
+        "only local accounts may be deleted from organization management": "api_errors:21015",
+        "only archived departments can be permanently deleted": "api_errors:21016",
+        "archived departments cannot be modified": "api_errors:21017",
+        "cannot restore department while parent department is archived": "api_errors:21018",
     }
 
     const normalizedStatusMessage = statusMessage.trim().toLowerCase()
@@ -91,7 +91,7 @@ function decodeEnvelopeMessage(envelope: any) {
 
     const finalMsg = i18MsgFromStatus && i18MsgFromStatus !== mappedStatusMessageKey
         ? i18MsgFromStatus
-        : (i18Msg !== `errors.${statusCode}` ? i18Msg : statusMessage)
+        : (i18Msg !== `api_errors:${statusCode}` ? i18Msg : statusMessage)
 
     // Defensive fallback: backend may leave Msg template like "{message}" or
     // "{field_name}" unsubstituted (BaseErrorCode does not .format(**kwargs)).

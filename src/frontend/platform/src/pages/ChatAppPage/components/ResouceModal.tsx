@@ -28,7 +28,7 @@ const Anwser = ({ id, msg, onInit, onAdd, fullScreen = false }) => {
                 onInit(res)
             }).catch(e => {
                 // 自动重试
-                e === t('errors.14001') && setTimeout(() => {
+                e === t('api_errors:14001') && setTimeout(() => {
                     loadData()
                 }, 1800);
             })

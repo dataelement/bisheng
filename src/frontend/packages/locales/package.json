@@ -1,0 +1,11 @@
+{
+  "name": "@bisheng/locales",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Single source of truth for cross-app copy. Edit src/<domain>/<lang>.json, then `pnpm build` compiles per-app locale artifacts.",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "watch": "node scripts/build.mjs --watch",
+    "check": "node scripts/build.mjs --check"
+  }
+}

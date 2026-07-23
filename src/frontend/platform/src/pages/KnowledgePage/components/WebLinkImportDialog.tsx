@@ -84,7 +84,7 @@ export default function WebLinkImportDialog({
         }
 
         if (statusCode !== undefined && statusCode !== null) {
-            const translated = t(`bs:errors.${statusCode}`, { ...(error?.data || {}), defaultValue: "" });
+            const translated = t(`api_errors:${statusCode}`, { ...(error?.data || {}), defaultValue: "" });
             if (translated) return translated;
         }
 

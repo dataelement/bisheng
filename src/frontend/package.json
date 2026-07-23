@@ -12,6 +12,9 @@
     "build:docs": "pnpm --filter bishengchat build:docs",
     "lint": "pnpm --filter bisheng lint && pnpm --filter bishengchat lint && pnpm --filter @bisheng/ui lint",
     "typecheck": "pnpm --filter bisheng typecheck && pnpm --filter bishengchat typecheck",
+    "locales:build": "pnpm --filter @bisheng/locales build",
+    "locales:watch": "pnpm --filter @bisheng/locales watch",
+    "locales:check": "pnpm --filter @bisheng/locales check",
     "preinstall": "npx only-allow pnpm"
   },
   "pnpm": {

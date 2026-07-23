@@ -185,7 +185,7 @@ export default function App() {
   useEffect(() => {
     if (window.url_error) {
       toast({
-        description: t(`errors.${window.url_error}`, { defaultValue: String(window.url_error) }),
+        description: t(`api_errors:${window.url_error}`, { defaultValue: String(window.url_error) }),
         variant: 'error',
       });
       delete window.url_error

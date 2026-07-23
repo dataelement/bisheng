@@ -72,6 +72,11 @@
     "zustand": "^4.5.2"
   },
   "scripts": {
+    "gen:locales": "pnpm --filter @bisheng/locales build",
+    "predev:docker": "pnpm gen:locales",
+    "prestart": "pnpm gen:locales",
+    "prebuild": "pnpm gen:locales",
+    "prebuild:vconsole": "pnpm gen:locales",
     "dev:docker": "vite --host 0.0.0.0",
     "start": "vite",
     "build": "vite build",

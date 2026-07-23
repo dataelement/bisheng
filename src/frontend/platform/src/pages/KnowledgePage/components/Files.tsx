@@ -93,7 +93,7 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({ status, remark
                 }
                 const mediaMessage = formatMediaParseFailureMessage(obj, t);
                 if (mediaMessage) return mediaMessage;
-                return t(`errors.${obj.status_code}`, obj.data)
+                return t(`api_errors:${obj.status_code}`, obj.data)
             } catch (error) {
                 return trimmedRemark
             }
@@ -330,10 +330,10 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
                     downloadFile(url, `${libName}_${dateStr}_${timeStr}.zip`);
                 }
             } else {
-                toast({ variant: 'error', description: t('errors.10003', { ns: 'bs' }) });
+                toast({ variant: 'error', description: t('api_errors:10003') });
             }
         } catch (e) {
-            toast({ variant: 'error', description: t('errors.10003', { ns: 'bs' }) });
+            toast({ variant: 'error', description: t('api_errors:10003') });
         } finally {
             setIsDownloading(false);
         }

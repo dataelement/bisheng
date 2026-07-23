@@ -41,7 +41,7 @@ export function resolveChatErrorMessage(
     const translatedMessage =
         statusCode === undefined || statusCode === null || statusCode === ""
             ? fallbackMessage
-            : translate(`errors.${statusCode}`, {
+            : translate(`api_errors:${statusCode}`, {
                 ...interpolationParams,
                 defaultValue: fallbackMessage,
             });
