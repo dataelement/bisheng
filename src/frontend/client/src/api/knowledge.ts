@@ -483,6 +483,8 @@ export interface KnowledgeFileSensitiveCheck {
 export interface KnowledgeFile {
     id: string;
     name: string;
+    /** AI-generated rename suggestion; non-empty when the backend proposes a new file name. */
+    aliasName?: string;
     type: FileType;
     size?: number;
     status?: FileStatus;
@@ -1045,6 +1047,7 @@ export function mapChild(raw: any, spaceId: string): KnowledgeFile {
     return {
         id: idVal !== undefined && idVal !== null ? String(idVal) : "",
         name: String(nameVal),
+        aliasName: raw?.alias_name ?? undefined,
         type: deriveFileType(raw),
         size: raw?.size ?? raw?.file_size,
         status,
@@ -2686,6 +2689,40 @@ export async function renameFileApi(
         { method: "POST", space_id, file_id, name },
         async () => {
             await request.post(`/api/v1/knowledge/space/${space_id}/files/${file_id}/rename`, { name });
+        }
+    );
+}
+
+/**
+ * Accept the AI-generated alias and promote it to the file name.
+ * Backend: POST /api/v1/knowledge/space/{space_id}/files/{file_id}/accept-alias
+ */
+export async function acceptFileAliasApi(
+    space_id: string,
+    file_id: string
+): Promise<void> {
+    return withKnowledgeMutationLog(
+        "accept-file-alias",
+        { method: "POST", space_id, file_id },
+        async () => {
+            await request.post(`/api/v1/knowledge/space/${space_id}/files/${file_id}/accept-alias`);
+        }
+    );
+}
+
+/**
+ * Reject the AI-generated alias and record it in the file remark.
+ * Backend: POST /api/v1/knowledge/space/{space_id}/files/{file_id}/reject-alias
+ */
+export async function rejectFileAliasApi(
+    space_id: string,
+    file_id: string
+): Promise<void> {
+    return withKnowledgeMutationLog(
+        "reject-file-alias",
+        { method: "POST", space_id, file_id },
+        async () => {
+            await request.post(`/api/v1/knowledge/space/${space_id}/files/${file_id}/reject-alias`);
         }
     );
 }

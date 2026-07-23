@@ -821,6 +821,28 @@ async def rename_file_by_post(
     return resp_200(file_record)
 
 
+@router.post("/{space_id}/files/{file_id}/accept-alias")
+async def accept_file_alias(
+    space_id: int,
+    file_id: int,
+    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    """Accept the AI-generated alias and promote it to the file name."""
+    file_record = await svc.accept_alias_rename(space_id, file_id)
+    return resp_200(file_record)
+
+
+@router.post("/{space_id}/files/{file_id}/reject-alias")
+async def reject_file_alias(
+    space_id: int,
+    file_id: int,
+    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    """Reject the AI-generated alias and record it in the file remark."""
+    file_record = await svc.reject_alias_rename(space_id, file_id)
+    return resp_200(file_record)
+
+
 @router.put("/{space_id}/files/{file_id}/encoding")
 async def update_file_encoding(
     space_id: int,

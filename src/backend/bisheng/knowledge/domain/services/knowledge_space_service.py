@@ -3160,12 +3160,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         # Department spaces and clinic spaces both need a canonical department
         # binding. Portal discovery and department-file approval intentionally
         # fail closed when the scope and binding do not agree.
-        should_create_department_binding = (
-            department_id is not None
-            and (
-                level == KnowledgeSpaceLevelEnum.DEPARTMENT
-                or (is_clinic and level == KnowledgeSpaceLevelEnum.TEAM)
-            )
+        should_create_department_binding = department_id is not None and (
+            level == KnowledgeSpaceLevelEnum.DEPARTMENT or (is_clinic and level == KnowledgeSpaceLevelEnum.TEAM)
         )
         if should_create_department_binding:
             try:
@@ -5129,9 +5125,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     "has_children": (not is_file) and candidate_count > 0,
                     "resolved_file_count": (1 if is_file and selectable else authorized_count),
                     "content_access": content_access,
-                    "can_download": bool(
-                        decision.can_download if decision is not None else False
-                    ),
+                    "can_download": bool(decision.can_download if decision is not None else False),
                     "is_department_file": bool(is_file and is_department_space),
                 }
             )
@@ -12387,6 +12381,67 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 action_code=FAVORITE_SOURCE_RENAMED,
             )
         return updated_file
+
+    async def accept_alias_rename(self, space_id: int, file_id: int) -> KnowledgeFile:
+        """Accept the AI-generated alias: promote it to file_name and clear alias_name."""
+        from bisheng.worker.knowledge.rebuild_knowledge_worker import (
+            rebuild_knowledge_file_chunk,
+        )
+
+        file_record = await self._get_file_for_action(file_id, space_id=space_id)
+        await self._require_permission_id("knowledge_file", file_id, "rename_file", space_id=file_record.knowledge_id)
+
+        alias_name = file_record.alias_name
+        if not alias_name:
+            return file_record
+
+        space = await KnowledgeDao.aquery_by_id(file_record.knowledge_id)
+        if not space:
+            raise SpaceNotFoundError()
+        self._ensure_space_async_task_tenant_consistency(space, "accept_alias_rename")
+
+        if file_record.file_source == FileSource.WEB_LINK.value:
+            alias_name = self._normalize_web_link_file_name(alias_name)
+
+        self._check_filename_sensitive_words(alias_name)
+        if await SpaceFileDao.count_file_by_name(file_record.knowledge_id, alias_name, exclude_id=file_id) > 0:
+            raise SpaceFileNameDuplicateError()
+
+        old_name = file_record.file_name
+        file_record.file_name = alias_name
+        file_record.alias_name = None
+        file_record.updater_id = self.login_user.user_id
+        file_record.updater_name = self.login_user.user_name
+        updated_file = await KnowledgeFileDao.async_update(file_record)
+
+        await KnowledgeSpaceContentStat.enqueue_file_stat_async([file_id])
+        if updated_file.status == KnowledgeFileStatus.SUCCESS.value:
+            rebuild_knowledge_file_chunk.delay(file_id=file_id)
+        await self.update_folder_update_time(file_record.file_level_path)
+        await KnowledgeDao.async_update_knowledge_update_time_by_id(file_record.knowledge_id)
+
+        if (old_name or "") != (updated_file.file_name or ""):
+            await self._notify_favorite_source_changed(
+                source_file_id=file_id,
+                file_name=updated_file.file_name,
+                action_code=FAVORITE_SOURCE_RENAMED,
+            )
+        return updated_file
+
+    async def reject_alias_rename(self, space_id: int, file_id: int) -> KnowledgeFile:
+        """Reject the AI-generated alias: record it in remark and clear alias_name."""
+        file_record = await self._get_file_for_action(file_id, space_id=space_id)
+        await self._require_permission_id("knowledge_file", file_id, "rename_file", space_id=file_record.knowledge_id)
+
+        alias_name = file_record.alias_name
+        if not alias_name:
+            return file_record
+
+        file_record.remark = f"拒绝新文件名：{alias_name}"
+        file_record.alias_name = None
+        file_record.updater_id = self.login_user.user_id
+        file_record.updater_name = self.login_user.user_name
+        return await KnowledgeFileDao.async_update(file_record)
 
     async def update_file_encoding(
         self,
