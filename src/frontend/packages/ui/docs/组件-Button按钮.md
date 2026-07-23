@@ -162,7 +162,7 @@ size：缺省（h-9） 201 / sm（h-9，与缺省同高名存实亡） 48 / icon
 - default 变体挂 `btn-brand-primary` 类，由 style.css:195-215 在绿主题下 `!important` 强刷 `#19b476` 三态（换肤 hack，见 §6 第 2 条记债）。
 
 ### A.5 代码锚点
-- 基准组件：`src/frontend/client/src/components/ui/Button.tsx`
+- 基准组件：`src/frontend/packages/ui/src/components/Button/Button.tsx`（2026-07-23 迁入 `@bisheng/ui`；client 旧路径 `~/components/ui/Button` 现为 re-export 壳）
 - 全局类：`src/frontend/client/src/style.css:1419-1545`（btn 系）、`:195-215`（换肤 hack）
 - 灰描边聚类代表：`pages/Subscription/ArticleList/MultiSourceSelect.tsx`、`pages/knowledge/SpaceDetail/EditTagsModal.tsx`
 - 画廊版块：`src/frontend/client/src/pages/_gallery/sections/ButtonSection.tsx`（未按本规范重做，留给组件窗口）
