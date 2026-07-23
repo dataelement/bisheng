@@ -49,6 +49,9 @@
     "@typescript-eslint/no-unused-vars": {
       "count": 2
     },
+    "no-restricted-imports": {
+      "count": 1
+    },
     "react-hooks/exhaustive-deps": {
       "count": 2
     }
@@ -101,6 +104,11 @@
     },
     "@typescript-eslint/no-unused-expressions": {
       "count": 2
+    }
+  },
+  "src/components/VariablesComponent/VarDialog.tsx": {
+    "no-restricted-imports": {
+      "count": 1
     }
   },
   "src/components/VariablesComponent/index.tsx": {
@@ -286,6 +294,11 @@
       "count": 1
     }
   },
+  "src/components/bs-comp/department/useLazyDepartmentTree.ts": {
+    "no-restricted-imports": {
+      "count": 1
+    }
+  },
   "src/components/bs-comp/filterTableDataComponent/FilterByApp.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 1
@@ -407,6 +420,11 @@
       "count": 1
     },
     "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "src/components/bs-comp/sheets/TaggingSheet.tsx": {
+    "no-restricted-imports": {
       "count": 1
     }
   },
@@ -1237,6 +1255,9 @@
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 1
+    },
+    "no-restricted-imports": {
+      "count": 1
     }
   },
   "src/layout/HeaderMenu.tsx": {
@@ -1378,6 +1399,9 @@
   "src/pages/BuildPage/appTemps.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 1
+    },
+    "no-restricted-imports": {
+      "count": 1
     }
   },
   "src/pages/BuildPage/apps.tsx": {
@@ -1506,6 +1530,9 @@
     "@typescript-eslint/no-explicit-any": {
       "count": 2
     },
+    "no-restricted-imports": {
+      "count": 1
+    },
     "react-hooks/exhaustive-deps": {
       "count": 1
     }
@@ -1515,6 +1542,9 @@
       "count": 4
     },
     "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    },
+    "no-restricted-imports": {
       "count": 1
     }
   },
@@ -1757,6 +1787,9 @@
   },
   "src/pages/BuildPage/flow/FlowNode/component/DragOptions.tsx": {
     "@typescript-eslint/no-unused-expressions": {
+      "count": 1
+    },
+    "no-restricted-imports": {
       "count": 1
     }
   },
@@ -2034,6 +2067,9 @@
     "@typescript-eslint/no-unused-vars": {
       "count": 7
     },
+    "no-restricted-imports": {
+      "count": 1
+    },
     "react-hooks/exhaustive-deps": {
       "count": 2
     }
@@ -2050,6 +2086,9 @@
   },
   "src/pages/BuildPage/hook.ts": {
     "@typescript-eslint/no-unused-expressions": {
+      "count": 1
+    },
+    "no-restricted-imports": {
       "count": 1
     },
     "react-hooks/exhaustive-deps": {
@@ -2080,6 +2119,9 @@
       "count": 3
     },
     "@typescript-eslint/no-unused-expressions": {
+      "count": 1
+    },
+    "no-restricted-imports": {
       "count": 1
     },
     "react-hooks/exhaustive-deps": {
@@ -2328,6 +2370,11 @@
       "count": 1
     }
   },
+  "src/pages/ChatAppPage/components/MarkLabel.tsx": {
+    "no-restricted-imports": {
+      "count": 1
+    }
+  },
   "src/pages/ChatAppPage/components/ResouceModal.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 5
@@ -2375,6 +2422,9 @@
     "no-console": {
       "count": 1
     },
+    "no-restricted-imports": {
+      "count": 1
+    },
     "react-hooks/exhaustive-deps": {
       "count": 1
     }
@@ -2404,6 +2454,9 @@
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 3
+    },
+    "no-restricted-imports": {
+      "count": 1
     }
   },
   "src/pages/Dashboard/components/config/ComponentConfigDrawer.tsx": {
@@ -2434,6 +2487,9 @@
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 4
+    },
+    "no-restricted-imports": {
+      "count": 1
     }
   },
   "src/pages/Dashboard/components/config/DimensionBlock.tsx": {
@@ -2464,6 +2520,9 @@
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 9
+    },
+    "no-restricted-imports": {
+      "count": 1
     },
     "react-hooks/exhaustive-deps": {
       "count": 2
@@ -2499,6 +2558,9 @@
   "src/pages/Dashboard/components/dashboard/DashboardSidebar.tsx": {
     "@typescript-eslint/no-unused-vars": {
       "count": 2
+    },
+    "no-restricted-imports": {
+      "count": 1
     }
   },
   "src/pages/Dashboard/components/editor/ComponentWrapper.tsx": {
@@ -2522,6 +2584,9 @@
     "no-console": {
       "count": 2
     },
+    "no-restricted-imports": {
+      "count": 1
+    },
     "react-hooks/exhaustive-deps": {
       "count": 6
     }
@@ -2539,12 +2604,18 @@
     "no-console": {
       "count": 2
     },
+    "no-restricted-imports": {
+      "count": 1
+    },
     "react-hooks/exhaustive-deps": {
       "count": 2
     }
   },
   "src/pages/Dashboard/editor.tsx": {
     "@typescript-eslint/no-unused-expressions": {
+      "count": 1
+    },
+    "no-restricted-imports": {
       "count": 1
     },
     "react-hooks/exhaustive-deps": {
@@ -2554,6 +2625,9 @@
   "src/pages/Dashboard/hook.ts": {
     "@typescript-eslint/no-explicit-any": {
       "count": 2
+    },
+    "no-restricted-imports": {
+      "count": 1
     }
   },
   "src/pages/Dashboard/index.tsx": {
@@ -2563,11 +2637,17 @@
     "@typescript-eslint/no-unused-vars": {
       "count": 2
     },
+    "no-restricted-imports": {
+      "count": 1
+    },
     "react-hooks/exhaustive-deps": {
       "count": 2
     }
   },
   "src/pages/Dashboard/share.tsx": {
+    "no-restricted-imports": {
+      "count": 1
+    },
     "react-hooks/exhaustive-deps": {
       "count": 1
     }
@@ -2719,6 +2799,9 @@
     "no-console": {
       "count": 3
     },
+    "no-restricted-imports": {
+      "count": 2
+    },
     "no-useless-escape": {
       "count": 4
     },
@@ -2751,6 +2834,11 @@
       "count": 15
     },
     "no-console": {
+      "count": 1
+    }
+  },
+  "src/pages/KnowledgePage/components/FileUploadSplitStrategy.tsx": {
+    "no-restricted-imports": {
       "count": 1
     }
   },
@@ -2805,6 +2893,9 @@
       "count": 5
     },
     "no-console": {
+      "count": 1
+    },
+    "no-restricted-imports": {
       "count": 1
     }
   },
@@ -3229,6 +3320,11 @@
       "count": 2
     }
   },
+  "src/pages/ModelPage/manage/ScopeBar.tsx": {
+    "no-restricted-imports": {
+      "count": 1
+    }
+  },
   "src/pages/ModelPage/manage/SystemConfigBanners.tsx": {
     "@typescript-eslint/no-unused-vars": {
       "count": 1
@@ -3243,6 +3339,9 @@
     "@typescript-eslint/no-unused-vars": {
       "count": 1
     },
+    "no-restricted-imports": {
+      "count": 1
+    },
     "react-hooks/exhaustive-deps": {
       "count": 1
     }
@@ -3255,6 +3354,9 @@
       "count": 1
     },
     "no-console": {
+      "count": 1
+    },
+    "no-restricted-imports": {
       "count": 1
     }
   },
@@ -3285,6 +3387,9 @@
       "count": 1
     },
     "no-console": {
+      "count": 1
+    },
+    "no-restricted-imports": {
       "count": 1
     },
     "react-hooks/exhaustive-deps": {
@@ -3402,6 +3507,11 @@
   },
   "src/pages/SystemPage/theme/Example.tsx": {
     "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "src/pages/SystemPage/theme/HSLitem.tsx": {
+    "no-restricted-imports": {
       "count": 1
     }
   },
@@ -3580,6 +3690,11 @@
       "count": 2
     }
   },
+  "src/test/test-utils.tsx": {
+    "no-restricted-imports": {
+      "count": 1
+    }
+  },
   "src/types/alerts/index.ts": {
     "@typescript-eslint/no-empty-object-type": {
       "count": 1
@@ -3719,7 +3834,7 @@
       "count": 1
     },
     "no-restricted-imports": {
-      "count": 1
+      "count": 2
     },
     "no-useless-escape": {
       "count": 1

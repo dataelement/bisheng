@@ -16,7 +16,7 @@ Vite 6 + React 18 + TypeScript + TailwindCSS 3 + Radix UI (shadcn/ui) + **Recoil
 ## Mandatory Rules (client-specific — common hard rules in root §4)
 - **Path Aliases**: `~/` (or `@/`) → `src/`.
 - **HTTP Requests**: wrapper is `~/api/request.ts`.
-- **State Management**: Recoil (`~/store/`). Context or other solutions prohibited for new state.
+- **State Management**: **Recoil is FROZEN** (archived by Meta; ledger #5) — no new atoms/selectors/`recoil` imports (lint-enforced via `no-restricted-imports`; existing usage is suppressed). Server state → react-query v4; local state → `useState`/props. If a feature genuinely needs new cross-page client state, raise it with shanghang (Jotai migration decision pending) — do not work around with Context or new libraries.
 - **UI Components**: shared library `@bisheng/ui` (`src/frontend/packages/ui/`) first — components migrated there (Button, …) keep re-export shims at `~/components/ui/<Name>` so both import paths work; everything else still lives in `~/components/ui/` (shadcn / Radix-based).
 - **Icons**: prefer `bisheng-icons` — `import { Outlined } from 'bisheng-icons'` → `<Outlined.Delete />` (variants `Outlined` / `Filled` / `Colored`). Use `lucide-react` ONLY as a fallback when `bisheng-icons` has no matching-semantic icon.
   - **⚠️ After upgrading `bisheng-icons`**, clear the Vite pre-bundle cache or new icons crash the page (`Element type is invalid`): `pnpm dev -- --force` (or `rm -rf node_modules/.vite && pnpm dev`). Its git-source `exports` field defeats Vite's dep-change detection, so the stale pre-bundled snapshot is served unless forced.

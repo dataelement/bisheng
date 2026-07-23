@@ -18,6 +18,7 @@ Vite 5 + React 18 + TypeScript + TailwindCSS 3 + Radix UI (bs-ui) + **Zustand** 
 - **Path Aliases**: `@/` → `src/`.
 - **HTTP Requests**: wrapper is `@/controllers/request.ts`; API modules in `@/controllers/API/`.
 - **State Management**: Zustand stores in `@/store/` (cross-page); React Context (`@/contexts/`) for UI-scoped state (alerts, theme, tabs).
+- **Frozen deps (lint-enforced via `no-restricted-imports`; existing usage suppressed)**: `react-query` v3 (unmaintained; @tanstack migration pending, ledger #6) — new data fetching uses the API Layer Pattern below; `xlsx` / `xlsx-populate` (vulnerable / duplicated, ledger #7); `react-color`, `react-beautiful-dnd` (deprecated, ledger #8). Do not add new imports of any of these.
 - **UI Components**: `@/components/bs-ui/` (Radix-based). Icons from `@/components/bs-icons/`.
 - **Workflow editor**: `@xyflow/react` (**not** `react-flow-renderer`); nodes in `src/CustomNodes/`.
 - **Toast**: `import { toast } from "@/components/bs-ui/toast/use-toast"; toast({ title, variant: 'error' | 'success', description })`.
