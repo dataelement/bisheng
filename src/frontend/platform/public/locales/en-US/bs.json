@@ -458,6 +458,8 @@
     "knowledgeSpaceFileUploadLimit": "Knowledge Space File Upload Limit",
     "knowledgeSpaceFileLimitDesc": "Limit the maximum file capacity that users can upload in the knowledge space",
     "knowledgeSpaceFileQuotaInvalid": "Enter a value between 0.1 and 999 GB (at most one decimal place)",
+    "knowledgeSpaceDownloadDailyLimit": "Daily download limit",
+    "knowledgeSpaceDownloadDailyLimitDesc": "Limit how many watermarked PDF downloads a normal user may perform per day (default 20; super admins and tenant admins are exempt)",
     "maxTotalUpload": "Maximum total upload",
     "workbenchMenuAuthorization": "Workbench Menu",
     "adminMenuAuthorization": "Admin Menu",

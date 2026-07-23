@@ -126,6 +126,8 @@ export default function Roles() {
   const [quotaFileGb, setQuotaFileGb] = useState("500")
   const [quotaChannelUnlimited, setQuotaChannelUnlimited] = useState(false)
   const [quotaChannelCount, setQuotaChannelCount] = useState("10")
+  const [quotaDownloadUnlimited, setQuotaDownloadUnlimited] = useState(false)
+  const [quotaDownloadDaily, setQuotaDownloadDaily] = useState("20")
   const [menuIds, setMenuIds] = useState<string[]>([])
   const [menuApprovalMode, setMenuApprovalMode] = useState(false)
   const [isMenuLoading, setIsMenuLoading] = useState(false)
@@ -167,6 +169,7 @@ export default function Roles() {
       { defaultWidth: 280, minWidth: 200 },
       { defaultWidth: 140, minWidth: 100 },
       { defaultWidth: 120, minWidth: 90 },
+      { defaultWidth: 130, minWidth: 100 },
       { defaultWidth: 100, minWidth: 80 },
       { defaultWidth: 160, minWidth: 120 },
       { defaultWidth: 170, minWidth: 140 },
@@ -186,6 +189,8 @@ export default function Roles() {
     quotaFileGbVal: string,
     quotaChannelUnlimitedVal: boolean,
     quotaChannelCountVal: string,
+    quotaDownloadUnlimitedVal: boolean,
+    quotaDownloadDailyVal: string,
     menuIdsVal: string[],
     menuApprovalModeVal: boolean,
   ) => JSON.stringify({
@@ -195,6 +200,8 @@ export default function Roles() {
     quotaFileGbVal,
     quotaChannelUnlimitedVal,
     quotaChannelCountVal,
+    quotaDownloadUnlimitedVal,
+    quotaDownloadDailyVal,
     menuIds: [...menuIdsVal].sort(),
     menuApprovalModeVal,
   })
@@ -235,12 +242,14 @@ export default function Roles() {
     setQuotaFileGb("500")
     setQuotaChannelUnlimited(false)
     setQuotaChannelCount("10")
+    setQuotaDownloadUnlimited(false)
+    setQuotaDownloadDaily("20")
     setMenuApprovalMode(false)
     setMenuIds(nextMenuIds)
     setIsMenuLoading(false)
     setMenuLoadFailed(false)
     setInitialEditSnapshot(
-      buildEditSnapshot("", nextDepartmentId, false, "500", false, "10", nextMenuIds, false)
+      buildEditSnapshot("", nextDepartmentId, false, "500", false, "10", false, "20", nextMenuIds, false)
     )
     setEditOpen(true)
   }
@@ -248,7 +257,8 @@ export default function Roles() {
   const loadRoleMenus = async (
     role: ROLE,
     fileLimit: number,
-    channelLimit: number
+    channelLimit: number,
+    downloadLimit: number,
   ) => {
     setIsMenuLoading(true)
     setMenuLoadFailed(false)
@@ -276,6 +286,8 @@ export default function Roles() {
         fileLimit > 0 ? formatKnowledgeSpaceGbInput(fileLimit) : "500",
         channelLimit === -1,
         channelLimit >= 0 ? String(channelLimit) : "10",
+        downloadLimit === -1,
+        downloadLimit >= 0 ? String(downloadLimit) : "20",
         ids,
         approvalFromRole,
       )
@@ -291,14 +303,17 @@ export default function Roles() {
     const rawFile = qc.knowledge_space_file
     const fileLimit = typeof rawFile === "number" ? rawFile : Number(rawFile ?? -1)
     const channelLimit = Number(qc.channel ?? 10)
+    const downloadLimit = Number(qc.knowledge_space_download_daily ?? 20)
     setQuotaFileUnlimited(fileLimit === -1)
     setQuotaFileGb(fileLimit > 0 ? formatKnowledgeSpaceGbInput(fileLimit) : "500")
     setQuotaChannelUnlimited(channelLimit === -1)
     setQuotaChannelCount(channelLimit >= 0 ? String(channelLimit) : "10")
+    setQuotaDownloadUnlimited(downloadLimit === -1)
+    setQuotaDownloadDaily(downloadLimit >= 0 ? String(downloadLimit) : "20")
     setMenuIds([])
     setMenuLoadFailed(false)
     setEditOpen(true)
-    await loadRoleMenus(role, fileLimit, channelLimit)
+    await loadRoleMenus(role, fileLimit, channelLimit, downloadLimit)
   }
 
   const buildQuotaConfig = (): Record<string, unknown> => {
@@ -309,6 +324,9 @@ export default function Roles() {
       ? -1
       : (normalizeKnowledgeSpaceFileGb(quotaFileGb) ?? KB_SPACE_FILE_GB_MIN)
     base.channel = quotaChannelUnlimited ? -1 : Math.max(0, Number(quotaChannelCount || 0))
+    base.knowledge_space_download_daily = quotaDownloadUnlimited
+      ? -1
+      : Math.max(0, Number(quotaDownloadDaily || 0))
     base.menu_approval_mode = menuApprovalMode
     return base
   }
@@ -444,6 +462,14 @@ export default function Roles() {
     return String(v)
   }
 
+  const formatDailyDownloadLimit = (el: ROLE) => {
+    const qc = (el.quota_config || {}) as Record<string, unknown>
+    const v = Number(qc.knowledge_space_download_daily ?? 20)
+    if (Number.isNaN(v)) return "-"
+    if (v === -1) return t("system.unlimited")
+    return String(v)
+  }
+
   const hasUnsavedEditChanges = useMemo(() => {
     if (!editOpen || !initialEditSnapshot) return false
     const current = buildEditSnapshot(
@@ -453,6 +479,8 @@ export default function Roles() {
       quotaFileGb,
       quotaChannelUnlimited,
       quotaChannelCount,
+      quotaDownloadUnlimited,
+      quotaDownloadDaily,
       menuIds,
       menuApprovalMode,
     )
@@ -466,6 +494,8 @@ export default function Roles() {
     quotaFileGb,
     quotaChannelUnlimited,
     quotaChannelCount,
+    quotaDownloadUnlimited,
+    quotaDownloadDaily,
     menuIds,
     menuApprovalMode,
   ])
@@ -542,7 +572,7 @@ export default function Roles() {
                 />
               </TableHead>
               <TableHead {...rc.getThProps(4)}>
-                {t("system.userCount")}
+                {t("system.knowledgeSpaceDownloadDailyLimit")}
                 <ColumnResizeHandle
                   columnIndex={4}
                   lastColumn={4 === roleLastResizeColIndex}
@@ -550,7 +580,7 @@ export default function Roles() {
                 />
               </TableHead>
               <TableHead {...rc.getThProps(5)}>
-                {t("system.creator")}
+                {t("system.userCount")}
                 <ColumnResizeHandle
                   columnIndex={5}
                   lastColumn={5 === roleLastResizeColIndex}
@@ -558,7 +588,7 @@ export default function Roles() {
                 />
               </TableHead>
               <TableHead {...rc.getThProps(6)}>
-                {t("createTime")}
+                {t("system.creator")}
                 <ColumnResizeHandle
                   columnIndex={6}
                   lastColumn={6 === roleLastResizeColIndex}
@@ -566,16 +596,24 @@ export default function Roles() {
                 />
               </TableHead>
               <TableHead {...rc.getThProps(7)}>
-                {t("system.changeTime")}
+                {t("createTime")}
                 <ColumnResizeHandle
                   columnIndex={7}
                   lastColumn={7 === roleLastResizeColIndex}
                   startResize={rc.startResize}
                 />
               </TableHead>
+              <TableHead {...rc.getThProps(8)}>
+                {t("system.changeTime")}
+                <ColumnResizeHandle
+                  columnIndex={8}
+                  lastColumn={8 === roleLastResizeColIndex}
+                  startResize={rc.startResize}
+                />
+              </TableHead>
               <TableHead
-                style={rc.getThProps(8).style}
-                className={cname(rc.getThProps(8).className, "text-right")}
+                style={rc.getThProps(9).style}
+                className={cname(rc.getThProps(9).className, "text-right")}
               >
                 {t("operations")}
               </TableHead>
@@ -584,7 +622,7 @@ export default function Roles() {
           <TableBody>
             {roles.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={9} className="text-center text-gray-400">
+                <TableCell colSpan={10} className="text-center text-gray-400">
                   {t("build.empty")}
                 </TableCell>
               </TableRow>
@@ -606,9 +644,12 @@ export default function Roles() {
                   <TableCell {...rc.getTdProps(3)} className="whitespace-nowrap tabular-nums">
                     {formatChannelCreationLimit(el)}
                   </TableCell>
-                  <TableCell {...rc.getTdProps(4)}>{el.user_count ?? "-"}</TableCell>
+                  <TableCell {...rc.getTdProps(4)} className="whitespace-nowrap tabular-nums">
+                    {formatDailyDownloadLimit(el)}
+                  </TableCell>
+                  <TableCell {...rc.getTdProps(5)}>{el.user_count ?? "-"}</TableCell>
                   <TableCell
-                    {...rc.getTdProps(5)}
+                    {...rc.getTdProps(6)}
                     className={cname(
                       "min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-sm text-muted-foreground"
                     )}
@@ -616,13 +657,13 @@ export default function Roles() {
                   >
                     {creatorLabel(el)}
                   </TableCell>
-                  <TableCell {...rc.getTdProps(6)} className="whitespace-nowrap tabular-nums">
+                  <TableCell {...rc.getTdProps(7)} className="whitespace-nowrap tabular-nums">
                     {fmtTime(el.create_time)}
                   </TableCell>
-                  <TableCell {...rc.getTdProps(7)} className="whitespace-nowrap tabular-nums">
+                  <TableCell {...rc.getTdProps(8)} className="whitespace-nowrap tabular-nums">
                     {fmtTime(el.update_time)}
                   </TableCell>
-                  <TableCell {...rc.getTdProps(8)} className="text-right">
+                  <TableCell {...rc.getTdProps(9)} className="text-right">
                     {el.is_readonly ? (
                       <span className="text-sm text-muted-foreground">&mdash;</span>
                     ) : (
@@ -752,6 +793,27 @@ export default function Roles() {
             </div>
 
             <div className="rounded-md border p-3">
+              <Label>{t("system.knowledgeSpaceDownloadDailyLimit")}</Label>
+              <p className="mt-1 text-xs text-muted-foreground">{t("system.knowledgeSpaceDownloadDailyLimitDesc")}</p>
+              <div className="mt-2 flex flex-wrap items-center gap-3">
+                <Checkbox
+                  checked={quotaDownloadUnlimited}
+                  onCheckedChange={(v) => setQuotaDownloadUnlimited(Boolean(v))}
+                />
+                <span className="text-sm">{t("system.unlimited")}</span>
+                {!quotaDownloadUnlimited && (
+                  <Input
+                    type="number"
+                    min={0}
+                    value={quotaDownloadDaily}
+                    onChange={(e) => setQuotaDownloadDaily(e.target.value)}
+                    className="w-[120px]"
+                  />
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-md border p-3">
               <Label>{t("system.menuPermissionSection")}</Label>
               <p className="mt-1 text-xs text-muted-foreground">{t("system.menuPermissionHint")}</p>
               <label className="mt-3 flex cursor-pointer items-center gap-2 rounded-md border bg-background px-3 py-2">
@@ -782,7 +844,8 @@ export default function Roles() {
                       const rawF = qc.knowledge_space_file
                       const fileLimit = typeof rawF === "number" ? rawF : Number(rawF ?? -1)
                       const channelLimit = Number(qc.channel ?? 10)
-                      void loadRoleMenus(activeRole, fileLimit, channelLimit)
+                      const downloadLimit = Number(qc.knowledge_space_download_daily ?? 20)
+                      void loadRoleMenus(activeRole, fileLimit, channelLimit, downloadLimit)
                     }}
                   >
                     {t("retry")}

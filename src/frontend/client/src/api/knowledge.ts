@@ -2773,7 +2773,9 @@ export async function batchDownloadApi(
         data
     );
     if (res?.status_code !== undefined && res.status_code !== 200) {
-        throw new Error(res.status_message || res.message || res.msg || "batch download failed");
+        throw new Error(
+            formatApiErrorMessage(res) || res.status_message || res.message || res.msg || "batch download failed",
+        );
     }
     // Response: { status_code, data: { url: "/tmp-dir/..." } }
     return res?.data?.url ?? res?.url ?? "";

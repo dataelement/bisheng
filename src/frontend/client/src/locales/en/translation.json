@@ -1364,6 +1364,8 @@
     "18050": "Tag already exists in this space",
     "18051": "Pending review tags are disabled; AI and manual tags cannot be submitted",
     "18077": "Bind a tag library to this knowledge space before adding tags",
+    "18092": "Folder or batch download is not supported",
+    "18093": "Daily download limit reached",
     "18060": "Version management is disabled.",
     "18061": "File must finish parsing before version management.",
     "18062": "Target document is unavailable.",
