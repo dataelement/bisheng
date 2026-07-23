@@ -2525,6 +2525,7 @@
     "approverIdsRequired": "Enter at least one valid approver ID",
     "routeFallback": "Route",
     "enabled": "Enabled",
+    "systemManagedReadOnly": "System-managed; flow structure is read-only",
     "disabled": "Disabled",
     "emptyScenarios": "No approval scenarios yet",
     "emptyRoutes": "No routes configured for this scenario",
@@ -2586,7 +2587,8 @@
       "target_knowledge_space_owner": "Target Space Owner",
       "target_knowledge_space_manager": "Target Space Manager",
       "target_knowledge_space_owner_department_admin": "Target Space Owner's Dept Admin",
-      "target_knowledge_space_manager_department_admin": "Target Space Manager's Dept Admin"
+      "target_knowledge_space_manager_department_admin": "Target Space Manager's Dept Admin",
+      "department_file_approvers": "File Department Admin"
     },
     "roleValue": {
       "admin": "System Admin",

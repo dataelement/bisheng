@@ -49,6 +49,7 @@ from bisheng.core.ai import FakeEmbeddings
 from bisheng.core.cache.redis_manager import get_redis_client, get_redis_client_sync
 from bisheng.core.cache.utils import async_file_download, file_download
 from bisheng.core.context.tenant import DEFAULT_TENANT_ID, get_admin_scope_tenant_id, get_current_tenant_id
+from bisheng.core.database import get_async_db_session
 from bisheng.core.storage.minio.minio_manager import get_minio_storage, get_minio_storage_sync
 from bisheng.database.models.group_resource import (
     ResourceTypeEnum,
@@ -74,6 +75,12 @@ from bisheng.knowledge.domain.models.knowledge_file import (
 )
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository import KnowledgeFileRepository
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_repository import KnowledgeRepository
+from bisheng.knowledge.domain.repositories.implementations.department_file_view_grant_repository_impl import (
+    DepartmentFileViewGrantRepositoryImpl,
+)
+from bisheng.knowledge.domain.repositories.implementations.knowledge_file_repository_impl import (
+    KnowledgeFileRepositoryImpl,
+)
 from bisheng.knowledge.domain.schemas.knowledge_schema import (
     AddKnowledgeMetadataFieldsReq,
     UpdateKnowledgeMetadataFieldsReq,
@@ -81,6 +88,9 @@ from bisheng.knowledge.domain.schemas.knowledge_schema import (
 from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import KnowledgeAuditTelemetryService
 from bisheng.knowledge.domain.services.knowledge_metadata_service import KnowledgeMetadataService
 from bisheng.knowledge.domain.services.knowledge_permission_service import KnowledgePermissionService
+from bisheng.knowledge.domain.services.department_file_view_lifecycle_service import (
+    DepartmentFileViewLifecycleService,
+)
 from bisheng.knowledge.domain.services.tag_library_tag_service import TagLibraryTagService
 from bisheng.llm.domain.const import LLMModelType
 from bisheng.user.domain.models.user import UserDao
@@ -1841,6 +1851,34 @@ class KnowledgeService(KnowledgeUtils):
         return finally_res, total, writeable
 
     @classmethod
+    async def _delete_knowledge_file_rows_atomic(
+        cls,
+        *,
+        tenant_id: int,
+        space_id: int,
+        file_ids: list[int],
+        login_user: UserPayload,
+    ) -> None:
+        async with get_async_db_session() as session:
+            lifecycle_service = DepartmentFileViewLifecycleService(
+                session=session,
+                file_repository=KnowledgeFileRepositoryImpl(session),
+                grant_repository=DepartmentFileViewGrantRepositoryImpl(session),
+            )
+            try:
+                await lifecycle_service.prepare_file_delete(
+                    tenant_id=int(tenant_id),
+                    space_id=int(space_id),
+                    file_ids=file_ids,
+                    operator_id=int(login_user.user_id),
+                    operator_name=str(login_user.user_name or ""),
+                )
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                raise
+
+    @classmethod
     def delete_knowledge_file(cls, request: Request, login_user: UserPayload, file_ids: list[int]):
         from bisheng.worker.knowledge import file_worker
         from bisheng.knowledge.domain.services.knowledge_pdf_artifact_service import (
@@ -1884,7 +1922,18 @@ class KnowledgeService(KnowledgeUtils):
             file_ids,
             pdf_artifact_snapshots=pdf_artifact_snapshots,
         )
-        KnowledgeFileDao.delete_batch(file_ids)
+        asyncio.run(
+            cls._delete_knowledge_file_rows_atomic(
+                tenant_id=int(
+                    file_tenant_id
+                    or getattr(db_knowledge, "tenant_id", None)
+                    or DEFAULT_TENANT_ID
+                ),
+                space_id=int(knowledge_file[0].knowledge_id),
+                file_ids=file_ids,
+                login_user=login_user,
+            )
+        )
         cls.audit_telemetry_service.telemetry_delete_knowledge_file(login_user)
 
         # Delete Audit Log for Knowledge Base Files

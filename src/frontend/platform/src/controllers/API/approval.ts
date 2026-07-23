@@ -31,6 +31,8 @@ export interface ApprovalScenarioItem {
   scenario_code: string;
   scenario_name: string;
   enabled?: boolean;
+  system_managed?: boolean;
+  structure_locked?: boolean;
 }
 
 export interface ApprovalRouteMatchCondition {

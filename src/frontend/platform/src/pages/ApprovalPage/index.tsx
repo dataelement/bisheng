@@ -302,6 +302,8 @@ const APPROVER_SOURCE_LABEL_KEYS: Record<string, string> = {
     'approvalPage.approverSource.target_knowledge_space_owner_department_admin',
   target_knowledge_space_manager_department_admin:
     'approvalPage.approverSource.target_knowledge_space_manager_department_admin',
+  department_file_approvers:
+    'approvalPage.approverSource.department_file_approvers',
 };
 
 function approverSourceLabelKey(sourceType: string, scenarioCode?: string | null): string {
@@ -1839,6 +1841,7 @@ export default function ApprovalPage() {
     () => flows.find((f) => f.id === selectedFlowId) ?? null,
     [flows, selectedFlowId],
   );
+  const selectedScenarioLocked = Boolean(selectedScenario?.structure_locked);
   // condition fields available for the selected scenario (from the preset registry)
   const activeConditionFields = useMemo(() => {
     // applicant_role is universal — every scenario supports identity-based routing.
@@ -2309,8 +2312,9 @@ export default function ApprovalPage() {
                       </span>
                       <div className="flex items-center gap-1 shrink-0">
                         <StatusBadge enabled={s.enabled} />
-                        {/* action icons — shown on hover */}
-                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {/* 固定场景的结构由系统维护，仅允许切换启停状态。 */}
+                        {!s.structure_locked && (
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
                         type="button"
                         title={t("approvalPage.edit")}
@@ -2333,7 +2337,8 @@ export default function ApprovalPage() {
                       >
                         <Trash2 size={13} />
                       </button>
-                        </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </button>
@@ -2362,6 +2367,11 @@ export default function ApprovalPage() {
                       {selectedScenario.scenario_name}
                     </span>
                     <StatusBadge enabled={selectedScenario.enabled} />
+                    {selectedScenario.system_managed && (
+                      <span className="rounded border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs text-blue-600">
+                        {t("approvalPage.systemManagedReadOnly", { defaultValue: "系统内置，流程结构只读" })}
+                      </span>
+                    )}
                   </div>
                   <div className="flex items-center gap-2 text-sm text-text-secondary">
                     <span>{t("approvalPage.enabled")}</span>
@@ -2380,12 +2390,14 @@ export default function ApprovalPage() {
                       title={t("approvalPage.routeTitle")}
                       hint={t("approvalPage.routeSectionHint")}
                       action={
-                        <ActionBtn
-                          variant="outline"
-                          onClick={() => setRouteDialog({ open: true, initial: {} })}
-                        >
-                          <Plus size={12} /> {t("approvalPage.createRoute")}
-                        </ActionBtn>
+                        selectedScenarioLocked ? undefined : (
+                          <ActionBtn
+                            variant="outline"
+                            onClick={() => setRouteDialog({ open: true, initial: {} })}
+                          >
+                            <Plus size={12} /> {t("approvalPage.createRoute")}
+                          </ActionBtn>
+                        )
                       }
                     />
                     <div className="rounded-lg border border-border-subtle overflow-hidden">
@@ -2444,7 +2456,8 @@ export default function ApprovalPage() {
                               )}
                             </div>
                             {/* toggle + sort + edit + delete */}
-                            <div className="shrink-0 flex items-center gap-1.5">
+                            {!selectedScenarioLocked && (
+                              <div className="shrink-0 flex items-center gap-1.5">
                               <Switch
                                 checked={route.enabled !== false}
                                 onCheckedChange={() => void handleToggleRoute(route)}
@@ -2469,7 +2482,8 @@ export default function ApprovalPage() {
                               <ActionBtn label={t("approvalPage.delete")} onClick={() => handleDeleteRoute(route)}>
                                 <Trash2 size={13} className="text-gray-400 hover:text-red-500" />
                               </ActionBtn>
-                            </div>
+                              </div>
+                            )}
                           </div>
                         );
                       })}
@@ -2523,7 +2537,8 @@ export default function ApprovalPage() {
                         ))}
                       </select>
                       {selectedFlow && <StatusBadge enabled={selectedFlow.is_active} />}
-                      <div className="ml-auto flex items-center gap-2">
+                      {!selectedScenarioLocked && (
+                        <div className="ml-auto flex items-center gap-2">
                         {isNodeEditMode ? (
                           <>
                             <ActionBtn
@@ -2575,7 +2590,8 @@ export default function ApprovalPage() {
                             </ActionBtn>
                           </>
                         )}
-                      </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* node list */}
@@ -2589,7 +2605,9 @@ export default function ApprovalPage() {
                       <div className="rounded-lg border border-dashed border-border-subtle py-8 text-center text-xs text-text-secondary">
                         {isNodeEditMode
                           ? t("approvalPage.noNodes")
-                          : <>{t("approvalPage.noNodes")} — <button type="button" className="text-primary underline" onClick={enterNodeEditMode}>{t("approvalPage.editNodesBtn", { defaultValue: "编辑节点" })}</button></>
+                          : selectedScenarioLocked
+                            ? t("approvalPage.noNodes")
+                            : <>{t("approvalPage.noNodes")} — <button type="button" className="text-primary underline" onClick={enterNodeEditMode}>{t("approvalPage.editNodesBtn", { defaultValue: "编辑节点" })}</button></>
                         }
                       </div>
                     ) : (

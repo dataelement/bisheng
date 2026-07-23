@@ -1008,14 +1008,31 @@ async def _resolve_user_kb_file_filters(
         request: Request,
         data: APIChatCompletion,
         login_user: UserPayload,
+        *,
+        portal_context: bool = False,
+        department_file_view_access_service=None,
 ) -> dict[int, list[int]] | None:
     ukb = data.use_knowledge_base
     scope = getattr(ukb, 'knowledge_scope', None) if ukb else None
-    if not scope or scope.mode != 'files':
+    if not scope:
+        if (
+            not portal_context
+            or not ukb
+            or not list(ukb.knowledge_space_ids or [])
+        ):
+            return None
+        scope_mode = 'knowledge_space'
+        folder_refs = []
+        file_refs = []
+    else:
+        scope_mode = scope.mode
+        folder_refs = list(scope.folder_refs or [])
+        file_refs = list(scope.file_refs or [])
+    if not portal_context and scope_mode != 'files':
+        return None
+    if portal_context and scope_mode not in {'files', 'knowledge_space'}:
         return None
 
-    folder_refs = list(scope.folder_refs or [])
-    file_refs = list(scope.file_refs or [])
     unique_file_refs = {
         (int(ref.knowledge_space_id), int(ref.file_id))
         for ref in file_refs
@@ -1024,9 +1041,29 @@ async def _resolve_user_kb_file_filters(
     if len(unique_file_refs) > 20:
         raise ValueError('一次最多可选择20个文件进行问答。')
     if not folder_refs and not file_refs:
-        raise ValueError('请选择可用于问答的文件。')
+        if not portal_context or scope_mode == 'files':
+            raise ValueError('请选择可用于问答的文件。')
 
     service = KnowledgeSpaceService(request, login_user)
+    if portal_context:
+        service.department_file_view_access_service = (
+            department_file_view_access_service
+        )
+        selected_space_ids = list(ukb.knowledge_space_ids or [])
+        if (
+            scope is not None
+            and scope_mode == 'knowledge_space'
+            and int(scope.knowledge_space_id or 0) > 0
+            and int(scope.knowledge_space_id) not in selected_space_ids
+        ):
+            selected_space_ids.append(int(scope.knowledge_space_id))
+        return await service.resolve_shougang_portal_qa_scope_file_ids(
+            mode=scope_mode,
+            knowledge_space_ids=selected_space_ids,
+            folder_refs=folder_refs,
+            file_refs=file_refs,
+            max_files=20,
+        )
     return await service.resolve_qa_scope_file_ids(
         folder_refs=folder_refs,
         file_refs=file_refs,
@@ -1258,7 +1295,12 @@ async def _process_agent_files(data: APIChatCompletion, model_info, login_user, 
 
 
 async def _agent_stream_chat_completion(
-        request: Request, data: APIChatCompletion, login_user: UserPayload,
+        request: Request,
+        data: APIChatCompletion,
+        login_user: UserPayload,
+        *,
+        portal_context: bool = False,
+        department_file_view_access_service=None,
 ):
     """v2.5 LangGraph ReAct Agent chat completion.
 
@@ -1361,7 +1403,15 @@ async def _agent_stream_chat_completion(
             # ---- Step 1: resolve user-selected KBs ----
             failure_stage = 'retrieval'
             knowledge_bases_info = await _resolve_user_kb_selection(data)
-            file_ids_by_space = await _resolve_user_kb_file_filters(request, data, login_user)
+            file_ids_by_space = await _resolve_user_kb_file_filters(
+                request,
+                data,
+                login_user,
+                portal_context=portal_context,
+                department_file_view_access_service=(
+                    department_file_view_access_service
+                ),
+            )
 
             # ---- Step 2: assemble LangChain tools ----
             tool_payloads = [t.model_dump() for t in (data.tools or [])]
@@ -1862,11 +1912,24 @@ async def _agent_stream_chat_completion(
 
 
 async def stream_chat_completion(
-        request: Request, data: APIChatCompletion, login_user: UserPayload,
+        request: Request,
+        data: APIChatCompletion,
+        login_user: UserPayload,
+        *,
+        portal_context: bool = False,
+        department_file_view_access_service=None,
 ):
     """v2.5 unified entry — every workstation chat request goes through the
     LangGraph ReAct Agent flow. When `data.tools` is empty/None the agent
     falls back to a plain `bisheng_llm.astream` branch (same new SSE format),
     so callers don't need to opt in explicitly.
     """
-    return await _agent_stream_chat_completion(request, data, login_user)
+    return await _agent_stream_chat_completion(
+        request,
+        data,
+        login_user,
+        portal_context=portal_context,
+        department_file_view_access_service=(
+            department_file_view_access_service
+        ),
+    )

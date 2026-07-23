@@ -2475,6 +2475,7 @@
     "approverIdsRequired": "有効な承認者 ID を 1 件以上入力してください",
     "routeFallback": "分岐",
     "enabled": "有効",
+    "systemManagedReadOnly": "システム管理のため、フロー構造は読み取り専用です",
     "disabled": "無効",
     "emptyScenarios": "承認シナリオはまだありません",
     "emptyRoutes": "このシナリオにはまだ条件分岐がありません",
@@ -2536,7 +2537,8 @@
       "target_knowledge_space_owner": "対象ナレッジスペースオーナー",
       "target_knowledge_space_manager": "対象ナレッジスペースマネージャー",
       "target_knowledge_space_owner_department_admin": "対象ナレッジスペースオーナーの部署管理者",
-      "target_knowledge_space_manager_department_admin": "対象ナレッジスペースマネージャーの部署管理者"
+      "target_knowledge_space_manager_department_admin": "対象ナレッジスペースマネージャーの部署管理者",
+      "department_file_approvers": "ファイル所属部署の管理者"
     },
     "roleValue": {
       "admin": "システム管理者",

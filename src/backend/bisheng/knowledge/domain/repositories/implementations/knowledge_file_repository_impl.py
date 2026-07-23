@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 from typing import Any
 
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, delete, or_
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -37,6 +37,40 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
         stmt = select(KnowledgeFile).where(KnowledgeFile.id == entity_id)
         result = await self.session.execute(stmt.execution_options(populate_existing=True))
         return result.scalars().first()
+
+    async def find_by_id_for_update(self, entity_id: int) -> KnowledgeFile | None:
+        stmt = (
+            select(KnowledgeFile)
+            .where(KnowledgeFile.id == entity_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        result = await self.session.execute(stmt)
+        return result.scalars().first()
+
+    async def find_by_ids_for_update(
+        self,
+        entity_ids: list[int],
+    ) -> list[KnowledgeFile]:
+        if not entity_ids:
+            return []
+        stmt = (
+            select(KnowledgeFile)
+            .where(col(KnowledgeFile.id).in_(entity_ids))
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def prepare_delete_by_ids(self, entity_ids: list[int]) -> int:
+        if not entity_ids:
+            return 0
+        result = await self.session.execute(
+            delete(KnowledgeFile).where(col(KnowledgeFile.id).in_(entity_ids))
+        )
+        await self.session.flush()
+        return int(result.rowcount or 0)
 
     async def find_main_version_files_in_space(
         self,

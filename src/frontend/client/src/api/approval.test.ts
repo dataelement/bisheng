@@ -7,6 +7,7 @@ import {
   listApprovalRequestsApi,
   listMyApprovalRequestsApi,
   listMyApprovalTasksApi,
+  revokeDepartmentFileViewGrantApi,
   revokeMenuAccessGrantApi,
   submitShougangKnowledgeSpaceCreateApprovalApi,
   withdrawApprovalInstanceApi,
@@ -141,6 +142,24 @@ describe("approval api", () => {
     expect(mockPost).toHaveBeenNthCalledWith(2, "/api/v1/approval/menu-access/21/revoke-grant", {
       reason: "cleanup",
     });
+  });
+
+  it("revokes a department file view grant through the fixed endpoint", async () => {
+    mockPost.mockResolvedValue({
+      status_code: 200,
+      data: { instance_id: 31, grant_status: "revoked" },
+    });
+
+    await expect(
+      revokeDepartmentFileViewGrantApi(31, { reason: "权限回收" }),
+    ).resolves.toEqual({
+      instance_id: 31,
+      grant_status: "revoked",
+    });
+    expect(mockPost).toHaveBeenCalledWith(
+      "/api/v1/approval/department-file-view/31/revoke-grant",
+      { reason: "权限回收" },
+    );
   });
 
   it("submits menu access applications", async () => {

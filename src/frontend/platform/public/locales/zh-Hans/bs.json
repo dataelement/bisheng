@@ -2475,6 +2475,7 @@
     "approverIdsRequired": "请至少输入一个有效的审批人 ID",
     "routeFallback": "流程分支",
     "enabled": "启用",
+    "systemManagedReadOnly": "系统内置，流程结构只读",
     "disabled": "未启用",
     "emptyScenarios": "当前还没有审批场景",
     "emptyRoutes": "当前场景还没有配置条件分支",
@@ -2536,7 +2537,8 @@
       "target_knowledge_space_owner": "目标知识空间 Owner",
       "target_knowledge_space_manager": "目标知识空间 Manager",
       "target_knowledge_space_owner_department_admin": "目标知识空间 Owner 的部门管理员",
-      "target_knowledge_space_manager_department_admin": "目标知识空间 Manager 的部门管理员"
+      "target_knowledge_space_manager_department_admin": "目标知识空间 Manager 的部门管理员",
+      "department_file_approvers": "文件所属部门管理员"
     },
     "roleValue": {
       "admin": "系统管理员",

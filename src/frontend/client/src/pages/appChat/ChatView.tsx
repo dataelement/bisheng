@@ -14,9 +14,11 @@ import { currentChatState, currentRunningState } from "./store/atoms";
 import useChatHelpers from "./useChatHelpers";
 import { useWebSocket } from "./useWebsocket";
 import { generateUUID } from "~/utils";
+import { CurrentUserWatermarkSurface } from "~/pages/knowledge/FilePreview/KnowledgePreviewWatermark";
 
 export default function ChatView({ data, cid, v, readOnly, isGuestMode = false, hideShare: forceHideShare = false, portalWorkflowMode = false }) {
     const { user } = useAuthContext();
+    const watermarkEnabled = Boolean(user && !isGuestMode && !readOnly);
     const help = useChatHelpers({ deferRuntimeKnowledgeSelection: portalWorkflowMode })
     useWebSocket(help)
 
@@ -83,7 +85,12 @@ export default function ChatView({ data, cid, v, readOnly, isGuestMode = false, 
                         hideShare={hideShare}
                         conversation={{ title: headerTitle, flowId: data.id, conversationId: cid, flowType: data.flow_type }}
                     />
-                    <ChatEmptyState onNewChat={createNewChat} />
+                    <CurrentUserWatermarkSurface
+                        enabled={watermarkEnabled}
+                        className="flex min-h-0 flex-1"
+                    >
+                        <ChatEmptyState onNewChat={createNewChat} />
+                    </CurrentUserWatermarkSurface>
                 </div>
             ) : (
                 <div className="flex min-h-0 flex-1 overflow-hidden">
@@ -94,7 +101,10 @@ export default function ChatView({ data, cid, v, readOnly, isGuestMode = false, 
                             conversation={{ title: headerTitle, flowId: data.id, conversationId: cid, flowType: data.flow_type }}
                         />
                         <div className="flex min-h-0 flex-1 overflow-hidden">
-                            <div className="relative mx-auto h-full min-h-0 w-full max-w-[800px] flex-1">
+                            <CurrentUserWatermarkSurface
+                                enabled={watermarkEnabled}
+                                className="mx-auto h-full min-h-0 w-full max-w-[800px] flex-1"
+                            >
                                 <ChatMessages
                                     useName={user?.username}
                                     title={data.name}
@@ -105,7 +115,7 @@ export default function ChatView({ data, cid, v, readOnly, isGuestMode = false, 
                                     onOpenCitationPanel={onOpenCitationPanel}
                                     activeCitationMessageId={activeCitationMessageId}
                                 />
-                            </div>
+                            </CurrentUserWatermarkSurface>
                         </div>
                         {!readOnly && <ChatInput v={v} readOnly={readOnly} portalWorkflowMode={portalWorkflowMode} />}
                     </div>
