@@ -29,13 +29,8 @@ _FILE_PUBLISH_TARGET_LEVELS: dict[KnowledgeSpaceLevelEnum, set[KnowledgeSpaceLev
         KnowledgeSpaceLevelEnum.PUBLIC,
         KnowledgeSpaceLevelEnum.DEPARTMENT,
         KnowledgeSpaceLevelEnum.TEAM,
-        KnowledgeSpaceLevelEnum.TEAM_KS,
     },
     KnowledgeSpaceLevelEnum.TEAM: {
-        KnowledgeSpaceLevelEnum.PUBLIC,
-        KnowledgeSpaceLevelEnum.DEPARTMENT,
-    },
-    KnowledgeSpaceLevelEnum.TEAM_KS: {
         KnowledgeSpaceLevelEnum.PUBLIC,
         KnowledgeSpaceLevelEnum.DEPARTMENT,
     },

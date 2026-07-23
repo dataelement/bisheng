@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -180,6 +181,104 @@ async def test_apply_service_rejects_blank_reason_before_any_side_effect() -> No
         )
 
     service.file_repository.find_by_id_for_update.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_apply_persists_datetime_metadata_as_json_safe_string(
+    approval_engine,
+) -> None:
+    file = SimpleNamespace(
+        id=11,
+        knowledge_id=10,
+        file_name="安全制度.pdf",
+        file_level_path="/20/21/",
+        file_source="space_upload",
+        file_subcategory_code="policy",
+        update_time=datetime(2026, 7, 23, 12, 0, 0),
+    )
+    decision = DepartmentFileAccessDecision(
+        file_id=11,
+        space_id=10,
+        status=DepartmentFileAccessStatus.APPROVAL_REQUIRED,
+        department_id=12,
+    )
+    resource = DepartmentFileResource(
+        file=file,
+        space=SimpleNamespace(id=10, name="炼钢部知识库"),
+        scope=SimpleNamespace(),
+        binding=SimpleNamespace(department_id=12),
+        department=SimpleNamespace(id=12, name="炼钢部"),
+        valid=True,
+    )
+    access_service = SimpleNamespace(
+        evaluate_file=AsyncMock(return_value=decision),
+        load_resource=AsyncMock(return_value=resource),
+        resolve_department_approvers=AsyncMock(return_value={20}),
+    )
+    provisioner = SimpleNamespace(
+        get_contract=AsyncMock(
+            return_value=SimpleNamespace(
+                scenario=SimpleNamespace(scenario_name="部门文件查看审批"),
+                flow_version=SimpleNamespace(id=1),
+                route=SimpleNamespace(id=2),
+                node=SimpleNamespace(
+                    node_code="department_file_owner_approvers",
+                    node_name="文件所属部门管理员审批",
+                    node_order=0,
+                ),
+            )
+        )
+    )
+
+    async with AsyncSession(approval_engine, expire_on_commit=False) as session:
+        service = DepartmentFileViewApprovalService(
+            session=session,
+            file_repository=SimpleNamespace(
+                find_by_id_for_update=AsyncMock(return_value=file),
+            ),
+            access_service=access_service,
+            provisioner=provisioner,
+        )
+        service._get_applicant_department_id = AsyncMock(return_value=30)
+        service._notify_approvers = AsyncMock()
+
+        result = await service.apply(
+            login_user=SimpleNamespace(
+                user_id=9,
+                user_name="申请人",
+                tenant_id=1,
+            ),
+            space_id=10,
+            file_id=11,
+            reason="项目协作",
+        )
+        instance = (
+            await session.exec(
+                select(ApprovalInstance).where(
+                    ApprovalInstance.id == result["instance_id"],
+                )
+            )
+        ).one()
+        tasks = (
+            await session.exec(
+                select(ApprovalTask).where(
+                    ApprovalTask.instance_id == result["instance_id"],
+                )
+            )
+        ).all()
+        audits = (
+            await session.exec(
+                select(AuditLog).where(
+                    AuditLog.target_id == str(result["instance_id"]),
+                )
+            )
+        ).all()
+
+    assert result["status"] == "pending"
+    assert instance.detail_snapshot["updated_at"] == "2026-07-23T12:00:00"
+    assert len(tasks) == 1
+    assert len(audits) == 1
+    service._notify_approvers.assert_awaited_once()
 
 
 @pytest.mark.asyncio

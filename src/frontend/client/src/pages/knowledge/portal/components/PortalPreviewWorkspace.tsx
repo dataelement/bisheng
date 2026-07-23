@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { KnowledgeFile, KnowledgeSpace } from "~/api/knowledge";
 import type { PanelKey, PortalFileCategoryGroupOption, PreviewState } from "../types";
 import type { BusinessDomainOptionItem } from "../uploadMetadata";
@@ -22,6 +23,7 @@ interface PortalPreviewWorkspaceProps {
     businessDomainOptions: BusinessDomainOptionItem[];
     isPersonalSpace: boolean;
     preview: PreviewState;
+    contentOverride?: ReactNode;
     selectedFile: KnowledgeFile;
     summaryExpanded: boolean;
     onAiDrawerOpenChange: (open: boolean) => void;
@@ -50,6 +52,7 @@ export function PortalPreviewWorkspace({
     businessDomainOptions,
     isPersonalSpace,
     preview,
+    contentOverride,
     selectedFile,
     summaryExpanded,
     onAiDrawerOpenChange,
@@ -68,24 +71,26 @@ export function PortalPreviewWorkspace({
                 <button type="button" className={s.backToListButton} onClick={onBackToFileList}>
                     返回文件列表
                 </button>
-                <DocumentPreview
-                    selectedFile={selectedFile}
-                    documentPath={documentPath}
-                    preview={preview}
-                    summaryExpanded={summaryExpanded}
-                    canEditTags={canEditTags}
-                    onOpenTags={onOpenTags}
-                    // onOpenShare={() => setActivePanel("share")}
-                    onDownload={onDownload}
-                    canDownload={canDownload}
-                    downloadPending={downloadPending}
-                    canManagePermission={canManagePermission}
-                    onOpenPermission={onOpenPermission}
-                    onToggleSummary={onToggleSummary}
-                />
+                {contentOverride ?? (
+                    <DocumentPreview
+                        selectedFile={selectedFile}
+                        documentPath={documentPath}
+                        preview={preview}
+                        summaryExpanded={summaryExpanded}
+                        canEditTags={canEditTags}
+                        onOpenTags={onOpenTags}
+                        // onOpenShare={() => setActivePanel("share")}
+                        onDownload={onDownload}
+                        canDownload={canDownload}
+                        downloadPending={downloadPending}
+                        canManagePermission={canManagePermission}
+                        onOpenPermission={onOpenPermission}
+                        onToggleSummary={onToggleSummary}
+                    />
+                )}
             </div>
 
-            {!aiDrawerOpen ? (
+            {!contentOverride && !aiDrawerOpen ? (
                 <PortalInfoDrawer
                     activePanel={activePanel}
                     activeSpace={activeSpace}
@@ -102,30 +107,34 @@ export function PortalPreviewWorkspace({
                 />
             ) : null}
 
-            <PortalAiDrawer
-                open={aiDrawerOpen}
-                activeSpace={activeSpace}
-                selectedFile={selectedFile}
-                documentPath={documentPath}
-                onOpenChange={onAiDrawerOpenChange}
-            />
+            {!contentOverride ? (
+                <PortalAiDrawer
+                    open={aiDrawerOpen}
+                    activeSpace={activeSpace}
+                    selectedFile={selectedFile}
+                    documentPath={documentPath}
+                    onOpenChange={onAiDrawerOpenChange}
+                />
+            ) : null}
 
-            <ToolRail
-                activePanel={activePanel}
-                aiOpen={aiDrawerOpen}
-                onTogglePanel={() => {
-                    onAiDrawerOpenChange(false);
-                    onPanelChange(activePanel ? null : "properties");
-                }}
-                onOpenAi={() => {
-                    onPanelChange(null);
-                    onAiDrawerOpenChange(true);
-                }}
-                onOpenPanel={(panel) => {
-                    onAiDrawerOpenChange(false);
-                    onPanelChange(panel);
-                }}
-            />
+            {!contentOverride ? (
+                <ToolRail
+                    activePanel={activePanel}
+                    aiOpen={aiDrawerOpen}
+                    onTogglePanel={() => {
+                        onAiDrawerOpenChange(false);
+                        onPanelChange(activePanel ? null : "properties");
+                    }}
+                    onOpenAi={() => {
+                        onPanelChange(null);
+                        onAiDrawerOpenChange(true);
+                    }}
+                    onOpenPanel={(panel) => {
+                        onAiDrawerOpenChange(false);
+                        onPanelChange(panel);
+                    }}
+                />
+            ) : null}
         </main>
     );
 }

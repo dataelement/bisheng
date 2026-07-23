@@ -164,6 +164,7 @@ async def test_portal_qa_tree_keeps_unauthorized_department_file_disabled(
             "has_children": False,
             "resolved_file_count": 0,
             "content_access": "approval_required",
+            "can_download": False,
             "is_department_file": True,
         }
     ]

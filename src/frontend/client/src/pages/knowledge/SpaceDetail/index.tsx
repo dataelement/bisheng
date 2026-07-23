@@ -93,8 +93,8 @@ interface KnowledgeSpaceContentProps {
     onEditTags: (fileId: string) => void;
     onRetryFile: (fileId: string) => void;
     onMoveFile?: (fileId: string, targetFolderId: number | null) => void;
-    /** Called after batch move completes so the host can refresh source + invalidate target cache. */
-    onAfterBatchMove?: (targetFolderId: number | null) => void | Promise<void>;
+    /** Called after batch move completes so the host can refresh folder stats. */
+    onAfterBatchMove?: () => void | Promise<void>;
     /** Called after a folder is created inside the move dialog, so the host can refresh its list. */
     onMoveDialogFolderCreated?: () => void;
     currentPath: Array<{ id?: string; name: string }>;
@@ -1248,7 +1248,7 @@ export function KnowledgeSpaceContent({
                 target_folder_id: targetFolderId,
             });
             dispatchKnowledgeSpaceFilesRefresh(space.id);
-            await onAfterBatchMove?.(targetFolderId);
+            await onAfterBatchMove?.();
             showToast({ message: localize("com_knowledge.batch_move_success"), status: "success" });
         } catch {
             showToast({ message: localize("com_knowledge.batch_move_failed"), status: "error" });
