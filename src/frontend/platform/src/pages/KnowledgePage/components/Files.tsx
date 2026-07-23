@@ -33,6 +33,7 @@ import WebLinkImportDialog from "./WebLinkImportDialog";
 import FileTagList from "./tags/FileTagList";
 import KnowledgeTagSelect from "./tags/KnowledgeTagSelect";
 import { resolveKnowledgeParseFailure } from "../knowledgeParseFailureMessage";
+import { knowledgeUploadCapabilities } from "../knowledgeUploadCapabilities";
 
 interface StatusIndicatorProps {
     status: number;
@@ -528,9 +529,18 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
                     {canEditKb && (
                         <AddKnowledgeFileMenu
                             buttonClassName="px-4 md:px-8"
-                            supportedFormatsLabel={t("supportedFormatsTip", { defaultValue: "" })}
+                            supportedFormatsLabel={t(
+                                knowledgeUploadCapabilities.media
+                                    ? "supportedFormatsTip"
+                                    : "supportedFormatsTipWithoutMedia",
+                                { defaultValue: "" },
+                            )}
                             onUploadFile={() => navigate(`/filelib/upload/${id}`)}
-                            onWebLink={() => setWebLinkOpen(true)}
+                            onWebLink={() => {
+                                if (knowledgeUploadCapabilities.webLink) {
+                                    setWebLinkOpen(true);
+                                }
+                            }}
                         />
                     )}
                 </div>
@@ -798,12 +808,14 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
                 id={id}
                 initialMetadata={metadataFields}
             />
-            <WebLinkImportDialog
-                knowledgeId={id}
-                open={webLinkOpen}
-                onOpenChange={setWebLinkOpen}
-                onImported={reload}
-            />
+            {knowledgeUploadCapabilities.webLink && (
+                <WebLinkImportDialog
+                    knowledgeId={id}
+                    open={webLinkOpen}
+                    onOpenChange={setWebLinkOpen}
+                    onImported={reload}
+                />
+            )}
         </div>
 
     )

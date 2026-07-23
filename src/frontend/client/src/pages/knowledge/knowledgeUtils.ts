@@ -1,5 +1,6 @@
 import { FileStatus, FileType, type KnowledgeFile } from "~/api/knowledge";
 import i18next from "i18next";
+import { knowledgeUploadCapabilities } from "./knowledgeUploadCapabilities";
 
 /** List/card: only folders and successfully parsed files are clickable; violation files stay grayed out. */
 export function isKnowledgeItemPreviewable(file: KnowledgeFile): boolean {
@@ -65,25 +66,37 @@ export function isKnowledgeItemPending(file: KnowledgeFile): boolean {
 }
 
 // ─── File upload constants ──────────────────────────────────────────
+export const MEDIA_FILE_EXTENSIONS = [
+    "mp3", "wav", "m4a", "aac", "flac", "ogg",
+    "mp4", "mov", "avi", "mkv", "webm",
+] as const;
+
 /**
- * Allowed file extensions for upload — fully populated set (assumes ETL4LM is enabled).
+ * Allowed file extensions for upload with ETL4LM enabled and capability switches applied.
  * Prefer `getAllowedExtensions(enableEtl4lm)` for runtime-correct lists.
  */
 export const ALLOWED_EXTENSIONS = [
     "pdf", "ofd", "txt", "docx", "ppt", "pptx", "md", "html",
     "xls", "xlsx", "csv", "doc", "png", "jpg", "jpeg", "bmp",
-    "wps", "dps", "et", "mp3", "wav", "m4a", "aac", "flac", "ogg",
-    "mp4", "mov", "avi", "mkv", "webm",
+    "wps", "dps", "et",
+    ...(knowledgeUploadCapabilities.media ? MEDIA_FILE_EXTENSIONS : []),
 ] as const;
 
 /** Subset used when ETL4LM is NOT deployed — drops images. */
 const ALLOWED_EXTENSIONS_NO_ETL4LM: readonly string[] = [
     "pdf", "ofd", "txt", "docx", "doc", "ppt", "pptx", "md", "html", "xls", "xlsx", "csv",
-    "wps", "dps", "et", "mp3", "wav", "m4a", "aac", "flac", "ogg", "mp4", "mov", "avi", "mkv", "webm",
+    "wps", "dps", "et",
+    ...(knowledgeUploadCapabilities.media ? MEDIA_FILE_EXTENSIONS : []),
 ];
 
+const MEDIA_MIME_TYPES = [
+    "audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav", "audio/mp4", "audio/m4a", "audio/x-m4a",
+    "audio/aac", "audio/flac", "audio/ogg",
+    "video/mp4", "video/quicktime", "video/x-msvideo", "video/avi", "video/x-matroska", "video/webm",
+] as const;
+
 /**
- * MIME types accepted during drag validation — fully populated set.
+ * MIME types accepted during drag validation with capability switches applied.
  * Prefer `getAllowedMimeTypes(enableEtl4lm)` for runtime-correct lists.
  */
 export const ALLOWED_MIME_TYPES = [
@@ -97,9 +110,7 @@ export const ALLOWED_MIME_TYPES = [
     "application/vnd.openxmlformats-officedocument.presentationml.presentation", // pptx
     "text/markdown", "text/html", "text/csv",
     "image/png", "image/jpeg", "image/bmp",
-    "audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav", "audio/mp4", "audio/m4a", "audio/x-m4a",
-    "audio/aac", "audio/flac", "audio/ogg",
-    "video/mp4", "video/quicktime", "video/x-msvideo", "video/avi", "video/x-matroska", "video/webm",
+    ...(knowledgeUploadCapabilities.media ? MEDIA_MIME_TYPES : []),
     "application/vnd.ms-works", "application/kswps", "application/wps-office.wps", // wps
     "application/vnd.wps-presentation", "application/kswps", // dps
     "application/vnd.ms-excel", "application/kset", // et
@@ -114,18 +125,39 @@ const ALLOWED_MIME_TYPES_NO_ETL4LM: readonly string[] = ALLOWED_MIME_TYPES.filte
 export const FILE_INPUT_ACCEPT = ALLOWED_EXTENSIONS.map(e => `.${e}`).join(",");
 
 /** Returns extension list based on whether ETL4LM is deployed. */
-export function getAllowedExtensions(enableEtl4lm: boolean): readonly string[] {
-    return enableEtl4lm ? ALLOWED_EXTENSIONS : ALLOWED_EXTENSIONS_NO_ETL4LM;
+export function getAllowedExtensions(
+    enableEtl4lm: boolean,
+    mediaEnabled: boolean = knowledgeUploadCapabilities.media
+): readonly string[] {
+    const extensions = enableEtl4lm ? ALLOWED_EXTENSIONS : ALLOWED_EXTENSIONS_NO_ETL4LM;
+    const extensionsWithoutMedia = extensions.filter(
+        (extension) => !(MEDIA_FILE_EXTENSIONS as readonly string[]).includes(extension)
+    );
+    return mediaEnabled
+        ? [...extensionsWithoutMedia, ...MEDIA_FILE_EXTENSIONS]
+        : extensionsWithoutMedia;
 }
 
 /** Returns MIME-type list based on whether ETL4LM is deployed. */
-export function getAllowedMimeTypes(enableEtl4lm: boolean): readonly string[] {
-    return enableEtl4lm ? ALLOWED_MIME_TYPES : ALLOWED_MIME_TYPES_NO_ETL4LM;
+export function getAllowedMimeTypes(
+    enableEtl4lm: boolean,
+    mediaEnabled: boolean = knowledgeUploadCapabilities.media
+): readonly string[] {
+    const mimeTypes = enableEtl4lm ? ALLOWED_MIME_TYPES : ALLOWED_MIME_TYPES_NO_ETL4LM;
+    const mimeTypesWithoutMedia = mimeTypes.filter(
+        (mimeType) => !mimeType.startsWith("audio/") && !mimeType.startsWith("video/")
+    );
+    return mediaEnabled
+        ? [...mimeTypesWithoutMedia, ...MEDIA_MIME_TYPES]
+        : mimeTypesWithoutMedia;
 }
 
 /** Returns the `<input accept="">` value for the current ETL4LM mode. */
-export function getFileInputAccept(enableEtl4lm: boolean): string {
-    return getAllowedExtensions(enableEtl4lm).map((e) => `.${e}`).join(",");
+export function getFileInputAccept(
+    enableEtl4lm: boolean,
+    mediaEnabled: boolean = knowledgeUploadCapabilities.media
+): string {
+    return getAllowedExtensions(enableEtl4lm, mediaEnabled).map((e) => `.${e}`).join(",");
 }
 
 /** Default maximum single file size in MB (used when env config is not available) */
@@ -133,11 +165,6 @@ export const DEFAULT_MAX_FILE_SIZE_MB = 50;
 
 /** Default maximum media file size in MB when env config is not available */
 export const DEFAULT_MEDIA_MAX_FILE_SIZE_MB = 1024;
-
-export const MEDIA_FILE_EXTENSIONS = [
-    "mp3", "wav", "m4a", "aac", "flac", "ogg",
-    "mp4", "mov", "avi", "mkv", "webm",
-] as const;
 
 export interface UploadSizeLimits {
     defaultMaxMB: number;
