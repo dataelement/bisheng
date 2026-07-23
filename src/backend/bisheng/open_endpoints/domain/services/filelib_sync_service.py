@@ -151,7 +151,7 @@ class FilelibSyncService:
             created_file = await self.repository.update(created_file)
             file_persisted = True
 
-            self.knowledge_space_service.enqueue_file_processing(
+            self.knowledge_space_service.enqueue_file_title_extraction(
                 [created_file],
                 [preview_cache_key],
             )

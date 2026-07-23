@@ -12309,10 +12309,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
         preview_cache_keys: list[str],
     ) -> None:
         """Enqueue title extraction and AI alias generation before formal parsing."""
+        from bisheng.worker.knowledge.file_title_worker import (
+            extract_knowledge_file_title_celery,
+        )
+
         if len(process_files) != len(preview_cache_keys):
             raise ValueError("process_files and preview_cache_keys length mismatch")
         for index, knowledge_file in enumerate(process_files):
-            file_worker.extract_knowledge_file_title_celery.delay(
+            extract_knowledge_file_title_celery.delay(
                 knowledge_file.id,
                 preview_cache_keys[index],
             )
