@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import PurePosixPath
 from typing import Any
 
@@ -444,6 +445,13 @@ class DepartmentFileViewAccessService:
     ) -> dict[str, Any]:
         file_name = str(getattr(file_record, "file_name", "") or "")
         suffix = PurePosixPath(file_name).suffix.lower().lstrip(".")
+        raw_updated_at = getattr(file_record, "update_time", None)
+        if isinstance(raw_updated_at, datetime):
+            updated_at = raw_updated_at.isoformat()
+        elif isinstance(raw_updated_at, str):
+            updated_at = raw_updated_at
+        else:
+            updated_at = ""
         return {
             "id": int(file_record.id),
             "space_id": int(file_record.knowledge_id),
@@ -458,7 +466,7 @@ class DepartmentFileViewAccessService:
                 None,
             ),
             "tags": list(tags or []),
-            "updated_at": getattr(file_record, "update_time", None),
+            "updated_at": updated_at,
             "content_access": decision.status,
             "can_download": bool(decision.can_download),
         }

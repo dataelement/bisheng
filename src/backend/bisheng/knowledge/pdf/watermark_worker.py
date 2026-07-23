@@ -135,7 +135,7 @@ def _parse_spec(payload: object) -> PdfWatermarkSpec:
     return PdfWatermarkSpec(
         lines=tuple(payload.get("lines", ())),
         rotation=float(payload.get("rotation", 35.0)),
-        opacity=float(payload.get("opacity", 0.31)),
+        opacity=float(payload.get("opacity", 0.11)),
         font_size=float(payload.get("font_size", 12.0)),
         horizontal_gap=float(payload.get("horizontal_gap", 180.0)),
         vertical_gap=float(payload.get("vertical_gap", 135.0)),

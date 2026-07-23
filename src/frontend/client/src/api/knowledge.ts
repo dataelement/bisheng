@@ -130,7 +130,6 @@ export enum SpaceLevel {
     PUBLIC = "public",
     DEPARTMENT = "department",
     TEAM = "team",
-    TEAM_KS = "team_ks",
     PERSONAL = "personal",
 }
 
@@ -525,6 +524,12 @@ export interface KnowledgeFile {
     folderPath?: string;          // mapped from folder_path / file_level_path
     sourcePath?: string;          // mapped from source_path
     sourceSpaceName?: string;     // mapped from knowledge_name / space_name
+    /** Department portal content decision. This never replaces backend authorization. */
+    contentAccess?: "allowed" | "approval_required" | "unavailable" | string;
+    /** Existing download_file decision, independent from department view approval. */
+    canDownload?: boolean;
+    /** Marks a file projected from a valid department knowledge space. */
+    isDepartmentFile?: boolean;
     // Transient UI-only fields
     isCreating?: boolean;
     /** 0–100 upload progress for in-flight uploads */
@@ -1075,6 +1080,11 @@ export function mapChild(raw: any, spaceId: string): KnowledgeFile {
         folderPath: raw?.folder_path ?? raw?.file_level_path ?? undefined,
         sourcePath: raw?.source_path ?? undefined,
         sourceSpaceName: raw?.knowledge_name ?? raw?.space_name ?? undefined,
+        contentAccess: raw?.content_access ?? undefined,
+        canDownload: raw?.can_download !== undefined ? Boolean(raw.can_download) : undefined,
+        isDepartmentFile: raw?.is_department_file !== undefined
+            ? Boolean(raw.is_department_file)
+            : undefined,
     };
 }
 
@@ -1237,6 +1247,23 @@ export async function getSpacesByLevelApi(spaceLevel: SpaceLevel, params?: {
         },
     });
     return extractKnowledgeSpaceList(res).map(mapSpace);
+}
+
+/**
+ * Logged-in portal discovery includes public spaces and every valid department
+ * space, independently from the caller's existing space membership.
+ */
+export async function getPortalDiscoverableSpacesApi(): Promise<KnowledgeSpace[]> {
+    const res = await request.get<ApiResponse<{ spaces: RawKnowledgeSpace[] }>>(
+        "/api/v1/knowledge/shougang-portal/spaces",
+        {
+            params: {
+                discovery_scope: "public_and_department",
+            },
+        },
+    );
+    const payload: any = res?.data ?? res ?? {};
+    return (Array.isArray(payload?.spaces) ? payload.spaces : []).map(mapSpace);
 }
 
 /**
@@ -2178,6 +2205,37 @@ export async function getSpaceChildrenApi(params: {
     };
 }
 
+/**
+ * Read-only portal tree for discoverable public/department spaces. Department
+ * files are returned with a safe metadata projection and content_access flag.
+ */
+export async function getPortalSpaceChildrenApi(params: {
+    space_id: string;
+    parent_id?: string;
+    cursor?: string | null;
+    page_size?: number;
+}): Promise<{ data: KnowledgeFile[]; page_size: number; has_more: boolean; next_cursor: string | null }> {
+    const res = await request.get<ApiResponse<any>>(
+        `/api/v1/knowledge/shougang-portal/qa/spaces/${params.space_id}/children`,
+        {
+            params: {
+                discovery_scope: "public_and_department",
+                parent_id: params.parent_id ? Number(params.parent_id) : undefined,
+                cursor: params.cursor || undefined,
+                page_size: params.page_size,
+            },
+        },
+    );
+    const payload: any = res?.data ?? res ?? {};
+    const list = extractList<RawSpaceChild>(payload);
+    return {
+        data: list.map((raw) => mapChild(raw, params.space_id)),
+        page_size: Number(payload?.page_size ?? params.page_size ?? 20),
+        has_more: Boolean(payload?.has_more),
+        next_cursor: payload?.next_cursor ?? null,
+    };
+}
+
 export interface SpaceFileActionPermission {
     fileId: string;
     permissionIds: string[];
@@ -2781,6 +2839,29 @@ export async function getFilePreviewApi(
 ): Promise<KnowledgeFilePreview> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const res = await request.get<any>(`/api/v1/knowledge/space/${space_id}/files/${file_id}/preview`);
+    const data = res?.data ?? res;
+    return {
+        original_url: data?.original_url ?? "",
+        preview_url: data?.preview_url ?? "",
+        pdf_preview_url: data?.pdf_preview_url ?? "",
+        file_source: data?.file_source ?? "",
+        source_url: data?.source_url ?? "",
+        final_url: data?.final_url ?? "",
+        web_title: data?.web_title ?? "",
+        media_kind: data?.media_kind ?? "",
+        html_preview_url: data?.html_preview_url ?? "",
+        can_download: data?.can_download ?? false,
+    };
+}
+
+/** Preview through the portal-specific content gate, which recognizes approval grants. */
+export async function getPortalFilePreviewApi(
+    space_id: string,
+    file_id: string,
+): Promise<KnowledgeFilePreview> {
+    const res = await request.get<any>(
+        `/api/v1/knowledge/shougang-portal/files/${space_id}/${file_id}/preview`,
+    );
     const data = res?.data ?? res;
     return {
         original_url: data?.original_url ?? "",

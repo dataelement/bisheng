@@ -233,7 +233,6 @@ const MENU_KEY_VALUES = [
 const SPACE_LEVEL_VALUES = [
   { value: 'public',     label: 'approvalPage.spaceLevel.public' },
   { value: 'department', label: 'approvalPage.spaceLevel.department' },
-  { value: 'team_ks',    label: 'approvalPage.spaceLevel.team_ks' },
   { value: 'team',       label: 'approvalPage.spaceLevel.team' },
   { value: 'personal',   label: 'approvalPage.spaceLevel.personal' },
 ];

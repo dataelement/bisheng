@@ -43,7 +43,6 @@ _CONDITION_FIELD_OPTIONS: dict[str, ApprovalPresetConditionField] = {
         values=_values([
             ('public', '公共'),
             ('department', '部门'),
-            ('team_ks', '科室'),
             ('team', '团队'),
             ('personal', '个人'),
         ]),
@@ -66,7 +65,6 @@ _CONDITION_FIELD_OPTIONS: dict[str, ApprovalPresetConditionField] = {
         values=_values([
             ('public', '公共'),
             ('department', '部门'),
-            ('team_ks', '科室'),
             ('team', '团队'),
             ('personal', '个人'),
         ]),
@@ -78,7 +76,6 @@ _CONDITION_FIELD_OPTIONS: dict[str, ApprovalPresetConditionField] = {
         values=_values([
             ('public', '公共'),
             ('department', '部门'),
-            ('team_ks', '科室'),
             ('team', '团队'),
             ('personal', '个人'),
         ]),

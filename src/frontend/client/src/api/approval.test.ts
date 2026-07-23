@@ -1,9 +1,11 @@
 import request from "~/api/request";
 import {
   applyMenuAccessApi,
+  applyDepartmentFileViewApi,
   decideApprovalTaskApi,
   getApprovalInstanceDetailApi,
   getMyApprovalTaskDetailApi,
+  getDepartmentFileViewStatusApi,
   listApprovalRequestsApi,
   listMyApprovalRequestsApi,
   listMyApprovalTasksApi,
@@ -160,6 +162,44 @@ describe("approval api", () => {
       "/api/v1/approval/department-file-view/31/revoke-grant",
       { reason: "权限回收" },
     );
+  });
+
+  it("queries status without side effects and explicitly applies for department file view", async () => {
+    mockGet.mockResolvedValue({
+      status_code: 200,
+      data: {
+        space_id: 10,
+        file_id: 20,
+        status: "approval_required",
+        content_access: "approval_required",
+        safe_metadata: { file_name: "制度.pdf" },
+      },
+    });
+    mockPost.mockResolvedValue({
+      status_code: 200,
+      data: {
+        space_id: 10,
+        file_id: 20,
+        status: "pending",
+        instance_id: 30,
+      },
+    });
+
+    await expect(getDepartmentFileViewStatusApi("10", "20")).resolves.toMatchObject({
+      status: "approval_required",
+      safeMetadata: { file_name: "制度.pdf" },
+    });
+    expect(mockGet).toHaveBeenCalledWith("/api/v1/approval/department-file-view/status", {
+      params: { space_id: 10, file_id: 20 },
+    });
+    expect(mockPost).not.toHaveBeenCalled();
+
+    await applyDepartmentFileViewApi("10", "20", "  项目查阅  ");
+    expect(mockPost).toHaveBeenCalledWith("/api/v1/approval/department-file-view/apply", {
+      space_id: 10,
+      file_id: 20,
+      reason: "项目查阅",
+    });
   });
 
   it("submits menu access applications", async () => {

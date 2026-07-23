@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetState
 import { useQuery } from "@tanstack/react-query";
 import {
     getCreateSpaceOptionsApi,
+    getPortalDiscoverableSpacesApi,
     getSpaceInfoApi,
     getSpacesByLevelApi,
     SpaceLevel,
@@ -47,6 +48,17 @@ export function resolveSpacePermissions(
     };
 }
 
+export function mergeDepartmentSpaces(
+    discoverableSpaces: KnowledgeSpace[],
+    accessibleSpaces: KnowledgeSpace[],
+): KnowledgeSpace[] {
+    const merged = new Map(discoverableSpaces.map((space) => [String(space.id), space]));
+    for (const space of accessibleSpaces) {
+        merged.set(String(space.id), space);
+    }
+    return Array.from(merged.values());
+}
+
 interface UsePortalSpacesParams {
     activeSpace: KnowledgeSpace | null;
     setActiveSpace: Dispatch<SetStateAction<KnowledgeSpace | null>>;
@@ -66,7 +78,6 @@ function getSpaceGroupKey(space?: Pick<KnowledgeSpace, "spaceLevel"> | null): Sp
         case SpaceLevel.DEPARTMENT:
             return "department";
         case SpaceLevel.TEAM:
-        case SpaceLevel.TEAM_KS:
             return "team";
         case SpaceLevel.PERSONAL:
             return "personal";
@@ -108,8 +119,17 @@ export function usePortalSpaces({
         placeholderData: (prev) => prev,
     });
     const departmentSpacesQuery = useQuery({
-        queryKey: ["knowledgeSpaces", "level", SpaceLevel.DEPARTMENT],
-        queryFn: () => getSpacesByLevelApi(SpaceLevel.DEPARTMENT, { order_by: SpaceSortType.SORT_WEIGHT }),
+        queryKey: ["knowledgeSpaces", "level", SpaceLevel.DEPARTMENT, "portalDiscovery"],
+        queryFn: async () => {
+            const [discoverableSpaces, accessibleSpaces] = await Promise.all([
+                getPortalDiscoverableSpacesApi(),
+                getSpacesByLevelApi(SpaceLevel.DEPARTMENT, { order_by: SpaceSortType.SORT_WEIGHT }),
+            ]);
+            return mergeDepartmentSpaces(
+                discoverableSpaces.filter((space) => space.spaceLevel === SpaceLevel.DEPARTMENT),
+                accessibleSpaces,
+            );
+        },
         enabled: shouldLoadGroup("department"),
         placeholderData: (prev) => prev,
     });

@@ -897,6 +897,10 @@ async def test_create_department_space_enqueues_default_scope_permissions():
             new_callable=AsyncMock,
         ),
         patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.DepartmentKnowledgeSpaceDao.acreate",
+            new_callable=AsyncMock,
+        ) as mock_create_department_binding,
+        patch(
             "bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.authorize",
             new_callable=AsyncMock,
         ) as mock_authorize,
@@ -932,6 +936,12 @@ async def test_create_department_space_enqueues_default_scope_permissions():
         )
 
     assert result.id == 11
+    mock_create_department_binding.assert_awaited_once_with(
+        tenant_id=1,
+        department_id=99,
+        space_id=11,
+        created_by=7,
+    )
     mock_authorize.assert_not_awaited()
     mock_enqueue_scope.assert_called_once_with(
         level=KnowledgeSpaceLevelEnum.DEPARTMENT,
@@ -942,7 +952,7 @@ async def test_create_department_space_enqueues_default_scope_permissions():
 
 @pytest.mark.asyncio
 async def test_create_clinic_space_uses_team_level_and_writes_department_binding():
-    """Clinic spaces are stored as TEAM_KS but grouped with team spaces."""
+    """Clinic spaces are team-level spaces bound to a department."""
     KnowledgeSpaceService = _load_service_class()
     login_user = _make_login_user(user_id=7, is_admin=False)
     svc = KnowledgeSpaceService(request=SimpleNamespace(), login_user=login_user)
@@ -1035,7 +1045,7 @@ async def test_create_clinic_space_uses_team_level_and_writes_department_binding
     mock_scope_create.assert_awaited_once_with(
         tenant_id=1,
         space_id=11,
-        level=KnowledgeSpaceLevelEnum.TEAM_KS,
+        level=KnowledgeSpaceLevelEnum.TEAM,
         owner_type=KnowledgeSpaceOwnerTypeEnum.USER,
         owner_id=7,
         created_by=7,
@@ -1135,8 +1145,8 @@ async def test_update_clinic_space_rebinds_department():
 
 
 @pytest.mark.asyncio
-async def test_create_department_space_does_not_write_clinic_binding():
-    """Regular department spaces must not create a department_knowledge_space binding."""
+async def test_create_department_space_writes_department_binding():
+    """Department spaces write the binding required by portal discovery."""
     KnowledgeSpaceService = _load_service_class()
     login_user = _make_login_user(user_id=7, is_admin=True)
     svc = KnowledgeSpaceService(request=SimpleNamespace(), login_user=login_user)
@@ -1228,7 +1238,12 @@ async def test_create_department_space_does_not_write_clinic_binding():
         owner_id=99,
         created_by=7,
     )
-    mock_binding_create.assert_not_awaited()
+    mock_binding_create.assert_awaited_once_with(
+        tenant_id=1,
+        department_id=99,
+        space_id=11,
+        created_by=7,
+    )
 
 
 @pytest.mark.asyncio
@@ -2344,7 +2359,8 @@ async def test_public_latest_selected_uses_authoritative_public_spaces_without_p
             ShougangPortalFileSearchReq(
                 recommendation="latest_selected",
                 public_only=True,
-                space_ids=[999],
+                discovery_scope="public",
+                space_ids=[],
                 sort="portal_read_count_desc",
                 limit=2,
             )
@@ -2359,6 +2375,7 @@ async def test_public_latest_selected_uses_authoritative_public_spaces_without_p
     mock_child_permissions.assert_not_awaited()
     mock_file_visibility.assert_not_awaited()
     assert [item["id"] for item in result["data"]] == [1801, 1580]
+    assert [item["can_download"] for item in result["data"]] == [True, True]
     assert result["has_more"] is False
     assert result["next_cursor"] is None
 
@@ -2423,7 +2440,8 @@ async def test_public_latest_selected_discards_stale_candidates_and_keeps_cursor
             ShougangPortalFileSearchReq(
                 recommendation="latest_selected",
                 public_only=True,
-                space_ids=[999],
+                discovery_scope="public",
+                space_ids=[],
                 sort="portal_read_count_desc",
                 limit=1,
             )
@@ -2488,7 +2506,8 @@ async def test_public_latest_selected_updated_time_sort_still_bypasses_permissio
             ShougangPortalFileSearchReq(
                 recommendation="latest_selected",
                 public_only=True,
-                space_ids=[999],
+                discovery_scope="public",
+                space_ids=[],
                 sort="updated_at_asc",
             )
         )
@@ -2568,6 +2587,7 @@ async def test_public_tag_browse_uses_authoritative_public_spaces_without_permis
     assert mock_files.await_args.kwargs["knowledge_ids"] == [12]
     assert mock_files.await_args.kwargs["file_ids"] == [1580]
     assert [item["id"] for item in result["data"]] == [1580]
+    assert result["data"][0]["can_download"] is True
 
 
 @pytest.mark.asyncio
@@ -3821,6 +3841,12 @@ async def test_shougang_portal_public_space_fast_path_skips_child_permission_fil
         ),
         patch.object(
             service,
+            "_public_space_viewer_permission_ids",
+            new_callable=AsyncMock,
+            return_value={"view_file", "download_file"},
+        ),
+        patch.object(
+            service,
             "_handle_file_folder_extra_info",
             new_callable=AsyncMock,
             return_value=[{**file_record.model_dump(), "tags": []}],
@@ -3833,6 +3859,7 @@ async def test_shougang_portal_public_space_fast_path_skips_child_permission_fil
     assert len(result["data"]) == 1
     assert result["has_more"] is False
     assert result["data"][0]["id"] == 4100
+    assert result["data"][0]["can_download"] is True
 
 
 @pytest.mark.asyncio
