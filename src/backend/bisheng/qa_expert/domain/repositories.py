@@ -1,8 +1,9 @@
 """Expert QA Repositories - 数据访问层"""
 
-from typing import Optional, List
-from sqlmodel import select, func, and_, or_, desc
-from sqlalchemy import Column, DateTime, Integer, String, delete, func, text, update
+from typing import List, Optional
+
+from sqlalchemy import Column, DateTime, Integer, String, delete, desc, func, text, update
+from sqlmodel import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from bisheng.core.database import get_async_db_session  # 确保导入了异步方法
 from bisheng.database.models.qa_expert import (
@@ -53,7 +54,17 @@ class ExpertRepository:
             return result.first()
 
     async def list_all(
-        self, business_domain: Optional[str] = None, keyword: Optional[str] = None, skip: int = 0, limit: int = 20
+        self,
+        keyword: Optional[str] = None,
+        department_id: Optional[str] = None,
+        job_family: Optional[str] = None,
+        job_category: Optional[str] = None,
+        position: Optional[str] = None,
+        major: Optional[str] = None,
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
+        skip: int = 0,
+        limit: Optional[int] = 20,
     ) -> tuple[List[Expert], int]:
         """列表查询专家"""
         async with get_async_db_session() as session:
@@ -61,21 +72,84 @@ class ExpertRepository:
             base_stmt = select(Expert)
 
             if keyword:
+                normalized_keyword = keyword.strip()
                 base_stmt = base_stmt.where(
-                    or_(Expert.expert_name.ilike(f"%{keyword}%"), Expert.introduction.ilike(f"%{keyword}%"))
+                    or_(
+                        Expert.expert_name.ilike(f"%{normalized_keyword}%"),
+                        Expert.introduction.ilike(f"%{normalized_keyword}%"),
+                    )
                 )
+
+            exact_filters = (
+                (Expert.depart_ment, department_id),
+                (Expert.job_family, job_family),
+                (Expert.job_category, job_category),
+                (Expert.position, position),
+                (Expert.major, major),
+            )
+            for column, value in exact_filters:
+                if value and value.strip():
+                    base_stmt = base_stmt.where(func.trim(column) == value.strip())
 
             # 2. 执行计数查询（应用了相同的筛选条件）
             count_stmt = select(func.count()).select_from(base_stmt.subquery())
             count_result = await session.execute(count_stmt)
             total = count_result.scalar() or 0
 
-            # 3. 执行分页查询
-            data_stmt = base_stmt.offset(skip).limit(limit).order_by(desc(Expert.created_at))
+            # 3. 执行排序和分页查询。部门名称排序在 Service 完成，因为专家表只保存部门 ID。
+            expert_score = Expert.answer_count + Expert.adoption_count * 5 + Expert.vote_count * 2
+            sort_expressions = {
+                "expert_name": func.lower(Expert.expert_name),
+                "job_family": func.lower(func.coalesce(Expert.job_family, "")),
+                "job_category": func.lower(func.coalesce(Expert.job_category, "")),
+                "position": func.lower(func.coalesce(Expert.position, "")),
+                "major": func.lower(func.coalesce(Expert.major, "")),
+                "expert_score": expert_score,
+                "created_at": Expert.created_at,
+            }
+            sort_expression = sort_expressions.get(sort_by, Expert.created_at)
+            order_expression = sort_expression.asc() if sort_order == "asc" else sort_expression.desc()
+            data_stmt = base_stmt.order_by(order_expression, Expert.id.asc())
+            if skip:
+                data_stmt = data_stmt.offset(skip)
+            if limit is not None:
+                data_stmt = data_stmt.limit(limit)
             result = await session.exec(data_stmt)
             experts = result.all()
 
             return experts, total
+
+    async def list_filter_options(self) -> dict[str, list[str]]:
+        """返回专家职业字段的去重筛选项。"""
+        async with get_async_db_session() as session:
+            result = await session.exec(
+                select(
+                    Expert.depart_ment,
+                    Expert.job_family,
+                    Expert.job_category,
+                    Expert.position,
+                    Expert.major,
+                )
+            )
+            options = {
+                "department_ids": set(),
+                "job_families": set(),
+                "job_categories": set(),
+                "positions": set(),
+                "majors": set(),
+            }
+            for department_id, job_family, job_category, position, major in result.all():
+                for key, value in (
+                    ("department_ids", department_id),
+                    ("job_families", job_family),
+                    ("job_categories", job_category),
+                    ("positions", position),
+                    ("majors", major),
+                ):
+                    normalized = str(value or "").strip()
+                    if normalized:
+                        options[key].add(normalized)
+            return {key: sorted(values, key=str.casefold) for key, values in options.items()}
 
     async def increment_answer_count(self, expert_id: int, count: int = 1):
         """原子性增加专家的回答数量"""
@@ -91,7 +165,7 @@ class ExpertRepository:
             stmt = update(Expert).where(Expert.id == expert_id).values(vote_count=Expert.vote_count + count)
             await session.exec(stmt)
             await session.commit()
-            
+
     async def increment_adoption_count(self, expert_id: int, count: int = 1):
         """原子性增加专家采纳采纳数量"""
         async with get_async_db_session() as session:
@@ -124,19 +198,20 @@ class ExpertRepository:
             await session.flush()
             return True
 
-    async def  get_expertinfo(self, expert_name: str):
+    async def get_expertinfo(self, expert_name: str):
         """原子性增加专家的回答数量"""
         async with get_async_db_session() as session:
             stmt = select(Expert).where(Expert.expert_name == expert_name)
             result = await session.exec(stmt)
             return result.first()
-        
-    async def  get_expertinfo_userid(self, user_id: int):
+
+    async def get_expertinfo_userid(self, user_id: int):
         """获取专家userid"""
         async with get_async_db_session() as session:
             stmt = select(Expert).where(Expert.user_id == user_id)
             result = await session.exec(stmt)
             return result.first()
+
 
 class QuestionRepository:
     """问题仓储"""
@@ -156,7 +231,7 @@ class QuestionRepository:
             stmt = select(Question).where(Question.id == question_id)
             result = await session.exec(stmt)
             return result.first()
-        
+
     async def delete(self, question_id: int) -> bool:
         """删除问题"""
         async with get_async_db_session() as session:
@@ -187,7 +262,7 @@ class QuestionRepository:
 
             if status in (1, 2):
                 # 状态为 1 (未解决) 或 2 (已解决) 时，直接按问题状态过滤
-                stmt = stmt.where(Question.status == status-1)
+                stmt = stmt.where(Question.status == status - 1)
             elif status == 3:
                 # 状态为 3 (我提问的) 时，按提问人 ID 过滤
                 if user_id is not None:
@@ -196,12 +271,14 @@ class QuestionRepository:
                 # 状态为 4 (邀请我的) 时，按被邀请的专家 ID 过滤
                 if expert_id is not None:
                     expert_id_str = str(expert_id)
-                    stmt = stmt.where(or_(
-                                        Question.invited_experts == expert_id_str,
-                                        Question.invited_experts.like(f"{expert_id_str};%"),
-                                        Question.invited_experts.like(f"%;{expert_id_str};%"),
-                                        Question.invited_experts.like(f"%;{expert_id_str}"),
-                                    ))
+                    stmt = stmt.where(
+                        or_(
+                            Question.invited_experts == expert_id_str,
+                            Question.invited_experts.like(f"{expert_id_str};%"),
+                            Question.invited_experts.like(f"%;{expert_id_str};%"),
+                            Question.invited_experts.like(f"%;{expert_id_str}"),
+                        )
+                    )
 
             # 排序相关的过滤条件需要在计算总数之前应用
             if sort_by == "unanswered":
@@ -263,21 +340,16 @@ class QuestionRepository:
             closed = (await session.exec(closed_stmt)).scalars().first() or 0
 
             return {"total": total, "unsolved": unsolved, "solved": solved, "closed": closed}
-    
+
     async def get_answer_count_by_domain(self) -> list[dict]:
         async with get_async_db_session() as session:
-            stmt = (
-                select(
-                    Question.business_domain,
-                    func.sum(Question.answer_count).label("answer_count"),
-                )
-                .group_by(Question.business_domain)
-            )
+            stmt = select(
+                Question.business_domain,
+                func.sum(Question.answer_count).label("answer_count"),
+            ).group_by(Question.business_domain)
             result = (await session.exec(stmt)).all()
-            return [
-                {"business_domain": row.business_domain, "answer_count": row.answer_count}
-                for row in result
-            ]
+            return [{"business_domain": row.business_domain, "answer_count": row.answer_count} for row in result]
+
 
 class QAExpertStatsRepository:
     """Repository for Expert QA overview statistics."""
@@ -300,9 +372,7 @@ class QAExpertStatsRepository:
             total_answers = int((await session.exec(answer_count_stmt)).one() or 0)
 
             resolution_rate = (
-                round(solved_questions / total_questions, RESOLUTION_RATE_PRECISION)
-                if total_questions
-                else 0.0
+                round(solved_questions / total_questions, RESOLUTION_RATE_PRECISION) if total_questions else 0.0
             )
 
             return {
@@ -332,21 +402,21 @@ class AnswerRepository:
             result = await session.exec(stmt)
             return result.first()
 
-    async def get_by_expertname(self, expert_name: str,question_id: int) -> Optional[Answer]:
+    async def get_by_expertname(self, expert_name: str, question_id: int) -> Optional[Answer]:
         """根据专家名称获取回答"""
         async with get_async_db_session() as session:
             stmt = select(Answer).where(and_(Answer.expert_name == expert_name, Answer.question_id == question_id))
             result = await session.exec(stmt)
-            
+
             return result.first()
 
-
-    async def get_by_question_id(self, question_id: int, skip: int = 0, limit: int = 100, sort_by: Optional[str] = None) -> tuple[List[Answer], int]:
+    async def get_by_question_id(
+        self, question_id: int, skip: int = 0, limit: int = 100, sort_by: Optional[str] = None
+    ) -> tuple[List[Answer], int]:
         """获取问题的所有回答"""
         async with get_async_db_session() as session:
-            stmt = (
-                select(Answer, func.count().over().label("total"))
-                .where(and_(Answer.question_id == question_id, Answer.status != 3))                
+            stmt = select(Answer, func.count().over().label("total")).where(
+                and_(Answer.question_id == question_id, Answer.status != 3)
             )
             if sort_by:
                 if sort_by == "top":
@@ -395,12 +465,12 @@ class AnswerRepository:
     async def get_answer_vote_count(self, question_id: int) -> int:
         """获取回答的投票数"""
         async with get_async_db_session() as session:
-            stmt = (
-                select(func.coalesce(func.sum(Answer.vote_count), 0).label("total_vote_count"))
-                .where(and_(Answer.question_id == question_id, Answer.status != 3))
+            stmt = select(func.coalesce(func.sum(Answer.vote_count), 0).label("total_vote_count")).where(
+                and_(Answer.question_id == question_id, Answer.status != 3)
             )
             result = await session.exec(stmt)
             return result.first() or 0
+
 
 class CommentRepository:
     """评论仓储"""
@@ -414,10 +484,7 @@ class CommentRepository:
             return comment
 
     async def get_by_answer_id(
-        self, answer_id: int, 
-        question_id: Optional[int] = None,
-        skip: int = 0,
-        limit: int = 100
+        self, answer_id: int, question_id: Optional[int] = None, skip: int = 0, limit: int = 100
     ) -> tuple[List[Comment], int]:
         """获取回答的所有评论"""
         if answer_id == 0 and not question_id:
@@ -533,6 +600,3 @@ class NotificationRepository:
             session.add(notification)
             await session.flush()
             return True
-
-
-
