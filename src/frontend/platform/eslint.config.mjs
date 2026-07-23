@@ -53,6 +53,14 @@ export default tseslint.config(
           ],
         },
       ],
+      // Ledger #28: user-facing copy must go through i18n. Hardcoded Chinese in
+      // source is frozen in eslint-suppressions.json; new code uses t().
+      'no-restricted-syntax': [
+        'error',
+        { selector: 'Literal[value=/[\\u4e00-\\u9fff]/]', message: 'Hardcoded Chinese string — route copy through i18n (useTranslation → t()). Ledger #28.' },
+        { selector: 'TemplateElement[value.raw=/[\\u4e00-\\u9fff]/]', message: 'Hardcoded Chinese in template string — route copy through i18n (useTranslation → t()). Ledger #28.' },
+        { selector: 'JSXText[value=/[\\u4e00-\\u9fff]/]', message: 'Hardcoded Chinese JSX text — route copy through i18n (useTranslation → t()). Ledger #28.' },
+      ],
     },
   },
   {

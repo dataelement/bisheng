@@ -23,6 +23,13 @@ export default tseslint.config(
       'no-console': ['error', { allow: ['warn', 'error'] }],
       // Package contract: presentation-only — no HTTP at all.
       'no-restricted-imports': ['error', { paths: [{ name: 'axios', message: '@bisheng/ui is presentation-only; no HTTP allowed (package contract).' }] }],
+      // Package contract: ALL text comes in via props — no hardcoded copy in any language.
+      'no-restricted-syntax': [
+        'error',
+        { selector: 'Literal[value=/[\\u4e00-\\u9fff]/]', message: 'Hardcoded Chinese string — @bisheng/ui components receive all text via props (package contract).' },
+        { selector: 'TemplateElement[value.raw=/[\\u4e00-\\u9fff]/]', message: 'Hardcoded Chinese in template string — @bisheng/ui components receive all text via props (package contract).' },
+        { selector: 'JSXText[value=/[\\u4e00-\\u9fff]/]', message: 'Hardcoded Chinese JSX text — @bisheng/ui components receive all text via props (package contract).' },
+      ],
     },
   },
   {
@@ -32,6 +39,8 @@ export default tseslint.config(
     rules: {
       '@typescript-eslint/no-require-imports': 'off',
       'no-console': 'off',
+      // Token metadata (usage notes) is internal Chinese documentation, not UI copy.
+      'no-restricted-syntax': 'off',
     },
   },
 )

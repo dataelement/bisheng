@@ -24,6 +24,9 @@
     "no-console": {
       "count": 2
     },
+    "no-restricted-syntax": {
+      "count": 1
+    },
     "prefer-const": {
       "count": 6
     }
@@ -76,6 +79,14 @@
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 3
+    }
+  },
+  "src/api/knowledgeParseFailureMessage.ts": {
+    "no-restricted-syntax": {
+      "count": 7
     }
   },
   "src/api/linsight.ts": {
@@ -120,6 +131,9 @@
     },
     "no-console": {
       "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 1
     }
   },
   "src/api/user.ts": {
@@ -138,6 +152,9 @@
     },
     "no-restricted-imports": {
       "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 3
     },
     "no-useless-escape": {
       "count": 2
@@ -231,6 +248,14 @@
   "src/components/ChannelMemberDialog.tsx": {
     "@typescript-eslint/no-unused-vars": {
       "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 12
+    }
+  },
+  "src/components/ChannelMemberManagementPanel.tsx": {
+    "no-restricted-syntax": {
+      "count": 12
     }
   },
   "src/components/Chat/AiChatInput.tsx": {
@@ -242,10 +267,16 @@
     },
     "no-restricted-imports": {
       "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 1
     }
   },
   "src/components/Chat/AiChatMessages.tsx": {
     "no-restricted-imports": {
+      "count": 1
+    },
+    "no-restricted-syntax": {
       "count": 1
     },
     "react-hooks/exhaustive-deps": {
@@ -261,6 +292,9 @@
     },
     "no-misleading-character-class": {
       "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 5
     }
   },
   "src/components/Chat/AiModelSelect.tsx": {
@@ -280,6 +314,9 @@
     },
     "no-restricted-imports": {
       "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 2
     },
     "react-hooks/exhaustive-deps": {
       "count": 2
@@ -403,6 +440,9 @@
     "@typescript-eslint/no-unused-vars": {
       "count": 6
     },
+    "no-restricted-syntax": {
+      "count": 1
+    },
     "react-hooks/exhaustive-deps": {
       "count": 1
     }
@@ -468,6 +508,9 @@
     },
     "no-console": {
       "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 1
     }
   },
   "src/components/Chat/Landing.tsx": {
@@ -509,14 +552,30 @@
       "count": 1
     }
   },
+  "src/components/Chat/MessageFeedbackButtons.tsx": {
+    "no-restricted-syntax": {
+      "count": 4
+    }
+  },
   "src/components/Chat/MessageSelection/ExportFormatSheet.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/components/Chat/MessageSelection/ExportSelectionButton.tsx": {
+    "no-restricted-syntax": {
+      "count": 4
     }
   },
   "src/components/Chat/MessageSelection/MessageSelectionToolbar.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 2
     }
   },
   "src/components/Chat/Messages/Content/ActionIcon.tsx": {
@@ -530,6 +589,9 @@
     },
     "no-restricted-imports": {
       "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 4
     }
   },
   "src/components/Chat/Messages/Content/CitationReferencesDrawer.tsx": {
@@ -539,8 +601,16 @@
     "no-restricted-imports": {
       "count": 1
     },
+    "no-restricted-syntax": {
+      "count": 17
+    },
     "react-hooks/exhaustive-deps": {
       "count": 1
+    }
+  },
+  "src/components/Chat/Messages/Content/CitationSourceIcon.tsx": {
+    "no-restricted-syntax": {
+      "count": 2
     }
   },
   "src/components/Chat/Messages/Content/CodeAnalyze.tsx": {
@@ -588,6 +658,9 @@
     },
     "no-restricted-imports": {
       "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 6
     },
     "no-useless-escape": {
       "count": 1
@@ -661,11 +734,19 @@
   "src/components/Chat/Messages/Content/citationUtils.ts": {
     "@typescript-eslint/no-explicit-any": {
       "count": 4
+    },
+    "no-restricted-syntax": {
+      "count": 17
     }
   },
   "src/components/Chat/Messages/Content/useCitationReferencePanel.tsx": {
     "react-hooks/exhaustive-deps": {
       "count": 1
+    }
+  },
+  "src/components/Chat/Messages/DeepThinkingGroup.tsx": {
+    "no-restricted-syntax": {
+      "count": 6
     }
   },
   "src/components/Chat/Messages/HoverButtons.tsx": {
@@ -732,11 +813,17 @@
   "src/components/Chat/Messages/ThinkingContent.tsx": {
     "no-restricted-imports": {
       "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 1
     }
   },
   "src/components/Chat/Messages/ToolCallDisplay.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 8
+    },
+    "no-restricted-syntax": {
+      "count": 13
     }
   },
   "src/components/Chat/Messages/ui/MessageRender.tsx": {
@@ -796,6 +883,11 @@
   "src/components/Endpoints/Settings/Plugins.tsx": {
     "no-restricted-imports": {
       "count": 1
+    }
+  },
+  "src/components/FileListRow.tsx": {
+    "no-restricted-syntax": {
+      "count": 11
     }
   },
   "src/components/Files/ActionButton.tsx": {
@@ -873,6 +965,11 @@
       "count": 3
     }
   },
+  "src/components/InfiniteScroll.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
   "src/components/Input/ModelSelect/PluginsByIndex.tsx": {
     "no-restricted-imports": {
       "count": 1
@@ -904,6 +1001,9 @@
   "src/components/Linsight/Artifacts/artifactUtils.test.ts": {
     "@typescript-eslint/no-explicit-any": {
       "count": 10
+    },
+    "no-restricted-syntax": {
+      "count": 19
     }
   },
   "src/components/Linsight/Artifacts/artifactUtils.ts": {
@@ -952,11 +1052,24 @@
       "count": 1
     }
   },
+  "src/components/Linsight/Execution/ToolRowLite.tsx": {
+    "no-restricted-syntax": {
+      "count": 7
+    }
+  },
+  "src/components/Linsight/Execution/stepUtils.test.ts": {
+    "no-restricted-syntax": {
+      "count": 133
+    }
+  },
   "src/components/Linsight/Execution/stepUtils.ts": {
     "@typescript-eslint/no-explicit-any": {
       "count": 8
     },
     "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    },
+    "no-restricted-syntax": {
       "count": 1
     }
   },
@@ -1028,6 +1141,9 @@
     },
     "no-restricted-imports": {
       "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 2
     }
   },
   "src/components/Nav/MobileNav.tsx": {
@@ -1327,6 +1443,9 @@
     "no-console": {
       "count": 2
     },
+    "no-restricted-syntax": {
+      "count": 1
+    },
     "no-useless-escape": {
       "count": 1
     },
@@ -1550,6 +1669,9 @@
   "src/components/Voice/TextToSpeechButton.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 1
     }
   },
   "src/components/Voice/textToSpeechStore.tsx": {
@@ -1560,6 +1682,9 @@
   "src/components/approval/ApprovalCenterDialog.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 16
+    },
+    "no-restricted-syntax": {
+      "count": 4
     },
     "react-hooks/exhaustive-deps": {
       "count": 3
@@ -1598,9 +1723,17 @@
       "count": 1
     }
   },
+  "src/components/permission/PermissionGrantTab.tsx": {
+    "no-restricted-syntax": {
+      "count": 4
+    }
+  },
   "src/components/permission/PermissionListTab.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 4
     }
   },
   "src/components/svg/DownIcon.tsx": {
@@ -1624,6 +1757,11 @@
   "src/components/ui/OriginalDialog.tsx": {
     "@typescript-eslint/no-unused-vars": {
       "count": 1
+    }
+  },
+  "src/components/ui/Steps.tsx": {
+    "no-restricted-syntax": {
+      "count": 2
     }
   },
   "src/components/ui/TermsAndConditionsModal.tsx": {
@@ -1743,6 +1881,9 @@
     "no-restricted-imports": {
       "count": 1
     },
+    "no-restricted-syntax": {
+      "count": 1
+    },
     "react-hooks/exhaustive-deps": {
       "count": 1
     }
@@ -1843,6 +1984,9 @@
     },
     "no-restricted-imports": {
       "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 1
     }
   },
   "src/hooks/Input/useAutoSave.ts": {
@@ -1926,6 +2070,9 @@
       "count": 1
     },
     "no-restricted-imports": {
+      "count": 1
+    },
+    "no-restricted-syntax": {
       "count": 1
     },
     "react-hooks/exhaustive-deps": {
@@ -2024,6 +2171,9 @@
   "src/hooks/SSE/useStepHandler.ts": {
     "no-restricted-imports": {
       "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 2
     }
   },
   "src/hooks/ThemeContext.tsx": {
@@ -2049,6 +2199,11 @@
     },
     "react-hooks/exhaustive-deps": {
       "count": 5
+    }
+  },
+  "src/hooks/Websocket/mock.js": {
+    "no-restricted-syntax": {
+      "count": 37
     }
   },
   "src/hooks/queries/auth/mutations.ts": {
@@ -2105,6 +2260,9 @@
     "no-restricted-imports": {
       "count": 1
     },
+    "no-restricted-syntax": {
+      "count": 2
+    },
     "react-hooks/exhaustive-deps": {
       "count": 2
     }
@@ -2114,6 +2272,9 @@
       "count": 4
     },
     "no-console": {
+      "count": 3
+    },
+    "no-restricted-syntax": {
       "count": 3
     }
   },
@@ -2171,6 +2332,9 @@
     },
     "no-restricted-imports": {
       "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 2
     },
     "react-hooks/exhaustive-deps": {
       "count": 2
@@ -2241,6 +2405,9 @@
     "no-restricted-imports": {
       "count": 1
     },
+    "no-restricted-syntax": {
+      "count": 2
+    },
     "react-hooks/exhaustive-deps": {
       "count": 2
     }
@@ -2248,6 +2415,29 @@
   "src/layouts/UserPopMenu.tsx": {
     "no-restricted-imports": {
       "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 4
+    }
+  },
+  "src/locales/i18n.ts": {
+    "no-restricted-syntax": {
+      "count": 3
+    }
+  },
+  "src/mock/channels.ts": {
+    "no-restricted-syntax": {
+      "count": 62
+    }
+  },
+  "src/mock/notifications.ts": {
+    "no-restricted-syntax": {
+      "count": 24
+    }
+  },
+  "src/mock/sources.ts": {
+    "no-restricted-syntax": {
+      "count": 18
     }
   },
   "src/pages/ChannelSquare.tsx": {
@@ -2257,13 +2447,24 @@
     "@typescript-eslint/no-unused-vars": {
       "count": 3
     },
+    "no-restricted-syntax": {
+      "count": 7
+    },
     "react-hooks/exhaustive-deps": {
       "count": 1
+    }
+  },
+  "src/pages/ChannelSquareCard.tsx": {
+    "no-restricted-syntax": {
+      "count": 2
     }
   },
   "src/pages/DevLogin/index.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 10
     }
   },
   "src/pages/MenuUnavailablePage.tsx": {
@@ -2361,6 +2562,9 @@
   "src/pages/Subscription/ChannelDiscoveryHome.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 6
+    },
+    "no-restricted-syntax": {
+      "count": 3
     }
   },
   "src/pages/Subscription/ChannelLayout.tsx": {
@@ -2382,6 +2586,9 @@
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 3
+    },
+    "no-restricted-syntax": {
+      "count": 1
     },
     "react-hooks/exhaustive-deps": {
       "count": 1
@@ -2415,6 +2622,9 @@
     "@typescript-eslint/no-unused-vars": {
       "count": 9
     },
+    "no-restricted-syntax": {
+      "count": 1
+    },
     "react-hooks/exhaustive-deps": {
       "count": 1
     }
@@ -2422,10 +2632,21 @@
   "src/pages/Subscription/CreateChannel/FilterConditionEditor.tsx": {
     "@typescript-eslint/no-unused-vars": {
       "count": 2
+    },
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/pages/Subscription/CreateChannel/KnowledgeSyncSection.tsx": {
+    "no-restricted-syntax": {
+      "count": 7
     }
   },
   "src/pages/Subscription/CreateChannel/SyncSpaceItem.tsx": {
     "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    },
+    "no-restricted-syntax": {
       "count": 1
     }
   },
@@ -2437,6 +2658,11 @@
   "src/pages/Subscription/Sidebar/SectionHeader.tsx": {
     "@typescript-eslint/no-unused-vars": {
       "count": 1
+    }
+  },
+  "src/pages/Subscription/channelUtils.ts": {
+    "no-restricted-syntax": {
+      "count": 3
     }
   },
   "src/pages/Subscription/hooks/useArticleShare.ts": {
@@ -2492,6 +2718,91 @@
       "count": 1
     }
   },
+  "src/pages/_gallery/GalleryApp.tsx": {
+    "no-restricted-syntax": {
+      "count": 35
+    }
+  },
+  "src/pages/_gallery/components/kit.tsx": {
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "src/pages/_gallery/progress/ButtonProgress.tsx": {
+    "no-restricted-syntax": {
+      "count": 56
+    }
+  },
+  "src/pages/_gallery/progress/ColorProgress.tsx": {
+    "no-restricted-syntax": {
+      "count": 35
+    }
+  },
+  "src/pages/_gallery/progress/ConfirmProgress.tsx": {
+    "no-restricted-syntax": {
+      "count": 83
+    }
+  },
+  "src/pages/_gallery/progress/ModalProgress.tsx": {
+    "no-restricted-syntax": {
+      "count": 128
+    }
+  },
+  "src/pages/_gallery/progress/ProgressOverview.tsx": {
+    "no-restricted-syntax": {
+      "count": 100
+    }
+  },
+  "src/pages/_gallery/progress/TypographyProgress.tsx": {
+    "no-restricted-syntax": {
+      "count": 23
+    }
+  },
+  "src/pages/_gallery/sections/ButtonSection.tsx": {
+    "no-restricted-syntax": {
+      "count": 89
+    }
+  },
+  "src/pages/_gallery/sections/ColorSection.tsx": {
+    "no-restricted-syntax": {
+      "count": 102
+    }
+  },
+  "src/pages/_gallery/sections/ConfirmDialogSection.tsx": {
+    "no-restricted-syntax": {
+      "count": 37
+    }
+  },
+  "src/pages/_gallery/sections/FeedbackSection.tsx": {
+    "no-restricted-syntax": {
+      "count": 15
+    }
+  },
+  "src/pages/_gallery/sections/IllustrationSection.tsx": {
+    "no-restricted-syntax": {
+      "count": 29
+    }
+  },
+  "src/pages/_gallery/sections/ModalSection.tsx": {
+    "no-restricted-syntax": {
+      "count": 43
+    }
+  },
+  "src/pages/_gallery/sections/OverviewSection.tsx": {
+    "no-restricted-syntax": {
+      "count": 29
+    }
+  },
+  "src/pages/_gallery/sections/ResponsiveSection.tsx": {
+    "no-restricted-syntax": {
+      "count": 58
+    }
+  },
+  "src/pages/_gallery/sections/TypographySection.tsx": {
+    "no-restricted-syntax": {
+      "count": 42
+    }
+  },
   "src/pages/appChat/AppChatEntry.tsx": {
     "no-restricted-imports": {
       "count": 1
@@ -2536,6 +2847,9 @@
     },
     "no-restricted-imports": {
       "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 2
     }
   },
   "src/pages/appChat/appUtils/skillMethod.ts": {
@@ -2546,6 +2860,9 @@
   "src/pages/appChat/components/AppInfoCard.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 3
     }
   },
   "src/pages/appChat/components/AppSidebarConvoItem.tsx": {
@@ -2553,6 +2870,9 @@
       "count": 3
     },
     "no-restricted-imports": {
+      "count": 1
+    },
+    "no-restricted-syntax": {
       "count": 1
     }
   },
@@ -2624,6 +2944,9 @@
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 2
+    },
+    "no-restricted-syntax": {
+      "count": 1
     }
   },
   "src/pages/appChat/components/MessageButtons.tsx": {
@@ -2631,6 +2954,14 @@
       "count": 1
     },
     "no-restricted-imports": {
+      "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 3
+    }
+  },
+  "src/pages/appChat/components/MessageFile.tsx": {
+    "no-restricted-syntax": {
       "count": 1
     }
   },
@@ -2657,6 +2988,9 @@
     "no-restricted-imports": {
       "count": 1
     },
+    "no-restricted-syntax": {
+      "count": 1
+    },
     "react-hooks/exhaustive-deps": {
       "count": 1
     }
@@ -2681,6 +3015,9 @@
   "src/pages/appChat/hooks/useAppSidebar.ts": {
     "no-restricted-imports": {
       "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 4
     }
   },
   "src/pages/appChat/index.tsx": {
@@ -2701,6 +3038,9 @@
     },
     "no-restricted-imports": {
       "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 3
     },
     "react-hooks/exhaustive-deps": {
       "count": 1
@@ -2744,6 +3084,9 @@
     "no-restricted-imports": {
       "count": 1
     },
+    "no-restricted-syntax": {
+      "count": 1
+    },
     "react-hooks/exhaustive-deps": {
       "count": 1
     }
@@ -2760,6 +3103,9 @@
     },
     "no-restricted-imports": {
       "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 1
     }
   },
   "src/pages/appChat/useMessages.ts": {
@@ -2773,6 +3119,9 @@
       "count": 1
     },
     "no-restricted-imports": {
+      "count": 1
+    },
+    "no-restricted-syntax": {
       "count": 1
     },
     "react-hooks/exhaustive-deps": {
@@ -2795,12 +3144,18 @@
     "no-restricted-imports": {
       "count": 1
     },
+    "no-restricted-syntax": {
+      "count": 1
+    },
     "react-hooks/exhaustive-deps": {
       "count": 2
     }
   },
   "src/pages/apps/components/AgentCard.tsx": {
     "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    },
+    "no-restricted-syntax": {
       "count": 1
     }
   },
@@ -2814,8 +3169,16 @@
     "no-restricted-imports": {
       "count": 1
     },
+    "no-restricted-syntax": {
+      "count": 9
+    },
     "react-hooks/exhaustive-deps": {
       "count": 3
+    }
+  },
+  "src/pages/apps/components/AgentNavigation.tsx": {
+    "no-restricted-syntax": {
+      "count": 2
     }
   },
   "src/pages/apps/components/MarkLabel.tsx": {
@@ -2848,6 +3211,9 @@
   "src/pages/apps/hooks/useAppCenter.ts": {
     "no-restricted-imports": {
       "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 4
     }
   },
   "src/pages/apps/index.tsx": {
@@ -2871,6 +3237,9 @@
     }
   },
   "src/pages/knowledge/FilePreview/RichKnowledgePreview.tsx": {
+    "no-restricted-syntax": {
+      "count": 2
+    },
     "react-hooks/exhaustive-deps": {
       "count": 1
     }
@@ -2900,6 +3269,9 @@
     },
     "no-console": {
       "count": 3
+    },
+    "no-restricted-syntax": {
+      "count": 8
     },
     "no-useless-escape": {
       "count": 4
@@ -3015,6 +3387,11 @@
       "count": 2
     }
   },
+  "src/pages/knowledge/SpaceDetail/RelateDocumentPanel.tsx": {
+    "no-restricted-syntax": {
+      "count": 5
+    }
+  },
   "src/pages/knowledge/SpaceDetail/SelectionPathBreadcrumb.tsx": {
     "@typescript-eslint/no-unused-vars": {
       "count": 2
@@ -3023,6 +3400,9 @@
   "src/pages/knowledge/SpaceDetail/SimilarDocumentDialog.tsx": {
     "@typescript-eslint/no-unused-vars": {
       "count": 2
+    },
+    "no-restricted-syntax": {
+      "count": 5
     }
   },
   "src/pages/knowledge/SpaceDetail/VersionManagementDialog.tsx": {
@@ -3044,9 +3424,19 @@
       "count": 1
     }
   },
+  "src/pages/knowledge/hooks/useFileDragDrop.ts": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
   "src/pages/knowledge/hooks/useFileManager.ts": {
     "@typescript-eslint/no-explicit-any": {
       "count": 3
+    }
+  },
+  "src/pages/knowledge/hooks/useFileUpload.test.ts": {
+    "no-restricted-syntax": {
+      "count": 8
     }
   },
   "src/pages/knowledge/hooks/useFileUpload.ts": {
@@ -3200,6 +3590,11 @@
       "count": 1
     }
   },
+  "src/routes/ShareAppRedirect.tsx": {
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
   "src/routes/index.tsx": {
     "@typescript-eslint/ban-ts-comment": {
       "count": 1
@@ -3233,6 +3628,11 @@
   "src/store/language.ts": {
     "no-empty": {
       "count": 3
+    }
+  },
+  "src/store/linsight.test.ts": {
+    "no-restricted-syntax": {
+      "count": 1
     }
   },
   "src/store/linsight.ts": {
@@ -3356,6 +3756,9 @@
     },
     "no-restricted-imports": {
       "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 4
     }
   },
   "src/utils/json.ts": {
