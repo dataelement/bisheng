@@ -676,6 +676,8 @@ interface FileTableProps {
     onRename: (id: string, newName: string) => void;
     onDelete: (id: string) => void;
     onRetry: (id: string) => void;
+    onAcceptAlias?: (id: string) => void;
+    onRejectAlias?: (id: string) => void;
     onNavigateFolder: (id: string) => void;
     onPreview?: (id: string) => void;
     onValidateName: (name: string, isFolder: boolean, fileId: string, isCreating: boolean) => string | null;
@@ -713,7 +715,7 @@ interface FileTableProps {
     retryActionLabel?: string;
 }
 
-export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, currentUserRole, onDownload, onEditTags, onRename, onDelete, onRetry, onNavigateFolder, onPreview, onValidateName, onCancelCreate, onRequestPermissions, permissionEntryIds, renameEntryIds, deleteEntryIds, downloadEntryIds, downloadingEntryIds, publishEntryIds, onManagePermission, onMove, moveEntryIds, onPublishFile, sortBy, sortDirection, onSort, versionManagementEnabled, onOpenVersionManagement, onOpenVersionHistory, canManageMembers = false, enableEncodingClassification = false, metadataEditableFileIds, fileCategoryOptions = [], fileCategoryGroups = DEFAULT_PORTAL_FILE_CATEGORY_GROUPS, businessDomainOptions = [], encodingPrefix = DEFAULT_ENCODING_PREFIX, onFileEncodingUpdated, canRetryFile, retryActionLabel }: FileTableProps) {
+export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, currentUserRole, onDownload, onEditTags, onRename, onDelete, onRetry, onAcceptAlias, onRejectAlias, onNavigateFolder, onPreview, onValidateName, onCancelCreate, onRequestPermissions, permissionEntryIds, renameEntryIds, deleteEntryIds, downloadEntryIds, downloadingEntryIds, publishEntryIds, onManagePermission, onMove, moveEntryIds, onPublishFile, sortBy, sortDirection, onSort, versionManagementEnabled, onOpenVersionManagement, onOpenVersionHistory, canManageMembers = false, enableEncodingClassification = false, metadataEditableFileIds, fileCategoryOptions = [], fileCategoryGroups = DEFAULT_PORTAL_FILE_CATEGORY_GROUPS, businessDomainOptions = [], encodingPrefix = DEFAULT_ENCODING_PREFIX, onFileEncodingUpdated, canRetryFile, retryActionLabel }: FileTableProps) {
     // Shougang feature gate
     const { data: bsConfig } = useGetBsConfig();
     const shougangEnabled = bsConfig?.shougang?.enabled ?? false;
@@ -930,6 +932,8 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
                                 onRename={(newName) => onRename(file.id, newName)}
                                 onDelete={() => onDelete(file.id)}
                                 onRetry={() => onRetry?.(file.id)}
+                                onAcceptAlias={onAcceptAlias ? () => onAcceptAlias(file.id) : undefined}
+                                onRejectAlias={onRejectAlias ? () => onRejectAlias(file.id) : undefined}
                                 onNavigateFolder={() => onNavigateFolder?.(file.id)}
                                 onPreview={() => onPreview?.(file.id)}
                                 onValidateName={(newName) => onValidateName?.(newName, file.type === FileType.FOLDER, file.id, !!file.isCreating)}
@@ -1053,6 +1057,8 @@ function FileRow({
     onMove,
     canRetryFile,
     retryActionLabel,
+    onAcceptAlias,
+    onRejectAlias,
 }: {
     file: KnowledgeFile;
     isSelected: boolean;
@@ -1064,6 +1070,8 @@ function FileRow({
     onRename: (newName: string) => void;
     onDelete: () => void;
     onRetry: () => void;
+    onAcceptAlias?: () => void;
+    onRejectAlias?: () => void;
     onNavigateFolder?: () => void;
     onPreview?: () => void;
     onValidateName?: (newName: string) => string | null;
@@ -1169,11 +1177,41 @@ function FileRow({
         </button>
     ) : undefined;
     const [rowHovered, setRowHovered] = useState(false);
-    const showRowActions = rowHovered || moreMenuOpen;
-    const rowActions = (
-        <div
-            className="absolute right-3 top-1/2 z-[35] flex -translate-y-1/2 items-center gap-1"
-        >
+    const showAliasActions = Boolean(file.aliasName) && canRename && (Boolean(onAcceptAlias) || Boolean(onRejectAlias));
+    const showHoverActions = rowHovered || moreMenuOpen;
+    const showRowActions = showAliasActions || showHoverActions;
+
+    const aliasActionButtons = showAliasActions ? (
+        <div className="flex items-center gap-1">
+            {onAcceptAlias && (
+                <button
+                    type="button"
+                    className="h-6 rounded bg-[#165dff] px-2 text-xs font-medium text-white hover:bg-[#4080ff] transition-colors"
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onAcceptAlias();
+                    }}
+                >
+                    接收
+                </button>
+            )}
+            {onRejectAlias && (
+                <button
+                    type="button"
+                    className="h-6 rounded border border-[#165dff] px-2 text-xs font-medium text-[#165dff] hover:bg-[#f2f3ff] transition-colors"
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onRejectAlias();
+                    }}
+                >
+                    拒绝
+                </button>
+            )}
+        </div>
+    ) : null;
+
+    const hoverActionButtons = showHoverActions ? (
+        <>
             {canDownload && (
                 <button
                     type="button"
@@ -1305,6 +1343,15 @@ function FileRow({
                     </DropdownMenuContent>
                 </DropdownMenu>
             )}
+        </>
+    ) : null;
+
+    const rowActions = (
+        <div
+            className="absolute right-3 top-1/2 z-[35] flex -translate-y-1/2 items-center gap-1"
+        >
+            {aliasActionButtons}
+            {hoverActionButtons}
         </div>
     );
 
@@ -1344,8 +1391,8 @@ function FileRow({
                     left: columnWidths.checkbox,
                 }}
             >
-                <div className="flex items-center gap-2 min-w-0 text-gray-300 ">
-                    <div className="flex size-[18px] shrink-0 items-center justify-center rounded-sm bg-white">
+                <div className="flex items-start gap-2 min-w-0 text-gray-300">
+                    <div className="mt-0.5 flex size-[18px] shrink-0 items-center justify-center rounded-sm bg-white">
                         <FileIconRenderer file={file} isFolder={isFolder} className="size-[18px]" showThumbnail={false} />
                     </div>
                     {isRenaming ? (
@@ -1370,58 +1417,69 @@ function FileRow({
                             )}
                         </div>
                     ) : (
-                        <>
-                            {versionManagementEnabled && file.is_multi_version && file.version_no != null && file.version_no >= 1 && (
-                                <span className="flex h-5 shrink-0 items-center justify-center rounded bg-[#E8F3FF] px-1.5 text-xs font-medium text-[#165DFF]">
-                                    {`V${file.version_no}`}
-                                </span>
-                            )}
-                            {versionManagementEnabled && canManageMembers && file.has_similar && !file.is_multi_version && (
-                                <button
-                                    type="button"
+                        <div className="flex flex-col min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                                {versionManagementEnabled && file.is_multi_version && file.version_no != null && file.version_no >= 1 && (
+                                    <span className="flex h-5 shrink-0 items-center justify-center rounded bg-[#E8F3FF] px-1.5 text-xs font-medium text-[#165DFF]">
+                                        {`V${file.version_no}`}
+                                    </span>
+                                )}
+                                {versionManagementEnabled && canManageMembers && file.has_similar && !file.is_multi_version && (
+                                    <button
+                                        type="button"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            onOpenVersionManagement?.(file);
+                                        }}
+                                        className="flex h-5 shrink-0 items-center gap-1 rounded bg-[#FFF3E8] px-1.5 text-xs text-[#F76F44] hover:bg-[#FFE6D2]"
+                                    >
+                                        <FileSearch className="size-3" />
+                                        {localize("com_knowledge.version.pill_similar")}
+                                    </button>
+                                )}
+                                <span
+                                    role={isFolder || namePreviewable ? "button" : undefined}
+                                    tabIndex={isFolder || namePreviewable ? 0 : undefined}
+                                    aria-label={isFolder || namePreviewable ? `打开${file.name}` : undefined}
+                                    className={cn(
+                                        "text-[15px] truncate flex-1",
+                                        namePreviewable
+                                            ? "cursor-pointer text-[#3662E3] hover:text-[#4080FF]"
+                                            : "cursor-default text-[#3662E3]"
+                                    )}
                                     onClick={(e) => {
                                         e.stopPropagation();
-                                        onOpenVersionManagement?.(file);
+                                        if (isFolder) {
+                                            onNavigateFolder?.();
+                                            return;
+                                        }
+                                        if (!namePreviewable) return;
+                                        onPreview?.();
                                     }}
-                                    className="flex h-5 shrink-0 items-center gap-1 rounded bg-[#FFF3E8] px-1.5 text-xs text-[#F76F44] hover:bg-[#FFE6D2]"
+                                    onKeyDown={(e) => {
+                                        if (e.key !== "Enter" && e.key !== " ") return;
+                                        e.preventDefault();
+                                        if (isFolder) {
+                                            onNavigateFolder?.();
+                                            return;
+                                        }
+                                        if (!namePreviewable) return;
+                                        onPreview?.();
+                                    }}
                                 >
-                                    <FileSearch className="size-3" />
-                                    {localize("com_knowledge.version.pill_similar")}
-                                </button>
+                                    <span className="block truncate">{file.name}</span>
+                                </span>
+                            </div>
+                            {file.aliasName && (
+                                <div
+                                    className="mt-0.5 flex min-w-0 items-center gap-1 text-xs text-[#86909c]"
+                                    title={`新文件名：${file.aliasName}`}
+                                >
+                                    <span className="shrink-0">新文件名：</span>
+                                    <span className="truncate">{file.aliasName}</span>
+                                </div>
                             )}
-                            <span
-                                role={isFolder || namePreviewable ? "button" : undefined}
-                                tabIndex={isFolder || namePreviewable ? 0 : undefined}
-                                aria-label={isFolder || namePreviewable ? `打开${file.name}` : undefined}
-                                className={cn(
-                                    "text-[15px] truncate flex-1",
-                                    namePreviewable
-                                        ? "cursor-pointer text-[#3662E3] hover:text-[#4080FF]"
-                                        : "cursor-default text-[#3662E3]"
-                                )}
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    if (isFolder) {
-                                        onNavigateFolder?.();
-                                        return;
-                                    }
-                                    if (!namePreviewable) return;
-                                    onPreview?.();
-                                }}
-                                onKeyDown={(e) => {
-                                    if (e.key !== "Enter" && e.key !== " ") return;
-                                    e.preventDefault();
-                                    if (isFolder) {
-                                        onNavigateFolder?.();
-                                        return;
-                                    }
-                                    if (!namePreviewable) return;
-                                    onPreview?.();
-                                }}
-                            >
-                                <span className="block truncate">{file.name}</span>
-                            </span>
-                        </>
+                        </div>
                     )}
                 </div>
                 {/* 固定列右侧阴影 */}

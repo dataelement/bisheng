@@ -5,6 +5,8 @@ import {
     FileType,
     KnowledgeFile,
     KnowledgeSpace,
+    acceptFileAliasApi,
+    rejectFileAliasApi,
     createFolderApi,
     renameFolderApi,
     deleteFolderApi,
@@ -699,6 +701,63 @@ export function useFileUpload({
         [activeSpace, files, setFiles, setTotal, showToast, localize]
     );
 
+    // ─── Accept / reject AI-generated alias rename ───────────────────────
+    const handleAcceptAlias = useCallback(
+        async (fileId: string) => {
+            if (!activeSpace) return;
+            const target = files.find((f) => f.id === fileId);
+            if (!target || !target.aliasName) return;
+
+            try {
+                await acceptFileAliasApi(String(activeSpace.id), fileId);
+                setFiles((prev) =>
+                    prev.map((f) =>
+                        f.id === fileId
+                            ? { ...f, name: target.aliasName as string, aliasName: undefined }
+                            : f
+                    )
+                );
+                showToast({
+                    message: localize("com_knowledge.rename_success"),
+                    severity: NotificationSeverity.SUCCESS,
+                } as any);
+            } catch {
+                showToast({
+                    message: localize("com_knowledge.rename_failed"),
+                    severity: NotificationSeverity.ERROR,
+                });
+            }
+        },
+        [activeSpace, files, setFiles, showToast, localize]
+    );
+
+    const handleRejectAlias = useCallback(
+        async (fileId: string) => {
+            if (!activeSpace) return;
+            const target = files.find((f) => f.id === fileId);
+            if (!target || !target.aliasName) return;
+
+            try {
+                await rejectFileAliasApi(String(activeSpace.id), fileId);
+                setFiles((prev) =>
+                    prev.map((f) =>
+                        f.id === fileId ? { ...f, aliasName: undefined } : f
+                    )
+                );
+                showToast({
+                    message: localize("com_knowledge.success"),
+                    severity: NotificationSeverity.SUCCESS,
+                } as any);
+            } catch {
+                showToast({
+                    message: localize("com_knowledge.operation_failed"),
+                    severity: NotificationSeverity.ERROR,
+                });
+            }
+        },
+        [activeSpace, files, setFiles, showToast, localize]
+    );
+
     return {
         uploadingFiles,
         creatingFolder,
@@ -713,5 +772,7 @@ export function useFileUpload({
         handleEditTags,
         handleDuplicateOverwrite,
         handleDuplicateSkip,
+        handleAcceptAlias,
+        handleRejectAlias,
     };
 }

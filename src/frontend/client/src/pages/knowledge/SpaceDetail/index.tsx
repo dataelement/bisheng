@@ -92,6 +92,8 @@ interface KnowledgeSpaceContentProps {
     onDeleteFile: (fileId: string) => void;
     onEditTags: (fileId: string) => void;
     onRetryFile: (fileId: string) => void;
+    onAcceptAlias?: (fileId: string) => void;
+    onRejectAlias?: (fileId: string) => void;
     onMoveFile?: (fileId: string, targetFolderId: number | null) => void;
     /** Called after batch move completes so the host can refresh folder stats. */
     onAfterBatchMove?: () => void | Promise<void>;
@@ -159,6 +161,8 @@ export function KnowledgeSpaceContent({
     onDeleteFile,
     onEditTags,
     onRetryFile,
+    onAcceptAlias,
+    onRejectAlias,
     onMoveFile,
     onAfterBatchMove,
     onMoveDialogFolderCreated,
@@ -1561,6 +1565,8 @@ export function KnowledgeSpaceContent({
                                     onRename={(id, newName) => onRenameFile(id, newName)}
                                     onDelete={(id) => handleDelete(id)}
                                     onRetry={(id) => handleSingleRetry(id)}
+                                    onAcceptAlias={onAcceptAlias}
+                                    onRejectAlias={onRejectAlias}
                                     onNavigateFolder={(id) => onNavigateFolder(id)}
                                     onPreview={(id) => handlePreviewFile(id)}
                                     onValidateName={validateFileName}

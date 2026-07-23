@@ -2685,6 +2685,8 @@ export default function PortalKnowledgeWorkbench() {
                                                     onAfterBatchMove={() => reloadFiles()}
                                                     onEditTags={(fileId) => void fileUpload.handleEditTags(fileId)}
                                                     onRetryFile={() => void reloadFiles()}
+                                                    onAcceptAlias={(fileId) => void fileUpload.handleAcceptAlias(fileId)}
+                                                    onRejectAlias={(fileId) => void fileUpload.handleRejectAlias(fileId)}
                                                     canRetryFile={canRetryPortalFailedFile}
                                                     retryActionLabel="重新解析"
                                                     currentPath={currentPath}

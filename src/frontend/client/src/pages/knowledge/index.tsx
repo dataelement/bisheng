@@ -800,6 +800,8 @@ export default function Knowledge() {
                                         onDeleteFile={fileUpload.handleDeleteFile}
                                         onEditTags={fileUpload.handleEditTags}
                                         onRetryFile={() => showToast({ message: localize("com_knowledge.retry_feature_dev"), severity: NotificationSeverity.INFO })}
+                                        onAcceptAlias={fileUpload.handleAcceptAlias}
+                                        onRejectAlias={fileUpload.handleRejectAlias}
                                         currentPath={fileManager.currentPath}
                                         currentFolderId={fileManager.currentFolderId}
                                         onDragStateChange={handleDragStateChange}
