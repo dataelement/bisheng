@@ -31,3 +31,6 @@ packages/ui/doc_build/
 package-lock.json
 yarn.lock
 .obsidian/
+
+# dead-key scan output (regenerable working artifact, not tracked)
+scripts/i18n-dead-keys-report.json
