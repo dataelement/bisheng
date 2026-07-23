@@ -90,14 +90,12 @@
     },
     "platform/knowledge.json/ja": {
       "missing": [
-        "splitMethodTooltip",
         "splitRules.articleRule",
         "splitRules.chapterRule",
         "splitRules.chinesePeriodRule",
         "splitRules.doubleNewlineRule",
         "splitRules.englishPeriodRule",
-        "splitRules.singleNewlineRule",
-        "splitSettingsTooltip"
+        "splitRules.singleNewlineRule"
       ],
       "extra": []
     },

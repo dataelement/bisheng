@@ -19,8 +19,7 @@
     "running": "运行中"
   },
   "triggerType": {
-    "manual": "手动",
-    "scheduled": "定时"
+    "manual": "手动"
   },
   "columns": {
     "time": "结束时间",
@@ -47,59 +46,26 @@
     "remove": "删除"
   },
   "form": {
-    "configName": "配置名称",
-    "configNamePlaceholder": "例如：企业微信生产环境",
-    "provider": "同步源类型",
-    "providerImmutable": "已创建的配置不可更改类型"
+    "provider": "同步源类型"
   },
   "dialog": {
-    "createTitle": "新建同步配置",
-    "editTitle": "编辑同步配置"
+    "createTitle": "新建同步配置"
   },
   "wecom": {
     "corpid": "企业 ID (corpid)",
-    "corpidPlaceholder": "企业微信 CorpID，以 ww 开头",
-    "corpidRequired": "请填写 corpid",
-    "corpsecret": "应用 Secret (corpsecret)",
-    "corpsecretPlaceholder": "应用的 Secret 密钥",
-    "corpsecretMaskedHint": "保持空值或 **** 表示不修改",
-    "corpsecretRequired": "请填写 corpsecret",
-    "corpsecretEditHint": "当前值为掩码占位，保存时将保留原有 secret。",
-    "corpsecretCannotBeMasked": "新建配置时必须填写真实的 corpsecret",
-    "agentId": "应用 ID (agent_id)",
-    "agentIdPlaceholder": "企业微信后台应用的 AgentId",
-    "agentIdRequired": "请填写 agent_id",
-    "allowDeptIds": "允许同步的根部门 ID",
-    "allowDeptIdsHint": "留空表示默认使用企微根部门（id=1）。仅整数，多个根部门分别添加。",
-    "allowDeptIdsPlaceholder": "输入整数后点击添加",
-    "allowDeptIdsDefault": "（默认 [1]）"
+    "corpsecret": "应用 Secret (corpsecret)"
   },
   "feishu": {
-    "appId": "App ID",
-    "appIdPlaceholder": "飞书自建应用 App ID",
-    "appIdRequired": "请填写 App ID",
-    "appSecret": "App Secret",
-    "appSecretPlaceholder": "飞书应用 Secret",
-    "appSecretMaskedHint": "保持空值或 **** 表示不修改",
-    "appSecretRequired": "请填写 App Secret",
-    "appSecretCannotBeMasked": "新建配置时必须填写真实的 App Secret"
+    "appId": "App ID"
   },
   "generic": {
-    "endpointUrl": "API 地址",
-    "endpointUrlPlaceholder": "https://example.com/org-sync",
-    "endpointUrlRequired": "请填写 API 地址",
-    "endpointUrlInvalid": "请填写以 http:// 或 https:// 开头的地址",
     "apiKey": "API Key（可选）",
-    "apiKeyPlaceholder": "接口鉴权密钥（如有）",
-    "apiKeyMaskedHint": "保持空值或 **** 表示不修改"
+    "apiKeyPlaceholder": "接口鉴权密钥（如有）"
   },
   "validation": {
     "nameRequired": "请填写配置名称"
   },
-  "testConnection": {
-    "successTitle": "连接成功",
-    "successDesc": "{{org}} 共 {{depts}} 个部门，{{members}} 名成员"
-  },
+  "testConnection": {},
   "confirmExecute": {
     "title": "确认立即同步？",
     "desc": "同步配置 “{{name}}” 将拉取最新的部门与成员，期间相关数据可能发生变化。"
@@ -118,9 +84,6 @@
   "syncLog": {
     "title": "同步日志 · {{name}}",
     "status": "状态",
-    "triggerType": "触发方式",
-    "deptChanges": "部门变动",
-    "memberChanges": "成员变动",
     "startTime": "开始时间",
     "endTime": "结束时间",
     "empty": "暂无同步记录"

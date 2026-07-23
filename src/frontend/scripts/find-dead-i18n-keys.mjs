@@ -62,6 +62,16 @@ function* walk(dir) {
   }
 }
 
+/** Remove a flattened key, whether it is a literal dotted property or a nested path. */
+function deleteKey(obj, key) {
+  if (Object.prototype.hasOwnProperty.call(obj, key)) return delete obj[key];
+  const dot = key.indexOf('.');
+  if (dot === -1) return false;
+  const head = key.slice(0, dot);
+  if (obj[head] && typeof obj[head] === 'object') return deleteKey(obj[head], key.slice(dot + 1));
+  return false;
+}
+
 const flatten = (obj, prefix = '') =>
   Object.entries(obj).flatMap(([k, v]) => {
     const key = prefix ? `${prefix}.${k}` : k;
@@ -147,13 +157,7 @@ if (args.includes('--delete')) {
       const f = scope.path(lang, file);
       if (!fs.existsSync(f)) continue;
       const j = JSON.parse(fs.readFileSync(f, 'utf8'));
-      for (const key of doomed) {
-        // delete nested path
-        const parts = key.split('.');
-        let node = j;
-        for (const p of parts.slice(0, -1)) node = node?.[p];
-        if (node) delete node[parts.at(-1)];
-      }
+      for (const key of doomed) deleteKey(j, key);
       fs.writeFileSync(f, JSON.stringify(j, null, 2) + '\n');
     }
     console.log(`[deleted] ${scopeId}/${file}: ${doomed.length} safe key(s)${prefix ? ` with prefix "${prefix}"` : ''} from all languages`);

@@ -10,8 +10,6 @@
     "linsightDefaultModel": "$t(bs:linsight)默认模型",
     "linsightDefaultModelTooltip": "该模型为$t(bs:linsight)任务的默认执行模型，用户发起任务时可切换",
     "workbenchVoiceModel": "工作台及知识空间语音模型",
-    "knowledgeSpaceQAModel": "订阅 / 知识空间问答生成模型",
-    "aiQASceneDescription": "用于订阅与知识空间场景的AI 问答场景",
     "sessionTitleGenerationModel": "应用会话标题生成模型",
     "asrModel": "语音转文字（ASR）模型",
     "asrModelTooltip": "用于工作台语音转文字场景",
@@ -97,11 +95,9 @@
     "notBeEmpty": "不能为空",
     "systemConfigRootBanner": "正在配置 {{tenantName}}（全局默认）。所有未自主配置的子租户将继承此项。",
     "systemConfigTenantBanner": "正在配置 {{tenantName}}。未配置项将从 {{rootName}} 继承（若 {{rootName}} 开启共享）。",
-    "systemConfigRootReadOnlyBanner": "{{tenantName}} 共享 · 只读。请切换到本租户视图以配置自有默认。",
     "systemConfigChildOwnBanner": "正在配置本租户系统模型。未配置项将从 {{rootName}} 继承（若 {{rootName}} 开启共享）。",
     "systemConfigInheritedBadge": "继承自 Root",
-    "systemConfigFallbackBlockedBanner": "Root 已关闭共享。请联系超管开启共享或在此为本租户独立配置。",
-    "systemConfigForbiddenWriteRoot": "权限不足：无法修改 Root 默认配置。"
+    "systemConfigFallbackBlockedBanner": "Root 已关闭共享。请联系超管开启共享或在此为本租户独立配置。"
   },
   "finetune": {
     "rtServiceManagement": "FT服务管理",

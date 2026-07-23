@@ -55,7 +55,6 @@
   "currentVersionLaunched": "The current version has been launched. Please save it as a new version to make changes.",
   "saveAsNewVersion": "Save as New Version",
   "dontSaveAndSwitch": "Do Not Save and Switch",
-  "unsavedChangesPrompt": "You have unsaved changes. Are you sure you want to leave?",
   "dontSave": "Do Not Save",
   "confirmImport": "Importing will overwrite the existing workflow. Confirm import?",
   "missingEndNode": "Missing end node",
@@ -151,7 +150,6 @@
   "dbUsernameRequired": "Database username cannot be empty",
   "dbUsernameTooLong": "Database username cannot exceed 100 characters",
   "dbPasswordRequired": "Database password cannot be empty",
-  "variableInput": "Variable Input",
   "leaveAndSave": "Leave and Save",
   "onlineVersionMessage": "The current version is online and cannot be modified. You can save the changes as a new version.",
   "unsavedChangesMessage": "You have unsaved changes. Are you sure you want to leave?",
@@ -167,12 +165,10 @@
   "temporarySessionFiles": "Temporary Knowledge",
   "storeFilesSentInCurrentSession": "Store files sent in the current session",
   "displayNameTooltip": "Displayed on the user conversation page",
-  "variableNameTooltipFile": "Used to store content entered on the user conversation page; can be selected from the temporary session file list",
   "variableNameTooltip": "Used to store content entered on the user conversation page; can be referenced in other nodes",
   "allowMultipleSelect": "Allow multiple selection",
   "allowUploadMultipleFiles": "Allow uploading multiple files",
   "uploadFileTypes": "Upload file types",
-  "temporaryKnowledgeBase": "Save to temporary knowledge base",
   "parseFile": "Parse file content",
   "parseNoIngest": "Parse file content (do not save to temporary knowledge base)",
   "parseWithIngest": "Parse file content (save to temporary knowledge base)",
@@ -188,8 +184,6 @@
   "parseResultName": "Parse result variable name",
   "selectFile": "Please select file processing strategy",
   "fileProcessingStrategy": "File processing strategy",
-  "docFileProcessingStrategy": "Document processing strategy",
-  "imageFileProcessingStrategy": "Image processing strategy",
   "fileProcessingStrategyTip": "Choose how to handle user-uploaded files:\n· Parse file content: Extract text from files to provide context for subsequent nodes like large language models.\n· Do not parse: Keep original files for processing by multimodal models or code nodes.",
   "dialogProcessingStrategyTip": "Choose how to handle user-uploaded files:\n· Parse file content: Extract text from files to provide context for subsequent nodes like large language models.\n·Save to Temporary Knowledge Base: Files will be uploaded to a temporary knowledge base and can be used in 'Document Knowledge Base Q&A' nodes.\n· Do not parse: Keep original files for processing by multimodal models or code nodes.",
   "tempKnowledgeBaseName": "Temporary knowledge base name",
@@ -213,10 +207,8 @@
   "doesNotExist": "does not exist",
   "tmpKnowledgeBaseNotSupportSingleNodeDebug": "Temporary knowledge base does not support single node debugging",
   "userInputContent": "User input content",
-  "advancedSearchSettings": "Advanced search settings",
   "userAuthVerification": "User knowledge base access verification",
   "userAuthVerificationTips": "When enabled, results are filtered by the current user's own view permission on knowledge-space files (each user only retrieves files they may view); when disabled, retrieval uses the config author's visible range, shared by all users (files the author cannot view are never retrieved). Document knowledge bases are unaffected by fine-grained file permissions.",
-  "enableToVerifyUserAccessToKnowledgeBase": "Enabling this will verify the user's access to the knowledge base.",
   "retrieverWeightSettings": "Retriever weight settings",
   "adjustWeightForVectorOrKeywordSearch": "Adjust the weight to prioritize either vector or keyword search.",
   "keyword": "Keyword",
@@ -607,6 +599,5 @@
         "label": "Output Variable"
       }
     }
-  },
-  "dbType": "Database Type"
+  }
 }
