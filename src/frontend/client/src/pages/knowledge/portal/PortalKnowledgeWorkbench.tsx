@@ -98,6 +98,7 @@ import {
     filterBusinessDomainOptionsByCodes,
     normalizeBusinessDomainOptions,
 } from "./uploadMetadata";
+import { invalidateTargetFolderCache } from "./utils/refreshAfterMove";
 import s from "./PortalKnowledgeWorkbench.module.css";
 
 const getPortalSpaceLevel = (space?: KnowledgeSpace | null) => (
@@ -301,6 +302,8 @@ export default function PortalKnowledgeWorkbench() {
     const currentFolderIdRef = useRef<string | undefined>();
     const previousSpaceIdRef = useRef<string | undefined>(undefined);
     const lastPortalLocationKeyRef = useRef("");
+    /** Set when a move targets the space root so the next navigate-to-root refetches. */
+    const rootCacheStaleRef = useRef(false);
     const isDeepLinkRestoring = Boolean(
         portalDeepLinkTarget && restoringDeepLinkKey === portalDeepLinkTarget.key,
     );
@@ -1039,6 +1042,29 @@ export default function PortalKnowledgeWorkbench() {
     const reloadFilesRef = useRef(reloadFiles);
     reloadFilesRef.current = reloadFiles;
 
+    /**
+     * Refresh the source folder list and invalidate the move target cache so the
+     * next breadcrumb navigation into the target refetches children.
+     */
+    const refreshAfterMove = useCallback(async (targetFolderId: number | null) => {
+        await reloadFiles();
+        const targetId = targetFolderId == null ? null : String(targetFolderId);
+        // Target is the folder currently on screen — reloadFiles already refreshed it.
+        if (targetId != null && targetId === currentFolderIdRef.current) {
+            return;
+        }
+        if (targetId == null && !currentFolderIdRef.current) {
+            return;
+        }
+        setTreeNodes((prev) => {
+            const result = invalidateTargetFolderCache(prev, targetId);
+            if (result.rootStale) {
+                rootCacheStaleRef.current = true;
+            }
+            return result.nodes;
+        });
+    }, [reloadFiles]);
+
     const fileUpload = useFileUpload({
         activeSpace,
         currentFolderId,
@@ -1369,6 +1395,7 @@ export default function PortalKnowledgeWorkbench() {
     useEffect(() => {
         if (!activeSpace?.id) {
             previousSpaceIdRef.current = undefined;
+            rootCacheStaleRef.current = false;
             return;
         }
 
@@ -1385,6 +1412,7 @@ export default function PortalKnowledgeWorkbench() {
 
         const spaceChanged = String(activeSpace.id) !== previousSpaceIdRef.current;
         if (spaceChanged) {
+            rootCacheStaleRef.current = false;
             setTreeNodes([]);
             setTreeRootPage(1);
             setTreeRootTotal(0);
@@ -2112,8 +2140,9 @@ export default function PortalKnowledgeWorkbench() {
 
         if (!folderId) {
             setCurrentFolderId(undefined);
-            if (treeNodes.length === 0) {
+            if (rootCacheStaleRef.current || treeNodes.length === 0) {
                 await loadRootTree(1, false, spaceId);
+                rootCacheStaleRef.current = false;
             }
             return;
         }
@@ -2558,11 +2587,11 @@ export default function PortalKnowledgeWorkbench() {
                                                     onDeleteFile={(fileId) => void handleDeleteFile(fileId)}
                                                     onMoveFile={async (fileId, targetFolderId) => {
                                                         await fileUpload.handleMoveFile(fileId, targetFolderId);
-                                                        // Refresh so the target folder's file-count stats update (move alone doesn't reload stats here).
-                                                        await reloadFiles();
+                                                        // Invalidate target cache so returning via breadcrumb refetches.
+                                                        await refreshAfterMove(targetFolderId);
                                                     }}
                                                     onMoveDialogFolderCreated={() => void reloadFiles()}
-                                                    onAfterBatchMove={() => reloadFiles()}
+                                                    onAfterBatchMove={(targetFolderId) => refreshAfterMove(targetFolderId)}
                                                     onEditTags={(fileId) => void fileUpload.handleEditTags(fileId)}
                                                     onRetryFile={() => void reloadFiles()}
                                                     canRetryFile={canRetryPortalFailedFile}
