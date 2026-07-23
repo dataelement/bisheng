@@ -45,6 +45,9 @@ jobs:
       - name: Shared locale artifacts in sync (packages/locales)
         run: pnpm --filter @bisheng/locales check
 
+      - name: i18n consistency (key parity + backend error-code coverage)
+        run: pnpm check-i18n
+
       - name: Lint platform
         run: pnpm --filter bisheng lint
 

@@ -15,6 +15,7 @@
     "locales:build": "pnpm --filter @bisheng/locales build",
     "locales:watch": "pnpm --filter @bisheng/locales watch",
     "locales:check": "pnpm --filter @bisheng/locales check",
+    "check-i18n": "node scripts/check-i18n.mjs",
     "preinstall": "npx only-allow pnpm"
   },
   "pnpm": {
