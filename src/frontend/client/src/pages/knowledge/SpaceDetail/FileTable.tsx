@@ -1177,38 +1177,8 @@ function FileRow({
         </button>
     ) : undefined;
     const [rowHovered, setRowHovered] = useState(false);
-    const showAliasActions = Boolean(file.aliasName) && canRename && (Boolean(onAcceptAlias) || Boolean(onRejectAlias));
     const showHoverActions = rowHovered || moreMenuOpen;
-    const showRowActions = showAliasActions || showHoverActions;
-
-    const aliasActionButtons = showAliasActions ? (
-        <div className="flex items-center gap-1">
-            {onAcceptAlias && (
-                <button
-                    type="button"
-                    className="h-6 rounded bg-[#165dff] px-2 text-xs font-medium text-white hover:bg-[#4080ff] transition-colors"
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        onAcceptAlias();
-                    }}
-                >
-                    接收
-                </button>
-            )}
-            {onRejectAlias && (
-                <button
-                    type="button"
-                    className="h-6 rounded border border-[#165dff] px-2 text-xs font-medium text-[#165dff] hover:bg-[#f2f3ff] transition-colors"
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        onRejectAlias();
-                    }}
-                >
-                    拒绝
-                </button>
-            )}
-        </div>
-    ) : null;
+    const showRowActions = showHoverActions;
 
     const hoverActionButtons = showHoverActions ? (
         <>
@@ -1350,7 +1320,6 @@ function FileRow({
         <div
             className="absolute right-3 top-1/2 z-[35] flex -translate-y-1/2 items-center gap-1"
         >
-            {aliasActionButtons}
             {hoverActionButtons}
         </div>
     );
@@ -1471,12 +1440,42 @@ function FileRow({
                                 </span>
                             </div>
                             {file.aliasName && (
-                                <div
-                                    className="mt-0.5 flex min-w-0 items-center gap-1 text-xs text-[#86909c]"
-                                    title={`新文件名：${file.aliasName}`}
-                                >
-                                    <span className="shrink-0">新文件名：</span>
-                                    <span className="truncate">{file.aliasName}</span>
+                                <div className="mt-0.5 flex min-w-0 items-center gap-2">
+                                    <div
+                                        className="flex min-w-0 items-center gap-1 text-xs text-[#86909c]"
+                                        title={`${file.name}：${file.aliasName}`}
+                                    >
+                                        <span className="shrink-0">{file.name}：</span>
+                                        <span className="truncate">{file.aliasName}</span>
+                                    </div>
+                                    {canRename && (onAcceptAlias || onRejectAlias) && (
+                                        <div className="flex shrink-0 items-center gap-1">
+                                            {onAcceptAlias && (
+                                                <button
+                                                    type="button"
+                                                    className="h-5 rounded bg-[#165dff] px-1.5 text-xs font-medium text-white hover:bg-[#4080ff] transition-colors"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        onAcceptAlias();
+                                                    }}
+                                                >
+                                                    接收
+                                                </button>
+                                            )}
+                                            {onRejectAlias && (
+                                                <button
+                                                    type="button"
+                                                    className="h-5 rounded border border-[#165dff] px-1.5 text-xs font-medium text-[#165dff] hover:bg-[#f2f3ff] transition-colors"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        onRejectAlias();
+                                                    }}
+                                                >
+                                                    拒绝
+                                                </button>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>
