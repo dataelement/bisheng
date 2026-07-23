@@ -148,6 +148,22 @@ body {
   line-height: 20px !important;
   margin: 16px 0 8px !important;
 }
+/* 「✅ 推荐 / ❌ 不推荐」comparison tables split their width 50/50. The two sides
+   are peers and must look like peers, but auto layout sizes columns by content,
+   so the longer example silently gets the wider column and the pair reads
+   lopsided. `table-layout: fixed` with no column widths divides width evenly.
+ *
+ * Selector = "exactly two columns" AND "no <code>/<strong> in the body". That
+ * second half is what separates the two kinds of two-column table we have:
+ * comparison tables hold plain prose examples, while 标签 + 规格 tables (按钮
+ * §4 边距、§5.5 移动端适配) put code/emphasis in a long right-hand column and
+ * NEED content-based sizing — forcing 50/50 there strands a 2-character label
+ * in half the width and crushes the rule text into a very tall row.
+ * Keep comparison-table cells plain text and they stay matched. */
+.rspress-doc table:has(thead th:nth-child(2):last-child):not(:has(td code)):not(:has(td strong)) {
+  table-layout: fixed !important;
+}
+
 /* Header cells: light fill, medium weight, primary text, bottom rule only. */
 .rspress-doc table th {
   padding: 10px 16px !important;
