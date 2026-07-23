@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * docs-ui-refactor punctuation normalizer (all passes in one).
+ * @bisheng/ui docs punctuation normalizer (all passes in one).
  *
  * Applies the 文案规范 / 文档撰写规范 rules to a doc's PROSE, leaving code,
  * JSX, links and URLs untouched:

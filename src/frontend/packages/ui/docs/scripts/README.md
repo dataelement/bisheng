@@ -15,7 +15,7 @@
 ## 用法
 
 ```bash
-# 在 docs-ui-refactor/ 下
+# 在 src/frontend/packages/ui/docs/ 下
 node scripts/normalize.cjs 基础-多端适配原则.md 组件-Button按钮.md   # 刷指定文件
 node scripts/normalize.cjs *.md components/*.mdx                    # 刷一批
 node scripts/detect.cjs *.md components/*.mdx                       # 刷完后查残留

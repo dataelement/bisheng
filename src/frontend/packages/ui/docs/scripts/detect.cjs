@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Residual checker for docs-ui-refactor: after running normalize.cjs and doing
+ * Residual checker for the @bisheng/ui docs: after running normalize.cjs and doing
  * a manual pass, this flags half-width , ; : ? that still sit in a Chinese
  * context (including cases where markdown markup separates the punctuation from
  * the nearest CJK char). Reports file:line so a human can eyeball each hit.

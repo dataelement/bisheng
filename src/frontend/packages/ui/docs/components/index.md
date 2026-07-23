@@ -1,6 +1,6 @@
 # 组件总览
 
-组件库的实时 demo 页。每个组件页用 `@rspress/plugin-preview` 直接渲染 `src/frontend/client/src/components/ui/` 下的**真实业务组件**——所见即业务页所得，组件代码一改，这里同步变。
+组件库的实时 demo 页。每个组件页用 `@rspress/plugin-preview` 直接渲染**真实组件**——已迁入组件库的从 `@bisheng/ui` 导入（如 Button），尚未迁库的从 `src/frontend/client/src/components/ui/` 导入。所见即业务页所得，组件代码一改，这里同步变。
 
 规范正文（定义、取值、状态矩阵、迁移台账）在顶部导航「文档」；组件页以演示为主，只穿插最要紧的使用规则。
 

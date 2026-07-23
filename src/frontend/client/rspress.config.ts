@@ -7,7 +7,7 @@ import autoprefixer from 'autoprefixer';
 /**
  * Component-library docs site (rspress).
  *
- * - Docs root is the gitignored `docs-ui-refactor/` at the repo root (design specs).
+ * - Docs root is `packages/ui/docs/` (design specs, git-tracked with @bisheng/ui).
  * - Real ui components are imported via the `~` / `@` alias (mirrors vite.config).
  * - @rspress/plugin-preview renders live component demos inside markdown.
  * - i18n and custom theme intentionally NOT enabled yet.
@@ -150,7 +150,7 @@ export default defineConfig({
       alias: {
         '~': clientSrc,
         '@': clientSrc,
-        // Spec pages (docs-ui-refactor/*.mdx) live outside this project, so a
+        // Spec pages (packages/ui/docs/*.mdx) live outside this project, so a
         // bare `bisheng-icons` import resolves from the docs dir and misses the
         // package installed here. Alias it to the local install so spec mdx can
         // embed real icon components (plugin-preview fenced demos already
