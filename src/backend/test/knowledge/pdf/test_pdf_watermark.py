@@ -105,7 +105,7 @@ def test_watermark_uses_chinese_text_opacity_and_arbitrary_angle(tmp_path: Path)
         ]
         assert watermark_traces
         assert all(trace["dir"][0] > 0 and trace["dir"][1] < 0 for trace in watermark_traces)
-        assert all(trace["opacity"] == pytest.approx(0.11) for trace in watermark_traces)
+        assert all(trace["opacity"] == pytest.approx(0.31) for trace in watermark_traces)
 
 
 def test_watermark_spec_uses_two_lines_and_pdf_visual_baseline() -> None:
@@ -113,7 +113,7 @@ def test_watermark_spec_uses_two_lines_and_pdf_visual_baseline() -> None:
 
     assert len(spec.lines) == 2
     assert spec.rotation == 35.0
-    assert spec.opacity == 0.11
+    assert spec.opacity == 0.31
     assert spec.font_size == 12.0
     assert spec.horizontal_gap == 180.0
     assert spec.vertical_gap == 135.0
