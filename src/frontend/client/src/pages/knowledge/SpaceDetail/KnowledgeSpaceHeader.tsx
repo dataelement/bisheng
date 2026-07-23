@@ -13,6 +13,7 @@ import {
     Tag,
     RotateCcw,
     Trash2,
+    FolderInput,
     FileSearch,
     Link2
 } from "lucide-react";
@@ -74,6 +75,8 @@ interface KnowledgeSpaceHeaderProps {
     onBatchRetry: () => void;
     onBatchDelete: () => void;
     canBatchDelete?: boolean;
+    onBatchMove?: () => void;
+    canBatchMove?: boolean;
     onGoKnowledgeSquare?: () => void;
     onToggleAiAssistant?: () => void;
     isAiAssistantOpen?: boolean;
@@ -123,6 +126,8 @@ export function KnowledgeSpaceHeader({
     onBatchRetry,
     onBatchDelete,
     canBatchDelete = false,
+    onBatchMove,
+    canBatchMove = false,
     onGoKnowledgeSquare,
     onToggleAiAssistant,
     isAiAssistantOpen,
@@ -164,6 +169,7 @@ export function KnowledgeSpaceHeader({
     const showViewModeTabs = enableCardMode && !isNarrow576;
     const hasBatchActions = (
         canBatchDownload ||
+        canBatchMove ||
         (isAdmin && !hasFoldersSelected) ||
         (isAdmin && hasFailedFiles) ||
         canBatchDelete
@@ -326,6 +332,12 @@ export function KnowledgeSpaceHeader({
                             <DropdownMenuItem onClick={onBatchDownload} className="cursor-pointer">
                                 <Download className="mr-2 size-4" />
                                 {localize("com_knowledge.batch_download")}
+                            </DropdownMenuItem>
+                        )}
+                        {canBatchMove && onBatchMove && (
+                            <DropdownMenuItem onClick={onBatchMove} className="cursor-pointer">
+                                <FolderInput className="mr-2 size-4" />
+                                {localize("com_knowledge.batch_move")}
                             </DropdownMenuItem>
                         )}
                         {isAdmin && !hasFoldersSelected && (

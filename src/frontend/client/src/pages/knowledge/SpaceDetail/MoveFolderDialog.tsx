@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { ChevronRight, Folder, FolderPlus, Home, Loader2, Pencil } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, Button } from "~/components/ui";
 import { useLocalize } from "~/hooks";
@@ -15,8 +15,12 @@ interface Props {
     open: boolean;
     spaceId: string;
     /** ID of the item being moved (to exclude from selectable targets). */
-    movingItemId: string;
-    movingItemType: "file" | "folder";
+    movingItemId?: string;
+    movingItemType?: "file" | "folder";
+    /** Batch move: exclude all selected folder IDs from target picker. */
+    excludeFolderIds?: string[];
+    /** Batch move: show count in dialog title. */
+    movingItemCount?: number;
     onConfirm: (targetFolderId: number | null) => void;
     onCancel: () => void;
     /**
@@ -27,8 +31,25 @@ interface Props {
     onFolderCreated?: () => void;
 }
 
-export function MoveFolderDialog({ open, spaceId, movingItemId, movingItemType, onConfirm, onCancel, onFolderCreated }: Props) {
+export function MoveFolderDialog({
+    open,
+    spaceId,
+    movingItemId = "",
+    movingItemType = "file",
+    excludeFolderIds = [],
+    movingItemCount,
+    onConfirm,
+    onCancel,
+    onFolderCreated,
+}: Props) {
     const localize = useLocalize();
+    const excludedFolderIdSet = useMemo(() => {
+        const ids = new Set(excludeFolderIds);
+        if (movingItemType === "folder" && movingItemId) {
+            ids.add(movingItemId);
+        }
+        return ids;
+    }, [excludeFolderIds, movingItemId, movingItemType]);
 
     // Currently browsed folder id (null = root)
     const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
@@ -58,9 +79,9 @@ export function MoveFolderDialog({ open, spaceId, movingItemId, movingItemType, 
                 parent_id: parentId ?? undefined,
                 page_size: 200,
             });
-            // Only show folders, exclude the item being moved (to prevent moving into itself)
+            // Only show folders, exclude items being moved (to prevent moving into themselves)
             const filteredFolders = res.data.filter(
-                (item) => item.type === FileType.FOLDER && item.id !== movingItemId
+                (item) => item.type === FileType.FOLDER && !excludedFolderIdSet.has(item.id)
             );
             setFolders(filteredFolders);
         } catch {
@@ -68,7 +89,7 @@ export function MoveFolderDialog({ open, spaceId, movingItemId, movingItemType, 
         } finally {
             setLoading(false);
         }
-    }, [spaceId, movingItemId]);
+    }, [spaceId, excludedFolderIdSet]);
 
     // Reset state when dialog opens
     useEffect(() => {
@@ -184,7 +205,11 @@ export function MoveFolderDialog({ open, spaceId, movingItemId, movingItemType, 
         <Dialog open={open} onOpenChange={(o) => { if (!o) onCancel(); }}>
             <DialogContent className="max-w-md w-full">
                 <DialogHeader>
-                    <DialogTitle>{localize("com_knowledge.move_to")}</DialogTitle>
+                    <DialogTitle>
+                        {movingItemCount && movingItemCount > 1
+                            ? localize("com_knowledge.batch_move_title", { 0: movingItemCount })
+                            : localize("com_knowledge.move_to")}
+                    </DialogTitle>
                 </DialogHeader>
 
                 {/* Breadcrumb + new-folder action (space-between) */}

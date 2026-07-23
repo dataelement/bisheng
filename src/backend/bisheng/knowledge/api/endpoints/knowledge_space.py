@@ -22,6 +22,7 @@ from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpace
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     BatchDeleteReq,
     BatchDownloadReq,
+    BatchMoveReq,
     ChatFolderReq,
     ChatReq,
     DepartmentBindingReq,
@@ -353,7 +354,8 @@ async def bind_department_space(
 ) -> Any:
     try:
         data = await DepartmentKnowledgeSpaceService.bind_space_to_department(
-            login_user, space_id=body.space_id, department_id=body.department_id)
+            login_user, space_id=body.space_id, department_id=body.department_id
+        )
         return resp_200(data)
     except BaseErrorCode as e:
         return e.return_resp_instance()
@@ -387,8 +389,7 @@ async def list_bindable_spaces(
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ) -> Any:
     try:
-        return resp_200(await DepartmentKnowledgeSpaceService.list_bindable_team_spaces(
-            login_user, keyword=keyword))
+        return resp_200(await DepartmentKnowledgeSpaceService.list_bindable_team_spaces(login_user, keyword=keyword))
     except BaseErrorCode as e:
         return e.return_resp_instance()
 
@@ -879,6 +880,16 @@ async def batch_delete(
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
     await svc.batch_delete(space_id, req.file_ids, req.folder_ids)
+    return resp_200()
+
+
+@router.post("/{space_id}/files/batch-move")
+async def batch_move(
+    space_id: int,
+    req: BatchMoveReq,
+    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    await svc.batch_move(space_id, req.file_ids, req.folder_ids, req.target_folder_id)
     return resp_200()
 
 

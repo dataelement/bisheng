@@ -779,6 +779,12 @@ class BatchDownloadReq(BaseModel):
     folder_ids: list[int] = Field(default_factory=list, description="List of folder IDs to download")
 
 
+class BatchMoveReq(BaseModel):
+    file_ids: list[int] = Field(default_factory=list, description="List of file IDs to move")
+    folder_ids: list[int] = Field(default_factory=list, description="List of folder IDs to move")
+    target_folder_id: int | None = Field(default=None, description="Target folder ID; null means space root")
+
+
 class ChatReq(BaseModel):
     model_config = ConfigDict(validate_by_alias=True, validate_by_name=True)
 

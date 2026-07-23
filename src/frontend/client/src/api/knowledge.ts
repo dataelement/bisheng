@@ -2641,6 +2641,34 @@ export async function batchDeleteApi(
 }
 
 /**
+ * Batch move files and/or folders to a target folder (null = space root)
+ */
+export async function batchMoveApi(
+    space_id: string,
+    data: { file_ids?: number[]; folder_ids?: number[]; target_folder_id: number | null }
+): Promise<void> {
+    return withKnowledgeMutationLog(
+        "batch-move",
+        {
+            method: "POST",
+            space_id,
+            file_ids: data.file_ids,
+            folder_ids: data.folder_ids,
+            target_folder_id: data.target_folder_id,
+        },
+        async () => {
+            const res = await request.post(
+                `/api/v1/knowledge/space/${space_id}/files/batch-move`,
+                data
+            ) as ApiResponse<null> & { message?: string; msg?: string };
+            if (res?.status_code !== undefined && res.status_code !== 200) {
+                throw new Error(res.status_message || res.message || res.msg || "batch move failed");
+            }
+        }
+    );
+}
+
+/**
  * Batch download files and/or folders (returns a download URL or triggers download)
  */
 export async function batchDownloadApi(

@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useLayoutEffect, useMemo, useCallback, typ
 import { useRecoilValue } from "recoil";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FolderPlus, Loader2 } from "lucide-react";
-import { FileStatus, FileType, FileTag, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceLevel, SpaceRole, batchDeleteApi, batchDownloadApi, batchRetryApi, getFileDownloadApi, getPendingSimilarFilesApi, importWebLinkApi } from "~/api/knowledge";
+import { FileStatus, FileType, FileTag, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceLevel, SpaceRole, batchDeleteApi, batchDownloadApi, batchMoveApi, batchRetryApi, getFileDownloadApi, getPendingSimilarFilesApi, importWebLinkApi } from "~/api/knowledge";
 import { useConfirm, useToastContext } from "~/Providers";
 import { useVersionManagementEnabled } from "~/hooks";
 import {
@@ -21,6 +21,7 @@ import {
     Input,
 } from "~/components/ui";
 import { useFileDragDrop } from "../hooks/useFileDragDrop";
+import { dispatchKnowledgeSpaceFilesRefresh } from "../hooks/useFileManager";
 import {
     MAX_FOLDER_UPLOAD_COUNT,
     MAX_UPLOAD_COUNT,
@@ -92,6 +93,8 @@ interface KnowledgeSpaceContentProps {
     onEditTags: (fileId: string) => void;
     onRetryFile: (fileId: string) => void;
     onMoveFile?: (fileId: string, targetFolderId: number | null) => void;
+    /** Called after batch move completes so the host can refresh folder stats. */
+    onAfterBatchMove?: () => void | Promise<void>;
     /** Called after a folder is created inside the move dialog, so the host can refresh its list. */
     onMoveDialogFolderCreated?: () => void;
     currentPath: Array<{ id?: string; name: string }>;
@@ -155,6 +158,7 @@ export function KnowledgeSpaceContent({
     onEditTags,
     onRetryFile,
     onMoveFile,
+    onAfterBatchMove,
     onMoveDialogFolderCreated,
     currentPath,
     currentFolderId,
@@ -409,6 +413,7 @@ export function KnowledgeSpaceContent({
     }, []);
     const [publishingFile, setPublishingFile] = useState<KnowledgeFile | null>(null);
     const [movingFile, setMovingFile] = useState<KnowledgeFile | null>(null);
+    const [isBatchMoving, setIsBatchMoving] = useState(false);
     const permissionEntryProbeKey = displayFiles
         .filter((file) => !file.isCreating && /^\d+$/.test(String(file.id)))
         .map((file) => `${file.id}:${file.type}`)
@@ -1191,6 +1196,41 @@ export function KnowledgeSpaceContent({
         clearPendingDeletion(allIds);
     };
 
+    const handleBatchMove = () => {
+        if (!canBatchMove) {
+            showToast({ message: localize("com_knowledge.batch_move_failed"), status: "error" });
+            return;
+        }
+        setIsBatchMoving(true);
+    };
+
+    const handleConfirmBatchMove = async (targetFolderId: number | null) => {
+        const selectedList = displayFiles.filter(f => selectedFiles.has(f.id));
+        const fileIds = selectedList.filter(f => f.type !== FileType.FOLDER).map(f => Number(f.id));
+        const folderIds = selectedList.filter(f => f.type === FileType.FOLDER).map(f => Number(f.id));
+        const allIds = selectedList.map(f => f.id);
+        const removeCount = allIds.length;
+
+        setFiles(prev => prev.filter(f => !selectedFiles.has(f.id)));
+        setTotal(prev => Math.max(0, prev - removeCount));
+        setSelectedFiles(new Set());
+        setIsBatchMoving(false);
+
+        try {
+            await batchMoveApi(space.id, {
+                file_ids: fileIds.length ? fileIds : undefined,
+                folder_ids: folderIds.length ? folderIds : undefined,
+                target_folder_id: targetFolderId,
+            });
+            dispatchKnowledgeSpaceFilesRefresh(space.id);
+            await onAfterBatchMove?.();
+            showToast({ message: localize("com_knowledge.batch_move_success"), status: "success" });
+        } catch {
+            showToast({ message: localize("com_knowledge.batch_move_failed"), status: "error" });
+            onDeleteFile("");
+        }
+    };
+
     const handleDelete = async (fileId: string) => {
         const file = displayFiles.find(f => f.id === fileId);
         if (!file) return;
@@ -1279,6 +1319,9 @@ export function KnowledgeSpaceContent({
     const canBatchDelete = selectedList.length > 0 && selectedList.every((file) =>
         effectiveDeleteEntryIds.has(file.id)
     );
+    const canBatchMove = selectedList.length > 0 && selectedList.every((file) =>
+        effectiveMoveEntryIds.has(file.id)
+    );
     const canBatchDownload = !hideBatchDownload
         && selectedList.length > 0
         && selectedList.every((file) => effectiveDownloadEntryIds.has(file.id));
@@ -1353,6 +1396,8 @@ export function KnowledgeSpaceContent({
                 onBatchRetry={handleBatchRetry}
                 onBatchDelete={handleBatchDelete}
                 canBatchDelete={canBatchDelete}
+                onBatchMove={handleBatchMove}
+                canBatchMove={canBatchMove}
                 onGoKnowledgeSquare={onGoKnowledgeSquare}
                 onToggleAiAssistant={onToggleAiAssistant}
                 isAiAssistantOpen={isAiAssistantOpen}
@@ -1571,17 +1616,32 @@ export function KnowledgeSpaceContent({
             />
 
             {/* Move file/folder dialog */}
-            {movingFile && (
+            {(movingFile || isBatchMoving) && (
                 <MoveFolderDialog
-                    open={Boolean(movingFile)}
+                    open={Boolean(movingFile || isBatchMoving)}
                     spaceId={String(space.id)}
-                    movingItemId={movingFile.id}
-                    movingItemType={movingFile.type === FileType.FOLDER ? "folder" : "file"}
+                    movingItemId={movingFile?.id}
+                    movingItemType={movingFile?.type === FileType.FOLDER ? "folder" : "file"}
+                    excludeFolderIds={
+                        isBatchMoving
+                            ? displayFiles
+                                .filter((file) => selectedFiles.has(file.id) && file.type === FileType.FOLDER)
+                                .map((file) => file.id)
+                            : undefined
+                    }
+                    movingItemCount={isBatchMoving ? selectedFiles.size : undefined}
                     onConfirm={(targetFolderId) => {
-                        onMoveFile?.(movingFile.id, targetFolderId);
+                        if (isBatchMoving) {
+                            void handleConfirmBatchMove(targetFolderId);
+                            return;
+                        }
+                        onMoveFile?.(movingFile!.id, targetFolderId);
                         setMovingFile(null);
                     }}
-                    onCancel={() => setMovingFile(null)}
+                    onCancel={() => {
+                        setMovingFile(null);
+                        setIsBatchMoving(false);
+                    }}
                     onFolderCreated={onMoveDialogFolderCreated}
                 />
             )}
