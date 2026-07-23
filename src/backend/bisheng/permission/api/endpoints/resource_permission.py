@@ -1180,7 +1180,8 @@ def _collect_department_tree_ids(nodes: list[dict]) -> set[int]:
 
 
 def _is_team_knowledge_space_level(space_level) -> bool:
-    return getattr(space_level, "value", space_level) == "team"
+    value = getattr(space_level, "value", space_level)
+    return value in ("team", "team_ks")
 
 
 async def _resolve_child_resource_space_id_for_grant_scope(resource_type: str, resource_id: str) -> str | None:
@@ -1343,7 +1344,7 @@ def _allowed_subject_types_for_space_level(space_level) -> set[str]:
 
     if space_level == KnowledgeSpaceLevelEnum.DEPARTMENT:
         return {"user", "department"}
-    if space_level == KnowledgeSpaceLevelEnum.TEAM:
+    if space_level in {KnowledgeSpaceLevelEnum.TEAM, KnowledgeSpaceLevelEnum.TEAM_KS}:
         return {"user", "department"}
     return {"user", "department", "user_group"}
 
