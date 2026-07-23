@@ -37,7 +37,7 @@ export default function ChatInput({ readOnly, v }) {
     // ... Placeholder 和 AutoFocus 逻辑保持不变 ...
     const placholder = useMemo(() => {
         return inputDisabled ?
-            (inputMsg.code ? localize(`api_errors.${inputMsg.code}`, inputMsg.data) : ' ')
+            (inputMsg.code ? localize(`api_errors.${inputMsg.code}`, { ...(inputMsg.data || {}), defaultValue: localize('api_errors.fallback') }) : ' ')
             : localize('com_ui_please_enter_question')
     }, [inputDisabled, inputMsg, localize]);
 

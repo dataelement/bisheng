@@ -392,5 +392,6 @@
   "24005": "Invalid quota_config or department_id value",
   "90001": "You do not have permission to access the admin backend. Please contact the administrator to request access if needed.",
   "90002": "Your current role does not have permission to access the workbench. Please contact the administrator if needed.",
-  "personIdAlreadyExists": "Person ID already exists"
+  "personIdAlreadyExists": "Person ID already exists",
+  "fallback": "The operation failed. Please try again later."
 }

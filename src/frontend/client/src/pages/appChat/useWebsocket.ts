@@ -204,7 +204,7 @@ export const useWebSocket = (helpers) => {
             }
             if (![10421, 13002].includes(code)) {
                 showToast({
-                    message: code === 500 ? message : localize(`api_errors.${String(code)}`, data.message?.data),
+                    message: code === 500 ? message : localize(`api_errors.${String(code)}`, { ...(data.message?.data || {}), defaultValue: localize('api_errors.fallback') }),
                     severity: NotificationSeverity.ERROR,
                 })
             } else {

@@ -283,7 +283,7 @@ export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBefo
             }
 
             // 记录
-            const errorMsg = status_code == 500 ? status_message || data.message.message : t(`api_errors:${status_code}`, params)
+            const errorMsg = status_code == 500 ? status_message || data.message.message : t(`api_errors:${status_code}`, { ...(params || {}), defaultValue: status_message || t('api_errors:fallback') })
             addNotification({
                 type: 'error',
                 title: 'runtime error',

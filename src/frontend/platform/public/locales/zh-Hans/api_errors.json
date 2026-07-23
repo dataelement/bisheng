@@ -392,5 +392,6 @@
   "24005": "quota_config 或 department_id 配置无效。",
   "90001": "您当前角色没有访问管理后台的权限。如有需要，请联系管理员开通。",
   "90002": "您当前角色没有访问工作台的权限。如有需要，请联系管理员开通。",
-  "personIdAlreadyExists": "人员 ID 已存在"
+  "personIdAlreadyExists": "人员 ID 已存在",
+  "fallback": "操作失败，请稍后重试"
 }

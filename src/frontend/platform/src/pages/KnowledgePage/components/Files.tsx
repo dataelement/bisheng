@@ -93,7 +93,7 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({ status, remark
                 }
                 const mediaMessage = formatMediaParseFailureMessage(obj, t);
                 if (mediaMessage) return mediaMessage;
-                return t(`api_errors:${obj.status_code}`, obj.data)
+                return t(`api_errors:${obj.status_code}`, { ...(obj.data || {}), defaultValue: obj.status_message || t('api_errors:fallback') })
             } catch (error) {
                 return trimmedRemark
             }

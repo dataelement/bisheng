@@ -121,7 +121,14 @@ export const translateApiErrorMessage = (data: any) => {
   if (statusMessageKey && i18next.exists(statusMessageKey)) {
     return i18next.t(statusMessageKey, data?.data);
   }
-  return statusMessage || (statusCodeKey ? i18next.t(statusCodeKey, data?.data) : "");
+  // Last resort keeps t(key, vars) so {{xxx}} templates still interpolate from
+  // data.data; defaultValue guards the truly-untranslated case — never the raw key.
+  return (
+    statusMessage ||
+    (statusCodeKey
+      ? String(i18next.t(statusCodeKey, { ...(data?.data || {}), defaultValue: String(i18next.t("api_errors.fallback")) }))
+      : "")
+  );
 };
 
 // License degradation (gateway returns 11001): throttle the toast so a burst of

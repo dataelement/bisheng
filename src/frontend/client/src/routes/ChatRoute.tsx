@@ -55,7 +55,7 @@ const useErrorPrompt = () => {
 
   useEffect(() => {
     if (error) {
-      showToast({ message: localize(`api_errors.${error}`), status: 'error' });
+      showToast({ message: localize(`api_errors.${error}`, { defaultValue: localize('api_errors.fallback') }), status: 'error' });
     }
   }, []);
 };
