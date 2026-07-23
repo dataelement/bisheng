@@ -2322,6 +2322,43 @@ export async function getSpaceFolderStatsApi(params: {
 }
 
 /**
+ * Load recursive folder counts for a portal-discoverable public or department
+ * space without requiring the generic folder can_read permission.
+ */
+export async function getPortalSpaceFolderStatsApi(params: {
+    space_id: string | number;
+    folder_ids: Array<string | number>;
+}): Promise<KnowledgeFolderStats[]> {
+    const folderIds = Array.from(new Set(
+        params.folder_ids
+            .map((id) => Number(id))
+            .filter((id) => Number.isFinite(id) && id > 0),
+    ));
+    if (!params.space_id || folderIds.length === 0) return [];
+
+    const res = await request.post(
+        `/api/v1/knowledge/shougang-portal/qa/spaces/${params.space_id}/folder-stats`,
+        { folder_ids: folderIds },
+        {
+            params: {
+                discovery_scope: "public_and_department",
+            },
+        },
+    ) as ApiResponse<{ stats?: any[] }> & { stats?: any[] };
+    const responsePayload: any = res?.data ?? res ?? {};
+    const stats = Array.isArray(responsePayload?.stats) ? responsePayload.stats : [];
+    return stats.map((raw) => ({
+        folderId: String(raw?.folder_id ?? raw?.folderId ?? ""),
+        fileNum: Number(raw?.file_num ?? raw?.fileNum ?? 0),
+        successFileNum: Number(raw?.success_file_num ?? raw?.successFileNum ?? 0),
+        visibleSuccessFileNum: Number(
+            raw?.resolved_file_count ?? raw?.resolvedFileCount ?? 0,
+        ),
+        processingFileNum: 0,
+    })).filter((item) => item.folderId);
+}
+
+/**
  * Search children (folders and files) within a space.
  * Backend: GET /api/v1/knowledge/space/{space_id}/search
  */
@@ -2773,7 +2810,9 @@ export async function batchDownloadApi(
         data
     );
     if (res?.status_code !== undefined && res.status_code !== 200) {
-        throw new Error(res.status_message || res.message || res.msg || "batch download failed");
+        throw new Error(
+            formatApiErrorMessage(res) || res.status_message || res.message || res.msg || "batch download failed",
+        );
     }
     // Response: { status_code, data: { url: "/tmp-dir/..." } }
     return res?.data?.url ?? res?.url ?? "";

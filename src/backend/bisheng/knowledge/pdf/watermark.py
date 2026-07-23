@@ -18,7 +18,7 @@ class PdfWatermarkError(ValueError):
 class PdfWatermarkSpec:
     lines: tuple[str, str]
     rotation: float = 35.0
-    opacity: float = 0.11
+    opacity: float = 0.31
     font_size: float = 12.0
     horizontal_gap: float = 180.0
     vertical_gap: float = 135.0

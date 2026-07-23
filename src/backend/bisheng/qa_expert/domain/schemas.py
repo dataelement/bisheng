@@ -76,21 +76,22 @@ class ExpertCreateRequest(BaseModel):
     introduction: Optional[str] = Field(None, description="专家介绍")
     depart_ment: Optional[str] = Field(default=[], description="所属部门")
     user_id: Optional[int] = Field(None, description="关联用户ID（可选）")
-    major: Optional[str]= Field(None, description="所属专业")
-    position: Optional[str]= Field(None, description="所属岗位")
-    job_family: Optional[str]= Field(None, description="所属岗位族")
-    job_category: Optional[str]= Field(None, description="所属岗位分类")
-    
+    major: Optional[str] = Field(None, description="所属专业")
+    position: Optional[str] = Field(None, description="所属岗位")
+    job_family: Optional[str] = Field(None, description="所属岗位族")
+    job_category: Optional[str] = Field(None, description="所属岗位分类")
+
+
 class ExpertUpdateRequest(BaseModel):
     """更新专家 - 请求"""
 
     expert_name: Optional[str] = None
     introduction: Optional[str] = None
     depart_ment: Optional[str] = None
-    major: Optional[str]= Field(None, description="所属专业")
-    position: Optional[str]= Field(None, description="所属岗位")
-    job_family: Optional[str]= Field(None, description="所属岗位族")
-    job_category: Optional[str]= Field(None, description="所属岗位分类")
+    major: Optional[str] = Field(None, description="所属专业")
+    position: Optional[str] = Field(None, description="所属岗位")
+    job_family: Optional[str] = Field(None, description="所属岗位族")
+    job_category: Optional[str] = Field(None, description="所属岗位分类")
 
 
 class ExpertResponse(BaseModel):
@@ -100,12 +101,20 @@ class ExpertResponse(BaseModel):
     user_id: int
     expert_name: str
     introduction: Optional[str]
+    depart_ment: Optional[str] = None
+    department_id: Optional[int | str] = None
+    position: Optional[str] = None
+    job_family: Optional[str] = None
+    job_category: Optional[str] = None
+    major: Optional[str] = None
     level: str
     business_domains: List[str]
     verified: bool
     answer_count: int
     adoption_count: int
-    helpful_count: int
+    vote_count: int = 0
+    expert_score: int = 0
+    helpful_count: int = 0
     created_at: datetime
 
     class Config:
@@ -115,7 +124,9 @@ class ExpertResponse(BaseModel):
 # ==================== 问题 Schemas ====================
 class QuestionCheckRequest(BaseModel):
     """检查问题 - 请求"""
+
     check_text: str = Field(..., min_length=0, max_length=10000, description="问题文本")
+
 
 class QuestionCreateRequest(BaseModel):
     """发起提问 - 请求"""
@@ -161,18 +172,10 @@ class QuestionUpdateRequest(BaseModel):
     business_domain: Optional[str] = None
     attachments: Optional[str] = Field(default=None, description="附件列表")
     related_docs: Optional[str] = Field(default=None, description="关联文档ID")
-    invited_experts: Optional[str] = Field(
-        default=None, description="邀请专家ID，多个用分号;分割"
-    )
-    experts_names: Optional[str] = Field(
-        default=None, description="邀请专家名称，多个用分号;分割"
-    )
-    image_url: Optional[str] = Field(
-        default=None, max_length=1024, description="图片URL"
-    )
-    status: int | str | None = Field(
-        default=None, description="状态: unsolved/solved/closed/pending"
-    )
+    invited_experts: Optional[str] = Field(default=None, description="邀请专家ID，多个用分号;分割")
+    experts_names: Optional[str] = Field(default=None, description="邀请专家名称，多个用分号;分割")
+    image_url: Optional[str] = Field(default=None, max_length=1024, description="图片URL")
+    status: int | str | None = Field(default=None, description="状态: unsolved/solved/closed/pending")
     created_by: Optional[str] = Field(default=None, description="创建人")
 
     @field_validator("description")
@@ -381,6 +384,7 @@ class CommentPageData(BaseModel):
 
 class VoteRequest(BaseModel):
     """投票 - 请求"""
+
     target_type: str = Field(..., description="目标类型: question/answer/comment")
     target_id: int = Field(..., description="目标ID")
 
@@ -474,9 +478,6 @@ class QAExpertStatsResponse(BaseModel):
         le=1.0,
         description="解决率，已解决问题数 / 问题总数",
     )
-
-
-
 
 
 # ==================== 页面数据 ====================

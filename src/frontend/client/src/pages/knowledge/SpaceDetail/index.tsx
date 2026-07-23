@@ -1056,8 +1056,12 @@ export function KnowledgeSpaceContent({
                 String(now.getDate()).padStart(2, '0');
             const randomStr = Math.random().toString(36).substring(2, 8).toUpperCase();
             triggerUrlDownload(url, `${dateStr}_${randomStr}.zip`);
-        } catch {
-            showToast({ message: localize("com_knowledge.download_failed"), status: "error" });
+        } catch (err) {
+            const message =
+                err instanceof Error && err.message
+                    ? err.message
+                    : localize("com_knowledge.download_failed");
+            showToast({ message, status: "error" });
         }
     };
 

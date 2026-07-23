@@ -24,6 +24,8 @@ from bisheng.knowledge.api.dependencies import (
 from bisheng.knowledge.api.portal_pdf_download_response import prepare_portal_pdf_download_response
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
+    ChatReq,
+    KnowledgeSpaceFolderStatsReq,
     ShougangPortalDomainBindableSpacesResp,
     ShougangPortalDomainFileCountReq,
     ShougangPortalDomainFileCountResp,
@@ -58,17 +60,15 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     ShougangPortalTagSearchReq,
     ShougangPortalTagSearchResp,
     ShougangPortalTelemetryEventReq,
-    ChatReq,
-    KnowledgeSpaceFolderStatsReq,
-)
-from bisheng.knowledge.domain.services.knowledge_space_chat_service import (
-    KnowledgeSpaceChatService,
 )
 from bisheng.knowledge.domain.schemas.portal_hot_search_schema import (
     PortalHotSearchTriggerRebuildReq,
     PortalHotSearchTriggerRebuildResp,
 )
 from bisheng.knowledge.domain.schemas.portal_pdf_download_schema import PortalPdfDownloadRequest
+from bisheng.knowledge.domain.services.knowledge_space_chat_service import (
+    KnowledgeSpaceChatService,
+)
 from bisheng.knowledge.domain.services.portal_hot_search_admin_service import (
     PortalHotSearchAdminService,
 )
@@ -114,9 +114,7 @@ async def list_shougang_portal_discoverable_spaces(
     ] = "public_and_department",
     svc: Any = Depends(get_knowledge_space_service),
 ) -> Any:
-    spaces = await svc.list_shougang_portal_discoverable_spaces(
-        discovery_scope=discovery_scope
-    )
+    spaces = await svc.list_shougang_portal_discoverable_spaces(discovery_scope=discovery_scope)
     return resp_200({"spaces": spaces})
 
 
@@ -367,9 +365,7 @@ async def chat_shougang_portal_single_file(
     space_id: int,
     file_id: int,
     req: ChatReq,
-    svc: KnowledgeSpaceChatService = Depends(
-        get_knowledge_space_chat_service
-    ),
+    svc: KnowledgeSpaceChatService = Depends(get_knowledge_space_chat_service),
 ) -> Any:
     async def event_stream():
         try:

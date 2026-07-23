@@ -2,7 +2,7 @@
 Expert QA API Endpoints - HTTP 路由处理层
 """
 
-from typing import Optional
+from typing import Literal, Optional
 from fastapi import APIRouter, Body, Depends, File, HTTPException, Path, UploadFile, status, Query
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -84,14 +84,49 @@ async def get_expert_service() -> ExpertService:
 @router.get("/experts", response_model=list[ExpertResponse])
 async def list_experts(
     keyword: Optional[str] = Query(None, description="搜索关键词"),
-    page: int = Query(0, ge=1, description="页码"),
+    department_id: Optional[str] = Query(None, description="部门 ID"),
+    job_family: Optional[str] = Query(None, description="职位族"),
+    job_category: Optional[str] = Query(None, description="职位类"),
+    position: Optional[str] = Query(None, description="职务"),
+    major: Optional[str] = Query(None, description="岗位"),
+    sort_by: Literal[
+        "expert_name",
+        "department",
+        "job_family",
+        "job_category",
+        "position",
+        "major",
+        "expert_score",
+        "created_at",
+    ] = Query("created_at", description="排序字段"),
+    sort_order: Literal["asc", "desc"] = Query("desc", description="排序方向"),
+    page: int = Query(1, ge=1, description="页码"),
     limit: int = Query(20, ge=1, le=500, description="每页数量"),
     service: ExpertService = Depends(get_expert_service),
 ):
     """列表查询专家"""
     skip = (page - 1) * limit
-    experts, total = await service.list_experts(keyword=keyword, skip=skip, limit=limit)
+    experts, total = await service.list_experts(
+        keyword=keyword,
+        department_id=department_id,
+        job_family=job_family,
+        job_category=job_category,
+        position=position,
+        major=major,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        skip=skip,
+        limit=limit,
+    )
     return resp_200(data={"experts": experts, "total": total})
+
+
+@router.get("/experts/filter-options")
+async def list_expert_filter_options(
+    service: ExpertService = Depends(get_expert_service),
+):
+    """获取部门、职位族、职位类、职务和岗位筛选项。"""
+    return resp_200(data=await service.list_filter_options())
 
 
 # ==================== 专家管理 Endpoints (补全) ====================
@@ -137,6 +172,7 @@ async def delete_expert(
     except Exception as e:
         return resp_500(code=500, msg=str(e))
 
+
 @router.get("/experts/name/{expert_name}")
 async def expertsinfo(
     expert_name: str,
@@ -144,10 +180,10 @@ async def expertsinfo(
     service: ExpertService = Depends(get_expert_service),
 ):
     """获取专家"""
-   
+
     experinfo = await service.get_expertinfo(expert_name)
     return resp_200(data=experinfo)
-  
+
 
 @router.get("/experts/userid/{user_id}")
 async def expertsinfo_id(
@@ -156,7 +192,7 @@ async def expertsinfo_id(
     service: ExpertService = Depends(get_expert_service),
 ):
     """获取专家"""
-   
+
     experinfo = await service.get_expertinfobyid(user_id)
     return resp_200(data=experinfo)
 
@@ -186,6 +222,7 @@ async def check_question(
 ):
     check_question_content(user.tenant_id, request.check_text)
     return resp_200()
+
 
 @router.post("/questions", response_model=QuestionDetailResponse)
 async def create_question(
@@ -279,7 +316,7 @@ async def adopt_answer(
     service: QuestionService = Depends(get_question_service),
 ):
     """采纳最佳回答"""
-  
+
     question = await service.adopt_answer(question_id, request.answer_id, user.user_id)
     return resp_200(data=question)
 
@@ -339,16 +376,13 @@ async def get_answers(
 @router.get("/questions/{question_id}/answers")
 async def get_answersbyname(
     question_id: int = Path(..., ge=1),
-    expert_name: Optional[str] = Query(None), 
+    expert_name: Optional[str] = Query(None),
     user: UserPayload = Depends(UserPayload.get_login_user),
     service: AnswerService = Depends(get_answer_service),
 ):
     """获取问题的所有回答"""
     answers = await service.get_by_expertname(expert_name, question_id)
     return resp_200(data=answers)
-
-
-
 
 
 @router.put("/answers/{answer_id}", response_model=AnswerDetailResponse)
@@ -406,12 +440,14 @@ async def create_comment(
     if not user.user_id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
 
-    comment = await service.create_comment(user.user_id,user.user_name, request)
+    comment = await service.create_comment(user.user_id, user.user_name, request)
 
     return resp_200(data=comment)
 
 
-@router.post("/allcomments", )
+@router.post(
+    "/allcomments",
+)
 async def get_allcomments(
     request: GetCommentsRequest,
     _user: UserPayload = Depends(UserPayload.get_login_user),
@@ -463,10 +499,8 @@ async def vote_answer(
     if not user.user_id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
 
- 
     success = await service.vote_answer(user.user_id, request.target_id)
     return resp_200(data={"success": success})
-  
 
 
 # ==================== 通知 Endpoints ====================
@@ -502,10 +536,6 @@ async def mark_notification_read(
     success = await repo.mark_as_read(notification_id)
 
     return resp_200(data={"success": success})
-
-
-
-
 
 
 # ==================== 公共方法 ====================

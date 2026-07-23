@@ -9499,6 +9499,14 @@ class TestTupleLifecycle:
                 new_callable=AsyncMock,
             ),
             patch(
+                "bisheng.knowledge.domain.services.knowledge_space_daily_download.enforce_knowledge_space_daily_download",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_daily_download.record_knowledge_space_daily_download",
+                new_callable=AsyncMock,
+            ),
+            patch(
                 "bisheng.knowledge.domain.services.knowledge_space_service.asyncio.create_task",
             ) as mock_create_task,
         ):
@@ -9537,6 +9545,14 @@ class TestTupleLifecycle:
                 return_value=("", ""),
             ),
             patch(
+                "bisheng.knowledge.domain.services.knowledge_space_daily_download.enforce_knowledge_space_daily_download",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_daily_download.record_knowledge_space_daily_download",
+                new_callable=AsyncMock,
+            ) as mock_record,
+            patch(
                 "bisheng.knowledge.domain.services.knowledge_space_service.asyncio.create_task",
             ) as mock_create_task,
         ):
@@ -9544,6 +9560,93 @@ class TestTupleLifecycle:
 
         assert result == {"original_url": "", "preview_url": ""}
         mock_create_task.assert_not_called()
+        mock_record.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_get_file_download_rejects_when_daily_limit_exceeded(self, service):
+        from bisheng.common.errcode.knowledge_space import DailyDownloadLimitExceededError
+
+        public_space = _make_space(auth_type=AuthTypeEnum.PUBLIC)
+        file_record = _make_file(file_id=101, knowledge_id=1)
+
+        with (
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id",
+                new_callable=AsyncMock,
+                return_value=public_space,
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.query_by_id",
+                new_callable=AsyncMock,
+                return_value=file_record,
+            ),
+            patch.object(
+                service,
+                "_get_effective_permission_ids",
+                new_callable=AsyncMock,
+                return_value={"download_file"},
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_daily_download.enforce_knowledge_space_daily_download",
+                new_callable=AsyncMock,
+                side_effect=DailyDownloadLimitExceededError(),
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeService.get_file_share_url",
+                return_value=("original", "preview"),
+            ) as mock_share_url,
+        ):
+            with pytest.raises(DailyDownloadLimitExceededError):
+                await service.get_file_download(101)
+
+        mock_share_url.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_get_file_download_records_daily_counter_after_url(self, service):
+        public_space = _make_space(auth_type=AuthTypeEnum.PUBLIC)
+        file_record = _make_file(file_id=102, knowledge_id=1)
+
+        with (
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id",
+                new_callable=AsyncMock,
+                return_value=public_space,
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.query_by_id",
+                new_callable=AsyncMock,
+                return_value=file_record,
+            ),
+            patch.object(
+                service,
+                "_get_effective_permission_ids",
+                new_callable=AsyncMock,
+                return_value={"download_file"},
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeService.get_file_share_url",
+                return_value=("original", ""),
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_daily_download.enforce_knowledge_space_daily_download",
+                new_callable=AsyncMock,
+            ) as mock_enforce,
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_daily_download.record_knowledge_space_daily_download",
+                new_callable=AsyncMock,
+            ) as mock_record,
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.asyncio.create_task",
+            ) as mock_create_task,
+        ):
+            result = await service.get_file_download(102)
+
+        assert result["original_url"] == "original"
+        mock_enforce.assert_awaited_once()
+        mock_record.assert_awaited_once()
+        scheduled_task = mock_create_task.call_args.args[0]
+        assert inspect.iscoroutine(scheduled_task)
+        scheduled_task.close()
 
     @pytest.mark.asyncio
     async def test_list_space_children_filters_each_child_by_view_permission(self, service):

@@ -290,3 +290,13 @@ class PortalPdfDownloadGenerationError(BaseErrorCode):
 class PortalPdfDownloadServiceUnavailableError(BaseErrorCode):
     Code: int = 18090
     Msg: str = "下载服务暂不可用"
+
+
+class FolderOrBatchDownloadNotAllowedError(BaseErrorCode):
+    Code: int = 18092
+    Msg: str = "不支持文件夹或批量下载"
+
+
+class DailyDownloadLimitExceededError(BaseErrorCode):
+    Code: int = 18093
+    Msg: str = "已达当日下载次数上限"
