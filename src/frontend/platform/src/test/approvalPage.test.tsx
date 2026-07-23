@@ -97,6 +97,7 @@ vi.mock("react-i18next", () => ({
         "approvalPage.spaceLevel.public": "公共",
         "approvalPage.spaceLevel.department": "部门",
         "approvalPage.spaceLevel.team": "团队",
+        "approvalPage.spaceLevel.team_ks": "科室",
         "approvalPage.spaceLevel.personal": "个人",
         "approvalPage.spaceVisibility.released": "发布到广场",
         "approvalPage.spaceVisibility.public": "公开",

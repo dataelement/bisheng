@@ -2551,6 +2551,7 @@
     "spaceLevel": {
       "public": "公共",
       "department": "部门",
+      "team_ks": "科室",
       "team": "团队",
       "personal": "个人"
     },
