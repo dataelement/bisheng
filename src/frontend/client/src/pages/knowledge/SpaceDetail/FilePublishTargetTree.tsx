@@ -270,7 +270,7 @@ export function FilePublishTargetTree({
                         type="button"
                         aria-expanded={!collapsed}
                         aria-label={`${collapsed ? "展开" : "收起"}${TARGET_LEVEL_LABELS[group.level]}分组`}
-                        className="flex w-full items-center gap-1 rounded px-1 py-0.5 text-left text-xs font-medium text-[#86909c] hover:bg-[#f2f3f5]"
+                        className="flex w-full items-center gap-1 rounded px-1 py-0.5 text-left text-sm font-medium text-[#1d2129] hover:bg-[#f2f3f5]"
                         onClick={() => handleToggleGroup(group.level)}
                     >
                         <ChevronRight
@@ -278,7 +278,7 @@ export function FilePublishTargetTree({
                             className={collapsed ? "transition-transform" : "rotate-90 transition-transform"}
                         />
                         <span>{TARGET_LEVEL_LABELS[group.level]}</span>
-                        <span className="ml-1 text-[#c9cdd4]">({group.spaces.length})</span>
+                        <span className="ml-1 text-xs font-normal text-[#86909c]">({group.spaces.length})</span>
                     </button>
                     {!collapsed && group.spaces.map((space) => {
                         const spaceId = String(space.id);
