@@ -2764,7 +2764,7 @@ export default function PortalKnowledgeWorkbench() {
                 showSuccessManageMembers={(spaceLevel) => spaceLevel !== SpaceLevel.PERSONAL}
                 canEditDepartmentBinding={
                     editingSpace?.isClinic
-                        ? isSystemAdmin || Boolean(currentUser?.is_department_admin)
+                        ? false
                         : isSystemAdmin
                 }
                 onViewCreatedSpace={() => setCreateDrawerOpen(false)}

@@ -477,15 +477,15 @@ async def test_on_demand_failure_maps_to_safe_download_error(tmp_path: Path, err
 @pytest.mark.parametrize(
     ("user", "expected_identity"),
     [
-        (_user(), "设备管理部-张三--SG001-2026-07-21"),
-        (_user(primary_department_name=""), "张三--SG001-2026-07-21"),
+        (_user(), "设备管理部-张三--SG001-2026/07/21"),
+        (_user(primary_department_name=""), "张三--SG001-2026/07/21"),
         (
             _user(user_name="", primary_department_name=None),
-            "client-name-must-not-be-used--SG001-2026-07-21",
+            "client-name-must-not-be-used--SG001-2026/07/21",
         ),
         (
             _user(external_id="", primary_department_name="设备管理部"),
-            "设备管理部-张三--client-name-must-not-be-used-2026-07-21",
+            "设备管理部-张三--client-name-must-not-be-used-2026/07/21",
         ),
     ],
 )

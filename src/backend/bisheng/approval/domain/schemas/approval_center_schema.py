@@ -3,7 +3,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class ApprovalGateDecision(str, Enum):
@@ -62,3 +62,26 @@ class ApprovalScenarioPreset(BaseModel):
     approver_source_types: list[str] = Field(default_factory=list)
     condition_field_options: list[ApprovalPresetConditionField] = Field(default_factory=list)
     approver_source_options: list[ApprovalPresetApproverSource] = Field(default_factory=list)
+
+
+class DepartmentFileViewApplyRequest(BaseModel):
+    space_id: int
+    file_id: int
+    reason: str = Field(min_length=1, max_length=2000)
+
+    @field_validator("reason", mode="before")
+    @classmethod
+    def normalize_reason(cls, value):
+        return str(value or "").strip()
+
+
+class DepartmentFileViewAccessResponse(BaseModel):
+    space_id: int
+    file_id: int
+    status: str
+    content_access: str
+    access_source: str | None = None
+    can_download: bool = False
+    instance_id: int | None = None
+    latest_instance_status: str | None = None
+    safe_metadata: dict[str, Any] = Field(default_factory=dict)

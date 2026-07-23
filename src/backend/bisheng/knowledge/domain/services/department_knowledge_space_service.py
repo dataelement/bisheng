@@ -434,6 +434,9 @@ class DepartmentKnowledgeSpaceService:
             space_id=space_id,
             created_by=login_user.user_id,
         )
+        # Clinic spaces are stored with level TEAM_KS so they can be distinguished
+        # from plain team spaces while still being grouped with them on display.
+        await KnowledgeSpaceScopeDao.aupdate_level(space_id, KnowledgeSpaceLevelEnum.TEAM_KS)
         return {"space_id": row.space_id, "department_id": row.department_id}
 
     @classmethod

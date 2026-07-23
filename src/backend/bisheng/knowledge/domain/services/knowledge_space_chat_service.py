@@ -17,6 +17,10 @@ from bisheng.chat_session.domain.chat import ChatSessionService
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import NotFoundError
+from bisheng.common.errcode.knowledge import (
+    KnowledgeDepartmentFileUnavailableError,
+    KnowledgeDepartmentFileViewApprovalRequiredError,
+)
 from bisheng.common.errcode.knowledge_space import SpacePermissionDeniedError
 from bisheng.common.schemas.telemetry.event_data_schema import PortalQaEventData
 from bisheng.common.stream_errors import StreamRetryEvent, StreamStageError, retry_async_stream
@@ -35,6 +39,14 @@ from bisheng.database.models.session import MessageSession, MessageSessionDao
 from bisheng.database.models.tag import TagDao
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
+from bisheng.knowledge.domain.models.knowledge_file import (
+    FileType,
+    KnowledgeFileDao,
+    KnowledgeFileStatus,
+)
+from bisheng.knowledge.domain.services.department_file_view_access_service import (
+    DepartmentFileAccessStatus,
+)
 from bisheng.knowledge.domain.models.knowledge_space_file import SpaceFileDao
 from bisheng.knowledge.domain.services.tag_library_tag_service import TagLibraryTagService
 from bisheng.knowledge.rag.version_filter import build_primary_only_filter
@@ -50,6 +62,7 @@ class KnowledgeSpaceChatService:
     def __init__(self, request: Request, login_user: UserPayload):
         self.request = request
         self.login_user = login_user
+        self.department_file_view_access_service = None
 
     def _permission_service(self):
         from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
@@ -75,6 +88,34 @@ class KnowledgeSpaceChatService:
         await svc._require_permission_id("knowledge_file", file_id, "view_file", space_id=space_id)
         return file_record
 
+    async def _require_portal_file_view_permission(
+        self,
+        space_id: int,
+        file_id: int,
+    ):
+        file_record = await KnowledgeFileDao.query_by_id(file_id)
+        if (
+            file_record is None
+            or int(file_record.knowledge_id) != int(space_id)
+            or int(file_record.file_type) != FileType.FILE.value
+            or int(file_record.status) != KnowledgeFileStatus.SUCCESS.value
+        ):
+            raise NotFoundError(msg="Knowledge file not found for chat")
+        access_service = self.department_file_view_access_service
+        if access_service is None:
+            raise RuntimeError("DepartmentFileViewAccessService 未注入")
+        decision = await access_service.evaluate_file(
+            login_user=self.login_user,
+            file=file_record,
+        )
+        if decision.status == DepartmentFileAccessStatus.ALLOWED:
+            return file_record
+        if decision.status == DepartmentFileAccessStatus.APPROVAL_REQUIRED:
+            raise KnowledgeDepartmentFileViewApprovalRequiredError()
+        if decision.status == DepartmentFileAccessStatus.UNAVAILABLE:
+            raise KnowledgeDepartmentFileUnavailableError()
+        return await self._require_file_view_permission(space_id, file_id)
+
     @classmethod
     def generate_flow_id_for_file(cls, knowledge_id: int, file_id: int) -> str:
         """Generate a unique flow_id representation for a single file chat"""
@@ -89,9 +130,45 @@ class KnowledgeSpaceChatService:
         self, knowledge_id: int, file_id: int, query: str, model_id: int
     ) -> AsyncIterator[ChatResponse | StreamRetryEvent]:
         """Single file RAG query"""
-        # Verify file exists and is a file
         file_record = await self._require_file_view_permission(knowledge_id, file_id)
+        async for item in self._chat_single_file_authorized(
+            knowledge_id=knowledge_id,
+            file_id=file_id,
+            query=query,
+            model_id=model_id,
+            file_record=file_record,
+        ):
+            yield item
 
+    async def chat_single_file_for_portal(
+        self,
+        knowledge_id: int,
+        file_id: int,
+        query: str,
+        model_id: int,
+    ) -> AsyncIterator[ChatResponse | StreamRetryEvent]:
+        file_record = await self._require_portal_file_view_permission(
+            knowledge_id,
+            file_id,
+        )
+        async for item in self._chat_single_file_authorized(
+            knowledge_id=knowledge_id,
+            file_id=file_id,
+            query=query,
+            model_id=model_id,
+            file_record=file_record,
+        ):
+            yield item
+
+    async def _chat_single_file_authorized(
+        self,
+        *,
+        knowledge_id: int,
+        file_id: int,
+        query: str,
+        model_id: int,
+        file_record,
+    ) -> AsyncIterator[ChatResponse | StreamRetryEvent]:
         space = await KnowledgeDao.aquery_by_id(file_record.knowledge_id)
         if not space:
             raise NotFoundError(msg="Knowledge space not found for chat")

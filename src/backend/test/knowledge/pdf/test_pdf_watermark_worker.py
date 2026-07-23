@@ -12,6 +12,7 @@ from bisheng.knowledge.pdf.watermark import PdfWatermarkSpec
 from bisheng.knowledge.pdf.watermark_worker import (
     PdfWatermarkWorkerError,
     PdfWatermarkWorkerTimeout,
+    _parse_spec,
     run_watermark_worker,
 )
 
@@ -26,10 +27,21 @@ def _create_source(path: Path) -> None:
 def _spec() -> PdfWatermarkSpec:
     return PdfWatermarkSpec(
         lines=(
-            "敏感部门-敏感姓名--SECRET-001-2026-07-21",
+            "敏感部门-敏感姓名--SECRET-001-2026/07/21",
             "首钢股份内部资料，严禁外传，违者必究",  # noqa: RUF001
         )
     )
+
+
+def test_worker_spec_defaults_to_unified_opacity() -> None:
+    spec = _parse_spec({
+        "lines": [
+            "设备管理部-张三--SG001-2026/07/23",
+            "首钢股份内部资料，严禁外传，违者必究",  # noqa: RUF001
+        ],
+    })
+
+    assert spec.opacity == 0.31
 
 
 def test_worker_generates_pdf_and_returns_only_safe_metadata(tmp_path: Path) -> None:

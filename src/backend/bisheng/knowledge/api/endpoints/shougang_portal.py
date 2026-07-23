@@ -1,14 +1,26 @@
 import asyncio
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Header, Query
+from loguru import logger
+from starlette.responses import StreamingResponse
 
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
-from bisheng.common.schemas.api import resp_200
+from bisheng.common.schemas.api import SSEResponse, resp_200
+from bisheng.common.stream_errors import (
+    StreamRetryEvent,
+    StreamStageError,
+    stream_error_sse,
+    stream_retry_sse,
+)
 from bisheng.common.telemetry.portal_event_service import PortalTelemetryEventService
-from bisheng.knowledge.api.dependencies import get_knowledge_space_service, get_portal_pdf_download_service
+from bisheng.knowledge.api.dependencies import (
+    get_knowledge_space_chat_service,
+    get_knowledge_space_service,
+    get_portal_pdf_download_service,
+)
 from bisheng.knowledge.api.portal_pdf_download_response import prepare_portal_pdf_download_response
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
@@ -46,6 +58,11 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     ShougangPortalTagSearchReq,
     ShougangPortalTagSearchResp,
     ShougangPortalTelemetryEventReq,
+    ChatReq,
+    KnowledgeSpaceFolderStatsReq,
+)
+from bisheng.knowledge.domain.services.knowledge_space_chat_service import (
+    KnowledgeSpaceChatService,
 )
 from bisheng.knowledge.domain.schemas.portal_hot_search_schema import (
     PortalHotSearchTriggerRebuildReq,
@@ -87,6 +104,20 @@ async def get_shougang_portal_space_levels(
 ) -> Any:
     levels = await svc.get_shougang_portal_space_levels()
     return resp_200(ShougangPortalSpaceLevelsResp(levels=levels).model_dump(mode="json"))
+
+
+@router.get("/spaces")
+async def list_shougang_portal_discoverable_spaces(
+    discovery_scope: Literal[
+        "public",
+        "public_and_department",
+    ] = "public_and_department",
+    svc: Any = Depends(get_knowledge_space_service),
+) -> Any:
+    spaces = await svc.list_shougang_portal_discoverable_spaces(
+        discovery_scope=discovery_scope
+    )
+    return resp_200({"spaces": spaces})
 
 
 @router.get("/personal-spaces")
@@ -160,10 +191,17 @@ async def create_shougang_portal_share_link(
 @router.get("/share-links/{share_token}")
 async def get_shougang_portal_share_link_meta(
     share_token: str,
+    portal_anonymous: bool = Header(
+        default=False,
+        alias="X-Portal-Anonymous",
+    ),
     svc: Any = Depends(get_knowledge_space_service),
 ) -> Any:
     try:
-        result = await svc.get_shougang_portal_share_link_meta(share_token)
+        result = await svc.get_shougang_portal_share_link_meta(
+            share_token,
+            for_anonymous_portal=portal_anonymous,
+        )
         raw = result.model_dump() if hasattr(result, "model_dump") else result
         return resp_200(ShougangPortalShareLinkMetaResp(**raw).model_dump(mode="json"))
     except BaseErrorCode as exc:
@@ -294,6 +332,74 @@ async def get_shougang_portal_home_stats(
     return resp_200(ShougangPortalHomeStatsResp(**result, total_files=total_files).model_dump(mode="json"))
 
 
+@router.get("/files/{space_id}/{file_id}/preview")
+async def get_shougang_portal_file_preview(
+    space_id: int,
+    file_id: int,
+    svc: Any = Depends(get_knowledge_space_service),
+) -> Any:
+    result = await svc.get_shougang_portal_file_preview(
+        space_id=space_id,
+        file_id=file_id,
+    )
+    return resp_200(result)
+
+
+@router.get("/files/{space_id}/{file_id}/chunks")
+async def get_shougang_portal_file_chunks(
+    space_id: int,
+    file_id: int,
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=100, ge=1, le=100),
+    svc: Any = Depends(get_knowledge_space_service),
+) -> Any:
+    result = await svc.get_shougang_portal_file_chunks(
+        space_id=space_id,
+        file_id=file_id,
+        page=page,
+        limit=limit,
+    )
+    return resp_200(result)
+
+
+@router.post("/files/{space_id}/{file_id}/chat")
+async def chat_shougang_portal_single_file(
+    space_id: int,
+    file_id: int,
+    req: ChatReq,
+    svc: KnowledgeSpaceChatService = Depends(
+        get_knowledge_space_chat_service
+    ),
+) -> Any:
+    async def event_stream():
+        try:
+            async for item in svc.chat_single_file_for_portal(
+                space_id,
+                file_id,
+                req.query,
+                req.model_id,
+            ):
+                if isinstance(item, StreamRetryEvent):
+                    yield stream_retry_sse(item)
+                else:
+                    yield SSEResponse(data=item).to_string()
+        except StreamStageError as exc:
+            logger.exception("portal chat_file staged stream error")
+            yield stream_error_sse(
+                exc.error,
+                stage=exc.stage,
+                had_output=exc.had_output,
+            )
+        except BaseErrorCode as exc:
+            logger.exception("portal chat_file business error")
+            yield stream_error_sse(exc, stage="document")
+        except Exception as exc:
+            logger.exception("portal chat_file error")
+            yield stream_error_sse(exc)
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
 @router.get("/files/{space_id}/{file_id}/related")
 async def list_shougang_portal_related_files(
     space_id: int,
@@ -341,3 +447,43 @@ async def search_shougang_portal_qa_files(
 ) -> Any:
     result = await svc.search_shougang_portal_qa_files_by_name(req)
     return resp_200(ShougangPortalQaFileSearchResp(**result).model_dump(mode="json"))
+
+
+@router.get("/qa/spaces/{space_id}/children")
+async def list_shougang_portal_qa_children(
+    space_id: int,
+    discovery_scope: Literal[
+        "public",
+        "public_and_department",
+    ] = "public_and_department",
+    parent_id: int | None = None,
+    cursor: str | None = None,
+    page_size: int = Query(default=10, ge=1, le=100),
+    svc: Any = Depends(get_knowledge_space_service),
+) -> Any:
+    result = await svc.list_shougang_portal_qa_children(
+        space_id=space_id,
+        parent_id=parent_id,
+        cursor=cursor,
+        page_size=page_size,
+        discovery_scope=discovery_scope,
+    )
+    return resp_200(result)
+
+
+@router.post("/qa/spaces/{space_id}/folder-stats")
+async def get_shougang_portal_qa_folder_stats(
+    space_id: int,
+    req: KnowledgeSpaceFolderStatsReq,
+    discovery_scope: Literal[
+        "public",
+        "public_and_department",
+    ] = "public_and_department",
+    svc: Any = Depends(get_knowledge_space_service),
+) -> Any:
+    result = await svc.get_shougang_portal_qa_folder_stats(
+        space_id=space_id,
+        folder_ids=req.folder_ids,
+        discovery_scope=discovery_scope,
+    )
+    return resp_200(result)

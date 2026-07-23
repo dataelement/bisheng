@@ -66,6 +66,7 @@ function getSpaceGroupKey(space?: Pick<KnowledgeSpace, "spaceLevel"> | null): Sp
         case SpaceLevel.DEPARTMENT:
             return "department";
         case SpaceLevel.TEAM:
+        case SpaceLevel.TEAM_KS:
             return "team";
         case SpaceLevel.PERSONAL:
             return "personal";

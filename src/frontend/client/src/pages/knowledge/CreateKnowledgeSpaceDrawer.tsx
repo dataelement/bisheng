@@ -355,7 +355,7 @@ export function CreateKnowledgeSpaceDrawer({
                 (mode === "create" && selectedLevelCreateEnabled)
                 || (mode === "edit" && canEditDepartmentBinding)
             )
-    ) || (isEditingClinic && canEditDepartmentBinding);
+    );
     const shouldShowApprovalReason = mode === "create"
         && showApprovalReason
         && initialSpaceLevel === SpaceLevel.TEAM;

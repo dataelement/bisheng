@@ -55,11 +55,13 @@ def _make_repository_session(*results):
 def _make_service(*, is_admin: bool) -> KnowledgeSpaceService:
     login_user = SimpleNamespace(
         user_id=7,
+        user_name="系统管理员",
         tenant_id=1,
         is_admin=Mock(return_value=is_admin),
     )
     service = KnowledgeSpaceService(request=Mock(), login_user=login_user)
     service.department_space_binding_repo = AsyncMock()
+    service.department_file_view_lifecycle_service = AsyncMock()
     service._require_permission_id = AsyncMock()
     return service
 
@@ -135,6 +137,11 @@ async def test_admin_can_rebind_department_space_and_preserves_manual_manager() 
             return_value=scope,
         ),
         patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.DepartmentKnowledgeSpaceDao.aget_by_space_id",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
+        patch(
             "bisheng.knowledge.domain.services.knowledge_space_service.DepartmentDao.aget_by_id",
             new_callable=AsyncMock,
             side_effect=[target_department, old_department],
@@ -170,6 +177,14 @@ async def test_admin_can_rebind_department_space_and_preserves_manual_manager() 
         old_admin_user_ids={10},
         new_admin_user_ids={20},
         revoke_old_department_viewer=True,
+    )
+    service.department_file_view_lifecycle_service.prepare_department_rebind.assert_awaited_once_with(
+        tenant_id=1,
+        space_id=11,
+        old_department_id=1,
+        new_department_id=2,
+        operator_id=7,
+        operator_name="系统管理员",
     )
     assert {
         (item.subject_type, item.subject_id)

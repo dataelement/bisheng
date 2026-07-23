@@ -23,6 +23,7 @@ class ScenarioUpdateReq(BaseModel):
     scenario_name: str | None = None
     enabled: bool | None = None
     display_name: str | None = None
+    toggle_reason: str | None = Field(default=None, max_length=2000)
 
 
 class ExceptionRetryReq(BaseModel):

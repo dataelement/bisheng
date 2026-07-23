@@ -668,8 +668,9 @@ def test_delete_knowledge_file_uses_permission_service_write_sync_bridge():
         service_module,
         'delete_knowledge_file_vectors',
     ), patch.object(
-        service_module.KnowledgeFileDao,
-        'delete_batch',
+        KnowledgeService,
+        '_delete_knowledge_file_rows_atomic',
+        new_callable=AsyncMock,
     ), patch.object(
         service_module.KnowledgeAuditTelemetryService,
         'telemetry_delete_knowledge_file',
