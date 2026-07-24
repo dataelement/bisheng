@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, exists, func, select, update
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.common.errcode.tag import (
