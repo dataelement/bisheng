@@ -8,11 +8,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/bs-ui/table"
+import { listGatewayOrgSyncLogsApi } from "@/controllers/API/orgSync"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
-import { useOrgSyncStore } from "@/store/orgSyncStore"
 import { OrgSyncLog } from "@/types/api/orgSync"
 import { formatIsoDateTime } from "@/util/utils"
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { GatewayLogDetailDialog } from "./GatewayLogDetailDialog"
 
@@ -38,16 +38,29 @@ function hasErrorDetails(log: OrgSyncLog): boolean {
 export default function OrgSync() {
   const { t } = useTranslation("orgSync")
 
-  const gatewayLogs = useOrgSyncStore((s) => s.gatewayLogs)
-  const gatewayTotal = useOrgSyncStore((s) => s.gatewayTotal)
-  const loading = useOrgSyncStore((s) => s.loading)
-  const page = useOrgSyncStore((s) => s.page)
+  // Page-local server data — fetched here per C7 (stores must not call HTTP).
+  const [gatewayLogs, setGatewayLogs] = useState<OrgSyncLog[]>([])
+  const [gatewayTotal, setGatewayTotal] = useState(0)
+  const [loading, setLoading] = useState(false)
+  const [page, setPage] = useState(1)
 
   const [detailLog, setDetailLog] = useState<OrgSyncLog | null>(null)
 
-  useEffect(() => {
-    captureAndAlertRequestErrorHoc(useOrgSyncStore.getState().fetchGatewayLogs(1))
+  const fetchGatewayLogs = useCallback(async (nextPage: number) => {
+    setLoading(true)
+    setPage(nextPage)
+    await captureAndAlertRequestErrorHoc(
+      listGatewayOrgSyncLogsApi({ page: nextPage, limit: PAGE_SIZE }).then(({ data, total }) => {
+        setGatewayLogs(data)
+        setGatewayTotal(total)
+      })
+    )
+    setLoading(false)
   }, [])
+
+  useEffect(() => {
+    fetchGatewayLogs(1)
+  }, [fetchGatewayLogs])
 
   const maxPage = useMemo(
     () => Math.max(1, Math.ceil(gatewayTotal / PAGE_SIZE)),
@@ -56,14 +69,12 @@ export default function OrgSync() {
 
   const goPrev = () => {
     if (page <= 1) return
-    const next = page - 1
-    captureAndAlertRequestErrorHoc(useOrgSyncStore.getState().fetchGatewayLogs(next))
+    fetchGatewayLogs(page - 1)
   }
 
   const goNext = () => {
     if (page >= maxPage) return
-    const next = page + 1
-    captureAndAlertRequestErrorHoc(useOrgSyncStore.getState().fetchGatewayLogs(next))
+    fetchGatewayLogs(page + 1)
   }
 
   return (

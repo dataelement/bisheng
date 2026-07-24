@@ -4,6 +4,7 @@ import { Button } from "@/components/bs-ui/button"
 import { useToast } from "@/components/bs-ui/toast/use-toast"
 import { getFlowVersions } from "@/controllers/API/flow"
 import { useDiffFlowStore } from "@/store/diffFlowStore"
+import { useDiffFlowRun } from "./useDiffFlowRun"
 import { FlowVersionItem } from "@/types/flow"
 import { ChevronLeft } from "lucide-react"
 import { useEffect, useState } from "react"
@@ -12,7 +13,7 @@ import { useNavigate, useParams } from "react-router-dom"
 import Component from "./components/Component"
 import RunTest from "./components/RunTest"
 
-export default function index(params) {
+export default function DiffFlowPage(params) {
     const { t } = useTranslation()
     // 技能 id, 版本id, 组件id
     const { id, vid, cid } = useParams()
@@ -21,7 +22,8 @@ export default function index(params) {
 
     const versions = useVersions(id)
 
-    const { mulitVersionFlow, removeVersionFlow, initFristVersionFlow, addEmptyVersionFlow, addVersionFlow } = useDiffFlowStore()
+    const { mulitVersionFlow, removeVersionFlow, addEmptyVersionFlow } = useDiffFlowStore()
+    const { initFristVersionFlow, addVersionFlow } = useDiffFlowRun()
     useEffect(() => {
         initFristVersionFlow(vid)
     }, [])

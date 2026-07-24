@@ -13,6 +13,7 @@ import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { TabsContext } from "../../../contexts/tabsContext";
 import { postBuildInit } from "../../../controllers/API";
+import { getAssistantDetailApi } from "../../../controllers/API/assistant";
 import { Variable, getFlowApi } from "../../../controllers/API/flow";
 import { FlowType, NodeType } from "../../../types/flow";
 import { validateNode } from "../../../utils";
@@ -27,7 +28,7 @@ export default function ChatPanne({ customWsHost = '', chatList, chat, appendHis
     const flowRef = useRef(null)
     const [assistant, setAssistant] = useState<any>(null)
     const [workflow, setWorkflow] = useState<any>(null)
-    const { assistantState, loadAssistantState, destroy } = useAssistantStore()
+    const { assistantState, setAssistantDetail, destroy } = useAssistantStore()
     // console.log('data :>> ', flow);
     const build = useBuild()
     const { messages, loadHistoryMsg, loadMoreHistoryMsg, changeChatId, clearMsgs } = useMessageStore()
@@ -72,7 +73,8 @@ export default function ChatPanne({ customWsHost = '', chatList, chat, appendHis
             setWorkflow(null)
             let _assistant = { id }
             try {
-                _assistant = await loadAssistantState(id, version)
+                _assistant = await getAssistantDetailApi(id, version)
+                setAssistantDetail(_assistant)
             } catch (e) {
                 console.error('e :>> ', e);
             }

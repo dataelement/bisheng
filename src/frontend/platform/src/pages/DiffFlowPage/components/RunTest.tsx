@@ -9,6 +9,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { generateUUID } from "@/components/bs-ui/utils";
 import { postBuildInit } from "@/controllers/API";
 import { useDiffFlowStore } from "@/store/diffFlowStore";
+import { useDiffFlowRun } from "../useDiffFlowRun";
 import { FlowStyleType, FlowType } from "@/types/flow";
 import { exportCsv } from "@/util/utils";
 import { CircleHelp, Download, Play } from "lucide-react";
@@ -22,7 +23,8 @@ export default function RunTest({ nodeId }) {
     const { t } = useTranslation()
     const [formShow, setFormShow] = useState(false)
     const { running, runningType, mulitVersionFlow, readyVersions, questions, removeQuestion, cellRefs,
-        allRunStart, rowRunStart, colRunStart, overQuestions, addQuestion, updateQuestion } = useDiffFlowStore()
+        overQuestions, addQuestion, updateQuestion } = useDiffFlowStore()
+    const { allRunStart, rowRunStart, colRunStart } = useDiffFlowRun()
 
     // 是否展示表单
     const isForm = useMemo(() => {

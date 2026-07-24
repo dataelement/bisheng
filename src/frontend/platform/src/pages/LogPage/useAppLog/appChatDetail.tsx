@@ -5,7 +5,9 @@ import { useMessageStore } from "@/components/bs-comp/chatComponent/messageStore
 import { LoadingIcon } from "@/components/bs-icons/loading";
 import { Button } from "@/components/bs-ui/button";
 import ShadTooltip from "@/components/ShadTooltipComponent";
+import { getAssistantDetailApi } from "@/controllers/API/assistant";
 import { getDeleteFlowApi } from "@/controllers/API/flow";
+import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import ChatMessages from "@/pages/BuildPage/flow/FlowChat/ChatMessages";
 import { useMessageStore as useFlowMessageStore } from "@/pages/BuildPage/flow/FlowChat/messageStore";
 import { useAssistantStore } from "@/store/assistantStore";
@@ -23,7 +25,7 @@ export default function AppChatDetail() {
 
     const loading = false;
     const title = t('log.detailedSession');
-    const { assistantState, loadAssistantState, destroy } = useAssistantStore()
+    const { assistantState, setAssistantDetail, destroy } = useAssistantStore()
     const { loadHistoryMsg, loadMoreHistoryMsg, changeChatId, clearMsgs } = useMessageStore()
     const {
         loadHistoryMsg: loadFlowHistoryMsg,
@@ -32,7 +34,7 @@ export default function AppChatDetail() {
         clearMsgs: clearFlowMsgs } = useFlowMessageStore()
 
     useEffect(() => {
-        type === AppNumType.ASSISTANT && loadAssistantState(fid, 'v1')
+        type === AppNumType.ASSISTANT && captureAndAlertRequestErrorHoc(getAssistantDetailApi(fid, 'v1').then(setAssistantDetail))
 
         type === AppNumType.FLOW ? loadFlowHistoryMsg(fid, cid, {
             appendHistory: true,

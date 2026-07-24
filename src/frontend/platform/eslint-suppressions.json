@@ -3044,9 +3044,6 @@
     },
     "react-hooks/exhaustive-deps": {
       "count": 2
-    },
-    "react-hooks/rules-of-hooks": {
-      "count": 7
     }
   },
   "src/pages/EvaluationPage/EvaluationCreate.tsx": {
@@ -3450,9 +3447,6 @@
     },
     "@typescript-eslint/no-unused-expressions": {
       "count": 2
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
     },
     "react-hooks/exhaustive-deps": {
       "count": 2
@@ -3983,14 +3977,6 @@
       "count": 4
     }
   },
-  "src/store/assistantStore.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "no-console": {
-      "count": 1
-    }
-  },
   "src/store/dashboardStore.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 6
@@ -4001,9 +3987,6 @@
   },
   "src/store/diffFlowStore.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 3
-    },
-    "@typescript-eslint/no-unused-vars": {
       "count": 2
     }
   },

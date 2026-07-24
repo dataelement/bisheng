@@ -5,14 +5,14 @@ import { hasPermissionId, usePermissionIds } from "@/components/bs-comp/permissi
 import { Button } from "@/components/bs-ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { changeAssistantStatusApi, saveAssistanttApi } from "@/controllers/API/assistant";
+import { changeAssistantStatusApi, getAssistantDetailApi, saveAssistanttApi } from "@/controllers/API/assistant";
 import { checkAppEditPermission } from "@/controllers/API/flow";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { useAssistantStore } from "@/store/assistantStore";
 import { OnlineState } from "@/types/flow";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useLocation } from "react-router";
+import { useLocation } from "react-router-dom";
 import { unstable_useBlocker as useBlocker, useNavigate, useParams } from "react-router-dom";
 import Header from "./Header";
 import Prompt from "./Prompt";
@@ -27,7 +27,7 @@ export default function editAssistant() {
     const loca = state?.flow; // Get the passed flow data
 
     // assistant data
-    const { assistantState, changed, loadAssistantState, changeStatus, saveAfter, destroy } = useAssistantStore()
+    const { assistantState, changed, setAssistantDetail, changeStatus, saveAfter, destroy } = useAssistantStore()
     const { startNewRound, insetSystemMsg, insetBsMsg, destory, setShowGuideQuestion } = useMessageStore()
     const [checking, setChecking] = useState(true)
     const assistantId = assisId ? String(assisId) : ''
@@ -37,12 +37,13 @@ export default function editAssistant() {
     const flowInit = async () => {
         await checkAppEditPermission(assisId, 5)
 
-        loadAssistantState(assisId, 'v1').then((res) => {
+        captureAndAlertRequestErrorHoc(getAssistantDetailApi(assisId, 'v1').then((res) => {
+            setAssistantDetail(res)
             setChecking(false)
             setShowGuideQuestion(true)
             setGuideQuestion(res.guide_question?.filter((item) => item) || [])
             res.guide_word && insetBsMsg(res.guide_word)
-        })
+        }))
     }
 
     useEffect(() => {
