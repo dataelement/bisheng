@@ -96,11 +96,17 @@ class WorkStationTagsService(BaseService):
             )
             await self.review_tags_repository.approve_review_tag(data.tag_name, data.resource_type, tenant_id)
             await self.session.commit()
+            from bisheng.knowledge.domain.services.tag_library_tag_service import TagLibraryTagService
+
+            await TagLibraryTagService.invalidate_link_b_tenant_catalog_cache_async(tenant_id)
         elif data and data.status == ApproveOrRejectEnum.REJECT:
             await self.review_tags_repository.reject_review_tag(
                 data.tag_name, data.reject_reason, data.resource_type, tenant_id
             )
             await self.session.commit()
+            from bisheng.knowledge.domain.services.tag_library_tag_service import TagLibraryTagService
+
+            await TagLibraryTagService.invalidate_link_b_tenant_catalog_cache_async(tenant_id)
         else:
             raise ReviewTagTypeMismatchError.http_exception()
 

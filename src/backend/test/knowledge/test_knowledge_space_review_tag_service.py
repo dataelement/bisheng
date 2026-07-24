@@ -50,7 +50,8 @@ def test_build_review_tag_system_prompt_appends_business_domain_and_file_categor
     assert "base prompt" in prompt
     assert "业务域：PP（生产）" in prompt
     assert "文件分类：标准规范 / 安全规程" in prompt
-    assert "生成不在标签库中的新标签" in prompt
+    assert "生成不在标签库中的新标签" not in prompt
+    assert "优先复用用户消息中" in prompt
 
 
 def test_build_review_tag_system_prompt_without_metadata_keeps_base_prompt():
@@ -91,6 +92,12 @@ def test_review_tag_llm_uses_zero_temperature():
     knowledge = SimpleNamespace(id=1)
     db_file = SimpleNamespace(id=2, tenant_id=1, user_id=7, abstract="评审内容")
 
+    resolved = SimpleNamespace(
+        entries=[
+            SimpleNamespace(canonical_name="新标签", target="pending"),
+        ]
+    )
+
     with (
         patch.object(KnowledgeSpaceReviewTagService, "_should_run", return_value=True),
         patch(f"{module_path}.KnowledgeSpaceAutoTagService._resolve_library_ids", return_value=[10]),
@@ -104,14 +111,26 @@ def test_review_tag_llm_uses_zero_temperature():
             return_value=SimpleNamespace(enabled=False, hits=[]),
         ),
         patch(f"{module_path}.LLMService.get_bisheng_llm_sync", return_value=object()) as get_llm,
+        patch(
+            f"{module_path}.TagLibraryTagService.load_link_b_tenant_catalog_sync",
+            return_value=SimpleNamespace(
+                library_by_key={},
+                pending_catalog=[],
+                library_names=[],
+                cache_source="db",
+            ),
+        ),
         patch.object(KnowledgeSpaceReviewTagService, "_invoke_llm", return_value=["新标签"]),
+        patch(f"{module_path}.TagLibraryTagService.resolve_link_b_tag_candidates_sync", return_value=resolved),
         patch.object(KnowledgeSpaceAutoTagService, "_cap_ai_tags_for_file", side_effect=lambda _fid, tags: tags),
-        patch.object(KnowledgeSpaceReviewTagService, "_append_file_tags") as append_file_tags,
+        patch(f"{module_path}.TagLibraryTagService.append_file_library_review_tags_sync") as append_pending,
+        patch(f"{module_path}.TagLibraryTagService.append_file_library_tags_sync") as append_approved,
     ):
         KnowledgeSpaceReviewTagService.apply_after_review_upload_parse(knowledge, db_file)
 
     assert get_llm.call_args.kwargs["temperature"] == 0
-    append_file_tags.assert_called_once()
+    append_pending.assert_called_once()
+    append_approved.assert_not_called()
 
 
 def test_review_tag_should_run_only_when_space_auto_tag_enabled():
@@ -169,6 +188,12 @@ def test_review_tag_cap_skips_when_file_already_has_five_ai_tags():
     module_path = "bisheng.knowledge.domain.services.knowledge_space_review_tag_service"
     knowledge = SimpleNamespace(id=1)
     db_file = SimpleNamespace(id=2, tenant_id=1, user_id=7, abstract="评审内容")
+    resolved = SimpleNamespace(
+        entries=[
+            SimpleNamespace(canonical_name="新标签-1", target="pending"),
+            SimpleNamespace(canonical_name="新标签-2", target="pending"),
+        ]
+    )
 
     with (
         patch.object(KnowledgeSpaceReviewTagService, "_should_run", return_value=True),
@@ -183,10 +208,83 @@ def test_review_tag_cap_skips_when_file_already_has_five_ai_tags():
             return_value=SimpleNamespace(enabled=False, hits=[]),
         ),
         patch(f"{module_path}.LLMService.get_bisheng_llm_sync", return_value=object()),
+        patch(
+            f"{module_path}.TagLibraryTagService.load_link_b_tenant_catalog_sync",
+            return_value=SimpleNamespace(
+                library_by_key={},
+                pending_catalog=[],
+                library_names=[],
+                cache_source="db",
+            ),
+        ),
         patch.object(KnowledgeSpaceReviewTagService, "_invoke_llm", return_value=["新标签-1", "新标签-2"]),
+        patch(f"{module_path}.TagLibraryTagService.resolve_link_b_tag_candidates_sync", return_value=resolved),
         patch.object(KnowledgeSpaceAutoTagService, "_cap_ai_tags_for_file", return_value=[]),
-        patch.object(KnowledgeSpaceReviewTagService, "_append_file_tags") as append_file_tags,
+        patch(f"{module_path}.TagLibraryTagService.append_file_library_review_tags_sync") as append_pending,
     ):
         KnowledgeSpaceReviewTagService.apply_after_review_upload_parse(knowledge, db_file)
 
-    append_file_tags.assert_not_called()
+    append_pending.assert_not_called()
+
+
+def test_review_tag_dual_channel_write_for_approved_and_pending():
+    module_path = "bisheng.knowledge.domain.services.knowledge_space_review_tag_service"
+    knowledge = SimpleNamespace(id=1)
+    db_file = SimpleNamespace(id=2, tenant_id=1, user_id=7, abstract="评审内容")
+    resolved = SimpleNamespace(
+        entries=[
+            SimpleNamespace(canonical_name="行业情报", target="approved"),
+            SimpleNamespace(canonical_name="新标签", target="pending"),
+        ]
+    )
+
+    with (
+        patch.object(KnowledgeSpaceReviewTagService, "_should_run", return_value=True),
+        patch(f"{module_path}.KnowledgeSpaceAutoTagService._resolve_library_ids", return_value=[10]),
+        patch(f"{module_path}.KnowledgeSpaceAutoTagService._collect_library_tags", return_value=(["已有标签"], [])),
+        patch(
+            f"{module_path}.LLMService.get_knowledge_llm",
+            return_value=SimpleNamespace(review_tag_enabled=True, extract_title_model_id=123, review_tag_prompt=""),
+        ),
+        patch(
+            f"{module_path}.SensitiveWordPolicyService.check_text",
+            return_value=SimpleNamespace(enabled=False, hits=[]),
+        ),
+        patch(f"{module_path}.LLMService.get_bisheng_llm_sync", return_value=object()),
+        patch(
+            f"{module_path}.TagLibraryTagService.load_link_b_tenant_catalog_sync",
+            return_value=SimpleNamespace(
+                library_by_key={},
+                pending_catalog=[],
+                library_names=[],
+                cache_source="db",
+            ),
+        ),
+        patch.object(KnowledgeSpaceReviewTagService, "_invoke_llm", return_value=["行业情报", "新标签"]),
+        patch(f"{module_path}.TagLibraryTagService.resolve_link_b_tag_candidates_sync", return_value=resolved),
+        patch.object(
+            KnowledgeSpaceAutoTagService,
+            "_cap_ai_tags_for_file",
+            side_effect=lambda _fid, tags: tags,
+        ),
+        patch(f"{module_path}.TagLibraryTagService.append_file_library_tags_sync") as append_approved,
+        patch(f"{module_path}.TagLibraryTagService.append_file_library_review_tags_sync") as append_pending,
+    ):
+        KnowledgeSpaceReviewTagService.apply_after_review_upload_parse(knowledge, db_file)
+
+    append_approved.assert_called_once_with(
+        space_id=1,
+        file_id=2,
+        tag_names=["行业情报"],
+        user_id=7,
+        tenant_id=1,
+        resource_type=TagResourceTypeEnum.AI_AUTO_TAG,
+    )
+    append_pending.assert_called_once_with(
+        space_id=1,
+        file_id=2,
+        tag_names=["新标签"],
+        user_id=7,
+        tenant_id=1,
+        resource_type=TagResourceTypeEnum.AI_AUTO_TAG,
+    )

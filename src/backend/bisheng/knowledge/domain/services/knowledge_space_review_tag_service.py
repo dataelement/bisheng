@@ -19,6 +19,7 @@ from bisheng.knowledge.domain.services.knowledge_space_auto_tag_service import (
     KnowledgeSpaceAutoTagService,
 )
 from bisheng.knowledge.domain.services.tag_library_tag_service import (
+    LINK_B_PROMPT_CATALOG_LIMIT,
     TagLibraryTagService,
 )
 from bisheng.llm.domain import LLMService
@@ -48,14 +49,19 @@ DEFAULT_REVIEW_TAG_SYSTEM_PROMPT = (
     "1. 分析文档类型与核心主题；\n"
     "2. 提取最多 5 个精准、多维度的标签，覆盖文档类型、业务领域、关键实体、核心主题等维度；\n"
     "3. 标签应简洁、规范、具代表性，避免过于宽泛或冗余；\n"
-    "4. 候选标签需与用户提供的标签库进行比对，若候选标签已存在于标签库中，则排除该标签；\n"
+    "4. 输出标签前，必须与「已入库标签」「待审核标签」比对：\n"
+    "   - 与已入库标签**名称完全一致**（仅空格/全半角差异）：必须复用已入库标签的**确切名称**；\n"
+    "   - 与待审核标签语义相同或接近：必须复用待审核标签的**确切名称**（不得创建近似新名）；\n"
+    "   - 已入库标签优先于待审核标签；\n"
+    "   - 仅当与已入库不完全一致、且与待审核也不构成相同/接近语义时，才可输出新标签名。\n"
     "5. 按相关性从高到低排序。\n\n"
     "# tag rules\n"
     "- 标签使用中文，统一小写，专有名词除外。\n"
     '- 复合概念用连字符"-"连接，如"机器学习-模型训练"。\n'
     "- 禁止出现文档中未涉及的内容；\n"
     '- 禁止过于宽泛的标签，如"文档"、"资料"、"其他"；\n'
-    '- **候选标签需去除首尾空格，过滤空值和明显无意义标签**（如"无"、"null"、"undefined"、""等）。\n\n'
+    '- **候选标签需去除首尾空格，过滤空值和明显无意义标签**（如"无"、"null"、"undefined"、""等）。\n'
+    "- 已入库标签必须名称完全一致才能复用；待审核标签不得输出仅差少量用字的变体名称。\n\n"
     "# output format\n"
     "仅输出纯 JSON 格式，不要包含任何其他解释文字、markdown 代码块标记或额外说明。\n"
     '1. 若满足所有条件且提取到有效标签，输出：`{"tags": ["标签1", "标签2", ...]}`。\n'
@@ -64,7 +70,9 @@ DEFAULT_REVIEW_TAG_SYSTEM_PROMPT = (
     '{"tags": ["会议纪要", "季度业务", "销售目标", "市场推广", "新产品上市", "团队组建", "决策事项"]}\n\n'
 )
 REVIEW_TAG_CONTEXT_INSTRUCTION = (
-    '请结合上述业务域、文件分类与文件内容，生成不在标签库中的新标签。'
+    "请结合上述业务域、文件分类与文件内容生成标签。"
+    "优先复用用户消息中「已入库标签」「待审核标签」列表里的确切名称；"
+    "仅当无合适复用对象时再输出新标签名。"
 )
 
 
@@ -95,7 +103,6 @@ class KnowledgeSpaceReviewTagService:
             if not llm_config.review_tag_enabled or not llm_config.extract_title_model_id:
                 return
 
-            # 获取安全违规内容
             check_text = cls._collect_all_content(documents, db_file)
             non_compliant = SensitiveWordPolicyService.check_text(
                 tenant_id=db_file.tenant_id,
@@ -133,22 +140,62 @@ class KnowledgeSpaceReviewTagService:
                 REVIEW_TAG_CONTEXT_INSTRUCTION,
             )
 
-            logger.info("review_tag_system_prompt space_id={} file_id={} system_prompt={}", knowledge.id, db_file.id, system_prompt)
+            logger.info(
+                "review_tag_system_prompt space_id={} file_id={} system_prompt={}",
+                knowledge.id,
+                db_file.id,
+                system_prompt,
+            )
             tags_list = list(dict.fromkeys(tag for tag in manual_tags + ai_tags if tag))
 
-            selected = cls._invoke_llm(llm, text, tags_list, system_prompt)
-            matched = cls._match_library_tags(selected, tags_list)
-            if not matched:
+            catalog = TagLibraryTagService.load_link_b_tenant_catalog_sync(
+                db_file.tenant_id,
+                TagResourceTypeEnum.AI_AUTO_TAG,
+            )
+            library_by_key = catalog.library_by_key
+            pending_catalog = catalog.pending_catalog
+            tenant_library_names = catalog.library_names[:LINK_B_PROMPT_CATALOG_LIMIT]
+            tenant_pending_names = [(tag.name or "").strip() for tag in pending_catalog if (tag.name or "").strip()][
+                :LINK_B_PROMPT_CATALOG_LIMIT
+            ]
+
+            selected = cls._invoke_llm(
+                llm,
+                text,
+                tags_list,
+                system_prompt,
+                tenant_library_names=tenant_library_names,
+                tenant_pending_names=tenant_pending_names,
+            )
+            if not selected:
                 logger.info(
-                    "review_tag_no_match space_id={} file_id={} selected_count={}",
+                    "review_tag_no_llm_output space_id={} file_id={}",
+                    knowledge.id,
+                    db_file.id,
+                )
+                return
+
+            resolved = TagLibraryTagService.resolve_link_b_tag_candidates_sync(
+                tenant_id=db_file.tenant_id,
+                candidates=selected,
+                resource_type=TagResourceTypeEnum.AI_AUTO_TAG,
+                library_by_key=library_by_key,
+                pending_catalog=pending_catalog,
+            )
+            if not resolved.entries:
+                logger.info(
+                    "review_tag_no_resolved space_id={} file_id={} selected_count={}",
                     knowledge.id,
                     db_file.id,
                     len(selected),
                 )
                 return
 
-            matched = KnowledgeSpaceAutoTagService._cap_ai_tags_for_file(db_file.id, matched)
-            if not matched:
+            capped_names = KnowledgeSpaceAutoTagService._cap_ai_tags_for_file(
+                db_file.id,
+                [entry.canonical_name for entry in resolved.entries],
+            )
+            if not capped_names:
                 logger.info(
                     "review_tag_cap_reached space_id={} file_id={}",
                     knowledge.id,
@@ -156,18 +203,35 @@ class KnowledgeSpaceReviewTagService:
                 )
                 return
 
-            cls._append_file_tags(
-                space_id=knowledge.id,
-                file_id=db_file.id,
-                tag_names=matched,
-                user_id=db_file.user_id or 0,
-                tenant_id=db_file.tenant_id,
-            )
+            target_by_name = {entry.canonical_name: entry.target for entry in resolved.entries}
+            approved_names = [name for name in capped_names if target_by_name.get(name) == "approved"]
+            pending_names = [name for name in capped_names if target_by_name.get(name) == "pending"]
+
+            if approved_names:
+                TagLibraryTagService.append_file_library_tags_sync(
+                    space_id=knowledge.id,
+                    file_id=db_file.id,
+                    tag_names=approved_names,
+                    user_id=db_file.user_id or 0,
+                    tenant_id=db_file.tenant_id,
+                    resource_type=TagResourceTypeEnum.AI_AUTO_TAG,
+                )
+            if pending_names:
+                TagLibraryTagService.append_file_library_review_tags_sync(
+                    space_id=knowledge.id,
+                    file_id=db_file.id,
+                    tag_names=pending_names,
+                    user_id=db_file.user_id or 0,
+                    tenant_id=db_file.tenant_id,
+                    resource_type=TagResourceTypeEnum.AI_AUTO_TAG,
+                )
+
             logger.info(
-                "auto_tag_success space_id={} file_id={} tags={}",
+                "review_tag_success space_id={} file_id={} approved_tags={} pending_tags={}",
                 knowledge.id,
                 db_file.id,
-                matched,
+                approved_names,
+                pending_names,
             )
         except Exception:
             logger.exception(
@@ -180,8 +244,6 @@ class KnowledgeSpaceReviewTagService:
     def _should_run(knowledge: Knowledge, db_file: KnowledgeFile) -> bool:
         if not knowledge or not db_file:
             return False
-        # Align with KnowledgeSpaceAutoTagService._resolve_library_ids so a space
-        # with only the default library fallback can still run link B.
         has_libraries = bool(KnowledgeSpaceAutoTagService._resolve_library_ids(knowledge))
         return (
             knowledge.type == KnowledgeTypeEnum.SPACE.value
@@ -229,15 +291,31 @@ class KnowledgeSpaceReviewTagService:
         text: str,
         library_tags: list[str],
         system_prompt: str = DEFAULT_REVIEW_TAG_SYSTEM_PROMPT,
+        *,
+        tenant_library_names: list[str] | None = None,
+        tenant_pending_names: list[str] | None = None,
     ) -> list[str]:
-        candidate_text = "\n".join(f"- {tag}" for tag in library_tags)
+        space_library_text = "\n".join(f"- {tag}" for tag in library_tags)
+        user_sections = [f"当前空间标签库（供参考，Link A 候选）：\n{space_library_text}"]
+
+        if tenant_library_names:
+            approved_text = "\n".join(f"- {tag}" for tag in tenant_library_names)
+            user_sections.insert(
+                0,
+                "已入库标签（租户全局，名称必须完全一致方可复用，系统将直接生效）：\n" + approved_text,
+            )
+        if tenant_pending_names:
+            pending_text = "\n".join(f"- {tag}" for tag in tenant_pending_names)
+            user_sections.insert(
+                1 if tenant_library_names else 0,
+                "待审核标签（租户全局，语义相同或接近必须复用下列名称）：\n" + pending_text,
+            )
+
+        user_content = "\n\n".join(user_sections) + f"\n\n文件内容：\n{text}"
         response = llm.invoke(
             [
                 {"role": "system", "content": system_prompt},
-                {
-                    "role": "user",
-                    "content": f"用户标签库信息：\n{candidate_text}\n\n文件内容：\n{text}",
-                },
+                {"role": "user", "content": user_content},
             ]
         )
         return KnowledgeSpaceReviewTagService._parse_llm_tags(getattr(response, "content", "") or "")
@@ -262,6 +340,7 @@ class KnowledgeSpaceReviewTagService:
 
     @staticmethod
     def _match_library_tags(selected: Iterable[str], library_tags: list[str]) -> list[str]:
+        """Deprecated: kept for backward-compatible unit tests."""
         not_allowed = {tag: tag for tag in library_tags}
         matched: list[str] = []
         for tag in selected:
