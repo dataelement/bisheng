@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import re
+import unicodedata
 from collections import defaultdict
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from datetime import datetime
+from difflib import SequenceMatcher
+from typing import Literal
 
 from loguru import logger
 from sqlalchemy import or_
@@ -25,6 +29,19 @@ from bisheng.knowledge.domain.models.knowledge_tag_library_link import (
     KnowledgeTagLibraryLinkDao,
 )
 from bisheng.knowledge.domain.schemas.knowledge_space_tag_library_schema import KnowledgeSpaceTagLibraryTreeItem
+from bisheng.knowledge.domain.schemas.link_b_tag_resolver_schema import (
+    PendingReviewTagMatch,
+    ResolvedTagCandidate,
+    TagMatchKind,
+    TagNameCatalogEntry,
+    TagResolutionBatch,
+)
+
+PENDING_REVIEW_TAG_SIMILARITY_THRESHOLD = 0.85
+TAG_SIMILARITY_MIN_LENGTH = 3
+TAG_SUBSTRING_MIN_LENGTH = 2
+LINK_B_L3_MAX_CANDIDATES = 200
+LINK_B_PROMPT_CATALOG_LIMIT = 200
 
 
 class TagLibraryTagService:
@@ -69,6 +86,389 @@ class TagLibraryTagService:
             ):
                 best_by_name[key] = tag
         return list(best_by_name.values())
+
+    @staticmethod
+    def normalize_tag_name_key(name: str) -> str:
+        text = unicodedata.normalize("NFKC", (name or "").strip())
+        return re.sub(r"\s+", "", text)
+
+    @staticmethod
+    def find_exact_tag_name(
+        candidate: str,
+        catalog_by_key: dict[str, str],
+    ) -> tuple[str | None, Literal["exact", "new"]]:
+        key = TagLibraryTagService.normalize_tag_name_key(candidate)
+        if not key:
+            return None, "new"
+        canonical = catalog_by_key.get(key)
+        if canonical:
+            return canonical, "exact"
+        return None, "new"
+
+    @classmethod
+    def find_similar_tag_name(
+        cls,
+        candidate: str,
+        catalog_entries: Sequence[tuple[str, str]],
+        *,
+        similarity_threshold: float = PENDING_REVIEW_TAG_SIMILARITY_THRESHOLD,
+        allow_substring: bool = True,
+        max_l3_candidates: int = LINK_B_L3_MAX_CANDIDATES,
+    ) -> tuple[str | None, TagMatchKind, float | None]:
+        candidate_key = cls.normalize_tag_name_key(candidate)
+        if not candidate_key:
+            return None, "new", None
+
+        for canonical_name, catalog_key in catalog_entries:
+            if catalog_key and catalog_key == candidate_key:
+                return canonical_name, "exact", 1.0
+
+        if allow_substring:
+            substring_hits: list[tuple[str, str]] = []
+            for canonical_name, catalog_key in catalog_entries:
+                if not catalog_key:
+                    continue
+                shorter, longer = (
+                    (candidate_key, catalog_key)
+                    if len(candidate_key) <= len(catalog_key)
+                    else (catalog_key, candidate_key)
+                )
+                if len(shorter) < TAG_SUBSTRING_MIN_LENGTH:
+                    continue
+                if shorter in longer:
+                    substring_hits.append((canonical_name, catalog_key))
+            if substring_hits:
+                canonical_name, _ = max(substring_hits, key=lambda item: len(item[1]))
+                return canonical_name, "substring", None
+
+        if len(candidate_key) < TAG_SIMILARITY_MIN_LENGTH:
+            return None, "new", None
+
+        l3_pool: list[tuple[str, str]] = []
+        for canonical_name, catalog_key in catalog_entries:
+            if not catalog_key or len(catalog_key) < TAG_SIMILARITY_MIN_LENGTH:
+                continue
+            if abs(len(candidate_key) - len(catalog_key)) > 4:
+                continue
+            if candidate_key[0] != catalog_key[0]:
+                continue
+            l3_pool.append((canonical_name, catalog_key))
+
+        if len(l3_pool) > max_l3_candidates:
+            l3_pool = l3_pool[:max_l3_candidates]
+
+        best_name: str | None = None
+        best_score: float | None = None
+        for canonical_name, catalog_key in l3_pool:
+            score = SequenceMatcher(None, candidate_key, catalog_key).ratio()
+            if score >= similarity_threshold and (best_score is None or score > best_score):
+                best_name = canonical_name
+                best_score = score
+
+        if best_name is not None:
+            return best_name, "similarity", best_score
+        return None, "new", None
+
+    @classmethod
+    def dedupe_pending_review_tags_by_name(cls, tags: list[ReviewTag]) -> list[ReviewTag]:
+        best_by_name: dict[str, ReviewTag] = {}
+        for tag in tags:
+            name = (tag.name or "").strip()
+            if not name:
+                continue
+            key = name.lower()
+            existing = best_by_name.get(key)
+            if existing is None:
+                best_by_name[key] = tag
+                continue
+            existing_priority = cls._resource_type_priority(existing.resource_type)
+            tag_priority = cls._resource_type_priority(tag.resource_type)
+            if tag_priority > existing_priority:
+                best_by_name[key] = tag
+            elif tag_priority == existing_priority and (tag.id or 0) < (existing.id or 0):
+                best_by_name[key] = tag
+        return list(best_by_name.values())
+
+    @classmethod
+    def _pick_best_library_tag_from_rows(cls, rows: list[Tag]) -> Tag | None:
+        if not rows:
+            return None
+        deduped = cls.dedupe_library_tags_by_name(rows)
+        return deduped[0] if deduped else None
+
+    @classmethod
+    def list_tenant_library_tag_catalog_sync(cls, tenant_id: int | None) -> list[TagNameCatalogEntry]:
+        if tenant_id is None:
+            return []
+        with get_sync_db_session() as session:
+            rows = session.exec(
+                select(Tag).where(
+                    Tag.tenant_id == tenant_id,
+                    Tag.business_type == TagBusinessTypeEnum.TAG_LIBRARY.value,
+                )
+            ).all()
+        deduped_tags = cls.dedupe_library_tags_by_name(list(rows))
+        return [
+            TagNameCatalogEntry(
+                canonical_name=(tag.name or "").strip(),
+                normalized_key=cls.normalize_tag_name_key(tag.name),
+                resource_type=tag.resource_type,
+            )
+            for tag in deduped_tags
+            if (tag.name or "").strip()
+        ]
+
+    @classmethod
+    def build_tenant_library_by_key_sync(cls, tenant_id: int | None) -> dict[str, str]:
+        return {
+            entry.normalized_key: entry.canonical_name for entry in cls.list_tenant_library_tag_catalog_sync(tenant_id)
+        }
+
+    @classmethod
+    def list_tenant_pending_review_catalog_sync(
+        cls,
+        tenant_id: int | None,
+        resource_type: TagResourceTypeEnum = TagResourceTypeEnum.AI_AUTO_TAG,
+    ) -> list[ReviewTag]:
+        if tenant_id is None:
+            return []
+        library_name_subq = select(Tag.name).where(
+            Tag.business_type == TagBusinessTypeEnum.TAG_LIBRARY.value,
+            Tag.tenant_id == tenant_id,
+        )
+        statement = select(ReviewTag).where(
+            ReviewTag.tenant_id == tenant_id,
+            ReviewTag.review_status == 0,
+            ReviewTag.is_deleted == False,
+            ReviewTag.resource_type == resource_type.value,
+            ReviewTag.name.not_in(library_name_subq),
+        )
+        with get_sync_db_session() as session:
+            rows = session.exec(statement).all()
+        return cls.dedupe_pending_review_tags_by_name(list(rows))
+
+    @classmethod
+    def find_exact_tenant_library_tag_sync(
+        cls,
+        *,
+        tenant_id: int | None,
+        tag_name: str,
+        catalog_by_key: dict[str, str] | None = None,
+    ) -> tuple[str | None, Literal["exact", "new"]]:
+        by_key = catalog_by_key if catalog_by_key is not None else cls.build_tenant_library_by_key_sync(tenant_id)
+        return cls.find_exact_tag_name(tag_name, by_key)
+
+    @classmethod
+    def _pending_catalog_entries(cls, catalog: Sequence[ReviewTag]) -> list[tuple[str, str]]:
+        return [
+            ((tag.name or "").strip(), cls.normalize_tag_name_key(tag.name))
+            for tag in catalog
+            if (tag.name or "").strip()
+        ]
+
+    @classmethod
+    def find_similar_tenant_pending_review_tag_sync(
+        cls,
+        *,
+        tenant_id: int | None,
+        tag_name: str,
+        resource_type: TagResourceTypeEnum = TagResourceTypeEnum.AI_AUTO_TAG,
+        catalog: Sequence[ReviewTag] | None = None,
+        similarity_threshold: float = PENDING_REVIEW_TAG_SIMILARITY_THRESHOLD,
+        allow_substring: bool = True,
+    ) -> PendingReviewTagMatch | None:
+        candidate = (tag_name or "").strip()
+        if not candidate:
+            return None
+
+        pending_catalog = (
+            list(catalog)
+            if catalog is not None
+            else cls.list_tenant_pending_review_catalog_sync(tenant_id, resource_type)
+        )
+        if not pending_catalog:
+            return None
+
+        tag_by_canonical = {(tag.name or "").strip(): tag for tag in pending_catalog if (tag.name or "").strip()}
+        canonical_name, match_kind, score = cls.find_similar_tag_name(
+            candidate,
+            cls._pending_catalog_entries(pending_catalog),
+            similarity_threshold=similarity_threshold,
+            allow_substring=allow_substring,
+        )
+        if not canonical_name or match_kind == "new":
+            return None
+
+        review_tag = tag_by_canonical.get(canonical_name)
+        if review_tag is None:
+            return None
+
+        if match_kind != "exact":
+            logger.info(
+                "review_tag_reuse_pending tenant_id={} original={} canonical={} match_kind={} score={} review_tag_id={}",
+                tenant_id,
+                candidate,
+                canonical_name,
+                match_kind,
+                score,
+                review_tag.id,
+            )
+        return PendingReviewTagMatch(
+            review_tag=review_tag,
+            original=candidate,
+            canonical_name=canonical_name,
+            match_kind=match_kind,
+            score=score,
+        )
+
+    @classmethod
+    def resolve_link_b_tag_candidates_sync(
+        cls,
+        *,
+        tenant_id: int | None,
+        candidates: Iterable[str],
+        resource_type: TagResourceTypeEnum = TagResourceTypeEnum.AI_AUTO_TAG,
+        library_by_key: dict[str, str] | None = None,
+        pending_catalog: Sequence[ReviewTag] | None = None,
+    ) -> TagResolutionBatch:
+        if tenant_id is None:
+            return TagResolutionBatch()
+
+        library_index = (
+            library_by_key if library_by_key is not None else cls.build_tenant_library_by_key_sync(tenant_id)
+        )
+        pending_rows = (
+            list(pending_catalog)
+            if pending_catalog is not None
+            else cls.list_tenant_pending_review_catalog_sync(tenant_id, resource_type)
+        )
+
+        entries: list[ResolvedTagCandidate] = []
+        seen_canonical: set[str] = set()
+
+        for raw_candidate in candidates:
+            candidate = (raw_candidate or "").strip()
+            if not candidate:
+                continue
+
+            canonical, library_kind = cls.find_exact_tenant_library_tag_sync(
+                tenant_id=tenant_id,
+                tag_name=candidate,
+                catalog_by_key=library_index,
+            )
+            if canonical and library_kind == "exact":
+                if canonical not in seen_canonical:
+                    seen_canonical.add(canonical)
+                    entries.append(
+                        ResolvedTagCandidate(
+                            original=candidate,
+                            canonical_name=canonical,
+                            target="approved",
+                            match_kind="exact",
+                            score=1.0,
+                        )
+                    )
+                    logger.info(
+                        "review_tag_reuse_library tenant_id={} original={} canonical={} match_kind={} score={}",
+                        tenant_id,
+                        candidate,
+                        canonical,
+                        "exact",
+                        1.0,
+                    )
+                continue
+
+            pending_match = cls.find_similar_tenant_pending_review_tag_sync(
+                tenant_id=tenant_id,
+                tag_name=candidate,
+                resource_type=resource_type,
+                catalog=pending_rows,
+            )
+            if pending_match:
+                canonical = pending_match.canonical_name
+                if canonical not in seen_canonical:
+                    seen_canonical.add(canonical)
+                    entries.append(
+                        ResolvedTagCandidate(
+                            original=candidate,
+                            canonical_name=canonical,
+                            target="pending",
+                            match_kind=pending_match.match_kind,
+                            score=pending_match.score,
+                        )
+                    )
+                continue
+
+            if candidate not in seen_canonical:
+                seen_canonical.add(candidate)
+                entries.append(
+                    ResolvedTagCandidate(
+                        original=candidate,
+                        canonical_name=candidate,
+                        target="pending",
+                        match_kind="new",
+                        score=None,
+                    )
+                )
+
+        return TagResolutionBatch(entries=entries)
+
+    @classmethod
+    def load_link_b_tenant_catalog_sync(
+        cls,
+        tenant_id: int | None,
+        resource_type: TagResourceTypeEnum = TagResourceTypeEnum.AI_AUTO_TAG,
+    ):
+        from bisheng.knowledge.domain.services.link_b_tag_resolver_catalog_cache import (
+            LinkBTagResolverCatalogCache,
+        )
+
+        return LinkBTagResolverCatalogCache.load_sync(tenant_id, resource_type)
+
+    @classmethod
+    def invalidate_link_b_tenant_catalog_cache_sync(cls, tenant_id: int | None) -> None:
+        from bisheng.knowledge.domain.services.link_b_tag_resolver_catalog_cache import (
+            LinkBTagResolverCatalogCache,
+        )
+
+        LinkBTagResolverCatalogCache.invalidate_sync(tenant_id)
+
+    @classmethod
+    async def invalidate_link_b_tenant_catalog_cache_async(cls, tenant_id: int | None) -> None:
+        from bisheng.knowledge.domain.services.link_b_tag_resolver_catalog_cache import (
+            LinkBTagResolverCatalogCache,
+        )
+
+        await LinkBTagResolverCatalogCache.invalidate_async(tenant_id)
+
+    @classmethod
+    def _find_tenant_pending_review_tag_exact_in_session(
+        cls,
+        session,
+        *,
+        tenant_id: int | None,
+        tag_name: str,
+        resource_type: TagResourceTypeEnum,
+    ) -> ReviewTag | None:
+        normalized = (tag_name or "").strip()
+        if not normalized or tenant_id is None:
+            return None
+        library_name_subq = select(Tag.name).where(
+            Tag.business_type == TagBusinessTypeEnum.TAG_LIBRARY.value,
+            Tag.tenant_id == tenant_id,
+        )
+        rows = session.exec(
+            select(ReviewTag).where(
+                ReviewTag.tenant_id == tenant_id,
+                ReviewTag.name == normalized,
+                ReviewTag.is_deleted == False,
+                ReviewTag.review_status == 0,
+                ReviewTag.resource_type == resource_type.value,
+                ReviewTag.name.not_in(library_name_subq),
+            )
+        ).all()
+        deduped = cls.dedupe_pending_review_tags_by_name(list(rows))
+        return deduped[0] if deduped else None
 
     @classmethod
     async def list_tags(cls, library_id: int) -> list[Tag]:
@@ -399,35 +799,31 @@ class TagLibraryTagService:
         if not normalized or tenant_id is None:
             return None
         async with get_async_db_session() as session:
-            row = (
+            rows = (
                 await session.exec(
-                    select(Tag)
-                    .where(
+                    select(Tag).where(
                         Tag.business_type == TagBusinessTypeEnum.TAG_LIBRARY.value,
                         Tag.tenant_id == tenant_id,
                         Tag.name == normalized,
                     )
-                    .limit(1)
                 )
-            ).first()
-        return row
+            ).all()
+        return cls._pick_best_library_tag_from_rows(list(rows))
 
     @classmethod
     def find_library_tag_by_name_sync(cls, *, tenant_id: int | None, tag_name: str) -> Tag | None:
         normalized = (tag_name or "").strip()
         if not normalized or tenant_id is None:
             return None
-        statement = (
-            select(Tag)
-            .where(
-                Tag.business_type == TagBusinessTypeEnum.TAG_LIBRARY.value,
-                Tag.tenant_id == tenant_id,
-                Tag.name == normalized,
-            )
-            .limit(1)
-        )
         with get_sync_db_session() as session:
-            return session.exec(statement).first()
+            rows = session.exec(
+                select(Tag).where(
+                    Tag.business_type == TagBusinessTypeEnum.TAG_LIBRARY.value,
+                    Tag.tenant_id == tenant_id,
+                    Tag.name == normalized,
+                )
+            ).all()
+        return cls._pick_best_library_tag_from_rows(list(rows))
 
     @classmethod
     def _first_library_id_for_space(cls, space_id: int) -> int | None:
@@ -453,15 +849,14 @@ class TagLibraryTagService:
         normalized = (tag_name or "").strip()
         if not normalized or tenant_id is None:
             return None
-        return session.exec(
-            select(Tag)
-            .where(
+        rows = session.exec(
+            select(Tag).where(
                 Tag.business_type == TagBusinessTypeEnum.TAG_LIBRARY.value,
                 Tag.tenant_id == tenant_id,
                 Tag.name == normalized,
             )
-            .limit(1)
-        ).first()
+        ).all()
+        return cls._pick_best_library_tag_from_rows(list(rows))
 
     @classmethod
     def append_file_library_tags_sync(
@@ -550,6 +945,8 @@ class TagLibraryTagService:
                     space_id,
                     file_id,
                 )
+                return
+        cls.invalidate_link_b_tenant_catalog_cache_sync(tenant_id)
 
     @classmethod
     def append_file_library_review_tags_sync(
@@ -578,19 +975,24 @@ class TagLibraryTagService:
             return
 
         with get_sync_db_session() as session:
-            existing_tags = session.exec(
-                select(ReviewTag).where(
-                    ReviewTag.business_type == TagBusinessTypeEnum.TAG_LIBRARY.value,
-                    ReviewTag.business_id == str(library_id),
-                    ReviewTag.name.in_(normalized_names),
-                )
-            ).all()
-            tag_by_name = {tag.name: tag for tag in existing_tags}
+            tag_by_name: dict[str, ReviewTag] = {}
             for tag_name in normalized_names:
                 if tag_name in tag_by_name:
                     continue
-                if cls.find_library_tag_by_name_sync(tenant_id=tenant_id, tag_name=tag_name):
+
+                tenant_pending = cls._find_tenant_pending_review_tag_exact_in_session(
+                    session,
+                    tenant_id=tenant_id,
+                    tag_name=tag_name,
+                    resource_type=resource_type,
+                )
+                if tenant_pending:
+                    tag_by_name[tag_name] = tenant_pending
                     continue
+
+                if cls._find_library_tag_in_session(session, tenant_id=tenant_id, tag_name=tag_name):
+                    continue
+
                 tag = ReviewTag(
                     name=tag_name,
                     business_type=TagBusinessTypeEnum.TAG_LIBRARY.value,
@@ -636,6 +1038,8 @@ class TagLibraryTagService:
                     space_id,
                     file_id,
                 )
+                return
+        cls.invalidate_link_b_tenant_catalog_cache_sync(tenant_id)
 
     @classmethod
     async def get_or_create_library_tag_async(
@@ -883,11 +1287,25 @@ class TagLibraryTagService:
                 now=now,
             )
             await session.commit()
+        await cls.invalidate_link_b_tenant_catalog_cache_async(tenant_id)
         return system, manual, ai
 
     @classmethod
     async def delete_for_library(cls, library_id: int) -> None:
+        tenant_id: int | None = None
         async with get_async_db_session() as session:
+            tenant_row = (
+                await session.exec(
+                    select(Tag.tenant_id)
+                    .where(
+                        Tag.business_type == TagBusinessTypeEnum.TAG_LIBRARY.value,
+                        Tag.business_id == cls._business_id(library_id),
+                    )
+                    .limit(1)
+                )
+            ).first()
+            if tenant_row is not None:
+                tenant_id = int(tenant_row)
             await session.exec(
                 delete(Tag).where(
                     Tag.business_type == TagBusinessTypeEnum.TAG_LIBRARY.value,
@@ -895,6 +1313,7 @@ class TagLibraryTagService:
                 )
             )
             await session.commit()
+        await cls.invalidate_link_b_tenant_catalog_cache_async(tenant_id)
 
     @classmethod
     async def collect_space_portal_tag_map(cls, space_ids: list[int]) -> dict[str, list[Tag]]:
