@@ -155,6 +155,8 @@ export async function getKnowledgeSpaceTagLibraryUsageApi(id: number): Promise<{
 export interface ReviewTagResourceItem {
   file_source?: string
   file_name?: string
+  file_id?: number
+  id?: number
   submit_time?: string
   knowledge_id?: number
   file_url?: string

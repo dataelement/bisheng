@@ -18,13 +18,51 @@ import {
     getKnowledgeSpaceTagLibrariesByKnowledgeApi,
     type KnowledgeSpaceTagLibraryListItem,
     type ReviewTagItem,
+    type ReviewTagResourceItem,
 } from "@/controllers/API/knowledgeSpaceTagLibrary";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { getWorkspaceClientUrl } from "@/utils/workspaceUrl";
 import { Check, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 const PAGE_SIZE = 5;
+
+function buildReviewTagFileDetailUrl(resource: ReviewTagResourceItem): string | null {
+    const fileId = resource.file_id ?? resource.id;
+    const spaceId = resource.knowledge_id;
+    const fileName = resource.file_name?.trim();
+    if (!fileId || !spaceId || !fileName) {
+        return null;
+    }
+
+    const ext = fileName.includes(".") ? (fileName.split(".").pop() || "") : "";
+    const params = new URLSearchParams();
+    params.set("name", fileName);
+    if (ext) {
+        params.set("type", ext);
+    }
+    params.set("spaceId", String(spaceId));
+
+    return getWorkspaceClientUrl(`/knowledge/file/${fileId}?${params.toString()}`);
+}
+
+function renderReviewTagFileSource(resource: ReviewTagResourceItem) {
+    const detailUrl = buildReviewTagFileDetailUrl(resource);
+    if (detailUrl) {
+        return (
+            <a
+                href={detailUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="truncate text-blue-600 hover:underline"
+            >
+                {resource.file_name}
+            </a>
+        );
+    }
+    return resource.file_name || "-";
+}
 
 interface KnowledgeSpaceTagSectionProps {
     visible: boolean;
@@ -360,20 +398,9 @@ export default function KnowledgeSpaceReviewTagSection({
                                                         {formatTagSourceLabel(group.resource_type, t)}
                                                     </td>
                                                 )}
-                                                <td className="truncate px-4 py-3">
-                                                    {resource.file_url ? (
-                                                        <a
-                                                            href={resource.file_url}
-                                                            target="_blank"
-                                                            rel="noopener noreferrer"
-                                                            className="text-blue-600 hover:underline"
-                                                        >
-                                                            {resource.file_name || "-"}
-                                                        </a>
-                                                    ) : (
-                                                        resource.file_name || "-"
-                                                    )}
-                                                </td>
+                                                    <td className="truncate px-4 py-3">
+                                                        {renderReviewTagFileSource(resource)}
+                                                    </td>
                                                 <td className="px-4 py-3">{resource.submit_time || "-"}</td>
                                                 <td className="px-4 py-3">
                                                     {renderActions(group, resource.knowledge_id ?? null)}
