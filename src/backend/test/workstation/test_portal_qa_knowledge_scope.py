@@ -84,6 +84,37 @@ async def test_pre_retrieve_passes_resolved_file_filters_to_query_chunks(monkeyp
 
 
 @pytest.mark.asyncio
+async def test_pre_retrieve_empty_resolved_file_scope_returns_empty_context(
+    monkeypatch,
+):
+    query_chunks = AsyncMock()
+    monkeypatch.setattr(
+        chat_service.WorkStationService,
+        'queryChunksFromDB',
+        query_chunks,
+        raising=False,
+    )
+
+    result = await chat_service._retrieve_selected_knowledge_context(
+        question='空知识库继续问答',
+        knowledge_bases_info=[
+            {
+                'id': 7101,
+                'source': 'space',
+                'type': KnowledgeTypeEnum.SPACE.value,
+            }
+        ],
+        max_token=15000,
+        login_user=_login_user(),
+        citation_collector=MagicMock(),
+        file_ids_by_space={},
+    )
+
+    assert result == ''
+    query_chunks.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_resolve_user_kb_file_filters_uses_knowledge_space_service(monkeypatch):
     data = APIChatCompletion(
         clientTimestamp='2026-06-17T10:00:00',

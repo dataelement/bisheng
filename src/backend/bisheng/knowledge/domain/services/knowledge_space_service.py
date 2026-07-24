@@ -5241,11 +5241,18 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         resolved: dict[int, list[int]] = {}
         denied_explicit: list[tuple[int, int]] = []
+        denied_space_count = 0
         for space_id, file_map in candidate_files_by_space.items():
-            _, is_department_space = await self._get_shougang_portal_qa_space(
-                space_id=space_id,
-                discovery_scope="public_and_department",
-            )
+            if not file_map:
+                continue
+            try:
+                _, is_department_space = await self._get_shougang_portal_qa_space(
+                    space_id=space_id,
+                    discovery_scope="public_and_department",
+                )
+            except SpacePermissionDeniedError:
+                denied_space_count += 1
+                continue
             authorized, _ = await self._filter_shougang_portal_qa_authorized_files(
                 files=list(file_map.values()),
                 is_department_space=is_department_space,
@@ -5257,13 +5264,27 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if authorized_ids:
                 resolved[space_id] = [file_id for file_id in file_map if file_id in authorized_ids]
 
-        if denied_explicit:
-            raise ValueError("所选部门文件尚未获得查看权限。")
         deduped_count = sum(len(file_ids) for file_ids in resolved.values())
         if mode == "files" and deduped_count > max_files:
             raise ValueError("一次最多可选择20个文件进行问答。")
+        if denied_explicit:
+            logger.info(
+                "Portal QA filtered unauthorized explicit files "
+                f"denied_file_count={len(denied_explicit)}"
+            )
+        if denied_space_count:
+            logger.info(
+                "Portal QA filtered inaccessible spaces "
+                f"denied_space_count={denied_space_count}"
+            )
         if deduped_count == 0:
-            raise ValueError("没有可用于问答的已授权文件。")
+            logger.info(
+                "Portal QA scope resolved to no authorized files; "
+                "continue with empty reference context "
+                f"mode={mode} knowledge_space_count={len(knowledge_space_ids or [])} "
+                f"folder_ref_count={len(folder_refs or [])} "
+                f"file_ref_count={len(file_refs or [])}"
+            )
         return {space_id: file_ids for space_id, file_ids in sorted(resolved.items())}
 
     async def get_shougang_portal_file(

@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from bisheng.common.errcode.knowledge_space import SpacePermissionDeniedError
 from bisheng.core import database as core_database
 from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFileStatus
 from bisheng.knowledge.domain.services import knowledge_space_service as svc_mod
@@ -171,7 +172,7 @@ async def test_portal_qa_tree_keeps_unauthorized_department_file_disabled(
 
 
 @pytest.mark.asyncio
-async def test_portal_qa_explicit_department_file_ref_is_rejected(
+async def test_portal_qa_unauthorized_explicit_file_returns_empty_scope(
     monkeypatch,
 ):
     service = svc_mod.KnowledgeSpaceService(
@@ -202,19 +203,89 @@ async def test_portal_qa_explicit_department_file_ref_is_rejected(
         AsyncMock(return_value=[denied_file]),
     )
 
-    with pytest.raises(ValueError, match="所选部门文件尚未获得查看权限"):
-        await service.resolve_shougang_portal_qa_scope_file_ids(
-            mode="files",
-            knowledge_space_ids=[7103],
-            folder_refs=[],
-            file_refs=[
-                SimpleNamespace(
-                    knowledge_space_id=7103,
-                    file_id=9301,
-                )
-            ],
-            max_files=20,
-        )
+    result = await service.resolve_shougang_portal_qa_scope_file_ids(
+        mode="files",
+        knowledge_space_ids=[7103],
+        folder_refs=[],
+        file_refs=[
+            SimpleNamespace(
+                knowledge_space_id=7103,
+                file_id=9301,
+            )
+        ],
+        max_files=20,
+    )
+
+    assert result == {}
+
+
+@pytest.mark.asyncio
+async def test_portal_qa_empty_whole_space_returns_empty_scope(
+    monkeypatch,
+):
+    service = svc_mod.KnowledgeSpaceService(
+        request=SimpleNamespace(headers={}),
+        login_user=SimpleNamespace(user_id=7, user_name="tester"),
+    )
+    load_files = AsyncMock(return_value=[])
+    resolve_space = AsyncMock(return_value=(SimpleNamespace(id=7101), False))
+    monkeypatch.setattr(
+        service,
+        "_get_shougang_portal_qa_space",
+        resolve_space,
+    )
+    monkeypatch.setattr(
+        svc_mod.KnowledgeFileDao,
+        "aget_file_by_filters",
+        load_files,
+    )
+
+    result = await service.resolve_shougang_portal_qa_scope_file_ids(
+        mode="knowledge_space",
+        knowledge_space_ids=[7101],
+        folder_refs=[],
+        file_refs=[],
+        max_files=20,
+    )
+
+    assert result == {}
+    resolve_space.assert_not_awaited()
+    load_files.assert_awaited_once_with(
+        7101,
+        status=[KnowledgeFileStatus.SUCCESS.value],
+        file_type=FileType.FILE.value,
+    )
+
+
+@pytest.mark.asyncio
+async def test_portal_qa_inaccessible_space_returns_empty_scope(
+    monkeypatch,
+):
+    service = svc_mod.KnowledgeSpaceService(
+        request=SimpleNamespace(headers={}),
+        login_user=SimpleNamespace(user_id=7, user_name="tester"),
+    )
+    file = _file(9301, space_id=7103)
+    monkeypatch.setattr(
+        service,
+        "_get_shougang_portal_qa_space",
+        AsyncMock(side_effect=SpacePermissionDeniedError()),
+    )
+    monkeypatch.setattr(
+        svc_mod.KnowledgeFileDao,
+        "aget_file_by_filters",
+        AsyncMock(return_value=[file]),
+    )
+
+    result = await service.resolve_shougang_portal_qa_scope_file_ids(
+        mode="knowledge_space",
+        knowledge_space_ids=[7103],
+        folder_refs=[],
+        file_refs=[],
+        max_files=20,
+    )
+
+    assert result == {}
 
 
 @pytest.mark.asyncio

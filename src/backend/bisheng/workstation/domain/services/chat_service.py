@@ -914,6 +914,10 @@ async def _retrieve_selected_knowledge_context(
     """
     if not knowledge_bases_info:
         return ''
+    # None means unrestricted retrieval; an empty mapping is an explicit empty scope.
+    if file_ids_by_space == {}:
+        logger.info('[pre_retrieve_kb] empty resolved file scope, skip retrieval')
+        return ''
 
     from bisheng.api.v1.schema.chat_schema import UseKnowledgeBaseParam
 
