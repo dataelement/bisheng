@@ -18,15 +18,8 @@ const Apps = lazy(() => import("@/pages/BuildPage/apps"));
 const EditAssistantPage = lazy(() => import("@/pages/BuildPage/assistant/editAssistant"));
 const WorkBenchPage = lazy(() => import("@/pages/BuildPage/bench/DialogueWork"));
 const FlowPage = lazy(() => import("@/pages/BuildPage/flow"));
-const SkillPage = lazy(() => import("@/pages/BuildPage/skills/editSkill"));
-const L2Edit = lazy(() => import("@/pages/BuildPage/skills/l2Edit"));
 const SkillToolsPage = lazy(() => import("@/pages/BuildPage/tools"));
-const SkillChatPage = lazy(() => import("@/pages/ChatAppPage"));
-const ChatAssitantShare = lazy(() => import("@/pages/ChatAppPage/chatAssitantShare"));
-const ChatShare = lazy(() => import("@/pages/ChatAppPage/chatShare"));
-const ChatPro = lazy(() => import("@/pages/ChatAppPage/chatWebview"));
 const DataSetPage = lazy(() => import("@/pages/DataSetPage"));
-const DiffFlowPage = lazy(() => import("@/pages/DiffFlowPage"));
 const EvaluatingPage = lazy(() => import("@/pages/EvaluationPage"));
 const EvaluatingCreate = lazy(() => import("@/pages/EvaluationPage/EvaluationCreate"));
 const KnowledgePage = lazy(() => import("@/pages/KnowledgePage"));
@@ -83,21 +76,16 @@ const privateRouter = [
     children: [
       // 开发环境登录后曾跳转 /admin，但业务路由无该 path，会落入 * → 404；统一进管理端后再由 userContext 纠偏
       { path: "admin", element: <Navigate to="/label" replace /> },
-      // { path: "", element: <SkillChatPage />, },
       { path: "filelib", element: <KnowledgePage />, permission: 'knowledge', },
       { path: "filelib/:id", element: <FilesPage />, permission: 'knowledge', },
       { path: "filelib/upload/:id", element: <FilesUpload />, permission: 'knowledge', },
       { path: "filelib/adjust/:fileId", element: <AdjustFilesUpload />, permission: 'knowledge', },
       { path: "filelib/qalib/:id", element: <QasPage />, permission: 'knowledge', },
       { path: "build/apps", element: <Apps />, permission: 'build', },
-      // { path: "build/assist", element: <SkillAssisPage />, permission: 'build', },
-      // { path: "build/skills", element: <SkillsPage />, permission: 'build', },
       // @ts-ignore
       { path: "build/tools", element: <SkillToolsPage />, permission: 'build', },
       { path: "build/client", element: <WorkBenchPage />, permission: 'workstation' },
       { path: "build", element: <Navigate to="apps" replace /> },
-      { path: "build/skill", element: <L2Edit />, permission: 'build', },
-      { path: "build/skill/:id/:vid", element: <L2Edit />, permission: 'build', },
       { path: "build/temps/:type", element: <Templates />, permission: 'create_app', },
       { path: "model/management", element: <Management />, permission: 'model' },
       { path: "model/finetune", element: <Finetune />, permission: 'model' },
@@ -123,13 +111,6 @@ const privateRouter = [
   { path: "dashboard/share/:boardId", element: <SharePage />, errorElement: <RouteErrorBoundary /> },
   { path: "model/doc", element: <Doc />, errorElement: <RouteErrorBoundary /> },
   {
-    path: "/skill/:id/",
-    errorElement: <RouteErrorBoundary />,
-    children: [
-      { path: "", element: <SkillPage /> }
-    ]
-  },
-  {
     path: "/flow/:id/",
     errorElement: <RouteErrorBoundary />,
     children: [
@@ -151,11 +132,9 @@ const privateRouter = [
   // Standalone chat pages — redirect to client app (/workspace)
   { path: "/chat/assistant/auth/:id/", element: <RedirectToClient />, errorElement: <RouteErrorBoundary /> },
   { path: "/chat/flow/auth/:id/", element: <RedirectToClient />, errorElement: <RouteErrorBoundary /> },
-  { path: "/chat", element: <SkillChatPage />, errorElement: <RouteErrorBoundary /> },
   { path: "/chat/flow/:id/", element: <RedirectToClient />, errorElement: <RouteErrorBoundary /> },
   { path: "/chat/assistant/:id/", element: <RedirectToClient />, errorElement: <RouteErrorBoundary /> },
   { path: "/report/:id/", element: <Report />, errorElement: <RouteErrorBoundary /> },
-  { path: "/diff/:id/:vid/:cid", element: <DiffFlowPage />, errorElement: <RouteErrorBoundary /> },
   { path: "/reset", element: <ResetPwdPage />, errorElement: <RouteErrorBoundary /> },
   // Backdoor login: also exposed inside privateRouter so an authenticated user
   // navigating here (e.g. to switch accounts) does not fall into the * -> /404 trap.

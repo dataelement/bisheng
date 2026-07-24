@@ -46,11 +46,6 @@
   "filePathEmpty": "File path is empty",
   "fileLoadFailed": "File loading failed",
   "fileContentEmpty": "File content is empty",
-  "unsupportedType": "Unsupported type: {{type}}, only CSV/XLSX/XLS are supported",
-  "unknownError": "Unknown error",
-  "currentSheetNoData": "Current sheet has no data",
-  "rowNumber": "Row",
-  "defaultColumnName": "Column {{index}}",
   "loading": "Loading file...",
   "supportedFormats": "Supports CSV, XLSX, XLS formats",
   "previewFailed": "Preview failed",
@@ -438,5 +433,6 @@
   "setSeparately": "Set separately for each table",
   "split": "Split",
   "successMsg": "File uploaded successfully",
-  "qa": {}
+  "qa": {},
+  "legacyFormatNotSupported": "Legacy file format cannot be previewed"
 }

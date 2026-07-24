@@ -4,8 +4,6 @@
   "assistantCanUseSkillsAndTools": "The assistant can use multiple skills and tools",
   "customWorkflow": "Custom Workflow",
   "simpleNodeOrchestration": "Orchestrate task flows through simple nodes, supporting parallel and cyclic processes, and complex human-computer interactions during workflow execution",
-  "customSkill": "Custom Skill",
-  "richComponentsForBuildingApps": "Build applications with rich components, providing more parameters for fine-tuning effects.",
   "appTemplate": "Application Templates",
   "chooseTemplateOrCreateBlank": "You can choose a template to start with or create a blank application.",
   "workflow": "Workflow",

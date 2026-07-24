@@ -30,7 +30,6 @@ export default function FileViewPanne({ file }) {
                 map[el.page].push({ id: generateUUID(8), label: el.bbox, active: true, txt: '' })
             })
         })
-        console.log('file.chunks[0].box[0].page :>> ', file.chunks);
         setPositon([file.chunks[0].box[0].page, file.chunks[0].box[0].bbox[1] || 0])
         return map
     }, [file.chunks])
@@ -53,7 +52,7 @@ export default function FileViewPanne({ file }) {
             if (suffix === 'pdf' || file.parse_type === 'uns') {
                 return previewFileUrl && <MemoizedFileView scrollTo={postion} fileUrl={file.fileUrl} labels={labels} />
             } else {
-                return <div className="flex justify-center items-center h-full text-gray-400">旧版文件格式暂不支持预览</div>
+                return <div className="flex justify-center items-center h-full text-gray-400">{t('legacyFormatNotSupported', { ns: 'knowledge' })}</div>
             }
         }
         switch (suffix) {
@@ -72,9 +71,9 @@ export default function FileViewPanne({ file }) {
             case 'jpeg':
             case 'bmp': return <img
                 className="border"
-                src={previewFileUrl.replace(/https?:\/\/[^\/]+/, __APP_ENV__.BASE_URL)} alt="" />
+                src={previewFileUrl.replace(/https?:\/\/[^/]+/, __APP_ENV__.BASE_URL)} alt="" />
             default:
-                return <div className="flex justify-center items-center h-full text-gray-400">该类型文件不支持预览</div>
+                return <div className="flex justify-center items-center h-full text-gray-400">{t('fileNotSupported', { ns: 'knowledge' })}</div>
         }
     }
 

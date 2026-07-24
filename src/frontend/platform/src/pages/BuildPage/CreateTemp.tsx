@@ -5,11 +5,10 @@ import { useToast } from '@/components/bs-ui/toast/use-toast';
 import { AppType } from '@/types/app';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Button } from '../../../components/bs-ui/button';
-import { Input, Textarea } from '../../../components/bs-ui/input';
-import { createTempApi } from '../../../controllers/API';
-import { captureAndAlertRequestErrorHoc } from '../../../controllers/request';
-import { FlowType } from '../../../types/flow';
+import { Button } from '@/components/bs-ui/button';
+import { Input, Textarea } from '@/components/bs-ui/input';
+import { createTempApi } from '@/controllers/API';
+import { captureAndAlertRequestErrorHoc } from '@/controllers/request';
 
 export default function CreateTemp({ flow, open, type, setOpen, onCreated }) {
     const { t } = useTranslation();
@@ -20,17 +19,18 @@ export default function CreateTemp({ flow, open, type, setOpen, onCreated }) {
     });
 
     useEffect(() => {
-        open && setData({
-            name: flow.name,
-            description: flow.description || ''
-        });
-    }, [open]);
+        if (open && flow) {
+            setData({
+                name: flow.name,
+                description: flow.description || ''
+            });
+        }
+    }, [open, flow]);
 
     const { message } = useToast();
     const handleSubmit = () => {
         const nameMap = {
             [AppType.FLOW]: t('build.workFlow'),
-            [AppType.SKILL]: t('build.skillName'),
             [AppType.ASSISTANT]: t('build.assistant')
         };
         const labelName = nameMap[type];
@@ -48,7 +48,7 @@ export default function CreateTemp({ flow, open, type, setOpen, onCreated }) {
 
         captureAndAlertRequestErrorHoc(
             createTempApi({ ...data, flow_id: flow.id }, type)
-                .then((res) => {
+                .then(() => {
                     setOpen(false);
                     message({
                         variant: 'success',

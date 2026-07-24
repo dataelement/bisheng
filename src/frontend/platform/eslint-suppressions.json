@@ -7,39 +7,6 @@
       "count": 3
     }
   },
-  "src/CustomNodes/GenericNode/components/parameterComponent/index.tsx": {
-    "@typescript-eslint/ban-ts-comment": {
-      "count": 2
-    },
-    "@typescript-eslint/no-explicit-any": {
-      "count": 3
-    },
-    "@typescript-eslint/no-unused-expressions": {
-      "count": 2
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 5
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 5
-    }
-  },
-  "src/CustomNodes/GenericNode/components/parameterComponent/l2Index.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "src/CustomNodes/GenericNode/index.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    },
-    "react-hooks/rules-of-hooks": {
-      "count": 1
-    }
-  },
   "src/alerts/alertDropDown/index.tsx": {
     "@typescript-eslint/no-unused-vars": {
       "count": 1
@@ -477,11 +444,6 @@
       "count": 10
     },
     "react-hooks/exhaustive-deps": {
-      "count": 1
-    }
-  },
-  "src/components/bs-comp/sheets/AppTempSheet.tsx": {
-    "@typescript-eslint/no-unused-vars": {
       "count": 1
     }
   },
@@ -1557,11 +1519,8 @@
     }
   },
   "src/pages/BuildPage/apps.tsx": {
-    "@typescript-eslint/ban-ts-comment": {
-      "count": 1
-    },
     "@typescript-eslint/no-explicit-any": {
-      "count": 16
+      "count": 12
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 4
@@ -2310,138 +2269,6 @@
       "count": 2
     }
   },
-  "src/pages/BuildPage/skills/CardSelectVersion.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    }
-  },
-  "src/pages/BuildPage/skills/CreateTemp.tsx": {
-    "@typescript-eslint/no-unused-expressions": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 2
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 1
-    }
-  },
-  "src/pages/BuildPage/skills/FormSet.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 3
-    },
-    "@typescript-eslint/no-unused-expressions": {
-      "count": 1
-    },
-    "no-restricted-imports": {
-      "count": 1
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 1
-    }
-  },
-  "src/pages/BuildPage/skills/editSkill/CollectionNameComponent/index.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    }
-  },
-  "src/pages/BuildPage/skills/editSkill/CollectionNameComponent/selectCollection.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "src/pages/BuildPage/skills/editSkill/DisclosureComponent/index.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 2
-    }
-  },
-  "src/pages/BuildPage/skills/editSkill/Header.tsx": {
-    "@typescript-eslint/no-unused-expressions": {
-      "count": 2
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 5
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 3
-    }
-  },
-  "src/pages/BuildPage/skills/editSkill/PageComponent/index.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 9
-    }
-  },
-  "src/pages/BuildPage/skills/editSkill/SelectionMenuComponent/index.tsx": {
-    "react-hooks/exhaustive-deps": {
-      "count": 1
-    }
-  },
-  "src/pages/BuildPage/skills/editSkill/extraSidebarComponent/PersonalComponents.tsx": {
-    "no-restricted-syntax": {
-      "count": 5
-    }
-  },
-  "src/pages/BuildPage/skills/editSkill/extraSidebarComponent/index.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 2
-    }
-  },
-  "src/pages/BuildPage/skills/editSkill/index.tsx": {
-    "react-hooks/exhaustive-deps": {
-      "count": 1
-    }
-  },
-  "src/pages/BuildPage/skills/editSkill/nodeToolbarComponent/index.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "@typescript-eslint/no-non-null-asserted-optional-chain": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    },
-    "no-case-declarations": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 6
-    }
-  },
-  "src/pages/BuildPage/skills/editSkill/skillPage.tsx": {
-    "react-hooks/exhaustive-deps": {
-      "count": 1
-    }
-  },
-  "src/pages/BuildPage/skills/l2Edit.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 2
-    },
-    "react-hooks/rules-of-hooks": {
-      "count": 22
-    }
-  },
   "src/pages/BuildPage/tools/EditMcp.tsx": {
     "@typescript-eslint/no-unused-vars": {
       "count": 1
@@ -2539,102 +2366,6 @@
       "count": 1
     }
   },
-  "src/pages/ChatAppPage/chatAssitantShare.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 2
-    },
-    "no-restricted-syntax": {
-      "count": 1
-    },
-    "react-hooks/rules-of-hooks": {
-      "count": 2
-    }
-  },
-  "src/pages/ChatAppPage/chatShare.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 1
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 1
-    },
-    "react-hooks/rules-of-hooks": {
-      "count": 4
-    }
-  },
-  "src/pages/ChatAppPage/chatWebview.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 1
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 1
-    }
-  },
-  "src/pages/ChatAppPage/components/ChatHome.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 1
-    }
-  },
-  "src/pages/ChatAppPage/components/ChatPanne.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 8
-    },
-    "@typescript-eslint/no-unused-expressions": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    },
-    "no-empty": {
-      "count": 1
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 2
-    }
-  },
-  "src/pages/ChatAppPage/components/ChatReportForm.tsx": {
-    "@typescript-eslint/no-unused-expressions": {
-      "count": 1
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 1
-    }
-  },
-  "src/pages/ChatAppPage/components/FileViewPanne.tsx": {
-    "no-console": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 2
-    },
-    "no-useless-escape": {
-      "count": 1
-    }
-  },
-  "src/pages/ChatAppPage/components/ForcePrompt.tsx": {
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
-  "src/pages/ChatAppPage/components/MarkLabel.tsx": {
-    "no-restricted-imports": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
   "src/pages/ChatAppPage/components/ResouceModal.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 5
@@ -2650,17 +2381,6 @@
     },
     "react-hooks/exhaustive-deps": {
       "count": 5
-    }
-  },
-  "src/pages/ChatAppPage/index.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 4
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 2
-    },
-    "no-restricted-syntax": {
-      "count": 1
     }
   },
   "src/pages/Dashboard/colorSchemes.ts": {
@@ -2992,57 +2712,6 @@
   },
   "src/pages/DepartmentPage/index.tsx": {
     "no-restricted-syntax": {
-      "count": 2
-    }
-  },
-  "src/pages/DiffFlowPage/components/Cell.tsx": {
-    "@typescript-eslint/no-unused-expressions": {
-      "count": 1
-    }
-  },
-  "src/pages/DiffFlowPage/components/Component.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    }
-  },
-  "src/pages/DiffFlowPage/components/ComponentParameter.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 3
-    }
-  },
-  "src/pages/DiffFlowPage/components/RunForm.tsx": {
-    "no-restricted-syntax": {
-      "count": 4
-    }
-  },
-  "src/pages/DiffFlowPage/components/RunTest.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 2
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    },
-    "no-console": {
-      "count": 1
-    },
-    "no-empty": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 2
-    }
-  },
-  "src/pages/DiffFlowPage/index.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    },
-    "no-console": {
-      "count": 1
-    },
-    "react-hooks/exhaustive-deps": {
       "count": 2
     }
   },
@@ -3974,7 +3643,7 @@
       "count": 2
     },
     "@typescript-eslint/no-unused-vars": {
-      "count": 4
+      "count": 1
     }
   },
   "src/store/dashboardStore.tsx": {
@@ -3983,11 +3652,6 @@
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 1
-    }
-  },
-  "src/store/diffFlowStore.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 2
     }
   },
   "src/store/editFlowStore.tsx": {

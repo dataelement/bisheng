@@ -1,5 +1,5 @@
 // @ts-strict-ignore
-import { AssistantIcon, FlowIcon, SkillIcon } from "@/components/bs-icons";
+import { AssistantIcon, FlowIcon } from "@/components/bs-icons";
 import { AppNumType } from "@/types/app";
 import { cn } from "@/utils";
 import { useMemo } from "react";
@@ -27,7 +27,6 @@ export default function AppAvator({ id = 1, flowType = '', url = '', className =
     if (url) return <img src={__APP_ENV__.BASE_URL + url} className={cn(`w-6 h-6 rounded-sm object-cover`, className)} />
 
     const flowIcons = {
-        [AppNumType.SKILL]: <SkillIcon className="" />,
         [AppNumType.ASSISTANT]: <AssistantIcon className="" />,
         [AppNumType.FLOW]: <FlowIcon className="" />
     }

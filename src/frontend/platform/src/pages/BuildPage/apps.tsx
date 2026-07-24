@@ -16,10 +16,9 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import SelectSearch from "@/components/bs-ui/select/select";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { userContext } from "@/contexts/userContext";
-import { readTempsDatabase } from "@/controllers/API";
 import { changeAssistantStatusApi, deleteAssistantApi } from "@/controllers/API/assistant";
 import { createAssistantsApi, getAssistantDetailApi, saveAssistanttApi } from "@/controllers/API/assistant";
-import { deleteFlowFromDatabase, getAppsApi, getFlowApi, saveFlowToDatabase, updataOnlineState } from "@/controllers/API/flow";
+import { deleteFlowFromDatabase, getAppsApi, getFlowApi } from "@/controllers/API/flow";
 import { copyReportTemplate, createWorkflowApi, onlineWorkflow } from "@/controllers/API/workflow";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { AppNumType, AppType } from "@/types/app";
@@ -31,8 +30,8 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import CreateApp from "./CreateApp";
 import { useCreateTemp, useErrorPrompt, useQueryLabels } from "./hook";
-import CardSelectVersion from "./skills/CardSelectVersion";
-import CreateTemp from "./skills/CreateTemp";
+import CardSelectVersion from "./CardSelectVersion";
+import CreateTemp from "./CreateTemp";
 
 /** 按应用上线(2)/下线(1)状态筛选，与后端 ``/api/v1/workflow/list?status=`` 一致 */
 export const SelectAppStatus = ({ defaultValue = 'all', onChange }: { defaultValue?: string; onChange: (v: string) => void }) => {
@@ -62,7 +61,6 @@ export const SelectType = ({ all = false, defaultValue = 'all', onChange }) => {
     const options: any = [
         { label: t('build.workflow'), value: AppType.FLOW },
         { label: t('build.assistant'), value: AppType.ASSISTANT },
-        // { label: t('build.skill'), value: AppType.SKILL },
     ];
 
     if (all) {
@@ -86,7 +84,6 @@ export const SelectType = ({ all = false, defaultValue = 'all', onChange }) => {
 
 const TypeNames = {
     5: AppType.ASSISTANT,
-    1: AppType.SKILL,
     10: AppType.FLOW
 }
 
@@ -217,29 +214,13 @@ export default function apps() {
                 }
                 return;
             }
-            if (item.flow_type === AppNumType.SKILL) {
-                const newName = `${flow.name}-${generateUUID(5)}`;
-                const res: any = await captureAndAlertRequestErrorHoc(
-                    saveFlowToDatabase({
-                        name: newName,
-                        id: '' as any,
-                        data: flow.data,
-                        description: flow.description,
-                    })
-                );
-                if (res?.id) {
-                    reload();
-                    const vid = res.version_id ?? res.version_list?.find((v: any) => v.is_current === 1)?.id;
-                    if (vid) navigate(`/build/skill/${res.id}/${vid}`, { state: { flow: res } });
-                }
-            }
         } finally {
             setCopyingId(null);
         }
     };
 
     const handleOpenPermission = (item: any) => {
-        const typeMap = { 5: 'assistant', 1: 'workflow', 10: 'workflow' };
+        const typeMap = { 5: 'assistant', 10: 'workflow' };
         setPermTarget({ id: String(item.id), name: item.name, type: typeMap[item.flow_type] || 'workflow' });
         setPermDialogOpen(true);
     };
@@ -250,14 +231,7 @@ export default function apps() {
     const handleCheckedChange = (checked, data) => {
         if (checked && !canPublish(data.id)) return;
         if (!checked && !canUnpublish(data.id)) return;
-        if (data.flow_type === 1) {
-            return captureAndAlertRequestErrorHoc(updataOnlineState(data.id, data, checked).then(res => {
-                if (res) {
-                    refreshData((item) => item.id === data.id, { status: checked ? 2 : 1 })
-                }
-                return res
-            }))
-        } else if (data.flow_type === 5) {
+        if (data.flow_type === 5) {
             return captureAndAlertRequestErrorHoc(changeAssistantStatusApi(data.id, checked ? 2 : 1)).then(res => {
                 if (res === null) {
                     refreshData((item) => item.id === data.id, { status: checked ? 2 : 1 })
@@ -275,7 +249,6 @@ export default function apps() {
     }
 
     const typeCnNames = {
-        1: t('build.skill'),
         5: t('build.assistant'),
         10: t('build.workflow')
     }
@@ -304,9 +277,6 @@ export default function apps() {
         }
         if (data.flow_type === 5) {
             navigate(`/assistant/${data.id}`, { state: { flow: data } })
-        } else if (data.flow_type === 1) {
-            const vid = data.version_list.find(item => item.is_current === 1)?.id
-            navigate(`/build/skill/${data.id}/${vid}`, { state: { flow: data } })
         } else {
             navigate(`/flow/${data.id}`, { state: { flow: data } })
         }
@@ -314,30 +284,7 @@ export default function apps() {
 
     const createAppModalRef = useRef(null)
     const handleCreateApp = async (type, tempId = 0, item?: any) => {
-        if (type === AppType.SKILL) {
-            if (!tempId) return navigate('/build/skill')
-            // select template
-            const [flow] = await readTempsDatabase(type, tempId)
-
-            flow.name = `${flow.name}-${generateUUID(5)}`
-            // @ts-ignore
-            captureAndAlertRequestErrorHoc(saveFlowToDatabase({ ...flow, id: flow.flow_id }).then((res: any) => {
-                res.user_name = user.user_name
-                res.write = true
-                // setOpen(false)
-                navigate(`/build/skill/${res.id}/${res.version_id}`)
-            }))
-        } else {
-            createAppModalRef.current.open(
-                type,
-                tempId,
-                // {
-                //     id: item?.id,
-                //     logo: item?.logo,
-                //     type: TypeNames[item.flow_type]
-                // }
-            );
-        }
+        createAppModalRef.current.open(type, tempId);
     }
 
     const { selectLabel, setSelectLabel, setSearchKey, filteredOptions, allOptions, refetchLabels } = useQueryLabels(t)
@@ -444,7 +391,7 @@ export default function apps() {
                                         </LabelShow>
                                     }
                                     footer={
-                                        <Badge className={`absolute py-0 px-1 right-0 bottom-0 rounded-none rounded-br-md  ${item.flow_type === AppNumType.SKILL && 'bg-gray-950'} ${item.flow_type === AppNumType.ASSISTANT && 'bg-[#fdb136]'}`}>
+                                        <Badge className={`absolute py-0 px-1 right-0 bottom-0 rounded-none rounded-br-md  ${item.flow_type === AppNumType.ASSISTANT && 'bg-[#fdb136]'}`}>
                                             {typeCnNames[item.flow_type]}
                                         </Badge>
                                     }

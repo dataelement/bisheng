@@ -41,11 +41,6 @@
   "filePathEmpty": "文件路径为空",
   "fileLoadFailed": "文件加载失败",
   "fileContentEmpty": "文件内容为空",
-  "unsupportedType": "不支持的类型: {{type}}，仅支持CSV/XLSX/XLS",
-  "unknownError": "未知错误",
-  "currentSheetNoData": "当前Sheet无数据",
-  "rowNumber": "行号",
-  "defaultColumnName": "列{{index}}",
   "loading": "加载文件中...",
   "supportedFormats": "支持 CSV, XLSX, XLS 格式",
   "previewFailed": "预览失败",
@@ -438,5 +433,6 @@
   "tagNameMaxLength": "标签名不能超过 {{count}} 个字符",
   "tagDeleted": "删除成功",
   "tagOperationRequiresCompletedFiles": "仅已完成文件支持添加标签",
-  "qa": {}
+  "qa": {},
+  "legacyFormatNotSupported": "旧版文件格式暂不支持预览"
 }

@@ -46,11 +46,6 @@
   "filePathEmpty": "ファイルパスが空です",
   "fileLoadFailed": "ファイル読み込み失敗",
   "fileContentEmpty": "ファイル内容が空です",
-  "unsupportedType": "サポートされていないタイプ: {{type}}，CSV/XLSX/XLSのみ対応",
-  "unknownError": "不明なエラー",
-  "currentSheetNoData": "現在のシートにデータがありません",
-  "rowNumber": "行番号",
-  "defaultColumnName": "列{{index}}",
   "loading": "ファイル読み込み中...",
   "supportedFormats": "CSV、XLSX、XLS形式に対応",
   "previewFailed": "プレビュー失敗",
@@ -432,5 +427,6 @@
   "appendTitleTooltipImageAlt": "チャンクに章題を追加する場合の説明図",
   "maxChunkSize": "最大分割長",
   "hfFilterTooltip": "解析時にヘッダーとフッターの内容を自動的にフィルタリングします",
-  "qa": {}
+  "qa": {},
+  "legacyFormatNotSupported": "旧形式のファイルはプレビューできません"
 }

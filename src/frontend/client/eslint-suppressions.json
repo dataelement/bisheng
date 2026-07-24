@@ -3022,18 +3022,12 @@
   },
   "src/pages/appChat/index.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 5
-    },
-    "@typescript-eslint/no-unused-expressions": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 5
-    },
-    "no-case-declarations": {
       "count": 2
     },
-    "no-empty": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 2
+    },
+    "no-case-declarations": {
       "count": 2
     },
     "no-restricted-imports": {
@@ -3046,7 +3040,7 @@
       "count": 1
     },
     "react-hooks/rules-of-hooks": {
-      "count": 17
+      "count": 16
     }
   },
   "src/pages/appChat/store/appSidebarAtoms.ts": {

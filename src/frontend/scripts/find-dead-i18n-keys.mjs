@@ -32,8 +32,10 @@ const SCOPES = [
     id: 'platform',
     srcDirs: ['platform/src'],
     langs: ['zh-Hans', 'en-US', 'ja'],
-    // api_errors is generated + reconciled against the backend registry by check-i18n
-    files: () => fs.readdirSync(path.join(WS, 'platform/public/locales/zh-Hans')).filter((f) => f.endsWith('.json') && f !== 'api_errors.json'),
+    // Generated artifacts are excluded: api_errors is reconciled against the
+    // backend registry by check-i18n; shared.json is consumed from packages/*
+    // (outside the scanned src dirs) and owned by packages/locales.
+    files: () => fs.readdirSync(path.join(WS, 'platform/public/locales/zh-Hans')).filter((f) => f.endsWith('.json') && f !== 'api_errors.json' && f !== 'shared.json'),
     path: (lang, file) => path.join(WS, 'platform/public/locales', lang, file),
     // platform addresses keys as "key" (default ns), "ns:key", or t('key', {ns})
     nsOf: (file) => file.replace(/\.json$/, ''),

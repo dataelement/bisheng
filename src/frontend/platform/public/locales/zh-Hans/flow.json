@@ -4,8 +4,6 @@
   "assistantCanUseSkillsAndTools": "助手可以调用多个技能和工具",
   "customWorkflow": "自定义工作流",
   "simpleNodeOrchestration": "通过简单的节点编排任务流程，支持并行和成环，支持工作流执行过程中复杂人机交互",
-  "customSkill": "自定义技能",
-  "richComponentsForBuildingApps": "通过丰富的组件搭建应用，提供更多参数以供效果调优。",
   "appTemplate": "应用模板",
   "chooseTemplateOrCreateBlank": "您可以选择一个模板开始，或者自定义创建一个空白应用",
   "workflow": "工作流",

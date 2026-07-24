@@ -7,14 +7,27 @@ import { AppNumType } from "@/types/app";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
-const SelectComp = ({ value, onChange = (id) => { }, data, disabled = false }) => {
+interface VersionCardData {
+    id: string;
+    flow_type: number;
+    version_list: { id: number | string; name: string; is_current: number }[];
+}
+
+interface SelectCompProps {
+    value: string;
+    onChange?: (id: string) => void;
+    data: VersionCardData;
+    disabled?: boolean;
+}
+
+const SelectComp = ({ value, onChange, data, disabled = false }: SelectCompProps) => {
 
     const handleChange = (id) => {
         const request = data.flow_type === AppNumType.FLOW
             ? changeWorkflowCurrentVersion
             : changeCurrentVersion
         captureAndAlertRequestErrorHoc(request({ flow_id: data.id, version_id: Number(id) }))
-        onChange(id)
+        onChange?.(id)
     }
 
     return <Select value={value} onValueChange={handleChange} disabled={disabled}>
@@ -25,7 +38,7 @@ const SelectComp = ({ value, onChange = (id) => { }, data, disabled = false }) =
             {
                 data.version_list.length ?
                     data.version_list.map(version => (
-                        <SelectItem value={version.id}>{version.name}</SelectItem>
+                        <SelectItem key={version.id} value={String(version.id)}>{version.name}</SelectItem>
                     ))
                     : <SelectItem value={'0'}>v0</SelectItem>
             }
@@ -35,9 +48,9 @@ const SelectComp = ({ value, onChange = (id) => { }, data, disabled = false }) =
 
 export default function CardSelectVersion(
     { showPop, ...props }:
-        { showPop: boolean, data: any }
+        { showPop: boolean, data: VersionCardData }
 ) {
-    const [value, setValue] = useState(props.data.version_list.find(item => item.is_current === 1)?.id || '0')
+    const [value, setValue] = useState(String(props.data.version_list.find(item => item.is_current === 1)?.id ?? '0'))
 
     const { t } = useTranslation()
 

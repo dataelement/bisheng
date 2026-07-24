@@ -268,8 +268,7 @@ export async function deleteBrandAssetApi(
 export async function readTempsDatabase(type, id?: number): Promise<FlowType[]> {
     const typeMap = {
         [AppType.FLOW]: 10,
-        [AppType.ASSISTANT]: 5,
-        [AppType.SKILL]: 1
+        [AppType.ASSISTANT]: 5
     }
     return await axios.get(`/api/v1/skill/template?flow_type=${typeMap[type]}${id ? '&id=' + id : ''}`);
 }

@@ -4,8 +4,6 @@
   "assistantCanUseSkillsAndTools": "アシスタントは複数のスキルとツールを使用できます",
   "customWorkflow": "カスタムワークフロー",
   "simpleNodeOrchestration": "シンプルなノード編成でタスクフローを作成、並列処理と循環をサポート、複雑な人間と機械のインタラクションをサポート",
-  "customSkill": "カスタムスキル",
-  "richComponentsForBuildingApps": "アプリ作成のための豊富なコンポーネント、効果調整のための追加パラメータを提供",
   "appTemplate": "アプリテンプレート",
   "chooseTemplateOrCreateBlank": "テンプレートを選んで開始するか、空のアプリをカスタマイズして作成できます",
   "workflow": "ワークフロー",
