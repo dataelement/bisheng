@@ -35,16 +35,6 @@ def extract_and_generate_alias(file_id: int) -> str | None:
         db_file.object_name,
         db_file.tenant_id,
     )
-    if db_file.status != KnowledgeFileStatus.WAITING.value:
-        logger.info(
-            "title extraction skipped, file status={} is not WAITING file_id={}",
-            db_file.status,
-            file_id,
-        )
-        return None
-    if not db_file.object_name:
-        logger.warning("title extraction skipped, missing object_name file_id={}", file_id)
-        return None
 
     try:
         with tempfile.TemporaryDirectory() as tmp_dir:
