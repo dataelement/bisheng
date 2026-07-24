@@ -289,6 +289,9 @@ export function CreateKnowledgeSpaceDrawer({
     );
     const bindDepartmentLabel = isClinicMode ? "绑定科室" : "绑定部门";
     const bindDepartmentPlaceholder = isClinicMode ? "请选择绑定科室" : "请选择绑定部门";
+    const bindDepartmentSearchPlaceholder = isClinicMode
+        ? localize("com_permission.search_clinic", { defaultValue: "搜索科室" })
+        : localize("com_permission.search_department");
 
     const levelOptions = useMemo(() => ([
         {
@@ -886,6 +889,7 @@ export function CreateKnowledgeSpaceDrawer({
                                                     selectionMode="single"
                                                     loadDepartments={loadCreateDepartments}
                                                     disabledIds={boundDepartmentIds}
+                                                    searchPlaceholder={bindDepartmentSearchPlaceholder}
                                                 />
                                             </div>
                                         </PopoverContent>
