@@ -1436,17 +1436,17 @@ function FileRow({
                                         onPreview?.();
                                     }}
                                 >
-                                    <span className="block truncate">{file.name}</span>
+                                    <span className="block truncate">{file.aliasName}</span>
                                 </span>
                             </div>
                             {file.aliasName && (
                                 <div className="mt-0.5 flex min-w-0 items-center gap-2">
                                     <div
                                         className="flex min-w-0 items-center gap-1 text-xs text-[#86909c]"
-                                        title={`${file.name}：${file.aliasName}`}
+                                        title={`原文件名：${file.name}`}
                                     >
-                                        <span className="shrink-0">{file.name}：</span>
-                                        <span className="truncate">{file.aliasName}</span>
+                                        <span className="shrink-0">原文件名：</span>
+                                        <span className="truncate">{file.name}</span>
                                     </div>
                                     {canRename && (onAcceptAlias || onRejectAlias) && (
                                         <div className="flex shrink-0 items-center gap-1">
@@ -1459,7 +1459,7 @@ function FileRow({
                                                         onAcceptAlias();
                                                     }}
                                                 >
-                                                    接收
+                                                    替换
                                                 </button>
                                             )}
                                             {onRejectAlias && (
@@ -1471,7 +1471,7 @@ function FileRow({
                                                         onRejectAlias();
                                                     }}
                                                 >
-                                                    拒绝
+                                                    放弃
                                                 </button>
                                             )}
                                         </div>
