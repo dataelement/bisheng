@@ -1436,7 +1436,7 @@ function FileRow({
                                         onPreview?.();
                                     }}
                                 >
-                                    <span className="block truncate">{file.aliasName}</span>
+                                    <span className="block truncate">{file.aliasName ? file.aliasName : file.name}</span>
                                 </span>
                             </div>
                             {file.aliasName && (
