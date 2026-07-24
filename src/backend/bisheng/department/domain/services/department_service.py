@@ -1721,44 +1721,74 @@ class DepartmentService:
         """
         old_dept_id_for_fga: int | None = None
         fga_add_new: bool = False
-        async with get_async_db_session() as session:
-            uds = list(
-                (
-                    await session.exec(
-                        select(UserDepartment).where(UserDepartment.user_id == user_id),
-                    )
-                ).all()
-            )
-            primary_rows = [u for u in uds if int(u.is_primary or 0) == 1]
-            old_primary = primary_rows[0] if primary_rows else None
-
-            if old_primary and int(old_primary.department_id) == int(new_dept_id):
-                return
-
-            target_ud = next(
-                (u for u in uds if int(u.department_id) == int(new_dept_id)),
-                None,
-            )
-
-            if old_primary is not None:
-                old_dept_id_for_fga = int(old_primary.department_id)
-                await session.delete(old_primary)
-
-            if target_ud:
-                target_ud.is_primary = 1
-                session.add(target_ud)
-            else:
-                session.add(
-                    UserDepartment(
-                        user_id=user_id,
-                        department_id=new_dept_id,
-                        is_primary=1,
-                        source="local",
-                    )
+        prepared = None
+        try:
+            async with get_async_db_session() as session:
+                uds = list(
+                    (
+                        await session.exec(
+                            select(UserDepartment).where(UserDepartment.user_id == user_id),
+                        )
+                    ).all()
                 )
-                fga_add_new = True
+                primary_rows = [u for u in uds if int(u.is_primary or 0) == 1]
+                old_primary = primary_rows[0] if primary_rows else None
 
-            await session.commit()
+                if old_primary and int(old_primary.department_id) == int(new_dept_id):
+                    return
+
+                from bisheng.permission.domain.services.primary_department_change_coordinator import (
+                    prepare_primary_department_change,
+                )
+
+                prepared = await prepare_primary_department_change(
+                    user_id=user_id,
+                    old_department_id=(
+                        int(old_primary.department_id) if old_primary is not None else None
+                    ),
+                    new_department_id=int(new_dept_id),
+                    trigger_source="local",
+                )
+                target_ud = next(
+                    (u for u in uds if int(u.department_id) == int(new_dept_id)),
+                    None,
+                )
+
+                if old_primary is not None:
+                    old_dept_id_for_fga = int(old_primary.department_id)
+                    await session.delete(old_primary)
+
+                if target_ud:
+                    target_ud.is_primary = 1
+                    session.add(target_ud)
+                else:
+                    session.add(
+                        UserDepartment(
+                            user_id=user_id,
+                            department_id=new_dept_id,
+                            is_primary=1,
+                            source="local",
+                        )
+                    )
+                    fga_add_new = True
+
+                await session.commit()
+        except Exception as exc:
+            from bisheng.permission.domain.services.primary_department_change_coordinator import (
+                cancel_primary_department_change,
+            )
+
+            await cancel_primary_department_change(
+                prepared,
+                reason=f"primary_department_update_failed:{type(exc).__name__}",
+            )
+            raise
+
+        from bisheng.permission.domain.services.primary_department_change_coordinator import (
+            activate_primary_department_change,
+        )
+
+        await activate_primary_department_change(prepared)
 
         invalidate_portal_recommendation_users_best_effort([user_id])
 

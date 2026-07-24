@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from datetime import datetime
 
 from bisheng.knowledge.domain.models.department_file_view_grant import (
     DepartmentFileViewGrant,
@@ -8,6 +9,16 @@ from bisheng.knowledge.domain.models.department_file_view_grant import (
 
 
 class DepartmentFileViewGrantRepository(ABC):
+    @abstractmethod
+    async def list_active_by_user_page(
+        self,
+        *,
+        tenant_id: int,
+        user_id: int,
+        after_id: int,
+        limit: int,
+    ) -> list[DepartmentFileViewGrant]: ...
+
     @abstractmethod
     async def list_by_user_and_files(
         self,
@@ -79,3 +90,15 @@ class DepartmentFileViewGrantRepository(ABC):
         file_ids: set[int],
         reason: str,
     ) -> list[DepartmentFileViewGrant]: ...
+
+    @abstractmethod
+    async def invalidate_snapshot_grant(
+        self,
+        *,
+        tenant_id: int,
+        grant_id: int,
+        user_id: int,
+        expected_approval_instance_id: int,
+        expected_granted_at: datetime | None,
+        reason: str,
+    ) -> DepartmentFileViewGrant | None: ...

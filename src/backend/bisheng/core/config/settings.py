@@ -173,7 +173,13 @@ class CeleryConf(BaseModel):
                 "bisheng.worker.admin_scope.*": {"queue": "knowledge_celery"},  # v2.5.1 F019 — 10min sweep, low-volume
                 "bisheng.worker.message.*": {"queue": "knowledge_celery"},  # WeChat message push tasks
                 "bisheng.worker.portal_course.*": {"queue": "knowledge_celery"},
+                "bisheng.worker.permission.*": {"queue": "knowledge_celery"},
             }
+        else:
+            self.task_routers.setdefault(
+                "bisheng.worker.permission.*",
+                {"queue": "knowledge_celery"},
+            )
         if "telemetry_mid_user_increment" not in self.beat_schedule:
             self.beat_schedule["telemetry_mid_user_increment"] = {
                 "task": "bisheng.worker.telemetry.mid_table.sync_mid_user_increment",
@@ -243,6 +249,11 @@ class CeleryConf(BaseModel):
             self.beat_schedule["retry_failed_tuples"] = {
                 "task": "bisheng.worker.permission.retry_failed_tuples.retry_failed_tuples",
                 "schedule": 30.0,  # Every 30 seconds
+            }
+        if "scan_department_transfer_permission_cleanup" not in self.beat_schedule:
+            self.beat_schedule["scan_department_transfer_permission_cleanup"] = {
+                "task": "bisheng.worker.permission.department_transfer_cleanup.scan_due_events",
+                "schedule": 30.0,
             }
         if "dispatch_approval_notifications" not in self.beat_schedule:
             self.beat_schedule["dispatch_approval_notifications"] = {

@@ -81,39 +81,61 @@ class UserDepartmentService:
                 "changed": False,
             }
 
-        async with get_async_db_session() as session:
-            if current_primary is not None:
-                await session.exec(
-                    update(UserDepartment)
-                    .where(
-                        UserDepartment.user_id == user_id,
-                        UserDepartment.department_id == current_primary.department_id,
-                    )
-                    .values(is_primary=0)
-                )
+        from bisheng.permission.domain.services.primary_department_change_coordinator import (
+            activate_primary_department_change,
+            cancel_primary_department_change,
+            prepare_primary_department_change,
+        )
 
-            # Upsert the new primary row. If the user already belongs to
-            # new_dept_id as a secondary, promote it; otherwise insert.
-            existing_secondary = await session.exec(_select_user_dept(user_id, new_dept_id))
-            row = existing_secondary.first()
-            if row is None:
-                session.add(
-                    UserDepartment(
-                        user_id=user_id,
-                        department_id=new_dept_id,
-                        is_primary=1,
+        prepared = await prepare_primary_department_change(
+            user_id=user_id,
+            old_department_id=(
+                int(current_primary.department_id) if current_primary is not None else None
+            ),
+            new_department_id=int(new_dept_id),
+            trigger_source="user_service",
+        )
+        try:
+            async with get_async_db_session() as session:
+                if current_primary is not None:
+                    await session.exec(
+                        update(UserDepartment)
+                        .where(
+                            UserDepartment.user_id == user_id,
+                            UserDepartment.department_id == current_primary.department_id,
+                        )
+                        .values(is_primary=0)
                     )
-                )
-            else:
-                await session.exec(
-                    update(UserDepartment)
-                    .where(
-                        UserDepartment.user_id == user_id,
-                        UserDepartment.department_id == new_dept_id,
+
+                # Upsert the new primary row. If the user already belongs to
+                # new_dept_id as a secondary, promote it; otherwise insert.
+                existing_secondary = await session.exec(_select_user_dept(user_id, new_dept_id))
+                row = existing_secondary.first()
+                if row is None:
+                    session.add(
+                        UserDepartment(
+                            user_id=user_id,
+                            department_id=new_dept_id,
+                            is_primary=1,
+                        )
                     )
-                    .values(is_primary=1)
-                )
-            await session.commit()
+                else:
+                    await session.exec(
+                        update(UserDepartment)
+                        .where(
+                            UserDepartment.user_id == user_id,
+                            UserDepartment.department_id == new_dept_id,
+                        )
+                        .values(is_primary=1)
+                    )
+                await session.commit()
+        except Exception as exc:
+            await cancel_primary_department_change(
+                prepared,
+                reason=f"primary_department_update_failed:{type(exc).__name__}",
+            )
+            raise
+        await activate_primary_department_change(prepared)
 
         invalidate_portal_recommendation_users_best_effort([user_id])
 

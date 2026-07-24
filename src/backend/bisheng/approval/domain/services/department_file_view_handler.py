@@ -94,9 +94,20 @@ class DepartmentFileViewApprovalHandler:
                 ):
                     raise ApprovalDepartmentFileInvalidBindingError()
 
+                from bisheng.permission.domain.services.department_transfer_grant_guard import (
+                    protect_department_file_grant,
+                )
+
+                applicant_user_id = int(payload_snapshot.get("applicant_user_id") or 0)
+                await protect_department_file_grant(
+                    user_id=applicant_user_id,
+                    space_id=space_id,
+                    file_id=file_id,
+                    approval_instance_id=int(instance_id),
+                )
                 grant = await grant_repository.activate(
                     tenant_id=int(payload_snapshot.get("tenant_id") or 1),
-                    user_id=int(payload_snapshot.get("applicant_user_id") or 0),
+                    user_id=applicant_user_id,
                     space_id=space_id,
                     file_id=file_id,
                     department_id=int(resource.department_id),

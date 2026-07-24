@@ -19,6 +19,28 @@ class DepartmentFileViewGrantRepositoryImpl(DepartmentFileViewGrantRepository):
     def __init__(self, session: AsyncSession):
         self.session = session
 
+    async def list_active_by_user_page(
+        self,
+        *,
+        tenant_id: int,
+        user_id: int,
+        after_id: int,
+        limit: int,
+    ) -> list[DepartmentFileViewGrant]:
+        statement = (
+            select(DepartmentFileViewGrant)
+            .where(
+                DepartmentFileViewGrant.tenant_id == tenant_id,
+                DepartmentFileViewGrant.user_id == user_id,
+                DepartmentFileViewGrant.status == DepartmentFileViewGrantStatus.ACTIVE,
+                DepartmentFileViewGrant.id > after_id,
+            )
+            .order_by(DepartmentFileViewGrant.id.asc())
+            .limit(limit)
+        )
+        result = await self.session.execute(statement)
+        return list(result.scalars().all())
+
     @staticmethod
     def _resource_predicate(
         resource_keys: set[tuple[int, int]],
@@ -259,3 +281,38 @@ class DepartmentFileViewGrantRepositoryImpl(DepartmentFileViewGrantRepository):
             self.session.add(row)
         await self.session.flush()
         return rows
+
+    async def invalidate_snapshot_grant(
+        self,
+        *,
+        tenant_id: int,
+        grant_id: int,
+        user_id: int,
+        expected_approval_instance_id: int,
+        expected_granted_at: datetime | None,
+        reason: str,
+    ) -> DepartmentFileViewGrant | None:
+        statement = (
+            select(DepartmentFileViewGrant)
+            .where(
+                DepartmentFileViewGrant.tenant_id == tenant_id,
+                DepartmentFileViewGrant.id == grant_id,
+                DepartmentFileViewGrant.user_id == user_id,
+            )
+            .with_for_update()
+        )
+        result = await self.session.execute(statement)
+        row = result.scalars().first()
+        if (
+            row is None
+            or row.status != DepartmentFileViewGrantStatus.ACTIVE
+            or int(row.approval_instance_id) != expected_approval_instance_id
+            or row.granted_at != expected_granted_at
+        ):
+            return None
+        row.status = DepartmentFileViewGrantStatus.INVALIDATED
+        row.invalidated_at = datetime.now()
+        row.invalidated_reason = reason
+        self.session.add(row)
+        await self.session.flush()
+        return row

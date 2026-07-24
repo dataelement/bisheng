@@ -49,6 +49,10 @@ from bisheng.worker.org_sync.reconcile_tasks import (
     report_ts_conflicts_weekly,
 )
 from bisheng.worker.org_sync.tasks import check_org_sync_schedules, execute_org_sync
+from bisheng.worker.permission.department_transfer_cleanup import (
+    process_event,
+    scan_due_events,
+)
 from bisheng.worker.permission.retry_failed_tuples import retry_failed_tuples
 from bisheng.worker.portal_course.tasks import (
     process_portal_course_media_cleanup,

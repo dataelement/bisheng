@@ -693,6 +693,72 @@ INDEX_PHSC_TENANT_BATCH = """\
 CREATE INDEX IF NOT EXISTS ix_phsc_tenant_batch
     ON portal_hot_search_candidate (tenant_id, batch_id)"""
 
+TABLE_DEPARTMENT_TRANSFER_PERMISSION_CLEANUP_EVENT = """\
+CREATE TABLE IF NOT EXISTS department_transfer_permission_cleanup_event (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id INTEGER NOT NULL DEFAULT 1,
+    event_key VARCHAR(128) NOT NULL UNIQUE,
+    user_id INTEGER NOT NULL,
+    old_department_id INTEGER NOT NULL,
+    new_department_id INTEGER NOT NULL,
+    trigger_source VARCHAR(32) NOT NULL,
+    status VARCHAR(24) NOT NULL DEFAULT 'preparing',
+    requested_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    changed_at DATETIME,
+    deadline_at DATETIME,
+    completed_at DATETIME,
+    overdue_at DATETIME,
+    next_retry_at DATETIME,
+    retry_count INTEGER NOT NULL DEFAULT 0,
+    snapshot_complete INTEGER NOT NULL DEFAULT 0,
+    total_count INTEGER NOT NULL DEFAULT 0,
+    revoked_count INTEGER NOT NULL DEFAULT 0,
+    protected_count INTEGER NOT NULL DEFAULT 0,
+    skipped_count INTEGER NOT NULL DEFAULT 0,
+    failed_count INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT,
+    create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+)"""
+
+TABLE_DEPARTMENT_TRANSFER_PERMISSION_CLEANUP_ITEM = """\
+CREATE TABLE IF NOT EXISTS department_transfer_permission_cleanup_item (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id INTEGER NOT NULL DEFAULT 1,
+    event_id INTEGER NOT NULL,
+    item_key VARCHAR(255) NOT NULL,
+    item_type VARCHAR(32) NOT NULL,
+    user_id INTEGER NOT NULL,
+    resource_type VARCHAR(32) NOT NULL,
+    resource_id VARCHAR(64) NOT NULL,
+    root_space_id INTEGER,
+    relation VARCHAR(32),
+    source_ref VARCHAR(128),
+    snapshot JSON NOT NULL,
+    status VARCHAR(24) NOT NULL DEFAULT 'pending',
+    protected_at DATETIME,
+    protected_source VARCHAR(32),
+    processed_at DATETIME,
+    retry_count INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT,
+    create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(event_id, item_key)
+)"""
+
+INDEX_DTPC_STATUS_RETRY = """\
+CREATE INDEX IF NOT EXISTS idx_dtpc_status_retry
+    ON department_transfer_permission_cleanup_event (status, next_retry_at)"""
+INDEX_DTPC_USER_CHANGED = """\
+CREATE INDEX IF NOT EXISTS idx_dtpc_user_changed
+    ON department_transfer_permission_cleanup_event (user_id, changed_at)"""
+INDEX_DTPC_ITEM_USER_STATUS = """\
+CREATE INDEX IF NOT EXISTS idx_dtpc_item_user_status
+    ON department_transfer_permission_cleanup_item (user_id, status)"""
+INDEX_DTPC_ITEM_EVENT_STATUS = """\
+CREATE INDEX IF NOT EXISTS idx_dtpc_item_event_status
+    ON department_transfer_permission_cleanup_item (event_id, status)"""
+
 
 # ---------------------------------------------------------------------------
 # Registry & helpers
@@ -738,6 +804,8 @@ TABLE_DEFINITIONS: dict[str, str] = {
     "portal_hot_search_snapshot": TABLE_PORTAL_HOT_SEARCH_SNAPSHOT,
     "portal_hot_search_batch_run": TABLE_PORTAL_HOT_SEARCH_BATCH_RUN,
     "portal_hot_search_candidate": TABLE_PORTAL_HOT_SEARCH_CANDIDATE,
+    "department_transfer_permission_cleanup_event": TABLE_DEPARTMENT_TRANSFER_PERMISSION_CLEANUP_EVENT,
+    "department_transfer_permission_cleanup_item": TABLE_DEPARTMENT_TRANSFER_PERMISSION_CLEANUP_ITEM,
 }
 
 # Indexes emitted after CREATE TABLE via create_all_tables.
@@ -760,6 +828,10 @@ INDEX_DEFINITIONS: list[str] = [
     INDEX_PHSBR_TENANT_TIME,
     INDEX_PHSBR_TENANT_BATCH,
     INDEX_PHSC_TENANT_BATCH,
+    INDEX_DTPC_STATUS_RETRY,
+    INDEX_DTPC_USER_CHANGED,
+    INDEX_DTPC_ITEM_USER_STATUS,
+    INDEX_DTPC_ITEM_EVENT_STATUS,
 ]
 
 
