@@ -1,6 +1,5 @@
 // @ts-strict-ignore
 import React, { useState, useRef, useEffect } from 'react';
-import PropTypes from 'prop-types';
 import { Mic, Square, Loader, LoaderCircle, Ellipsis } from 'lucide-react';
 import i18next from "i18next";
 import { captureAndAlertRequestErrorHoc } from '@/controllers/request';
@@ -302,11 +301,6 @@ const SpeechToTextComponent = ({ disabled, onChange }) => {
       {isRecording && <div className="pulse-ring"></div>}
     </div>
   );
-};
-
-// 类型定义
-SpeechToTextComponent.propTypes = {
-  onChange: PropTypes.func.isRequired
 };
 
 export default SpeechToTextComponent;
