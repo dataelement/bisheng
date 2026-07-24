@@ -1989,6 +1989,7 @@
     "permission_item_view_folder": "フォルダを表示",
     "permission_item_view_space": "スペースを表示",
     "search_department": "部署を検索",
+    "search_clinic": "科室を検索",
     "search_user": "ユーザーを検索",
     "search_user_by_name_or_account": "名前またはアカウントを検索",
     "search_user_group": "ユーザーグループを検索",

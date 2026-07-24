@@ -26,6 +26,7 @@ interface SubjectSearchDepartmentProps {
   loadDepartments?: (config?: { signal?: AbortSignal }) => Promise<DepartmentNode[]>;
   selectionMode?: "multiple" | "single";
   grantDepartmentsApi?: typeof getResourceGrantDepartments;
+  searchPlaceholder?: string;
 }
 
 function collectExplicitDepartmentSelections(
@@ -95,6 +96,7 @@ export function SubjectSearchDepartment({
   loadDepartments,
   selectionMode = "multiple",
   grantDepartmentsApi,
+  searchPlaceholder,
 }: SubjectSearchDepartmentProps) {
   const localize = useLocalize();
   const [tree, setTree] = useState<DepartmentNode[]>([]);
@@ -217,7 +219,7 @@ export function SubjectSearchDepartment({
         <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#999999]" />
         <input
           type="text"
-          placeholder={localize("com_permission.search_department")}
+          placeholder={searchPlaceholder || localize("com_permission.search_department")}
           value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
           className="h-8 w-full rounded-[6px] border border-[#EBECF0] bg-white pl-9 pr-3 text-[14px] text-[#212121] outline-none transition-colors placeholder:text-[#999999] focus:border-[#C9CDD4]"
