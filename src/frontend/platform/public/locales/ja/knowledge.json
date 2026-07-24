@@ -216,6 +216,7 @@
   "import": "インポート",
   "importing": "インポート中...",
   "supportedFormatsTip": "文書、画像、音声、動画ファイルに対応",
+  "supportedFormatsTipWithoutMedia": "文書と画像ファイルに対応",
   "segmentStrategy": "セグメントルール",
   "textComparison": "原文比較",
   "dataProcessing": "データ処理",

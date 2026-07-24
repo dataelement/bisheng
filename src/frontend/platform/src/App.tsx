@@ -170,7 +170,7 @@ export default function App() {
   const noAuthPages = ['chat', 'resouce']
   const path = location.pathname.replace(__APP_ENV__.BASE_URL, '').split('/')?.[1] || ''
 
-  // Resolve route permissions with fallbacks for department and child tenant admins.
+  // Dynamic routes use web_menu; Child Admin compatibility grants are added in resolveRoutePermissions.
   const router = useMemo(() => {
     if (user && user.role === 'admin') return getAdminRouter()
     if (!user?.user_id) return null
