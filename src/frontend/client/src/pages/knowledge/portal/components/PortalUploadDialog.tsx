@@ -1,4 +1,4 @@
-import { type Dispatch, type MutableRefObject, type ReactNode, type SetStateAction } from "react";
+import { useEffect, useState, type Dispatch, type MutableRefObject, type ReactNode, type SetStateAction } from "react";
 import { ChevronDown, ChevronRight, FileText, Folder, Upload, X } from "lucide-react";
 import {
     Button,
@@ -171,6 +171,33 @@ export function PortalUploadDialog({
     const isAiFolderSelection = uploadFolderSelection.mode === "ai";
     const selectedUploadFolderName = isAiFolderSelection ? "未选择目录（AI推荐）" : uploadFolderName;
 
+    // Track whether the user has explicitly picked a value for the required
+    // dropdowns. "AI 自动生成" resolves to an empty string, so we can't tell
+    // "not touched" from "touched AI" by value alone.
+    const [fileCategoryTouched, setFileCategoryTouched] = useState(false);
+    const [businessDomainTouched, setBusinessDomainTouched] = useState(false);
+    useEffect(() => {
+        if (open && step === "select") {
+            setFileCategoryTouched(Boolean(fileSubcategoryCode));
+            setBusinessDomainTouched(Boolean(businessDomainCode));
+        }
+        // Only reset when the dialog transitions to a fresh open of the select step.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [open, step]);
+    const handleSelectFileCategory = (code: string) => {
+        setFileCategoryTouched(true);
+        onSelectFileCategory(code);
+    };
+    const handleSelectBusinessDomain = (code: string) => {
+        setBusinessDomainTouched(true);
+        onSelectBusinessDomain(code);
+    };
+    const canSubmit = Boolean(uploadFiles.length)
+        && !uploadSubmitting
+        && fileCategoryTouched
+        && businessDomainTouched
+        && uploadFolderSelection.mode === "manual";
+
     return (
         <Dialog
             open={open}
@@ -280,33 +307,38 @@ export function PortalUploadDialog({
                                 <div className={s.uploadMetadataGrid}>
                                     <div className={s.uploadField}>
                                         <span>
-                                            文件分类
+                                            <span className="text-[#f5222d]">*</span> 文件分类
+                                            <span className="ml-1 text-xs text-[#f5222d]">(必选)</span>
                                         </span>
                                         <PortalFileCategoryDropdown
                                             groups={fileCategoryGroups}
                                             value={fileSubcategoryCode}
-                                            placeholder="AI 自动生成"
-                                            clearable
+                                            placeholder={fileCategoryTouched ? "AI 自动生成" : "请选择"}
+                                            showAiOption
                                             ariaLabel="文件分类"
-                                            onChange={(option) => onSelectFileCategory(option?.code ?? "")}
+                                            onChange={(option) => handleSelectFileCategory(option?.code ?? "")}
                                         />
                                     </div>
                                     <label className={s.uploadField}>
                                         <span>
-                                            业务域
+                                            <span className="text-[#f5222d]">*</span> 业务域
+                                            <span className="ml-1 text-xs text-[#f5222d]">(必选)</span>
                                         </span>
                                         <select
                                             aria-label="业务域"
                                             className={s.uploadSelect}
-                                            value={businessDomainCode}
-                                            onChange={(event) => onSelectBusinessDomain(event.currentTarget.value)}
+                                            value={businessDomainTouched ? businessDomainCode : "__unset__"}
+                                            onChange={(event) => handleSelectBusinessDomain(event.currentTarget.value)}
                                         >
-                                            <option value="">AI 自动生成</option>
+                                            {!businessDomainTouched ? (
+                                                <option value="__unset__" disabled hidden>请选择</option>
+                                            ) : null}
                                             {businessDomainOptions.map((option) => (
                                                 <option key={option.code} value={option.code}>
                                                     {option.code} / {option.name}
                                                 </option>
                                             ))}
+                                            <option value="">AI 自动生成</option>
                                         </select>
                                     </label>
                                 </div>
@@ -348,24 +380,12 @@ export function PortalUploadDialog({
                                     <input aria-label="目标知识库" className={s.uploadReadonlyInput} value={activeSpaceName || ""} readOnly />
                                 </label>
                                 <div className={s.uploadField}>
-                                    <span>上传目标目录</span>
+                                    <span>
+                                        <span className="text-[#f5222d]">*</span> 上传目标目录
+                                        <span className="ml-1 text-xs text-[#f5222d]">(必选)</span>
+                                    </span>
                                         <div className={s.uploadFolderPicker}>
-                                        <div className={s.uploadFolderSelected} data-testid="selected-upload-folder">
-                                            {selectedUploadFolderName}
-                                        </div>
                                         <div className={s.uploadFolderTree}>
-                                            <div className={s.uploadFolderRow}>
-                                                <span className={s.uploadFolderExpandPlaceholder} />
-                                                <button
-                                                    type="button"
-                                                    className={`${s.uploadFolderSelectButton} ${isAiFolderSelection ? s.uploadFolderSelectButtonActive : ""}`}
-                                                    aria-label="未选择目录AI推荐"
-                                                    onClick={onUseAiUploadFolder}
-                                                >
-                                                    <Folder size={14} />
-                                                    <span>未选择目录（AI推荐）</span>
-                                                </button>
-                                            </div>
                                             <div className={s.uploadFolderRow}>
                                                 <span className={s.uploadFolderExpandPlaceholder} />
                                                 <button
@@ -394,11 +414,23 @@ export function PortalUploadDialog({
                                             ) : (
                                                 <div className={s.uploadFolderEmpty}>暂无子目录</div>
                                             )}
+                                            <div className={s.uploadFolderRow}>
+                                                <span className={s.uploadFolderExpandPlaceholder} />
+                                                <button
+                                                    type="button"
+                                                    className={`${s.uploadFolderSelectButton} ${isAiFolderSelection ? s.uploadFolderSelectButtonActive : ""}`}
+                                                    aria-label="未选择目录AI推荐"
+                                                    onClick={onUseAiUploadFolder}
+                                                >
+                                                    <Folder size={14} />
+                                                    <span>未选择目录（AI推荐）</span>
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
                                 <div className={s.uploadHint}>
-                                    未选择目录时，系统会根据当前知识库已有目录推荐上传目录，并直接上传到推荐目录。
+                                    请选择“选择根目录”或某个子目录后再上传。“未选择目录（AI 推荐）”仅供参考，不能作为最终上传目录。
                                 </div>
                             </div>
                         </div>
@@ -406,7 +438,7 @@ export function PortalUploadDialog({
                             <Button variant="outline" className="h-8" onClick={onClose}>
                                 取消
                             </Button>
-                            <Button className="h-8" disabled={!uploadFiles.length || uploadSubmitting} onClick={onUploadNext}>
+                            <Button className="h-8" disabled={!canSubmit} onClick={onUploadNext}>
                                 {uploadSubmitting ? "上传中..." : "上传"}
                             </Button>
                         </DialogFooter>
