@@ -3,37 +3,52 @@ import {
   Login,
   TwoFactorScreen
 } from '@/components/Auth';
-import WebView from '@/components/WebView';
 import { AuthContextProvider } from '@/hooks/AuthContext';
-import AppChat from '@/pages/appChat';
-import AppChatEntry from '@/pages/appChat/AppChatEntry';
-import AgentCenter from '@/pages/apps';
-import ExplorePlaza from '@/pages/apps/explore';
-import Share from '@/pages/share';
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, type ReactNode } from 'react';
 import { createBrowserRouter, Navigate, Outlet, useParams } from 'react-router-dom';
 import ChatRoute from './ChatRoute';
 import LoginLayout from './Layouts/Login';
 import RouteErrorBoundary from './RouteErrorBoundary';
 // import ShareRoute from './ShareRoute';
-import Sop from '@/components/Sop';
 import MainLayout from '@/layouts/MainLayout';
 import Page404 from '@/pages/Page404';
 import Page403 from '@/pages/Page403';
 import { AliveScope } from 'react-activation';
-import Subscription from '~/pages/Subscription';
 import AppRoot from './AppRoot';
 import Root from './Root';
-import Knowledge from '~/pages/knowledge';
-import FilePreviewPage from '~/pages/knowledge/FilePreview/FilePreviewPage';
-import ArticlePage from '~/pages/Subscription/Article/ArticlePage';
-import DevLogin from '~/pages/DevLogin';
-import StandaloneChatPage from '~/pages/standaloneChat/StandaloneChatPage';
 import MenuUnavailablePage from '@/pages/MenuUnavailablePage';
 import { useAuthContext } from '@/hooks';
 import MenuApprovalPluginGate from '@/layouts/MenuApprovalPluginGate';
 import { appsSectionLinkTarget } from '@/layouts/appModuleNavPaths';
 import { canOpenWorkbench } from '@/utils/platformAccess';
+import { LoadingIcon } from '~/components/ui/icon/Loading';
+
+// Route-level code splitting (ledger #27): only the primary landing path
+// (login + main layout + chat home) ships in the entry chunk; every other
+// page loads on first navigation.
+const WebView = lazy(() => import('@/components/WebView'));
+const AppChat = lazy(() => import('@/pages/appChat'));
+const AppChatEntry = lazy(() => import('@/pages/appChat/AppChatEntry'));
+const AgentCenter = lazy(() => import('@/pages/apps'));
+const ExplorePlaza = lazy(() => import('@/pages/apps/explore'));
+const Share = lazy(() => import('@/pages/share'));
+const Sop = lazy(() => import('@/components/Sop'));
+const Subscription = lazy(() => import('~/pages/Subscription'));
+const Knowledge = lazy(() => import('~/pages/knowledge'));
+const FilePreviewPage = lazy(() => import('~/pages/knowledge/FilePreview/FilePreviewPage'));
+const ArticlePage = lazy(() => import('~/pages/Subscription/Article/ArticlePage'));
+const DevLogin = lazy(() => import('~/pages/DevLogin'));
+const StandaloneChatPage = lazy(() => import('~/pages/standaloneChat/StandaloneChatPage'));
+
+function RouteLoading() {
+  return (
+    <div className="flex h-full min-h-[50vh] w-full items-center justify-center">
+      <LoadingIcon className="size-16 text-blue-500" />
+    </div>
+  );
+}
+
+const suspended = (node: ReactNode) => <Suspense fallback={<RouteLoading />}>{node}</Suspense>;
 
 function HomeEntryRedirect() {
   const { user } = useAuthContext();
@@ -148,7 +163,7 @@ export const router = createBrowserRouter([
               },
               {
                 path: 'linsight/:conversationId?',
-                element: (
+                element: suspended(
                   // F035: task mode has its own menu permission key, split from `home`
                   <MenuApprovalPluginGate pluginId="linsight_task_mode">
                     <Sop />
@@ -157,7 +172,7 @@ export const router = createBrowserRouter([
               },
               {
                 path: 'linsight/case/:sopId',
-                element: (
+                element: suspended(
                   <MenuApprovalPluginGate pluginId="linsight_task_mode">
                     <Sop />
                   </MenuApprovalPluginGate>
@@ -168,8 +183,8 @@ export const router = createBrowserRouter([
           },
           {
             path: 'app', element: <AppRoot />, children: [
-              { path: ':fid/:type', element: <AppChatEntry /> },
-              { path: ':conversationId/:fid/:type', element: <AppChat /> }
+              { path: ':fid/:type', element: suspended(<AppChatEntry />) },
+              { path: ':conversationId/:fid/:type', element: suspended(<AppChat />) }
             ]
           },
           {
@@ -179,7 +194,7 @@ export const router = createBrowserRouter([
           },
           {
             path: 'apps',
-            element: (
+            element: suspended(
               <MenuApprovalPluginGate pluginId="apps">
                 <AgentCenter />
               </MenuApprovalPluginGate>
@@ -187,57 +202,57 @@ export const router = createBrowserRouter([
           },
           {
             path: 'apps/explore',
-            element: (
+            element: suspended(
               <MenuApprovalPluginGate pluginId="apps">
                 <ExplorePlaza />
               </MenuApprovalPluginGate>
             ),
           },
-          { path: 'channel', element: (
+          { path: 'channel', element: suspended(
             <MenuApprovalPluginGate pluginId="subscription">
               <Subscription />
             </MenuApprovalPluginGate>
           )},
-          { path: 'channel/share/:channelId', element: <Subscription /> },
-          { path: 'channel/:channelId', element: (
+          { path: 'channel/share/:channelId', element: suspended(<Subscription />) },
+          { path: 'channel/:channelId', element: suspended(
             <MenuApprovalPluginGate pluginId="subscription">
               <Subscription />
             </MenuApprovalPluginGate>
           )},
-          { path: 'knowledge', element: (
+          { path: 'knowledge', element: suspended(
             <MenuApprovalPluginGate pluginId="knowledge_space">
               <Knowledge />
             </MenuApprovalPluginGate>
           )},
-          { path: 'knowledge/space/:spaceId', element: (
+          { path: 'knowledge/space/:spaceId', element: suspended(
             <MenuApprovalPluginGate pluginId="knowledge_space">
               <Knowledge />
             </MenuApprovalPluginGate>
           )},
-          { path: 'knowledge/space/:spaceId/folder/:folderId', element: (
+          { path: 'knowledge/space/:spaceId/folder/:folderId', element: suspended(
             <MenuApprovalPluginGate pluginId="knowledge_space">
               <Knowledge />
             </MenuApprovalPluginGate>
           )},
-          { path: 'knowledge/share/:spaceId', element: <Knowledge /> },
+          { path: 'knowledge/share/:spaceId', element: suspended(<Knowledge />) },
           { path: 'menu-unavailable', element: <MenuUnavailablePage /> },
         ],
       },
       // Standalone chat — auth (login required, inside AuthLayout)
-      { path: 'chat/flow/auth/:flowId', element: <StandaloneChatPage mode="auth" flowType="workflow" /> },
-      { path: 'chat/assistant/auth/:flowId', element: <StandaloneChatPage mode="auth" flowType="assistant" /> },
+      { path: 'chat/flow/auth/:flowId', element: suspended(<StandaloneChatPage mode="auth" flowType="workflow" />) },
+      { path: 'chat/assistant/auth/:flowId', element: suspended(<StandaloneChatPage mode="auth" flowType="assistant" />) },
 
-      { path: 'share/:token/:vid?', element: <Share /> },
-      { path: 'knowledge/file/:fileId', element: <FilePreviewPage /> },
-      { path: 'channel/:channelId/article/:articleId', element: <ArticlePage /> },
+      { path: 'share/:token/:vid?', element: suspended(<Share />) },
+      { path: 'knowledge/file/:fileId', element: suspended(<FilePreviewPage />) },
+      { path: 'channel/:channelId/article/:articleId', element: suspended(<ArticlePage />) },
     ],
   },
   // Standalone chat — guest (no login, outside AuthLayout to avoid 401 redirect)
-  { path: 'chat/flow/:flowId', element: <StandaloneChatPage mode="guest" flowType="workflow" />, errorElement: <RouteErrorBoundary /> },
-  { path: 'chat/assistant/:flowId', element: <StandaloneChatPage mode="guest" flowType="assistant" />, errorElement: <RouteErrorBoundary /> },
-  { path: '/html', element: <WebView /> },
+  { path: 'chat/flow/:flowId', element: suspended(<StandaloneChatPage mode="guest" flowType="workflow" />), errorElement: <RouteErrorBoundary /> },
+  { path: 'chat/assistant/:flowId', element: suspended(<StandaloneChatPage mode="guest" flowType="assistant" />), errorElement: <RouteErrorBoundary /> },
+  { path: '/html', element: suspended(<WebView />) },
   ...devGalleryRoutes,
-  { path: '/__dev/login', element: <DevLogin /> },
+  { path: '/__dev/login', element: suspended(<DevLogin />) },
   { path: '/404', element: <Page404 /> },
   { path: '/403', element: <Page403 /> },
   { path: "*", element: <Navigate to="/404" replace /> }
