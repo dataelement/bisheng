@@ -3,7 +3,8 @@ from enum import Enum
 
 from pydantic import Field
 from sqlalchemy import Column, DateTime, Integer, String, UniqueConstraint, and_
-from sqlmodel import Field, col, delete, select, text
+from sqlmodel import Field, delete, select, text
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_async_db_session, get_sync_db_session
@@ -114,6 +115,43 @@ class ReviewTagDao(ReviewTag):
             return data
 
     @classmethod
+    async def _delete_orphan_review_tags_in_session(
+        cls,
+        session: AsyncSession,
+        tag_ids: list[int],
+    ) -> list[int]:
+        """Hard-delete review_tag rows that no longer have any active links."""
+        normalized_tag_ids = list(dict.fromkeys(int(tag_id) for tag_id in tag_ids if tag_id))
+        if not normalized_tag_ids:
+            return []
+
+        still_linked_rows = (
+            await session.exec(
+                select(ReviewTagLink.tag_id).where(
+                    ReviewTagLink.tag_id.in_(normalized_tag_ids),
+                    ReviewTagLink.is_deleted == False,  # noqa: E712
+                )
+            )
+        ).all()
+        still_linked_ids = {int(tag_id) for tag_id in still_linked_rows}
+        orphan_tag_ids = [tag_id for tag_id in normalized_tag_ids if tag_id not in still_linked_ids]
+        if orphan_tag_ids:
+            await session.exec(delete(ReviewTag).where(ReviewTag.id.in_(orphan_tag_ids)))
+        return orphan_tag_ids
+
+    @classmethod
+    async def adelete_orphan_review_tags(cls, tag_ids: list[int]) -> list[int]:
+        """Delete review_tag rows with no active links."""
+        normalized_tag_ids = list(dict.fromkeys(int(tag_id) for tag_id in tag_ids if tag_id))
+        if not normalized_tag_ids:
+            return []
+
+        async with get_async_db_session() as session:
+            orphan_tag_ids = await cls._delete_orphan_review_tags_in_session(session, normalized_tag_ids)
+            await session.commit()
+            return orphan_tag_ids
+
+    @classmethod
     async def aupdate_resource_tags(
         cls,
         tag_ids: list[int],
@@ -122,24 +160,52 @@ class ReviewTagDao(ReviewTag):
         user_id: int,
         tenant_id: int | None = None,
     ) -> bool:
-        """Update tag association data"""
+        """Update tag association data while preserving submit time on unchanged links."""
+        desired_tag_ids = list(dict.fromkeys(int(tag_id) for tag_id in tag_ids))
+        resource_type_value = resource_type.value
+
         async with get_async_db_session() as session:
-            # Delete original tag association data
-            statement = delete(ReviewTagLink).where(
-                col(ReviewTagLink.resource_id) == resource_id, col(ReviewTagLink.resource_type) == resource_type.value
-            )
-            await session.exec(statement)
-            # Insert new tag association data
-            for tag_id in tag_ids:
-                tag_link = ReviewTagLink(
-                    tag_id=tag_id,
-                    resource_id=resource_id,
-                    resource_type=resource_type.value,
-                    user_id=user_id,
-                    tenant_id=tenant_id,
-                    is_deleted=False,
+            existing_rows = (
+                await session.exec(
+                    select(ReviewTagLink).where(
+                        ReviewTagLink.resource_id == resource_id,
+                        ReviewTagLink.resource_type == resource_type_value,
+                        ReviewTagLink.is_deleted == False,  # noqa: E712
+                    )
                 )
-                session.add(tag_link)
+            ).all()
+            existing_tag_ids = {int(row.tag_id) for row in existing_rows}
+            desired_tag_ids_set = set(desired_tag_ids)
+
+            remove_tag_ids = existing_tag_ids - desired_tag_ids_set
+            add_tag_ids = desired_tag_ids_set - existing_tag_ids
+
+            if remove_tag_ids:
+                await session.exec(
+                    delete(ReviewTagLink).where(
+                        ReviewTagLink.resource_id == resource_id,
+                        ReviewTagLink.resource_type == resource_type_value,
+                        ReviewTagLink.tag_id.in_(list(remove_tag_ids)),
+                    )
+                )
+
+            now = datetime.now()
+            for tag_id in add_tag_ids:
+                session.add(
+                    ReviewTagLink(
+                        tag_id=tag_id,
+                        resource_id=resource_id,
+                        resource_type=resource_type_value,
+                        user_id=user_id,
+                        tenant_id=tenant_id,
+                        is_deleted=False,
+                        create_time=now,
+                    )
+                )
+
+            if remove_tag_ids:
+                await cls._delete_orphan_review_tags_in_session(session, list(remove_tag_ids))
+
             await session.commit()
             return True
 
@@ -211,18 +277,7 @@ class ReviewTagDao(ReviewTag):
                 await session.commit()
                 return
 
-            still_linked_rows = (
-                await session.exec(
-                    select(ReviewTagLink.tag_id).where(
-                        ReviewTagLink.tag_id.in_(affected_tag_ids),
-                        ReviewTagLink.is_deleted == False,  # noqa: E712
-                    )
-                )
-            ).all()
-            still_linked_ids = {int(tag_id) for tag_id in still_linked_rows}
-            orphan_tag_ids = [tag_id for tag_id in affected_tag_ids if tag_id not in still_linked_ids]
-            if orphan_tag_ids:
-                await session.exec(delete(ReviewTag).where(ReviewTag.id.in_(orphan_tag_ids)))
+            await cls._delete_orphan_review_tags_in_session(session, affected_tag_ids)
 
             await session.commit()
 

@@ -132,15 +132,15 @@ function ApproveReviewTagDialog({
                     <p className="text-sm text-muted-foreground">
                         {usingAllLibraries
                             ? t(
-                                  "build.reviewTagApproveDescAllLibraries",
-                                  "将标签「{{tagName}}」导入到租户下的标签库中",
-                                  { tagName: row?.tag_name || "" },
-                              )
+                                "build.reviewTagApproveDescAllLibraries",
+                                "将标签「{{tagName}}」导入到租户下的标签库中",
+                                { tagName: row?.tag_name || "" },
+                            )
                             : t(
-                                  "build.reviewTagApproveDesc",
-                                  "将标签「{{tagName}}」导入到该知识空间绑定的标签库中",
-                                  { tagName: row?.tag_name || "" },
-                              )}
+                                "build.reviewTagApproveDesc",
+                                "将标签「{{tagName}}」导入到该知识空间绑定的标签库中",
+                                { tagName: row?.tag_name || "" },
+                            )}
                     </p>
                     <div>
                         <Label className="bisheng-label">
@@ -289,125 +289,125 @@ export default function KnowledgeSpaceReviewTagSection({
                 </div>
 
                 <div className="mt-4 rounded-lg border border-[#ECECEC] bg-[#FAFBFC] p-4">
-                        <div className="mb-3 flex items-center gap-2">
-                            <SearchInput
-                                className="w-[280px]"
-                                placeholder={t("build.searchReviewTag", "搜索待审核标签")}
-                                value={keyword}
-                                onChange={(e) => setKeyword(e.target.value)}
-                            />
-                        </div>
-                        <div className="max-h-[240px] overflow-y-auto rounded-md border bg-background">
-                            <table className="w-full table-fixed border-collapse">
-                                <thead className="sticky top-0 z-10 bg-background">
-                                    <tr className="text-left text-sm text-muted-foreground">
-                                        <th className="w-[20%] px-4 py-3 font-medium">
-                                            {t("build.reviewTagName", "建议标签")}
-                                        </th>
-                                        <th className="w-[20%] px-4 py-3 font-medium">
-                                            {t("build.reviewTagSource", "标签来源")}
-                                        </th>
-                                        <th className="w-[40%] px-4 py-3 font-medium">
-                                            {t("build.fileResource", "文件来源")}
-                                        </th>
-                                        <th className="w-[20%] px-4 py-3 font-medium">
-                                            {t("build.submitTime", "提交时间")}
-                                        </th>
-                                        <th className="w-[20%] px-4 py-3 font-medium">
-                                            {t("build.operation", "操作")}
-                                        </th>
+                    <div className="mb-3 flex items-center gap-2">
+                        <SearchInput
+                            className="w-[280px]"
+                            placeholder={t("build.searchReviewTag", "搜索待审核标签")}
+                            value={keyword}
+                            onChange={(e) => setKeyword(e.target.value)}
+                        />
+                    </div>
+                    <div className="max-h-[240px] overflow-y-auto rounded-md border bg-background">
+                        <table className="w-full table-fixed border-collapse">
+                            <thead className="sticky top-0 z-10 bg-background">
+                                <tr className="text-left text-sm text-muted-foreground">
+                                    <th className="w-[20%] px-4 py-3 font-medium">
+                                        {t("build.reviewTagName", "建议标签")}
+                                    </th>
+                                    <th className="w-[20%] px-4 py-3 font-medium">
+                                        {t("build.reviewTagSource", "标签来源")}
+                                    </th>
+                                    <th className="w-[40%] px-4 py-3 font-medium">
+                                        {t("build.fileResource", "文件来源")}
+                                    </th>
+                                    <th className="w-[20%] px-4 py-3 font-medium">
+                                        {t("build.submitTime", "提交时间")}
+                                    </th>
+                                    <th className="w-[20%] px-4 py-3 font-medium">
+                                        {t("build.operation", "操作")}
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {loading ? (
+                                    <tr>
+                                        <td className="px-4 py-10 text-center text-sm text-muted-foreground" colSpan={5}>
+                                            {t("loading")}
+                                        </td>
                                     </tr>
-                                </thead>
-                                <tbody>
-                                    {loading ? (
-                                        <tr>
-                                            <td className="px-4 py-10 text-center text-sm text-muted-foreground" colSpan={5}>
-                                                {t("loading")}
-                                            </td>
-                                        </tr>
-                                    ) : rows.length === 0 ? (
-                                        <tr>
-                                            <td className="px-4 py-10 text-center text-sm text-muted-foreground" colSpan={5}>
-                                                {t("build.tagEmpty", "暂无待审核标签")}
-                                            </td>
-                                        </tr>
-                                    ) : (
-                                        rows.map((group) => {
-                                            if (!group.resource_files || group.resource_files.length === 0) {
-                                                return (
-                                                    <tr key={group.tag_name} className="border-t text-sm">
-                                                        <td className="truncate px-4 py-3 font-medium">{group.tag_name}</td>
-                                                        <td className="truncate px-4 py-3 font-medium">
-                                                            {formatTagSourceLabel(group.resource_type, t)}
-                                                        </td>
-                                                        <td className="truncate px-4 py-3 text-muted-foreground">-</td>
-                                                        <td className="px-4 py-3 text-muted-foreground">-</td>
-                                                        <td className="px-4 py-3">
-                                                            {renderActions(group, group.knowledge_ids?.[0] ?? null)}
-                                                        </td>
-                                                    </tr>
-                                                );
-                                            }
-                                            return group.resource_files.map((resource, idx) => (
-                                                <tr key={`${group.tag_name}-${idx}`} className="border-t text-sm">
-                                                    {idx === 0 && (
-                                                        <td rowSpan={group.resource_files.length} className="truncate px-4 py-3 font-medium align-top">
-                                                            {group.tag_name}
-                                                        </td>
-                                                    )}
-                                                    {idx === 0 && (
-                                                        <td rowSpan={group.resource_files.length} className="truncate px-4 py-3 font-medium align-top">
-                                                            {formatTagSourceLabel(group.resource_type, t)}
-                                                        </td>
-                                                    )}
-                                                    <td className="truncate px-4 py-3">
-                                                        {resource.file_url ? (
-                                                            <a
-                                                                href={resource.file_url}
-                                                                target="_blank"
-                                                                rel="noopener noreferrer"
-                                                                className="text-blue-600 hover:underline"
-                                                            >
-                                                                {resource.file_name || "-"}
-                                                            </a>
-                                                        ) : (
-                                                            resource.file_name || "-"
-                                                        )}
+                                ) : rows.length === 0 ? (
+                                    <tr>
+                                        <td className="px-4 py-10 text-center text-sm text-muted-foreground" colSpan={5}>
+                                            {t("build.tagEmpty", "暂无待审核标签")}
+                                        </td>
+                                    </tr>
+                                ) : (
+                                    rows.map((group) => {
+                                        if (!group.resource_files || group.resource_files.length === 0) {
+                                            return (
+                                                <tr key={group.tag_name} className="border-t text-sm">
+                                                    <td className="truncate px-4 py-3 font-medium">{group.tag_name}</td>
+                                                    <td className="truncate px-4 py-3 font-medium">
+                                                        {formatTagSourceLabel(group.resource_type, t)}
                                                     </td>
-                                                    <td className="px-4 py-3">{resource.submit_time || "-"}</td>
+                                                    <td className="truncate px-4 py-3 text-muted-foreground">-</td>
+                                                    <td className="px-4 py-3 text-muted-foreground">-</td>
                                                     <td className="px-4 py-3">
-                                                        {renderActions(group, resource.knowledge_id ?? null)}
+                                                        {renderActions(group, group.knowledge_ids?.[0] ?? null)}
                                                     </td>
                                                 </tr>
-                                            ));
-                                        })
-                                    )}
-                                </tbody>
-                            </table>
+                                            );
+                                        }
+                                        return group.resource_files.map((resource, idx) => (
+                                            <tr key={`${group.tag_name}-${idx}`} className="border-t text-sm">
+                                                {idx === 0 && (
+                                                    <td rowSpan={group.resource_files.length} className="truncate px-4 py-3 font-medium align-top">
+                                                        {group.tag_name}
+                                                    </td>
+                                                )}
+                                                {idx === 0 && (
+                                                    <td rowSpan={group.resource_files.length} className="truncate px-4 py-3 font-medium align-top">
+                                                        {formatTagSourceLabel(group.resource_type, t)}
+                                                    </td>
+                                                )}
+                                                <td className="truncate px-4 py-3">
+                                                    {resource.file_url ? (
+                                                        <a
+                                                            href={resource.file_url}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="text-blue-600 hover:underline"
+                                                        >
+                                                            {resource.file_name || "-"}
+                                                        </a>
+                                                    ) : (
+                                                        resource.file_name || "-"
+                                                    )}
+                                                </td>
+                                                <td className="px-4 py-3">{resource.submit_time || "-"}</td>
+                                                <td className="px-4 py-3">
+                                                    {renderActions(group, resource.knowledge_id ?? null)}
+                                                </td>
+                                            </tr>
+                                        ));
+                                    })
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                    {rows.length > 0 && (
+                        <div className="mt-2 flex items-center justify-end gap-2">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={page <= 1}
+                                onClick={() => handlePageChange(page - 1)}
+                            >
+                                {t("build.prevPage", "上一页")}
+                            </Button>
+                            <span className="text-sm text-muted-foreground">
+                                {page} / {totalPages}
+                            </span>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={page >= totalPages}
+                                onClick={() => handlePageChange(page + 1)}
+                            >
+                                {t("build.nextPage", "下一页")}
+                            </Button>
                         </div>
-                        {rows.length > 0 && (
-                            <div className="mt-2 flex items-center justify-end gap-2">
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    disabled={page <= 1}
-                                    onClick={() => handlePageChange(page - 1)}
-                                >
-                                    {t("build.prevPage", "上一页")}
-                                </Button>
-                                <span className="text-sm text-muted-foreground">
-                                    {page} / {totalPages}
-                                </span>
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    disabled={page >= totalPages}
-                                    onClick={() => handlePageChange(page + 1)}
-                                >
-                                    {t("build.nextPage", "下一页")}
-                                </Button>
-                            </div>
-                        )}
+                    )}
                 </div>
             </div>
 

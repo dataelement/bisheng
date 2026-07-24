@@ -41,7 +41,7 @@ export async function getKnowledgeSpaceTagListApi(params?: {
 }
 
 export async function deleteKnowledgeSpaceTagApi(
-  data:{
+  data: {
     tag_name: string,
     resource_type: string
   }): Promise<boolean> {

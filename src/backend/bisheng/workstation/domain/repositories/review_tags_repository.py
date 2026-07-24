@@ -239,12 +239,23 @@ class ReviewTagsRepositoryImpl:
             Tag.tenant_id == tenant_id,
         )
 
+    @staticmethod
+    def _active_review_tag_link_exists(tenant_id: int):
+        return exists(
+            select(1).where(
+                ReviewTagLink.tag_id == ReviewTag.id,
+                ReviewTagLink.tenant_id == tenant_id,
+                ReviewTagLink.is_deleted == False,  # noqa: E712
+            )
+        )
+
     async def get_review_tag_group_list_by_page(self, page: int, page_size: int, tenant_id: int, keyword: str = ""):
         where_clause = [
             ReviewTag.tenant_id == tenant_id,
             ReviewTag.is_deleted == False,
             ReviewTag.review_status == 0,
             ReviewTag.name.not_in(self._library_tag_name_subquery(tenant_id)),
+            self._active_review_tag_link_exists(tenant_id),
         ]
         if keyword:
             where_clause.append(ReviewTag.name.like(f"%{keyword}%"))
@@ -268,6 +279,7 @@ class ReviewTagsRepositoryImpl:
             ReviewTag.is_deleted == False,
             ReviewTag.review_status == 0,
             ReviewTag.name.not_in(self._library_tag_name_subquery(tenant_id)),
+            self._active_review_tag_link_exists(tenant_id),
         ]
         if keyword:
             where_clause.append(ReviewTag.name.like(f"%{keyword}%"))
@@ -314,6 +326,7 @@ class ReviewTagsRepositoryImpl:
             ids = [tag.id for tag in tag_list]
             review_tag_link_list = await self.get_review_tag_link_list_by_tag_id(ids, tenant_id)
             if review_tag_link_list and len(review_tag_link_list) > 0:
+                tag_create_time_by_id = {tag.id: tag.create_time for tag in tag_list}
                 for tag_link in review_tag_link_list:
                     file_info = {}
                     knowledgefile = await self.tags_repository.get_knowledgefile_by_resource_id(
@@ -339,9 +352,8 @@ class ReviewTagsRepositoryImpl:
                         file_info["file_level_path"] = knowledgefile.file_level_path
                         file_info["id"] = knowledgefile.id
                         file_info["knowledge_id"] = knowledgefile.knowledge_id
-                        file_info["submit_time"] = (
-                            tag_link.create_time.strftime("%Y-%m-%d %H:%M:%S") if tag_link.create_time else ""
-                        )
+                        submit_time = tag_link.create_time or tag_create_time_by_id.get(tag_link.tag_id)
+                        file_info["submit_time"] = submit_time.strftime("%Y-%m-%d %H:%M:%S") if submit_time else ""
                     if file_info:
                         resource_list.append(file_info)
                 return {
