@@ -96,7 +96,7 @@ class FreeSpaceMigrationService:
             return MigrationDecision("normal_delete")
         scope = await KnowledgeSpaceScopeDao.aget_by_space_id(space.id)
         level = getattr(scope, "level", None)
-        if level != KnowledgeSpaceLevelEnum.TEAM.value and level != KnowledgeSpaceLevelEnum.TEAM:
+        if not KnowledgeSpaceLevelEnum.is_team_level(level):
             _logger.info("pre_delete_guard space=%s level=%s → normal_delete(非自由 team 库，直接删)", space_id, level)
             return MigrationDecision("normal_delete")
         try:

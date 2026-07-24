@@ -755,6 +755,7 @@ class KnowledgeDao(KnowledgeBase):
                     KnowledgeSpaceLevelEnum.PUBLIC.value,
                     KnowledgeSpaceLevelEnum.DEPARTMENT.value,
                     KnowledgeSpaceLevelEnum.TEAM.value,
+                    KnowledgeSpaceLevelEnum.TEAM_KS.value,
                 ]),
             )
         )

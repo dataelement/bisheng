@@ -8,6 +8,7 @@ from bisheng.common.errcode.knowledge_space import (
     DepartmentKnowledgeSpaceExistsError,
     SpaceNotFoundError,
 )
+from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
 from bisheng.knowledge.domain.services.department_knowledge_space_service import (
     DepartmentKnowledgeSpaceService as Svc,
 )
@@ -62,9 +63,11 @@ async def test_bind_success_creates_row():
             f"{MOD}.DepartmentKnowledgeSpaceDao.acreate",
             new=AsyncMock(return_value=SimpleNamespace(space_id=10, department_id=3)),
         ) as create,
+        patch(f"{MOD}.KnowledgeSpaceScopeDao.aupdate_level", new=AsyncMock()) as update_level,
     ):
         await Svc.bind_space_to_department(_admin(), space_id=10, department_id=3)
         create.assert_awaited_once()
+        update_level.assert_awaited_once_with(10, KnowledgeSpaceLevelEnum.TEAM_KS)
 
 
 @pytest.mark.asyncio

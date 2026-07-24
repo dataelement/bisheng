@@ -69,8 +69,13 @@ class ShougangApprovalService:
             KnowledgeSpaceLevelEnum.PUBLIC,
             KnowledgeSpaceLevelEnum.DEPARTMENT,
             KnowledgeSpaceLevelEnum.TEAM,
+            KnowledgeSpaceLevelEnum.TEAM_KS,
         },
         KnowledgeSpaceLevelEnum.TEAM: {
+            KnowledgeSpaceLevelEnum.PUBLIC,
+            KnowledgeSpaceLevelEnum.DEPARTMENT,
+        },
+        KnowledgeSpaceLevelEnum.TEAM_KS: {
             KnowledgeSpaceLevelEnum.PUBLIC,
             KnowledgeSpaceLevelEnum.DEPARTMENT,
         },

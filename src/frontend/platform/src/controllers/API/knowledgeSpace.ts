@@ -4,7 +4,7 @@ export interface KnowledgeSpaceSummary {
   id: number
   name: string
   description?: string | null
-  space_level?: "public" | "department" | "team" | "personal"
+  space_level?: "public" | "department" | "team" | "team_ks" | "personal"
   space_kind?: "normal" | "department"
   department_id?: number | null
   department_name?: string | null

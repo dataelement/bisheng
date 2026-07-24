@@ -1255,7 +1255,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 raise SpaceInvalidScopeOwnerError(msg="Department does not exist or is archived")
             if not await self._can_bind_department_on_create(int(department_id)):
                 raise SpaceCreateDepartmentDeniedError()
-            return KnowledgeSpaceLevelEnum.TEAM, KnowledgeSpaceOwnerTypeEnum.USER, int(self.login_user.user_id)
+            return KnowledgeSpaceLevelEnum.TEAM_KS, KnowledgeSpaceOwnerTypeEnum.USER, int(self.login_user.user_id)
 
         if level == KnowledgeSpaceLevelEnum.PUBLIC:
             if department_id is not None or user_group_id is not None:
@@ -1567,12 +1567,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 if binding is not None:
                     space.approval_enabled = binding.approval_enabled
                     space.sensitive_check_enabled = binding.sensitive_check_enabled
-                    # Clinic spaces are team-level spaces with a department binding.
+                    # Clinic spaces are stored as TEAM_KS (or legacy TEAM) with a
+                    # department binding.
                     scope = scopes.get(int(space.id))
                     if (
                         scope is not None
-                        and scope.level == KnowledgeSpaceLevelEnum.TEAM
                         and scope.owner_type == KnowledgeSpaceOwnerTypeEnum.USER
+                        and KnowledgeSpaceLevelEnum.is_team_level(scope.level)
                     ):
                         space.is_clinic = True
         return spaces
@@ -3157,13 +3158,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
         self._created_space_scope_by_id[int(knowledge_space.id)] = (level, owner_type, owner_id)
         log_perf_stage("scope_create")
 
-        # Department spaces and clinic spaces both need a canonical department
-        # binding. Portal discovery and department-file approval intentionally
-        # fail closed when the scope and binding do not agree.
-        should_create_department_binding = department_id is not None and (
-            level == KnowledgeSpaceLevelEnum.DEPARTMENT or (is_clinic and level == KnowledgeSpaceLevelEnum.TEAM)
-        )
-        if should_create_department_binding:
+        # Clinic spaces are team-level spaces bound to a department; write the
+        # binding row so they appear under "团队/科室知识库" and department-scoped
+        # queries can find them.
+        if is_clinic and department_id is not None and KnowledgeSpaceLevelEnum.is_team_level(level):
             try:
                 await DepartmentKnowledgeSpaceDao.acreate(
                     tenant_id=int(self.login_user.tenant_id),
@@ -8561,8 +8559,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
             clinic_binding = await DepartmentKnowledgeSpaceDao.aget_by_space_id(space_id)
             is_clinic_space = (
                 rebind_scope is not None
-                and rebind_scope.level == KnowledgeSpaceLevelEnum.TEAM
                 and rebind_scope.owner_type == KnowledgeSpaceOwnerTypeEnum.USER
+                and KnowledgeSpaceLevelEnum.is_team_level(rebind_scope.level)
                 and clinic_binding is not None
             )
             if not is_department_space and not is_clinic_space:
@@ -8670,7 +8668,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if department_id is not None:
             if is_clinic_rebind:
                 # Clinic spaces only need the department_knowledge_space binding updated;
-                # the scope remains TEAM/USER.
+                # the scope remains TEAM_KS/USER (or legacy TEAM/USER).
                 if int(clinic_binding.department_id) != int(department_id):
                     clinic_binding.department_id = int(department_id)
                     await DepartmentKnowledgeSpaceDao.aupdate(clinic_binding)
@@ -8960,7 +8958,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 grouped.public_spaces.append(space)
             elif space.space_level == KnowledgeSpaceLevelEnum.DEPARTMENT:
                 grouped.department_spaces.append(space)
-            elif space.space_level == KnowledgeSpaceLevelEnum.TEAM:
+            elif KnowledgeSpaceLevelEnum.is_team_level(space.space_level):
                 grouped.team_spaces.append(space)
             else:
                 # 个人知识库仅本人可见：全局超管虽能访问全部空间，个人分类下也只显示自己的库
@@ -8983,15 +8981,22 @@ class KnowledgeSpaceService(KnowledgeUtils):
         # intact without issuing a permission check per candidate space.
         if target_level in {
             KnowledgeSpaceLevelEnum.TEAM,
+            KnowledgeSpaceLevelEnum.TEAM_KS,
             KnowledgeSpaceLevelEnum.DEPARTMENT,
         }:
+            # TEAM and TEAM_KS (clinic) spaces are displayed together under the
+            # "团队/科室知识库" group, so a request for TEAM returns both.
+            if target_level == KnowledgeSpaceLevelEnum.TEAM:
+                level_query = [KnowledgeSpaceLevelEnum.TEAM, KnowledgeSpaceLevelEnum.TEAM_KS]
+            else:
+                level_query = [target_level]
             (
                 space_ids,
                 memberships,
                 readable_space_ids,
                 manageable_space_ids,
             ) = await asyncio.gather(
-                KnowledgeSpaceScopeDao.aget_space_ids_by_level(target_level),
+                KnowledgeSpaceScopeDao.aget_space_ids_by_levels(level_query),
                 SpaceChannelMemberDao.async_get_user_space_members(self.login_user.user_id),
                 PermissionService.list_accessible_ids(
                     user_id=self.login_user.user_id,
@@ -9035,7 +9040,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
             )
 
         spaces = await self._list_accessible_spaces(order_by)
-        result = [space for space in spaces if space.space_level == target_level]
+        if target_level == KnowledgeSpaceLevelEnum.TEAM:
+            result = [space for space in spaces if KnowledgeSpaceLevelEnum.is_team_level(space.space_level)]
+        else:
+            result = [space for space in spaces if space.space_level == target_level]
 
         return result
 
@@ -9139,12 +9147,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
             KnowledgeSpaceLevelEnum.PUBLIC: 0,
             KnowledgeSpaceLevelEnum.DEPARTMENT: 1,
             KnowledgeSpaceLevelEnum.TEAM: 2,
+            KnowledgeSpaceLevelEnum.TEAM_KS: 2,
             KnowledgeSpaceLevelEnum.PERSONAL: 3,
         }
         level_labels = {
             KnowledgeSpaceLevelEnum.PUBLIC: "公共知识库",
             KnowledgeSpaceLevelEnum.DEPARTMENT: "部门知识库",
             KnowledgeSpaceLevelEnum.TEAM: "团队知识库",
+            KnowledgeSpaceLevelEnum.TEAM_KS: "科室知识库",
             KnowledgeSpaceLevelEnum.PERSONAL: "个人知识库",
         }
 
@@ -9250,6 +9260,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             KnowledgeSpaceLevelEnum.PUBLIC,
             KnowledgeSpaceLevelEnum.DEPARTMENT,
             KnowledgeSpaceLevelEnum.TEAM,
+            KnowledgeSpaceLevelEnum.TEAM_KS,
         }:
             # Personal spaces are per-user and have no shared order to define.
             raise SpaceInvalidLevelError()
