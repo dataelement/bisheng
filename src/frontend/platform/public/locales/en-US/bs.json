@@ -1035,6 +1035,8 @@
     "reportDescription": "Report generation description...",
     "newButton": "New",
     "importButton": "Import",
+    "saveTemplate": "Save",
+    "saveSuccess": "Saved",
     "start": "start",
     "formSettings": "Form Settings",
     "requiredLabel": "Required",

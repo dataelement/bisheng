@@ -198,7 +198,7 @@ async def force_save_report_file(
         )
 
     logger.info(f"report force save accepted key={version_key}")
-    return resp_200()
+    return resp_200(data={"saved": True})
 
 
 @router.post("/report/callback", status_code=200)

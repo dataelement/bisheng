@@ -815,6 +815,8 @@
     "reportDescription": "レポート生成の説明...",
     "newButton": "新規",
     "importButton": "インポート",
+    "saveTemplate": "保存",
+    "saveSuccess": "保存しました",
     "start": "開始",
     "formSettings": "フォーム設定",
     "requiredLabel": "必須",
