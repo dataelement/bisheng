@@ -12,7 +12,6 @@ from fastapi import UploadFile
 from langchain_core.tools import BaseTool
 from loguru import logger
 
-from bisheng.api.services.workstation import WorkStationService
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
@@ -1101,16 +1100,19 @@ class LinsightWorkbenchImpl:
         await redis_client.aset(key=key, value=parse_result, expiration=60 * 60 * cls.CACHE_EXPIRATION_HOURS)
 
     @classmethod
-    async def _init_bisheng_code_tool(cls, config_tool_ids: list[int], file_dir: str, user_id: int) -> list[BaseTool]:
-        """
-        Code interpreter tool for special handling initialization Bi Lift
+    async def _init_bisheng_code_tool(cls, selected_tool_ids: list[int], file_dir: str, user_id: int) -> list[BaseTool]:
+        """Initialize the code interpreter separately (it needs the workspace dir bound).
+
+        ``selected_tool_ids`` is the user's per-turn tool selection. The id is
+        consumed (removed) on a hit so the generic ``init_by_tool_ids`` pass does
+        not build a second, workspace-less copy of the same tool.
         """
         tools = []
         bisheng_code_tool = await GptsToolsDao.aget_tool_by_tool_key(tool_key="bisheng_code_interpreter")
-        if not bisheng_code_tool or bisheng_code_tool.id not in config_tool_ids:
+        if not bisheng_code_tool or bisheng_code_tool.id not in selected_tool_ids:
             return tools
         # Individual initialization code interpreter tool
-        config_tool_ids.remove(bisheng_code_tool.id)
+        selected_tool_ids.remove(bisheng_code_tool.id)
         code_config = json.loads(bisheng_code_tool.extra) if bisheng_code_tool.extra else {}
         if "config" not in code_config:
             code_config["config"] = {}
@@ -1163,22 +1165,18 @@ class LinsightWorkbenchImpl:
             return tools
 
         # &Extraction toolID
-        tool_ids = cls._extract_tool_ids(session_version.tools)
-
-        # Code-interpreter whitelist source. Unified-resource direction
-        # (2026-06-16): task mode reuses the DAILY chat config tool selection,
-        # not the legacy per-app linsight config. get_daily_chat_config falls
-        # back to defaults (never None in practice), but guard defensively so a
-        # missing config degrades to an empty whitelist instead of crashing the
-        # task with 'NoneType' object has no attribute 'tools'.
-        daily_config = await WorkStationService.get_daily_chat_config()
-        config_tool_ids = cls._extract_tool_ids(daily_config.tools or []) if daily_config else []
+        tool_ids = list(dict.fromkeys(cls._extract_tool_ids(session_version.tools)))  # de-dup, preserve order
 
         # todo Better tool initialization scheme
+        # The code interpreter binds ONLY when the user picked it for this turn.
+        # It used to be gated on the daily-config whitelist (the admin-configured
+        # candidate list), which made it bind on every task turn regardless of the
+        # input-bar toggle — the whitelist is the set of tools a user MAY pick,
+        # not a set of tools to auto-enable.
         if need_upload and file_dir:
             try:
                 bisheng_code_tool = await cls._init_bisheng_code_tool(
-                    config_tool_ids, file_dir, user_id=session_version.user_id
+                    tool_ids, file_dir, user_id=session_version.user_id
                 )
                 tools.extend(bisheng_code_tool)
             except Exception as e:
@@ -1188,9 +1186,9 @@ class LinsightWorkbenchImpl:
 
         # Unified-resource direction (2026-06-16): task mode reuses the daily
         # tool selection directly. Every selected tool id (a real GptsTools id
-        # the user already has access to) binds. config_tool_ids (from the daily
-        # chat config) is used only by the code-interpreter branch above.
-        valid_tool_ids = list(dict.fromkeys(tool_ids))  # de-dup, preserve order
+        # the user already has access to) binds. The code interpreter is already
+        # consumed above when selected, so it is never built twice.
+        valid_tool_ids = tool_ids
 
         # Initialization Tools
         if valid_tool_ids:
