@@ -170,12 +170,14 @@ async def force_save_report_file(
 
     # The editor is opened with a per-session key (`<version_key>_<ts>`); the
     # command service needs that exact key, so keep whatever the client sent.
-    office_url = bisheng_settings.get_from_db("office_url")
+    # Config must be read through the async accessor here: the sync one runs a
+    # blocking DB/Redis fetch that returns empty inside the event loop.
+    office_url = await bisheng_settings.aget_from_db("office_url")
     if not office_url:
         return ServerError.return_resp(msg="Document service is not configured")
 
     payload = {"c": "forcesave", "key": version_key}
-    secret = bisheng_settings.get_from_db("office_jwt_secret") or ""
+    secret = await bisheng_settings.aget_from_db("office_jwt_secret") or ""
     if secret:
         # Signed payloads must also carry the token in-body for the command
         # service (header-only auth is rejected when JWT is enabled).

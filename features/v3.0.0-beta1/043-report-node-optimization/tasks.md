@@ -93,4 +93,5 @@
 - 分支名改用扁平形式 `feat/3.0.0-beta1-043-report-node`：SDD 约定的 `feat/<version>/{NNN}-{name}` 与已存在的 `feat/3.0.0-beta1` 分支产生 git ref 层级冲突；仓库历史（如 `feat/2.5.0-sg-048-portal-hot-search`）本就是扁平命名
 - T003 新增「文档服务返回"无变更"视为保存成功」→ 见 design §4.2（纯实现细节，未推翻决策）
 - T006 实际文案位置为 `public/locales/{zh-Hans,en-US,ja}/bs.json`（tasks 原写 `src/locales/{en,zh,ja}`，与仓库实际结构不符）
+- T003 修正：异步端点须用 `aget_from_db` 读配置（同步版在事件循环上静默返回空）→ design §5 坑 5
 - T007 未改动共用的 `Word.tsx`，共用组件回归风险从结构上消除；旧技能报告页路由的人工点检仍建议在联调环境顺手做一次
