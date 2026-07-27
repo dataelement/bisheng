@@ -151,6 +151,7 @@ export type DepartmentMemberEditForm = {
     user_name: string
     person_id: string
     source: string
+    wechat_user_id?: string | null
   }
   context: { dept_id: string; name: string; is_primary: number }
   primary_department: null | {
@@ -190,6 +191,7 @@ export async function applyDepartmentMemberEditApi(
     context_role_ids?: number[] | null
     primary_role_ids?: number[] | null
     affiliate_roles?: { dept_id: string; role_ids: number[] }[] | null
+    wechat_user_id?: string | null
   }
 ): Promise<void> {
   await axios.post(

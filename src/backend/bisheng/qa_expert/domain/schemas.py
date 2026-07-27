@@ -80,6 +80,7 @@ class ExpertCreateRequest(BaseModel):
     position: Optional[str] = Field(None, description="所属岗位")
     job_family: Optional[str] = Field(None, description="所属岗位族")
     job_category: Optional[str] = Field(None, description="所属岗位分类")
+    wechat_user_id: Optional[str] =  Field(None, description="绑定企业微信用户id")
 
 
 class ExpertUpdateRequest(BaseModel):
@@ -92,6 +93,7 @@ class ExpertUpdateRequest(BaseModel):
     position: Optional[str] = Field(None, description="所属岗位")
     job_family: Optional[str] = Field(None, description="所属岗位族")
     job_category: Optional[str] = Field(None, description="所属岗位分类")
+    wechat_user_id: Optional[str] =  Field(None, description="绑定企业微信用户id")
 
 
 class ExpertResponse(BaseModel):

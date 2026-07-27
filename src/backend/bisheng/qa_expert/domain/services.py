@@ -35,6 +35,7 @@ from bisheng.qa_expert.domain.repositories import (
 )
 from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.database.models.department import DepartmentDao
+from bisheng.user.domain.models.user import UserDao
 
 
 # ==================== 错误定义 ====================
@@ -91,6 +92,21 @@ class ExpertService:
     def __init__(self):
         self.repository = ExpertRepository()
 
+    @staticmethod
+    async def _sync_wechat_user_id(user_id: Optional[int], wechat_user_id: Optional[str]) -> None:
+        """将企业微信用户ID同步到关联的user表。"""
+        if user_id is None:
+            return
+        new_id = (wechat_user_id or "").strip() or None
+        user = await UserDao.aget_user(user_id)
+        if not user:
+            return
+        current_id = getattr(user, "wechat_user_id", None) or None
+        if new_id == current_id:
+            return
+        user.wechat_user_id = new_id
+        await UserDao.aupdate_user(user)
+
     async def create_expert(self, request: ExpertCreateRequest) -> Expert:
         """创建专家（后台管理员操作）"""
         # 检查是否已是专家
@@ -109,6 +125,7 @@ class ExpertService:
             job_category=request.job_category,
         )
         temp_expert = await self.repository.create(expert)
+        await self._sync_wechat_user_id(temp_expert.user_id, request.wechat_user_id)
         depart = await DepartmentDao.aget_by_id(temp_expert.depart_ment)
         if depart:
             temp_expert.depart_ment = depart.name
@@ -123,7 +140,9 @@ class ExpertService:
             raise ExpertNotFoundError()
 
         update_data = request.dict(exclude_unset=True)
+        wechat_user_id = update_data.pop("wechat_user_id", None)
         temp_expert = await self.repository.update(expert_id, **update_data)
+        await self._sync_wechat_user_id(temp_expert.user_id, wechat_user_id)
         expert_dict = temp_expert.model_dump()
         expert_dict["department_id"] = temp_expert.depart_ment
         depart = await DepartmentDao.aget_by_id(temp_expert.depart_ment)

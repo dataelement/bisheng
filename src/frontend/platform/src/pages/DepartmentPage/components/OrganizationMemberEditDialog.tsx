@@ -53,6 +53,7 @@ export function OrganizationMemberEditDialog({
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState<DepartmentMemberEditForm | null>(null)
   const [userName, setUserName] = useState("")
+  const [wechatUserId, setWechatUserId] = useState("")
   const [groupSel, setGroupSel] = useState<Set<number>>(new Set())
   const [primaryRoles, setPrimaryRoles] = useState<Set<number>>(new Set())
   const [affRoleByDept, setAffRoleByDept] = useState<Record<string, Set<number>>>({})
@@ -66,6 +67,7 @@ export function OrganizationMemberEditDialog({
   const resetLocal = useCallback(() => {
     setForm(null)
     setUserName("")
+    setWechatUserId("")
     setGroupSel(new Set())
     setPrimaryRoles(new Set())
     setAffRoleByDept({})
@@ -92,6 +94,7 @@ export function OrganizationMemberEditDialog({
       }
       setForm(data)
       setUserName(data.user.user_name)
+      setWechatUserId(data.user.wechat_user_id ?? "")
       setGroupSel(new Set(data.current_group_ids))
       if (data.edit_mode === "affiliate") {
         setCtxRoles(new Set(data.context_role_ids))
@@ -244,6 +247,7 @@ export function OrganizationMemberEditDialog({
         }))
         const body: Parameters<typeof applyDepartmentMemberEditApi>[2] = {
           user_name: form.edit_mode === "local_primary" ? userName.trim() : undefined,
+          wechat_user_id: form.edit_mode === "local_primary" ? wechatUserId.trim() : undefined,
           primary_department_id:
             form.edit_mode === "local_primary" &&
             form.can_change_primary &&
@@ -430,6 +434,22 @@ export function OrganizationMemberEditDialog({
                 )}
               </div>
             )}
+
+            {form.edit_mode === "local_primary" && (
+              <div>
+                <Label>{t("bs:localMember.wechatUserId")}</Label>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {t("bs:localMember.wechatUserIdHint")}
+                </p>
+                <Input
+                  value={wechatUserId}
+                  onChange={(e) => setWechatUserId(e.target.value)}
+                  className="mt-1"
+                  placeholder={t("bs:localMember.wechatUserIdPlaceholder")}
+                />
+              </div>
+            )}
+
           </div>
         )}
         <DialogFooter className="flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

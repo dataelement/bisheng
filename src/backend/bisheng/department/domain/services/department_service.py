@@ -2024,6 +2024,7 @@ class DepartmentService:
                 "user_name": user.user_name,
                 "person_id": cls._person_display_id(user),
                 "source": getattr(user, "source", "local") or "local",
+                "wechat_user_id": getattr(user, "wechat_user_id", None) or None,
             },
             "context": {
                 "dept_id": ctx_dept.dept_id,
@@ -2086,10 +2087,20 @@ class DepartmentService:
         else:
             edit_mode = "synced_primary"
 
-        if data.user_name is not None and edit_mode == "local_primary":
-            name = (data.user_name or "").strip()
-            if name and name != user.user_name:
-                user.user_name = name
+        if edit_mode == "local_primary":
+            updated = False
+            if data.user_name is not None:
+                name = (data.user_name or "").strip()
+                if name and name != user.user_name:
+                    user.user_name = name
+                    updated = True
+            if data.wechat_user_id is not None:
+                wechat_id = data.wechat_user_id.strip() or None
+                current_id = getattr(user, "wechat_user_id", None) or None
+                if wechat_id != current_id:
+                    user.wechat_user_id = wechat_id
+                    updated = True
+            if updated:
                 await UserDao.aupdate_user(user)
 
         if edit_mode == "local_primary" and data.primary_department_id is not None:

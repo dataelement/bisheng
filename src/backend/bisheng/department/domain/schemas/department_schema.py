@@ -29,6 +29,11 @@ class DepartmentMemberEditApply(BaseModel):
     # 主属（本地/第三方）：主部门角色 + 各附属部门角色
     primary_role_ids: list[int] | None = None
     affiliate_roles: list[DepartmentMemberAffiliateRolesPayload] | None = None
+    wechat_user_id: str | None = Field(
+        default=None,
+        max_length=256,
+        description="企业微信用户ID，用于接收企业微信消息推送",
+    )
 
 
 class DepartmentCreate(BaseModel):
