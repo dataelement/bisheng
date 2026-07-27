@@ -4,6 +4,8 @@ from fastapi import APIRouter, Depends, Query
 
 from bisheng.approval.domain.schemas.shougang_approval_schema import (
     ShougangFilePublishSubmitReq,
+    ShougangFileShareRevokeReq,
+    ShougangFileShareSubmitReq,
     ShougangKnowledgeSpaceCreateSubmitReq,
     ShougangKnowledgeSpaceCreateValidateReq,
 )
@@ -117,5 +119,65 @@ async def submit_file_publish(
         login_user=login_user,
         space_service=space_service,
         version_service=version_service,
+    )
+    return resp_200(data)
+
+
+@router.get('/file-share/target-spaces')
+async def list_file_share_target_spaces(
+    source_space_id: int = Query(..., gt=0),
+    source_file_id: int = Query(..., gt=0),
+    _: UserPayload = Depends(UserPayload.get_login_user),
+    space_service=Depends(get_knowledge_space_service),
+):
+    service = ShougangApprovalService(
+        message_service=getattr(space_service, 'message_service', None)
+    )
+    data = await service.list_file_share_target_spaces(
+        source_space_id=source_space_id,
+        source_file_id=source_file_id,
+        space_service=space_service,
+    )
+    return resp_200(data)
+
+
+@router.post('/file-share/submit')
+async def submit_file_share(
+    req: ShougangFileShareSubmitReq,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    space_service=Depends(get_knowledge_space_service),
+):
+    service = ShougangApprovalService(
+        message_service=getattr(space_service, 'message_service', None)
+    )
+    data = await service.submit_file_share(
+        req=req,
+        login_user=login_user,
+        space_service=space_service,
+    )
+    return resp_200(data)
+
+
+@router.get('/file-share/entries')
+async def list_file_share_entries(
+    source_file_id: int = Query(..., gt=0),
+    _: UserPayload = Depends(UserPayload.get_login_user),
+    space_service=Depends(get_knowledge_space_service),
+):
+    data = await space_service.list_document_share_entries(
+        source_file_id=source_file_id,
+    )
+    return resp_200(data)
+
+
+@router.post('/file-share/revoke')
+async def revoke_file_share(
+    req: ShougangFileShareRevokeReq,
+    _: UserPayload = Depends(UserPayload.get_login_user),
+    space_service=Depends(get_knowledge_space_service),
+):
+    data = await space_service.revoke_document_share(
+        source_file_id=req.source_file_id,
+        share_entry_id=req.share_entry_id,
     )
     return resp_200(data)

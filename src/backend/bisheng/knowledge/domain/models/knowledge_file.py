@@ -5,7 +5,7 @@ from typing import ClassVar, List, Optional, Dict, Any, Literal
 
 # if TYPE_CHECKING:
 from pydantic import field_validator
-from sqlalchemy import Column, DateTime, Integer, String, and_, or_, text, Text
+from sqlalchemy import Boolean, Column, DateTime, Index, Integer, String, Text, and_, case, exists, or_, text
 from sqlmodel import Field, delete, func, select, update, col
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -51,6 +51,26 @@ class FileSource(Enum):
     AUDIO_TRANSCRIPT = 'audio_transcript'
     VIDEO_TRANSCRIPT = 'video_transcript'
     WEB_LINK = 'web_link'
+
+
+class KnowledgeFileEntryType(str, Enum):
+    MANAGER = "manager"
+    PUBLISH = "publish"
+    SHARE = "share"
+    PROJECTION_TOMBSTONE = "projection_tombstone"
+
+
+class KnowledgeFileEntryStatus(str, Enum):
+    PREPARING = "preparing"
+    ACTIVE = "active"
+    DELETING = "deleting"
+
+
+class KnowledgeFileProjectionStatus(str, Enum):
+    PENDING = "pending"
+    PROCESSING = "processing"
+    READY = "ready"
+    FAILED = "failed"
 
 
 # Portal "my uploads" list: space uploads plus media reclassified at ingest time.
@@ -129,6 +149,85 @@ class KnowledgeFileBase(SQLModelSerializable):
         sa_column=Column(Integer, nullable=False, server_default=text('1'),
                          index=True, comment='Tenant ID'),
     )
+    reference_document_id: Optional[int] = Field(
+        default=None,
+        description="Canonical KnowledgeDocument referenced by this F059 entry",
+    )
+    entry_type: Optional[str] = Field(
+        default=None,
+        sa_column=Column(String(24), nullable=True),
+        description="F059 distribution role",
+    )
+    entry_status: Optional[str] = Field(
+        default=None,
+        sa_column=Column(String(16), nullable=True),
+        description="F059 entry lifecycle state",
+    )
+    predecessor_logic_file_id: Optional[int] = Field(
+        default=None,
+        description="Direct publish predecessor KnowledgeFile ID",
+    )
+    share_source_file_id: Optional[int] = Field(
+        default=None,
+        description="Manager or publish entry that originated this share",
+    )
+    allow_download: bool = Field(
+        default=False,
+        sa_column=Column(Boolean, nullable=False, server_default=text("0")),
+        description="Whether a share entry permits watermarked PDF download",
+    )
+    approval_instance_id: Optional[int] = Field(
+        default=None,
+        description="Approval instance that created this entry",
+    )
+    projection_previous_file_id: Optional[int] = Field(
+        default=None,
+        description="Previous entry file ID whose projection must be removed",
+    )
+    desired_content_generation: int = Field(
+        default=0,
+        sa_column=Column(Integer, nullable=False, server_default=text("0")),
+    )
+    applied_content_generation: int = Field(
+        default=0,
+        sa_column=Column(Integer, nullable=False, server_default=text("0")),
+    )
+    desired_entry_generation: int = Field(
+        default=0,
+        sa_column=Column(Integer, nullable=False, server_default=text("0")),
+    )
+    applied_entry_generation: int = Field(
+        default=0,
+        sa_column=Column(Integer, nullable=False, server_default=text("0")),
+    )
+    projection_status: str = Field(
+        default=KnowledgeFileProjectionStatus.PENDING.value,
+        sa_column=Column(
+            String(16),
+            nullable=False,
+            server_default=text("'pending'"),
+        ),
+    )
+    projection_retry_count: int = Field(
+        default=0,
+        sa_column=Column(Integer, nullable=False, server_default=text("0")),
+    )
+    projection_next_retry_at: Optional[datetime] = Field(
+        default=None,
+        sa_column=Column(DateTime, nullable=True),
+    )
+    projection_lease_owner: Optional[str] = Field(
+        default=None,
+        sa_column=Column(String(64), nullable=True),
+    )
+    projection_lease_until: Optional[datetime] = Field(
+        default=None,
+        sa_column=Column(DateTime, nullable=True),
+    )
+    projection_last_error: Optional[str] = Field(
+        default=None,
+        sa_column=Column(Text, nullable=True),
+    )
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
@@ -178,6 +277,37 @@ class QAKnowledgeBase(SQLModelSerializable):
         return v
 
 class KnowledgeFile(KnowledgeFileBase, table=True):
+    __table_args__ = (
+        Index(
+            "idx_kfile_document_space_status",
+            "tenant_id",
+            "reference_document_id",
+            "knowledge_id",
+            "entry_status",
+        ),
+        Index(
+            "idx_kfile_document_type_status",
+            "tenant_id",
+            "reference_document_id",
+            "entry_type",
+            "entry_status",
+        ),
+        Index(
+            "idx_kfile_projection_retry_lease",
+            "tenant_id",
+            "projection_status",
+            "projection_next_retry_at",
+            "projection_lease_until",
+        ),
+        Index(
+            "idx_kfile_entry_cleanup",
+            "tenant_id",
+            "entry_status",
+            "projection_previous_file_id",
+        ),
+        Index("idx_kfile_predecessor", "predecessor_logic_file_id"),
+        Index("idx_kfile_share_source", "share_source_file_id"),
+    )
     id: Optional[int] = Field(default=None, primary_key=True)
 
 class QAKnowledge(QAKnowledgeBase, table=True):
@@ -202,6 +332,45 @@ class KnowledgeFileDao(KnowledgeFileBase):
         KnowledgeFileStatus.TIMEOUT.value,
         KnowledgeFileStatus.VIOLATION.value,
     )
+
+    @staticmethod
+    def active_inventory_predicate():
+        """Files that represent one visible inventory item in their local space."""
+        from bisheng.knowledge.domain.models.knowledge_document_version import (
+            KnowledgeDocumentVersion,
+        )
+
+        active_entry = or_(
+            KnowledgeFile.reference_document_id.is_(None),
+            and_(
+                KnowledgeFile.entry_status
+                == KnowledgeFileEntryStatus.ACTIVE.value,
+                col(KnowledgeFile.entry_type).in_(
+                    [
+                        KnowledgeFileEntryType.MANAGER.value,
+                        KnowledgeFileEntryType.PUBLISH.value,
+                        KnowledgeFileEntryType.SHARE.value,
+                    ]
+                ),
+            ),
+        )
+        is_historical_version = exists(
+            select(KnowledgeDocumentVersion.id).where(
+                KnowledgeDocumentVersion.knowledge_file_id
+                == KnowledgeFile.id,
+                KnowledgeDocumentVersion.is_primary.is_(False),
+            )
+        )
+        return and_(active_entry, ~is_historical_version)
+
+    @staticmethod
+    def physical_storage_predicate():
+        """Rows owning physical content, including non-primary versions."""
+        return or_(
+            KnowledgeFile.entry_type.is_(None),
+            KnowledgeFile.entry_type
+            == KnowledgeFileEntryType.MANAGER.value,
+        )
 
     @classmethod
     def _apply_duplicate_filters(cls, statement):
@@ -259,6 +428,7 @@ class KnowledgeFileDao(KnowledgeFileBase):
                 KnowledgeFile.knowledge_id.in_(knowledge_ids),
                 KnowledgeFile.file_type == 1,
                 KnowledgeFile.status == KnowledgeFileStatus.SUCCESS.value,
+                cls.active_inventory_predicate(),
             )
             .group_by(KnowledgeFile.knowledge_id)
         )
@@ -268,12 +438,27 @@ class KnowledgeFileDao(KnowledgeFileBase):
 
     @classmethod
     async def async_count_all_success_files(cls) -> int:
-        """Async: Count all SUCCESS files across all knowledge spaces."""
+        """Count canonical SUCCESS documents across all spaces."""
         statement = (
-            select(func.count())
+            select(
+                func.count(
+                    func.distinct(
+                        case(
+                            (
+                                KnowledgeFile.reference_document_id.is_not(
+                                    None
+                                ),
+                                KnowledgeFile.reference_document_id,
+                            ),
+                            else_=KnowledgeFile.id,
+                        )
+                    )
+                )
+            )
             .where(
                 KnowledgeFile.file_type == 1,
                 KnowledgeFile.status == KnowledgeFileStatus.SUCCESS.value,
+                cls.active_inventory_predicate(),
             )
         )
         async with get_async_db_session() as session:
@@ -297,26 +482,36 @@ class KnowledgeFileDao(KnowledgeFileBase):
             return {}
         like_conditions = [col(KnowledgeFile.file_encoding).like(f'%-{code}-%') for code in normalized]
         statement = (
-            select(KnowledgeFile.file_encoding)
+            select(
+                KnowledgeFile.id,
+                KnowledgeFile.reference_document_id,
+                KnowledgeFile.file_encoding,
+            )
             .where(
                 KnowledgeFile.file_type == FileType.FILE.value,
                 KnowledgeFile.status == KnowledgeFileStatus.SUCCESS.value,
                 col(KnowledgeFile.file_encoding).is_not(None),
                 or_(*like_conditions),
+                cls.active_inventory_predicate(),
             )
         )
         async with get_async_db_session() as session:
             rows = (await session.exec(statement)).all()
-        counts = {code: 0 for code in normalized}
+        canonical_ids_by_code = {code: set() for code in normalized}
         code_set = set(normalized)
-        for encoding in rows:
+        for file_id, document_id, encoding in rows:
             parts = (encoding or '').split('-')
             if len(parts) >= 3:
                 # business code = second-from-last segment (robust to multi-segment prefixes)
                 domain = parts[-2].strip().upper()
                 if domain in code_set:
-                    counts[domain] += 1
-        return counts
+                    canonical_ids_by_code[domain].add(
+                        int(document_id or file_id)
+                    )
+        return {
+            code: len(canonical_ids)
+            for code, canonical_ids in canonical_ids_by_code.items()
+        }
 
     @classmethod
     async def async_count_files_by_domain_scopes(cls, domain_space_ids: dict[str, set[int]]) -> dict[str, int]:
@@ -338,24 +533,36 @@ class KnowledgeFileDao(KnowledgeFileBase):
         if not conditions:
             return counts
         statement = (
-            select(KnowledgeFile.knowledge_id, KnowledgeFile.file_encoding)
+            select(
+                KnowledgeFile.id,
+                KnowledgeFile.reference_document_id,
+                KnowledgeFile.knowledge_id,
+                KnowledgeFile.file_encoding,
+            )
             .where(
                 KnowledgeFile.file_type == FileType.FILE.value,
                 KnowledgeFile.status == KnowledgeFileStatus.SUCCESS.value,
                 col(KnowledgeFile.file_encoding).is_not(None),
                 or_(*conditions),
+                cls.active_inventory_predicate(),
             )
         )
         async with get_async_db_session() as session:
             rows = (await session.exec(statement)).all()
-        for knowledge_id, encoding in rows:
+        canonical_ids_by_code = {code: set() for code in normalized_scopes}
+        for file_id, document_id, knowledge_id, encoding in rows:
             parts = (encoding or '').split('-')
             if len(parts) < 3:
                 continue
             code = parts[-2].strip().upper()
             if knowledge_id in normalized_scopes.get(code, set()):
-                counts[code] += 1
-        return counts
+                canonical_ids_by_code[code].add(
+                    int(document_id or file_id)
+                )
+        return {
+            code: len(canonical_ids_by_code[code])
+            for code in counts
+        }
 
     @classmethod
     def delete_batch(cls, file_ids: List[int]) -> bool:
@@ -385,6 +592,7 @@ class KnowledgeFileDao(KnowledgeFileBase):
         statement = select(func.sum(KnowledgeFile.file_size)).where(
             KnowledgeFile.user_id == user_id,
             KnowledgeFile.file_type == FileType.FILE.value,
+            cls.physical_storage_predicate(),
             KnowledgeFile.status.in_([
                 KnowledgeFileStatus.PROCESSING.value,
                 KnowledgeFileStatus.SUCCESS.value,
@@ -400,6 +608,7 @@ class KnowledgeFileDao(KnowledgeFileBase):
         statement = select(func.sum(KnowledgeFile.file_size)).where(
             KnowledgeFile.user_id == user_id,
             KnowledgeFile.file_type == FileType.FILE.value,
+            cls.physical_storage_predicate(),
             KnowledgeFile.status.in_([
                 KnowledgeFileStatus.PROCESSING.value,
                 KnowledgeFileStatus.SUCCESS.value,

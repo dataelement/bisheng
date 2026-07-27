@@ -4,6 +4,33 @@ This directory contains manual maintenance and migration scripts for the backend
 
 ## Knowledge Space Scripts
 
+### `knowledge_document_distribution_preflight.py`
+
+F059 单实体发布/分享上线前只读检查。校验三张核心表、文档 tenant 可唯一反推、
+`knowledge_file_id` 唯一版本关系、单 manager/同空间单入口、逻辑入口无物理负载、
+旧复制发布痕迹和 MinIO 图片路径不依赖知识库 ID。任一阻断项返回退出码 `2`，
+可直接作为打开 `knowledge.distribution.writer_enabled` 前的发布门禁。
+
+```bash
+PYTHONPATH=./ .venv/bin/python \
+  scripts/knowledge_document_distribution_preflight.py
+```
+
+### `reconcile_knowledge_document_projection.py`
+
+按 tenant 和 entry 检查或重新调度单个 F059 ES/Milvus 投影。默认仅输出代次、状态和
+重试次数；传入 `--apply` 才向 `knowledge_celery` 调度投影任务。
+
+```bash
+PYTHONPATH=./ .venv/bin/python \
+  scripts/reconcile_knowledge_document_projection.py \
+  --tenant-id 1 --entry-id 123
+
+PYTHONPATH=./ .venv/bin/python \
+  scripts/reconcile_knowledge_document_projection.py \
+  --tenant-id 1 --entry-id 123 --apply
+```
+
 ### `dedupe_department_space_documents.py`
 
 删除部门知识空间中与公共知识空间重复的逻辑文档。脚本只比较两类空间当前主版本中

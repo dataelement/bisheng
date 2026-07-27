@@ -20,6 +20,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+import secrets
+from contextlib import AsyncExitStack
 from typing import List, Optional, Set
 
 from bisheng.core.openfga.exceptions import FGAConnectionError, FGAWriteError
@@ -239,6 +241,69 @@ class PermissionService:
         Expands department subjects to include sub-departments when include_children=True.
         Delegates to batch_write_tuples() for FGA writes + FailedTuple compensation.
         """
+        direct_user_grants = {}
+        if object_type in {"knowledge_space", "folder", "knowledge_file"}:
+            from bisheng.permission.domain.services.department_transfer_grant_guard import (
+                KnowledgeGrantSignature,
+            )
+
+            direct_user_grants: dict[int, list[KnowledgeGrantSignature]] = {}
+            for grant in grants or []:
+                if grant.subject_type != "user" or grant.relation == "owner":
+                    continue
+                direct_user_grants.setdefault(int(grant.subject_id), []).append(
+                    KnowledgeGrantSignature(
+                        resource_type=object_type,
+                        resource_id=str(object_id),
+                        relation=grant.relation,
+                        model_id=getattr(grant, "model_id", None),
+                    )
+                )
+        if not direct_user_grants:
+            await cls._authorize_operations(
+                object_type=object_type,
+                object_id=object_id,
+                grants=grants,
+                revokes=revokes,
+                enforce_fga_success=enforce_fga_success,
+            )
+            return
+
+        from bisheng.permission.domain.services.department_transfer_grant_guard import (
+            _DepartmentTransferUserLock,
+            protect_knowledge_direct_grants,
+        )
+
+        operation_id = secrets.token_hex(16)
+        async with AsyncExitStack() as locks:
+            for target_user_id in sorted(direct_user_grants):
+                await locks.enter_async_context(_DepartmentTransferUserLock(target_user_id))
+            for target_user_id, signatures in direct_user_grants.items():
+                await protect_knowledge_direct_grants(
+                    user_id=target_user_id,
+                    grants=signatures,
+                    source="permission_service",
+                    operation_id=operation_id,
+                    lock_held=True,
+                )
+            await cls._authorize_operations(
+                object_type=object_type,
+                object_id=object_id,
+                grants=grants,
+                revokes=revokes,
+                enforce_fga_success=enforce_fga_success,
+            )
+
+    @classmethod
+    async def _authorize_operations(
+        cls,
+        *,
+        object_type: str,
+        object_id: str,
+        grants: List[AuthorizeGrantItem] = None,
+        revokes: List[AuthorizeRevokeItem] = None,
+        enforce_fga_success: bool = False,
+    ) -> None:
         operations: List[TupleOperation] = []
         affected_user_ids: set[int] = set()
         fga_objects = [f'{object_type}:{object_id}']

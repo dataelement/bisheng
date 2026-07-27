@@ -292,7 +292,10 @@ def rebuild_knowledge_file_chunk(file_id: int):
                                             ServerError(exception=e).to_json_str())
 
 
-def _rebuild_knowledge_file_chunk(db_file: KnowledgeFile):
+def _rebuild_knowledge_file_chunk(
+    db_file: KnowledgeFile,
+    metadata_overrides: dict | None = None,
+):
     db_knowledge = KnowledgeDao.query_by_id(db_file.knowledge_id)
     milvus_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(db_file.user_id, knowledge=db_knowledge)
     es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(db_knowledge)
@@ -309,6 +312,10 @@ def _rebuild_knowledge_file_chunk(db_file: KnowledgeFile):
     chunks = get_all_es_chunks(es_client.client, index_name, query)
     if not chunks:
         logger.warning(f"No chunks found for")
+        if metadata_overrides:
+            raise RuntimeError(
+                "F059 projection source has no ES chunks"
+            )
         return
 
     logger.info(f"Found {len(chunks)} chunks in ES for file_id={db_file.id}")
@@ -336,6 +343,16 @@ def _rebuild_knowledge_file_chunk(db_file: KnowledgeFile):
         metadata["abstract"] = db_file.abstract
         metadata["updater"] = db_file.updater_name
         metadata["update_time"] = int(db_file.update_time.timestamp())
+        if metadata_overrides:
+            metadata.update(metadata_overrides)
+            raw_user_metadata = metadata.get("user_metadata")
+            user_metadata = (
+                dict(raw_user_metadata)
+                if isinstance(raw_user_metadata, dict)
+                else {}
+            )
+            user_metadata.update(metadata_overrides)
+            metadata["user_metadata"] = user_metadata
 
         # re-concatenate
         new_text = KnowledgeUtils.aggregate_chunk_metadata(raw_chunk, metadata)

@@ -192,25 +192,47 @@ class SgUsersSyncService:
         if current is not None and int(current.department_id) == dept_id:
             await cls._sync_department_member_tuples(user_id, [dept_id])
             return
-        if current is not None:
-            await cls._remove_department_membership(
-                user_id,
-                int(current.department_id),
+        from bisheng.permission.domain.services.primary_department_change_coordinator import (
+            activate_primary_department_change,
+            cancel_primary_department_change,
+            prepare_primary_department_change,
+        )
+
+        prepared = await prepare_primary_department_change(
+            user_id=user_id,
+            old_department_id=(
+                int(current.department_id) if current is not None else None
+            ),
+            new_department_id=int(dept_id),
+            trigger_source="sg_sync",
+        )
+        try:
+            if current is not None:
+                await cls._remove_department_membership(
+                    user_id,
+                    int(current.department_id),
+                )
+            existing = await UserDepartmentDao.aget_membership(user_id, dept_id)
+            if existing is not None:
+                await UserDepartmentDao.aset_primary_flag(
+                    user_id,
+                    dept_id,
+                    is_primary=1,
+                )
+            else:
+                await UserDepartmentDao.aadd_member(
+                    user_id,
+                    dept_id,
+                    is_primary=1,
+                    source=cls.SOURCE,
+                )
+        except Exception as exc:
+            await cancel_primary_department_change(
+                prepared,
+                reason=f"primary_department_update_failed:{type(exc).__name__}",
             )
-        existing = await UserDepartmentDao.aget_membership(user_id, dept_id)
-        if existing is not None:
-            await UserDepartmentDao.aset_primary_flag(
-                user_id,
-                dept_id,
-                is_primary=1,
-            )
-        else:
-            await UserDepartmentDao.aadd_member(
-                user_id,
-                dept_id,
-                is_primary=1,
-                source=cls.SOURCE,
-            )
+            raise
+        await activate_primary_department_change(prepared)
         await cls._sync_department_member_tuples(user_id, [dept_id])
         invalidate_portal_recommendation_users_best_effort([user_id])
 

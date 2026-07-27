@@ -36,6 +36,7 @@ class KnowledgeDocumentVersion(KnowledgeDocumentVersionBase, table=True):
     __tablename__ = 'knowledge_document_version'
     __table_args__ = (
         UniqueConstraint('document_id', 'version_no', name='uk_kdv_document_version'),
+        UniqueConstraint('knowledge_file_id', name='uk_kdv_knowledge_file'),
     )
     id: Optional[int] = Field(default=None, primary_key=True)
 

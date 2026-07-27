@@ -45,3 +45,32 @@ async def test_async_vector_retrieval_uses_sync_retriever_to_avoid_loop_bound_mi
     docs = await tool.ainvoke("what is this document about?")
 
     assert [doc.page_content for doc in docs] == ["second chunk", "first chunk"]
+
+
+def test_retriever_dedupes_distribution_entries_by_canonical_chunk():
+    documents = [
+        Document(
+            page_content="same chunk",
+            metadata={
+                "document_id": 10,
+                "canonical_document_id": 100,
+                "canonical_version_id": 900,
+                "chunk_index": 2,
+            },
+        ),
+        Document(
+            page_content="same chunk",
+            metadata={
+                "document_id": 20,
+                "user_metadata": {
+                    "canonical_document_id": 100,
+                    "canonical_version_id": 900,
+                },
+                "chunk_index": 2,
+            },
+        ),
+    ]
+
+    result = KnowledgeRetrieverTool._dedupe_canonical_chunks(documents)
+
+    assert result == [documents[0]]

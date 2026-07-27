@@ -1,0 +1,607 @@
+"""Transactional publish lifecycle tests for F059."""
+
+from __future__ import annotations
+
+from unittest.mock import AsyncMock
+
+import pytest
+from sqlalchemy import select
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from bisheng.database.models.group_resource import ResourceTypeEnum
+from bisheng.database.models.review_tags import ReviewTagLink
+from bisheng.database.models.tag import TagLink
+from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
+from bisheng.knowledge.domain.models.knowledge_document_version import (
+    KnowledgeDocumentVersion,
+)
+from bisheng.knowledge.domain.models.knowledge_file import (
+    KnowledgeFile,
+    KnowledgeFileEntryStatus,
+    KnowledgeFileEntryType,
+    KnowledgeFileProjectionStatus,
+    KnowledgeFileStatus,
+)
+from bisheng.knowledge.domain.repositories.implementations.knowledge_document_repository_impl import (
+    KnowledgeDocumentRepositoryImpl,
+)
+from bisheng.knowledge.domain.repositories.implementations.knowledge_document_version_repository_impl import (
+    KnowledgeDocumentVersionRepositoryImpl,
+)
+from bisheng.knowledge.domain.repositories.implementations.knowledge_file_repository_impl import (
+    KnowledgeFileRepositoryImpl,
+)
+from bisheng.knowledge.domain.services.knowledge_document_distribution_service import (
+    KnowledgeDocumentDistributionError,
+    KnowledgeDocumentDistributionService,
+    PublishKnowledgeDocumentCommand,
+)
+from bisheng.knowledge.domain.services.knowledge_document_permission_activation_service import (
+    KnowledgeDocumentPermissionActivationService,
+)
+from bisheng.permission.domain.schemas.tuple_operation import TupleOperation
+
+
+def _service(
+    session: AsyncSession,
+    *,
+    tuple_writer=AsyncMock(),
+    permission_snapshot_loader=AsyncMock(return_value=[]),
+) -> KnowledgeDocumentDistributionService:
+    file_repository = KnowledgeFileRepositoryImpl(session)
+    return KnowledgeDocumentDistributionService(
+        session=session,
+        document_repository=KnowledgeDocumentRepositoryImpl(session),
+        version_repository=KnowledgeDocumentVersionRepositoryImpl(session),
+        file_repository=file_repository,
+        permission_activation_service=KnowledgeDocumentPermissionActivationService(
+            file_repository=file_repository,
+            tuple_writer=tuple_writer,
+        ),
+        permission_snapshot_loader=permission_snapshot_loader,
+    )
+
+
+async def _seed_manager(session: AsyncSession) -> None:
+    session.add_all(
+        [
+            KnowledgeDocument(
+                id=91,
+                tenant_id=7,
+                knowledge_id=10,
+                primary_version_id=501,
+                content_generation=3,
+            ),
+            KnowledgeFile(
+                id=99,
+                tenant_id=7,
+                knowledge_id=10,
+                file_name="v1.pdf",
+                object_name="tenant/7/v1.pdf",
+                status=KnowledgeFileStatus.SUCCESS.value,
+            ),
+            KnowledgeFile(
+                id=100,
+                tenant_id=7,
+                knowledge_id=10,
+                file_name="canonical.pdf",
+                object_name="tenant/7/canonical.pdf",
+                preview_file_object_name="tenant/7/canonical-preview.pdf",
+                file_size=1024,
+                md5="abc",
+                status=KnowledgeFileStatus.SUCCESS.value,
+                file_level_path="/8",
+                level=2,
+                reference_document_id=91,
+                entry_type=KnowledgeFileEntryType.MANAGER.value,
+                entry_status=KnowledgeFileEntryStatus.ACTIVE.value,
+                projection_status=KnowledgeFileProjectionStatus.READY.value,
+                desired_content_generation=3,
+                applied_content_generation=3,
+            ),
+            KnowledgeDocumentVersion(
+                id=500,
+                document_id=91,
+                knowledge_file_id=99,
+                version_no=1,
+                is_primary=False,
+            ),
+            KnowledgeDocumentVersion(
+                id=501,
+                document_id=91,
+                knowledge_file_id=100,
+                version_no=2,
+                is_primary=True,
+            ),
+        ]
+    )
+    await session.commit()
+
+
+def _command() -> PublishKnowledgeDocumentCommand:
+    return PublishKnowledgeDocumentCommand(
+        tenant_id=7,
+        approval_instance_id=7001,
+        document_id=91,
+        source_entry_id=100,
+        target_space_id=20,
+        target_file_level_path="/88",
+        target_level=2,
+    )
+
+
+@pytest.mark.asyncio
+async def test_publish_moves_manager_and_creates_payload_free_source_entry(
+    async_db_session: AsyncSession,
+):
+    await _seed_manager(async_db_session)
+    tuple_writer = AsyncMock()
+    service = _service(async_db_session, tuple_writer=tuple_writer)
+
+    result = await service.publish_approved(_command())
+
+    assert result.manager_file_id == 100
+    assert result.publish_entry_id != 100
+    assert result.idempotent is False
+
+    file_repository = KnowledgeFileRepositoryImpl(async_db_session)
+    document_repository = KnowledgeDocumentRepositoryImpl(async_db_session)
+    version_repository = KnowledgeDocumentVersionRepositoryImpl(async_db_session)
+    manager = await file_repository.find_by_id(100)
+    publish = await file_repository.find_by_id(result.publish_entry_id)
+    document = await document_repository.find_by_id(91)
+    versions = await version_repository.find_by_document_id(91)
+    physical_files = [
+        await file_repository.find_by_id(version.knowledge_file_id)
+        for version in versions
+    ]
+
+    assert manager.knowledge_id == 20
+    assert manager.file_level_path == "/88"
+    assert manager.object_name == "tenant/7/canonical.pdf"
+    assert manager.projection_previous_file_id == publish.id
+    assert publish.knowledge_id == 10
+    assert publish.file_level_path == "/8"
+    assert publish.entry_type == KnowledgeFileEntryType.PUBLISH.value
+    assert publish.entry_status == KnowledgeFileEntryStatus.ACTIVE.value
+    assert publish.object_name is None
+    assert publish.preview_file_object_name is None
+    assert publish.file_size == 0
+    assert publish.md5 is None
+    assert publish.approval_instance_id == 7001
+    assert document.knowledge_id == 20
+    assert document.predecessor_logic_file_id == publish.id
+    assert document.content_generation == 4
+    assert {file.knowledge_id for file in physical_files} == {20}
+    assert len(versions) == 2
+    assert tuple_writer.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_permission_prewrite_failure_keeps_old_manager_and_hidden_preparing_entry(
+    async_db_session: AsyncSession,
+):
+    await _seed_manager(async_db_session)
+    tuple_writer = AsyncMock(side_effect=RuntimeError("FGA down"))
+    service = _service(async_db_session, tuple_writer=tuple_writer)
+
+    with pytest.raises(KnowledgeDocumentDistributionError, match="prewrite"):
+        await service.publish_approved(_command())
+
+    repository = KnowledgeFileRepositoryImpl(async_db_session)
+    manager = await repository.find_by_id(100)
+    entries = await repository.find_distribution_entries_by_document_id(91)
+
+    assert manager.knowledge_id == 10
+    assert manager.entry_type == KnowledgeFileEntryType.MANAGER.value
+    assert manager.entry_status == (
+        KnowledgeFileEntryStatus.PREPARING.value
+    )
+    preparing = [
+        entry
+        for entry in entries
+        if entry.approval_instance_id == 7001
+        and entry.entry_type == KnowledgeFileEntryType.PUBLISH.value
+    ]
+    assert len(preparing) == 1
+    assert preparing[0].entry_status == KnowledgeFileEntryStatus.PREPARING.value
+
+
+@pytest.mark.asyncio
+async def test_repeated_approved_callback_is_idempotent(
+    async_db_session: AsyncSession,
+):
+    await _seed_manager(async_db_session)
+    tuple_writer = AsyncMock()
+    service = _service(async_db_session, tuple_writer=tuple_writer)
+
+    first = await service.publish_approved(_command())
+    second = await service.publish_approved(_command())
+
+    assert second.publish_entry_id == first.publish_entry_id
+    assert second.manager_file_id == first.manager_file_id
+    assert second.idempotent is True
+    assert tuple_writer.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_publish_rejects_non_manager_source(
+    async_db_session: AsyncSession,
+):
+    await _seed_manager(async_db_session)
+    source = await KnowledgeFileRepositoryImpl(async_db_session).find_by_id(100)
+    source.entry_type = KnowledgeFileEntryType.SHARE.value
+    async_db_session.add(source)
+    await async_db_session.commit()
+
+    with pytest.raises(KnowledgeDocumentDistributionError, match="manager"):
+        await _service(async_db_session).publish_approved(_command())
+
+
+@pytest.mark.asyncio
+async def test_switch_primary_moves_manager_identity_without_changing_logical_entries(
+    async_db_session: AsyncSession,
+):
+    connection = await async_db_session.connection()
+    await connection.run_sync(
+        lambda sync_connection: TagLink.__table__.create(
+            sync_connection,
+            checkfirst=True,
+        )
+    )
+    await connection.run_sync(
+        lambda sync_connection: ReviewTagLink.__table__.create(
+            sync_connection,
+            checkfirst=True,
+        )
+    )
+    await _seed_manager(async_db_session)
+    resource_type = ResourceTypeEnum.SPACE_FILE.value
+    async_db_session.add_all(
+        [
+            KnowledgeFile(
+                id=101,
+                tenant_id=7,
+                knowledge_id=30,
+                file_name="canonical.pdf",
+                file_type=1,
+                status=KnowledgeFileStatus.SUCCESS.value,
+                file_level_path="/30",
+                reference_document_id=91,
+                entry_type=KnowledgeFileEntryType.PUBLISH.value,
+                entry_status=KnowledgeFileEntryStatus.ACTIVE.value,
+                desired_content_generation=3,
+                applied_content_generation=3,
+                projection_status=KnowledgeFileProjectionStatus.READY.value,
+            ),
+            KnowledgeFile(
+                id=102,
+                tenant_id=7,
+                knowledge_id=40,
+                file_name="canonical.pdf",
+                file_type=1,
+                status=KnowledgeFileStatus.SUCCESS.value,
+                file_level_path="/40",
+                reference_document_id=91,
+                entry_type=KnowledgeFileEntryType.SHARE.value,
+                entry_status=KnowledgeFileEntryStatus.ACTIVE.value,
+                allow_download=True,
+                desired_content_generation=3,
+                applied_content_generation=3,
+                projection_status=KnowledgeFileProjectionStatus.READY.value,
+            ),
+            TagLink(
+                tag_id=701,
+                resource_id="100",
+                resource_type=resource_type,
+                user_id=11,
+                tenant_id=7,
+            ),
+            TagLink(
+                tag_id=799,
+                resource_id="99",
+                resource_type=resource_type,
+                user_id=12,
+                tenant_id=7,
+            ),
+            ReviewTagLink(
+                tag_id=801,
+                resource_id="100",
+                resource_type=resource_type,
+                user_id=11,
+                tenant_id=7,
+                remark="source review tag",
+            ),
+            ReviewTagLink(
+                tag_id=899,
+                resource_id="99",
+                resource_type=resource_type,
+                user_id=12,
+                tenant_id=7,
+                remark="stale target tag",
+            ),
+        ]
+    )
+    await async_db_session.commit()
+    tuple_writer = AsyncMock()
+    permission_snapshot_loader = AsyncMock(
+        return_value=[
+            TupleOperation(
+                action="write",
+                user="user:11",
+                relation="editor",
+                object="knowledge_file:100",
+            )
+        ]
+    )
+    service = _service(
+        async_db_session,
+        tuple_writer=tuple_writer,
+        permission_snapshot_loader=permission_snapshot_loader,
+    )
+
+    result = await service.switch_primary_manager(
+        tenant_id=7,
+        document_id=91,
+        current_manager_file_id=100,
+        target_version_id=500,
+    )
+
+    file_repository = KnowledgeFileRepositoryImpl(async_db_session)
+    version_repository = KnowledgeDocumentVersionRepositoryImpl(
+        async_db_session
+    )
+    document_repository = KnowledgeDocumentRepositoryImpl(async_db_session)
+    old_manager = await file_repository.find_by_id(100)
+    new_manager = await file_repository.find_by_id(99)
+    publish = await file_repository.find_by_id(101)
+    share = await file_repository.find_by_id(102)
+    document = await document_repository.find_by_id(91)
+    versions = await version_repository.find_by_document_id(91)
+    target_tag_links = list(
+        (
+            await async_db_session.execute(
+                select(TagLink).where(
+                    TagLink.resource_id == "99",
+                    TagLink.resource_type == resource_type,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    target_review_tag_links = list(
+        (
+            await async_db_session.execute(
+                select(ReviewTagLink).where(
+                    ReviewTagLink.resource_id == "99",
+                    ReviewTagLink.resource_type == resource_type,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    assert result.manager_file_id == 99
+    assert result.previous_manager_file_id == 100
+    assert document.primary_version_id == 500
+    assert document.content_generation == 4
+    assert [(item.id, item.is_primary) for item in versions] == [
+        (500, True),
+        (501, False),
+    ]
+    assert new_manager.entry_type == KnowledgeFileEntryType.MANAGER.value
+    assert new_manager.entry_status == KnowledgeFileEntryStatus.ACTIVE.value
+    assert new_manager.reference_document_id == 91
+    assert new_manager.file_level_path == "/8"
+    assert new_manager.projection_previous_file_id == 100
+    assert new_manager.file_name == "v1.pdf"
+    assert old_manager.entry_type is None
+    assert old_manager.entry_status is None
+    assert old_manager.reference_document_id is None
+    assert publish.id == 101
+    assert publish.file_level_path == "/30"
+    assert publish.file_name == "v1.pdf"
+    assert share.id == 102
+    assert share.file_level_path == "/40"
+    assert share.file_name == "v1.pdf"
+    assert share.allow_download is True
+    assert {
+        new_manager.desired_content_generation,
+        publish.desired_content_generation,
+        share.desired_content_generation,
+    } == {4}
+    assert [item.tag_id for item in target_tag_links] == [701]
+    assert [item.tag_id for item in target_review_tag_links] == [801]
+    assert target_review_tag_links[0].remark == "source review tag"
+    assert tuple_writer.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_switch_primary_rejects_name_conflict_before_permission_prewrite(
+    async_db_session: AsyncSession,
+):
+    await _seed_manager(async_db_session)
+    async_db_session.add(
+        KnowledgeFile(
+            id=110,
+            tenant_id=7,
+            knowledge_id=10,
+            file_name="v1.pdf",
+            file_type=1,
+            status=KnowledgeFileStatus.SUCCESS.value,
+            file_level_path="/8",
+        )
+    )
+    await async_db_session.commit()
+    tuple_writer = AsyncMock()
+    service = _service(async_db_session, tuple_writer=tuple_writer)
+
+    with pytest.raises(
+        KnowledgeDocumentDistributionError,
+        match="name conflict",
+    ):
+        await service.switch_primary_manager(
+            tenant_id=7,
+            document_id=91,
+            current_manager_file_id=100,
+            target_version_id=500,
+        )
+
+    document = await KnowledgeDocumentRepositoryImpl(
+        async_db_session
+    ).find_by_id(91)
+    assert document.primary_version_id == 501
+    tuple_writer.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_publish_merge_migrates_existing_version_row_without_copy(
+    async_db_session: AsyncSession,
+):
+    await _seed_manager(async_db_session)
+    source_versions = await KnowledgeDocumentVersionRepositoryImpl(
+        async_db_session
+    ).find_by_document_id(91)
+    await async_db_session.delete(source_versions[0])
+    await async_db_session.commit()
+    async_db_session.add_all(
+        [
+            KnowledgeDocument(
+                id=92,
+                tenant_id=7,
+                knowledge_id=20,
+                primary_version_id=601,
+                content_generation=2,
+            ),
+            KnowledgeFile(
+                id=200,
+                tenant_id=7,
+                knowledge_id=20,
+                file_name="target-v1.pdf",
+                object_name="tenant/7/target-v1.pdf",
+                status=KnowledgeFileStatus.SUCCESS.value,
+            ),
+            KnowledgeDocumentVersion(
+                id=601,
+                document_id=92,
+                knowledge_file_id=200,
+                version_no=1,
+                is_primary=True,
+            ),
+        ]
+    )
+    await async_db_session.commit()
+    command = PublishKnowledgeDocumentCommand(
+        tenant_id=7,
+        approval_instance_id=7002,
+        document_id=91,
+        source_entry_id=100,
+        target_space_id=20,
+        target_file_level_path="/88",
+        target_level=2,
+        target_document_id=92,
+    )
+    service = _service(async_db_session)
+
+    first = await service.publish_approved(command)
+    second = await service.publish_approved(command)
+
+    document_repository = KnowledgeDocumentRepositoryImpl(async_db_session)
+    file_repository = KnowledgeFileRepositoryImpl(async_db_session)
+    version_repository = KnowledgeDocumentVersionRepositoryImpl(
+        async_db_session
+    )
+    source_document = await document_repository.find_by_id(91)
+    target_document = await document_repository.find_by_id(92)
+    versions = await version_repository.find_by_document_id(92)
+    manager = await file_repository.find_by_id(100)
+    old_target = await file_repository.find_by_id(200)
+    publish = await file_repository.find_by_id(first.publish_entry_id)
+
+    assert source_document is None
+    assert target_document.primary_version_id == 501
+    assert target_document.predecessor_logic_file_id == publish.id
+    assert [(item.knowledge_file_id, item.version_no, item.is_primary) for item in versions] == [
+        (200, 1, False),
+        (100, 2, True),
+    ]
+    assert manager.reference_document_id == 92
+    assert manager.entry_type == KnowledgeFileEntryType.MANAGER.value
+    assert manager.knowledge_id == 20
+    assert manager.object_name == "tenant/7/canonical.pdf"
+    assert old_target.reference_document_id is None
+    assert old_target.entry_type is None
+    assert old_target.object_name == "tenant/7/target-v1.pdf"
+    assert publish.reference_document_id == 92
+    assert publish.entry_status == KnowledgeFileEntryStatus.ACTIVE.value
+    assert first.document_id == 92
+    assert second.document_id == 92
+    assert second.idempotent is True
+
+
+@pytest.mark.asyncio
+async def test_publish_merge_rejects_distributed_target(
+    async_db_session: AsyncSession,
+):
+    await _seed_manager(async_db_session)
+    source_versions = await KnowledgeDocumentVersionRepositoryImpl(
+        async_db_session
+    ).find_by_document_id(91)
+    await async_db_session.delete(source_versions[0])
+    await async_db_session.commit()
+    async_db_session.add_all(
+        [
+            KnowledgeDocument(
+                id=92,
+                tenant_id=7,
+                knowledge_id=20,
+                primary_version_id=601,
+            ),
+            KnowledgeFile(
+                id=200,
+                tenant_id=7,
+                knowledge_id=20,
+                file_name="target-v1.pdf",
+                object_name="tenant/7/target-v1.pdf",
+                status=KnowledgeFileStatus.SUCCESS.value,
+                reference_document_id=92,
+                entry_type=KnowledgeFileEntryType.MANAGER.value,
+                entry_status=KnowledgeFileEntryStatus.ACTIVE.value,
+            ),
+            KnowledgeFile(
+                id=201,
+                tenant_id=7,
+                knowledge_id=30,
+                file_name="target-v1.pdf",
+                status=KnowledgeFileStatus.SUCCESS.value,
+                reference_document_id=92,
+                entry_type=KnowledgeFileEntryType.SHARE.value,
+                entry_status=KnowledgeFileEntryStatus.ACTIVE.value,
+            ),
+            KnowledgeDocumentVersion(
+                id=601,
+                document_id=92,
+                knowledge_file_id=200,
+                version_no=1,
+                is_primary=True,
+            ),
+        ]
+    )
+    await async_db_session.commit()
+
+    with pytest.raises(
+        KnowledgeDocumentDistributionError,
+        match="distributed target",
+    ):
+        await _service(async_db_session).publish_approved(
+            PublishKnowledgeDocumentCommand(
+                tenant_id=7,
+                approval_instance_id=7002,
+                document_id=91,
+                source_entry_id=100,
+                target_space_id=20,
+                target_document_id=92,
+            )
+        )

@@ -41,3 +41,18 @@ def test_unique_constraint_on_document_id_and_version_no():
         {col.name for col in c.columns} == {"document_id", "version_no"}
         for c in constraints
     ), "Expected UNIQUE constraint on (document_id, version_no)"
+
+
+def test_unique_constraint_on_knowledge_file_id():
+    from sqlalchemy import UniqueConstraint
+
+    constraints = [
+        constraint
+        for constraint in KnowledgeDocumentVersion.__table__.constraints
+        if isinstance(constraint, UniqueConstraint)
+    ]
+    assert any(
+        constraint.name == "uk_kdv_knowledge_file"
+        and {column.name for column in constraint.columns} == {"knowledge_file_id"}
+        for constraint in constraints
+    ), "Expected a named UNIQUE constraint on knowledge_file_id"

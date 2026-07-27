@@ -75,6 +75,14 @@ class _KnowledgeUtilsPlaceholder:
         return ""
 
     @classmethod
+    def get_knowledge_file_image_dir(
+        cls,
+        doc_id,
+        knowledge_id=None,
+    ):
+        return f"knowledge/images/files/{doc_id}"
+
+    @classmethod
     def resolve_source_object_name(cls, *args, **kwargs):
         return None
 

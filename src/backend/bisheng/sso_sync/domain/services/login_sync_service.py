@@ -363,28 +363,48 @@ class LoginSyncService:
         if current is not None and current.department_id == dept_id:
             await cls._sync_department_member_tuples(user_id, [dept_id])
             return
-        if current is not None:
-            # Demote old primary in place instead of deleting to preserve
-            # membership history; F012 sync_user reads only the flag.
-            await UserDepartmentDao.aset_primary_flag(
-                user_id,
-                current.department_id,
-                is_primary=0,
+        from bisheng.permission.domain.services.primary_department_change_coordinator import (
+            activate_primary_department_change,
+            cancel_primary_department_change,
+            prepare_primary_department_change,
+        )
+
+        prepared = await prepare_primary_department_change(
+            user_id=user_id,
+            old_department_id=(int(current.department_id) if current is not None else None),
+            new_department_id=int(dept_id),
+            trigger_source="login_sync",
+        )
+        try:
+            if current is not None:
+                # Demote old primary in place instead of deleting to preserve
+                # membership history; F012 sync_user reads only the flag.
+                await UserDepartmentDao.aset_primary_flag(
+                    user_id,
+                    current.department_id,
+                    is_primary=0,
+                )
+            existing = await UserDepartmentDao.aget_membership(user_id, dept_id)
+            if existing is not None:
+                await UserDepartmentDao.aset_primary_flag(
+                    user_id,
+                    dept_id,
+                    is_primary=1,
+                )
+            else:
+                await UserDepartmentDao.aadd_member(
+                    user_id,
+                    dept_id,
+                    is_primary=1,
+                    source=row_source,
+                )
+        except Exception as exc:
+            await cancel_primary_department_change(
+                prepared,
+                reason=f"primary_department_update_failed:{type(exc).__name__}",
             )
-        existing = await UserDepartmentDao.aget_membership(user_id, dept_id)
-        if existing is not None:
-            await UserDepartmentDao.aset_primary_flag(
-                user_id,
-                dept_id,
-                is_primary=1,
-            )
-        else:
-            await UserDepartmentDao.aadd_member(
-                user_id,
-                dept_id,
-                is_primary=1,
-                source=row_source,
-            )
+            raise
+        await activate_primary_department_change(prepared)
         await cls._sync_department_member_tuples(user_id, [dept_id])
         invalidate_portal_recommendation_users_best_effort([user_id])
 
@@ -409,23 +429,52 @@ class LoginSyncService:
 
         current_memberships = await UserDepartmentDao.aget_user_departments(user_id)
         current_dept_ids = list(dict.fromkeys(int(row.department_id) for row in current_memberships))
-
-        await cls._replace_department_scoped_roles(
-            user_id,
-            revoke_dept_ids=current_dept_ids,
-            apply_dept_ids=desired_dept_ids,
+        current_primary_id = next(
+            (int(row.department_id) for row in current_memberships if int(getattr(row, "is_primary", 0) or 0) == 1),
+            None,
+        )
+        from bisheng.permission.domain.services.primary_department_change_coordinator import (
+            activate_primary_department_change,
+            cancel_primary_department_change,
+            prepare_primary_department_change,
         )
 
-        for department_id in current_dept_ids:
-            await cls._remove_department_membership(user_id, department_id)
-
-        if primary_dept_id is not None:
-            await UserDepartmentDao.aadd_member(
-                user_id,
-                int(primary_dept_id),
-                is_primary=1,
-                source=row_source,
+        prepared = (
+            await prepare_primary_department_change(
+                user_id=user_id,
+                old_department_id=current_primary_id,
+                new_department_id=int(primary_dept_id),
+                trigger_source="login_sync",
             )
+            if primary_dept_id is not None
+            else None
+        )
+
+        try:
+            await cls._replace_department_scoped_roles(
+                user_id,
+                revoke_dept_ids=current_dept_ids,
+                apply_dept_ids=desired_dept_ids,
+            )
+
+            for department_id in current_dept_ids:
+                await cls._remove_department_membership(user_id, department_id)
+
+            if primary_dept_id is not None:
+                await UserDepartmentDao.aadd_member(
+                    user_id,
+                    int(primary_dept_id),
+                    is_primary=1,
+                    source=row_source,
+                )
+        except Exception as exc:
+            await cancel_primary_department_change(
+                prepared,
+                reason=f"primary_department_update_failed:{type(exc).__name__}",
+            )
+            raise
+        await activate_primary_department_change(prepared)
+
         for department_id in desired_secondary_ids:
             await UserDepartmentDao.aadd_member(
                 user_id,
@@ -435,14 +484,6 @@ class LoginSyncService:
             )
 
         await cls._sync_department_member_tuples(user_id, desired_dept_ids)
-        current_primary_id = next(
-            (
-                int(row.department_id)
-                for row in current_memberships
-                if int(getattr(row, "is_primary", 0) or 0) == 1
-            ),
-            None,
-        )
         if current_primary_id != primary_dept_id:
             invalidate_portal_recommendation_users_best_effort([user_id])
 

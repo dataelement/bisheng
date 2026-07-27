@@ -1,12 +1,19 @@
 from collections.abc import Sequence
+from datetime import datetime
 from typing import Any
 
-from sqlalchemy import and_, delete, or_
+from sqlalchemy import and_, case, delete, or_, update
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.common.repositories.implementations.base_repository_impl import BaseRepositoryImpl
-from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFile
+from bisheng.knowledge.domain.models.knowledge_file import (
+    FileType,
+    KnowledgeFile,
+    KnowledgeFileEntryStatus,
+    KnowledgeFileEntryType,
+    KnowledgeFileProjectionStatus,
+)
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository import KnowledgeFileRepository
 
 
@@ -56,7 +63,8 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
             return []
         stmt = (
             select(KnowledgeFile)
-            .where(col(KnowledgeFile.id).in_(entity_ids))
+            .where(col(KnowledgeFile.id).in_(sorted(set(entity_ids))))
+            .order_by(KnowledgeFile.id.asc())
             .with_for_update()
             .execution_options(populate_existing=True)
         )
@@ -71,6 +79,346 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
         )
         await self.session.flush()
         return int(result.rowcount or 0)
+
+    async def find_distribution_entries_by_document_id(
+        self,
+        document_id: int,
+        *,
+        statuses: set[str] | None = None,
+        for_update: bool = False,
+    ) -> list[KnowledgeFile]:
+        stmt = (
+            select(KnowledgeFile)
+            .where(KnowledgeFile.reference_document_id == document_id)
+            .order_by(KnowledgeFile.id.asc())
+            .execution_options(populate_existing=True)
+        )
+        if statuses is not None:
+            stmt = stmt.where(col(KnowledgeFile.entry_status).in_(sorted(statuses)))
+        if for_update:
+            stmt = stmt.with_for_update()
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def find_entry_in_space_for_update(
+        self,
+        document_id: int,
+        knowledge_id: int,
+    ) -> KnowledgeFile | None:
+        stmt = (
+            select(KnowledgeFile)
+            .where(
+                KnowledgeFile.reference_document_id == document_id,
+                KnowledgeFile.knowledge_id == knowledge_id,
+                col(KnowledgeFile.entry_status).in_(
+                    [
+                        KnowledgeFileEntryStatus.PREPARING.value,
+                        KnowledgeFileEntryStatus.ACTIVE.value,
+                        KnowledgeFileEntryStatus.DELETING.value,
+                    ]
+                ),
+            )
+            .order_by(KnowledgeFile.id.asc())
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        result = await self.session.execute(stmt)
+        return result.scalars().first()
+
+    async def find_manager_for_update(
+        self,
+        document_id: int,
+    ) -> KnowledgeFile | None:
+        stmt = (
+            select(KnowledgeFile)
+            .where(
+                KnowledgeFile.reference_document_id == document_id,
+                KnowledgeFile.entry_type == KnowledgeFileEntryType.MANAGER.value,
+                KnowledgeFile.entry_status == KnowledgeFileEntryStatus.ACTIVE.value,
+            )
+            .order_by(KnowledgeFile.id.asc())
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        result = await self.session.execute(stmt)
+        return result.scalars().first()
+
+    async def find_by_approval_instance_id(
+        self,
+        approval_instance_id: int,
+    ) -> KnowledgeFile | None:
+        result = await self.session.execute(
+            select(KnowledgeFile)
+            .where(
+                KnowledgeFile.approval_instance_id == approval_instance_id,
+                KnowledgeFile.reference_document_id.is_not(None),
+                col(KnowledgeFile.entry_type).in_(
+                    [
+                        KnowledgeFileEntryType.PUBLISH.value,
+                        KnowledgeFileEntryType.SHARE.value,
+                    ]
+                ),
+            )
+            .order_by(KnowledgeFile.id.asc())
+            .execution_options(populate_existing=True)
+        )
+        return result.scalars().first()
+
+    async def mark_document_entries_content_generation(
+        self,
+        document_id: int,
+        generation: int,
+    ) -> int:
+        result = await self.session.execute(
+            update(KnowledgeFile)
+            .where(
+                KnowledgeFile.reference_document_id == document_id,
+                KnowledgeFile.entry_status == KnowledgeFileEntryStatus.ACTIVE.value,
+            )
+            .values(
+                desired_content_generation=generation,
+                projection_status=KnowledgeFileProjectionStatus.PENDING.value,
+                projection_next_retry_at=None,
+            )
+        )
+        await self.session.flush()
+        return int(result.rowcount or 0)
+
+    @staticmethod
+    def _projection_candidate_predicate(now: datetime):
+        is_distribution_row = or_(
+            KnowledgeFile.reference_document_id.is_not(None),
+            KnowledgeFile.entry_type
+            == KnowledgeFileEntryType.PROJECTION_TOMBSTONE.value,
+        )
+        has_work = or_(
+            KnowledgeFile.desired_content_generation
+            > KnowledgeFile.applied_content_generation,
+            KnowledgeFile.desired_entry_generation
+            > KnowledgeFile.applied_entry_generation,
+            col(KnowledgeFile.projection_status).in_(
+                [
+                    KnowledgeFileProjectionStatus.PENDING.value,
+                    KnowledgeFileProjectionStatus.FAILED.value,
+                    KnowledgeFileProjectionStatus.PROCESSING.value,
+                ]
+            ),
+            KnowledgeFile.entry_status
+            == KnowledgeFileEntryStatus.DELETING.value,
+            KnowledgeFile.entry_type
+            == KnowledgeFileEntryType.PROJECTION_TOMBSTONE.value,
+        )
+        retry_due = or_(
+            KnowledgeFile.projection_next_retry_at.is_(None),
+            KnowledgeFile.projection_next_retry_at <= now,
+        )
+        lease_available = or_(
+            KnowledgeFile.projection_lease_until.is_(None),
+            KnowledgeFile.projection_lease_until <= now,
+        )
+        return and_(
+            is_distribution_row,
+            col(KnowledgeFile.entry_status).in_(
+                [
+                    KnowledgeFileEntryStatus.ACTIVE.value,
+                    KnowledgeFileEntryStatus.DELETING.value,
+                ]
+            ),
+            has_work,
+            retry_due,
+            lease_available,
+        )
+
+    async def find_projection_candidates(
+        self,
+        *,
+        now: datetime,
+        limit: int,
+    ) -> list[KnowledgeFile]:
+        if limit <= 0:
+            return []
+        result = await self.session.execute(
+            select(KnowledgeFile)
+            .where(self._projection_candidate_predicate(now))
+            .order_by(KnowledgeFile.id.asc())
+            .limit(limit)
+            .execution_options(populate_existing=True)
+        )
+        return list(result.scalars().all())
+
+    async def claim_projection_lease(
+        self,
+        *,
+        entry_id: int,
+        lease_owner: str,
+        lease_until: datetime,
+        now: datetime,
+    ) -> KnowledgeFile | None:
+        result = await self.session.execute(
+            update(KnowledgeFile)
+            .where(
+                KnowledgeFile.id == entry_id,
+                self._projection_candidate_predicate(now),
+            )
+            .values(
+                projection_status=KnowledgeFileProjectionStatus.PROCESSING.value,
+                projection_lease_owner=lease_owner,
+                projection_lease_until=lease_until,
+            )
+        )
+        await self.session.flush()
+        if int(result.rowcount or 0) != 1:
+            return None
+        return await self.find_by_id(entry_id)
+
+    async def apply_projection_result(
+        self,
+        *,
+        entry_id: int,
+        lease_owner: str,
+        target_content_generation: int,
+        target_entry_generation: int,
+    ) -> bool:
+        target_is_current = and_(
+            KnowledgeFile.desired_content_generation
+            == target_content_generation,
+            KnowledgeFile.desired_entry_generation == target_entry_generation,
+        )
+        result = await self.session.execute(
+            update(KnowledgeFile)
+            .where(
+                KnowledgeFile.id == entry_id,
+                KnowledgeFile.projection_lease_owner == lease_owner,
+                KnowledgeFile.applied_content_generation
+                <= target_content_generation,
+                KnowledgeFile.applied_entry_generation <= target_entry_generation,
+            )
+            .values(
+                applied_content_generation=target_content_generation,
+                applied_entry_generation=target_entry_generation,
+                projection_status=case(
+                    (
+                        target_is_current,
+                        KnowledgeFileProjectionStatus.READY.value,
+                    ),
+                    else_=KnowledgeFileProjectionStatus.PENDING.value,
+                ),
+                projection_retry_count=0,
+                projection_next_retry_at=None,
+                projection_lease_owner=None,
+                projection_lease_until=None,
+                projection_last_error=None,
+                projection_previous_file_id=case(
+                    (
+                        and_(
+                            target_is_current,
+                            KnowledgeFile.entry_status
+                            == KnowledgeFileEntryStatus.ACTIVE.value,
+                        ),
+                        None,
+                    ),
+                    else_=KnowledgeFile.projection_previous_file_id,
+                ),
+            )
+        )
+        await self.session.flush()
+        return int(result.rowcount or 0) == 1
+
+    async def fail_projection_lease(
+        self,
+        *,
+        entry_id: int,
+        lease_owner: str,
+        next_retry_at: datetime,
+        error_summary: str,
+    ) -> bool:
+        result = await self.session.execute(
+            update(KnowledgeFile)
+            .where(
+                KnowledgeFile.id == entry_id,
+                KnowledgeFile.projection_lease_owner == lease_owner,
+            )
+            .values(
+                projection_status=KnowledgeFileProjectionStatus.FAILED.value,
+                projection_retry_count=KnowledgeFile.projection_retry_count + 1,
+                projection_next_retry_at=next_retry_at,
+                projection_lease_owner=None,
+                projection_lease_until=None,
+                projection_last_error=error_summary[:4000],
+            )
+        )
+        await self.session.flush()
+        return int(result.rowcount or 0) == 1
+
+    async def activate_prepared_entry(self, entry_id: int) -> bool:
+        result = await self.session.execute(
+            update(KnowledgeFile)
+            .where(
+                KnowledgeFile.id == entry_id,
+                KnowledgeFile.entry_status
+                == KnowledgeFileEntryStatus.PREPARING.value,
+            )
+            .values(
+                entry_status=KnowledgeFileEntryStatus.ACTIVE.value,
+                desired_entry_generation=(
+                    KnowledgeFile.desired_entry_generation + 1
+                ),
+                projection_status=KnowledgeFileProjectionStatus.PENDING.value,
+                projection_next_retry_at=None,
+            )
+        )
+        await self.session.flush()
+        return int(result.rowcount or 0) == 1
+
+    async def mark_entry_deleting(self, entry_id: int) -> bool:
+        result = await self.session.execute(
+            update(KnowledgeFile)
+            .where(
+                KnowledgeFile.id == entry_id,
+                col(KnowledgeFile.entry_status).in_(
+                    [
+                        KnowledgeFileEntryStatus.PREPARING.value,
+                        KnowledgeFileEntryStatus.ACTIVE.value,
+                    ]
+                ),
+            )
+            .values(
+                entry_status=KnowledgeFileEntryStatus.DELETING.value,
+                desired_entry_generation=(
+                    KnowledgeFile.desired_entry_generation + 1
+                ),
+                projection_status=KnowledgeFileProjectionStatus.PENDING.value,
+                projection_next_retry_at=None,
+            )
+        )
+        await self.session.flush()
+        return int(result.rowcount or 0) == 1
+
+    async def find_permission_reconcile_candidates(
+        self,
+        *,
+        older_than: datetime,
+        limit: int,
+    ) -> list[KnowledgeFile]:
+        if limit <= 0:
+            return []
+        result = await self.session.execute(
+            select(KnowledgeFile)
+            .where(
+                KnowledgeFile.reference_document_id.is_not(None),
+                col(KnowledgeFile.entry_status).in_(
+                    [
+                        KnowledgeFileEntryStatus.PREPARING.value,
+                        KnowledgeFileEntryStatus.DELETING.value,
+                    ]
+                ),
+                KnowledgeFile.update_time <= older_than,
+            )
+            .order_by(KnowledgeFile.id.asc())
+            .limit(limit)
+            .execution_options(populate_existing=True)
+        )
+        return list(result.scalars().all())
 
     async def find_main_version_files_in_space(
         self,

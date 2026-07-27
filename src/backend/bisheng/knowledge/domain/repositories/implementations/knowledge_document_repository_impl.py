@@ -1,7 +1,7 @@
 """KnowledgeDocumentRepository implementation."""
 from typing import List, Optional
 
-from sqlmodel import select, update
+from sqlmodel import col, select, update
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.common.repositories.implementations.base_repository_impl import BaseRepositoryImpl
@@ -30,6 +30,35 @@ class KnowledgeDocumentRepositoryImpl(
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
+    async def find_by_id_for_update(
+        self,
+        entity_id: int,
+    ) -> Optional[KnowledgeDocument]:
+        stmt = (
+            select(KnowledgeDocument)
+            .where(KnowledgeDocument.id == entity_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        result = await self.session.execute(stmt)
+        return result.scalars().first()
+
+    async def find_by_ids_for_update(
+        self,
+        entity_ids: list[int],
+    ) -> List[KnowledgeDocument]:
+        if not entity_ids:
+            return []
+        stmt = (
+            select(KnowledgeDocument)
+            .where(col(KnowledgeDocument.id).in_(sorted(set(entity_ids))))
+            .order_by(KnowledgeDocument.id.asc())
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
     async def find_in_folder(
         self, knowledge_id: int, file_level_path: Optional[str]
     ) -> List[KnowledgeDocument]:
@@ -49,4 +78,13 @@ class KnowledgeDocumentRepositoryImpl(
             .values(primary_version_id=primary_version_id)
         )
         await self.session.execute(stmt)
-        await self.session.commit()
+        await self.session.flush()
+
+    async def increment_content_generation(self, document_id: int) -> int:
+        document = await self.find_by_id_for_update(document_id)
+        if document is None:
+            raise ValueError(f"KnowledgeDocument {document_id} does not exist")
+        document.content_generation += 1
+        self.session.add(document)
+        await self.session.flush()
+        return document.content_generation

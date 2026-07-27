@@ -359,6 +359,7 @@ export interface ShougangFilePublishTargetSpace {
 
 export interface ShougangFilePublishDocumentEntry {
   document_id?: number | null;
+  target_document_id?: number | null;
   target_file_id?: number | null;
   title: string;
   doc_code?: string | null;
@@ -467,6 +468,79 @@ export async function submitShougangFilePublishApprovalApi(data: {
     "/api/v1/approval/shougang/file-publish/submit",
     data,
   );
+  return unwrapPayload(response);
+}
+
+export interface ShougangFileShareTargetSpace {
+  id: number | string;
+  name: string;
+  space_level?: SpaceLevel;
+  owner_name?: string | null;
+}
+
+export interface ShougangFileShareEntry {
+  entry_id: number;
+  target_space_id: number;
+  target_space_name?: string | null;
+  allow_download: boolean;
+  entry_status: string;
+  create_time?: string | null;
+}
+
+export async function getShougangFileShareTargetSpacesApi(
+  sourceSpaceId: string | number,
+  sourceFileId: string | number,
+): Promise<{ data: ShougangFileShareTargetSpace[]; total: number }> {
+  const response = await request.get<ApiResponse<{
+    data: ShougangFileShareTargetSpace[];
+    total: number;
+  }>>(
+    "/api/v1/approval/shougang/file-share/target-spaces",
+    {
+      params: {
+        source_space_id: sourceSpaceId,
+        source_file_id: sourceFileId,
+      },
+    },
+  );
+  return unwrapPaged<ShougangFileShareTargetSpace>(response);
+}
+
+export async function submitShougangFileShareApprovalApi(data: {
+  source_space_id: string | number;
+  source_file_id: string | number;
+  target_space_id: string | number;
+  reason: string;
+  allow_download: boolean;
+}): Promise<ShougangApprovalSubmitResult> {
+  const response = await request.post(
+    "/api/v1/approval/shougang/file-share/submit",
+    data,
+  ) as ApiResponse<ShougangApprovalSubmitResult>;
+  return unwrapPayload(response);
+}
+
+export async function listShougangFileShareEntriesApi(
+  sourceFileId: string | number,
+): Promise<{ data: ShougangFileShareEntry[]; total: number }> {
+  const response = await request.get<ApiResponse<{
+    data: ShougangFileShareEntry[];
+    total: number;
+  }>>(
+    "/api/v1/approval/shougang/file-share/entries",
+    { params: { source_file_id: sourceFileId } },
+  );
+  return unwrapPaged<ShougangFileShareEntry>(response);
+}
+
+export async function revokeShougangFileShareApi(data: {
+  source_file_id: string | number;
+  share_entry_id: string | number;
+}): Promise<Record<string, unknown>> {
+  const response = await request.post(
+    "/api/v1/approval/shougang/file-share/revoke",
+    data,
+  ) as ApiResponse<Record<string, unknown>>;
   return unwrapPayload(response);
 }
 

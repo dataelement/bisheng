@@ -716,6 +716,61 @@ describe("updateFileEncoding", () => {
 });
 
 describe("mapChild", () => {
+  it("maps distribution identity, projection state, and server capabilities", () => {
+    const file = mapChild(
+      {
+        id: 20,
+        knowledge_id: 2,
+        file_name: "shared.pdf",
+        file_type: 1,
+        status: 2,
+        entry_type: "share",
+        entry_status: "active",
+        canonical_document_id: 100,
+        canonical_version_id: 900,
+        manager_file_id: 10,
+        manager_space_id: 1,
+        projection_status: "pending",
+        projection_ready: false,
+        desired_content_generation: 3,
+        applied_content_generation: 2,
+        desired_entry_generation: 1,
+        applied_entry_generation: 1,
+        capabilities: {
+          can_view: true,
+          can_preview: true,
+          can_download: false,
+          can_move: true,
+          can_manage_members: true,
+          can_edit_content: false,
+          can_publish: false,
+          can_share: false,
+          can_delete: true,
+        },
+      },
+      "2",
+    );
+
+    expect(file).toMatchObject({
+      entryType: "share",
+      canonicalDocumentId: 100,
+      canonicalVersionId: 900,
+      managerFileId: undefined,
+      managerSpaceId: 1,
+      projectionStatus: "pending",
+      projectionReady: false,
+      desiredContentGeneration: 3,
+      appliedContentGeneration: 2,
+      capabilities: {
+        canView: true,
+        canDownload: false,
+        canMove: true,
+        canEditContent: false,
+        canDelete: true,
+      },
+    });
+  });
+
   it("maps summary directly when backend provides summary", () => {
     const file = mapChild(
       {

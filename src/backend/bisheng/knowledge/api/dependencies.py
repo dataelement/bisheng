@@ -159,6 +159,9 @@ async def get_knowledge_space_service(
     request: Request,
     session: AsyncSession = Depends(get_db_session),
     login_user: UserPayload = Depends(UserPayload.get_login_user),
+    knowledge_file_repo: KnowledgeFileRepository = Depends(
+        get_knowledge_file_repository
+    ),
     version_repo: KnowledgeDocumentVersionRepository = Depends(get_knowledge_document_version_repository),
     doc_repo: KnowledgeDocumentRepository = Depends(get_knowledge_document_repository),
     similar_candidate_repo: KnowledgeFileSimilarityCandidateRepository = Depends(
@@ -169,6 +172,16 @@ async def get_knowledge_space_service(
     ),
 ) -> "KnowledgeSpaceService":
     """Get KnowledgeSpaceService instance, bound to the current request and login user"""
+    from bisheng.knowledge.domain.services.knowledge_document_distribution_service import (
+        KnowledgeDocumentDistributionService,
+    )
+    from bisheng.knowledge.domain.services.knowledge_document_entry_resolver import (
+        KnowledgeDocumentDurableReferenceResolver,
+        KnowledgeDocumentEntryResolver,
+    )
+    from bisheng.knowledge.domain.services.knowledge_document_permission_activation_service import (
+        KnowledgeDocumentPermissionActivationService,
+    )
     from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService as _SvcClass
 
     message_service = await _get_message_service(session)
@@ -178,6 +191,43 @@ async def get_knowledge_space_service(
     service.version_repo = version_repo
     service.doc_repo = doc_repo
     service.similar_candidate_repo = similar_candidate_repo
+    service.document_distribution_service = (
+        KnowledgeDocumentDistributionService(
+            session=session,
+            document_repository=doc_repo,
+            version_repository=version_repo,
+            file_repository=knowledge_file_repo,
+            permission_activation_service=(
+                KnowledgeDocumentPermissionActivationService(
+                    file_repository=knowledge_file_repo,
+                )
+            ),
+        )
+    )
+
+    async def _entry_permission_loader(
+        file_id: int,
+        space_id: int,
+    ) -> set[str]:
+        return await service._get_effective_permission_ids(
+            "knowledge_file",
+            file_id,
+            space_id=space_id,
+        )
+
+    service.document_entry_resolver = KnowledgeDocumentEntryResolver(
+        document_repository=doc_repo,
+        version_repository=version_repo,
+        file_repository=knowledge_file_repo,
+        permission_loader=_entry_permission_loader,
+    )
+    service.document_durable_reference_resolver = (
+        KnowledgeDocumentDurableReferenceResolver(
+            entry_resolver=service.document_entry_resolver,
+            version_repository=version_repo,
+            file_repository=knowledge_file_repo,
+        )
+    )
     service.department_file_view_access_service = department_file_view_access_service
     service.department_file_view_lifecycle_service = (
         DepartmentFileViewLifecycleService(
@@ -248,6 +298,9 @@ async def get_knowledge_space_chat_service(
     session: AsyncSession = Depends(get_db_session),
     login_user: UserPayload = Depends(UserPayload.get_login_user),
     version_repo: KnowledgeDocumentVersionRepository = Depends(get_knowledge_document_version_repository),
+    doc_repo: KnowledgeDocumentRepository = Depends(
+        get_knowledge_document_repository
+    ),
     department_file_view_access_service: DepartmentFileViewAccessService = Depends(
         get_department_file_view_access_service
     ),
@@ -257,6 +310,7 @@ async def get_knowledge_space_chat_service(
 
     service = _SvcClass(request=request, login_user=login_user)
     service.version_repo = version_repo
+    service.doc_repo = doc_repo
     service.department_file_view_access_service = (
         department_file_view_access_service
     )
@@ -275,6 +329,18 @@ async def get_knowledge_version_service(
     ),
 ) -> "KnowledgeVersionService":
     """Get KnowledgeVersionService instance, bound to the current request and login user."""
+    from bisheng.knowledge.domain.services.knowledge_document_distribution_service import (
+        KnowledgeDocumentDistributionService,
+    )
+    from bisheng.knowledge.domain.services.knowledge_document_entry_resolver import (
+        KnowledgeDocumentEntryResolver,
+    )
+    from bisheng.knowledge.domain.services.knowledge_document_permission_activation_service import (
+        KnowledgeDocumentPermissionActivationService,
+    )
+    from bisheng.knowledge.domain.services.knowledge_space_service import (
+        KnowledgeSpaceService,
+    )
     from bisheng.knowledge.domain.services.knowledge_version_service import KnowledgeVersionService
 
     service = KnowledgeVersionService(
@@ -287,4 +353,38 @@ async def get_knowledge_version_service(
     )
     # 版本关联变更时给收藏了受影响文件的用户发站内信，需要 message_service。
     service.message_service = await _get_message_service(session)
+    authorization_service = KnowledgeSpaceService(
+        request=request,
+        login_user=login_user,
+    )
+
+    async def _entry_permission_loader(
+        file_id: int,
+        space_id: int,
+    ) -> set[str]:
+        return await authorization_service._get_effective_permission_ids(
+            "knowledge_file",
+            file_id,
+            space_id=space_id,
+        )
+
+    service.document_entry_resolver = KnowledgeDocumentEntryResolver(
+        document_repository=doc_repo,
+        version_repository=version_repo,
+        file_repository=knowledge_file_repo,
+        permission_loader=_entry_permission_loader,
+    )
+    service.document_distribution_service = (
+        KnowledgeDocumentDistributionService(
+            session=session,
+            document_repository=doc_repo,
+            version_repository=version_repo,
+            file_repository=knowledge_file_repo,
+            permission_activation_service=(
+                KnowledgeDocumentPermissionActivationService(
+                    file_repository=knowledge_file_repo,
+                )
+            ),
+        )
+    )
     return service

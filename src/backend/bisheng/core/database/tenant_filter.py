@@ -62,6 +62,7 @@ _TENANT_AWARE_MODEL_MODULES = (
     "bisheng.shougang_portal_course.domain.models.portal_course",
     # Previously *not* on any auto-imported chain — silent tenant-id leaks.
     "bisheng.database.models.failed_tuple",
+    "bisheng.permission.domain.models.department_transfer_permission_cleanup",
     "bisheng.database.models.flow_version",
     "bisheng.database.models.role_access",
     "bisheng.database.models.user_group",
@@ -77,6 +78,7 @@ _TENANT_AWARE_MODEL_MODULES = (
     "bisheng.database.models.mark_record",
     "bisheng.database.models.mark_task",
     "bisheng.user.domain.models.user_role",
+    "bisheng.knowledge.domain.models.knowledge_document",
     "bisheng.knowledge.domain.models.knowledge_file",
     "bisheng.knowledge.domain.models.knowledge_file_pdf_artifact",
     "bisheng.knowledge.domain.models.knowledge_file_similarity_candidate",

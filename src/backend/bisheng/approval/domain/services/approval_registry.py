@@ -215,6 +215,20 @@ class ApprovalRegistry:
         )
         registry.register_preset(
             ApprovalScenarioPreset(
+                scenario_code='knowledge_space_file_share_request',
+                scenario_name='部门知识文件分享审批',
+                handler_key='knowledge_space_file_share_request',
+                condition_fields=[],
+                approver_source_types=[
+                    'knowledge_space_owner',
+                    'knowledge_space_manager',
+                    'target_knowledge_space_owner',
+                    'target_knowledge_space_manager',
+                ],
+            )
+        )
+        registry.register_preset(
+            ApprovalScenarioPreset(
                 scenario_code='department_file_view_request',
                 scenario_name='部门文件查看审批',
                 handler_key='department_file_view_request',

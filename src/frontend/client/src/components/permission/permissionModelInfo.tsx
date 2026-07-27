@@ -66,6 +66,7 @@ const KNOWLEDGE_PERMISSION_ITEMS: Record<
   ],
   knowledge_file: [
     { id: "view_file", labelKey: "com_permission.permission_item_view_file", relation: "can_read" },
+    { id: "share_file", labelKey: "com_permission.permission_item_share_file", relation: "can_edit" },
     { id: "rename_file", labelKey: "com_permission.permission_item_rename_file", relation: "can_edit" },
     { id: "delete_file", labelKey: "com_permission.permission_item_delete_file", relation: "can_delete" },
     { id: "download_file", labelKey: "com_permission.permission_item_download_file", relation: "can_read" },

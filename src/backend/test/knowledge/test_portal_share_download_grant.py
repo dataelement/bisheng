@@ -231,6 +231,52 @@ async def test_share_verify_issues_user_bound_grant_only_when_requested() -> Non
 
 
 @pytest.mark.asyncio
+async def test_legacy_share_verify_resolves_current_entry_from_durable_reference() -> None:
+    service = KnowledgeSpaceService(
+        MagicMock(),
+        UserPayload(user_id=7, user_name="张三", tenant_id=5),
+    )
+    resolved = SimpleNamespace(
+        entry_file_id=2580,
+        canonical_document_id=91,
+        canonical_version_id=501,
+        desired_content_generation=4,
+        applied_content_generation=4,
+        desired_entry_generation=3,
+        applied_entry_generation=3,
+    )
+    durable_resolver = SimpleNamespace(
+        resolve=AsyncMock(return_value=resolved),
+    )
+    service.document_durable_reference_resolver = durable_resolver
+
+    with patch.object(
+        service,
+        "_get_shougang_portal_share_link",
+        new_callable=AsyncMock,
+        return_value=_share_link(),
+    ):
+        access = await service.verify_shougang_portal_share_link(
+            "share-token",
+            ShougangPortalShareLinkVerifyReq(),
+        )
+
+    durable_resolver.resolve.assert_awaited_once_with(
+        tenant_id=5,
+        requested_space_id=12,
+        durable_file_id=1580,
+        require_view_permission=False,
+    )
+    assert access.space_id == 12
+    assert access.file_id == 1580
+    assert access.entry_file_id == 2580
+    assert access.canonical_document_id == 91
+    assert access.canonical_version_id == 501
+    assert access.desired_content_generation == 4
+    assert access.desired_entry_generation == 3
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("user_id", "issue_download_grant", "allow_download"),
     [
@@ -284,6 +330,43 @@ async def test_share_download_live_recheck_accepts_current_public_link() -> None
             space_id=12,
             file_id=1580,
         )
+
+
+@pytest.mark.asyncio
+async def test_share_download_live_recheck_resolves_legacy_public_reference() -> None:
+    service = KnowledgeSpaceService(
+        MagicMock(),
+        UserPayload(user_id=7, user_name="张三", tenant_id=5),
+    )
+    service.document_durable_reference_resolver = SimpleNamespace()
+    current_entry = SimpleNamespace(id=2580, knowledge_id=12)
+    resolve_reference = AsyncMock(
+        return_value=(current_entry, current_entry)
+    )
+    with (
+        patch.object(
+            service,
+            "_get_shougang_portal_share_link",
+            new_callable=AsyncMock,
+            return_value=_share_link(),
+        ),
+        patch.object(
+            service,
+            "resolve_shougang_portal_download_reference",
+            resolve_reference,
+        ),
+    ):
+        await service.require_shougang_portal_share_download(
+            share_token="share-token",
+            space_id=12,
+            file_id=1580,
+        )
+
+    resolve_reference.assert_awaited_once_with(
+        space_id=12,
+        file_id=1580,
+        external_share_grant=True,
+    )
 
 
 @pytest.mark.asyncio
