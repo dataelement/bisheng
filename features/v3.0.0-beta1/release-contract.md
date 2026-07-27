@@ -20,6 +20,7 @@
 | —（无新增） | F044-model-status-manual-verify | 在既有 `LLMModel` 上新增 `status_update_time` 字段（Alembic）与「手动验证单模型」对外 API；复用既有按类型探活逻辑，状态写入仍经由既有 LLM service/DAO；不引入新领域对象 |
 | —（无新增） | F045-chat-image-preview | 纯 client 前端渲染改造（日常/任务/工作流会话消息附件的图片分流 + 失效占位）；不触碰后端与存储 |
 | —（无新增） | F046-channel-source-link-failure-ux | 纯 client 前端改造（添加公众号信息源的失败状态机、弹窗文案、引导浮层）；不改后端识别接口与错误码 |
+| —（无新增） | F047-linsight-citation-traceability | 在既有 citation 子系统上新增**灵思任务模式**的溯源接线：`search_knowledge_base` 保留 chunk 元数据并接入 registry、包装 `web_search` 登记来源、完成时经既有 `save_message_citations` 向 `message_citation` 写入（`message_id`=任务轮 `ChatMessage.id`，`chat_id`=会话 id）。只读 / 调用现有 `KnowledgeFile` / `MessageCitation` 与 citation 服务；不拥有 `message_citation` schema、不改日常模式、不改灵思检索的文件级可见性 |
 
 **规则**：
 - 非 Owner Feature 的 AC 中不得出现其他对象的"创建/修改/删除"行为，只能"读取"或"调用" Owner 的 Service
@@ -52,6 +53,7 @@
 | F044-model-status-manual-verify | 无 | 前后端小改 + 1 个 Alembic 字段；不依赖本版本其他 Feature |
 | F045-chat-image-preview | 无 | 纯前端；不依赖本版本其他 Feature |
 | F046-channel-source-link-failure-ux | 无 | 纯前端；不依赖本版本其他 Feature |
+| F047-linsight-citation-traceability | F035, F029（均为 v2.6.0 存量，已上线） | 接线型；把灵思任务模式产物接入既有 citation 溯源子系统（Phase 1 应用内预览行内角标，覆盖 KB 文档 + Web 网页；Phase 2 下载 Word/PDF 烘焙可见 `[1]` 编号 + 参考资料，延后）；不新增领域对象/表/对外 API/错误码/不变量/`MessageEventType` 枚举；无 alembic 迁移（复用 `message_citation`）；不写 `LinsightExecuteTask.history`（避 DM8 写放大）；角标解析复用 F029 `view_file` 过滤守 **INV-7**（见 v2.6.0 契约） |
 
 ---
 
@@ -61,7 +63,7 @@
 
 | 模块编码 (MMM) | 模块 | Owner Feature |
 |----------------|------|---------------|
-| —（本批四个 Feature 均不新增错误码） | — | F043 复用工作流/报告既有错误响应；F044 验证失败是业务结果（状态=异常）而非错误响应，不占码；F045/F046 纯前端 |
+| —（本版本 Feature 均不新增错误码） | — | F043 复用工作流/报告既有错误响应；F044 验证失败是业务结果（状态=异常）而非错误响应，不占码；F045/F046 纯前端；F047 复用 citation 子系统与 F029 权限过滤的既有错误响应 |
 
 ---
 
@@ -70,3 +72,4 @@
 | 日期 | 变更内容 | 影响范围 |
 |------|---------|---------|
 | 2026-07-24 | 初始化 v3.0.0-beta1 契约；登记 F043~F046 四个功能体验优化 Feature（均无新增领域对象；新增 INV-8 报告模板变量以节点 ID 为键 + 永久兼容旧格式；均不新增错误码） | F043 / F044 / F045 / F046 |
+| 2026-07-27 | 登记 F047 灵思任务模式引用溯源（**由 v2.6.0 F040 迁入并改编**——v2.6.0 的 F040 编号已被 `040-rebac-read-path-perf-rollout` 占用，spec/design 内容未变，仅改版本与编号）：表 1 标"无新增领域对象"（在既有 citation 子系统上加灵思接线，写入仍经 `save_message_citations`）、表 3 记跨版本依赖 F035/F029（v2.6.0 存量已上线）；复用 F029 `view_file` 过滤守 v2.6.0 **INV-7**；无新增错误码/对外 API/不变量/alembic 迁移；分期 Phase 1 应用内预览行内角标（KB+Web）/ Phase 2 下载件烘焙可见引用（延后） | F047 |
