@@ -4,6 +4,7 @@ import { DialogClose } from "@/components/bs-ui/dialog"
 import { getWorkflowReportTemplate } from "@/controllers/API/workflow"
 import { uploadFileWithProgress } from "@/modals/UploadModal/upload"
 import Word from "@/pages/Report/components/Word"
+import { getOfficeReachableUrl } from "@/utils/officeUrl"
 import { ChevronDown, ChevronLeft } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
@@ -113,9 +114,9 @@ const useReport = (versionKey, flowId, onchange) => {
 
 
     const handleCreate = async () => {
-        // 本地调试
-        // setDocx(docx => ({ ...docx, path: 'http://192.168.106.120:3002/empty.docx' }))
-        setDocx(doc => ({ ...docx, path: location.origin + __APP_ENV__.BASE_URL + '/empty.docx' }))// 文档服务能访问到的文件地址
+        // Must be an address the document server itself can fetch — in local dev
+        // override it via VITE_OFFICE_PUBLIC_ORIGIN (see utils/officeUrl).
+        setDocx(doc => ({ ...docx, path: getOfficeReachableUrl('/empty.docx') }))
     }
 
     const handleImport = () => {

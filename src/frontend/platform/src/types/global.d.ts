@@ -36,6 +36,16 @@ declare global {
     }
 
     const __VCONSOLE_ENABLED__: boolean;
+
+    /** Build-time app config, injected by vite `define` (see vite.config.mts). */
+    const __APP_ENV__: {
+        /** Sub-path the app is served under (e.g. `/custom`); empty for root. */
+        BASE_URL: string;
+        /** Origin of the end-user client app; empty when it shares ours. */
+        WORKSPACE_ORIGIN: string;
+        /** Origin the OnlyOffice Document Server can reach us at; empty in production. */
+        OFFICE_PUBLIC_ORIGIN: string;
+    };
 }
 
 declare module "*.png" {

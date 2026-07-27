@@ -105,6 +105,9 @@ export default defineConfig(({ command, mode }) => {
   // SignatureDoesNotMatch (e.g. set http://localhost:9000 when sharepoint=localhost:9000).
   const minioTarget = env.VITE_DEV_MINIO_TARGET || 'http://127.0.0.1:9000';
   const apiTarget = env.VITE_DEV_API_TARGET || 'http://127.0.0.1:7860';
+  // Per-request proxy logging is opt-in (VITE_PROXY_LOG=1): on by default it prints
+  // dozens of lines per page load and buries the warnings that matter.
+  const proxyLog = env.VITE_PROXY_LOG === '1';
 
   return {
     base: app_env.BASE_URL || '/',
@@ -135,9 +138,11 @@ export default defineConfig(({ command, mode }) => {
           secure: false,
           ws: true,
           configure: (proxy, options) => {
-            proxy.on('proxyReq', (proxyReq, req, res) => {
-              console.log('Proxying request to:', proxyReq.path);
-            });
+            if (proxyLog) {
+              proxy.on('proxyReq', (proxyReq, req, res) => {
+                console.log('Proxying request to:', proxyReq.path);
+              });
+            }
           },
           rewrite: (path) => {
             return path.replace(/^\/workspace/, '');
