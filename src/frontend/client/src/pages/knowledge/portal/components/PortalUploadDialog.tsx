@@ -196,7 +196,7 @@ export function PortalUploadDialog({
         && !uploadSubmitting
         && fileCategoryTouched
         && businessDomainTouched
-        && uploadFolderSelection.mode === "manual";
+        && (uploadFolderSelection.mode === "manual" || uploadFolderSelection.mode === "ai");
 
     return (
         <Dialog
@@ -430,7 +430,7 @@ export function PortalUploadDialog({
                                     </div>
                                 </div>
                                 <div className={s.uploadHint}>
-                                    请选择“选择根目录”或某个子目录后再上传。“未选择目录（AI 推荐）”仅供参考，不能作为最终上传目录。
+                                    选择“选择根目录”或某个子目录后上传；选择“未选择目录（AI 推荐）”则由系统自动分配目录。
                                 </div>
                             </div>
                         </div>
