@@ -57,6 +57,9 @@ export default function Conversation({
   const [titleInput, setTitleInput] = useState(title);
   const [renaming, setRenaming] = useState(false);
   const [isPopoverActive, setIsPopoverActive] = useState(false);
+  // Right-click context menu mirrors the "..." options menu (desktop only).
+  const [contextMenuOpen, setContextMenuOpen] = useState(false);
+  const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
   const isSmallScreen = usePrefersMobileLayout();
   const localize = useLocalize();
   const navigate = useNavigate();
@@ -192,6 +195,12 @@ export default function Conversation({
         isActiveConvo ? "bg-[#EEE]" : "hover:bg-[#f7f7f7]",
         renaming ? "bg-[#EEE]" : "",
       )}
+      onContextMenu={(e) => {
+        if (isSmallScreen || renaming) return;
+        e.preventDefault();
+        setContextMenuPosition({ x: e.clientX, y: e.clientY });
+        setContextMenuOpen(true);
+      }}
     >
       {renaming ? (
         <div className="flex h-5 grow cursor-pointer items-center gap-[8px] overflow-hidden whitespace-nowrap break-all">
@@ -311,6 +320,9 @@ export default function Conversation({
               conversationId={conversationId}
               isPopoverActive={isPopoverActive}
               setIsPopoverActive={setIsPopoverActive}
+              contextMenuOpen={contextMenuOpen}
+              contextMenuPosition={contextMenuPosition}
+              onContextMenuOpenChange={setContextMenuOpen}
             />
           </div>
         )}

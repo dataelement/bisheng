@@ -1,4 +1,5 @@
 import { useState, useRef, memo } from 'react';
+import { createPortal } from 'react-dom';
 import { Ellipsis } from 'lucide-react';
 import { Outlined } from 'bisheng-icons';
 import type { MouseEvent } from 'react';
@@ -19,6 +20,9 @@ function ConvoOptions({
   isPopoverActive,
   setIsPopoverActive,
   isActiveConvo,
+  contextMenuOpen = false,
+  contextMenuPosition,
+  onContextMenuOpenChange,
 }: {
   conversationId: string | null;
   title: string | null;
@@ -27,6 +31,10 @@ function ConvoOptions({
   isPopoverActive: boolean;
   setIsPopoverActive: React.Dispatch<React.SetStateAction<boolean>>;
   isActiveConvo: boolean;
+  /** Cursor-anchored right-click menu state, owned by the row (desktop only). */
+  contextMenuOpen?: boolean;
+  contextMenuPosition?: { x: number; y: number };
+  onContextMenuOpenChange?: (open: boolean) => void;
 }) {
   const localize = useLocalize();
   const { index } = useChatContext();
@@ -71,6 +79,23 @@ function ConvoOptions({
     deleteConversationConfirm({ conversationId, title: title ?? '', retainView });
   };
 
+  // Shared items, reused by the "..." dropdown and the row's right-click menu.
+  const menuItems = (
+    <>
+      <ActionMenuItem
+        icon={<Outlined.Edit />}
+        label={localize('com_ui_rename')}
+        onSelect={handleRename}
+      />
+      <ActionMenuItem
+        danger
+        icon={<Outlined.Delete />}
+        label={localize('com_ui_delete')}
+        onSelect={handleDelete}
+      />
+    </>
+  );
+
   return (
     <>
       <DropdownMenu open={isPopoverActive} onOpenChange={setIsPopoverActive}>
@@ -95,19 +120,33 @@ function ConvoOptions({
           width={140}
           onClick={(e) => e.stopPropagation()}
         >
-          <ActionMenuItem
-            icon={<Outlined.Edit />}
-            label={localize('com_ui_rename')}
-            onSelect={handleRename}
-          />
-          <ActionMenuItem
-            danger
-            icon={<Outlined.Delete />}
-            label={localize('com_ui_delete')}
-            onSelect={handleDelete}
-          />
+          {menuItems}
         </ActionMenuContent>
       </DropdownMenu>
+      {/* Right-click menu: an invisible cursor-anchored trigger drives the same
+          items as the "..." menu. Portaled to <body> so `position: fixed` anchors
+          to the viewport regardless of ancestor containing blocks (WeCom WebView). */}
+      {onContextMenuOpenChange && contextMenuPosition && createPortal(
+        <DropdownMenu open={contextMenuOpen} onOpenChange={onContextMenuOpenChange}>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              aria-hidden="true"
+              tabIndex={-1}
+              className="fixed size-0 opacity-0"
+              style={{ left: contextMenuPosition.x, top: contextMenuPosition.y }}
+              onClick={(e) => e.stopPropagation()}
+            />
+          </DropdownMenuTrigger>
+          <ActionMenuContent
+            width={140}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {menuItems}
+          </ActionMenuContent>
+        </DropdownMenu>,
+        document.body,
+      )}
       {showShareDialog && (
         <ShareButton
           conversationId={conversationId ?? ''}

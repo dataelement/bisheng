@@ -442,6 +442,9 @@ export function FileCard({
     const handleCardContextMenu = (e: MouseEvent<HTMLDivElement>) => {
         if (!showMoreMenu) return;
         e.preventDefault();
+        // Same lazy permission resolution as the "..." trigger, otherwise the
+        // right-click menu renders with unresolved (reduced) permissions.
+        onEnsureFilePermissions?.(file);
         setContextMenuPosition({ x: e.clientX, y: e.clientY });
         setContextMenuOpen(true);
     };
