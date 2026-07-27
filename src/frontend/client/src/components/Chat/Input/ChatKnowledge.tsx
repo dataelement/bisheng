@@ -869,7 +869,7 @@ export const ChatKnowledge = ({
               }}
               className="flex cursor-pointer items-center gap-2 rounded-[6px] px-2 py-[5px] outline-none"
             >
-              <Outlined.Binoculars size={16} className={taskModeActive ? 'text-blue-600' : 'text-[#999]'} />
+              <Outlined.ListSuccess size={16} className={taskModeActive ? 'text-blue-600' : 'text-[#999]'} />
               <span className={cn('flex-1 text-[14px] font-normal', taskModeActive ? 'text-blue-600' : 'text-slate-700')}>
                 {localize('com_linsight_task_mode')}
               </span>

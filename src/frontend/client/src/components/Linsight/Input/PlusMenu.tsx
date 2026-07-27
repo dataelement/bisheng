@@ -84,7 +84,7 @@ export function PlusMenu({
                     onSelect={() => onToggleTaskMode()}
                     className="flex cursor-pointer items-center gap-3 rounded-xl px-2 py-1.5 outline-none"
                 >
-                    <Outlined.Binoculars size={16} className={cn(taskModeActive ? 'text-blue-500' : 'text-slate-600')} />
+                    <Outlined.ListSuccess size={16} className={cn(taskModeActive ? 'text-blue-500' : 'text-slate-600')} />
                     <span
                         className={cn(
                             'flex-1 text-[14px] font-normal',
