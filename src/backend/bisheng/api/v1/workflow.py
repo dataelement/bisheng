@@ -34,12 +34,15 @@ from bisheng_langchain.utils.requests import Requests
 
 router = APIRouter(prefix="/workflow", tags=["Workflow"])
 
-# Command-service rejection codes worth telling the user apart. Anything else
-# collapses to the generic message -- the user can only ever retry or reopen.
+# Command-service rejection codes, per the document server's documented set.
+# Anything else collapses to the generic message -- the user can only ever
+# retry or reopen the template anyway.
 FORCE_SAVE_ERROR_MESSAGES = {
-    1: "The document key is already in use, please reopen the template",
+    1: "The template is not open in the editor, please reopen it and retry",
+    2: "The document service rejected the callback address",
     3: "The document service failed to save the template",
-    6: "The editing session has expired, please reopen the template",
+    5: "The save request was malformed",
+    6: "The document service rejected our signature, check office_jwt_secret",
 }
 # "No changes since the last save" -- nothing to flush, so the template on
 # storage already matches what the user sees. Report it as saved, not failed.
@@ -170,9 +173,11 @@ async def force_save_report_file(
 
     # The editor is opened with a per-session key (`<version_key>_<ts>`); the
     # command service needs that exact key, so keep whatever the client sent.
-    # Config must be read through the async accessor here: the sync one runs a
-    # blocking DB/Redis fetch that returns empty inside the event loop.
+    # `office_url` is served to the browser out of the `env` config block (see
+    # GET /env), so read it there; the top-level key is only a legacy override.
     office_url = await bisheng_settings.aget_from_db("office_url")
+    if not office_url:
+        office_url = (await bisheng_settings.aget_from_db("env") or {}).get("office_url")
     if not office_url:
         return ServerError.return_resp(msg="Document service is not configured")
 
