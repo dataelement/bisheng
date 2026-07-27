@@ -105,7 +105,7 @@ class ExpertService:
         if not new_id or new_id == current_id:
             return
         user.wechat_user_id = new_id
-        user.updated_at = datetime.now()
+        user.update_time = datetime.now()
         await UserDao.aupdate_user(user)
 
     async def create_expert(self, request: ExpertCreateRequest) -> Expert:
