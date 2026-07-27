@@ -411,8 +411,7 @@ export function KnowledgeSpaceSidebar({
             {/* Drag-to-resize handle */}
             {!collapsed && !mobileDrawerMode && (
                 <div
-                    className="absolute top-0 right-0 h-full z-[50] cursor-col-resize select-none flex items-stretch"
-                    style={{ width: '8px' }}
+                    className="absolute top-0 right-0 z-[50] h-full w-2 translate-x-full cursor-col-resize select-none flex items-stretch"
                     onMouseDown={handleResizeMouseDown}
                 >
                     <div className="w-0.5 mx-auto h-full opacity-0 hover:opacity-100 bg-blue-400 transition-opacity duration-150" />

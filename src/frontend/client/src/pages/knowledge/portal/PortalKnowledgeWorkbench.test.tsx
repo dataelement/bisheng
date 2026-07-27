@@ -3856,12 +3856,12 @@ describe("PortalKnowledgeWorkbench", () => {
 
     test("sizes the knowledge space sidebar and file pane to the reference layout ratio", () => {
         const css = readFileSync(path.join(__dirname, "PortalKnowledgeWorkbench.module.css"), "utf8");
-        const sidebarRule = css.match(/\.spaceSidebar\s*\{(?<body>[^}]*)\}/)?.groups?.body ?? "";
+        const sidebarShellRule = css.match(/\.spaceSidebarShell\s*\{(?<body>[^}]*)\}/)?.groups?.body ?? "";
         const filePaneRule = css.match(/\.filePane\s*\{(?<body>[^}]*)\}/)?.groups?.body ?? "";
-        const collapsedRule = css.match(/\.spaceSidebar\.spaceSidebarCollapsed\s*\{(?<body>[^}]*)\}/)?.groups?.body ?? "";
+        const collapsedRule = css.match(/\.spaceSidebarShell\.spaceSidebarShellCollapsed\s*\{(?<body>[^}]*)\}/)?.groups?.body ?? "";
 
-        expect(sidebarRule).toMatch(/width\s*:\s*216px/);
-        expect(sidebarRule).toMatch(/min-width\s*:\s*216px/);
+        expect(sidebarShellRule).toMatch(/width\s*:\s*280px/);
+        expect(sidebarShellRule).toMatch(/min-width\s*:\s*280px/);
         expect(filePaneRule).toMatch(/width\s*:\s*360px/);
         expect(filePaneRule).toMatch(/min-width\s*:\s*360px/);
         expect(collapsedRule).toMatch(/width\s*:\s*72px/);

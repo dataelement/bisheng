@@ -225,7 +225,16 @@ export function SubjectSearchDepartment({
           className="h-8 w-full rounded-[6px] border border-[#EBECF0] bg-white pl-9 pr-3 text-[14px] text-[#212121] outline-none transition-colors placeholder:text-[#999999] focus:border-[#C9CDD4]"
         />
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto rounded-[6px] border border-[#EBECF0]">
+      <div
+        className="min-h-0 flex-1 overflow-y-auto rounded-[6px] border border-[#EBECF0]"
+        // When nested inside a Radix Dialog (e.g. CreateKnowledgeSpaceDrawer Sheet),
+        // portaled Popover content sits outside react-remove-scroll's shard, so wheel
+        // events are preventDefault'd at the document level. Pointer-drag on the
+        // scrollbar still works; drive scrollTop manually for mouse wheel.
+        onWheel={(event) => {
+          event.currentTarget.scrollTop += event.deltaY;
+        }}
+      >
         {loading && (
           <div className="py-4 text-center text-sm text-gray-500">{localize("com_ui_loading")}</div>
         )}

@@ -10,10 +10,35 @@
   box-sizing: border-box;
 }
 
-.spaceSidebar {
+.spaceSidebarShell {
   position: relative;
   width: 280px;
   min-width: 280px;
+  height: 100%;
+  min-height: 0;
+  max-height: 100%;
+  flex-shrink: 0;
+  transition: width 180ms ease, min-width 180ms ease;
+}
+
+.spaceSidebarShell.spaceSidebarShellCollapsed {
+  width: 72px;
+  min-width: 72px;
+}
+
+.sidebarResizeHandle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 8px;
+  height: 100%;
+  transform: translateX(100%);
+  cursor: col-resize;
+  z-index: 50;
+}
+
+.spaceSidebar {
+  width: 100%;
   height: 100%;
   min-height: 0;
   max-height: 100%;
@@ -22,12 +47,9 @@
   background: #fff;
   border-right: 1px solid #dfe7f2;
   overflow: hidden;
-  transition: width 180ms ease, min-width 180ms ease;
 }
 
 .spaceSidebar.spaceSidebarCollapsed {
-  width: 72px;
-  min-width: 72px;
   background: #fbfdff;
 }
 
@@ -2862,7 +2884,7 @@
 }
 
 @media (max-width: 1280px) {
-  .spaceSidebar {
+  .spaceSidebarShell {
     width: 280px;
     min-width: 280px;
   }
