@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import i18next from "i18next";
 import ReactMarkdown from "react-markdown";
@@ -63,18 +63,26 @@ function extractMarkdownSection(markdown: string, heading: string): string {
     return (nextHeading >= 0 ? rest.slice(0, nextHeading) : rest).trim();
 }
 
+function MarkdownBody({ content }: { content: string }) {
+    return (
+        <div className="prose prose-sm max-w-none text-[#1d2129]">
+            <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                rehypePlugins={[[rehypeHighlight, { detect: true, ignoreMissing: true }]]}
+            >
+                {content}
+            </ReactMarkdown>
+        </div>
+    );
+}
+
 function MarkdownBlock({ content }: { content: string }) {
     return (
         <div className="flex-1 overflow-auto bg-[#fbfbfb]">
             <div className="flex justify-center px-4 py-6">
                 <div className="w-full max-w-[800px] rounded-sm bg-white shadow-md">
-                    <div className="prose prose-sm max-w-none p-8 text-[#1d2129]">
-                        <ReactMarkdown
-                            remarkPlugins={[remarkGfm]}
-                            rehypePlugins={[[rehypeHighlight, { detect: true, ignoreMissing: true }]]}
-                        >
-                            {content}
-                        </ReactMarkdown>
+                    <div className="p-8">
+                        <MarkdownBody content={content} />
                     </div>
                 </div>
             </div>
@@ -182,22 +190,30 @@ function MediaTranscriptTabs({ fileUrl }: { fileUrl: string }) {
     const activeContent = activeTab === "recognized" ? recognizedText : entryText;
 
     return (
-        <section className="flex min-h-[320px] flex-col overflow-hidden rounded-[8px] border border-[#e5e6eb] bg-white shadow-sm">
-            <div className="flex shrink-0 items-center gap-2 border-b border-[#e5e6eb] bg-white px-4 py-3">
-                <button
-                    type="button"
-                    onClick={() => setActiveTab("recognized")}
-                    className={`h-8 rounded-[6px] px-3 text-sm ${activeTab === "recognized" ? "bg-primary text-white" : "bg-[#f2f3f5] text-[#4e5969]"}`}
-                >
-                    {localize("com_knowledge.recognized_text")}
-                </button>
-                <button
-                    type="button"
-                    onClick={() => setActiveTab("entry")}
-                    className={`h-8 rounded-[6px] px-3 text-sm ${activeTab === "entry" ? "bg-primary text-white" : "bg-[#f2f3f5] text-[#4e5969]"}`}
-                >
-                    {localize("com_knowledge.knowledge_entry_text")}
-                </button>
+        <section className="flex h-full min-h-0 flex-col bg-white">
+            <div className="flex shrink-0 items-center px-6 py-3">
+                {/* Segmented control — mirrors the include/exclude tabs in
+                    Subscription/CreateChannel/FilterConditionEditor. */}
+                <div className="flex flex-shrink-0 rounded-[6px] bg-[#F8F8F8] p-[3px]">
+                    <button
+                        type="button"
+                        onClick={() => setActiveTab("recognized")}
+                        className={`whitespace-nowrap rounded-[4px] px-[12px] py-[2px] text-center text-[14px] leading-[22px] transition-colors ${activeTab === "recognized"
+                            ? "bg-blue-500/15 font-medium text-blue-500"
+                            : "bg-transparent text-[#818181] hover:bg-[#F2F3F5]"}`}
+                    >
+                        {localize("com_knowledge.recognized_text")}
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setActiveTab("entry")}
+                        className={`whitespace-nowrap rounded-[4px] px-[12px] py-[2px] text-center text-[14px] leading-[22px] transition-colors ${activeTab === "entry"
+                            ? "bg-blue-500/15 font-medium text-blue-500"
+                            : "bg-transparent text-[#818181] hover:bg-[#F2F3F5]"}`}
+                    >
+                        {localize("com_knowledge.knowledge_entry_text")}
+                    </button>
+                </div>
             </div>
             {loading ? (
                 <div className="flex flex-1 items-center justify-center text-sm text-[#86909c]">
@@ -206,7 +222,9 @@ function MediaTranscriptTabs({ fileUrl }: { fileUrl: string }) {
             ) : error ? (
                 <div className="flex flex-1 items-center justify-center text-sm text-[#86909c]">{error}</div>
             ) : (
-                <MarkdownBlock content={activeContent} />
+                <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-28 pt-2">
+                    <MarkdownBody content={activeContent} />
+                </div>
             )}
         </section>
     );
@@ -229,16 +247,9 @@ export function RichKnowledgePreview({
     const webLinkMarkdownUrl = resolveKnowledgePreviewUrl(preview.preview_url || preview.original_url || "");
     const mediaPlaybackUrl = resolveKnowledgePreviewUrl(preview.original_url || "");
 
-    const title = useMemo(() => {
-        if (preview.file_source === "web_link") {
-            return preview.web_title || fileName;
-        }
-        return fileName;
-    }, [fileName, preview.file_source, preview.web_title]);
-
     if (isMedia) {
         return (
-            <div className="flex h-full w-full flex-col overflow-hidden bg-[#f5f7fb]">
+            <div className="flex h-full w-full flex-col overflow-hidden bg-white">
                 {!compactMode && (
                     <TopBar
                         fileName={fileName}
@@ -247,29 +258,29 @@ export function RichKnowledgePreview({
                         actions={actions}
                     />
                 )}
-                <div className="flex min-h-0 flex-1 flex-col">
-                    <div className="shrink-0 overflow-visible px-5 pb-0 pt-5">
-                        <section className="mx-auto w-full max-w-[980px] overflow-visible rounded-[8px] border border-[#e5e6eb] bg-white p-4 shadow-sm">
-                            <div className="mb-3 text-base font-semibold text-[#1d2129]">{title}</div>
-                            {isVideo ? (
-                                <video
-                                    className="max-h-[320px] w-full rounded-[6px] bg-black"
-                                    src={mediaPlaybackUrl}
-                                    controls
-                                />
-                            ) : (
-                                <div className="flex min-h-[160px] flex-col justify-end overflow-visible py-1">
-                                    <audio className="w-full" src={mediaPlaybackUrl} controls />
-                                </div>
-                            )}
-                        </section>
+                {/* Side-by-side on md+: player left, transcript right, split by a single
+                    divider line (no card border/shadow). Stacked on narrow screens. */}
+                <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+                    <div className="shrink-0 overflow-visible px-6 py-5 md:w-1/2 md:overflow-y-auto">
+                        {isVideo ? (
+                            <video
+                                className="max-h-[60vh] w-full rounded-[6px] bg-black"
+                                src={mediaPlaybackUrl}
+                                controls
+                            />
+                        ) : (
+                            <div className="overflow-visible py-2">
+                                <audio className="w-full" src={mediaPlaybackUrl} controls />
+                            </div>
+                        )}
                     </div>
                     {mediaTextUrl ? (
-                        <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5 pt-4">
-                            <div className="mx-auto w-full max-w-[980px]">
+                        <>
+                            <div className="h-px shrink-0 bg-[#e5e6eb] md:h-auto md:w-px" />
+                            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                                 <MediaTranscriptTabs fileUrl={mediaTextUrl} />
                             </div>
-                        </div>
+                        </>
                     ) : null}
                 </div>
             </div>
