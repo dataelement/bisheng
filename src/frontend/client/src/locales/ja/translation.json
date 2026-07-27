@@ -453,6 +453,8 @@
   "com_linsight_queue_position": "{{0}} 番目",
   "com_linsight_queue_cancel": "順番待ちをキャンセル",
   "com_linsight_report_ready": "レポートをまとめました",
+  "com_linsight_files_ready_prefix": "まとめたファイル:",
+  "com_linsight_files_ready_suffix": "など {{0}} 件",
   "com_linsight_output_files": "出力ファイル {{0}}",
   "com_linsight_save_as": "名前を付けて保存",
   "com_linsight_preview": "プレビュー",

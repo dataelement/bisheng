@@ -105,6 +105,9 @@ class LinsightWorkflowTask:
         self._partial_salvage: str | None = None
         self._partial_error: BaseException | None = None
         self.file_dir: str | None = None
+        # Files present in ``file_dir`` before the agent ran (set by
+        # _init_file_directory); the deliverable scan diffs against it.
+        self._baseline_files: set[str] = set()
         self.session_version_id: str | None = None
         self.llm: BaseChatModel | None = None  # For storageLLMInstances
 
@@ -556,29 +559,33 @@ class LinsightWorkflowTask:
         file_dir = os.path.normpath(file_dir)
         os.makedirs(file_dir, exist_ok=True)
 
-        if not session_model.files:
-            return file_dir
+        if session_model.files:
+            # Only entries that carry a parsed-markdown object can be prefetched. A
+            # file without ``markdown_file_path`` (e.g. an org-KB reference, or a file
+            # still parsing) must be SKIPPED — not crash task startup. (The agent reads
+            # uploaded sources through the WorkspaceBackend ``uploads/`` keys anyway, so
+            # this local prefetch is best-effort cache warming, not the access path.)
+            downloadable = [f for f in session_model.files if isinstance(f, dict) and f.get("markdown_file_path")]
+            skipped = len(session_model.files) - len(downloadable)
+            if skipped:
+                logger.warning(f"{skipped} uploaded file(s) without markdown_file_path skipped for local prefetch")
 
-        # Only entries that carry a parsed-markdown object can be prefetched. A
-        # file without ``markdown_file_path`` (e.g. an org-KB reference, or a file
-        # still parsing) must be SKIPPED — not crash task startup. (The agent reads
-        # uploaded sources through the WorkspaceBackend ``uploads/`` keys anyway, so
-        # this local prefetch is best-effort cache warming, not the access path.)
-        downloadable = [f for f in session_model.files if isinstance(f, dict) and f.get("markdown_file_path")]
-        skipped = len(session_model.files) - len(downloadable)
-        if skipped:
-            logger.warning(f"{skipped} uploaded file(s) without markdown_file_path skipped for local prefetch")
+            # Concurrent downloads
+            download_tasks = [self._download_file(file_info, file_dir) for file_info in downloadable]
 
-        # Concurrent downloads
-        download_tasks = [self._download_file(file_info, file_dir) for file_info in downloadable]
+            results = await asyncio.gather(*download_tasks, return_exceptions=True)
 
-        results = await asyncio.gather(*download_tasks, return_exceptions=True)
+            # Record Download Failed Files
+            for i, result in enumerate(results):
+                if isinstance(result, Exception):
+                    file_name = os.path.basename(downloadable[i].get("markdown_file_path") or "")
+                    logger.error(f"This content failed to load {file_name}: {result}")
 
-        # Record Download Failed Files
-        for i, result in enumerate(results):
-            if isinstance(result, Exception):
-                file_name = os.path.basename(downloadable[i].get("markdown_file_path") or "")
-                logger.error(f"This content failed to load {file_name}: {result}")
+        # Baseline for deliverable detection: everything present BEFORE the agent
+        # runs (i.e. the prefetched upload sources). Captured here — after the
+        # prefetch, at the single point every driver goes through — so the
+        # completion scan can tell what the agent actually produced.
+        self._baseline_files = linsight_execute_utils.snapshot_file_paths(file_dir)
 
         return file_dir
 
@@ -1366,7 +1373,7 @@ class LinsightWorkflowTask:
         # for an empty output/, so a greeting still yields nothing here.
         file_details = await linsight_execute_utils.read_file_directory(self.file_dir)
         final_files = await linsight_execute_utils.get_final_result_file(
-            session_model=session_model, file_details=file_details, answer=answer
+            session_model=session_model, file_details=file_details, baseline_paths=self._baseline_files
         )
         # Synthesize a fallback report ONLY when the model actually planned work but
         # produced no deliverable — never for a trivial greeting/Q&A with no output.
@@ -1424,7 +1431,7 @@ class LinsightWorkflowTask:
         # the success / direct-answer paths).
         file_details = await linsight_execute_utils.read_file_directory(self.file_dir)
         final_files = await linsight_execute_utils.get_final_result_file(
-            session_model=session_model, file_details=file_details, answer=answer
+            session_model=session_model, file_details=file_details, baseline_paths=self._baseline_files
         )
         if not final_files:
             final_files = await linsight_execute_utils.build_fallback_report_file(
@@ -1460,7 +1467,7 @@ class LinsightWorkflowTask:
             answer = (self._final_result.answer or "").strip() or (self._last_assistant_text or "").strip()
 
             final_result_files = await linsight_execute_utils.get_final_result_file(
-                session_model=session_model, file_details=file_details, answer=answer
+                session_model=session_model, file_details=file_details, baseline_paths=self._baseline_files
             )
             # F035 backstop: weak models can finish without ever writing an output/
             # deliverable (they loop on write_todos), leaving no report. Synthesize

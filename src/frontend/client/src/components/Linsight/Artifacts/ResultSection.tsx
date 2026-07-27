@@ -21,15 +21,26 @@ interface ResultSectionProps {
 
 export function ResultSection({ answer, files, versionId, onPreview }: ResultSectionProps) {
     const localize = useLocalize();
-    // primary deliverable = first final file (spec §5: report link row)
+    // Primary deliverable = files[0] (spec §5: report link row). The backend ranks
+    // the list by file TYPE then recency, so [0] is the headline artifact (a report
+    // outranks the charts it rendered afterwards), not just the newest write.
     const primaryFile = files[0];
+    // With several deliverables the row names the headline file AND says how many
+    // there are in total — naming one of five silently would misrepresent the run,
+    // and a bare count would waste the row. The full manifest is the card below.
+    const multiple = files.length > 1;
+    const fileCount = String(files.length);
 
     return (
         <div className="space-y-3">
             {/* report link row */}
             {primaryFile && (
                 <div className="flex items-center gap-1.5 text-sm text-gray-800">
-                    <span className="shrink-0">{localize('com_linsight_report_ready')}</span>
+                    <span className="shrink-0">
+                        {multiple
+                            ? localize('com_linsight_files_ready_prefix', { 0: fileCount })
+                            : localize('com_linsight_report_ready')}
+                    </span>
                     <button
                         type="button"
                         className="flex min-w-0 items-center gap-1 text-blue-600 transition-colors hover:text-blue-700"
@@ -38,6 +49,14 @@ export function ResultSection({ answer, files, versionId, onPreview }: ResultSec
                         <Outlined.File size={14} className="shrink-0" />
                         <span className="truncate">{primaryFile.file_name}</span>
                     </button>
+                    {/* shrink-0 so a long file name truncates but the "等 N 个文件"
+                        count stays fully visible — otherwise the user never learns
+                        there are more files than the one named. */}
+                    {multiple && (
+                        <span className="shrink-0">
+                            {localize('com_linsight_files_ready_suffix', { 0: fileCount })}
+                        </span>
+                    )}
                 </div>
             )}
 

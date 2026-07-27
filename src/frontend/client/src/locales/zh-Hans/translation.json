@@ -456,6 +456,8 @@
   "com_linsight_queue_position": "第 {{0}} 位",
   "com_linsight_queue_cancel": "取消排队",
   "com_linsight_report_ready": "已为您整理好",
+  "com_linsight_files_ready_prefix": "已为您整理好",
+  "com_linsight_files_ready_suffix": "等 {{0}} 个文件",
   "com_linsight_output_files": "已整理输出文件 {{0}}",
   "com_linsight_save_as": "另存为",
   "com_linsight_preview": "预览",
