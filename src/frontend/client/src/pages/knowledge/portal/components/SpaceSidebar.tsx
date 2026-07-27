@@ -377,9 +377,12 @@ export function SpaceSidebar({
     }, [handleSpaceDragEnd, onReorderSpace, spaceDrag, spaceDropTarget]);
 
     return (
+        <div
+            className={`${s.spaceSidebarShell} ${collapsed ? s.spaceSidebarShellCollapsed : ""}`}
+            style={collapsed ? undefined : { width: `${sidebarWidth}px`, minWidth: `${sidebarWidth}px` }}
+        >
         <aside
             className={`${s.spaceSidebar} ${collapsed ? s.spaceSidebarCollapsed : ""}`}
-            style={collapsed ? undefined : { width: `${sidebarWidth}px`, minWidth: `${sidebarWidth}px` }}
         >
             {collapsed ? (
                 <div className={s.collapsedSidebar} aria-label="知识库分组快捷栏">
@@ -578,20 +581,14 @@ export function SpaceSidebar({
                     </div>
                 </>
             )}
+        </aside>
             {!collapsed && (
                 <div
-                    style={{
-                        position: "absolute",
-                        top: 0,
-                        right: 0,
-                        width: "8px",
-                        height: "100%",
-                        cursor: "col-resize",
-                        zIndex: 50,
-                    }}
+                    className={s.sidebarResizeHandle}
+                    aria-hidden="true"
                     onMouseDown={handleResizeMouseDown}
                 />
             )}
-        </aside>
+        </div>
     );
 }
