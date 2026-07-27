@@ -49,6 +49,7 @@ import { MoveFolderDialog } from "./MoveFolderDialog";
 import { canOpenPermissionDialog, checkPermission } from "~/api/permission";
 import {
     hasKnowledgeSpacePermission,
+    hasRoleBasedSpaceActionBypass,
     useKnowledgeSpaceActionPermissions,
 } from "../hooks/useKnowledgeSpacePermissions";
 import { useLocalize, usePrefersMobileLayout, useScrollRevealRef } from "~/hooks";
@@ -330,10 +331,13 @@ export function KnowledgeSpaceContent({
     }, [onFileEncodingUpdatedProp, setFiles]);
 
     // 详情页只消费 share_space（分享按钮），按需只查这一项而非全部 4 个操作权限；
-    // creator/admin 由 fullAccessSpaceIds 直接放行，不发请求。
+    // creator（及非部门 admin）由 fullAccessSpaceIds 直接放行，不发请求。
     const { permissions: spaceActionPermissions } = useKnowledgeSpaceActionPermissions(
         [space.id],
-        { fullAccessSpaceIds: isAdmin ? [space.id] : [], permissionIds: ["share_space"] },
+        {
+            fullAccessSpaceIds: hasRoleBasedSpaceActionBypass(space) ? [space.id] : [],
+            permissionIds: ["share_space"],
+        },
     );
     // Version-management write entries (process-similar button, list "similar"
     // pill) gate on the user's OpenFGA relation to this space: creator (owner)

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { SpaceLevel, SpaceRole, type KnowledgeSpace } from "~/api/knowledge";
 import { checkPermission } from "~/api/permission";
 import { useAuthContext } from "~/hooks";
 import { SystemRoles } from "~/types/chat";
@@ -22,6 +23,25 @@ const PERMISSION_RELATION: Record<KnowledgeSpaceActionPermission, string> = {
 
 export function isSystemAdmin(role?: string) {
     return role === SystemRoles.ADMIN || String(role ?? "").toLowerCase() === "admin";
+}
+
+/**
+ * Whether the space list `role` alone can skip per-action permission API checks.
+ *
+ * Department spaces must always verify manage/delete via `checkPermission`: the
+ * backend may return `role=admin` from implicit dept-admin read scope that does
+ * not grant delete, and admins of sibling departments must not inherit manage UI.
+ */
+export function hasRoleBasedSpaceActionBypass(
+    space: Pick<KnowledgeSpace, "role" | "spaceLevel">,
+): boolean {
+    if (space.role === SpaceRole.CREATOR) {
+        return true;
+    }
+    if (space.role === SpaceRole.ADMIN && space.spaceLevel !== SpaceLevel.DEPARTMENT) {
+        return true;
+    }
+    return false;
 }
 
 export function hasKnowledgeSpacePermission(

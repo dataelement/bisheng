@@ -15,6 +15,7 @@ import { UserPopMenu } from "~/layouts/UserPopMenu";
 import { MobileSidebarHeaderTabs } from "~/components/Nav/MobileSidebarHeaderTabs";
 import {
     hasKnowledgeSpacePermission,
+    hasRoleBasedSpaceActionBypass,
     useKnowledgeSpaceActionPermissions,
 } from "../hooks/useKnowledgeSpacePermissions";
 import { sortKnowledgeSpacesForSection } from "./spaceSort";
@@ -173,7 +174,7 @@ export function KnowledgeSpaceSidebar({
             ...teamSpaces,
             ...personalSpaces,
         ]
-            .filter((space) => space.role === SpaceRole.CREATOR || space.role === SpaceRole.ADMIN)
+            .filter((space) => hasRoleBasedSpaceActionBypass(space))
             .map((space) => space.id),
         [publicSpaces, departmentSpaces, teamSpaces, personalSpaces],
     );
