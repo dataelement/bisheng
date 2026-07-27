@@ -7,6 +7,10 @@ from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
 from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
+from bisheng.knowledge.domain.models.knowledge_file import (
+    KnowledgeFileEntryStatus,
+    KnowledgeFileEntryType,
+)
 from bisheng.knowledge.domain.repositories.implementations.knowledge_document_repository_impl import (
     KnowledgeDocumentRepositoryImpl,
 )
@@ -90,13 +94,20 @@ async def test_link_promotes_new_version_to_primary(enable_switch, async_db_sess
     target_doc_fresh = await svc.doc_repo.find_by_id(target_doc.id)
     assert target_doc_fresh.primary_version_id == by_no[2].id
 
-    # original independent doc + V1 row for file 101 are gone
+    # The source document is gone, while its unique physical-file version
+    # relationship is migrated into the target chain.
     assert await svc.doc_repo.find_by_id(current_doc.id) is None
-    assert await svc.version_repo.find_by_id(current_v1.id) is None
+    migrated = await svc.version_repo.find_by_id(current_v1.id)
+    assert migrated is not None
+    assert migrated.document_id == target_doc.id
+    assert migrated.version_no == 2
 
 
 @pytest.mark.asyncio
 async def test_link_rejected_when_switch_off(async_db_session, monkeypatch):
+    from bisheng.common.errcode.knowledge_space import (
+        VersionManagementDisabledError,
+    )
     from bisheng.knowledge.domain.services import knowledge_version_service as kvs_mod
     mock_settings = MagicMock()
     conf = MagicMock()
@@ -105,9 +116,9 @@ async def test_link_rejected_when_switch_off(async_db_session, monkeypatch):
     monkeypatch.setattr(kvs_mod, "bisheng_settings", mock_settings)
 
     svc = _build_svc(async_db_session)
-    with pytest.raises(HTTPException) as ctx:
+    with pytest.raises(VersionManagementDisabledError) as ctx:
         await svc.link_file_to_document(knowledge_file_id=1, target_document_id=1)
-    assert ctx.value.status_code == 403
+    assert ctx.value.code == 18060
 
 
 @pytest.mark.asyncio
@@ -126,7 +137,51 @@ async def test_link_rejected_when_md5_duplicate_in_target_chain(enable_switch, a
 
 
 @pytest.mark.asyncio
+async def test_link_rejected_when_target_is_distributed_document(
+    enable_switch,
+    async_db_session,
+):
+    from bisheng.common.errcode.knowledge_space import (
+        KnowledgeDocumentEntryConflictError,
+    )
+
+    target_doc, _ = await _seed_doc(
+        async_db_session,
+        1,
+        100,
+        "target.pdf",
+        md5="aaa",
+    )
+    await _seed_doc(
+        async_db_session,
+        1,
+        101,
+        "incoming.pdf",
+        md5="bbb",
+    )
+    target_file = await KnowledgeFileRepositoryImpl(
+        async_db_session
+    ).find_by_id(100)
+    target_file.reference_document_id = int(target_doc.id)
+    target_file.entry_type = KnowledgeFileEntryType.MANAGER.value
+    target_file.entry_status = KnowledgeFileEntryStatus.ACTIVE.value
+    async_db_session.add(target_file)
+    await async_db_session.commit()
+
+    svc = _build_svc(async_db_session)
+    with pytest.raises(KnowledgeDocumentEntryConflictError) as exc_info:
+        await svc.link_file_to_document(
+            knowledge_file_id=101,
+            target_document_id=int(target_doc.id),
+        )
+    assert exc_info.value.code == 18094
+
+
+@pytest.mark.asyncio
 async def test_link_rejected_when_current_file_not_parsed(enable_switch, async_db_session, monkeypatch):
+    from bisheng.common.errcode.knowledge_space import (
+        VersionLinkFileNotReadyError,
+    )
     target_doc, _ = await _seed_doc(async_db_session, 1, 100, "target.pdf", md5="aaa")
     # Seed an unparsed (status=1 WAITING) incoming file with its own doc
     _, _ = await _seed_doc(async_db_session, 1, 101, "incoming.pdf", md5="bbb", status=1)
@@ -136,9 +191,9 @@ async def test_link_rejected_when_current_file_not_parsed(enable_switch, async_d
         MagicMock(return_value=None),
     )
     svc = _build_svc(async_db_session)
-    with pytest.raises(HTTPException) as ctx:
+    with pytest.raises(VersionLinkFileNotReadyError) as ctx:
         await svc.link_file_to_document(knowledge_file_id=101, target_document_id=target_doc.id)
-    assert ctx.value.status_code == 412
+    assert ctx.value.code == 18061
 
 
 @pytest.mark.asyncio
@@ -168,11 +223,14 @@ async def test_link_rejected_when_source_is_primary_of_multi_version_doc(
     async_db_session.add(source_doc)
     await async_db_session.commit()
 
+    from bisheng.common.errcode.knowledge_space import (
+        VersionLinkSourceMultiVersionError,
+    )
+
     svc = _build_svc(async_db_session)
-    with pytest.raises(HTTPException) as ctx:
+    with pytest.raises(VersionLinkSourceMultiVersionError) as ctx:
         await svc.link_file_to_document(knowledge_file_id=201, target_document_id=target_doc.id)
-    assert ctx.value.status_code == 409
-    assert "multi-version document" in ctx.value.detail
+    assert ctx.value.code == 18063
 
 
 @pytest.mark.asyncio

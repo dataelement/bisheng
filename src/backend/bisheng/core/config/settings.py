@@ -255,6 +255,14 @@ class CeleryConf(BaseModel):
                 "task": "bisheng.worker.permission.department_transfer_cleanup.scan_due_events",
                 "schedule": 30.0,
             }
+        if "fanout_document_projection_scan" not in self.beat_schedule:
+            self.beat_schedule["fanout_document_projection_scan"] = {
+                "task": (
+                    "bisheng.worker.knowledge.document_projection."
+                    "fanout_document_projection_scan"
+                ),
+                "schedule": 60.0,
+            }
         if "dispatch_approval_notifications" not in self.beat_schedule:
             self.beat_schedule["dispatch_approval_notifications"] = {
                 "task": "bisheng.worker.approval.notification_tasks.dispatch_approval_notifications",
@@ -611,6 +619,25 @@ class KnowledgePdfWatermarkConf(BaseModel):
         return self
 
 
+class KnowledgeDistributionConf(BaseModel):
+    """F059 canonical publish/share rollout switches."""
+
+    writer_enabled: bool = Field(
+        default=False,
+        description=(
+            "Enable new canonical publish/share submissions. Existing "
+            "logical entries remain readable when disabled."
+        ),
+    )
+    legacy_share_creation_enabled: bool = Field(
+        default=False,
+        description=(
+            "Allow creation of legacy link/invite shares. Existing tokens "
+            "remain readable independently."
+        ),
+    )
+
+
 class KnowledgeConf(BaseModel):
     """Knowledge Configure"""
 
@@ -629,6 +656,10 @@ class KnowledgeConf(BaseModel):
     pdf_watermark: KnowledgePdfWatermarkConf = Field(
         default_factory=KnowledgePdfWatermarkConf,
         description="Portal PDF Watermark Configure",
+    )
+    distribution: KnowledgeDistributionConf = Field(
+        default_factory=KnowledgeDistributionConf,
+        description="Canonical publish/share distribution rollout",
     )
 
     @property

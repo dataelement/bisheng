@@ -300,3 +300,34 @@ class FolderOrBatchDownloadNotAllowedError(BaseErrorCode):
 class DailyDownloadLimitExceededError(BaseErrorCode):
     Code: int = 18093
     Msg: str = "已达当日下载次数上限"
+
+
+# —— Canonical document distribution
+class KnowledgeDocumentEntryConflictError(BaseErrorCode):
+    Code: int = 18094
+    Msg: str = "同一文档在目标知识库中已存在入口，或文档无法安全合并"
+
+
+class KnowledgeDocumentEntryTypeInvalidError(BaseErrorCode):
+    Code: int = 18095
+    Msg: str = "当前入口类型不允许执行该操作"
+
+
+class KnowledgeDocumentManagerRequiredError(BaseErrorCode):
+    Code: int = 18096
+    Msg: str = "只有当前管理入口可以修改文档内容"
+
+
+class KnowledgeDocumentDownloadDeniedError(BaseErrorCode):
+    Code: int = 18097
+    Msg: str = "当前分享策略或本地权限不允许下载"
+
+
+class KnowledgeDocumentStateConflictError(BaseErrorCode):
+    Code: int = 18098
+    Msg: str = "文档状态已变化或容器中存在分发文件，请刷新后重试"
+
+
+class KnowledgeDocumentActiveShareError(BaseErrorCode):
+    Code: int = 18099
+    Msg: str = "文档仍存在有效分享，请先撤回分享"

@@ -111,11 +111,49 @@ def _patch_file_publish_submit_dependencies(
     monkeypatch.setattr(service, "_ensure_can_publish_file", AsyncMock(return_value=None))
     monkeypatch.setattr(service, "_ensure_publish_target_space", AsyncMock(return_value=target_space))
     monkeypatch.setattr(service, "_ensure_publish_target_folder", AsyncMock(return_value=None))
+    monkeypatch.setattr(
+        service,
+        "_normalize_publish_source",
+        AsyncMock(
+            return_value=SimpleNamespace(
+                document_id=900,
+                manager_file_id=int(source_file.id),
+                manager_space_id=int(source_file.knowledge_id),
+            )
+        ),
+    )
     monkeypatch.setattr(service, "_get_primary_department_id", AsyncMock(return_value=9))
     monkeypatch.setattr(service, "_task_approver_user_ids", AsyncMock(return_value=[]))
     if service.notification_service is None:
         service.notification_service = SimpleNamespace(enqueue_file_publish=AsyncMock())
     return source_file, target_space
+
+
+@pytest.fixture(autouse=True)
+def _stub_canonical_publish_source(monkeypatch):
+    """Keep legacy submit tests isolated from the F059 database normalization."""
+    from bisheng.approval.domain.services.shougang_approval_service import (
+        ShougangApprovalService,
+    )
+    from bisheng.common.services.config_service import settings
+
+    monkeypatch.setattr(
+        settings.knowledge.distribution,
+        "writer_enabled",
+        True,
+    )
+
+    monkeypatch.setattr(
+        ShougangApprovalService,
+        "_normalize_publish_source",
+        AsyncMock(
+            return_value=SimpleNamespace(
+                document_id=900,
+                manager_file_id=100,
+                manager_space_id=10,
+            )
+        ),
+    )
 
 
 @pytest.mark.asyncio
@@ -1030,6 +1068,10 @@ async def test_file_publish_submit_persists_target_folder_snapshot(monkeypatch):
     assert gate_req.payload_snapshot["target_folder_name"] == "制度目录"
     assert gate_req.payload_snapshot["target_folder_level"] == 3
     assert gate_req.payload_snapshot["target_folder_level_path"] == "/300/301"
+    assert gate_req.business_key == "knowledge-file-publish:document:900:target:20"
+    assert gate_req.business_resource_id == "900:20"
+    assert gate_req.payload_snapshot["canonical_document_id"] == 900
+    assert gate_req.payload_snapshot["source_entry_id"] == 100
 
 
 @pytest.mark.asyncio
@@ -2391,6 +2433,41 @@ async def test_file_publish_handler_links_version_with_selected_folder_path(monk
         level=3,
     )
     assert result == {"file_id": 188, "target_space_id": 20, "version": {"document_id": 300}}
+
+
+@pytest.mark.asyncio
+async def test_new_file_publish_approval_uses_distribution_without_copy(monkeypatch):
+    from bisheng.approval.domain.services.shougang_approval_handler import (
+        KnowledgeSpaceFilePublishApprovalHandler,
+    )
+
+    handler = KnowledgeSpaceFilePublishApprovalHandler()
+    distribution = AsyncMock(
+        return_value={
+            "document_id": 900,
+            "file_id": 100,
+            "publish_entry_id": 188,
+            "target_space_id": 20,
+            "idempotent": False,
+        }
+    )
+    copy_file = Mock()
+    monkeypatch.setattr(handler, "_publish_distribution", distribution)
+    monkeypatch.setattr(handler, "_copy_file", copy_file)
+
+    payload = {
+        "tenant_id": 1,
+        "canonical_document_id": 900,
+        "source_entry_id": 100,
+        "source_space_id": 10,
+        "source_file_id": 100,
+        "target_space_id": 20,
+    }
+    result = await handler.on_approved(102, payload)
+
+    distribution.assert_awaited_once_with(102, payload)
+    copy_file.assert_not_called()
+    assert result["publish_entry_id"] == 188
 
 
 @pytest.mark.asyncio

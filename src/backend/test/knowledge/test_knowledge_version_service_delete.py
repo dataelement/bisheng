@@ -8,6 +8,10 @@ from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
 from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
+from bisheng.knowledge.domain.models.knowledge_file import (
+    KnowledgeFileEntryStatus,
+    KnowledgeFileEntryType,
+)
 from bisheng.knowledge.domain.models.knowledge_file_similarity_candidate import KnowledgeFileSimilarityCandidate
 from bisheng.knowledge.domain.repositories.implementations.knowledge_document_repository_impl import (
     KnowledgeDocumentRepositoryImpl,
@@ -88,6 +92,11 @@ async def test_delete_history_removes_version_and_file(enable_switch, async_db_s
         "bisheng.api.services.knowledge_imp.delete_minio_files",
         MagicMock(return_value=None),
     )
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.services.knowledge_pdf_artifact_service."
+        "get_pdf_artifact_deletion_snapshots",
+        AsyncMock(return_value=[]),
+    )
 
     svc = _build_svc(async_db_session)
     result = await svc.delete_version(version_id=v1.id)
@@ -129,12 +138,46 @@ async def test_delete_history_removes_similarity_candidate_cache(enable_switch, 
     )
     monkeypatch.setattr("bisheng.api.services.knowledge_imp.delete_vector_files", MagicMock(return_value=True))
     monkeypatch.setattr("bisheng.api.services.knowledge_imp.delete_minio_files", MagicMock(return_value=None))
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.services.knowledge_pdf_artifact_service."
+        "get_pdf_artifact_deletion_snapshots",
+        AsyncMock(return_value=[]),
+    )
 
     svc = _build_svc(async_db_session)
     await svc.delete_version(version_id=v1.id)
 
     cached = await svc.similar_candidate_repo.find_by_source_file_id(101)
     assert cached == []
+
+
+@pytest.mark.asyncio
+async def test_delete_distributed_history_requires_current_manager(
+    enable_switch,
+    async_db_session,
+):
+    from bisheng.common.errcode.knowledge_space import (
+        KnowledgeDocumentManagerRequiredError,
+    )
+
+    doc, v1, v2 = await _seed_two_version_doc(async_db_session)
+    manager = await KnowledgeFileRepositoryImpl(
+        async_db_session
+    ).find_by_id(int(v2.knowledge_file_id))
+    manager.reference_document_id = int(doc.id)
+    manager.entry_type = KnowledgeFileEntryType.MANAGER.value
+    manager.entry_status = KnowledgeFileEntryStatus.ACTIVE.value
+    async_db_session.add(manager)
+    await async_db_session.commit()
+
+    svc = _build_svc(async_db_session)
+    svc._require_document_content_manager = AsyncMock(
+        side_effect=KnowledgeDocumentManagerRequiredError()
+    )
+    with pytest.raises(KnowledgeDocumentManagerRequiredError) as exc_info:
+        await svc.delete_version(version_id=int(v1.id))
+    assert exc_info.value.code == 18096
+    svc._require_document_content_manager.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -181,13 +224,17 @@ async def test_delete_rejected_when_switch_off(async_db_session, monkeypatch):
 
 def _build_mock_svc():
     """Build a KnowledgeVersionService whose repos are all MagicMock/AsyncMock."""
-    return KnowledgeVersionService(
+    service = KnowledgeVersionService(
         request=MagicMock(),
         login_user=MagicMock(),
         doc_repo=MagicMock(),
         version_repo=MagicMock(),
         knowledge_file_repo=MagicMock(),
     )
+    service.knowledge_file_repo.find_distribution_entries_by_document_id = (
+        AsyncMock(return_value=[])
+    )
+    return service
 
 
 def _patch_switch_enabled(monkeypatch):

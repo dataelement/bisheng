@@ -87,3 +87,42 @@ class ShougangFilePublishSubmitReq(BaseModel):
     target_document_id: int | None = Field(default=None, gt=0)
     target_file_id: int | None = Field(default=None, gt=0)
     reason: str | None = Field(default=None, max_length=2000)
+
+
+class ShougangFileShareTargetSpace(BaseModel):
+    id: int
+    name: str
+    space_level: KnowledgeSpaceLevelEnum
+    owner_name: str | None = None
+
+
+class ShougangFileShareTargetSpacesResp(BaseModel):
+    data: list[ShougangFileShareTargetSpace] = Field(default_factory=list)
+    total: int = 0
+
+
+class ShougangFileShareSubmitReq(BaseModel):
+    source_space_id: int = Field(..., gt=0)
+    source_file_id: int = Field(..., gt=0)
+    target_space_id: int = Field(..., gt=0)
+    reason: str = Field(..., min_length=1, max_length=2000)
+    allow_download: bool = False
+
+
+class ShougangFileShareEntry(BaseModel):
+    entry_id: int
+    target_space_id: int
+    target_space_name: str | None = None
+    allow_download: bool
+    entry_status: str
+    create_time: str | None = None
+
+
+class ShougangFileShareEntriesResp(BaseModel):
+    data: list[ShougangFileShareEntry] = Field(default_factory=list)
+    total: int = 0
+
+
+class ShougangFileShareRevokeReq(BaseModel):
+    source_file_id: int = Field(..., gt=0)
+    share_entry_id: int = Field(..., gt=0)

@@ -222,14 +222,24 @@ class PortalPdfDownloadService:
         tenant_id = int(getattr(login_user, "tenant_id", 0) or 0)
         user_id = int(getattr(login_user, "user_id", 0) or 0)
         file_record = await self.file_repository.find_by_id(request.file_id)
+        reference_resolver = getattr(
+            type(self.authorization_service),
+            "resolve_shougang_portal_download_reference",
+            None,
+        )
         if (
             file_record is None
             or file_record.file_type != FileType.FILE.value
-            or int(file_record.knowledge_id) != int(request.space_id)
             or int(file_record.tenant_id or 0) != tenant_id
+            or (
+                reference_resolver is None
+                and int(file_record.knowledge_id)
+                != int(request.space_id)
+            )
         ):
             raise SpaceFileNotFoundError()
 
+        access_file = file_record
         if request.share_access_grant:
             claims = self.share_grant_service.verify(
                 request.share_access_grant,
@@ -243,11 +253,26 @@ class PortalPdfDownloadService:
                 space_id=request.space_id,
                 file_id=request.file_id,
             )
+            if reference_resolver is not None:
+                access_file, file_record = await reference_resolver(
+                    self.authorization_service,
+                    space_id=request.space_id,
+                    file_id=request.file_id,
+                    external_share_grant=True,
+                )
         else:
+            if reference_resolver is not None:
+                access_file, file_record = await reference_resolver(
+                    self.authorization_service,
+                    space_id=request.space_id,
+                    file_id=request.file_id,
+                    external_share_grant=False,
+                )
             await self.authorization_service.require_shougang_portal_file_download_permission(
-                space_id=request.space_id,
-                file_id=request.file_id,
+                space_id=int(access_file.knowledge_id),
+                file_id=int(access_file.id),
             )
+        content_file_id = int(file_record.id)
 
         await self._enforce_daily_download_limit(request, login_user)
 
@@ -292,7 +317,11 @@ class PortalPdfDownloadService:
                 file_record,
                 timeout_seconds=self._remaining(readiness_deadline),
             )
-            self._validate_artifact_reference(artifact, tenant_id, request.file_id)
+            self._validate_artifact_reference(
+                artifact,
+                tenant_id,
+                content_file_id,
+            )
             try:
                 await self._copy_and_validate_artifact(artifact, input_path, readiness_deadline)
             except asyncio.CancelledError:
@@ -311,7 +340,7 @@ class PortalPdfDownloadService:
                 self._validate_artifact_reference(
                     artifact,
                     tenant_id,
-                    request.file_id,
+                    content_file_id,
                     invalid_generation=invalid_generation,
                 )
                 await self._copy_and_validate_artifact(artifact, input_path, readiness_deadline)

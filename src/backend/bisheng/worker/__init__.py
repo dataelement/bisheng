@@ -16,6 +16,11 @@ from bisheng.worker.knowledge.file_worker import (
     refresh_file_similarity_candidates_celery,
     retry_knowledge_file_celery,
 )
+from bisheng.worker.knowledge.document_projection import (
+    fanout_document_projection_scan,
+    process_document_projection,
+    scan_tenant_document_projections,
+)
 from bisheng.worker.knowledge.pdf_artifact_worker import (
     generate_knowledge_file_pdf_celery,
 )

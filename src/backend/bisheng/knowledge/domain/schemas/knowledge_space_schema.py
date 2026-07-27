@@ -11,6 +11,9 @@ from bisheng.knowledge.domain.models.knowledge_space_scope import (
     KnowledgeSpaceLevelEnum,
     KnowledgeSpaceOwnerTypeEnum,
 )
+from bisheng.knowledge.domain.schemas.knowledge_document_distribution_schema import (
+    KnowledgeDocumentEntryCapabilities,
+)
 from bisheng.knowledge.domain.schemas.portal_hot_search_schema import PortalHotSearchItem
 
 
@@ -320,6 +323,13 @@ class ShougangPortalShareLinkAccessResp(BaseModel):
     share_token: str
     space_id: int
     file_id: int
+    entry_file_id: int | None = None
+    canonical_document_id: int | None = None
+    canonical_version_id: int | None = None
+    desired_content_generation: int = 0
+    applied_content_generation: int = 0
+    desired_entry_generation: int = 0
+    applied_entry_generation: int = 0
     allow_download: bool = False
     download_grant: str = Field(default="", description="Internal opaque download grant")
     download_grant_expires_at: int | None = Field(default=None, description="Internal grant expiry as Unix timestamp")
@@ -504,6 +514,21 @@ class ShougangPortalFileItemResp(BaseModel):
     ] = "allowed"
     access_source: str | None = None
     is_department_file: bool = False
+    entry_type: Literal["normal", "manager", "publish", "share"] = "normal"
+    entry_status: str = "active"
+    canonical_document_id: int | None = None
+    canonical_version_id: int | None = None
+    manager_file_id: int | None = None
+    manager_space_id: int | None = None
+    desired_content_generation: int = 0
+    applied_content_generation: int = 0
+    desired_entry_generation: int = 0
+    applied_entry_generation: int = 0
+    projection_status: str = "ready"
+    projection_ready: bool = True
+    capabilities: KnowledgeDocumentEntryCapabilities = Field(
+        default_factory=KnowledgeDocumentEntryCapabilities
+    )
 
 
 class ShougangPortalFileSearchResp(BaseModel):
@@ -974,6 +999,14 @@ class KnowledgeSpaceFileResponse(KnowledgeFileRead):
     has_similar: bool = Field(
         default=False,
         description="Whether this file has unresolved similar candidates (similar_status == 1)",
+    )
+    canonical_document_id: int | None = None
+    canonical_version_id: int | None = None
+    manager_file_id: int | None = None
+    manager_space_id: int | None = None
+    projection_ready: bool = True
+    capabilities: KnowledgeDocumentEntryCapabilities = Field(
+        default_factory=KnowledgeDocumentEntryCapabilities
     )
 
 

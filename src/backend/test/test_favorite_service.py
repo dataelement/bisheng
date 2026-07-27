@@ -264,6 +264,150 @@ async def test_list_marks_valid_when_source_exists():
         assert resp.data[0].status == "valid"
 
 
+@pytest.mark.asyncio
+async def test_find_favorite_matches_canonical_document_after_primary_switch():
+    from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
+
+    svc = _make_service()
+    ref = KnowledgeFile(
+        id=999,
+        tenant_id=1,
+        knowledge_id=200,
+        user_id=7,
+        file_name="old.pdf",
+        user_metadata={
+            "favorite_reference": {
+                "source_space_id": 1,
+                "source_file_id": 2,
+            }
+        },
+    )
+    with patch(
+        "bisheng.knowledge.domain.services.knowledge_space_service."
+        "KnowledgeFileDao.aget_references_by_knowledge_id",
+        new=AsyncMock(return_value=([ref], 1)),
+    ), patch.object(
+        svc,
+        "_resolve_favorite_durable_target",
+        new=AsyncMock(return_value=(3, 91)),
+    ):
+        matched = await svc._find_favorite_reference(
+            200,
+            1,
+            3,
+            canonical_document_id=91,
+        )
+
+    assert matched is ref
+
+
+@pytest.mark.asyncio
+async def test_list_favorite_returns_current_entry_after_primary_switch():
+    from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
+
+    svc = _make_service()
+    fav_space = Knowledge(
+        id=200,
+        name="我的收藏",
+        user_id=7,
+        type=3,
+        is_favorite=True,
+    )
+    ref = KnowledgeFile(
+        id=999,
+        tenant_id=1,
+        knowledge_id=200,
+        user_id=7,
+        file_name="old.pdf",
+        user_metadata={
+            "favorite_reference": {
+                "source_space_id": 1,
+                "source_file_id": 2,
+            }
+        },
+    )
+    current = KnowledgeFile(
+        id=3,
+        tenant_id=1,
+        knowledge_id=1,
+        user_id=8,
+        file_name="current.pdf",
+    )
+    with patch.object(
+        KnowledgeSpaceService,
+        "_find_favorite_space",
+        new=AsyncMock(return_value=fav_space),
+    ), patch(
+        "bisheng.knowledge.domain.services.knowledge_space_service."
+        "KnowledgeFileDao.aget_references_by_knowledge_id",
+        new=AsyncMock(return_value=([ref], 1)),
+    ), patch.object(
+        svc,
+        "_resolve_favorite_durable_target",
+        new=AsyncMock(return_value=(3, 91)),
+    ), patch(
+        "bisheng.knowledge.domain.services.knowledge_space_service."
+        "KnowledgeFileDao.query_by_id",
+        new=AsyncMock(return_value=current),
+    ):
+        resp = await svc.list_shougang_portal_favorites(
+            page=1,
+            page_size=20,
+        )
+
+    assert resp.data[0].status == "valid"
+    assert resp.data[0].source_file_id == 3
+    assert resp.data[0].file_name == "current.pdf"
+
+
+@pytest.mark.asyncio
+async def test_create_favorite_reference_persists_tenant_and_canonical_id():
+    from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
+
+    svc = _make_service()
+    fav_space = Knowledge(
+        id=200,
+        name="我的收藏",
+        user_id=7,
+        type=3,
+        is_favorite=True,
+    )
+    source_space = Knowledge(id=1, name="src", user_id=8, type=3)
+    source_file = KnowledgeFile(
+        id=3,
+        tenant_id=1,
+        knowledge_id=1,
+        user_id=8,
+        file_name="current.pdf",
+    )
+    captured = None
+
+    async def _capture(file_record):
+        nonlocal captured
+        captured = file_record
+        file_record.id = 1000
+        return file_record
+
+    with patch(
+        "bisheng.knowledge.domain.services.knowledge_space_service."
+        "KnowledgeFileDao.aadd_file",
+        new=_capture,
+    ):
+        await svc._create_favorite_reference(
+            fav_space,
+            source_space,
+            source_file,
+            canonical_document_id=91,
+        )
+
+    assert captured.tenant_id == 1
+    assert captured.user_metadata["favorite_reference"] == {
+        "source_space_id": 1,
+        "source_file_id": 3,
+        "canonical_document_id": 91,
+    }
+
+
 # ── rename_file → 收藏变更站内信接线 ─────────────────────────────────────────
 
 def _svc_for_rename(user_id=7):

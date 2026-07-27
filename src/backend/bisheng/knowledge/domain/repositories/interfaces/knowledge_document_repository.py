@@ -14,6 +14,20 @@ class KnowledgeDocumentRepository(BaseRepository[KnowledgeDocument, int], ABC):
         """List all documents in a knowledge space."""
 
     @abstractmethod
+    async def find_by_id_for_update(
+        self,
+        entity_id: int,
+    ) -> Optional[KnowledgeDocument]:
+        """Lock one document row for a distribution state transition."""
+
+    @abstractmethod
+    async def find_by_ids_for_update(
+        self,
+        entity_ids: list[int],
+    ) -> List[KnowledgeDocument]:
+        """Lock document rows in stable ID order."""
+
+    @abstractmethod
     async def find_in_folder(
         self, knowledge_id: int, file_level_path: Optional[str]
     ) -> List[KnowledgeDocument]:
@@ -23,4 +37,8 @@ class KnowledgeDocumentRepository(BaseRepository[KnowledgeDocument, int], ABC):
     async def update_primary_version_id(
         self, document_id: int, primary_version_id: Optional[int]
     ) -> None:
-        """Atomically update only the primary_version_id pointer."""
+        """Update the primary pointer and flush without committing."""
+
+    @abstractmethod
+    async def increment_content_generation(self, document_id: int) -> int:
+        """Lock the document, increment its content generation, and flush."""

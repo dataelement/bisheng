@@ -22,6 +22,8 @@ from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao, K
 from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFile,
     KnowledgeFileDao,
+    KnowledgeFileEntryStatus,
+    KnowledgeFileEntryType,
     KnowledgeFileStatus,
 )
 from bisheng.telemetry.domain.mid_table.knowledge_space_content import KnowledgeSpaceContentStat
@@ -78,6 +80,105 @@ def _enqueue_recommendation_projection_refresh(file_id: int) -> None:
         enqueue_portal_recommendation_projection_refresh(file_id=int(file_id))
     except Exception:
         logger.exception("failed to enqueue recommendation projection refresh file_id={}", file_id)
+
+
+async def _advance_manager_projection_after_parse(
+    *,
+    tenant_id: int,
+    file_id: int,
+) -> bool:
+    """Advance F059 content generation only after manager parsing succeeds."""
+    from bisheng.core.database import get_async_db_session
+    from bisheng.knowledge.domain.repositories.implementations.knowledge_document_repository_impl import (
+        KnowledgeDocumentRepositoryImpl,
+    )
+    from bisheng.knowledge.domain.repositories.implementations.knowledge_document_version_repository_impl import (
+        KnowledgeDocumentVersionRepositoryImpl,
+    )
+    from bisheng.knowledge.domain.repositories.implementations.knowledge_file_repository_impl import (
+        KnowledgeFileRepositoryImpl,
+    )
+    from bisheng.knowledge.domain.services.knowledge_document_distribution_service import (
+        KnowledgeDocumentDistributionService,
+    )
+    from bisheng.knowledge.domain.services.knowledge_document_permission_activation_service import (
+        KnowledgeDocumentPermissionActivationService,
+    )
+
+    async with get_async_db_session() as session:
+        file_repository = KnowledgeFileRepositoryImpl(session)
+        file_record = await file_repository.find_by_id(int(file_id))
+        if (
+            file_record is None
+            or int(file_record.tenant_id or 0) != int(tenant_id)
+            or file_record.status != KnowledgeFileStatus.SUCCESS.value
+            or file_record.reference_document_id is None
+            or file_record.entry_type
+            != KnowledgeFileEntryType.MANAGER.value
+            or file_record.entry_status
+            != KnowledgeFileEntryStatus.ACTIVE.value
+        ):
+            return False
+        document_repository = KnowledgeDocumentRepositoryImpl(session)
+        version_repository = (
+            KnowledgeDocumentVersionRepositoryImpl(session)
+        )
+        service = KnowledgeDocumentDistributionService(
+            session=session,
+            document_repository=document_repository,
+            version_repository=version_repository,
+            file_repository=file_repository,
+            permission_activation_service=(
+                KnowledgeDocumentPermissionActivationService(
+                    file_repository=file_repository,
+                )
+            ),
+        )
+        await service.touch_manager_content(
+            tenant_id=int(tenant_id),
+            document_id=int(file_record.reference_document_id),
+            manager_file_id=int(file_record.id),
+        )
+    return True
+
+
+def _mark_manager_projection_after_parse(
+    file_record: KnowledgeFile,
+) -> None:
+    if file_record.tenant_id is None:
+        return
+    try:
+        from bisheng.core.context.tenant import (
+            current_tenant_id,
+            set_current_tenant_id,
+        )
+        from bisheng.worker._asyncio_utils import run_async_task
+        from bisheng.worker.knowledge.document_projection import (
+            enqueue_document_projection_entries,
+        )
+
+        token = set_current_tenant_id(int(file_record.tenant_id))
+        try:
+            changed = run_async_task(
+                lambda: _advance_manager_projection_after_parse(
+                    tenant_id=int(file_record.tenant_id),
+                    file_id=int(file_record.id),
+                )
+            )
+        finally:
+            current_tenant_id.reset(token)
+        if changed:
+            enqueue_document_projection_entries(
+                tenant_id=int(file_record.tenant_id),
+                entry_ids=None,
+            )
+    except Exception:
+        logger.exception(
+            "F059 failed to advance manager projection after parse: "
+            "tenant_id={} file_id={}",
+            file_record.tenant_id,
+            file_record.id,
+        )
 
 
 @bisheng_celery.task(acks_late=True)
@@ -256,6 +357,7 @@ def copy_vector(
     target_knowledge: Knowledge,
     source_file_id: int,
     target_file_id: int,
+    metadata_overrides: dict | None = None,
 ):
     # migrate vectordb
     embedding = FakeEmbeddings()
@@ -271,6 +373,16 @@ def copy_vector(
     for data in source_data:
         data["knowledge_id"] = target_knowledge.id
         data["document_id"] = target_file_id
+        if metadata_overrides:
+            data.update(metadata_overrides)
+            raw_user_metadata = data.get("user_metadata")
+            user_metadata = (
+                dict(raw_user_metadata)
+                if isinstance(raw_user_metadata, dict)
+                else {}
+            )
+            user_metadata.update(metadata_overrides)
+            data["user_metadata"] = user_metadata
     milvus_db = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(0, knowledge=target_knowledge, embeddings=embedding)
     # Create a new one for the first time collection
     if milvus_db.col is None:
@@ -417,6 +529,12 @@ def parse_knowledge_file_celery(file_id: int, preview_cache_key: str = None, cal
     finally:
         db_file = KnowledgeFileDao.get_file_by_ids([file_id])
         if db_file:
+            if (
+                knowledge is not None
+                and db_file[0].status
+                == KnowledgeFileStatus.SUCCESS.value
+            ):
+                _mark_manager_projection_after_parse(db_file[0])
             _enqueue_recommendation_projection_refresh(file_id)
             _enqueue_current_pdf_artifact_sync(
                 tenant_id=int(db_file[0].tenant_id),
@@ -491,6 +609,12 @@ def retry_knowledge_file_celery(file_id: int, preview_cache_key: str = None, cal
     finally:
         db_file = KnowledgeFileDao.get_file_by_ids([file_id])
         if db_file:
+            if (
+                knowledge is not None
+                and db_file[0].status
+                == KnowledgeFileStatus.SUCCESS.value
+            ):
+                _mark_manager_projection_after_parse(db_file[0])
             _enqueue_recommendation_projection_refresh(file_id)
             _enqueue_current_pdf_artifact_sync(
                 tenant_id=int(db_file[0].tenant_id),

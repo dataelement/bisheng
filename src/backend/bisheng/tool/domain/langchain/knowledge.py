@@ -74,6 +74,8 @@ class KnowledgeRetrieverTool(BaseTool):
     def _rrf_rerank(self, milvus_docs: List[Document], es_docs: List[Document], query: str) -> List[Document]:
         if not milvus_docs and not es_docs:
             return []
+        milvus_docs = self._dedupe_canonical_chunks(milvus_docs)
+        es_docs = self._dedupe_canonical_chunks(es_docs)
         rrf_rerank = RRFRerank(retrievers=[self.vector_retriever, self.elastic_retriever],
                                weights=self.rrf_weights,
                                remove_zero_score=self.rrf_remove_zero_score)
@@ -96,6 +98,48 @@ class KnowledgeRetrieverTool(BaseTool):
             finally_docs = sorted(finally_docs,
                                   key=lambda x: (x.metadata.get('document_name', ""), x.metadata.get('chunk_index', 0)))
         return finally_docs
+
+    @staticmethod
+    def _dedupe_canonical_chunks(
+        documents: List[Document],
+    ) -> List[Document]:
+        seen: set[tuple] = set()
+        result: List[Document] = []
+        for document in documents:
+            metadata = document.metadata or {}
+            user_metadata = metadata.get("user_metadata")
+            canonical_metadata = (
+                user_metadata
+                if isinstance(user_metadata, dict)
+                else {}
+            )
+            canonical_document_id = (
+                metadata.get("canonical_document_id")
+                or canonical_metadata.get("canonical_document_id")
+                or metadata.get("document_id")
+                or metadata.get("file_id")
+                or metadata.get("source")
+                or metadata.get("document_name")
+                or id(document)
+            )
+            canonical_version_id = (
+                metadata.get("canonical_version_id")
+                or canonical_metadata.get("canonical_version_id")
+                or canonical_document_id
+            )
+            chunk_index = metadata.get("chunk_index")
+            if chunk_index is None:
+                chunk_index = canonical_metadata.get("chunk_index", 0)
+            key = (
+                canonical_document_id,
+                canonical_version_id,
+                chunk_index,
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+            result.append(document)
+        return result
 
 
 class KnowledgeRagTool(BaseTool):

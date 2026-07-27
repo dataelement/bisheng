@@ -181,7 +181,12 @@ export default function FilePreviewPage() {
             signal: controller.signal,
         })
             .then((result) => {
-                if (!cancelled) setCanDownload(Boolean(result.allowed));
+                if (!cancelled) {
+                    setCanDownload(
+                        Boolean(result.allowed)
+                        && (previewData?.can_download ?? true),
+                    );
+                }
             })
             .catch(() => {
                 if (!cancelled) setCanDownload(false);
@@ -191,7 +196,7 @@ export default function FilePreviewPage() {
             cancelled = true;
             controller.abort();
         };
-    }, [fileId]);
+    }, [fileId, previewData?.can_download]);
 
     useEffect(() => {
         if (!fileId) {
@@ -205,7 +210,12 @@ export default function FilePreviewPage() {
             signal: controller.signal,
         })
             .then((allowed) => {
-                if (!cancelled) setCanManagePermission(Boolean(allowed));
+                if (!cancelled) {
+                    setCanManagePermission(
+                        Boolean(allowed)
+                        && (previewData?.capabilities?.can_manage_members ?? true),
+                    );
+                }
             })
             .catch(() => {
                 if (!cancelled) setCanManagePermission(false);
@@ -215,7 +225,7 @@ export default function FilePreviewPage() {
             cancelled = true;
             controller.abort();
         };
-    }, [fileId]);
+    }, [fileId, previewData?.capabilities]);
 
     const handleDownloadFile = useCallback(async () => {
         if (!fileId || !spaceId || !canDownload || downloadPendingRef.current) return;
@@ -265,15 +275,29 @@ export default function FilePreviewPage() {
     });
 
     useEffect(() => {
-        if (loading || isMobile || showAiAssistant || hasAutoOpenedAiAssistant.current || !splitContainerRef.current) return;
+        if (
+            loading
+            || isMobile
+            || showAiAssistant
+            || previewData?.projection_ready === false
+            || hasAutoOpenedAiAssistant.current
+            || !splitContainerRef.current
+        ) return;
         const w = splitContainerRef.current.getBoundingClientRect().width;
         if (w < AI_MIN_LEFT + AI_MIN_RIGHT) return;
         hasAutoOpenedAiAssistant.current = true;
         setShowAiAssistant(true);
-    }, [loading, showAiAssistant, isMobile]);
+    }, [loading, previewData?.projection_ready, showAiAssistant, isMobile]);
 
     // Toggle AI assistant
     const handleToggleAiAssistant = useCallback(() => {
+        if (previewData?.projection_ready === false) {
+            showToast({
+                message: "文件内容同步中，暂不可问答",
+                severity: NotificationSeverity.WARNING,
+            });
+            return;
+        }
         setShowAiAssistant((prev) => {
             if (!prev && !isMobile && splitContainerRef.current) {
                 const w = splitContainerRef.current.getBoundingClientRect().width;
@@ -281,11 +305,25 @@ export default function FilePreviewPage() {
             }
             return !prev;
         });
-    }, [isMobile]);
+    }, [isMobile, previewData?.projection_ready, showToast]);
 
     // Extra actions injected into FilePreview's TopBar slot.
     const topBarActions = (
         <>
+            {previewData?.entry_type && previewData.entry_type !== "normal" && (
+                <span className="hidden rounded bg-[#f2f3f5] px-2 py-1 text-xs text-[#4e5969] md:inline-flex">
+                    {previewData.entry_type === "manager"
+                        ? "管理文件"
+                        : previewData.entry_type === "publish"
+                            ? "发布文件"
+                            : "分享文件"}
+                </span>
+            )}
+            {previewData?.projection_ready === false && (
+                <span className="hidden rounded bg-[#fff7e8] px-2 py-1 text-xs text-[#f77234] md:inline-flex">
+                    内容同步中
+                </span>
+            )}
             {canManagePermission && spaceLevelLoaded && (
                 <Button
                     variant="outline"

@@ -215,6 +215,13 @@ export function FilePublishDialog({
 
     const handleSubmit = async () => {
         if (!activeSpace || !file || !targetSpaceId) return;
+        if (file.capabilities && !file.capabilities.canPublish) {
+            showToast({
+                message: "当前入口不能发布文件",
+                severity: NotificationSeverity.ERROR,
+            });
+            return;
+        }
         setSubmitting(true);
         try {
             const result = await submitShougangFilePublishApprovalApi({
@@ -245,32 +252,43 @@ export function FilePublishDialog({
         }
     };
 
-    const versionOptions: VersionOption[] = versionManagementEnabled ? [
-        ...candidates.map((item) => ({
-            key: `document:${item.target_document_id ?? item.document_id}`,
+    const candidateVersionOptions: VersionOption[] = candidates.flatMap((item) => {
+        const id = item.target_document_id ?? item.document_id;
+        if (id == null) return [];
+        return [{
+            key: `document:${id}`,
             type: "document" as const,
-            id: item.target_document_id ?? item.document_id,
+            id,
             title: item.title,
             source: "推荐" as const,
             docCode: item.doc_code,
             versionNo: item.current_primary_version_no,
             uploaderName: item.primary_uploader_name,
             uploadTime: item.primary_upload_time,
-        })),
-        ...searchResults.map((item) => ({
+        }];
+    });
+    const searchVersionOptions: VersionOption[] = searchResults.flatMap((item) => {
+        const id = item.target_file_id ?? item.document_id ?? item.target_document_id;
+        if (id == null) return [];
+        return [{
             key: item.target_file_id
                 ? `file:${item.target_file_id}`
-                : `document:${item.document_id ?? item.target_document_id}`,
+                : `document:${id}`,
             type: item.target_file_id ? "file" as const : "document" as const,
-            id: item.target_file_id ?? item.document_id ?? item.target_document_id,
+            id,
             title: item.title,
             source: "搜索" as const,
             docCode: item.doc_code,
             versionNo: item.current_primary_version_no,
             uploaderName: item.primary_uploader_name,
             uploadTime: item.primary_upload_time,
-        })),
-    ].filter((item, index, all) => item.id && all.findIndex((one) => one.key === item.key) === index) : [];
+        }];
+    });
+    const versionOptions: VersionOption[] = versionManagementEnabled
+        ? [...candidateVersionOptions, ...searchVersionOptions].filter(
+            (item, index, all) => all.findIndex((one) => one.key === item.key) === index,
+        )
+        : [];
     const selectedVersionOption = versionTarget
         ? versionOptions.find((option) => option.type === versionTarget.type && option.id === versionTarget.id)
         : null;

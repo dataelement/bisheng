@@ -1,4 +1,5 @@
 from abc import ABC
+from datetime import datetime
 from typing import Any
 
 from bisheng.common.repositories.interfaces.base_repository import BaseRepository
@@ -21,6 +22,105 @@ class KnowledgeFileRepository(BaseRepository[KnowledgeFile, int], ABC):
 
     async def prepare_delete_by_ids(self, entity_ids: list[int]) -> int:
         """在当前 session 暂存批量删除；只 flush，不提交。"""
+        ...
+
+    async def find_distribution_entries_by_document_id(
+        self,
+        document_id: int,
+        *,
+        statuses: set[str] | None = None,
+        for_update: bool = False,
+    ) -> list[KnowledgeFile]:
+        """List F059 entries for a canonical document in stable ID order."""
+        ...
+
+    async def find_entry_in_space_for_update(
+        self,
+        document_id: int,
+        knowledge_id: int,
+    ) -> KnowledgeFile | None:
+        """Lock the active/preparing entry for a document in one space."""
+        ...
+
+    async def find_manager_for_update(
+        self,
+        document_id: int,
+    ) -> KnowledgeFile | None:
+        """Lock the current manager entry for a canonical document."""
+        ...
+
+    async def find_by_approval_instance_id(
+        self,
+        approval_instance_id: int,
+    ) -> KnowledgeFile | None:
+        """Find the F059 entry created by an approval instance."""
+        ...
+
+    async def mark_document_entries_content_generation(
+        self,
+        document_id: int,
+        generation: int,
+    ) -> int:
+        """Mark every active entry pending at a canonical content generation."""
+        ...
+
+    async def find_projection_candidates(
+        self,
+        *,
+        now: datetime,
+        limit: int,
+    ) -> list[KnowledgeFile]:
+        """Return due F059 projection rows using the complete retry predicate."""
+        ...
+
+    async def claim_projection_lease(
+        self,
+        *,
+        entry_id: int,
+        lease_owner: str,
+        lease_until: datetime,
+        now: datetime,
+    ) -> KnowledgeFile | None:
+        """Atomically claim or take over an expired projection lease."""
+        ...
+
+    async def apply_projection_result(
+        self,
+        *,
+        entry_id: int,
+        lease_owner: str,
+        target_content_generation: int,
+        target_entry_generation: int,
+    ) -> bool:
+        """CAS applied generations by lease token without hiding newer work."""
+        ...
+
+    async def fail_projection_lease(
+        self,
+        *,
+        entry_id: int,
+        lease_owner: str,
+        next_retry_at: datetime,
+        error_summary: str,
+    ) -> bool:
+        """Record a projection failure by lease token and release the lease."""
+        ...
+
+    async def activate_prepared_entry(self, entry_id: int) -> bool:
+        """Conditionally activate one preparing entry and flush."""
+        ...
+
+    async def mark_entry_deleting(self, entry_id: int) -> bool:
+        """Conditionally hide one active/preparing entry and flush."""
+        ...
+
+    async def find_permission_reconcile_candidates(
+        self,
+        *,
+        older_than: datetime,
+        limit: int,
+    ) -> list[KnowledgeFile]:
+        """Find aged preparing/deleting entries for permission compensation."""
         ...
 
     async def get_user_metadata_by_knowledge_file_ids(

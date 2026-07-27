@@ -224,3 +224,8 @@ class KnowledgeDepartmentFileUnavailableError(BaseErrorCode):
 class KnowledgeDepartmentShareLoginRequiredError(BaseErrorCode):
     Code: int = 10994
     Msg: str = '部门文件分享需要登录后访问'
+
+
+class KnowledgeShareCreationDisabledError(BaseErrorCode):
+    Code: int = 10995
+    Msg: str = '新建链接或邀请码分享已停用'

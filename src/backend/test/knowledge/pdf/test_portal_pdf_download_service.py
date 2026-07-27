@@ -22,7 +22,12 @@ from bisheng.common.errcode.knowledge_space import (
     SpacePermissionDeniedError,
 )
 from bisheng.core.config.settings import KnowledgePdfWatermarkConf
-from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFile
+from bisheng.knowledge.domain.models.knowledge_file import (
+    FileType,
+    KnowledgeFile,
+    KnowledgeFileEntryStatus,
+    KnowledgeFileEntryType,
+)
 from bisheng.knowledge.domain.schemas.portal_pdf_download_schema import PortalPdfDownloadRequest
 from bisheng.knowledge.domain.services.knowledge_pdf_artifact_service import PdfArtifactReference
 from bisheng.knowledge.domain.services.pdf_artifact_on_demand_service import (
@@ -86,6 +91,26 @@ class FakeAuthorizationService:
 
     async def require_shougang_portal_share_download(self, *, share_token: str, space_id: int, file_id: int) -> None:
         self.share_calls.append((share_token, space_id, file_id))
+
+
+class FakeDurableAuthorizationService(FakeAuthorizationService):
+    def __init__(self, *, access_file: KnowledgeFile, content_file: KnowledgeFile) -> None:
+        super().__init__()
+        self.access_file = access_file
+        self.content_file = content_file
+        self.reference_calls: list[tuple[int, int, bool]] = []
+
+    async def resolve_shougang_portal_download_reference(
+        self,
+        *,
+        space_id: int,
+        file_id: int,
+        external_share_grant: bool = False,
+    ):
+        self.reference_calls.append(
+            (space_id, file_id, external_share_grant)
+        )
+        return self.access_file, self.content_file
 
 
 class FakeGrantService:
@@ -408,6 +433,55 @@ async def test_share_download_accepts_real_signed_grant_without_client_share_tok
     )
 
     assert fakes["authorization"].share_calls == [("share-token", 12, 1580)]
+    await prepared.close()
+
+
+@pytest.mark.asyncio
+async def test_legacy_share_download_uses_durable_entry_after_manager_moves(
+    tmp_path: Path,
+) -> None:
+    old_manager_reference = _file(
+        knowledge_id=20,
+        reference_document_id=91,
+        entry_type=KnowledgeFileEntryType.MANAGER.value,
+        entry_status=KnowledgeFileEntryStatus.ACTIVE.value,
+    )
+    access_entry = _file(
+        id=200,
+        knowledge_id=12,
+        reference_document_id=91,
+        entry_type=KnowledgeFileEntryType.PUBLISH.value,
+        entry_status=KnowledgeFileEntryStatus.ACTIVE.value,
+    )
+    content_file = _file(
+        id=100,
+        knowledge_id=20,
+        reference_document_id=91,
+        entry_type=KnowledgeFileEntryType.MANAGER.value,
+        entry_status=KnowledgeFileEntryStatus.ACTIVE.value,
+    )
+    authorization = FakeDurableAuthorizationService(
+        access_file=access_entry,
+        content_file=content_file,
+    )
+    service, fakes = _build_service(
+        tmp_path,
+        file=old_manager_reference,
+        authorization=authorization,
+        artifact=_artifact(knowledge_file_id=100),
+    )
+
+    prepared = await service.prepare_download(
+        _request(
+            entry_point="share",
+            share_access_grant="opaque-grant",
+        ),
+        _login_user(),
+    )
+
+    assert authorization.share_calls == [("share-token", 12, 1580)]
+    assert authorization.reference_calls == [(12, 1580, True)]
+    assert fakes["artifact_ensurer"].calls[0]["file_id"] == 100
     await prepared.close()
 
 

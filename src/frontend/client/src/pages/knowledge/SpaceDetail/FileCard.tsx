@@ -1,4 +1,4 @@
-import { Download, Edit, FileSearch, GitBranch, History, Loader2, MoreVertical, RefreshCw, Send, Shield, Tag, Trash2, X } from "lucide-react";
+import { Download, Edit, FileSearch, GitBranch, History, Loader2, MoreVertical, RefreshCw, Send, Share2, Shield, Tag, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { FileStatus, FileType, KnowledgeFile, SpaceRole } from "~/api/knowledge";
 import { Button, Checkbox } from "~/components";
@@ -42,6 +42,8 @@ interface FileCardProps {
     downloadPending?: boolean;
     canPublish?: boolean;
     onPublishFile?: (file: KnowledgeFile) => void;
+    canShare?: boolean;
+    onShareFile?: (file: KnowledgeFile) => void;
     disableClickNavigate?: boolean;
     hideSelectionCheckbox?: boolean;
     /** H5: render as list-row (not card tile). */
@@ -79,6 +81,8 @@ export function FileCard({
     downloadPending = false,
     canPublish = false,
     onPublishFile,
+    canShare = false,
+    onShareFile,
     disableClickNavigate = false,
     hideSelectionCheckbox = false,
     mobileListMode = false,
@@ -251,6 +255,20 @@ export function FileCard({
                 {`V${file.version_no}`}
             </span>
         );
+        const entryBadge = !isFolder && file.entryType && file.entryType !== "normal" && (
+            <span className="flex h-5 shrink-0 items-center rounded bg-[#f2f3f5] px-1.5 text-xs text-[#4e5969]">
+                {file.entryType === "manager"
+                    ? "管理文件"
+                    : file.entryType === "publish"
+                        ? "发布文件"
+                        : "分享文件"}
+            </span>
+        );
+        const projectionBadge = !isFolder && file.projectionReady === false && (
+            <span className="flex h-5 shrink-0 items-center rounded bg-[#fff7e8] px-1.5 text-xs text-[#f77234]">
+                同步中
+            </span>
+        );
         const similarIndicator = versionManagementEnabled && canManageMembers && file.has_similar && !file.is_multi_version && (
             <button
                 type="button"
@@ -270,6 +288,8 @@ export function FileCard({
                 <div className="flex min-w-0 items-center gap-2">
                     {versionBadge}
                     {similarIndicator}
+                    {entryBadge}
+                    {projectionBadge}
                     <span className={cn("truncate", nameToneClass)}>{file.name}</span>
                 </div>
             );
@@ -278,6 +298,8 @@ export function FileCard({
             <div className="flex min-w-0 items-center gap-2">
                 {versionBadge}
                 {similarIndicator}
+                {entryBadge}
+                {projectionBadge}
                 <span className={cn("min-w-0 flex-1 truncate", nameToneClass)}>{file.name}</span>
                 {renderStatusBadge()}
             </div>
@@ -311,7 +333,8 @@ export function FileCard({
     const canEditTags = isAdmin && !isFolder;
     const canRetry = isAdmin && hasRetryOption;
     const showPublish = canPublish && Boolean(onPublishFile) && !isFolder;
-    const showMoreMenu = showPublish || canEditTags || canRename || canRetry || canDelete || Boolean(onManagePermission);
+    const showShare = canShare && Boolean(onShareFile) && !isFolder;
+    const showMoreMenu = showPublish || showShare || canEditTags || canRename || canRetry || canDelete || Boolean(onManagePermission);
     /** 有「更多」时下载只在菜单内；无更多（普通成员/预览）时单独显示下载图标 */
     const showInlineDownloadButton = canDownload && !hideDownloadActions && !showMoreMenu;
     const showMenuDownloadItem = canDownload && !hideDownloadActions;
@@ -451,6 +474,15 @@ export function FileCard({
                                             >
                                                 <Send className="mr-2 size-4 shrink-0" />
                                                 发布
+                                            </DropdownMenuItem>
+                                        )}
+                                        {showShare && (
+                                            <DropdownMenuItem
+                                                onClick={(e) => { e.stopPropagation(); onShareFile?.(file); }}
+                                                className="flex items-center"
+                                            >
+                                                <Share2 className="mr-2 size-4 shrink-0" />
+                                                分享
                                             </DropdownMenuItem>
                                         )}
 
@@ -633,6 +665,15 @@ export function FileCard({
                                     >
                                         <Send className="mr-2 size-4 shrink-0" />
                                         发布
+                                    </DropdownMenuItem>
+                                )}
+                                {showShare && (
+                                    <DropdownMenuItem
+                                        onClick={(e) => { e.stopPropagation(); onShareFile?.(file); }}
+                                        className="flex items-center"
+                                    >
+                                        <Share2 className="mr-2 size-4 shrink-0" />
+                                        分享
                                     </DropdownMenuItem>
                                 )}
 

@@ -114,3 +114,23 @@ async def test_async_list_children_file_type_none_does_not_add_extra_filter():
     # Presence of "file_type = 0" or "file_type = 1" would indicate a spurious filter.
     assert "file_type = 0" not in sql
     assert "file_type = 1" not in sql
+
+
+@pytest.mark.asyncio
+async def test_async_list_children_excludes_hidden_distribution_entries():
+    session = _FakeAsyncSession()
+    with patch(
+        "bisheng.knowledge.domain.models.knowledge_space_file.get_async_db_session",
+        return_value=session,
+    ):
+        await SpaceFileDao.async_list_children(
+            knowledge_id=1,
+            parent_id=None,
+            page=1,
+            page_size=10,
+        )
+
+    sql = _compile_sql(session.statement)
+    assert "reference_document_id IS NULL" in sql
+    assert "entry_status = 'active'" in sql
+    assert "entry_type != 'projection_tombstone'" in sql

@@ -29,7 +29,11 @@ from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.cache.utils import save_uploaded_file
 from bisheng.core.logger import trace_id_var
 from bisheng.database.models.role_access import AccessType, WebMenuResource
-from bisheng.knowledge.api.dependencies import get_knowledge_service, get_knowledge_file_service
+from bisheng.knowledge.api.dependencies import (
+    get_knowledge_file_service,
+    get_knowledge_service,
+    get_knowledge_space_service,
+)
 from bisheng.knowledge.domain.models.knowledge import (KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum,
                                                        KnowledgeUpdate)
 from bisheng.knowledge.domain.models.knowledge import KnowledgeState
@@ -230,9 +234,16 @@ async def process_knowledge_file(*,
 async def rebuild_knowledge_file(*,
                                  request: Request,
                                  login_user: UserPayload = Depends(UserPayload.get_login_user),
-                                 req_data: KnowledgeFileReProcess):
+                                 req_data: KnowledgeFileReProcess,
+                                 knowledge_space_service=Depends(
+                                     get_knowledge_space_service
+                                 )):
     """ Reprocessing Knowledge Base Files """
 
+    await knowledge_space_service.require_rebuild_content_manager(
+        space_id=int(req_data.knowledge_id),
+        file_id=int(req_data.kb_file_id),
+    )
     res = await KnowledgeService.rebuild_knowledge_file(request, login_user, req_data)
     return resp_200(res)
 

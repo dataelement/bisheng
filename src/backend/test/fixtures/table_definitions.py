@@ -195,6 +195,7 @@ CREATE TABLE IF NOT EXISTS knowledge (
     auto_tag_enabled INTEGER NOT NULL DEFAULT 0,
     auto_tag_library_id INTEGER,
     business_domain_codes JSON,
+    sort_weight INTEGER,
     metadata_fields JSON,
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
@@ -320,6 +321,7 @@ CREATE TABLE IF NOT EXISTS knowledgefile (
     knowledge_id INTEGER NOT NULL,
     thumbnails VARCHAR(512),
     file_name VARCHAR(200) NOT NULL,
+    alias_name VARCHAR(200),
     file_type INTEGER DEFAULT 1,
     file_source VARCHAR(32),
     level INTEGER DEFAULT 0,
@@ -342,6 +344,24 @@ CREATE TABLE IF NOT EXISTS knowledgefile (
     similar_status INTEGER NOT NULL DEFAULT 0,
     updater_id INTEGER,
     updater_name VARCHAR(255),
+    reference_document_id INTEGER,
+    entry_type VARCHAR(24),
+    entry_status VARCHAR(16),
+    predecessor_logic_file_id INTEGER,
+    share_source_file_id INTEGER,
+    allow_download INTEGER NOT NULL DEFAULT 0,
+    approval_instance_id INTEGER,
+    projection_previous_file_id INTEGER,
+    desired_content_generation INTEGER NOT NULL DEFAULT 0,
+    applied_content_generation INTEGER NOT NULL DEFAULT 0,
+    desired_entry_generation INTEGER NOT NULL DEFAULT 0,
+    applied_entry_generation INTEGER NOT NULL DEFAULT 0,
+    projection_status VARCHAR(16) NOT NULL DEFAULT 'pending',
+    projection_retry_count INTEGER NOT NULL DEFAULT 0,
+    projection_next_retry_at DATETIME,
+    projection_lease_owner VARCHAR(64),
+    projection_lease_until DATETIME,
+    projection_last_error TEXT,
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
 )"""
@@ -349,10 +369,14 @@ CREATE TABLE IF NOT EXISTS knowledgefile (
 TABLE_KNOWLEDGE_DOCUMENT = """\
 CREATE TABLE IF NOT EXISTS knowledge_document (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id INTEGER NOT NULL,
     knowledge_id INTEGER NOT NULL,
     file_level_path VARCHAR(512),
     level INTEGER DEFAULT 0,
     primary_version_id INTEGER,
+    predecessor_logic_file_id INTEGER,
+    content_generation INTEGER NOT NULL DEFAULT 0,
+    lifecycle_status VARCHAR(16) NOT NULL DEFAULT 'active',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
 )"""
@@ -366,7 +390,8 @@ CREATE TABLE IF NOT EXISTS knowledge_document_version (
     is_primary INTEGER NOT NULL DEFAULT 0,
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    CONSTRAINT uk_kdv_document_version UNIQUE (document_id, version_no)
+    CONSTRAINT uk_kdv_document_version UNIQUE (document_id, version_no),
+    CONSTRAINT uk_kdv_knowledge_file UNIQUE (knowledge_file_id)
 )"""
 
 TABLE_KNOWLEDGE_FILE_SIMILARITY_CANDIDATE = """\
