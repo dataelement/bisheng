@@ -12,7 +12,7 @@ from bisheng.dictionary.domain.schemas.dictionary_schema import (
 )
 from bisheng.dictionary.domain.services.dictionary_service import DictionaryService
 
-router = APIRouter(prefix="", tags=["Dictionary"])
+router = APIRouter(tags=["Dictionary"])
 
 
 @router.post("", response_model=DictionaryResponse)
