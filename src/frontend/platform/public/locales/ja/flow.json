@@ -238,6 +238,8 @@
   "allTypes": "すべてのタイプ",
   "document": "ドキュメント",
   "image": "画像",
+  "media": "音声/動画",
+  "noFileTypesSelected": "ファイルタイプ未選択",
   "enterValidNumber": "有効な数字を入力してください",
   "numberExceedsMaxLimit": "数字は最大で32ビットの整数（2の32乗）を超えてはいけません",
   "unknownKnowledgeBase": "未知の知識ベース",

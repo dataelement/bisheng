@@ -34,6 +34,7 @@ import {
 import { copyText, cn } from "~/utils";
 import type { AgentEvent, ChatMessage } from "~/api/chatApi";
 import { getFileTypebyFileName } from "~/components/ui/icon/File/FileIcon";
+import { MediaAttachmentChip, isMediaChipFile } from "~/components/Chat/attachments/MediaAttachmentChip";
 
 // Transient/retryable backend error codes surfaced by daily-mode chat — LLM rate
 // limit (12046), generic busy (429/503), thread-pool full (10540), dept concurrency
@@ -111,6 +112,15 @@ function UploadedFileList({ files }: { files: any[] }) {
         >
             {files.map((file, i) => {
                 const fileName = file.name || file.file_name || "File";
+                if (isMediaChipFile(file)) {
+                    return (
+                        <MediaAttachmentChip
+                            key={i}
+                            file={file}
+                            variant="message"
+                        />
+                    );
+                }
                 const fileType = getFileTypebyFileName(fileName);
                 const FileTypeIcon = FILE_TYPE_ICONS[fileType] ?? Outlined.File;
                 return (

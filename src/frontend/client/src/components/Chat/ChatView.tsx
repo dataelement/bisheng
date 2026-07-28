@@ -184,6 +184,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
     title: chatTitle,
     isLoading,
     isStreaming,
+    isParsingMedia,
     sendMessage,
     stopGenerating,
     regenerate,
@@ -688,6 +689,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                               disabled={!bsConfig?.models?.length || !!shareToken}
                               sendDisabled={taskRunning}
                               isStreaming={isStreaming}
+                              isParsingMedia={isParsingMedia}
                               // Parked awaiting the user → not "running": drop the Stop
                               // button (sendDisabled still blocks a new round until the
                               // current one resolves). The user replies via the
@@ -864,6 +866,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                             disabled={!bsConfig?.models?.length || !!shareToken}
                             sendDisabled={taskRunning}
                             isStreaming={isStreaming}
+                            isParsingMedia={isParsingMedia}
                             features={{ taskModeEntry: canUseTaskMode, taskMode: taskMode && canUseTaskMode }}
                             onToggleTaskMode={() => setTaskMode((v) => !v)}
                             placeholder={taskMode

@@ -14,7 +14,7 @@ import {
 } from "react";
 import { useNavigate } from "react-router-dom";
 import { useRecoilValue, useRecoilState } from "recoil";
-import { File_Accept } from "~/common";
+import { buildChatAccept } from "~/common/chatAccept";
 import { SkillSelector } from "~/components/Linsight/Input/SkillSelector";
 import { taskModeSkillsState } from "~/store/linsight";
 import AgentToolSelector from "~/components/Chat/Input/AgentToolSelector";
@@ -29,7 +29,9 @@ import { Button, TextareaAutosize } from "~/components/ui";
 import SpeechToTextComponent from "~/components/Voice/SpeechToText";
 import { useContainerCompact, TOOLBAR_COMPACT_THRESHOLD } from "~/hooks";
 import { useGetWorkbenchModelsQuery } from "~/hooks/queries/data-provider";
+import useLocalize from "~/hooks/useLocalize";
 import InputFiles from "~/pages/appChat/components/InputFiles";
+import { resolveUploadSizeLimits } from "~/pages/knowledge/knowledgeUtils";
 import { useFileDropAndPaste } from "~/pages/appChat/useFileDropAndPaste";
 import { bishengConfState } from "~/pages/appChat/store/atoms";
 import { checkIfScrollable, cn, removeFocusRings } from "~/utils";
@@ -59,6 +61,8 @@ interface AiChatInputProps {
      */
     sendDisabled?: boolean;
     isStreaming?: boolean;
+    /** True while backend ASR is processing attached media after send. */
+    isParsingMedia?: boolean;
     /**
      * F035: a linsight task round is executing. The handoff SSE stream already
      * closed (so ``isStreaming`` is false), but the task keeps running via the
@@ -117,6 +121,7 @@ const AiChatInput = memo(
         disabled = false,
         sendDisabled = false,
         isStreaming = false,
+        isParsingMedia = false,
         taskRunning = false,
         modelOptions,
         modelValue,
@@ -138,6 +143,7 @@ const AiChatInput = memo(
         onSelectionPresenceChange,
         onToggleTaskMode,
     }: AiChatInputProps) => {
+        const localize = useLocalize();
         const {
             modelSelect = true,
             knowledgeBase = true,
@@ -233,7 +239,12 @@ const AiChatInput = memo(
         // File upload state
         const [fileUploading, setFileUploading] = useState(false);
         const [chatFiles, setChatFiles] = useState<any[] | null>(null);
-        const [uploadingFiles, setUploadingFiles] = useState<Array<{ id: string; name: string }>>([]);
+        const [uploadingFiles, setUploadingFiles] = useState<Array<{
+            id: string;
+            name: string;
+            mediaPreviewUrl?: string;
+            mediaDurationSec?: number;
+        }>>([]);
         const inputFilesRef = useRef<any>(null);
 
         // Voice input: check if ASR model is available
@@ -274,7 +285,7 @@ const AiChatInput = memo(
 
         const handleSend = useCallback(() => {
             const trimmed = text.trim();
-            if ((!trimmed && !chatFiles?.length) || disabled || sendDisabled || isStreaming || fileUploading) return;
+            if ((!trimmed && !chatFiles?.length) || disabled || sendDisabled || isStreaming || isParsingMedia || fileUploading) return;
             // Pass files through to parent
             onSend(trimmed, chatFiles);
             setText("");
@@ -291,7 +302,7 @@ const AiChatInput = memo(
                 window.clearTimeout(textareaScrollHideTimerRef.current);
                 textareaScrollHideTimerRef.current = null;
             }
-        }, [text, disabled, sendDisabled, isStreaming, fileUploading, onSend, chatFiles, setText]);
+        }, [text, disabled, sendDisabled, isStreaming, isParsingMedia, fileUploading, onSend, chatFiles, setText]);
 
         const handleKeyDown = useCallback(
             (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -375,10 +386,11 @@ const AiChatInput = memo(
                         "+" menu; keep the picker trigger hidden here. */}
                     {showUpload && (() => {
                         const InputFilesAny = InputFiles as any;
-                        const baseAccept = bsConfig?.enable_etl4lm ? File_Accept.Linsight_Etl4lm : File_Accept.Linsight;
-                        // Workstation (daily) chat also accepts OFD. Linsight shares this
-                        // enum but is out of scope, so only extend the non-Lingsi path.
-                        const accept = isLingsi ? baseAccept : `${baseAccept},.ofd`;
+                        const accept = buildChatAccept({
+                            enableMedia: !!envConfig?.enable_media_upload,
+                            enableEtl4lm: !!bsConfig?.enable_etl4lm,
+                            includeOfd: !isLingsi,
+                        });
                         return <InputFilesAny
                             ref={inputFilesRef}
                             v={""}
@@ -388,11 +400,17 @@ const AiChatInput = memo(
                             hideTrigger
                             hideList
                             uploadMode={isLingsi ? 'linsight' : 'workstation'}
+                            uploadSizeLimits={resolveUploadSizeLimits(envConfig)}
                             size={envConfig?.uploaded_files_maximum_size || 50}
                             onFilesStateChange={(currentFiles: any[] = []) => {
                                 const pending = currentFiles
                                     .filter((f) => f?.isUploading)
-                                    .map((f) => ({ id: String(f.id), name: String(f.name || "") }));
+                                    .map((f) => ({
+                                        id: String(f.id),
+                                        name: String(f.name || ""),
+                                        ...(f.mediaPreviewUrl ? { mediaPreviewUrl: f.mediaPreviewUrl } : {}),
+                                        ...(f.mediaDurationSec != null ? { mediaDurationSec: f.mediaDurationSec } : {}),
+                                    }));
                                 setUploadingFiles(pending);
                             }}
                             onChange={(files: any) => {
@@ -417,7 +435,7 @@ const AiChatInput = memo(
                         onPaste={handlePaste}
                         onScroll={handleTextareaScroll}
                         onHeightChange={updateTextareaScrollable}
-                        disabled={disabled || isStreaming}
+                        disabled={disabled || isStreaming || isParsingMedia}
                         placeholder={placeholder || bsConfig?.inputPlaceholder}
                         tabIndex={0}
                         data-testid="ai-chat-input"
@@ -593,9 +611,10 @@ const AiChatInput = memo(
                                     type="button"
                                     onClick={handleSend}
                                     disabled={
-                                        !text?.trim() ||
+                                        (!text?.trim() && !chatFiles?.length) ||
                                         disabled ||
                                         sendDisabled ||
+                                        isParsingMedia ||
                                         fileUploading
                                     }
                                     className="btn-brand-primary flex h-8 w-8 items-center justify-center rounded-full bg-primary text-text-primary outline-offset-4 transition-all duration-200 disabled:cursor-not-allowed disabled:bg-[#E5E6EB] disabled:text-[#86909C] disabled:opacity-100 [&>svg]:text-white disabled:[&>svg]:text-[#4E5969]"
@@ -607,6 +626,11 @@ const AiChatInput = memo(
                             )}
                         </div>
                     </div>
+                    {isParsingMedia && (
+                        <p className="px-4 pb-1 text-center text-xs text-primary">
+                            {localize('com_chat.media_parsing')}
+                        </p>
+                    )}
                 </div>
             </div>
         );

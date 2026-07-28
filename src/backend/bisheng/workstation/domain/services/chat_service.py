@@ -16,7 +16,9 @@ from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTe
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import ServerError
-from bisheng.common.errcode.knowledge import KnowledgeFileNotSupportedError
+from bisheng.common.errcode.knowledge import (
+    KnowledgeFileNotSupportedError,
+)
 from bisheng.common.errcode.workstation import (
     ConversationNotFoundError,
     DepartmentDailyChatConcurrentLimitError,
@@ -75,6 +77,12 @@ async def get_file_content(filepath_local: str, file_name: str, invoke_user_id: 
         raw_texts = [doc.page_content for doc in result.documents]
     except KnowledgeFileNotSupportedError:
         raw_texts = []
+    except (
+        NoAsrModelConfigError,
+        KnowledgeMediaTranscriptionError,
+        KnowledgeMediaNoRecognizableAudioError,
+    ):
+        raise
     return knowledge_imp.KnowledgeUtils.chunk2promt("".join(raw_texts), {"source": file_name})
 
 

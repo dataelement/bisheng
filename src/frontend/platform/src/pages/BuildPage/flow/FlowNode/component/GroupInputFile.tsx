@@ -4,6 +4,7 @@ import { WorkflowNode } from "@/types/flow"
 import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import FileTypeSelect from "./FileTypeSelect"
+import { normalizeFileAccept, type UploadFileKind } from "@/util/fileAcceptUtils"
 import InputItem from "./InputItem"
 import { Label } from "@/components/bs-ui/label"
 import { Badge } from "@/components/bs-ui/badge"
@@ -59,17 +60,19 @@ export default function GroupInputFile({ nodeId, node, cate, tab,
     const parsemodeItem = useMemo(() => cate.params.find(item => item.key === 'file_parse_mode'), [cate.params])
 
     const [open, setOpen] = useState(titleItem.value ?? false)
-    const [selectedFileType, setSelectedFileType] = useState<string>(fileTypeItem?.value ?? 'all')
+    const [selectedKinds, setSelectedKinds] = useState<UploadFileKind[]>(() =>
+        normalizeFileAccept(fileTypeItem?.value ?? 'all'),
+    )
     const [mode, setMode] = useState<FileParseMode>(() => toMode(parsemodeItem?.value))
 
     useEffect(() => {
-        setSelectedFileType(fileTypeItem?.value ?? 'all')
+        setSelectedKinds(normalizeFileAccept(fileTypeItem?.value ?? 'all'))
         setMode(toMode(parsemodeItem?.value))
     }, [fileTypeItem, parsemodeItem])
 
     // Unified variable rule: path always; image when upload type allows; content when parsing.
     const isExtract = mode === FileParseMode.ExtractText
-    const showImage = selectedFileType !== 'file' // 'file' = document-only
+    const showImage = selectedKinds.includes('image')
 
     const handleStrategyChange = (value: FileParseMode) => {
         setMode(value)
@@ -80,12 +83,12 @@ export default function GroupInputFile({ nodeId, node, cate, tab,
         onFouceUpdate?.()
     }
 
-    const handleFileTypeChange = (val: string) => {
-        setSelectedFileType(val)
+    const handleFileTypeChange = (val: UploadFileKind[]) => {
+        setSelectedKinds(val)
         if (fileTypeItem) fileTypeItem.value = val
         if (imageFileItem) {
-            imageFileItem.hidden = val === 'file'
-            if (val === 'file') imageFileItem.value = {}
+            imageFileItem.hidden = !val.includes('image')
+            if (!val.includes('image')) imageFileItem.value = {}
         }
         onFouceUpdate?.()
     }

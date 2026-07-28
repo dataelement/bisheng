@@ -15,7 +15,9 @@ import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 're
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useRecoilState, useRecoilValue } from 'recoil';
 import { checkFileParseStatus } from '~/api/linsight';
-import { File_Accept, NotificationSeverity } from '~/common';
+import { buildChatAccept } from '~/common/chatAccept';
+import { NotificationSeverity } from '~/common';
+import { resolveUploadSizeLimits } from '~/pages/knowledge/knowledgeUtils';
 import DragDropOverlay from '~/components/Chat/Input/Files/DragDropOverlay';
 import { TextareaAutosize } from '~/components/ui';
 import {
@@ -275,7 +277,11 @@ export function TaskModeInput({ conversationId = 'new', disabled = false, onFoll
     };
 
     const hasText = !!text.trim();
-    const accept = (bsConfig as any)?.enable_etl4lm ? File_Accept.Linsight_Etl4lm : File_Accept.Linsight;
+    const accept = buildChatAccept({
+        enableMedia: !!(envConfig as any)?.enable_media_upload,
+        enableEtl4lm: !!(bsConfig as any)?.enable_etl4lm,
+        includeOfd: false,
+    });
     const InputFilesAny = InputFiles as any;
 
     return (
@@ -291,6 +297,7 @@ export function TaskModeInput({ conversationId = 'new', disabled = false, onFoll
                     hideTrigger
                     hideList
                     uploadMode="linsight"
+                    uploadSizeLimits={resolveUploadSizeLimits(envConfig as any)}
                     size={(envConfig as any)?.uploaded_files_maximum_size || 50}
                     onFilesStateChange={(currentFiles: any[] = []) => {
                         setUploadingFiles(

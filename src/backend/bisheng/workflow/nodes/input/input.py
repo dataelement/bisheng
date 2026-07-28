@@ -29,6 +29,9 @@ class ParseModeEnum(str, Enum):
     INGEST_TO_KNOWLEDGE_BASE = "ingest_to_temp_kb"
 
 
+MAX_MEDIA_FILES_PER_VARIABLE = 5
+
+
 class InputNode(BaseNode):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -151,6 +154,26 @@ class InputNode(BaseNode):
         )
 
     @staticmethod
+    def _accepts_image(file_type) -> bool:
+        """dialog_file_accept: legacy string ('all'/'image') and new array ['image', ...]."""
+        if isinstance(file_type, (list, tuple, set)):
+            return "image" in file_type
+        return file_type in ("image", "all")
+
+    @staticmethod
+    def _count_media_files(file_urls: list[str]) -> int:
+        count = 0
+        for one_file_url in file_urls:
+            if not one_file_url:
+                continue
+            url_obj = urlparse(one_file_url)
+            file_name = unquote(url_obj.path.split("/")[-1])
+            file_name = KnowledgeService.get_upload_file_original_name(file_name)
+            if is_media_filename(file_name):
+                count += 1
+        return count
+
+    @staticmethod
     def _modes_for_file(file_parse_mode, file_kind: str) -> set:
         """Resolve the set of parse modes applying to a single uploaded file (F038).
 
@@ -180,7 +203,8 @@ class InputNode(BaseNode):
         if isinstance(file_parse_mode, dict):
             doc_mode = file_parse_mode.get("doc")
             image_mode = file_parse_mode.get("image")
-            active = {m for m in (doc_mode, image_mode) if m}
+            media_mode = file_parse_mode.get("media")
+            active = {m for m in (doc_mode, image_mode, media_mode) if m}
             return active, image_mode == ParseModeEnum.KEEP_RAW.value
         if isinstance(file_parse_mode, (list, tuple, set)):
             active = {m for m in file_parse_mode if m}
@@ -213,7 +237,7 @@ class InputNode(BaseNode):
         # raw file path — always exposed
         ret[key_info["file_path"]] = key_value.get(key_info["file_path"], [])
         # image variable — driven by upload type only, not by the strategy
-        if key_info.get("file_type") in ["image", "all"]:
+        if self._accepts_image(key_info.get("file_type")):
             ret[key_info["image_file"]] = key_value.get(key_info["image_file"], [])
         # parsed content — when the strategy parses
         if ParseModeEnum.EXTRACT_TEXT.value in active:
@@ -350,6 +374,10 @@ class InputNode(BaseNode):
         file_parse_mode = key_info.get("file_parse_mode")
         file_content_max_size = int(key_info.get("file_content_size", 15000))
 
+        media_count = self._count_media_files(value)
+        if media_count > MAX_MEDIA_FILES_PER_VARIABLE:
+            raise WorkflowMediaFileCountLimitError()
+
         file_id = generate_uuid()
 
         file_content_length = 0
@@ -376,7 +404,12 @@ class InputNode(BaseNode):
             )
 
             file_ext = file_name.split(".")[-1].lower()
-            file_kind = "image" if file_ext in self._image_ext else "doc"
+            if file_ext in self._image_ext:
+                file_kind = "image"
+            elif is_media_filename(file_name):
+                file_kind = "media"
+            else:
+                file_kind = "doc"
             modes = self._modes_for_file(file_parse_mode, file_kind)
             logger.debug(f"{self.id}.{key} modes for {file_name} is {modes}")
             original_file_path.append(one_file_url)

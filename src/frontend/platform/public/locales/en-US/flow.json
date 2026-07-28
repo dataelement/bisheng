@@ -238,6 +238,8 @@
   "allTypes": "All Types",
   "document": "Document",
   "image": "Image",
+  "media": "Audio/Video",
+  "noFileTypesSelected": "No file types selected",
   "enterValidNumber": "Please enter a valid number",
   "numberExceedsMaxLimit": "The number cannot exceed 2 to the power of 32.",
   "unknownKnowledgeBase": "Unknown Knowledge Base",

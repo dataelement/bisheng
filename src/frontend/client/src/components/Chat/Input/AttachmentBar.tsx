@@ -27,6 +27,7 @@ import BooksIcon from "~/components/ui/icon/Books";
 import type { FileType } from "~/components/ui/icon/File/FileIcon";
 import { OGDialog, OGDialogContent } from "~/components/ui";
 import { cn } from "~/utils";
+import { isMediaChipFile, MediaAttachmentChip } from "~/components/Chat/attachments/MediaAttachmentChip";
 
 /** Fixed card geometry from the design (Figma 12841:47405). */
 const CARD_WIDTH = 148;
@@ -123,6 +124,16 @@ const KbCard = ({ kb, onRemove }: { kb: any; onRemove?: () => void }) => (
 );
 
 const FileCard = ({ file, onRemove }: { file: any; onRemove?: () => void }) => {
+    if (isMediaChipFile(file)) {
+        return (
+            <MediaAttachmentChip
+                file={file}
+                onRemove={onRemove}
+                variant="bar"
+            />
+        );
+    }
+
     const FileTypeIcon = CHIP_FILE_ICONS[resolveFileType(file)] ?? Outlined.File;
     // Locally-generated preview URL for pasted / uploaded images. When present the
     // chip shows a thumbnail and opens a full-size preview on click.
@@ -178,9 +189,17 @@ const SkillCard = ({ skill, onRemove }: { skill: any; onRemove?: () => void }) =
     />
 );
 
-const UploadingCard = ({ name }: { name: string }) => (
-    <CardShell icon={<Loader2 className="size-4 animate-spin" />} label={name} />
-);
+const UploadingCard = ({ name, file }: { name: string; file?: any }) => {
+    if (file && isMediaChipFile({ name: file.name || name, ...file })) {
+        return (
+            <MediaAttachmentChip
+                file={{ name, isUploading: true, ...file }}
+                variant="bar"
+            />
+        );
+    }
+    return <CardShell icon={<Loader2 className="size-4 animate-spin" />} label={name} />;
+};
 
 const ArrowButton = ({
     direction,
@@ -208,7 +227,12 @@ const ArrowButton = ({
 };
 
 interface AttachmentBarProps {
-    uploadingFiles: Array<{ id: string; name: string }>;
+    uploadingFiles: Array<{
+        id: string;
+        name: string;
+        mediaPreviewUrl?: string;
+        mediaDurationSec?: number;
+    }>;
     files: any[];
     kbs: any[];
     skills: any[];
@@ -218,7 +242,7 @@ interface AttachmentBarProps {
 }
 
 type Entry =
-    | { kind: "uploading"; key: string; data: { id: string; name: string } }
+    | { kind: "uploading"; key: string; data: AttachmentBarProps['uploadingFiles'][number] }
     | { kind: "file"; key: string; data: any }
     | { kind: "kb"; key: string; data: any }
     | { kind: "skill"; key: string; data: any };
@@ -316,7 +340,13 @@ export const AttachmentBar = ({
                         {entries.map((entry) => {
                             switch (entry.kind) {
                                 case "uploading":
-                                    return <UploadingCard key={entry.key} name={entry.data.name} />;
+                                    return (
+                                        <UploadingCard
+                                            key={entry.key}
+                                            name={entry.data.name}
+                                            file={entry.data}
+                                        />
+                                    );
                                 case "file":
                                     return (
                                         <FileCard

@@ -11,7 +11,7 @@ import {
 import { LoadingIcon } from "~/components/ui/icon/Loading";
 import { useMessageSelection } from "~/hooks/useMessageSelection";
 import { cn, copyText, formatStrTime } from "~/utils";
-import ChatFile from "./ChatFile";
+import { AppChatFileChip } from "./AppChatFileChip";
 import MessageButtons from "./MessageButtons";
 import useLocalize from "~/hooks/useLocalize";
 
@@ -144,7 +144,13 @@ export default function MessageBs({
                                             onOpenCitationPanel={onOpenCitationPanel}
                                         />
                                     </div>}
-                                    {data.files.length > 0 && data.files.map(file => <ChatFile key={file.path} fileName={file.name} filePath={file.path} />)}
+                                    {data.files.length > 0 && (
+                                        <div className="mt-2 flex flex-col gap-2">
+                                            {data.files.map((file, index) => (
+                                                <AppChatFileChip key={index} file={file} variant="message" />
+                                            ))}
+                                        </div>
+                                    )}
                                     {/* @user */}
                                     {data.receiver && <p className="text-blue-500 text-sm">@ {data.receiver.user_name}</p>}
                                 </div>

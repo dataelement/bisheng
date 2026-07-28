@@ -464,7 +464,6 @@ dependencies = [
     { name = "sqlmodel" },
     { name = "supabase" },
     { name = "sympy" },
-    { name = "sync" },
     { name = "tabulate" },
     { name = "transformers" },
     { name = "uvicorn" },
@@ -575,7 +574,6 @@ requires-dist = [
     { name = "sqlmodel", specifier = ">=0.0.27" },
     { name = "supabase", specifier = ">=2.23.3" },
     { name = "sympy", specifier = ">=1.14.0" },
-    { name = "sync", specifier = ">=1.0.0" },
     { name = "tabulate", specifier = "==0.9.0" },
     { name = "transformers", specifier = "==4.57.1" },
     { name = "uvicorn", specifier = ">=0.38.0" },
@@ -6036,12 +6034,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/83/d3/803453b36afefb7c2
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a2/09/77d55d46fd61b4a135c444fc97158ef34a095e5681d0a6c10b75bf356191/sympy-1.14.0-py3-none-any.whl", hash = "sha256:e091cc3e99d2141a0ba2847328f5479b05d94a6635cb96148ccb3f34671bd8f5", size = 6299353, upload-time = "2025-04-27T18:04:59.103Z" },
 ]
-
-[[package]]
-name = "sync"
-version = "1.0.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/89/72/60d97fe2f6b74993230148bc25106569c6e8ed5292eab46f5f917d120b82/sync-1.0.0.zip", hash = "sha256:9f8e9a5c89dec5e82efaa2ae64a8c6f63690a3c4f4d5f0f84660202306ea078e", size = 6388, upload-time = "2014-12-14T05:42:39.238Z" }
 
 [[package]]
 name = "tabulate"

@@ -48,8 +48,6 @@ import { KnowledgeSpaceShareDialog } from "./SpaceDetail/KnowledgeSpaceShareDial
 import { LoadingIcon } from "~/components/ui/icon/Loading";
 import { bishengConfState } from "~/pages/appChat/store/atoms";
 import { resolveUploadSizeLimits } from "./knowledgeUtils";
-import { knowledgeUploadCapabilities } from "./knowledgeUploadCapabilities";
-
 export default function Knowledge() {
     const localize = useLocalize();
     const bishengConfig = useRecoilValue(bishengConfState);
@@ -720,7 +718,7 @@ export default function Knowledge() {
                             <p>{localize("com_knowledge.format_list")}</p>
                             <p>
                                 {localize(
-                                    knowledgeUploadCapabilities.media
+                                    bishengConfig?.enable_media_upload
                                         ? "com_knowledge.upload_size_limits_hint"
                                         : "com_knowledge.upload_size_limit_hint_without_media",
                                     {

@@ -22,6 +22,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip
 import { CopyShareLinkButton } from "~/components/CopyShareLinkButton";
 import { useLocalize, useMediaQuery, usePrefersMobileLayout } from "~/hooks";
 import { knowledgeUploadCapabilities } from "../knowledgeUploadCapabilities";
+import { useRecoilValue } from "recoil";
+import { bishengConfState } from "~/pages/appChat/store/atoms";
 
 interface KnowledgeSpaceHeaderProps {
     space: KnowledgeSpace;
@@ -113,6 +115,7 @@ export function KnowledgeSpaceHeader({
     canManageMembers = false,
 }: KnowledgeSpaceHeaderProps) {
     const localize = useLocalize();
+    const bishengConfig = useRecoilValue(bishengConfState);
     const isH5 = usePrefersMobileLayout();
     const isNarrow576 = useMediaQuery("(max-width: 576px)");
 
@@ -354,7 +357,7 @@ export function KnowledgeSpaceHeader({
                                                 className="z-[999] max-w-md bg-white px-3 py-2 text-sm text-[#4e5969] shadow-md"
                                             >
                                                 {localize(
-                                                    knowledgeUploadCapabilities.media
+                                                    bishengConfig?.enable_media_upload
                                                         ? "com_knowledge.upload_file_types_tip"
                                                         : "com_knowledge.upload_file_types_tip_without_media",
                                                 )}

@@ -1,5 +1,5 @@
 import { formatStrTime } from "~/utils"
-import ChatFile from "./ChatFile"
+import { AppChatFileChip } from "./AppChatFileChip"
 
 export default function MessageFile({ data, title, logo }) {
 
@@ -16,7 +16,11 @@ export default function MessageFile({ data, title, logo }) {
                     {logo}
                     <div>
                         <p className="select-none font-semibold text-base mb-2">{title}</p>
-                        <ChatFile fileName={data.files[0]?.file_name} filePath={data.files[0]?.file_url} />
+                        <div className="flex flex-col gap-2">
+                            {data.files.map((file, index) => (
+                                <AppChatFileChip key={index} file={file} variant="message" />
+                            ))}
+                        </div>
                     </div>
                 </div>
             </div>
