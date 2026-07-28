@@ -64,6 +64,7 @@ _RESOURCE_COUNT_TEMPLATES: dict[str, str] = {
     "knowledge_space_file": (
         "SELECT COALESCE(SUM(file_size), 0) FROM knowledgefile "
         "WHERE {col}=:{param} AND file_source IN ('channel','space_upload') "
+        "AND deleted_at IS NULL "
         "AND COALESCE(entry_type, '') NOT IN "
         "('publish','share','projection_tombstone')"
     ),
@@ -89,6 +90,7 @@ _RESOURCE_COUNT_TEMPLATES: dict[str, str] = {
     "storage_gb": (
         "SELECT COALESCE(SUM(file_size), 0) FROM knowledgefile "
         "WHERE {col}=:{param} AND file_source IN ('channel','space_upload') "
+        "AND deleted_at IS NULL "
         "AND COALESCE(entry_type, '') NOT IN "
         "('publish','share','projection_tombstone')"
     ),

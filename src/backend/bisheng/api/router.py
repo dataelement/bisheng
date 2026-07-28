@@ -30,6 +30,7 @@ from bisheng.dictionary.api.router import router as dictionary_router
 from bisheng.finetune.api.finetune import router as finetune_router
 from bisheng.finetune.api.server import router as server_router
 from bisheng.knowledge.api.router import (
+    knowledge_recycle_router,
     knowledge_router,
     knowledge_space_router,
     knowledge_space_tag_library_router,
@@ -75,6 +76,7 @@ router.include_router(knowledge_space_tag_library_router)
 router.include_router(knowledge_space_router)
 router.include_router(shougang_portal_router)
 router.include_router(knowledge_version_router)
+router.include_router(knowledge_recycle_router)
 router.include_router(server_router)
 router.include_router(user_router)
 router.include_router(qa_router)

@@ -47,10 +47,10 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFileProjectionStatus,
     KnowledgeFileStatus,
 )
+from bisheng.knowledge.domain.models.knowledge_space_file import SpaceFileDao
 from bisheng.knowledge.domain.services.department_file_view_access_service import (
     DepartmentFileAccessStatus,
 )
-from bisheng.knowledge.domain.models.knowledge_space_file import SpaceFileDao
 from bisheng.knowledge.domain.services.tag_library_tag_service import TagLibraryTagService
 from bisheng.knowledge.rag.version_filter import build_primary_only_filter
 from bisheng.llm.domain import LLMService
@@ -535,6 +535,11 @@ class KnowledgeSpaceChatService:
         """
         # Fetch non-primary file ids once, used in both branches.
         excluded: list[int] = await self.version_repo.find_non_primary_file_ids_by_knowledge_ids([knowledge_id])
+        from bisheng.knowledge.domain.services.knowledge_recycle_service import KnowledgeRecycleService
+
+        recycled = await KnowledgeRecycleService.list_recycled_file_ids(knowledge_id)
+        if recycled:
+            excluded = list(dict.fromkeys([*excluded, *recycled]))
 
         if target_file_ids is None:
             # Branch A: whole-space query — apply not-in filter when exclusions exist.

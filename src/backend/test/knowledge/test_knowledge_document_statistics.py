@@ -74,9 +74,7 @@ async def test_domain_statistics_dedupe_entries_by_canonical_document():
         "bisheng.knowledge.domain.models.knowledge_file.get_async_db_session",
         return_value=session,
     ):
-        counts = await KnowledgeFileDao.async_count_files_by_domain_scopes(
-            {"QM": {1, 2}}
-        )
+        counts = await KnowledgeFileDao.async_count_files_by_domain_scopes({"QM": {1, 2}})
 
     assert counts == {"QM": 2}
     sql = _compile_sql(session.statement)
@@ -100,6 +98,24 @@ async def test_folder_entry_count_uses_active_inventory_predicate():
     assert "entry_status = 'active'" in sql
     assert "entry_type IN ('manager', 'publish', 'share')" in sql
     assert "knowledge_document_version.is_primary IS 0" in sql
+    assert "knowledgefile.deleted_at IS NULL" in sql
+
+
+@pytest.mark.asyncio
+async def test_active_inventory_predicate_excludes_soft_deleted():
+    from sqlalchemy.dialects import sqlite
+    from sqlmodel import select
+
+    from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile, KnowledgeFileDao
+
+    stmt = select(KnowledgeFile.id).where(KnowledgeFileDao.active_inventory_predicate())
+    sql = str(
+        stmt.compile(
+            dialect=sqlite.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
+    )
+    assert "knowledgefile.deleted_at IS NULL" in sql
 
 
 def test_capacity_queries_exclude_logic_entries():

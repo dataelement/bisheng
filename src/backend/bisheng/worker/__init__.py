@@ -42,6 +42,7 @@ from bisheng.worker.knowledge.portal_recommendation import (
 )
 from bisheng.worker.knowledge.qa import copy_qa_knowledge_celery, insert_qa_celery, rebuild_qa_knowledge_celery
 from bisheng.worker.knowledge.rebuild_knowledge_worker import rebuild_knowledge_celery, rebuild_knowledge_file_chunk
+from bisheng.worker.knowledge.recycle_bin import purge_expired_recycle_items_celery
 from bisheng.worker.knowledge.space_init_worker import (
     grant_knowledge_space_scope_permissions,
     init_knowledge_space_indices,
