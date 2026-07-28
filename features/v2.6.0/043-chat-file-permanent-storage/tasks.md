@@ -12,7 +12,7 @@
 | spec.md | ✅ 已评审 | 用户已确认（存量不可恢复 / 会话删除即清理 / 按需换发链接 / 三场景一并处理 / 对象名唯一化纳入范围） |
 | design.md | ✅ 已评审 | 用户已确认；接手时第一入口 |
 | tasks.md | ✅ 已拆解 | 方案调整后重排波次 |
-| 实现 | 🟡 进行中 | 9 / 14 完成（Wave 1-3 已完成）|
+| 实现 | 🟡 代码完成待验证 | 14 / 14 完成（需在有对象存储的环境人工验证）|
 
 ---
 
@@ -99,20 +99,20 @@
   **覆盖 AC**: AC-06, AC-07, AC-08, AC-09
   **依赖**: T007
 
-- [ ] **T010**: 两套消息渲染各自接入
+- [x] **T010**: 两套消息渲染各自接入
   **文件**: `src/frontend/client/src/components/Chat/AiMessageBubble.tsx`（日常 / 任务模式）
   `src/frontend/client/src/pages/appChat/components/MessageFile.tsx` / `ChatFile.tsx`（工作流会话）
   **逻辑**: 按文件名后缀分流（png/jpg/jpeg/gif/webp/bmp/svg → 图片组件，其余保持现状）。**这是两套独立渲染，必须都改**（design §5 坑 7）；文件名字段各入口键名不一，取值做兼容
   **覆盖 AC**: AC-05, AC-10, AC-11
   **依赖**: T009
 
-- [ ] **T012**: 失效占位组件（独立组件）
+- [x] **T012**: 失效占位组件（独立组件）
   **文件**: `src/frontend/client/src/components/Chat/Messages/Content/InvalidImagePlaceholder.tsx`（新建）
   **逻辑**: 浅灰圆角卡片，居中 `Outlined.FileImage`（bisheng-icons，已确认存在）+ 下方文字「图片已失效，无法查看」。尺寸与图片缩略图一致，避免消息布局跳动
   **覆盖 AC**: AC-09
   **依赖**: 无
 
-- [ ] **T011**: 失效占位文案 i18n
+- [x] **T011**: 失效占位文案 i18n
   **文件**: `src/frontend/client/src/locales/{en,zh-Hans,ja}/translation.json`
   **逻辑**: 「图片已失效，无法查看」三语（嵌套命名空间）
   **⚠️ 前车之鉴**: F044 曾把文案加错命名空间导致不生效——加完确认页面 `t()` 实际读的是哪个命名空间

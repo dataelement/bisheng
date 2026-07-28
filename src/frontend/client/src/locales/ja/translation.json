@@ -182,6 +182,7 @@
   "com_bschoose_confirm": "確認",
   "com_bschoose_confirmed": "確認済み",
   "com_case_featured": "$t(linsight) 厳選ケース",
+  "com_chat_image_expired": "画像は無効になり、表示できません",
   "com_chat_knowledge_empty_no_org_kbs": "組織ナレッジベースはありません",
   "com_chat_knowledge_empty_no_spaces": "ナレッジスペースはありません",
   "com_chat_knowledge_placeholder_search_space": "ナレッジスペース名で検索",

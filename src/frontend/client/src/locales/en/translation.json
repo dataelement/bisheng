@@ -190,6 +190,7 @@
   "com_bschoose_confirm": "Confirm",
   "com_bschoose_confirmed": "Confirmed",
   "com_case_featured": "$t(linsight) Featured cases",
+  "com_chat_image_expired": "Image is no longer available",
   "com_chat_knowledge_empty_no_org_kbs": "No organization knowledge bases",
   "com_chat_knowledge_empty_no_spaces": "No knowledge spaces",
   "com_chat_knowledge_placeholder_search_space": "Search knowledge spaces by name",

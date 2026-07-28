@@ -33,7 +33,8 @@ import {
 } from "~/components/Chat/MessageSelection";
 import { copyText, cn } from "~/utils";
 import type { AgentEvent, ChatMessage } from "~/api/chatApi";
-import { getFileTypebyFileName } from "~/components/ui/icon/File/FileIcon";
+import { getFileTypebyFileName, isImageFileName } from "~/components/ui/icon/File/FileIcon";
+import { MessageImage } from "~/components/Chat/Messages/Content/MessageImage";
 
 // Transient/retryable backend error codes surfaced by daily-mode chat — LLM rate
 // limit (12046), generic busy (429/503), thread-pool full (10540), dept concurrency
@@ -76,7 +77,7 @@ const FILE_TYPE_ICONS: Record<string, typeof Outlined.File> = {
  * mask softly fades the top/bottom edge (instead of a hard clip) whenever there
  * is more content to scroll in that direction — same fade trick used elsewhere.
  */
-function UploadedFileList({ files }: { files: any[] }) {
+function UploadedFileList({ files, conversationId }: { files: any[]; conversationId?: string }) {
     const scrollRef = useRef<HTMLDivElement>(null);
     const [fade, setFade] = useState({ top: false, bottom: false });
 
@@ -102,29 +103,50 @@ function UploadedFileList({ files }: { files: any[] }) {
 
     if (!files || files.length === 0) return null;
 
+    // Pictures are shown as pictures; everything else keeps the compact
+    // icon+name row it always had.
+    const images = files.filter((f) => isImageFileName(f.name || f.file_name));
+    const others = files.filter((f) => !isImageFileName(f.name || f.file_name));
+
     return (
-        <div
-            ref={scrollRef}
-            onScroll={updateFade}
-            style={maskStyle}
-            className="scrollbar-os mb-2 mt-1 flex max-h-[120px] max-w-sm flex-col gap-3 overflow-y-auto"
-        >
-            {files.map((file, i) => {
-                const fileName = file.name || file.file_name || "File";
-                const fileType = getFileTypebyFileName(fileName);
-                const FileTypeIcon = FILE_TYPE_ICONS[fileType] ?? Outlined.File;
-                return (
-                    <div key={i} className="flex shrink-0 items-center gap-1 text-[#999999]">
-                        <FileTypeIcon size={12} className="shrink-0 text-[#CCCCCC]" />
-                        <div className="min-w-0 flex-1 overflow-hidden">
-                            <div className="truncate text-xs" title={fileName}>
-                                {fileName}
+        <>
+            {images.length > 0 && (
+                <div className="mb-2 mt-1 flex flex-wrap justify-end gap-2">
+                    {images.map((file, i) => (
+                        <MessageImage
+                            key={file.file_id ?? i}
+                            conversationId={conversationId}
+                            fileId={file.file_id}
+                            altText={file.name || file.file_name}
+                        />
+                    ))}
+                </div>
+            )}
+            {others.length > 0 && (
+                <div
+                    ref={scrollRef}
+                    onScroll={updateFade}
+                    style={maskStyle}
+                    className="scrollbar-os mb-2 mt-1 flex max-h-[120px] max-w-sm flex-col gap-3 overflow-y-auto"
+                >
+                    {others.map((file, i) => {
+                        const fileName = file.name || file.file_name || "File";
+                        const fileType = getFileTypebyFileName(fileName);
+                        const FileTypeIcon = FILE_TYPE_ICONS[fileType] ?? Outlined.File;
+                        return (
+                            <div key={i} className="flex shrink-0 items-center gap-1 text-[#999999]">
+                                <FileTypeIcon size={12} className="shrink-0 text-[#CCCCCC]" />
+                                <div className="min-w-0 flex-1 overflow-hidden">
+                                    <div className="truncate text-xs" title={fileName}>
+                                        {fileName}
+                                    </div>
+                                </div>
                             </div>
-                        </div>
-                    </div>
-                );
-            })}
-        </div>
+                        );
+                    })}
+                </div>
+            )}
+        </>
     );
 }
 
@@ -424,7 +446,7 @@ function UserBubble({
             <div className={cn("flex min-w-0 flex-col items-end touch-mobile:max-w-[calc(100%-40px)]", knowledgeChatLayout ? "max-w-[min(92%,56rem)]" : "max-w-[80%]")}>
                 {/* Uploaded files: icon + filename only (no preview), with soft fade
                     edges while scrolling so the 120px-clipped list never hard-cuts. */}
-                <UploadedFileList files={message.files || []} />
+                <UploadedFileList files={message.files || []} conversationId={message.conversationId} />
                 {/* min-w-0: without it this flex row's `min-width: auto` floors at
                     the URL's (unbreakable) min-content width, defeating the bubble's
                     max-width and letting long content overflow off the left edge. */}

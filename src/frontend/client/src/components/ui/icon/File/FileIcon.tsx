@@ -135,3 +135,11 @@ const getSizeClass = (size: 'sm' | 'md' | 'lg') => {
 export const getFileTypebyFileName = (fileName: string) => {
     return fileName ? fileName.split('.').pop()?.toLocaleLowerCase() as FileType : '';
 }
+// Whether an attachment should render as a picture. Judged by filename rather
+// than any stored MIME type: older messages don't carry one, and the upload
+// endpoints disagree on where they put it — the name is always there, and this
+// keeps the decision aligned with the icon shown for the same file.
+const IMAGE_FILE_TYPES = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg']);
+
+export const isImageFileName = (fileName?: string): boolean =>
+    IMAGE_FILE_TYPES.has(getFileTypebyFileName(fileName ?? ''));
