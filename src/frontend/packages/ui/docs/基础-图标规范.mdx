@@ -136,6 +136,24 @@ export const FigPixel = () => (
 
 export const iconLabel = { fontSize: 12, color: 'rgb(var(--text-3))' };
 
+export const DashCard = ({ dash, label, mark, markColor }) => (
+  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+    <svg width="112" height="112" viewBox="0 0 120 120" role="img" aria-label={label}>
+      <path d="M60 18 A42 42 0 0 0 60 102" style={{ fill: 'none', stroke: 'rgb(var(--text-2))', strokeWidth: 5, strokeLinecap: 'round' }} />
+      <path d="M60 18 A42 42 0 0 1 60 102" pathLength="100" style={{ fill: 'none', stroke: 'rgb(var(--text-2))', strokeWidth: 5, strokeLinecap: 'round', strokeDasharray: dash }} />
+      <path d="M53 46 L53 74 L78 60 Z" style={{ fill: 'rgb(var(--text-2))', strokeLinejoin: 'round' }} />
+    </svg>
+    <span style={iconLabel}>{label} <span style={{ color: markColor }}>{mark}</span></span>
+  </div>
+);
+
+export const FigDash = () => (
+  <Pair cap="同一个图标、同一显示尺寸，只有 dash/gap 值不同：在 24 下设=右半圈均匀 5 段；沿用大尺寸旧值=只剩 2 段挤在上方，下半圈空白"
+    a={<DashCard dash="10 10" label="dash 在 24 下设" mark="✓" markColor="#00b42a" />}
+    b={<DashCard dash="10 40" label="沿用大尺寸 dash" mark="✗" markColor="#f53f3f" />}
+  />
+);
+
 export const FigRhythm = () => (
   <div style={figRow}>
     <figure style={half}>
@@ -191,11 +209,18 @@ export const FigRhythm = () => (
 
 <FigPixel />
 
+- **虚线的 dash/gap 直接在 24×24 尺寸下设，别在大尺寸画完再缩小**：`stroke-dasharray` 的间距值不随图形缩放——图形缩 4 倍、dash/gap 还是原值，段数就少 4 倍、虚线变稀（PlaySpeed 曾因此右半圈从 5 段缩成 2 段、看着像没画）。
+
+<FigDash />
+
 - **形式与韵律**：图形从圆 / 方 / 三角基本形推导；同类图标构图一致（如一组文件图标共用同一外框）；圆角、点、线的规格在整套内克制复用，不逐个自造。
 
 <FigRhythm />
 
-- **输出卫生**：合并路径、删多余节点、拉平图层；`fill="none"` + `stroke="currentColor"`（Outlined），不留写死颜色（Colored 除外）。
+- **输出卫生**：如下规范
+  - 合并路径、删多余节点、拉平图层。
+  - 描边 `fill="none"` + `stroke="currentColor"`（Outlined），不留写死颜色（Colored 除外）。
+  - **不使用 mask**：图形一律用路径 / 描边直接表达；`mask`（及 `clipPath`）依赖唯一 id，多个图标同页内联时 id 易冲突，且会干扰 `currentColor` 着色与自动生成流程。
 - **命名**：如下规范
   - 英文用 **大驼峰（PascalCase）命名法**，`Square`、`Circle` 等区分字段作后缀。
   - **按语义不按形状**命名（`Delete` 而非 `Trash2`），同语义不造近义重复图标。
@@ -316,4 +341,5 @@ X 20 · Plus 11 · ChevronLeft 10 · Check 10 · Search 9 · ChevronDown 7 · Li
 | 2026-07-21 | 成对图统一「两等宽半栏各自居中」模板（新增 half 列容器 + Pair 组件），上下 6 组左右列垂直对齐；「形式与韵律」右侧改用真实 File/FileImage/FileWord（共用文件外框最真实的例子），「命名」两例改用真实 Delete 图标——首次在规范 mdx 内嵌 bisheng-icons，rspress.config 加 `bisheng-icons` alias（**唯一进仓库的改动**） | 本文件、rspress.config.ts | rspress.config 提交 / 本文件不提交 |
 | 2026-07-21 | Kinyoo 定：删「视觉平衡」整点（文本+插图+FigBalance 组件全删）；「命名」去插图（删 FigNaming/NameCard），正文改为命名规范条目列表（大驼峰/区分字段后缀、按语义不按形状、禁特殊符号、禁数字与顺序编号、同类不重复） | 本文件 | 不提交 |
 | 2026-07-21 | 章节标题去括号后缀：绘制规范（设计侧）/使用规范（研发侧）/选用优先级（总纲 §七）→ 去掉括号；FigRhythm 左侧圆方三角应用视觉补偿（overshoot）：方形为基准、圆直径 48、三角上下溢出更多，加两条虚线标基准，图注改为说明视觉补偿 | 本文件 | 不提交 |
+| 2026-07-28 | 微调 FigRhythm 三形至圆Ø45/方44/等边三角(底52高45)；左半栏结构对齐右半栏（图形+独立 span 标签，两侧图形与小标签水平对齐）；§3 步骤 1「按 §1 绘制」改「按照绘制规范绘制」；绘制规范新增「不使用 mask」条（mask/clipPath 唯一 id 冲突 + 干扰 currentColor）。⚠️ 注：本文件已随 docs 迁入 packages/ui/docs 成为 **git 跟踪**文件（@bisheng/ui 包），上方各行"不提交"口径已过期 | 本文件 | 提交 |
 */}
