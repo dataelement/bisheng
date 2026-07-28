@@ -100,6 +100,9 @@ async def list_experts(
         "created_at",
     ] = Query("created_at", description="排序字段"),
     sort_order: Literal["asc", "desc"] = Query("desc", description="排序方向"),
+    answer_desc: Optional[bool] = Query(None, description="回答数排序"),
+    adoption_desc: Optional[bool] = Query(None, description="采纳数排序"),
+    vote_desc: Optional[bool] = Query(None, description="点赞数排序"),
     page: int = Query(1, ge=1, description="页码"),
     limit: int = Query(20, ge=1, le=500, description="每页数量"),
     service: ExpertService = Depends(get_expert_service),
@@ -117,6 +120,9 @@ async def list_experts(
         sort_order=sort_order,
         skip=skip,
         limit=limit,
+        answer_desc=answer_desc,
+        adoption_desc=adoption_desc,
+        vote_desc=vote_desc,
     )
     return resp_200(data={"experts": experts, "total": total})
 
