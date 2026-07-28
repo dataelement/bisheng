@@ -345,7 +345,7 @@ class QuestionRepository:
         async with get_async_db_session() as session:
             stmt = select(
                 Question.business_domain,
-                func.sum(Question.answer_count).label("answer_count"),
+                func.count(Question.id).label("answer_count"),
             ).group_by(Question.business_domain)
             result = (await session.exec(stmt)).all()
             return [{"business_domain": row.business_domain, "answer_count": row.answer_count} for row in result]
