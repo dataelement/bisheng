@@ -4512,82 +4512,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         self,
         req: ShougangPortalShareLinkCreateReq,
     ) -> ShougangPortalShareLinkCreateResp:
-        from bisheng.common.services.config_service import settings
-
-        if not settings.knowledge.distribution.legacy_share_creation_enabled:
-            raise KnowledgeShareCreationDisabledError()
-        source_space = await KnowledgeDao.aquery_by_id(req.space_id)
-        if not source_space or source_space.type != KnowledgeTypeEnum.SPACE.value:
-            raise SpaceNotFoundError()
-
-        source_file = await KnowledgeFileDao.query_by_id(req.file_id)
-        source_file = self._ensure_space_file(source_file, req.space_id)
-        await self._require_shougang_portal_share_create_permission(source_space, source_file)
-        department_decision = await self._get_department_file_share_access_decision(source_file)
-        if (
-            department_decision is not None
-            and department_decision.status == DepartmentFileAccessStatus.APPROVAL_REQUIRED
-        ):
-            raise KnowledgeDepartmentFileViewApprovalRequiredError()
-        if department_decision is not None and department_decision.status == DepartmentFileAccessStatus.UNAVAILABLE:
-            raise KnowledgeDepartmentFileUnavailableError()
-
-        share_type = self._enum_value(req.share_type)
-        visibility = self._enum_value(req.visibility)
-        if share_type not in {item.value for item in ShougangPortalShareType}:
-            raise SpacePermissionDeniedError(msg="Invalid share type")
-        if visibility not in {item.value for item in ShougangPortalShareVisibility}:
-            raise SpacePermissionDeniedError(msg="Invalid share visibility")
-
-        department_id = 0
-        if visibility == ShougangPortalShareVisibility.DEPARTMENT.value:
-            department_id = await self._resolve_shougang_portal_create_share_department_id(source_space)
-            if not department_id:
-                raise SpacePermissionDeniedError(
-                    msg="当前账号未绑定部门，无法创建仅本部门分享",
-                )
-
-        invite_code = (
-            self._generate_shougang_portal_invite_code()
-            if share_type == ShougangPortalShareType.INVITE_CODE.value
-            else ""
-        )
-        password = str(req.password or "")
-        meta_data = {
-            "space_id": int(req.space_id),
-            "file_id": int(req.file_id),
-            "file_name": str(source_file.file_name or ""),
-            "share_type": share_type,
-            "visibility": visibility,
-            "permissions": {
-                "view": True,
-                "download": (bool(req.allow_download) if department_decision is None else False),
-                "upload": False,
-            },
-            "department_file_view_guarded": department_decision is not None,
-            "password_hash": self._hash_shougang_portal_share_secret(password),
-            "invite_code_hash": self._hash_shougang_portal_share_secret(invite_code),
-        }
-        if department_id:
-            meta_data["department_id"] = department_id
-        tenant_id = int(getattr(self.login_user, "tenant_id", 1) or 1)
-        share_link = ShareLink(
-            share_token=common_util.generate_short_high_entropy_string(),
-            resource_id=str(req.file_id),
-            resource_type=ShareResourceTypeEnum.KNOWLEDGE_SPACE_FILE,
-            share_mode=ShareMode.READ_ONLY,
-            expire_time=int(req.expire_seconds or 0),
-            meta_data=meta_data,
-            create_user_id=str(getattr(self.login_user, "user_id", "")),
-            tenant_id=tenant_id,
-        )
-        saved = await self._save_shougang_portal_share_link(share_link)
-        return ShougangPortalShareLinkCreateResp(
-            share_token=saved.share_token,
-            link=f"/share/document/{saved.share_token}",
-            invite_code=invite_code,
-            expire_seconds=int(req.expire_seconds or 0),
-        )
+        raise KnowledgeShareCreationDisabledError()
 
     async def get_shougang_portal_share_link_meta(
         self,
@@ -9081,8 +9006,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 )
         return [space_map[space_id] for space_id in ordered_ids if space_id in space_map]
 
+    @classmethod
     async def _get_valid_department_space_ids(
-        self,
+        cls,
         space_ids: set[int],
     ) -> set[int]:
         if not space_ids:
@@ -9104,8 +9030,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if department is None:
                 continue
             if (
-                self._space_level_value(scope.level) != KnowledgeSpaceLevelEnum.DEPARTMENT.value
-                or self._space_level_value(scope.owner_type) != KnowledgeSpaceOwnerTypeEnum.DEPARTMENT.value
+                cls._space_level_value(scope.level) != KnowledgeSpaceLevelEnum.DEPARTMENT.value
+                or cls._space_level_value(scope.owner_type) != KnowledgeSpaceOwnerTypeEnum.DEPARTMENT.value
                 or int(scope.owner_id) != int(binding.department_id)
                 or getattr(department, "status", "active") != "active"
                 or int(getattr(department, "is_deleted", 0) or 0) != 0
@@ -9123,6 +9049,130 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if len(tenant_ids) <= 1:
                 valid_space_ids.add(space_id)
         return valid_space_ids
+
+    @classmethod
+    async def list_valid_department_space_options(
+        cls,
+        *,
+        keyword: str = "",
+        page: int = 1,
+        page_size: int = 20,
+    ) -> dict[str, Any]:
+        """返回审批配置可用的部门知识库候选
+
+        候选与门户可发现部门库复用同一有效性判定, 避免管理端保存一个运行时
+        已经失效或归属不一致的知识库 ID。
+        """
+        if page < 1 or page_size < 1 or page_size > 100:
+            raise ValueError("invalid department knowledge space pagination")
+
+        bindings = await DepartmentKnowledgeSpaceDao.aget_all()
+        candidate_ids = {
+            int(binding.space_id)
+            for binding in bindings
+            if int(getattr(binding, "space_id", 0) or 0) > 0
+        }
+        valid_ids = await cls._get_valid_department_space_ids(candidate_ids)
+        if not valid_ids:
+            return {
+                "items": [],
+                "total": 0,
+                "page": page,
+                "page_size": page_size,
+            }
+
+        spaces = await KnowledgeDao.async_get_spaces_by_ids(
+            sorted(valid_ids),
+            order_by="name",
+        )
+        space_map = {
+            int(space.id): space
+            for space in spaces
+            if getattr(space, "id", None) is not None
+            and int(getattr(space, "type", -1)) == KnowledgeTypeEnum.SPACE.value
+        }
+        binding_map = {
+            int(binding.space_id): binding
+            for binding in bindings
+            if int(getattr(binding, "space_id", 0) or 0) in valid_ids
+        }
+        department_ids = sorted(
+            {
+                int(binding.department_id)
+                for binding in binding_map.values()
+            }
+        )
+        departments = await DepartmentDao.aget_by_ids(department_ids)
+        department_map = {
+            int(department.id): department
+            for department in departments
+            if getattr(department, "id", None) is not None
+        }
+
+        normalized_keyword = str(keyword or "").strip().casefold()
+        options: list[dict[str, Any]] = []
+        for space_id in valid_ids:
+            space = space_map.get(space_id)
+            binding = binding_map.get(space_id)
+            if space is None or binding is None:
+                continue
+            department = department_map.get(int(binding.department_id))
+            if department is None:
+                continue
+            space_name = str(getattr(space, "name", "") or "")
+            department_name = str(getattr(department, "name", "") or "")
+            search_text = " ".join(
+                (
+                    space_name,
+                    department_name,
+                    str(space_id),
+                    str(getattr(department, "dept_id", "") or ""),
+                )
+            ).casefold()
+            if normalized_keyword and normalized_keyword not in search_text:
+                continue
+            label = (
+                f"{space_name} ({department_name})"
+                if department_name
+                else space_name
+            )
+            options.append(
+                {
+                    "value": str(space_id),
+                    "label": label,
+                    "department_id": int(binding.department_id),
+                    "department_name": department_name,
+                }
+            )
+
+        options.sort(
+            key=lambda item: (
+                str(item["label"]).casefold(),
+                int(item["value"]),
+            )
+        )
+        total = len(options)
+        offset = (page - 1) * page_size
+        return {
+            "items": options[offset : offset + page_size],
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+        }
+
+    @classmethod
+    async def is_valid_department_space_id(cls, space_id: int) -> bool:
+        if int(space_id) <= 0:
+            return False
+        valid_ids = await cls._get_valid_department_space_ids({int(space_id)})
+        if int(space_id) not in valid_ids:
+            return False
+        spaces = await KnowledgeDao.async_get_spaces_by_ids([int(space_id)])
+        return any(
+            int(getattr(space, "id", 0) or 0) == int(space_id)
+            and int(getattr(space, "type", -1)) == KnowledgeTypeEnum.SPACE.value
+            for space in spaces
+        )
 
     def _accept_shougang_portal_public_files(self, files: list[KnowledgeFile]) -> list[KnowledgeFile]:
         """Accept server-scoped public files without evaluating user permissions."""

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from bisheng.approval.domain.services.approval_exception_service import ApprovalExceptionService
@@ -123,7 +123,34 @@ async def update_scenario(
 @router.get('/scenarios/{scenario_id}/routes')
 async def list_routes(scenario_id: int, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     await _ensure_admin(login_user)
-    return resp_200(await ApprovalScenarioAdminService.list_routes(tenant_id=login_user.tenant_id, scenario_id=scenario_id))
+    return resp_200(
+        await ApprovalScenarioAdminService.list_routes(
+            tenant_id=login_user.tenant_id,
+            scenario_id=scenario_id,
+        )
+    )
+
+
+@router.get('/scenarios/{scenario_id}/condition-options')
+async def list_condition_options(
+    scenario_id: int,
+    field: str = Query(min_length=1, max_length=64),
+    keyword: str = Query(default='', max_length=200),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    await _ensure_admin(login_user)
+    return resp_200(
+        await ApprovalScenarioAdminService.list_condition_options(
+            tenant_id=login_user.tenant_id,
+            scenario_id=scenario_id,
+            field=field,
+            keyword=keyword,
+            page=page,
+            page_size=page_size,
+        )
+    )
 
 
 @router.post('/scenarios/{scenario_id}/routes')
@@ -153,7 +180,7 @@ async def update_route(
         await ApprovalScenarioAdminService.update_route(
             tenant_id=login_user.tenant_id,
             route_rule_id=route_rule_id,
-            payload=req.model_dump(exclude_none=True),
+            payload=req.model_dump(exclude_unset=True),
         )
     )
 
@@ -161,7 +188,12 @@ async def update_route(
 @router.get('/scenarios/{scenario_id}/flows')
 async def list_flows(scenario_id: int, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     await _ensure_admin(login_user)
-    return resp_200(await ApprovalScenarioAdminService.list_flows(tenant_id=login_user.tenant_id, scenario_id=scenario_id))
+    return resp_200(
+        await ApprovalScenarioAdminService.list_flows(
+            tenant_id=login_user.tenant_id,
+            scenario_id=scenario_id,
+        )
+    )
 
 
 @router.post('/scenarios/{scenario_id}/flows')
@@ -200,7 +232,10 @@ async def update_flow(
 async def list_nodes(flow_definition_id: int, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     await _ensure_admin(login_user)
     try:
-        data = await ApprovalScenarioAdminService.list_nodes(tenant_id=login_user.tenant_id, flow_definition_id=flow_definition_id)
+        data = await ApprovalScenarioAdminService.list_nodes(
+            tenant_id=login_user.tenant_id,
+            flow_definition_id=flow_definition_id,
+        )
     except ValueError:
         from bisheng.common.errcode.approval import ApprovalFlowNotFoundError
         return ApprovalFlowNotFoundError.return_resp()
@@ -240,7 +275,10 @@ async def reorder_routes(
 @router.delete('/flows/{flow_definition_id}')
 async def delete_flow(flow_definition_id: int, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     await _ensure_admin(login_user)
-    await ApprovalScenarioAdminService.delete_flow(tenant_id=login_user.tenant_id, flow_definition_id=flow_definition_id)
+    await ApprovalScenarioAdminService.delete_flow(
+        tenant_id=login_user.tenant_id,
+        flow_definition_id=flow_definition_id,
+    )
     return resp_200({'deleted': flow_definition_id})
 
 

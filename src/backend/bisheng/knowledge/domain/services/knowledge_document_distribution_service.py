@@ -10,6 +10,7 @@ from sqlalchemy import delete, or_
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_document import (
     KnowledgeDocument,
     KnowledgeDocumentLifecycleStatus,
@@ -41,6 +42,10 @@ from bisheng.knowledge.domain.services.knowledge_document_permission_activation_
 from bisheng.permission.domain.schemas.tuple_operation import TupleOperation
 
 logger = logging.getLogger(__name__)
+
+PUBLISH_DUPLICATE_CONTENT_MESSAGE = (
+    "目标知识库已存在相同内容的文件，不能重复发布"  # noqa: RUF001
+)
 
 PermissionSnapshotLoader = Callable[
     [int],
@@ -171,6 +176,86 @@ class KnowledgeDocumentDistributionService:
         self.file_repository = file_repository
         self.permission_activation_service = permission_activation_service
         self.permission_snapshot_loader = permission_snapshot_loader
+
+    async def _ensure_publish_target_content_not_duplicate(
+        self,
+        command: PublishKnowledgeDocumentCommand,
+        *,
+        lock_target_space: bool = False,
+        source_md5: str | None = None,
+    ) -> None:
+        resolved_md5 = (
+            str(source_md5).strip()
+            if source_md5 is not None
+            else None
+        )
+        if resolved_md5 is None:
+            manager = await self.file_repository.find_by_id(
+                command.source_entry_id
+            )
+            if manager is None:
+                raise KnowledgeDocumentDistributionError(
+                    "publish manager no longer exists"
+                )
+            resolved_md5 = str(manager.md5 or "").strip()
+        if not resolved_md5:
+            return
+
+        if lock_target_space:
+            target_result = await self.session.exec(
+                select(Knowledge.id)
+                .where(
+                    Knowledge.id == command.target_space_id,
+                    Knowledge.tenant_id == command.tenant_id,
+                )
+                .with_for_update()
+            )
+            if target_result.first() is None:
+                raise KnowledgeDocumentDistributionError(
+                    "publish target space no longer exists"
+                )
+
+        if await self.file_repository.has_visible_content_in_space(
+            tenant_id=command.tenant_id,
+            knowledge_id=command.target_space_id,
+            md5=resolved_md5,
+        ):
+            raise KnowledgeDocumentDistributionError(
+                PUBLISH_DUPLICATE_CONTENT_MESSAGE
+            )
+
+    async def _discard_duplicate_publish_preparation(
+        self,
+        *,
+        command: PublishKnowledgeDocumentCommand,
+        publish_entry_id: int,
+    ) -> None:
+        locked_files = await self.file_repository.find_by_ids_for_update(
+            [command.source_entry_id, publish_entry_id]
+        )
+        file_map = {int(item.id): item for item in locked_files}
+        manager = file_map.get(command.source_entry_id)
+        publish = file_map.get(publish_entry_id)
+        if (
+            manager is not None
+            and manager.entry_status
+            == KnowledgeFileEntryStatus.PREPARING.value
+            and int(manager.approval_instance_id or 0)
+            == command.approval_instance_id
+        ):
+            manager.entry_status = KnowledgeFileEntryStatus.ACTIVE.value
+            manager.approval_instance_id = None
+            self.session.add(manager)
+        if (
+            publish is not None
+            and publish.entry_status
+            == KnowledgeFileEntryStatus.PREPARING.value
+            and int(publish.approval_instance_id or 0)
+            == command.approval_instance_id
+        ):
+            await self.session.delete(publish)
+        await self.session.flush()
+        await self.session.commit()
 
     async def normalize_manager(
         self,
@@ -946,6 +1031,7 @@ class KnowledgeDocumentDistributionService:
                 source_document=document,
                 target_document=target_document,
             )
+        await self._ensure_publish_target_content_not_duplicate(command)
         publish = self._create_publish_entry(
             manager=manager,
             document=document,
@@ -1059,7 +1145,13 @@ class KnowledgeDocumentDistributionService:
         *,
         command: PublishKnowledgeDocumentCommand,
         publish_entry_id: int,
+        source_md5: str,
     ) -> None:
+        await self._ensure_publish_target_content_not_duplicate(
+            command,
+            lock_target_space=True,
+            source_md5=source_md5,
+        )
         if command.target_document_id is not None:
             await self._activate_publish_merge(
                 command=command,
@@ -1335,6 +1427,18 @@ class KnowledgeDocumentDistributionService:
                 raise KnowledgeDocumentDistributionError(
                     "approval entry is not retryable"
                 )
+            try:
+                await self._ensure_publish_target_content_not_duplicate(
+                    command
+                )
+            except KnowledgeDocumentDistributionError as exc:
+                if str(exc) == PUBLISH_DUPLICATE_CONTENT_MESSAGE:
+                    await self.session.rollback()
+                    await self._discard_duplicate_publish_preparation(
+                        command=command,
+                        publish_entry_id=int(existing.id),
+                    )
+                raise
             publish = existing
         else:
             try:
@@ -1350,6 +1454,7 @@ class KnowledgeDocumentDistributionService:
             raise KnowledgeDocumentDistributionError(
                 "publish manager no longer exists"
             )
+        source_md5 = str(manager.md5 or "").strip()
         old_parent_delete = (
             self.permission_activation_service.build_parent_operation(
                 manager,
@@ -1359,6 +1464,7 @@ class KnowledgeDocumentDistributionService:
         target_old_manager = None
         target_old_parent_delete = None
         target_explicit_snapshot: list[TupleOperation] = []
+        prewrite_cleanup_operations: list[TupleOperation] = []
         try:
             explicit_snapshot = list(
                 await self.permission_snapshot_loader(command.source_entry_id)
@@ -1411,6 +1517,28 @@ class KnowledgeDocumentDistributionService:
                 relation="parent",
                 object=f"knowledge_file:{command.source_entry_id}",
             )
+            prewrite_cleanup_operations = [
+                self.permission_activation_service.build_parent_operation(
+                    publish,
+                    action="delete",
+                ),
+                *self._retarget_explicit_operations(
+                    explicit_snapshot,
+                    target_file_id=int(publish.id),
+                    action="delete",
+                ),
+                TupleOperation(
+                    action="delete",
+                    user=manager_target_parent.user,
+                    relation=manager_target_parent.relation,
+                    object=manager_target_parent.object,
+                ),
+                *self._retarget_explicit_operations(
+                    target_explicit_snapshot,
+                    target_file_id=command.source_entry_id,
+                    action="delete",
+                ),
+            ]
             await self.permission_activation_service.prewrite_entry_permissions(
                 entry=publish,
                 explicit_operations=self._retarget_explicit_operations(
@@ -1440,9 +1568,29 @@ class KnowledgeDocumentDistributionService:
             await self._activate_publish_transfer(
                 command=command,
                 publish_entry_id=int(publish.id),
+                source_md5=source_md5,
             )
-        except Exception:
+        except Exception as exc:
             await self.session.rollback()
+            if (
+                isinstance(exc, KnowledgeDocumentDistributionError)
+                and str(exc) == PUBLISH_DUPLICATE_CONTENT_MESSAGE
+            ):
+                await self._discard_duplicate_publish_preparation(
+                    command=command,
+                    publish_entry_id=int(publish.id),
+                )
+                try:
+                    await self.permission_activation_service.tuple_writer(
+                        prewrite_cleanup_operations
+                    )
+                except Exception:
+                    logger.exception(
+                        "F059 duplicate publish permission cleanup deferred: "
+                        "document_id=%s target_space_id=%s",
+                        command.document_id,
+                        command.target_space_id,
+                    )
             raise
 
         cleanup_operations = [

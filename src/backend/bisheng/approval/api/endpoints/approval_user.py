@@ -11,9 +11,6 @@ from bisheng.approval.domain.services.approval_center_service import ApprovalCen
 from bisheng.approval.domain.services.department_file_view_approval_service import (
     DepartmentFileViewApprovalService,
 )
-from bisheng.approval.domain.services.fixed_scenario_provisioner import (
-    FixedScenarioProvisioner,
-)
 from bisheng.common.dependencies.core_deps import get_db_session
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.schemas.api import resp_200
@@ -63,7 +60,6 @@ def _build_department_file_view_service(
         session=session,
         file_repository=file_repository,
         access_service=access_service,
-        provisioner=FixedScenarioProvisioner(session),
     )
 
 

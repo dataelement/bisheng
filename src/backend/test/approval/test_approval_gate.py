@@ -793,83 +793,93 @@ async def test_gate_creates_file_publish_target_role_department_admin_empty_exce
         return [41], []
 
     async def fake_get_user_departments(user_ids: list[int]):
-        assert user_ids == [41]
-        return [SimpleNamespace(user_id=41, department_id=300, is_primary=1)]
+        primary_departments = {
+            41: 300,
+            6001: 600,
+        }
+        return [
+            SimpleNamespace(user_id=user_id, department_id=primary_departments[user_id], is_primary=1)
+            for user_id in user_ids
+            if user_id in primary_departments
+        ]
 
     async def fake_get_departments(department_ids: list[int]):
         assert department_ids == [300]
-        return [SimpleNamespace(id=300, path='/100/200/300/')]
+        return [SimpleNamespace(id=300, path="/100/200/300/")]
 
     async def fake_get_admins_by_departments(department_ids: list[int]):
         assert department_ids == [100, 200, 300]
-        return {}
+        return {300: [6001]}
 
     monkeypatch.setattr(
-        'bisheng.approval.domain.services.shougang_approval_handler._resolve_space_roles_via_fga',
+        "bisheng.approval.domain.services.shougang_approval_handler._resolve_space_roles_via_fga",
         fake_resolve_space_roles,
     )
-    monkeypatch.setattr(UserDepartmentDao, 'aget_by_user_ids', fake_get_user_departments)
-    monkeypatch.setattr(DepartmentDao, 'aget_by_ids', fake_get_departments)
-    monkeypatch.setattr(DepartmentAdminGrantDao, 'aget_user_ids_by_departments', fake_get_admins_by_departments)
+    monkeypatch.setattr(UserDepartmentDao, "aget_by_user_ids", fake_get_user_departments)
+    monkeypatch.setattr(DepartmentDao, "aget_by_ids", fake_get_departments)
+    monkeypatch.setattr(DepartmentAdminGrantDao, "aget_user_ids_by_departments", fake_get_admins_by_departments)
 
     handler = KnowledgeSpaceFilePublishApprovalHandler()
     registry = SimpleNamespace(get_handler=AsyncMock(return_value=handler))
     node = SimpleNamespace(
-        node_code='first_node',
-        node_name='一级审批',
+        node_code="first_node",
+        node_name="一级审批",
         node_order=1,
-        node_mode='or',
-        approver_config={'sources': [{'type': 'target_knowledge_space_owner_department_admin'}]},
+        node_mode="or",
+        approver_config={"sources": [{"type": "target_knowledge_space_owner_department_admin"}]},
     )
     scenario_repository = SimpleNamespace(
         get_scenario_by_code=AsyncMock(
             return_value=SimpleNamespace(
                 id=2,
-                scenario_code='knowledge_space_file_publish_request',
-                scenario_name='知识空间文件发布审批',
+                scenario_code="knowledge_space_file_publish_request",
+                scenario_name="知识空间文件发布审批",
                 enabled=True,
             )
         ),
-        list_route_rules=AsyncMock(return_value=[SimpleNamespace(id=31, route_type='flow', flow_definition_id=9)]),
+        list_route_rules=AsyncMock(return_value=[SimpleNamespace(id=31, route_type="flow", flow_definition_id=9)]),
         get_active_flow_version=AsyncMock(return_value=SimpleNamespace(id=21)),
         list_node_definitions=AsyncMock(return_value=[node]),
     )
     instance_repository = SimpleNamespace(
         find_duplicate_active_instance=AsyncMock(return_value=None),
-        create_instance=AsyncMock(side_effect=lambda row: row.model_copy(update={'id': 701})),
+        create_instance=AsyncMock(side_effect=lambda row: row.model_copy(update={"id": 701})),
         create_exception=AsyncMock(),
-        create_task=AsyncMock(),
+        create_tasks=AsyncMock(
+            side_effect=lambda rows: [row.model_copy(update={"id": index}) for index, row in enumerate(rows, start=1)]
+        ),
+        create_action_log=AsyncMock(),
     )
     gate = ApprovalGate(
         registry=registry,
         scenario_repository=scenario_repository,
         instance_repository=instance_repository,
-        route_matcher=AsyncMock(return_value=SimpleNamespace(id=31, route_type='flow', flow_definition_id=9)),
+        route_matcher=AsyncMock(return_value=SimpleNamespace(id=31, route_type="flow", flow_definition_id=9)),
     )
 
     result = await gate.request_or_pass(
         ApprovalGateRequest(
             tenant_id=1,
-            scenario_code='knowledge_space_file_publish_request',
-            business_key='file:900:publish:20:user:7',
-            business_resource_type='knowledge_file',
-            business_resource_id='900',
-            business_name='文件发布',
+            scenario_code="knowledge_space_file_publish_request",
+            business_key="file:900:publish:20:user:7",
+            business_resource_type="knowledge_file",
+            business_resource_id="900",
+            business_name="文件发布",
             applicant_user_id=7,
-            applicant_user_name='alice',
+            applicant_user_name="alice",
             payload_snapshot={
-                'source_space_id': 10,
-                'source_file_id': 900,
-                'source_file_name': 'a.pdf',
-                'target_space_id': 20,
-                'target_space_name': '目标空间',
+                "source_space_id": 10,
+                "source_file_id": 900,
+                "source_file_name": "a.pdf",
+                "target_space_id": 20,
+                "target_space_name": "目标空间",
             },
         )
     )
 
     assert result.decision == ApprovalGateDecision.EXCEPTION
     assert result.exception_type == ApprovalExceptionType.APPROVER_EMPTY
-    instance_repository.create_task.assert_not_awaited()
+    instance_repository.create_tasks.assert_not_awaited()
 
 
 

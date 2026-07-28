@@ -5,7 +5,6 @@ from uuid import uuid4
 from bisheng.approval.domain.models.approval_scenario import (
     ApprovalFlowDefinition,
     ApprovalFlowVersion,
-    ApprovalNodeDefinition,
     ApprovalRouteRule,
     ApprovalScenario,
 )
@@ -13,14 +12,15 @@ from bisheng.approval.domain.repositories.approval_query_repository import Appro
 from bisheng.approval.domain.repositories.approval_scenario_repository import ApprovalScenarioRepository
 from bisheng.approval.domain.services.approval_registry import ApprovalRegistry
 from bisheng.common.errcode.approval import (
+    ApprovalConditionOptionInvalidError,
     ApprovalFixedScenarioStructureLockedError,
-    ApprovalFlowInUseByRoutesError,
 )
 from bisheng.database.models.audit_log import AuditLogDao
 
 
 class ApprovalScenarioAdminService:
-    FIXED_SCENARIO_CODES = frozenset({"department_file_view_request"})
+    SYSTEM_SCENARIO_CODES = frozenset({"department_file_view_request"})
+    FIXED_SCENARIO_CODES = frozenset()
 
     @classmethod
     def _is_fixed_scenario(cls, scenario) -> bool:
@@ -88,7 +88,10 @@ class ApprovalScenarioAdminService:
         return [
             {
                 **row.model_dump(),
-                'system_managed': cls._is_fixed_scenario(row),
+                'system_managed': (
+                    getattr(row, 'scenario_code', None)
+                    in cls.SYSTEM_SCENARIO_CODES
+                ),
                 'structure_locked': cls._is_fixed_scenario(row),
             }
             for row in rows
@@ -104,7 +107,7 @@ class ApprovalScenarioAdminService:
         operator_user_name: str | None = None,
     ):
         scenario_code = str(payload['scenario_code'])
-        if scenario_code in cls.FIXED_SCENARIO_CODES:
+        if scenario_code in cls.SYSTEM_SCENARIO_CODES:
             raise ApprovalFixedScenarioStructureLockedError()
         existing = await ApprovalScenarioRepository.get_scenario_by_code(tenant_id, scenario_code)
         if existing:
@@ -194,11 +197,16 @@ class ApprovalScenarioAdminService:
         scenario_id: int,
         payload: dict,
     ):
-        await cls._assert_scenario_structure_mutable(
+        scenario = await cls._assert_scenario_structure_mutable(
             tenant_id=tenant_id,
             scenario_id=scenario_id,
         )
-        row = await ApprovalScenarioRepository.create_route_rule(
+        await cls._validate_route_payload(
+            tenant_id=tenant_id,
+            scenario=scenario,
+            payload=payload,
+        )
+        row = await ApprovalScenarioRepository.create_route_rule_safely(
             ApprovalRouteRule(
                 tenant_id=tenant_id,
                 scenario_id=scenario_id,
@@ -223,19 +231,28 @@ class ApprovalScenarioAdminService:
             tenant_id=tenant_id,
             route_rule_id=route_rule_id,
         )
-        if payload.get('route_name'):
-            row.route_name = payload['route_name']
-        if payload.get('route_type'):
-            row.route_type = payload['route_type']
-        if 'sort_order' in payload:
-            row.sort_order = int(payload['sort_order'])
-        if 'flow_definition_id' in payload:
-            row.flow_definition_id = payload['flow_definition_id']
-        if 'match_config' in payload:
-            row.match_config = payload['match_config'] or {}
-        if 'enabled' in payload:
-            row.enabled = bool(payload['enabled'])
-        updated = await ApprovalScenarioRepository.update_route_rule(row)
+        scenario = await ApprovalScenarioRepository.get_scenario(row.scenario_id)
+        merged_payload = {
+            'route_name': row.route_name,
+            'route_type': row.route_type,
+            'sort_order': row.sort_order,
+            'flow_definition_id': row.flow_definition_id,
+            'match_config': row.match_config or {},
+            'enabled': row.enabled,
+            **payload,
+        }
+        await cls._validate_route_payload(
+            tenant_id=tenant_id,
+            scenario=scenario,
+            payload=merged_payload,
+        )
+        updated = (
+            await ApprovalScenarioRepository.update_route_rule_safely(
+                tenant_id=tenant_id,
+                route_rule_id=route_rule_id,
+                payload=payload,
+            )
+        )
         return updated.model_dump()
 
     @classmethod
@@ -283,16 +300,18 @@ class ApprovalScenarioAdminService:
         flow_definition_id: int,
         payload: dict,
     ):
-        row = await cls._assert_flow_structure_mutable(
+        await cls._assert_flow_structure_mutable(
             tenant_id=tenant_id,
             flow_definition_id=flow_definition_id,
         )
-        if payload.get('flow_name'):
-            row.flow_name = payload['flow_name']
         # flow_code is auto-generated and not user-editable
-        if 'is_active' in payload:
-            row.is_active = bool(payload['is_active'])
-        updated = await ApprovalScenarioRepository.update_flow_definition(row)
+        updated = (
+            await ApprovalScenarioRepository.update_flow_definition_safely(
+                tenant_id=tenant_id,
+                flow_definition_id=flow_definition_id,
+                payload=payload,
+            )
+        )
         return updated.model_dump()
 
     @classmethod
@@ -308,10 +327,12 @@ class ApprovalScenarioAdminService:
 
     @classmethod
     async def delete_scenario(cls, *, tenant_id: int, scenario_id: int) -> None:
-        await cls._assert_scenario_structure_mutable(
+        scenario = await cls._assert_scenario_structure_mutable(
             tenant_id=tenant_id,
             scenario_id=scenario_id,
         )
+        if scenario.scenario_code in cls.SYSTEM_SCENARIO_CODES:
+            raise ApprovalFixedScenarioStructureLockedError()
         await ApprovalScenarioRepository.delete_scenario(scenario_id)
 
     @classmethod
@@ -320,7 +341,10 @@ class ApprovalScenarioAdminService:
             tenant_id=tenant_id,
             route_rule_id=route_rule_id,
         )
-        await ApprovalScenarioRepository.delete_route_rule(route_rule_id)
+        await ApprovalScenarioRepository.delete_route_rule_safely(
+            tenant_id=tenant_id,
+            route_rule_id=route_rule_id,
+        )
 
     @classmethod
     async def reorder_routes(cls, *, tenant_id: int, scenario_id: int, ordered_route_ids: list[int]) -> None:
@@ -328,12 +352,14 @@ class ApprovalScenarioAdminService:
             tenant_id=tenant_id,
             scenario_id=scenario_id,
         )
-        existing = await ApprovalScenarioRepository.list_route_rules(tenant_id, scenario_id)
-        existing_ids = {r.id for r in existing}
-        for rid in ordered_route_ids:
-            if rid not in existing_ids:
-                raise ValueError(f'route {rid} does not belong to scenario {scenario_id}')
-        await ApprovalScenarioRepository.bulk_update_route_sort_order(ordered_route_ids)
+        await (
+            ApprovalScenarioRepository
+            .bulk_update_route_sort_order_safely(
+                tenant_id=tenant_id,
+                scenario_id=scenario_id,
+                ordered_route_ids=ordered_route_ids,
+            )
+        )
 
     @classmethod
     async def delete_flow(cls, *, tenant_id: int, flow_definition_id: int) -> None:
@@ -341,12 +367,118 @@ class ApprovalScenarioAdminService:
             tenant_id=tenant_id,
             flow_definition_id=flow_definition_id,
         )
-        referencing_routes = await ApprovalScenarioRepository.list_route_rules_by_flow_definition(
-            tenant_id, flow_definition_id
+        await ApprovalScenarioRepository.delete_flow_definition_safely(
+            tenant_id=tenant_id,
+            flow_definition_id=flow_definition_id,
         )
-        if referencing_routes:
-            raise ApprovalFlowInUseByRoutesError()
-        await ApprovalScenarioRepository.delete_flow_definition(flow_definition_id)
+
+    @classmethod
+    async def list_condition_options(
+        cls,
+        *,
+        tenant_id: int,
+        scenario_id: int,
+        field: str,
+        keyword: str = '',
+        page: int = 1,
+        page_size: int = 20,
+    ) -> dict:
+        scenario = await ApprovalScenarioRepository.get_scenario(scenario_id)
+        if scenario is None or scenario.tenant_id != tenant_id:
+            raise ApprovalConditionOptionInvalidError()
+        preset = ApprovalRegistry.with_default_presets().get_preset(
+            scenario.scenario_code
+        )
+        descriptors = {
+            descriptor.field: descriptor
+            for descriptor in (preset.condition_field_options if preset else [])
+        }
+        descriptor = descriptors.get(field)
+        if (
+            descriptor is None
+            or descriptor.type != 'selector'
+            or field != 'file_knowledge_space_id'
+        ):
+            raise ApprovalConditionOptionInvalidError()
+
+        from bisheng.knowledge.domain.services.knowledge_space_service import (
+            KnowledgeSpaceService,
+        )
+
+        return await KnowledgeSpaceService.list_valid_department_space_options(
+            keyword=keyword,
+            page=page,
+            page_size=page_size,
+        )
+
+    @classmethod
+    async def _validate_route_payload(
+        cls,
+        *,
+        tenant_id: int,
+        scenario,
+        payload: dict,
+    ) -> None:
+        if scenario is None or scenario.tenant_id != tenant_id:
+            raise ApprovalConditionOptionInvalidError()
+
+        route_type = str(payload.get('route_type') or '')
+        flow_definition_id = payload.get('flow_definition_id')
+        if route_type == 'pass':
+            if flow_definition_id is not None:
+                raise ApprovalConditionOptionInvalidError()
+        elif route_type in {'flow', 'approval'}:
+            if not flow_definition_id:
+                raise ApprovalConditionOptionInvalidError()
+            flow = await ApprovalScenarioRepository.get_flow_definition(
+                int(flow_definition_id)
+            )
+            if (
+                flow is None
+                or flow.tenant_id != tenant_id
+                or flow.scenario_id != scenario.id
+                or not flow.is_active
+            ):
+                raise ApprovalConditionOptionInvalidError()
+        else:
+            raise ApprovalConditionOptionInvalidError()
+
+        preset = ApprovalRegistry.with_default_presets().get_preset(
+            scenario.scenario_code
+        )
+        allowed_fields = set(preset.condition_fields if preset else [])
+        match_config = payload.get('match_config') or {}
+        raw_conditions = match_config.get('conditions')
+        if raw_conditions is None:
+            raw_conditions = (
+                [match_config]
+                if match_config.get('field')
+                else []
+            )
+        if not isinstance(raw_conditions, list):
+            raise ApprovalConditionOptionInvalidError()
+
+        from bisheng.knowledge.domain.services.knowledge_space_service import (
+            KnowledgeSpaceService,
+        )
+
+        for condition in raw_conditions:
+            if not isinstance(condition, dict):
+                raise ApprovalConditionOptionInvalidError()
+            field = str(condition.get('field') or '')
+            value = str(condition.get('value') or '')
+            if not field or field not in allowed_fields or not value:
+                raise ApprovalConditionOptionInvalidError()
+            if field != 'file_knowledge_space_id':
+                continue
+            try:
+                space_id = int(value)
+            except (TypeError, ValueError):
+                raise ApprovalConditionOptionInvalidError() from None
+            if not await KnowledgeSpaceService.is_valid_department_space_id(
+                space_id
+            ):
+                raise ApprovalConditionOptionInvalidError()
 
     @classmethod
     async def get_flow_version(cls, *, tenant_id: int, flow_definition_id: int, flow_version_id: int):
@@ -374,39 +506,18 @@ class ApprovalScenarioAdminService:
             tenant_id=tenant_id,
             flow_definition_id=flow_definition_id,
         )
-        current_version = await ApprovalScenarioRepository.get_active_flow_version(tenant_id, flow_definition_id)
-        before_snapshot: dict | None = None
-        if current_version:
-            before_snapshot = current_version.definition_snapshot or {}
-            current_version.is_active = False
-            await ApprovalScenarioRepository.update_flow_version(current_version)
-            new_version_no = current_version.version_no + 1
-        else:
-            new_version_no = 1
-        new_version = await ApprovalScenarioRepository.create_flow_version(
-            ApprovalFlowVersion(
-                tenant_id=tenant_id,
-                flow_definition_id=flow_definition_id,
-                version_no=new_version_no,
-                is_active=True,
-                definition_snapshot={'nodes': nodes_payload},
-            )
+        (
+            flow,
+            new_version,
+            created_rows,
+            before_snapshot,
+        ) = await ApprovalScenarioRepository.replace_flow_nodes_safely(
+            tenant_id=tenant_id,
+            flow_definition_id=flow_definition_id,
+            nodes_payload=nodes_payload,
         )
-        created = []
-        for idx, node_data in enumerate(nodes_payload):
-            row = await ApprovalScenarioRepository.create_node_definition(
-                ApprovalNodeDefinition(
-                    tenant_id=tenant_id,
-                    flow_version_id=new_version.id,
-                    node_code=node_data.get('node_code', f'node_{idx}'),
-                    node_name=node_data.get('node_name', f'Node {idx + 1}'),
-                    node_order=node_data.get('node_order', idx),
-                    node_mode=node_data.get('node_mode', 'or'),
-                    approver_config=node_data.get('approver_config') or {},
-                    extra_config=node_data.get('extra_config') or {},
-                )
-            )
-            created.append(row.model_dump())
+        created = [row.model_dump() for row in created_rows]
+        new_version_no = int(new_version.version_no)
         if operator_user_id is not None:
             scenario_code: str | None = None
             try:

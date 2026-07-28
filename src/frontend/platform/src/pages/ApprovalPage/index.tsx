@@ -20,6 +20,7 @@ import {
   deleteApprovalRouteApi,
   deleteApprovalScenarioApi,
   getApprovalInstanceDetailForAdminApi,
+  listApprovalConditionOptionsApi,
   listApprovalFlowsApi,
   listApprovalExceptionsApi,
   listApprovalNodesApi,
@@ -281,6 +282,12 @@ const CONDITION_FIELD_META: Record<string, ConditionFieldMeta> = {
   applicant_department_id: {
     label: 'approvalPage.condition.applicant_department_id',
   },
+  file_department_id: {
+    label: 'approvalPage.condition.file_department_id',
+  },
+  file_knowledge_space_id: {
+    label: 'approvalPage.condition.file_knowledge_space_id',
+  },
   target_space_id: {
     label: 'approvalPage.condition.target_space_id',
   },
@@ -371,7 +378,12 @@ function conditionLabel(
       .filter(Boolean)
       .join(` ${t("approvalPage.conditionOperatorAnd", { defaultValue: "AND" })} `);
   }
-  return singleConditionLabel(matchConfig, t, roleNameMap, departmentNameMap);
+  return singleConditionLabel(
+    isSingleMatchConfig(matchConfig) ? matchConfig : undefined,
+    t,
+    roleNameMap,
+    departmentNameMap,
+  );
 }
 
 // ─── Add/Edit dialogs ────────────────────────────────────────────────────────
@@ -498,6 +510,7 @@ function RouteDialog({
   initial,
   flows,
   conditionFields,
+  scenarioId,
   scenarioCode,
   onClose,
   onConfirm,
@@ -506,6 +519,7 @@ function RouteDialog({
   initial: Partial<ApprovalRouteItem>;
   flows: ApprovalFlowItem[];
   conditionFields: string[];
+  scenarioId?: number | null;
   scenarioCode?: string | null;
   onClose: () => void;
   onConfirm: (data: {
@@ -639,6 +653,45 @@ function RouteDialog({
     });
   }, [open, condField, targetSpacesLoaded, targetSpacesLoading, targetSpacesLoadAttempt]);
 
+  useEffect(() => {
+    if (!open || condField !== "file_knowledge_space_id" || !scenarioId) return;
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      setTargetSpacesLoading(true);
+      setTargetSpacesLoadFailed(false);
+      listApprovalConditionOptionsApi(scenarioId, {
+        field: "file_knowledge_space_id",
+        keyword: targetSpaceSearch,
+        page: 1,
+        page_size: 100,
+      }).then((result) => {
+        if (cancelled) return;
+        setTargetSpaces(result.items.map((item) => ({
+          value: item.value,
+          label: item.label,
+        })));
+        setTargetSpacesLoaded(true);
+      }).catch(() => {
+        if (cancelled) return;
+        setTargetSpaces([]);
+        setTargetSpacesLoadFailed(true);
+        setTargetSpacesLoaded(false);
+      }).finally(() => {
+        if (!cancelled) setTargetSpacesLoading(false);
+      });
+    }, 200);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [
+    open,
+    condField,
+    scenarioId,
+    targetSpaceSearch,
+    targetSpacesLoadAttempt,
+  ]);
+
   const retryLoadTargetSpaces = () => {
     setTargetSpacesLoaded(false);
     setTargetSpacesLoadFailed(false);
@@ -647,7 +700,12 @@ function RouteDialog({
   };
 
   useEffect(() => {
-    if (!open || condField !== "applicant_department_id" || departmentsLoaded || departmentsLoading) return;
+    if (
+      !open
+      || !["applicant_department_id", "file_department_id"].includes(condField)
+      || departmentsLoaded
+      || departmentsLoading
+    ) return;
 
     setDepartmentsLoading(true);
     setDepartmentsLoadFailed(false);
@@ -700,13 +758,13 @@ function RouteDialog({
     });
   };
 
-  const targetSpaceConditionInvalid = condField === "target_space_id" && (
+  const targetSpaceConditionInvalid = ["target_space_id", "file_knowledge_space_id"].includes(condField) && (
     targetSpacesLoading ||
     targetSpacesLoadFailed ||
     !targetSpacesLoaded ||
     !condValue
   );
-  const departmentConditionInvalid = condField === "applicant_department_id" && (
+  const departmentConditionInvalid = ["applicant_department_id", "file_department_id"].includes(condField) && (
     departmentsLoading ||
     departmentsLoadFailed ||
     !departmentsLoaded ||
@@ -826,7 +884,7 @@ function RouteDialog({
               {condField && (
                 <>
                   <span className="text-xs text-text-secondary">=</span>
-                  {condField === "applicant_department_id" ? (
+                  {["applicant_department_id", "file_department_id"].includes(condField) ? (
                     <div className="flex-1 space-y-2">
                       {departmentsLoading ? (
                         <p className="text-xs text-text-secondary">{t("approvalPage.loading")}</p>
@@ -866,7 +924,7 @@ function RouteDialog({
                         <p className="text-xs text-text-secondary">{t("approvalPage.noDepartments", { defaultValue: "暂无可用部门" })}</p>
                       )}
                     </div>
-                  ) : condField === "target_space_id" ? (
+                  ) : ["target_space_id", "file_knowledge_space_id"].includes(condField) ? (
                     <div className="flex-1 space-y-2">
                       {targetSpacesLoading ? (
                         <p className="text-xs text-text-secondary">{t("approvalPage.loading")}</p>
@@ -2327,17 +2385,19 @@ export default function ApprovalPage() {
                       >
                         <Pencil size={13} />
                       </button>
-                      <button
-                        type="button"
-                        title={t("approvalPage.delete")}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteScenario(s);
-                        }}
-                        className="text-gray-400 hover:text-red-500"
-                      >
-                        <Trash2 size={13} />
-                      </button>
+                      {!s.system_managed && (
+                        <button
+                          type="button"
+                          title={t("approvalPage.delete")}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteScenario(s);
+                          }}
+                          className="text-gray-400 hover:text-red-500"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      )}
                           </div>
                         )}
                       </div>
@@ -2370,7 +2430,9 @@ export default function ApprovalPage() {
                     <StatusBadge enabled={selectedScenario.enabled} />
                     {selectedScenario.system_managed && (
                       <span className="rounded border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs text-blue-600">
-                        {t("approvalPage.systemManagedReadOnly", { defaultValue: "系统内置，流程结构只读" })}
+                        {selectedScenario.structure_locked
+                          ? t("approvalPage.systemManagedReadOnly", { defaultValue: "系统内置，流程结构只读" })
+                          : t("approvalPage.systemManaged", { defaultValue: "系统内置" })}
                       </span>
                     )}
                   </div>
@@ -2941,6 +3003,7 @@ export default function ApprovalPage() {
         initial={routeDialog.initial}
         flows={flows}
         conditionFields={activeConditionFields}
+        scenarioId={selectedScenario?.id}
         scenarioCode={selectedScenario?.scenario_code}
         onClose={() => setRouteDialog({ open: false, initial: {} })}
         onConfirm={(data) => void handleSaveRoute(data)}

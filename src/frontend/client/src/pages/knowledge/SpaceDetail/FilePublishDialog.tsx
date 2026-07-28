@@ -37,6 +37,14 @@ type FilePublishDialogProps = {
     versionManagementEnabled?: boolean;
 };
 
+function getPublishErrorMessage(error: unknown): string {
+    const detail = (error as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
+    if (typeof detail === "string" && detail.trim()) {
+        return detail.trim();
+    }
+    return error instanceof Error && error.message ? error.message : "提交发布申请失败";
+}
+
 export function FilePublishDialog({
     open,
     activeSpace,
@@ -245,7 +253,7 @@ export function FilePublishDialog({
             showToast({ message: "已提交发布申请", severity: NotificationSeverity.SUCCESS });
             onOpenChange(false);
         } catch (error) {
-            const message = error instanceof Error && error.message ? error.message : "提交发布申请失败";
+            const message = getPublishErrorMessage(error);
             showToast({ message, severity: NotificationSeverity.ERROR });
         } finally {
             setSubmitting(false);

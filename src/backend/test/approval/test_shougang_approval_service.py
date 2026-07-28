@@ -135,13 +135,6 @@ def _stub_canonical_publish_source(monkeypatch):
     from bisheng.approval.domain.services.shougang_approval_service import (
         ShougangApprovalService,
     )
-    from bisheng.common.services.config_service import settings
-
-    monkeypatch.setattr(
-        settings.knowledge.distribution,
-        "writer_enabled",
-        True,
-    )
 
     monkeypatch.setattr(
         ShougangApprovalService,
@@ -1150,6 +1143,57 @@ async def test_file_publish_submit_allows_matching_target_business_domain(monkey
     )
 
     service.approval_gate.request_or_pass.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_file_publish_submit_rejects_duplicate_target_content(monkeypatch):
+    from bisheng.approval.domain.schemas.shougang_approval_schema import (
+        ShougangFilePublishSubmitReq,
+    )
+    from bisheng.approval.domain.services.shougang_approval_service import (
+        PUBLISH_DUPLICATE_CONTENT_MESSAGE,
+        ShougangApprovalService,
+    )
+
+    service = ShougangApprovalService(
+        approval_gate=SimpleNamespace(request_or_pass=AsyncMock())
+    )
+    source_file, _ = _patch_file_publish_submit_dependencies(
+        monkeypatch,
+        service,
+    )
+    source_file.md5 = "same-md5"
+    duplicate_check = AsyncMock(
+        side_effect=HTTPException(
+            status_code=409,
+            detail=PUBLISH_DUPLICATE_CONTENT_MESSAGE,
+        )
+    )
+    monkeypatch.setattr(
+        service,
+        "_ensure_publish_target_content_not_duplicate",
+        duplicate_check,
+        raising=False,
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await service.submit_file_publish(
+            req=ShougangFilePublishSubmitReq(
+                source_space_id=10,
+                source_file_id=100,
+                target_space_id=20,
+            ),
+            login_user=_login_user(),
+        )
+
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail == PUBLISH_DUPLICATE_CONTENT_MESSAGE
+    duplicate_check.assert_awaited_once_with(
+        tenant_id=1,
+        source_file=source_file,
+        target_space_id=20,
+    )
+    service.approval_gate.request_or_pass.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -2871,6 +2915,69 @@ async def test_file_publish_handler_resolves_space_role_sources_by_side(monkeypa
 
 
 @pytest.mark.asyncio
+async def test_file_publish_handler_rejects_cross_branch_admin_and_skips_applicant(monkeypatch):
+    from bisheng.approval.domain.services.shougang_approval_handler import KnowledgeSpaceFilePublishApprovalHandler
+    from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
+    from bisheng.database.models.department_admin_grant import DepartmentAdminGrantDao
+
+    handler = KnowledgeSpaceFilePublishApprovalHandler()
+    departments = {
+        5: SimpleNamespace(id=5, path="/1/4/5/"),
+    }
+    grants = {
+        5: [6],  # User 6 belongs to a sibling branch and is ineligible.
+        4: [4],  # The applicant is ineligible, so resolution must continue upward.
+        1: [8],
+    }
+    primary_departments = {
+        4: 99,
+        6: 6,
+        8: 1,
+    }
+
+    async def fake_get_department(department_id: int):
+        return departments.get(department_id)
+
+    async def fake_get_departments(department_ids: list[int]):
+        return [departments[department_id] for department_id in department_ids if department_id in departments]
+
+    async def fake_get_admins(department_id: int):
+        return grants.get(department_id, [])
+
+    async def fake_get_admins_by_departments(department_ids: list[int]):
+        return {department_id: grants.get(department_id, []) for department_id in department_ids}
+
+    async def fake_get_user_departments(user_ids: list[int]):
+        return [
+            SimpleNamespace(user_id=user_id, department_id=primary_departments[user_id], is_primary=1)
+            for user_id in user_ids
+            if user_id in primary_departments
+        ]
+
+    monkeypatch.setattr(DepartmentDao, "aget_by_id", fake_get_department)
+    monkeypatch.setattr(DepartmentDao, "aget_by_ids", fake_get_departments)
+    monkeypatch.setattr(DepartmentAdminGrantDao, "aget_user_ids_by_department", fake_get_admins)
+    monkeypatch.setattr(DepartmentAdminGrantDao, "aget_user_ids_by_departments", fake_get_admins_by_departments)
+    monkeypatch.setattr(UserDepartmentDao, "aget_by_user_ids", fake_get_user_departments)
+
+    approvers = await handler.resolve_approvers(
+        {"sources": [{"type": "department_admin"}]},
+        SimpleNamespace(
+            tenant_id=1,
+            applicant_user_id=4,
+            applicant_department_id=5,
+            payload_snapshot={
+                "applicant_department_id": 5,
+                "source_space_id": 10,
+                "target_space_id": 20,
+            },
+        ),
+    )
+
+    assert approvers == [8]
+
+
+@pytest.mark.asyncio
 async def test_file_publish_handler_resolves_target_role_department_admins(monkeypatch):
     from bisheng.approval.domain.services.shougang_approval_handler import KnowledgeSpaceFilePublishApprovalHandler
     from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
@@ -2883,10 +2990,19 @@ async def test_file_publish_handler_resolves_target_role_department_admins(monke
         return [41], [42, 43]
 
     async def fake_get_user_departments(user_ids: list[int]):
+        primary_departments = {
+            41: 300,
+            42: 400,
+            43: 500,
+            1001: 100,
+            2001: 200,
+            2002: 200,
+            4001: 400,
+        }
         return [
-            SimpleNamespace(user_id=41, department_id=300, is_primary=1),
-            SimpleNamespace(user_id=42, department_id=400, is_primary=1),
-            SimpleNamespace(user_id=43, department_id=500, is_primary=1),
+            SimpleNamespace(user_id=user_id, department_id=primary_departments[user_id], is_primary=1)
+            for user_id in user_ids
+            if user_id in primary_departments
         ]
 
     async def fake_get_departments(department_ids: list[int]):

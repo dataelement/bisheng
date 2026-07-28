@@ -119,3 +119,13 @@ class ApprovalDepartmentFileGrantNotRevokableError(BaseErrorCode):
 class ApprovalFixedScenarioInvalidError(BaseErrorCode):
     Code: int = 18123
     Msg: str = '部门文件查看审批配置不完整'
+
+
+class ApprovalConfigInUseError(BaseErrorCode):
+    Code: int = 18124
+    Msg: str = 'approval_config_in_use'
+
+
+class ApprovalConditionOptionInvalidError(BaseErrorCode):
+    Code: int = 18125
+    Msg: str = 'approval_condition_option_invalid'

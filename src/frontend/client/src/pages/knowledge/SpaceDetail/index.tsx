@@ -418,12 +418,14 @@ export function KnowledgeSpaceContent({
     const [moveEntryIds, setMoveEntryIds] = useState<Set<string>>(new Set());
     const [publishEntryIds, setPublishEntryIds] = useState<Set<string>>(new Set());
     const shareEntryIds = useMemo(
-        () => new Set(
-            displayFiles
-                .filter((file) => file.capabilities?.canShare)
-                .map((file) => file.id),
-        ),
-        [displayFiles],
+        () => space.spaceLevel === SpaceLevel.DEPARTMENT
+            ? new Set(
+                displayFiles
+                    .filter((file) => file.capabilities?.canShare)
+                    .map((file) => file.id),
+            )
+            : new Set<string>(),
+        [displayFiles, space.spaceLevel],
     );
     const hasExternalFileActionPermissions = externalFileActionPermissions !== undefined;
     // 懒查询：加载时不再对所有文件逐项预检操作权限；仅当用户悬停/交互某一行（真正可能用到
