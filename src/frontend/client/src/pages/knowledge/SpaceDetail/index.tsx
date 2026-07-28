@@ -1266,16 +1266,7 @@ export function KnowledgeSpaceContent({
     };
 
     const handleBatchDelete = async () => {
-        const confirmed = await confirm({
-            title: localize("com_knowledge.confirm_delete_selected_items", { 0: selectedFiles.size }),
-            description: localize("com_knowledge.delete_folder_warning"),
-            cancelText: localize("com_knowledge.cancel"),
-            confirmText: localize("com_knowledge.delete"),
-            variant: "destructive"
-        });
-
-        if (!confirmed) return;
-
+        // Soft-delete to recycle bin — no confirmation dialog.
         if (!canBatchDelete) {
             showToast({ message: localize("com_knowledge.batch_delete_failed"), status: "error" });
             return;
@@ -1346,23 +1337,13 @@ export function KnowledgeSpaceContent({
         const file = displayFiles.find(f => f.id === fileId);
         if (!file) return;
 
-        const isFolder = file.type === FileType.FOLDER;
         if (!effectiveDeleteEntryIds.has(fileId)) {
             showToast({ message: localize("com_knowledge.delete_failed"), status: "error" });
             return;
         }
 
-        const confirmed = await confirm({
-            title: isFolder ? `确认删除文件夹 "${file.name}" 吗？` : localize("com_knowledge.confirm_delete_file"),
-            description: isFolder ? localize("com_knowledge.delete_folder_permanent_warning") : undefined,
-            cancelText: localize("com_knowledge.cancel"),
-            confirmText: localize("com_knowledge.delete"),
-            variant: "destructive"
-        });
-
-        if (confirmed) {
-            onDeleteFile(fileId);
-        }
+        // Soft-delete to recycle bin — no confirmation dialog.
+        onDeleteFile(fileId);
     };
 
     const handleBatchRetry = async () => {

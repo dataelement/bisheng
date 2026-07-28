@@ -346,10 +346,7 @@ class RagUtils(BaseNode):
         if file_filters is None:
             file_filters = getattr(self, "_runtime_selected_file_ids_by_space", None)
         if file_filters:
-            kb_filters = {
-                int(knowledge_id): {"file_ids": file_ids}
-                for knowledge_id, file_ids in file_filters.items()
-            }
+            kb_filters = {int(knowledge_id): {"file_ids": file_ids} for knowledge_id, file_ids in file_filters.items()}
         knowledge_base_ids = knowledge_base_ids or [int(one) for one in self._knowledge_value]
         permission_user = self.user_info
         if not getattr(self, "_knowledge_auth", True):
@@ -460,9 +457,7 @@ class RagUtils(BaseNode):
                 self._runtime_selected_file_ids_by_knowledge,
                 self._runtime_selected_file_ids_by_space,
             ) = self._resolve_runtime_item_scope(selection)
-            self._knowledge_value = sorted(
-                set(self._runtime_selected_file_ids_by_space or {})
-            )
+            self._knowledge_value = sorted(set(self._runtime_selected_file_ids_by_space or {}))
         else:
             raise ValueError(f"Unsupported runtime knowledge selection mode: {selection.mode}")
 
@@ -488,20 +483,10 @@ class RagUtils(BaseNode):
     def _resolve_knowledge_item_groups(self, knowledge_groups: dict[int, list[Any]]) -> dict[int, list[int]] | None:
         file_ids_by_knowledge: dict[int, list[int]] = {}
         file_ids = list(
-            dict.fromkeys(
-                item.id
-                for items in knowledge_groups.values()
-                for item in items
-                if item.ref_type == "file"
-            )
+            dict.fromkeys(item.id for items in knowledge_groups.values() for item in items if item.ref_type == "file")
         )
         folder_ids = list(
-            dict.fromkeys(
-                item.id
-                for items in knowledge_groups.values()
-                for item in items
-                if item.ref_type == "folder"
-            )
+            dict.fromkeys(item.id for items in knowledge_groups.values() for item in items if item.ref_type == "folder")
         )
 
         selected_records = KnowledgeFileDao.get_file_by_ids(file_ids + folder_ids)
@@ -516,7 +501,10 @@ class RagUtils(BaseNode):
                 if not record or int(record.knowledge_id) != int(knowledge_id):
                     raise ValueError(f"所选文件或文件夹不属于当前知识库: {item.id}")
                 if item.ref_type == "file":
-                    if int(record.file_type) != FileType.FILE.value or int(record.status) != KnowledgeFileStatus.SUCCESS.value:
+                    if (
+                        int(record.file_type) != FileType.FILE.value
+                        or int(record.status) != KnowledgeFileStatus.SUCCESS.value
+                    ):
                         raise ValueError(f"所选文件不属于当前知识库或不可检索: {[item.id]}")
                     file_ids_by_knowledge.setdefault(int(knowledge_id), []).append(int(item.id))
                 else:
@@ -550,8 +538,7 @@ class RagUtils(BaseNode):
             return [
                 int(item.id)
                 for item in children or []
-                if int(item.file_type) == FileType.FILE.value
-                and int(item.status) == KnowledgeFileStatus.SUCCESS.value
+                if int(item.file_type) == FileType.FILE.value and int(item.status) == KnowledgeFileStatus.SUCCESS.value
             ]
 
         try:
@@ -684,7 +671,11 @@ class RagUtils(BaseNode):
         async def _fetch():
             async with get_async_db_session() as session:
                 repo = KnowledgeDocumentVersionRepositoryImpl(session)
-                return await repo.find_non_primary_file_ids_by_knowledge_ids(knowledge_ids)
+                non_primary = await repo.find_non_primary_file_ids_by_knowledge_ids(knowledge_ids)
+            from bisheng.knowledge.domain.services.knowledge_recycle_service import KnowledgeRecycleService
+
+            recycled = await KnowledgeRecycleService.list_recycled_file_ids_by_knowledge_ids(knowledge_ids)
+            return list(dict.fromkeys([*non_primary, *recycled]))
 
         try:
             asyncio.get_running_loop()

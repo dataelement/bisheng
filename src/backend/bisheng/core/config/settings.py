@@ -324,6 +324,12 @@ class CeleryConf(BaseModel):
                 "schedule": 60.0,
             }
 
+        if "purge_expired_knowledge_recycle_items" not in self.beat_schedule:
+            self.beat_schedule["purge_expired_knowledge_recycle_items"] = {
+                "task": "bisheng.worker.knowledge.recycle_bin.purge_expired_recycle_items",
+                "schedule": crontab.from_string("0 1 * * *"),
+            }
+
         # F056: root Beat entries only fan out; every tenant child task carries
         # an explicit tenant header and runs on the existing knowledge queue.
         if "portal_recommendation_pools_6h" not in self.beat_schedule:

@@ -82,7 +82,8 @@ def test_get_file_by_condition_excludes_failed_and_timeout_duplicates(monkeypatc
     assert "knowledgefile.knowledge_id = 1" in sql
     assert "knowledgefile.file_name = 'failed.docx'" in sql
     assert "knowledgefile.md5 = 'abc123'" in sql
-    assert "knowledgefile.status NOT IN (3, 6)" in sql
+    assert "knowledgefile.status NOT IN (3, 6" in sql
+    assert "knowledgefile.deleted_at IS NULL" in sql
 
 
 @pytest.mark.asyncio
@@ -97,6 +98,22 @@ async def test_get_repeat_file_excludes_failed_and_timeout_duplicates(monkeypatc
 
     sql = _compile_sql(session.statement)
     assert "knowledgefile.knowledge_id = 1" in sql
-    assert "knowledgefile.status NOT IN (3, 6)" in sql
+    assert "knowledgefile.status NOT IN (3, 6" in sql
     assert "knowledgefile.md5 = 'abc123'" in sql
     assert "knowledgefile.file_name = 'failed.docx'" in sql
+    assert "knowledgefile.deleted_at IS NULL" in sql
+
+
+@pytest.mark.asyncio
+async def test_get_repeat_file_excludes_soft_deleted_recycle_files(monkeypatch):
+    session = _AsyncSession()
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.models.knowledge_file.get_async_db_session",
+        lambda: _AsyncSessionCtx(session),
+    )
+
+    await KnowledgeFileDao.get_repeat_file(knowledge_id=19, file_name="recycled.pdf", md5_="deadbeef")
+
+    sql = _compile_sql(session.statement)
+    assert "knowledgefile.deleted_at IS NULL" in sql
+    assert "knowledgefile.knowledge_id = 19" in sql

@@ -43,9 +43,7 @@ from bisheng.permission.domain.schemas.tuple_operation import TupleOperation
 
 logger = logging.getLogger(__name__)
 
-PUBLISH_DUPLICATE_CONTENT_MESSAGE = (
-    "目标知识库已存在相同内容的文件，不能重复发布"  # noqa: RUF001
-)
+PUBLISH_DUPLICATE_CONTENT_MESSAGE = "目标知识库已存在相同内容的文件，不能重复发布"  # noqa: RUF001
 
 PermissionSnapshotLoader = Callable[
     [int],
@@ -139,9 +137,7 @@ async def _default_permission_snapshot_loader(
 
     fga = await PermissionService._aget_fga()
     if fga is None:
-        raise KnowledgeDocumentDistributionError(
-            "OpenFGA is unavailable while snapshotting source permissions"
-        )
+        raise KnowledgeDocumentDistributionError("OpenFGA is unavailable while snapshotting source permissions")
     tuples = await fga.read_tuples(object=f"knowledge_file:{file_id}")
     return [
         TupleOperation(
@@ -151,9 +147,7 @@ async def _default_permission_snapshot_loader(
             object=f"knowledge_file:{file_id}",
         )
         for item in tuples
-        if item.get("relation") != "parent"
-        and item.get("user")
-        and item.get("relation")
+        if item.get("relation") != "parent" and item.get("user") and item.get("relation")
     ]
 
 
@@ -166,9 +160,7 @@ class KnowledgeDocumentDistributionService:
         version_repository: KnowledgeDocumentVersionRepository,
         file_repository: KnowledgeFileRepository,
         permission_activation_service: KnowledgeDocumentPermissionActivationService,
-        permission_snapshot_loader: PermissionSnapshotLoader = (
-            _default_permission_snapshot_loader
-        ),
+        permission_snapshot_loader: PermissionSnapshotLoader = (_default_permission_snapshot_loader),
     ):
         self.session = session
         self.document_repository = document_repository
@@ -184,19 +176,11 @@ class KnowledgeDocumentDistributionService:
         lock_target_space: bool = False,
         source_md5: str | None = None,
     ) -> None:
-        resolved_md5 = (
-            str(source_md5).strip()
-            if source_md5 is not None
-            else None
-        )
+        resolved_md5 = str(source_md5).strip() if source_md5 is not None else None
         if resolved_md5 is None:
-            manager = await self.file_repository.find_by_id(
-                command.source_entry_id
-            )
+            manager = await self.file_repository.find_by_id(command.source_entry_id)
             if manager is None:
-                raise KnowledgeDocumentDistributionError(
-                    "publish manager no longer exists"
-                )
+                raise KnowledgeDocumentDistributionError("publish manager no longer exists")
             resolved_md5 = str(manager.md5 or "").strip()
         if not resolved_md5:
             return
@@ -211,18 +195,14 @@ class KnowledgeDocumentDistributionService:
                 .with_for_update()
             )
             if target_result.first() is None:
-                raise KnowledgeDocumentDistributionError(
-                    "publish target space no longer exists"
-                )
+                raise KnowledgeDocumentDistributionError("publish target space no longer exists")
 
         if await self.file_repository.has_visible_content_in_space(
             tenant_id=command.tenant_id,
             knowledge_id=command.target_space_id,
             md5=resolved_md5,
         ):
-            raise KnowledgeDocumentDistributionError(
-                PUBLISH_DUPLICATE_CONTENT_MESSAGE
-            )
+            raise KnowledgeDocumentDistributionError(PUBLISH_DUPLICATE_CONTENT_MESSAGE)
 
     async def _discard_duplicate_publish_preparation(
         self,
@@ -230,28 +210,22 @@ class KnowledgeDocumentDistributionService:
         command: PublishKnowledgeDocumentCommand,
         publish_entry_id: int,
     ) -> None:
-        locked_files = await self.file_repository.find_by_ids_for_update(
-            [command.source_entry_id, publish_entry_id]
-        )
+        locked_files = await self.file_repository.find_by_ids_for_update([command.source_entry_id, publish_entry_id])
         file_map = {int(item.id): item for item in locked_files}
         manager = file_map.get(command.source_entry_id)
         publish = file_map.get(publish_entry_id)
         if (
             manager is not None
-            and manager.entry_status
-            == KnowledgeFileEntryStatus.PREPARING.value
-            and int(manager.approval_instance_id or 0)
-            == command.approval_instance_id
+            and manager.entry_status == KnowledgeFileEntryStatus.PREPARING.value
+            and int(manager.approval_instance_id or 0) == command.approval_instance_id
         ):
             manager.entry_status = KnowledgeFileEntryStatus.ACTIVE.value
             manager.approval_instance_id = None
             self.session.add(manager)
         if (
             publish is not None
-            and publish.entry_status
-            == KnowledgeFileEntryStatus.PREPARING.value
-            and int(publish.approval_instance_id or 0)
-            == command.approval_instance_id
+            and publish.entry_status == KnowledgeFileEntryStatus.PREPARING.value
+            and int(publish.approval_instance_id or 0) == command.approval_instance_id
         ):
             await self.session.delete(publish)
         await self.session.flush()
@@ -263,32 +237,21 @@ class KnowledgeDocumentDistributionService:
         tenant_id: int,
         source_file_id: int,
     ) -> CanonicalManagerSnapshot:
-        source_file = await self.file_repository.find_by_id_for_update(
-            source_file_id
-        )
+        source_file = await self.file_repository.find_by_id_for_update(source_file_id)
         if source_file is None:
             raise KnowledgeDocumentDistributionError("source file does not exist")
         if int(source_file.tenant_id or 0) != int(tenant_id):
             raise KnowledgeDocumentDistributionError("source tenant mismatch")
-        if (
-            source_file.file_type != FileType.FILE.value
-            or source_file.status != KnowledgeFileStatus.SUCCESS.value
-        ):
-            raise KnowledgeDocumentDistributionError(
-                "only a parsed file can become manager"
-            )
+        if source_file.file_type != FileType.FILE.value or source_file.status != KnowledgeFileStatus.SUCCESS.value:
+            raise KnowledgeDocumentDistributionError("only a parsed file can become manager")
         if source_file.entry_type in {
             KnowledgeFileEntryType.PUBLISH.value,
             KnowledgeFileEntryType.SHARE.value,
             KnowledgeFileEntryType.PROJECTION_TOMBSTONE.value,
         }:
-            raise KnowledgeDocumentDistributionError(
-                "source entry is not the current manager"
-            )
+            raise KnowledgeDocumentDistributionError("source entry is not the current manager")
 
-        version = await self.version_repository.find_by_knowledge_file_id(
-            source_file_id
-        )
+        version = await self.version_repository.find_by_knowledge_file_id(source_file_id)
         if version is None:
             document = KnowledgeDocument(
                 tenant_id=tenant_id,
@@ -308,28 +271,18 @@ class KnowledgeDocumentDistributionService:
             await self.session.flush()
             document.primary_version_id = int(version.id)
         else:
-            document = await self.document_repository.find_by_id_for_update(
-                int(version.document_id)
-            )
+            document = await self.document_repository.find_by_id_for_update(int(version.document_id))
             if document is None:
-                raise KnowledgeDocumentDistributionError(
-                    "source version has no canonical document"
-                )
+                raise KnowledgeDocumentDistributionError("source version has no canonical document")
             if int(document.tenant_id or 0) != int(tenant_id):
-                raise KnowledgeDocumentDistributionError(
-                    "canonical document tenant mismatch"
-                )
+                raise KnowledgeDocumentDistributionError("canonical document tenant mismatch")
             if int(document.primary_version_id or 0) != int(version.id or 0):
-                raise KnowledgeDocumentDistributionError(
-                    "historical version cannot become manager"
-                )
+                raise KnowledgeDocumentDistributionError("historical version cannot become manager")
 
         source_file.reference_document_id = int(document.id)
         source_file.entry_type = KnowledgeFileEntryType.MANAGER.value
         source_file.entry_status = KnowledgeFileEntryStatus.ACTIVE.value
-        source_file.projection_status = (
-            KnowledgeFileProjectionStatus.PENDING.value
-        )
+        source_file.projection_status = KnowledgeFileProjectionStatus.PENDING.value
         source_file.desired_content_generation = document.content_generation
         source_file.applied_content_generation = 0
         source_file.desired_entry_generation += 1
@@ -355,9 +308,7 @@ class KnowledgeDocumentDistributionService:
             if entry.entry_status != KnowledgeFileEntryStatus.ACTIVE.value:
                 continue
             if entry.file_level_path:
-                path_filter = (
-                    KnowledgeFile.file_level_path == entry.file_level_path
-                )
+                path_filter = KnowledgeFile.file_level_path == entry.file_level_path
             else:
                 path_filter = or_(
                     KnowledgeFile.file_level_path.is_(None),
@@ -370,20 +321,15 @@ class KnowledgeDocumentDistributionService:
                     KnowledgeFile.file_type == FileType.FILE.value,
                     KnowledgeFile.file_name == file_name,
                     path_filter,
+                    col(KnowledgeFile.deleted_at).is_(None),
                 )
                 .limit(1)
             )
             if excluded_file_ids:
-                stmt = stmt.where(
-                    col(KnowledgeFile.id).not_in(
-                        sorted(excluded_file_ids)
-                    )
-                )
+                stmt = stmt.where(col(KnowledgeFile.id).not_in(sorted(excluded_file_ids)))
             conflict = (await self.session.execute(stmt)).scalars().first()
             if conflict is not None:
-                raise KnowledgeDocumentDistributionError(
-                    "canonical name conflict in an active entry directory"
-                )
+                raise KnowledgeDocumentDistributionError("canonical name conflict in an active entry directory")
 
     async def _replace_primary_tag_links(
         self,
@@ -422,8 +368,7 @@ class KnowledgeDocumentDistributionService:
                 await self.session.execute(
                     select(ReviewTagLink)
                     .where(
-                        ReviewTagLink.resource_id
-                        == source_resource_id,
+                        ReviewTagLink.resource_id == source_resource_id,
                         ReviewTagLink.resource_type == resource_type,
                         ReviewTagLink.is_deleted.is_(False),
                     )
@@ -479,38 +424,21 @@ class KnowledgeDocumentDistributionService:
         target_version: KnowledgeDocumentVersion | None,
         target_file: KnowledgeFile | None,
     ) -> None:
-        if (
-            document is None
-            or current_manager is None
-            or target_version is None
-            or target_file is None
-        ):
-            raise KnowledgeDocumentDistributionError(
-                "primary switch state no longer exists"
-            )
+        if document is None or current_manager is None or target_version is None or target_file is None:
+            raise KnowledgeDocumentDistributionError("primary switch state no longer exists")
         if (
             int(document.tenant_id or 0) != tenant_id
             or int(current_manager.tenant_id or 0) != tenant_id
             or int(target_file.tenant_id or 0) != tenant_id
-            or int(current_manager.reference_document_id or 0)
-            != int(document.id)
-            or current_manager.entry_type
-            != KnowledgeFileEntryType.MANAGER.value
-            or current_manager.entry_status
-            != KnowledgeFileEntryStatus.ACTIVE.value
+            or int(current_manager.reference_document_id or 0) != int(document.id)
+            or current_manager.entry_type != KnowledgeFileEntryType.MANAGER.value
+            or current_manager.entry_status != KnowledgeFileEntryStatus.ACTIVE.value
             or int(target_version.document_id) != int(document.id)
             or int(target_version.knowledge_file_id) != int(target_file.id)
         ):
-            raise KnowledgeDocumentDistributionError(
-                "primary switch requires the active canonical manager"
-            )
-        if (
-            target_file.file_type != FileType.FILE.value
-            or target_file.status != KnowledgeFileStatus.SUCCESS.value
-        ):
-            raise KnowledgeDocumentDistributionError(
-                "target primary version is not parsed successfully"
-            )
+            raise KnowledgeDocumentDistributionError("primary switch requires the active canonical manager")
+        if target_file.file_type != FileType.FILE.value or target_file.status != KnowledgeFileStatus.SUCCESS.value:
+            raise KnowledgeDocumentDistributionError("target primary version is not parsed successfully")
 
     async def switch_primary_manager(
         self,
@@ -522,16 +450,10 @@ class KnowledgeDocumentDistributionService:
     ) -> SwitchPrimaryManagerResult:
         """Switch the physical manager after permission prewrite."""
         document = await self.document_repository.find_by_id(document_id)
-        target_version = await self.version_repository.find_by_id(
-            target_version_id
-        )
-        current_manager = await self.file_repository.find_by_id(
-            current_manager_file_id
-        )
+        target_version = await self.version_repository.find_by_id(target_version_id)
+        current_manager = await self.file_repository.find_by_id(current_manager_file_id)
         target_file = (
-            await self.file_repository.find_by_id(
-                int(target_version.knowledge_file_id)
-            )
+            await self.file_repository.find_by_id(int(target_version.knowledge_file_id))
             if target_version is not None
             else None
         )
@@ -552,26 +474,20 @@ class KnowledgeDocumentDistributionService:
                 idempotent=True,
             )
 
-        versions = await self.version_repository.find_by_document_id(
-            document_id
+        versions = await self.version_repository.find_by_document_id(document_id)
+        entries = await self.file_repository.find_distribution_entries_by_document_id(
+            document_id,
+            statuses={KnowledgeFileEntryStatus.ACTIVE.value},
         )
-        entries = (
-            await self.file_repository.find_distribution_entries_by_document_id(
-                document_id,
-                statuses={KnowledgeFileEntryStatus.ACTIVE.value},
-            )
-        )
-        excluded_file_ids = {
-            int(version.knowledge_file_id) for version in versions
-        } | {int(entry.id) for entry in entries}
+        excluded_file_ids = {int(version.knowledge_file_id) for version in versions} | {
+            int(entry.id) for entry in entries
+        }
         await self._ensure_canonical_name_available(
             entries=entries,
             file_name=str(target_file.file_name),
             excluded_file_ids=excluded_file_ids,
         )
-        explicit_snapshot = list(
-            await self.permission_snapshot_loader(current_manager_file_id)
-        )
+        explicit_snapshot = list(await self.permission_snapshot_loader(current_manager_file_id))
         manager_candidate = target_file.model_copy(
             update={
                 "knowledge_id": int(document.knowledge_id),
@@ -579,11 +495,9 @@ class KnowledgeDocumentDistributionService:
                 "level": current_manager.level,
             }
         )
-        target_parent = (
-            self.permission_activation_service.build_parent_operation(
-                manager_candidate,
-                action="write",
-            )
+        target_parent = self.permission_activation_service.build_parent_operation(
+            manager_candidate,
+            action="write",
         )
         try:
             await self.permission_activation_service.tuple_writer(
@@ -597,25 +511,17 @@ class KnowledgeDocumentDistributionService:
                 ]
             )
         except Exception as exc:
-            raise KnowledgeDocumentDistributionError(
-                "primary switch permission prewrite failed"
-            ) from exc
+            raise KnowledgeDocumentDistributionError("primary switch permission prewrite failed") from exc
 
         await self.session.commit()
-        document = await self.document_repository.find_by_id_for_update(
-            document_id
-        )
-        locked_files = await self.file_repository.find_by_ids_for_update(
-            sorted(excluded_file_ids)
-        )
+        document = await self.document_repository.find_by_id_for_update(document_id)
+        locked_files = await self.file_repository.find_by_ids_for_update(sorted(excluded_file_ids))
         file_map = {int(item.id): item for item in locked_files}
         current_manager = file_map.get(current_manager_file_id)
         target_file = file_map.get(int(target_version.knowledge_file_id))
         version_result = await self.session.execute(
             select(KnowledgeDocumentVersion)
-            .where(
-                KnowledgeDocumentVersion.document_id == document_id
-            )
+            .where(KnowledgeDocumentVersion.document_id == document_id)
             .order_by(KnowledgeDocumentVersion.id.asc())
             .with_for_update()
             .execution_options(populate_existing=True)
@@ -632,18 +538,11 @@ class KnowledgeDocumentDistributionService:
         )
         if int(document.primary_version_id or 0) != int(
             next(
-                (
-                    version.id
-                    for version in versions
-                    if int(version.knowledge_file_id)
-                    == current_manager_file_id
-                ),
+                (version.id for version in versions if int(version.knowledge_file_id) == current_manager_file_id),
                 0,
             )
         ):
-            raise KnowledgeDocumentDistributionError(
-                "primary switch state changed concurrently"
-            )
+            raise KnowledgeDocumentDistributionError("primary switch state changed concurrently")
 
         entries = [
             item
@@ -656,11 +555,9 @@ class KnowledgeDocumentDistributionService:
             file_name=str(target_file.file_name),
             excluded_file_ids=excluded_file_ids,
         )
-        old_parent_delete = (
-            self.permission_activation_service.build_parent_operation(
-                current_manager,
-                action="delete",
-            )
+        old_parent_delete = self.permission_activation_service.build_parent_operation(
+            current_manager,
+            action="delete",
         )
         await self._replace_primary_tag_links(
             tenant_id=tenant_id,
@@ -691,9 +588,7 @@ class KnowledgeDocumentDistributionService:
         target_file.entry_status = KnowledgeFileEntryStatus.ACTIVE.value
         target_file.projection_previous_file_id = current_manager_file_id
         target_file.desired_entry_generation += 1
-        target_file.projection_status = (
-            KnowledgeFileProjectionStatus.PENDING.value
-        )
+        target_file.projection_status = KnowledgeFileProjectionStatus.PENDING.value
         target_file.projection_next_retry_at = None
 
         for entry in entries:
@@ -750,18 +645,11 @@ class KnowledgeDocumentDistributionService:
         user_metadata: dict | None = None,
         clear_alias: bool = False,
     ) -> KnowledgeFile:
-        document = await self.document_repository.find_by_id_for_update(
-            document_id
-        )
-        manager = await self.file_repository.find_by_id_for_update(
-            manager_file_id
-        )
+        document = await self.document_repository.find_by_id_for_update(document_id)
+        manager = await self.file_repository.find_by_id_for_update(manager_file_id)
         primary_version = (
-            await self.version_repository.find_by_id(
-                int(document.primary_version_id)
-            )
-            if document is not None
-            and document.primary_version_id is not None
+            await self.version_repository.find_by_id(int(document.primary_version_id))
+            if document is not None and document.primary_version_id is not None
             else None
         )
         self._validate_switch_manager_state(
@@ -771,19 +659,15 @@ class KnowledgeDocumentDistributionService:
             target_version=primary_version,
             target_file=manager,
         )
-        entries = (
-            await self.file_repository.find_distribution_entries_by_document_id(
-                document_id,
-                statuses={KnowledgeFileEntryStatus.ACTIVE.value},
-                for_update=True,
-            )
+        entries = await self.file_repository.find_distribution_entries_by_document_id(
+            document_id,
+            statuses={KnowledgeFileEntryStatus.ACTIVE.value},
+            for_update=True,
         )
-        versions = await self.version_repository.find_by_document_id(
-            document_id
-        )
-        excluded_file_ids = {
-            int(version.knowledge_file_id) for version in versions
-        } | {int(entry.id) for entry in entries}
+        versions = await self.version_repository.find_by_document_id(document_id)
+        excluded_file_ids = {int(version.knowledge_file_id) for version in versions} | {
+            int(entry.id) for entry in entries
+        }
         await self._ensure_canonical_name_available(
             entries=entries,
             file_name=new_name,
@@ -819,18 +703,11 @@ class KnowledgeDocumentDistributionService:
         manager_file_id: int,
     ) -> int:
         """Advance canonical content generation after a manager-only write."""
-        document = await self.document_repository.find_by_id_for_update(
-            document_id
-        )
-        manager = await self.file_repository.find_by_id_for_update(
-            manager_file_id
-        )
+        document = await self.document_repository.find_by_id_for_update(document_id)
+        manager = await self.file_repository.find_by_id_for_update(manager_file_id)
         primary_version = (
-            await self.version_repository.find_by_id(
-                int(document.primary_version_id)
-            )
-            if document is not None
-            and document.primary_version_id is not None
+            await self.version_repository.find_by_id(int(document.primary_version_id))
+            if document is not None and document.primary_version_id is not None
             else None
         )
         self._validate_switch_manager_state(
@@ -908,21 +785,12 @@ class KnowledgeDocumentDistributionService:
         *,
         allow_preparing_manager: bool = False,
     ) -> None:
-        manager_status_is_valid = (
-            manager.entry_status
-            == KnowledgeFileEntryStatus.ACTIVE.value
-            or (
-                allow_preparing_manager
-                and manager.entry_status
-                == KnowledgeFileEntryStatus.PREPARING.value
-                and int(manager.approval_instance_id or 0)
-                == command.approval_instance_id
-            )
+        manager_status_is_valid = manager.entry_status == KnowledgeFileEntryStatus.ACTIVE.value or (
+            allow_preparing_manager
+            and manager.entry_status == KnowledgeFileEntryStatus.PREPARING.value
+            and int(manager.approval_instance_id or 0) == command.approval_instance_id
         )
-        if (
-            int(document.tenant_id or 0) != command.tenant_id
-            or int(manager.tenant_id or 0) != command.tenant_id
-        ):
+        if int(document.tenant_id or 0) != command.tenant_id or int(manager.tenant_id or 0) != command.tenant_id:
             raise KnowledgeDocumentDistributionError("publish tenant mismatch")
         if (
             int(document.primary_version_id or 0) <= 0
@@ -932,52 +800,36 @@ class KnowledgeDocumentDistributionService:
             or int(manager.id) != command.source_entry_id
             or int(manager.knowledge_id) != int(document.knowledge_id)
         ):
-            raise KnowledgeDocumentDistributionError(
-                "publish source is not the current manager"
-            )
+            raise KnowledgeDocumentDistributionError("publish source is not the current manager")
         existing_target = await self.file_repository.find_entry_in_space_for_update(
             command.document_id,
             command.target_space_id,
         )
         if existing_target is not None:
-            raise KnowledgeDocumentDistributionError(
-                "canonical document already has an entry in target space"
-            )
+            raise KnowledgeDocumentDistributionError("canonical document already has an entry in target space")
 
     async def _prepare_manager_permission_transition(
         self,
         command: PublishKnowledgeDocumentCommand,
     ) -> KnowledgeFile:
         """Hide the moving manager before target permissions are prewritten."""
-        manager = await self.file_repository.find_by_id_for_update(
-            command.source_entry_id
-        )
+        manager = await self.file_repository.find_by_id_for_update(command.source_entry_id)
         if manager is None:
-            raise KnowledgeDocumentDistributionError(
-                "publish manager no longer exists"
-            )
+            raise KnowledgeDocumentDistributionError("publish manager no longer exists")
         if (
             int(manager.tenant_id or 0) != command.tenant_id
-            or int(manager.reference_document_id or 0)
-            != command.document_id
-            or manager.entry_type
-            != KnowledgeFileEntryType.MANAGER.value
+            or int(manager.reference_document_id or 0) != command.document_id
+            or manager.entry_type != KnowledgeFileEntryType.MANAGER.value
         ):
-            raise KnowledgeDocumentDistributionError(
-                "publish source is not the current manager"
-            )
+            raise KnowledgeDocumentDistributionError("publish source is not the current manager")
         if (
-            manager.entry_status
-            == KnowledgeFileEntryStatus.PREPARING.value
-            and int(manager.approval_instance_id or 0)
-            == command.approval_instance_id
+            manager.entry_status == KnowledgeFileEntryStatus.PREPARING.value
+            and int(manager.approval_instance_id or 0) == command.approval_instance_id
         ):
             await self.session.commit()
             return manager
         if manager.entry_status != KnowledgeFileEntryStatus.ACTIVE.value:
-            raise KnowledgeDocumentDistributionError(
-                "publish manager permission transition is not retryable"
-            )
+            raise KnowledgeDocumentDistributionError("publish manager permission transition is not retryable")
         manager.entry_status = KnowledgeFileEntryStatus.PREPARING.value
         manager.approval_instance_id = command.approval_instance_id
         self.session.add(manager)
@@ -991,29 +843,19 @@ class KnowledgeDocumentDistributionService:
     ) -> KnowledgeFile:
         document_map: dict[int, KnowledgeDocument] = {}
         if command.target_document_id is not None:
-            locked_documents = (
-                await self.document_repository.find_by_ids_for_update(
-                    [
-                        command.document_id,
-                        command.target_document_id,
-                    ]
-                )
+            locked_documents = await self.document_repository.find_by_ids_for_update(
+                [
+                    command.document_id,
+                    command.target_document_id,
+                ]
             )
-            document_map = {
-                int(item.id): item for item in locked_documents
-            }
+            document_map = {int(item.id): item for item in locked_documents}
             document = document_map.get(command.document_id)
         else:
-            document = await self.document_repository.find_by_id_for_update(
-                command.document_id
-            )
-        manager = await self.file_repository.find_by_id_for_update(
-            command.source_entry_id
-        )
+            document = await self.document_repository.find_by_id_for_update(command.document_id)
+        manager = await self.file_repository.find_by_id_for_update(command.source_entry_id)
         if document is None or manager is None:
-            raise KnowledgeDocumentDistributionError(
-                "publish source state no longer exists"
-            )
+            raise KnowledgeDocumentDistributionError("publish source state no longer exists")
         await self._validate_publish_authority(
             command,
             document,
@@ -1023,9 +865,7 @@ class KnowledgeDocumentDistributionService:
         if command.target_document_id is not None:
             target_document = document_map.get(command.target_document_id)
             if target_document is None:
-                raise KnowledgeDocumentDistributionError(
-                    "target document does not exist"
-                )
+                raise KnowledgeDocumentDistributionError("target document does not exist")
             await self._validate_merge_target(
                 command=command,
                 source_document=document,
@@ -1054,72 +894,43 @@ class KnowledgeDocumentDistributionService:
         KnowledgeFile,
     ]:
         if int(source_document.id) == int(target_document.id):
-            raise KnowledgeDocumentDistributionError(
-                "source and target document must differ"
-            )
+            raise KnowledgeDocumentDistributionError("source and target document must differ")
         if (
             int(target_document.tenant_id or 0) != command.tenant_id
-            or int(target_document.knowledge_id)
-            != command.target_space_id
-            or target_document.lifecycle_status
-            != KnowledgeDocumentLifecycleStatus.ACTIVE.value
+            or int(target_document.knowledge_id) != command.target_space_id
+            or target_document.lifecycle_status != KnowledgeDocumentLifecycleStatus.ACTIVE.value
             or target_document.predecessor_logic_file_id is not None
         ):
-            raise KnowledgeDocumentDistributionError(
-                "target document is not eligible for merge"
-            )
+            raise KnowledgeDocumentDistributionError("target document is not eligible for merge")
 
-        source_versions = await self.version_repository.find_by_document_id(
-            int(source_document.id)
-        )
-        target_versions = await self.version_repository.find_by_document_id(
-            int(target_document.id)
-        )
+        source_versions = await self.version_repository.find_by_document_id(int(source_document.id))
+        target_versions = await self.version_repository.find_by_document_id(int(target_document.id))
         if len(source_versions) != 1 or not target_versions:
-            raise KnowledgeDocumentDistributionError(
-                "merge requires a single-version source and a versioned target"
-            )
+            raise KnowledgeDocumentDistributionError("merge requires a single-version source and a versioned target")
         target_primary = next(
-            (
-                version
-                for version in target_versions
-                if int(version.id)
-                == int(target_document.primary_version_id or 0)
-            ),
+            (version for version in target_versions if int(version.id) == int(target_document.primary_version_id or 0)),
             None,
         )
         if target_primary is None:
-            raise KnowledgeDocumentDistributionError(
-                "target primary version pointer is invalid"
-            )
-        target_manager = await self.file_repository.find_by_id_for_update(
-            int(target_primary.knowledge_file_id)
-        )
+            raise KnowledgeDocumentDistributionError("target primary version pointer is invalid")
+        target_manager = await self.file_repository.find_by_id_for_update(int(target_primary.knowledge_file_id))
         if (
             target_manager is None
             or int(target_manager.tenant_id or 0) != command.tenant_id
             or int(target_manager.knowledge_id) != command.target_space_id
         ):
-            raise KnowledgeDocumentDistributionError(
-                "target primary file is not local to target space"
-            )
-        target_entries = (
-            await self.file_repository.find_distribution_entries_by_document_id(
-                int(target_document.id),
-                for_update=True,
-            )
+            raise KnowledgeDocumentDistributionError("target primary file is not local to target space")
+        target_entries = await self.file_repository.find_distribution_entries_by_document_id(
+            int(target_document.id),
+            for_update=True,
         )
         if target_entries and not (
             len(target_entries) == 1
             and int(target_entries[0].id) == int(target_manager.id)
-            and target_entries[0].entry_type
-            == KnowledgeFileEntryType.MANAGER.value
-            and target_entries[0].entry_status
-            == KnowledgeFileEntryStatus.ACTIVE.value
+            and target_entries[0].entry_type == KnowledgeFileEntryType.MANAGER.value
+            and target_entries[0].entry_status == KnowledgeFileEntryStatus.ACTIVE.value
         ):
-            raise KnowledgeDocumentDistributionError(
-                "distributed target document cannot be merged"
-            )
+            raise KnowledgeDocumentDistributionError("distributed target document cannot be merged")
         return source_versions[0], target_primary, target_manager
 
     @staticmethod
@@ -1159,25 +970,18 @@ class KnowledgeDocumentDistributionService:
             )
             return
 
-        document = await self.document_repository.find_by_id_for_update(
-            command.document_id
-        )
-        locked_files = await self.file_repository.find_by_ids_for_update(
-            [command.source_entry_id, publish_entry_id]
-        )
+        document = await self.document_repository.find_by_id_for_update(command.document_id)
+        locked_files = await self.file_repository.find_by_ids_for_update([command.source_entry_id, publish_entry_id])
         file_map = {int(item.id): item for item in locked_files}
         manager = file_map.get(command.source_entry_id)
         publish = file_map.get(publish_entry_id)
         if document is None or manager is None or publish is None:
-            raise KnowledgeDocumentDistributionError(
-                "publish activation state no longer exists"
-            )
+            raise KnowledgeDocumentDistributionError("publish activation state no longer exists")
 
         if (
             publish.entry_status == KnowledgeFileEntryStatus.ACTIVE.value
             and int(document.knowledge_id) == command.target_space_id
-            and int(document.predecessor_logic_file_id or 0)
-            == publish_entry_id
+            and int(document.predecessor_logic_file_id or 0) == publish_entry_id
         ):
             return
         await self._validate_publish_authority(
@@ -1187,23 +991,13 @@ class KnowledgeDocumentDistributionService:
             allow_preparing_manager=True,
         )
         if publish.entry_status != KnowledgeFileEntryStatus.PREPARING.value:
-            raise KnowledgeDocumentDistributionError(
-                "publish entry is not preparing"
-            )
+            raise KnowledgeDocumentDistributionError("publish entry is not preparing")
 
-        versions = await self.version_repository.find_by_document_id(
-            command.document_id
-        )
-        physical_file_ids = sorted(
-            {int(version.knowledge_file_id) for version in versions}
-        )
-        physical_files = await self.file_repository.find_by_ids_for_update(
-            physical_file_ids
-        )
+        versions = await self.version_repository.find_by_document_id(command.document_id)
+        physical_file_ids = sorted({int(version.knowledge_file_id) for version in versions})
+        physical_files = await self.file_repository.find_by_ids_for_update(physical_file_ids)
         if len(physical_files) != len(physical_file_ids):
-            raise KnowledgeDocumentDistributionError(
-                "canonical document has missing physical versions"
-            )
+            raise KnowledgeDocumentDistributionError("canonical document has missing physical versions")
 
         document.content_generation += 1
         document.knowledge_id = command.target_space_id
@@ -1252,9 +1046,7 @@ class KnowledgeDocumentDistributionService:
         publish_entry_id: int,
     ) -> None:
         if command.target_document_id is None:
-            raise KnowledgeDocumentDistributionError(
-                "target document is required for merge"
-            )
+            raise KnowledgeDocumentDistributionError("target document is required for merge")
         documents = await self.document_repository.find_by_ids_for_update(
             [command.document_id, command.target_document_id]
         )
@@ -1262,45 +1054,31 @@ class KnowledgeDocumentDistributionService:
         source_document = document_map.get(command.document_id)
         target_document = document_map.get(command.target_document_id)
         if source_document is None:
-            existing_publish = await self.file_repository.find_by_id_for_update(
-                publish_entry_id
-            )
+            existing_publish = await self.file_repository.find_by_id_for_update(publish_entry_id)
             if (
                 existing_publish is not None
-                and int(existing_publish.reference_document_id or 0)
-                == command.target_document_id
-                and existing_publish.entry_status
-                == KnowledgeFileEntryStatus.ACTIVE.value
+                and int(existing_publish.reference_document_id or 0) == command.target_document_id
+                and existing_publish.entry_status == KnowledgeFileEntryStatus.ACTIVE.value
             ):
                 return
-            raise KnowledgeDocumentDistributionError(
-                "merge source document no longer exists"
-            )
+            raise KnowledgeDocumentDistributionError("merge source document no longer exists")
         if target_document is None:
-            raise KnowledgeDocumentDistributionError(
-                "merge target document no longer exists"
-            )
+            raise KnowledgeDocumentDistributionError("merge target document no longer exists")
 
-        source_version, _target_primary, target_old_manager = (
-            await self._validate_merge_target(
-                command=command,
-                source_document=source_document,
-                target_document=target_document,
-            )
+        source_version, _target_primary, target_old_manager = await self._validate_merge_target(
+            command=command,
+            source_document=source_document,
+            target_document=target_document,
         )
-        source_entries = (
-            await self.file_repository.find_distribution_entries_by_document_id(
-                command.document_id,
-                for_update=True,
-            )
+        source_entries = await self.file_repository.find_distribution_entries_by_document_id(
+            command.document_id,
+            for_update=True,
         )
         source_entry_map = {int(item.id): item for item in source_entries}
         manager = source_entry_map.get(command.source_entry_id)
         publish = source_entry_map.get(publish_entry_id)
         if manager is None or publish is None:
-            raise KnowledgeDocumentDistributionError(
-                "merge source entries no longer exist"
-            )
+            raise KnowledgeDocumentDistributionError("merge source entries no longer exist")
         await self._validate_publish_authority(
             command,
             source_document,
@@ -1308,16 +1086,10 @@ class KnowledgeDocumentDistributionService:
             allow_preparing_manager=True,
         )
         if publish.entry_status != KnowledgeFileEntryStatus.PREPARING.value:
-            raise KnowledgeDocumentDistributionError(
-                "merge publish entry is not preparing"
-            )
+            raise KnowledgeDocumentDistributionError("merge publish entry is not preparing")
 
-        target_versions = await self.version_repository.find_by_document_id(
-            int(target_document.id)
-        )
-        next_version_no = max(
-            int(version.version_no) for version in target_versions
-        ) + 1
+        target_versions = await self.version_repository.find_by_document_id(int(target_document.id))
+        next_version_no = max(int(version.version_no) for version in target_versions) + 1
         for version in target_versions:
             version.is_primary = False
             self.session.add(version)
@@ -1328,9 +1100,7 @@ class KnowledgeDocumentDistributionService:
         target_old_manager.reference_document_id = None
         target_old_manager.entry_type = None
         target_old_manager.entry_status = None
-        target_old_manager.projection_status = (
-            KnowledgeFileProjectionStatus.READY.value
-        )
+        target_old_manager.projection_status = KnowledgeFileProjectionStatus.READY.value
         target_old_manager.projection_lease_owner = None
         target_old_manager.projection_lease_until = None
 
@@ -1341,9 +1111,7 @@ class KnowledgeDocumentDistributionService:
         manager.entry_type = KnowledgeFileEntryType.MANAGER.value
         manager.entry_status = KnowledgeFileEntryStatus.ACTIVE.value
         manager.approval_instance_id = None
-        manager.projection_previous_file_id = int(
-            target_old_manager.id
-        )
+        manager.projection_previous_file_id = int(target_old_manager.id)
         manager.desired_entry_generation += 1
         manager.projection_status = KnowledgeFileProjectionStatus.PENDING.value
         manager.projection_next_retry_at = None
@@ -1386,28 +1154,19 @@ class KnowledgeDocumentDistributionService:
         self,
         command: PublishKnowledgeDocumentCommand,
     ) -> PublishKnowledgeDocumentResult:
-        existing = await self.file_repository.find_by_approval_instance_id(
-            command.approval_instance_id
-        )
+        existing = await self.file_repository.find_by_approval_instance_id(command.approval_instance_id)
         if existing is not None:
-            result_document_id = (
-                command.target_document_id or command.document_id
-            )
+            result_document_id = command.target_document_id or command.document_id
             if (
                 int(existing.reference_document_id or 0)
                 not in {
                     command.document_id,
                     int(result_document_id),
                 }
-                or existing.entry_type
-                != KnowledgeFileEntryType.PUBLISH.value
+                or existing.entry_type != KnowledgeFileEntryType.PUBLISH.value
             ):
-                raise KnowledgeDocumentDistributionError(
-                    "approval instance is bound to a different entry"
-                )
-            document = await self.document_repository.find_by_id(
-                int(result_document_id)
-            )
+                raise KnowledgeDocumentDistributionError("approval instance is bound to a different entry")
+            document = await self.document_repository.find_by_id(int(result_document_id))
             if (
                 existing.entry_status == KnowledgeFileEntryStatus.ACTIVE.value
                 and document is not None
@@ -1420,17 +1179,10 @@ class KnowledgeDocumentDistributionService:
                     target_space_id=command.target_space_id,
                     idempotent=True,
                 )
-            if (
-                existing.entry_status
-                != KnowledgeFileEntryStatus.PREPARING.value
-            ):
-                raise KnowledgeDocumentDistributionError(
-                    "approval entry is not retryable"
-                )
+            if existing.entry_status != KnowledgeFileEntryStatus.PREPARING.value:
+                raise KnowledgeDocumentDistributionError("approval entry is not retryable")
             try:
-                await self._ensure_publish_target_content_not_duplicate(
-                    command
-                )
+                await self._ensure_publish_target_content_not_duplicate(command)
             except KnowledgeDocumentDistributionError as exc:
                 if str(exc) == PUBLISH_DUPLICATE_CONTENT_MESSAGE:
                     await self.session.rollback()
@@ -1447,66 +1199,40 @@ class KnowledgeDocumentDistributionService:
                 await self.session.rollback()
                 raise
 
-        manager = await self.file_repository.find_by_id(
-            command.source_entry_id
-        )
+        manager = await self.file_repository.find_by_id(command.source_entry_id)
         if manager is None:
-            raise KnowledgeDocumentDistributionError(
-                "publish manager no longer exists"
-            )
+            raise KnowledgeDocumentDistributionError("publish manager no longer exists")
         source_md5 = str(manager.md5 or "").strip()
-        old_parent_delete = (
-            self.permission_activation_service.build_parent_operation(
-                manager,
-                action="delete",
-            )
+        old_parent_delete = self.permission_activation_service.build_parent_operation(
+            manager,
+            action="delete",
         )
         target_old_manager = None
         target_old_parent_delete = None
         target_explicit_snapshot: list[TupleOperation] = []
         prewrite_cleanup_operations: list[TupleOperation] = []
         try:
-            explicit_snapshot = list(
-                await self.permission_snapshot_loader(command.source_entry_id)
-            )
+            explicit_snapshot = list(await self.permission_snapshot_loader(command.source_entry_id))
             if command.target_document_id is not None:
-                target_document = await self.document_repository.find_by_id(
-                    command.target_document_id
-                )
+                target_document = await self.document_repository.find_by_id(command.target_document_id)
                 target_primary = (
-                    await self.version_repository.find_by_id(
-                        int(target_document.primary_version_id)
-                    )
-                    if target_document is not None
-                    and target_document.primary_version_id is not None
+                    await self.version_repository.find_by_id(int(target_document.primary_version_id))
+                    if target_document is not None and target_document.primary_version_id is not None
                     else None
                 )
                 target_old_manager = (
-                    await self.file_repository.find_by_id(
-                        int(target_primary.knowledge_file_id)
-                    )
+                    await self.file_repository.find_by_id(int(target_primary.knowledge_file_id))
                     if target_primary is not None
                     else None
                 )
                 if target_old_manager is None:
-                    raise KnowledgeDocumentDistributionError(
-                        "merge target manager no longer exists"
-                    )
-                target_explicit_snapshot = list(
-                    await self.permission_snapshot_loader(
-                        int(target_old_manager.id)
-                    )
+                    raise KnowledgeDocumentDistributionError("merge target manager no longer exists")
+                target_explicit_snapshot = list(await self.permission_snapshot_loader(int(target_old_manager.id)))
+                target_old_parent_delete = self.permission_activation_service.build_parent_operation(
+                    target_old_manager,
+                    action="delete",
                 )
-                target_old_parent_delete = (
-                    self.permission_activation_service
-                    .build_parent_operation(
-                        target_old_manager,
-                        action="delete",
-                    )
-                )
-            manager = await self._prepare_manager_permission_transition(
-                command
-            )
+            manager = await self._prepare_manager_permission_transition(command)
             manager_target_parent = TupleOperation(
                 action="write",
                 user=(
@@ -1556,13 +1282,9 @@ class KnowledgeDocumentDistributionService:
                 ],
             )
         except KnowledgeDocumentPermissionActivationError as exc:
-            raise KnowledgeDocumentDistributionError(
-                "publish permission prewrite failed"
-            ) from exc
+            raise KnowledgeDocumentDistributionError("publish permission prewrite failed") from exc
         except Exception as exc:
-            raise KnowledgeDocumentDistributionError(
-                "publish permission snapshot or prewrite failed"
-            ) from exc
+            raise KnowledgeDocumentDistributionError("publish permission snapshot or prewrite failed") from exc
 
         try:
             await self._activate_publish_transfer(
@@ -1572,22 +1294,16 @@ class KnowledgeDocumentDistributionService:
             )
         except Exception as exc:
             await self.session.rollback()
-            if (
-                isinstance(exc, KnowledgeDocumentDistributionError)
-                and str(exc) == PUBLISH_DUPLICATE_CONTENT_MESSAGE
-            ):
+            if isinstance(exc, KnowledgeDocumentDistributionError) and str(exc) == PUBLISH_DUPLICATE_CONTENT_MESSAGE:
                 await self._discard_duplicate_publish_preparation(
                     command=command,
                     publish_entry_id=int(publish.id),
                 )
                 try:
-                    await self.permission_activation_service.tuple_writer(
-                        prewrite_cleanup_operations
-                    )
+                    await self.permission_activation_service.tuple_writer(prewrite_cleanup_operations)
                 except Exception:
                     logger.exception(
-                        "F059 duplicate publish permission cleanup deferred: "
-                        "document_id=%s target_space_id=%s",
+                        "F059 duplicate publish permission cleanup deferred: document_id=%s target_space_id=%s",
                         command.document_id,
                         command.target_space_id,
                     )
@@ -1601,10 +1317,7 @@ class KnowledgeDocumentDistributionService:
                 action="delete",
             ),
         ]
-        if (
-            target_old_manager is not None
-            and target_old_parent_delete is not None
-        ):
+        if target_old_manager is not None and target_old_parent_delete is not None:
             cleanup_operations.extend(
                 [
                     target_old_parent_delete,
@@ -1616,9 +1329,7 @@ class KnowledgeDocumentDistributionService:
                 ]
             )
         try:
-            await self.permission_activation_service.tuple_writer(
-                cleanup_operations
-            )
+            await self.permission_activation_service.tuple_writer(cleanup_operations)
         except Exception:
             logger.exception(
                 "F059 old manager permission cleanup deferred: document_id=%s",
@@ -1626,9 +1337,7 @@ class KnowledgeDocumentDistributionService:
             )
 
         return PublishKnowledgeDocumentResult(
-            document_id=int(
-                command.target_document_id or command.document_id
-            ),
+            document_id=int(command.target_document_id or command.document_id),
             manager_file_id=command.source_entry_id,
             publish_entry_id=int(publish.id),
             target_space_id=command.target_space_id,
@@ -1691,76 +1400,47 @@ class KnowledgeDocumentDistributionService:
         document: KnowledgeDocument,
         source_entry: KnowledgeFile,
     ) -> KnowledgeFile:
-        if (
-            int(document.tenant_id or 0) != command.tenant_id
-            or int(source_entry.tenant_id or 0) != command.tenant_id
-        ):
+        if int(document.tenant_id or 0) != command.tenant_id or int(source_entry.tenant_id or 0) != command.tenant_id:
             raise KnowledgeDocumentDistributionError("share tenant mismatch")
         if (
-            int(source_entry.reference_document_id or 0)
-            != command.document_id
-            or source_entry.entry_status
-            != KnowledgeFileEntryStatus.ACTIVE.value
+            int(source_entry.reference_document_id or 0) != command.document_id
+            or source_entry.entry_status != KnowledgeFileEntryStatus.ACTIVE.value
             or source_entry.entry_type
             not in {
                 KnowledgeFileEntryType.MANAGER.value,
                 KnowledgeFileEntryType.PUBLISH.value,
             }
         ):
-            raise KnowledgeDocumentDistributionError(
-                "share source must be an active manager or publish entry"
-            )
+            raise KnowledgeDocumentDistributionError("share source must be an active manager or publish entry")
         if int(source_entry.knowledge_id) == command.target_space_id:
-            raise KnowledgeDocumentDistributionError(
-                "share target must differ from source space"
-            )
-        existing_target = (
-            await self.file_repository.find_entry_in_space_for_update(
-                command.document_id,
-                command.target_space_id,
-            )
+            raise KnowledgeDocumentDistributionError("share target must differ from source space")
+        existing_target = await self.file_repository.find_entry_in_space_for_update(
+            command.document_id,
+            command.target_space_id,
         )
         if existing_target is not None:
-            raise KnowledgeDocumentDistributionError(
-                "canonical document already has an entry in target space"
-            )
-        manager = await self.file_repository.find_manager_for_update(
-            command.document_id
-        )
+            raise KnowledgeDocumentDistributionError("canonical document already has an entry in target space")
+        manager = await self.file_repository.find_manager_for_update(command.document_id)
         if manager is None:
-            raise KnowledgeDocumentDistributionError(
-                "canonical document has no active manager"
-            )
+            raise KnowledgeDocumentDistributionError("canonical document has no active manager")
         return manager
 
     async def share_approved(
         self,
         command: ShareKnowledgeDocumentCommand,
     ) -> ShareKnowledgeDocumentResult:
-        existing = await self.file_repository.find_by_approval_instance_id(
-            command.approval_instance_id
-        )
+        existing = await self.file_repository.find_by_approval_instance_id(command.approval_instance_id)
         if existing is not None:
             if (
-                int(existing.reference_document_id or 0)
-                != command.document_id
+                int(existing.reference_document_id or 0) != command.document_id
                 or existing.entry_type != KnowledgeFileEntryType.SHARE.value
                 or int(existing.knowledge_id) != command.target_space_id
             ):
-                raise KnowledgeDocumentDistributionError(
-                    "approval instance is bound to a different entry"
-                )
-            manager = await self.file_repository.find_manager_for_update(
-                command.document_id
-            )
+                raise KnowledgeDocumentDistributionError("approval instance is bound to a different entry")
+            manager = await self.file_repository.find_manager_for_update(command.document_id)
             if manager is None:
-                raise KnowledgeDocumentDistributionError(
-                    "canonical document has no active manager"
-                )
-            if (
-                existing.entry_status
-                == KnowledgeFileEntryStatus.ACTIVE.value
-            ):
+                raise KnowledgeDocumentDistributionError("canonical document has no active manager")
+            if existing.entry_status == KnowledgeFileEntryStatus.ACTIVE.value:
                 return ShareKnowledgeDocumentResult(
                     document_id=command.document_id,
                     manager_file_id=int(manager.id),
@@ -1768,25 +1448,14 @@ class KnowledgeDocumentDistributionService:
                     target_space_id=command.target_space_id,
                     idempotent=True,
                 )
-            if (
-                existing.entry_status
-                != KnowledgeFileEntryStatus.PREPARING.value
-            ):
-                raise KnowledgeDocumentDistributionError(
-                    "share approval entry is not retryable"
-                )
+            if existing.entry_status != KnowledgeFileEntryStatus.PREPARING.value:
+                raise KnowledgeDocumentDistributionError("share approval entry is not retryable")
             share = existing
         else:
-            document = await self.document_repository.find_by_id_for_update(
-                command.document_id
-            )
-            source_entry = await self.file_repository.find_by_id_for_update(
-                command.source_entry_id
-            )
+            document = await self.document_repository.find_by_id_for_update(command.document_id)
+            source_entry = await self.file_repository.find_by_id_for_update(command.source_entry_id)
             if document is None or source_entry is None:
-                raise KnowledgeDocumentDistributionError(
-                    "share source state no longer exists"
-                )
+                raise KnowledgeDocumentDistributionError("share source state no longer exists")
             manager = await self._validate_share_authority(
                 command=command,
                 document=document,
@@ -1808,9 +1477,7 @@ class KnowledgeDocumentDistributionService:
             await self.session.commit()
         except Exception as exc:
             await self.session.rollback()
-            raise KnowledgeDocumentDistributionError(
-                "share permission prewrite or activation failed"
-            ) from exc
+            raise KnowledgeDocumentDistributionError("share permission prewrite or activation failed") from exc
 
         return ShareKnowledgeDocumentResult(
             document_id=command.document_id,
@@ -1828,34 +1495,24 @@ class KnowledgeDocumentDistributionService:
         share_entry_id: int,
         actor_entry_id: int,
     ) -> RemoveShareEntryResult:
-        document = await self.document_repository.find_by_id_for_update(
-            document_id
-        )
-        locked = await self.file_repository.find_by_ids_for_update(
-            [actor_entry_id, share_entry_id]
-        )
+        document = await self.document_repository.find_by_id_for_update(document_id)
+        locked = await self.file_repository.find_by_ids_for_update([actor_entry_id, share_entry_id])
         file_map = {int(item.id): item for item in locked}
         actor = file_map.get(actor_entry_id)
         share = file_map.get(share_entry_id)
         if document is None or actor is None or share is None:
-            raise KnowledgeDocumentDistributionError(
-                "share removal state no longer exists"
-            )
+            raise KnowledgeDocumentDistributionError("share removal state no longer exists")
         if (
             int(document.tenant_id or 0) != tenant_id
             or int(actor.tenant_id or 0) != tenant_id
             or int(share.tenant_id or 0) != tenant_id
         ):
-            raise KnowledgeDocumentDistributionError(
-                "share removal tenant mismatch"
-            )
+            raise KnowledgeDocumentDistributionError("share removal tenant mismatch")
         if (
             int(share.reference_document_id or 0) != document_id
             or share.entry_type != KnowledgeFileEntryType.SHARE.value
         ):
-            raise KnowledgeDocumentDistributionError(
-                "target entry is not a share"
-            )
+            raise KnowledgeDocumentDistributionError("target entry is not a share")
         actor_is_recipient = int(actor.id) == int(share.id)
         actor_is_manager = (
             int(actor.reference_document_id or 0) == document_id
@@ -1863,9 +1520,7 @@ class KnowledgeDocumentDistributionService:
             and actor.entry_status == KnowledgeFileEntryStatus.ACTIVE.value
         )
         if not actor_is_recipient and not actor_is_manager:
-            raise KnowledgeDocumentDistributionError(
-                "only the recipient entry or current manager can remove a share"
-            )
+            raise KnowledgeDocumentDistributionError("only the recipient entry or current manager can remove a share")
         if share.entry_status == KnowledgeFileEntryStatus.DELETING.value:
             return RemoveShareEntryResult(
                 document_id=document_id,
@@ -1873,19 +1528,13 @@ class KnowledgeDocumentDistributionService:
                 idempotent=True,
             )
         if share.entry_status != KnowledgeFileEntryStatus.ACTIVE.value:
-            raise KnowledgeDocumentDistributionError(
-                "share entry is not active"
-            )
+            raise KnowledgeDocumentDistributionError("share entry is not active")
         if not await self.file_repository.mark_entry_deleting(share_entry_id):
-            raise KnowledgeDocumentDistributionError(
-                "share entry state changed concurrently"
-            )
+            raise KnowledgeDocumentDistributionError("share entry state changed concurrently")
         await self.session.commit()
 
         try:
-            explicit_snapshot = list(
-                await self.permission_snapshot_loader(share_entry_id)
-            )
+            explicit_snapshot = list(await self.permission_snapshot_loader(share_entry_id))
             await self.permission_activation_service.revoke_deleting_entry(
                 entry_id=share_entry_id,
                 explicit_operations=explicit_snapshot,
@@ -1949,36 +1598,25 @@ class KnowledgeDocumentDistributionService:
         document = await self.document_repository.find_by_id(document_id)
         entry = await self.file_repository.find_by_id(entry_id)
         if document is None or entry is None:
-            raise KnowledgeDocumentDistributionError(
-                "delete target no longer exists"
-            )
+            raise KnowledgeDocumentDistributionError("delete target no longer exists")
         if (
             int(document.tenant_id or 0) != tenant_id
             or int(entry.tenant_id or 0) != tenant_id
             or int(entry.reference_document_id or 0) != document_id
-            or entry.entry_status
-            != KnowledgeFileEntryStatus.ACTIVE.value
+            or entry.entry_status != KnowledgeFileEntryStatus.ACTIVE.value
         ):
-            raise KnowledgeDocumentDistributionError(
-                "delete target state changed"
-            )
+            raise KnowledgeDocumentDistributionError("delete target state changed")
         if entry.entry_type == KnowledgeFileEntryType.PUBLISH.value:
-            raise KnowledgeDocumentDistributionError(
-                "publish entries cannot be deleted"
-            )
+            raise KnowledgeDocumentDistributionError("publish entries cannot be deleted")
         if entry.entry_type == KnowledgeFileEntryType.SHARE.value:
             return "remove_share"
         if entry.entry_type != KnowledgeFileEntryType.MANAGER.value:
-            raise KnowledgeDocumentDistributionError(
-                "entry type does not support explicit delete"
-            )
+            raise KnowledgeDocumentDistributionError("entry type does not support explicit delete")
         if document.predecessor_logic_file_id is not None:
             return "rollback"
 
-        entries = (
-            await self.file_repository.find_distribution_entries_by_document_id(
-                document_id,
-            )
+        entries = await self.file_repository.find_distribution_entries_by_document_id(
+            document_id,
         )
         if any(
             candidate.entry_type == KnowledgeFileEntryType.SHARE.value
@@ -1989,9 +1627,7 @@ class KnowledgeDocumentDistributionService:
             }
             for candidate in entries
         ):
-            raise KnowledgeDocumentDistributionError(
-                "active shares must be revoked before final manager deletion"
-            )
+            raise KnowledgeDocumentDistributionError("active shares must be revoked before final manager deletion")
         return "final_delete"
 
     async def delete_manager(
@@ -2001,30 +1637,20 @@ class KnowledgeDocumentDistributionService:
         document_id: int,
         manager_file_id: int,
     ) -> DeleteManagerResult:
-        document = await self.document_repository.find_by_id_for_update(
-            document_id
-        )
-        manager = await self.file_repository.find_by_id_for_update(
-            manager_file_id
-        )
+        document = await self.document_repository.find_by_id_for_update(document_id)
+        manager = await self.file_repository.find_by_id_for_update(manager_file_id)
         if document is None or manager is None:
-            raise KnowledgeDocumentDistributionError(
-                "manager delete state no longer exists"
-            )
+            raise KnowledgeDocumentDistributionError("manager delete state no longer exists")
         if (
             int(document.tenant_id or 0) != tenant_id
             or int(manager.tenant_id or 0) != tenant_id
             or int(manager.reference_document_id or 0) != document_id
             or manager.entry_type != KnowledgeFileEntryType.MANAGER.value
         ):
-            raise KnowledgeDocumentDistributionError(
-                "delete target is not the canonical manager"
-            )
+            raise KnowledgeDocumentDistributionError("delete target is not the canonical manager")
         if (
-            document.lifecycle_status
-            == KnowledgeDocumentLifecycleStatus.DELETING.value
-            and manager.entry_status
-            == KnowledgeFileEntryStatus.DELETING.value
+            document.lifecycle_status == KnowledgeDocumentLifecycleStatus.DELETING.value
+            and manager.entry_status == KnowledgeFileEntryStatus.DELETING.value
         ):
             return DeleteManagerResult(
                 document_id=document_id,
@@ -2034,11 +1660,7 @@ class KnowledgeDocumentDistributionService:
             )
 
         predecessor_id = document.predecessor_logic_file_id
-        if (
-            manager.entry_status
-            == KnowledgeFileEntryStatus.PREPARING.value
-            and predecessor_id is not None
-        ):
+        if manager.entry_status == KnowledgeFileEntryStatus.PREPARING.value and predecessor_id is not None:
             return await self._rollback_manager(
                 tenant_id=tenant_id,
                 document=document,
@@ -2046,9 +1668,7 @@ class KnowledgeDocumentDistributionService:
                 predecessor_id=int(predecessor_id),
             )
         if manager.entry_status != KnowledgeFileEntryStatus.ACTIVE.value:
-            raise KnowledgeDocumentDistributionError(
-                "manager state changed concurrently"
-            )
+            raise KnowledgeDocumentDistributionError("manager state changed concurrently")
         if predecessor_id is not None:
             return await self._rollback_manager(
                 tenant_id=tenant_id,
@@ -2057,11 +1677,9 @@ class KnowledgeDocumentDistributionService:
                 predecessor_id=int(predecessor_id),
             )
 
-        entries = (
-            await self.file_repository.find_distribution_entries_by_document_id(
-                document_id,
-                for_update=True,
-            )
+        entries = await self.file_repository.find_distribution_entries_by_document_id(
+            document_id,
+            for_update=True,
         )
         if any(
             entry.entry_type == KnowledgeFileEntryType.SHARE.value
@@ -2072,13 +1690,9 @@ class KnowledgeDocumentDistributionService:
             }
             for entry in entries
         ):
-            raise KnowledgeDocumentDistributionError(
-                "active shares must be revoked before final manager deletion"
-            )
+            raise KnowledgeDocumentDistributionError("active shares must be revoked before final manager deletion")
 
-        document.lifecycle_status = (
-            KnowledgeDocumentLifecycleStatus.DELETING.value
-        )
+        document.lifecycle_status = KnowledgeDocumentLifecycleStatus.DELETING.value
         manager.entry_status = KnowledgeFileEntryStatus.DELETING.value
         manager.desired_entry_generation += 1
         manager.projection_status = KnowledgeFileProjectionStatus.PENDING.value
@@ -2101,46 +1715,32 @@ class KnowledgeDocumentDistributionService:
         manager: KnowledgeFile,
         predecessor_id: int,
     ) -> DeleteManagerResult:
-        predecessor = await self.file_repository.find_by_id_for_update(
-            predecessor_id
-        )
+        predecessor = await self.file_repository.find_by_id_for_update(predecessor_id)
         if (
             predecessor is None
             or int(predecessor.tenant_id or 0) != tenant_id
-            or int(predecessor.reference_document_id or 0)
-            != int(document.id)
-            or predecessor.entry_type
-            != KnowledgeFileEntryType.PUBLISH.value
-            or predecessor.entry_status
-            != KnowledgeFileEntryStatus.ACTIVE.value
+            or int(predecessor.reference_document_id or 0) != int(document.id)
+            or predecessor.entry_type != KnowledgeFileEntryType.PUBLISH.value
+            or predecessor.entry_status != KnowledgeFileEntryStatus.ACTIVE.value
         ):
-            raise KnowledgeDocumentDistributionError(
-                "publish predecessor is not restorable"
-            )
+            raise KnowledgeDocumentDistributionError("publish predecessor is not restorable")
         if manager.entry_status not in {
             KnowledgeFileEntryStatus.ACTIVE.value,
             KnowledgeFileEntryStatus.PREPARING.value,
         }:
-            raise KnowledgeDocumentDistributionError(
-                "rollback manager is not retryable"
-            )
+            raise KnowledgeDocumentDistributionError("rollback manager is not retryable")
 
-        entries = (
-            await self.file_repository.find_distribution_entries_by_document_id(
-                int(document.id),
-                for_update=True,
-            )
+        entries = await self.file_repository.find_distribution_entries_by_document_id(
+            int(document.id),
+            for_update=True,
         )
         tombstone = next(
             (
                 entry
                 for entry in entries
-                if entry.entry_type
-                == KnowledgeFileEntryType.PROJECTION_TOMBSTONE.value
-                and entry.entry_status
-                == KnowledgeFileEntryStatus.PREPARING.value
-                and int(entry.projection_previous_file_id or 0)
-                == int(manager.id)
+                if entry.entry_type == KnowledgeFileEntryType.PROJECTION_TOMBSTONE.value
+                and entry.entry_status == KnowledgeFileEntryStatus.PREPARING.value
+                and int(entry.projection_previous_file_id or 0) == int(manager.id)
                 and int(entry.knowledge_id) == int(manager.knowledge_id)
             ),
             None,
@@ -2157,14 +1757,10 @@ class KnowledgeDocumentDistributionService:
         await self.session.commit()
 
         try:
-            predecessor_permissions = list(
-                await self.permission_snapshot_loader(int(predecessor.id))
-            )
-            manager_target_parent = (
-                self.permission_activation_service.build_parent_operation(
-                    predecessor,
-                    action="write",
-                )
+            predecessor_permissions = list(await self.permission_snapshot_loader(int(predecessor.id)))
+            manager_target_parent = self.permission_activation_service.build_parent_operation(
+                predecessor,
+                action="write",
             )
             manager_target_parent = TupleOperation(
                 action="write",
@@ -2183,16 +1779,10 @@ class KnowledgeDocumentDistributionService:
                 ]
             )
         except Exception as exc:
-            raise KnowledgeDocumentDistributionError(
-                "rollback permission prewrite failed"
-            ) from exc
+            raise KnowledgeDocumentDistributionError("rollback permission prewrite failed") from exc
 
-        document = await self.document_repository.find_by_id_for_update(
-            int(document.id)
-        )
-        locked = await self.file_repository.find_by_ids_for_update(
-            [int(manager.id), predecessor_id, int(tombstone.id)]
-        )
+        document = await self.document_repository.find_by_id_for_update(int(document.id))
+        locked = await self.file_repository.find_by_ids_for_update([int(manager.id), predecessor_id, int(tombstone.id)])
         file_map = {int(item.id): item for item in locked}
         manager = file_map.get(int(manager.id))
         predecessor = file_map.get(predecessor_id)
@@ -2202,41 +1792,25 @@ class KnowledgeDocumentDistributionService:
             or manager is None
             or predecessor is None
             or tombstone is None
-            or int(document.predecessor_logic_file_id or 0)
-            != predecessor_id
-            or manager.entry_status
-            != KnowledgeFileEntryStatus.PREPARING.value
-            or predecessor.entry_status
-            != KnowledgeFileEntryStatus.ACTIVE.value
-            or tombstone.entry_status
-            != KnowledgeFileEntryStatus.PREPARING.value
+            or int(document.predecessor_logic_file_id or 0) != predecessor_id
+            or manager.entry_status != KnowledgeFileEntryStatus.PREPARING.value
+            or predecessor.entry_status != KnowledgeFileEntryStatus.ACTIVE.value
+            or tombstone.entry_status != KnowledgeFileEntryStatus.PREPARING.value
         ):
-            raise KnowledgeDocumentDistributionError(
-                "rollback state changed concurrently"
-            )
+            raise KnowledgeDocumentDistributionError("rollback state changed concurrently")
 
-        versions = await self.version_repository.find_by_document_id(
-            int(document.id)
-        )
-        physical_file_ids = sorted(
-            {int(version.knowledge_file_id) for version in versions}
-        )
-        physical_files = await self.file_repository.find_by_ids_for_update(
-            physical_file_ids
-        )
+        versions = await self.version_repository.find_by_document_id(int(document.id))
+        physical_file_ids = sorted({int(version.knowledge_file_id) for version in versions})
+        physical_files = await self.file_repository.find_by_ids_for_update(physical_file_ids)
         if len(physical_files) != len(physical_file_ids):
-            raise KnowledgeDocumentDistributionError(
-                "canonical document has missing physical versions"
-            )
+            raise KnowledgeDocumentDistributionError("canonical document has missing physical versions")
         for physical_file in physical_files:
             physical_file.knowledge_id = int(predecessor.knowledge_id)
             self.session.add(physical_file)
 
-        old_parent_delete = (
-            self.permission_activation_service.build_parent_operation(
-                manager,
-                action="delete",
-            )
+        old_parent_delete = self.permission_activation_service.build_parent_operation(
+            manager,
+            action="delete",
         )
         manager.knowledge_id = int(predecessor.knowledge_id)
         manager.file_level_path = predecessor.file_level_path
@@ -2250,20 +1824,14 @@ class KnowledgeDocumentDistributionService:
         document.knowledge_id = int(predecessor.knowledge_id)
         document.file_level_path = predecessor.file_level_path
         document.level = predecessor.level
-        document.predecessor_logic_file_id = (
-            predecessor.predecessor_logic_file_id
-        )
+        document.predecessor_logic_file_id = predecessor.predecessor_logic_file_id
 
         predecessor.entry_status = KnowledgeFileEntryStatus.DELETING.value
         predecessor.desired_entry_generation += 1
-        predecessor.projection_status = (
-            KnowledgeFileProjectionStatus.PENDING.value
-        )
+        predecessor.projection_status = KnowledgeFileProjectionStatus.PENDING.value
         predecessor.projection_next_retry_at = None
         tombstone.entry_status = KnowledgeFileEntryStatus.DELETING.value
-        tombstone.projection_status = (
-            KnowledgeFileProjectionStatus.PENDING.value
-        )
+        tombstone.projection_status = KnowledgeFileProjectionStatus.PENDING.value
         tombstone.projection_next_retry_at = None
 
         self.session.add(document)
@@ -2274,13 +1842,10 @@ class KnowledgeDocumentDistributionService:
         await self.session.commit()
 
         try:
-            await self.permission_activation_service.tuple_writer(
-                [old_parent_delete]
-            )
+            await self.permission_activation_service.tuple_writer([old_parent_delete])
         except Exception:
             logger.exception(
-                "F059 rollback old manager permission cleanup deferred: "
-                "document_id=%s",
+                "F059 rollback old manager permission cleanup deferred: document_id=%s",
                 document.id,
             )
 

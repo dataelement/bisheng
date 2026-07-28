@@ -83,9 +83,7 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
     async def prepare_delete_by_ids(self, entity_ids: list[int]) -> int:
         if not entity_ids:
             return 0
-        result = await self.session.execute(
-            delete(KnowledgeFile).where(col(KnowledgeFile.id).in_(entity_ids))
-        )
+        result = await self.session.execute(delete(KnowledgeFile).where(col(KnowledgeFile.id).in_(entity_ids)))
         await self.session.flush()
         return int(result.rowcount or 0)
 
@@ -151,15 +149,12 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
             select(KnowledgeDocumentVersion.id)
             .join(
                 KnowledgeDocument,
-                KnowledgeDocument.primary_version_id
-                == KnowledgeDocumentVersion.id,
+                KnowledgeDocument.primary_version_id == KnowledgeDocumentVersion.id,
             )
             .where(
-                KnowledgeDocumentVersion.knowledge_file_id
-                == KnowledgeFile.id,
+                KnowledgeDocumentVersion.knowledge_file_id == KnowledgeFile.id,
                 KnowledgeDocument.tenant_id == tenant_id,
-                KnowledgeDocument.lifecycle_status
-                == KnowledgeDocumentLifecycleStatus.ACTIVE.value,
+                KnowledgeDocument.lifecycle_status == KnowledgeDocumentLifecycleStatus.ACTIVE.value,
             )
         )
         physical_stmt = (
@@ -170,13 +165,12 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
                 KnowledgeFile.file_type == FileType.FILE.value,
                 KnowledgeFile.status == KnowledgeFileStatus.SUCCESS.value,
                 KnowledgeFile.md5 == md5,
+                col(KnowledgeFile.deleted_at).is_(None),
                 or_(
                     KnowledgeFile.entry_type.is_(None),
                     and_(
-                        KnowledgeFile.entry_type
-                        == KnowledgeFileEntryType.MANAGER.value,
-                        KnowledgeFile.entry_status
-                        == KnowledgeFileEntryStatus.ACTIVE.value,
+                        KnowledgeFile.entry_type == KnowledgeFileEntryType.MANAGER.value,
+                        KnowledgeFile.entry_status == KnowledgeFileEntryStatus.ACTIVE.value,
                     ),
                 ),
                 or_(
@@ -196,37 +190,34 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
             select(logical_entry.id)
             .join(
                 KnowledgeDocument,
-                KnowledgeDocument.id
-                == logical_entry.reference_document_id,
+                KnowledgeDocument.id == logical_entry.reference_document_id,
             )
             .join(
                 KnowledgeDocumentVersion,
-                KnowledgeDocumentVersion.id
-                == KnowledgeDocument.primary_version_id,
+                KnowledgeDocumentVersion.id == KnowledgeDocument.primary_version_id,
             )
             .join(
                 content_file,
-                content_file.id
-                == KnowledgeDocumentVersion.knowledge_file_id,
+                content_file.id == KnowledgeDocumentVersion.knowledge_file_id,
             )
             .where(
                 logical_entry.tenant_id == tenant_id,
                 logical_entry.knowledge_id == knowledge_id,
+                col(logical_entry.deleted_at).is_(None),
                 col(logical_entry.entry_type).in_(
                     [
                         KnowledgeFileEntryType.PUBLISH.value,
                         KnowledgeFileEntryType.SHARE.value,
                     ]
                 ),
-                logical_entry.entry_status
-                == KnowledgeFileEntryStatus.ACTIVE.value,
+                logical_entry.entry_status == KnowledgeFileEntryStatus.ACTIVE.value,
                 KnowledgeDocument.tenant_id == tenant_id,
-                KnowledgeDocument.lifecycle_status
-                == KnowledgeDocumentLifecycleStatus.ACTIVE.value,
+                KnowledgeDocument.lifecycle_status == KnowledgeDocumentLifecycleStatus.ACTIVE.value,
                 content_file.tenant_id == tenant_id,
                 content_file.file_type == FileType.FILE.value,
                 content_file.status == KnowledgeFileStatus.SUCCESS.value,
                 content_file.md5 == md5,
+                col(content_file.deleted_at).is_(None),
             )
             .limit(1)
         )
@@ -296,14 +287,11 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
     def _projection_candidate_predicate(now: datetime):
         is_distribution_row = or_(
             KnowledgeFile.reference_document_id.is_not(None),
-            KnowledgeFile.entry_type
-            == KnowledgeFileEntryType.PROJECTION_TOMBSTONE.value,
+            KnowledgeFile.entry_type == KnowledgeFileEntryType.PROJECTION_TOMBSTONE.value,
         )
         has_work = or_(
-            KnowledgeFile.desired_content_generation
-            > KnowledgeFile.applied_content_generation,
-            KnowledgeFile.desired_entry_generation
-            > KnowledgeFile.applied_entry_generation,
+            KnowledgeFile.desired_content_generation > KnowledgeFile.applied_content_generation,
+            KnowledgeFile.desired_entry_generation > KnowledgeFile.applied_entry_generation,
             col(KnowledgeFile.projection_status).in_(
                 [
                     KnowledgeFileProjectionStatus.PENDING.value,
@@ -311,10 +299,8 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
                     KnowledgeFileProjectionStatus.PROCESSING.value,
                 ]
             ),
-            KnowledgeFile.entry_status
-            == KnowledgeFileEntryStatus.DELETING.value,
-            KnowledgeFile.entry_type
-            == KnowledgeFileEntryType.PROJECTION_TOMBSTONE.value,
+            KnowledgeFile.entry_status == KnowledgeFileEntryStatus.DELETING.value,
+            KnowledgeFile.entry_type == KnowledgeFileEntryType.PROJECTION_TOMBSTONE.value,
         )
         retry_due = or_(
             KnowledgeFile.projection_next_retry_at.is_(None),
@@ -388,8 +374,7 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
         target_entry_generation: int,
     ) -> bool:
         target_is_current = and_(
-            KnowledgeFile.desired_content_generation
-            == target_content_generation,
+            KnowledgeFile.desired_content_generation == target_content_generation,
             KnowledgeFile.desired_entry_generation == target_entry_generation,
         )
         result = await self.session.execute(
@@ -397,8 +382,7 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
             .where(
                 KnowledgeFile.id == entry_id,
                 KnowledgeFile.projection_lease_owner == lease_owner,
-                KnowledgeFile.applied_content_generation
-                <= target_content_generation,
+                KnowledgeFile.applied_content_generation <= target_content_generation,
                 KnowledgeFile.applied_entry_generation <= target_entry_generation,
             )
             .values(
@@ -420,8 +404,7 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
                     (
                         and_(
                             target_is_current,
-                            KnowledgeFile.entry_status
-                            == KnowledgeFileEntryStatus.ACTIVE.value,
+                            KnowledgeFile.entry_status == KnowledgeFileEntryStatus.ACTIVE.value,
                         ),
                         None,
                     ),
@@ -463,14 +446,11 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
             update(KnowledgeFile)
             .where(
                 KnowledgeFile.id == entry_id,
-                KnowledgeFile.entry_status
-                == KnowledgeFileEntryStatus.PREPARING.value,
+                KnowledgeFile.entry_status == KnowledgeFileEntryStatus.PREPARING.value,
             )
             .values(
                 entry_status=KnowledgeFileEntryStatus.ACTIVE.value,
-                desired_entry_generation=(
-                    KnowledgeFile.desired_entry_generation + 1
-                ),
+                desired_entry_generation=(KnowledgeFile.desired_entry_generation + 1),
                 projection_status=KnowledgeFileProjectionStatus.PENDING.value,
                 projection_next_retry_at=None,
             )
@@ -492,9 +472,7 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
             )
             .values(
                 entry_status=KnowledgeFileEntryStatus.DELETING.value,
-                desired_entry_generation=(
-                    KnowledgeFile.desired_entry_generation + 1
-                ),
+                desired_entry_generation=(KnowledgeFile.desired_entry_generation + 1),
                 projection_status=KnowledgeFileProjectionStatus.PENDING.value,
                 projection_next_retry_at=None,
             )

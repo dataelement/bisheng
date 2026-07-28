@@ -229,3 +229,59 @@ class KnowledgeDepartmentShareLoginRequiredError(BaseErrorCode):
 class KnowledgeShareCreationDisabledError(BaseErrorCode):
     Code: int = 10995
     Msg: str = '新建链接或邀请码分享已停用'
+
+
+class KnowledgeRecycleForbiddenError(BaseErrorCode):
+    Code: int = 10941
+    Msg: str = '无权限操作回收站'
+
+
+class KnowledgeRecycleItemNotFoundError(BaseErrorCode):
+    Code: int = 10942
+    Msg: str = '回收站条目不存在'
+
+
+class KnowledgeRecycleOriginalPathGoneError(BaseErrorCode):
+    Code: int = 10943
+    Msg: str = '原位置已不存在，无法还原'
+
+
+class KnowledgeRecycleTargetPathNotFoundError(BaseErrorCode):
+    Code: int = 10944
+    Msg: str = '目标路径不存在'
+
+
+class KnowledgeRecycleBusinessDomainError(BaseErrorCode):
+    Code: int = 10945
+    Msg: str = '目标库业务域不匹配，无法还原'
+
+
+class KnowledgeRecycleFileDuplicateError(BaseErrorCode):
+    Code: int = 10946
+    Msg: str = '目标位置存在同名文件冲突'
+
+
+class KnowledgeRecycleFolderConflictError(BaseErrorCode):
+    Code: int = 10947
+    Msg: str = '存在重名文件夹，请确认是否合并'
+
+
+class KnowledgeRecycleRetentionInvalidError(BaseErrorCode):
+    Code: int = 10948
+    Msg: str = '回收站保留天数无效'
+
+
+class KnowledgeRecycleCrossSpaceError(BaseErrorCode):
+    Code: int = 10949
+    Msg: str = '跨空间还原失败'
+
+
+class KnowledgeRecycleTaskError(BaseErrorCode):
+    Code: int = 10950
+    Msg: str = '回收站任务执行失败'
+
+
+class KnowledgeRecycleOverwriteRequiredError(BaseErrorCode):
+    Code: int = 10951
+    Msg: str = '文件冲突，请确认是否覆盖'
+
