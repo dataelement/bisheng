@@ -12,7 +12,7 @@
 | spec.md | ✅ 已评审 | 用户已确认（存量不可恢复 / 会话删除即清理 / 按需换发链接 / 三场景一并处理 / 对象名唯一化纳入范围） |
 | design.md | ✅ 已评审 | 用户已确认；接手时第一入口 |
 | tasks.md | ✅ 已拆解 | 方案调整后重排波次 |
-| 实现 | 🟡 进行中 | 6 / 14 完成（Wave 1-2 已完成）|
+| 实现 | 🟡 进行中 | 9 / 14 完成（Wave 1-3 已完成）|
 
 ---
 
@@ -70,7 +70,7 @@
 
 ### Wave 3 — 换发链接与清理
 
-- [ ] **T007**: 换发链接的鉴权逻辑 + 单元测试
+- [x] **T007**: 换发链接的鉴权逻辑 + 单元测试
   **文件**: `src/backend/bisheng/chat_session/domain/chat.py`（或同模块 service）
   `src/backend/test/chat_session/test_attachment_link.py`（新建）
   **逻辑**: `resolve_attachment_url(chat_id, file_id, login_user)` —— ①载入会话 ②校验请求者为会话所属用户 ③在该会话消息的 files 中查 `file_id` 取**对象名** ④签发短时效链接。**对象名只从服务端数据取，绝不使用入参**（design §3 决策 3、§5 坑 6）
@@ -78,13 +78,13 @@
   **覆盖 AC**: AC-04, AC-08
   **依赖**: 无
 
-- [ ] **T008**: 换发链接端点
+- [x] **T008**: 换发链接端点
   **文件**: `src/backend/bisheng/chat_session/api/endpoints/chat.py`
   **逻辑**: 新增端点，入参 `chat_id` + `file_id`，委托 T007；不新增错误码，复用既有未授权 / 未找到响应
   **覆盖 AC**: AC-04, AC-08
   **依赖**: T006
 
-- [ ] **T009**: 会话删除时清理附件
+- [x] **T009**: 会话删除时清理附件
   **文件**: `src/backend/bisheng/chat_session/domain/chat.py`（`delete_session`）
   **逻辑**: 软删会话后，从该会话的消息 files 中取出 `object_name` 并逐个删除（上传时拿不到会话 ID，无法按前缀清扫——design §5 坑 8）。**清理失败只记日志，不得让删除会话失败**（spec §3）
   **覆盖 AC**: AC-03
@@ -92,7 +92,7 @@
 
 ### Wave 4 — 前端（client）
 
-- [ ] **T009**: 共用「消息图片」组件 + 换发链接接入
+- [x] **T009**: 共用「消息图片」组件 + 换发链接接入
   **文件**: `src/frontend/client/src/components/Chat/Messages/Content/MessageImage.tsx`（新建，基于既有 `Image.tsx` / `DialogImage.tsx` 提取）
   `src/frontend/client/src/api/chatApi.ts`（新增换发链接请求方法）
   **逻辑**: 渲染时调换发接口取链接 → 缩略图 → 点击全屏（右上角关闭）；**换发失败或图片加载失败** → 渲染占位「图片已失效，无法查看」（design §3 决策 4）；老消息无对象名字段时直接走失效分支（向后兼容）
