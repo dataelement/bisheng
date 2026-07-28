@@ -31,6 +31,7 @@ from bisheng.common.services import telemetry_service
 from bisheng.common.services.llm_error_classifier import ErrorType, label_error, unwrap
 from bisheng.core.cache.utils import async_file_download
 from bisheng.core.logger import trace_id_var
+from bisheng.core.storage.chat_attachment import promote_chat_attachments
 from bisheng.database.models.flow import FlowType
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
@@ -119,6 +120,11 @@ async def initialize_chat(data: APIChatCompletion, login_user: UserPayload):
         await MessageSessionDao.touch_session(conversation_id)
         conversation = await MessageSessionDao.async_get_one(conversation_id)
 
+    # Uploads land in the temp bucket, which clears itself every 3 days. Sending
+    # is the point where the file becomes part of the conversation, so that's
+    # where it gets copied somewhere permanent.
+    await promote_chat_attachments(data.files, login_user.user_id)
+
     if data.overrideParentMessageId:
         message = await ChatMessageDao.aget_message_by_id(int(data.overrideParentMessageId))
     else:
@@ -171,7 +177,6 @@ from pydantic import SkipValidation
 
 from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema
 from bisheng.citation.domain.services.citation_prompt_helper import (
-    CITATION_PROMPT_RULES,
     CitationRegistryCollector,
     annotate_rag_documents_with_citations,
     annotate_web_results_with_citations,
@@ -179,7 +184,6 @@ from bisheng.citation.domain.services.citation_prompt_helper import (
     cache_citation_registry_items_sync,
     collect_rag_citation_registry_items,
     collect_web_citation_registry_items,
-    prompt_has_citation_rules,
     save_message_citations,
     select_registry_items_for_persistence,
 )
@@ -1109,6 +1113,10 @@ async def _agent_initialize_chat(data: APIChatCompletion, login_user: UserPayloa
     if not is_new_conversation:
         await MessageSessionDao.touch_session(conversation_id)
         conversation = await MessageSessionDao.async_get_one(conversation_id)
+
+    # Same as the legacy flow: the attachment becomes permanent at send time,
+    # not at upload time (see promote_chat_attachments).
+    await promote_chat_attachments(data.files, login_user.user_id)
 
     # Always insert a brand-new question row — Agent flow has no regenerate.
     message = await ChatMessageDao.ainsert_one(

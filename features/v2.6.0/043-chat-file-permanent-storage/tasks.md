@@ -12,7 +12,7 @@
 | spec.md | ✅ 已评审 | 用户已确认（存量不可恢复 / 会话删除即清理 / 按需换发链接 / 三场景一并处理 / 对象名唯一化纳入范围） |
 | design.md | ✅ 已评审 | 用户已确认；接手时第一入口 |
 | tasks.md | ✅ 已拆解 | 方案调整后重排波次 |
-| 实现 | 🟡 进行中 | 2 / 13 完成（Wave 1 已完成）|
+| 实现 | 🟡 进行中 | 6 / 14 完成（Wave 1-2 已完成）|
 
 ---
 
@@ -44,25 +44,25 @@
 
 > 上传接口**一个都不改**（design 决策 1 选 B）。日常模式前端改用共用上传接口即可获得 uuid 命名。
 
-- [ ] **T003**: 日常模式消息落库接入
+- [x] **T003**: 日常模式消息落库接入
   **文件**: `src/backend/bisheng/workstation/domain/services/chat_service.py`（两处 `files=json.dumps(data.files)`）
   **逻辑**: 存库前调 `promote_chat_attachments(data.files, login_user.user_id)`
   **覆盖 AC**: AC-01
   **依赖**: T002
 
-- [ ] **T004**: 工作流会话消息落库接入
+- [x] **T004**: 工作流会话消息落库接入
   **文件**: `src/backend/bisheng/worker/workflow/redis_callback.py`（`files=json.dumps(chat_response.files…)`）
   **逻辑**: 同上；注意此处在 Celery worker 内，需确认用户上下文可取
   **覆盖 AC**: AC-01
   **依赖**: T002
 
-- [ ] **T005**: 任务模式消息落库确认
+- [x] **T005**: 任务模式消息落库确认
   **文件**: `src/backend/bisheng/linsight/domain/utils.py`（`files=json.dumps(files)`）
-  **逻辑**: 灵思上传已落主桶。**只需确认消息 files 里带了对象名**（其上传处写的是 `file_info["file_url"] = object_name`）；带了则接入 `promote_chat_attachments` 后会自动跳过 copy，不带则补上字段
+  **逻辑**: 实测灵思是第三种架构——上传落**后端本地磁盘**，执行时才进对象存储。但其入库流程**已经**为图片预览把原始字节提升到了正式桶（`entry["original_file_path"]`），只需在 `_annotate_display_files` 里把它带进消息的 `object_name`；另对走共用上传接口的附件在持久化前统一调 `promote_chat_attachments`
   **覆盖 AC**: AC-01, AC-11
   **依赖**: T002
 
-- [ ] **T006**: 日常模式前端改用共用上传接口
+- [x] **T006**: 日常模式前端改用共用上传接口
   **文件**: `src/frontend/client/src/api/apps.ts`（`uploadChatFile` 的 `urlMap`）
   **逻辑**: 日常模式不再指向 `/workstation/files`，改用 `/api/v1/knowledge/upload`（已 uuid 命名，**同名覆盖泄露随之消失**）。前端字段已有兜底（`file_id` 回落本地 id、`parsing_status` 有默认值），无需额外适配
   **覆盖 AC**: AC-02
@@ -106,6 +106,12 @@
   **覆盖 AC**: AC-05, AC-10, AC-11
   **依赖**: T009
 
+- [ ] **T012**: 失效占位组件（独立组件）
+  **文件**: `src/frontend/client/src/components/Chat/Messages/Content/InvalidImagePlaceholder.tsx`（新建）
+  **逻辑**: 浅灰圆角卡片，居中 `Outlined.FileImage`（bisheng-icons，已确认存在）+ 下方文字「图片已失效，无法查看」。尺寸与图片缩略图一致，避免消息布局跳动
+  **覆盖 AC**: AC-09
+  **依赖**: 无
+
 - [ ] **T011**: 失效占位文案 i18n
   **文件**: `src/frontend/client/src/locales/{en,zh-Hans,ja}/translation.json`
   **逻辑**: 「图片已失效，无法查看」三语（嵌套命名空间）
@@ -134,4 +140,6 @@
 - T001 偏离：对象名由 `chat/{chat_id}/` 改为 `chat/{user_id}/` → 更新 design 决策 1 + 新增坑 8（上传发生在会话创建之前，命名时拿不到会话 ID）
 - 方案整体调整：由「上传即落主桶」改为「上传不动 + 发消息时转正」→ 更新 design 决策 1（用户提出应避免改共用上传接口，顺此消除孤儿文件问题）
 - 原 T002「前缀批量删除」已移除：新方案下删除按对象名进行，该能力无调用方，不留投机性死代码
+- T005 偏离：任务模式为第三种架构（上传落本地磁盘、执行时才进对象存储），但其图片原件已被提升到正式桶，故只需把该对象名带进消息 → design §5 新增坑 11
+- 转正逻辑补「存储不可达时不阻断发消息」：原实现会让 MinIO 故障直接导致消息发不出去，违背 design「附件问题不应拖垮消息」的原则（已补测试固化）
 - T008 偏离：删除改为「从消息取对象名逐个删」，不再按前缀清扫（同坑 8）

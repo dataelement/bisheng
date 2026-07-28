@@ -17,7 +17,7 @@ from uuid import uuid4
 
 from loguru import logger
 
-from bisheng.core.storage.minio.minio_manager import get_minio_storage
+from bisheng.core.storage.minio.minio_manager import get_minio_storage, get_minio_storage_sync
 
 CHAT_OBJECT_PREFIX = "chat/"
 
@@ -74,6 +74,21 @@ def temp_object_name_from_url(file_url: str, tmp_bucket: str) -> str | None:
     return unquote(path[idx + len(marker) :]) or None
 
 
+def _plan_promotions(files: list[dict], user_id: int | str, tmp_bucket: str) -> list[tuple[dict, str, str]]:
+    """Work out which attachments still need moving: (file, source, dest)."""
+    plan = []
+    for file in files:
+        if not isinstance(file, dict) or file.get("object_name"):
+            # Already permanent — task-mode uploads land in the main bucket.
+            continue
+        source_object = temp_object_name_from_url(file.get("filepath") or file.get("file_path") or "", tmp_bucket)
+        if not source_object:
+            continue
+        dest_object = build_chat_object_name(user_id, file.get("filename") or file.get("file_name") or "")
+        plan.append((file, source_object, dest_object))
+    return plan
+
+
 async def promote_chat_attachments(files: list[dict] | None, user_id: int | str) -> list[dict]:
     """Move a message's attachments out of the temp bucket, in place.
 
@@ -83,8 +98,7 @@ async def promote_chat_attachments(files: list[dict] | None, user_id: int | str)
 
     Each promoted file gains an `object_name` pointing at the permanent copy —
     that field is what later resolves a fresh link and what conversation
-    deletion removes. A file that already has one is left alone (task-mode
-    uploads land in the main bucket to begin with).
+    deletion removes.
 
     One attachment failing must not cost the others or the message itself, so
     failures are logged and that file is simply left without `object_name`.
@@ -92,18 +106,44 @@ async def promote_chat_attachments(files: list[dict] | None, user_id: int | str)
     if not files:
         return []
 
-    minio_client = await get_minio_storage()
-    for file in files:
-        if not isinstance(file, dict) or file.get("object_name"):
-            continue
-        source_object = temp_object_name_from_url(
-            file.get("filepath") or file.get("file_path") or "", minio_client.tmp_bucket
-        )
-        if not source_object:
-            continue
-        dest_object = build_chat_object_name(user_id, file.get("filename") or file.get("file_name") or "")
+    try:
+        minio_client = await get_minio_storage()
+    except Exception:
+        # Best-effort by design: an attachment that can't be made permanent is
+        # worth a broken thumbnail, not a message the user can't send.
+        logger.exception("cannot reach object storage to promote chat attachments for user {}", user_id)
+        return files
+
+    for file, source_object, dest_object in _plan_promotions(files, user_id, minio_client.tmp_bucket):
         try:
             await minio_client.copy_object(
+                source_bucket=minio_client.tmp_bucket,
+                source_object=source_object,
+                dest_bucket=minio_client.bucket,
+                dest_object=dest_object,
+            )
+        except Exception:
+            logger.exception("failed to promote chat attachment {} for user {}", source_object, user_id)
+            continue
+        file["object_name"] = dest_object
+    return files
+
+
+def promote_chat_attachments_sync(files: list[dict] | None, user_id: int | str) -> list[dict]:
+    """Sync twin of `promote_chat_attachments`, for the Celery worker path."""
+    if not files:
+        return []
+
+    try:
+        minio_client = get_minio_storage_sync()
+    except Exception:
+        # Same reasoning as the async twin: never block the message.
+        logger.exception("cannot reach object storage to promote chat attachments for user {}", user_id)
+        return files
+
+    for file, source_object, dest_object in _plan_promotions(files, user_id, minio_client.tmp_bucket):
+        try:
+            minio_client.copy_object_sync(
                 source_bucket=minio_client.tmp_bucket,
                 source_object=source_object,
                 dest_bucket=minio_client.bucket,

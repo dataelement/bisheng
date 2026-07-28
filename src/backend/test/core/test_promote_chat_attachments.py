@@ -79,6 +79,17 @@ class TestPromoteChatAttachments:
         assert await promote_chat_attachments(None, user_id=7) == []
         storage.copy_object.assert_not_awaited()
 
+    async def test_unreachable_storage_does_not_block_the_message(self):
+        # Sending must survive a storage outage: the worst outcome allowed here
+        # is an attachment that can't be viewed later, never a message the user
+        # cannot send at all.
+        files = [{"file_id": "f1", "filename": "a.png", "filepath": "/bisheng-tmp/a.png"}]
+        with patch(
+            "bisheng.core.storage.chat_attachment.get_minio_storage",
+            AsyncMock(side_effect=RuntimeError("minio down")),
+        ):
+            assert await promote_chat_attachments(files, user_id=7) == files
+
 
 class TestTempObjectNameFromUrl:
     """The link we issued at upload is what tells us the object to move."""
