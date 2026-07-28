@@ -11,8 +11,8 @@
 |------|------|------|
 | spec.md | ✅ 已评审 | 用户已确认 |
 | design.md | ✅ 已评审 | 用户已确认；接手时第一入口 |
-| tasks.md | 🔲 草稿 | 待用户确认 |
-| 实现 | 🔲 未开始 | 0 / 7 完成 |
+| tasks.md | ✅ 已拆解 | — |
+| 实现 | 🟡 代码完成待验证 | 7 / 7 完成（需在有模型配置的环境人工验证）|
 
 ---
 
@@ -28,7 +28,7 @@
 
 ### Wave 1 — 数据层
 
-- [ ] **T001**: 模型表新增「状态更新时间」字段 + 迁移
+- [x] **T001**: 模型表新增「状态更新时间」字段 + 迁移
   **文件**: `src/backend/bisheng/llm/domain/models/llm_server.py`（`LLMModelBase` 加字段）
   `src/backend/bisheng/core/database/alembic/versions/v3_0_0_beta1_f044_llm_model_status_update_time.py`（新建）
   **逻辑**: 新增可空 DateTime 列 `status_update_time`（历史行为 NULL → 前端显示「—」）。**不得**用 `ON UPDATE CURRENT_TIMESTAMP`，由业务代码显式写入（design §3 决策 4）
@@ -37,7 +37,7 @@
   **覆盖 AC**: AC-05
   **依赖**: 无
 
-- [ ] **T002**: DAO 写状态时一并写时间
+- [x] **T002**: DAO 写状态时一并写时间
   **文件**: `src/backend/bisheng/llm/domain/models/llm_server.py`（`LLMDao.update_model_status` / `aupdate_model_status`）
   **逻辑**: 两个方法的 `values(...)` 增加 `status_update_time=当前时间`；保持既有签名与调用方兼容
   **覆盖 AC**: AC-03, AC-04, AC-05
@@ -45,14 +45,14 @@
 
 ### Wave 2 — 探活行为修正（Test-First）
 
-- [ ] **T003**: 探活状态写入单元测试
+- [x] **T003**: 探活状态写入单元测试
   **文件**: `src/backend/test/llm/test_model_status_verify.py`（新建）
   **逻辑**: mock 各类型模型客户端。用例：调用成功 → 写状态=正常且 remark 清空且时间刷新；调用抛异常 → 写状态=异常 + 原因 + 时间刷新；超时 → 按异常处理且原因含超时语义
   **覆盖 AC**: AC-03, AC-04
   **基础设施**: `test/llm/` 若不存在则新建（含 `__init__.py`），复用根 `conftest.py`
   **依赖**: T002
 
-- [ ] **T004**: `test_model_status` 补成功回写 + 超时
+- [x] **T004**: `test_model_status` 补成功回写 + 超时
   **文件**: `src/backend/bisheng/llm/domain/services/llm.py`（`LLMService.test_model_status`）
   **逻辑**: ①成功分支补 `update_model_status(id, 0, '')`——现状只在失败写库，不改 AC-03 不成立（design §3 决策 3、§5 坑 1）；②整段探活加 30 秒超时上限，超时按异常处理
   **测试**: T003 全部通过
@@ -62,13 +62,13 @@
 
 ### Wave 3 — API 层
 
-- [ ] **T005**: 「验证单个模型」端点
+- [x] **T005**: 「验证单个模型」端点
   **文件**: `src/backend/bisheng/llm/api/router.py`（与 `/online` 同级新增）
   **逻辑**: 入参模型 ID；权限沿用同文件既有 `get_tenant_admin_user` 注入；取模型 → 调 `LLMService.test_model_status` → 回读并返回 `{status, remark, status_update_time}`。**不新增错误码**：验证失败是业务结果（状态=异常），接口本身返回成功
   **覆盖 AC**: AC-02, AC-03, AC-04, AC-06
   **依赖**: T004
 
-- [ ] **T006**: 模型列表响应带出状态更新时间
+- [x] **T006**: 模型列表响应带出状态更新时间
   **文件**: `src/backend/bisheng/llm/domain/services/llm.py` / 相关 schema（按现有模型列表返回结构补字段）
   **逻辑**: 列表接口响应中带 `status_update_time`（新增字段，向后兼容，其他消费方忽略即可）
   **覆盖 AC**: AC-05
@@ -76,7 +76,7 @@
 
 ### Wave 4 — 前端
 
-- [ ] **T007**: 模型管理页：更新状态按钮 + 时间列 + i18n
+- [x] **T007**: 模型管理页：更新状态按钮 + 时间列 + i18n
   **文件**: `src/frontend/platform/src/pages/ModelPage/manage/index.tsx`
   `src/frontend/platform/src/controllers/API/finetune.ts`（新增请求方法，走既有封装）
   platform locale 三语文件
@@ -95,4 +95,5 @@
 
 > 只留一行指针，论证在 design.md。
 
-- （待填）
+- T006 无需改动：模型信息 schema 继承自表基类，新字段自动带出
+- T004 行为修正的连带影响：`test_zhipu_provider.py::test_model_status_checks_llm_with_non_streaming` 原先靠"成功不写库"绕开 DB，改为成功也写库后需补 DAO mock（已修）
