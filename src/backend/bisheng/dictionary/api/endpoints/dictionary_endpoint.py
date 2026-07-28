@@ -12,10 +12,10 @@ from bisheng.dictionary.domain.schemas.dictionary_schema import (
 )
 from bisheng.dictionary.domain.services.dictionary_service import DictionaryService
 
-router = APIRouter(tags=["Dictionary"])
+router = APIRouter(prefix="/dictoption", tags=["Dictionary"])
 
 
-@router.post("", response_model=DictionaryResponse)
+@router.post("/create", response_model=DictionaryResponse)
 async def create_dictionary(
     request: DictionaryCreateRequest,
     user: UserPayload = Depends(UserPayload.get_login_user),
@@ -26,7 +26,7 @@ async def create_dictionary(
     return resp_200(data=result.model_dump())
 
 
-@router.put("/{dictionary_id}", response_model=DictionaryResponse)
+@router.put("/update/{dictionary_id}", response_model=DictionaryResponse)
 async def update_dictionary(
     dictionary_id: int,
     request: DictionaryUpdateRequest,
@@ -38,7 +38,7 @@ async def update_dictionary(
     return resp_200(data=result.model_dump())
 
 
-@router.delete("/{dictionary_id}")
+@router.delete("/delete/{dictionary_id}")
 async def delete_dictionary(
     dictionary_id: int,
     user: UserPayload = Depends(UserPayload.get_login_user),
@@ -69,7 +69,7 @@ async def get_dictionary_by_key(
     return resp_200(data=result.model_dump())
 
 
-@router.get("/{dictionary_id}", response_model=DictionaryResponse)
+@router.get("/query/{dictionary_id}", response_model=DictionaryResponse)
 async def get_dictionary_by_id(
     dictionary_id: int,
     service: DictionaryService = Depends(get_dictionary_service),
@@ -79,7 +79,7 @@ async def get_dictionary_by_id(
     return resp_200(data=result.model_dump())
 
 
-@router.get("", response_model=PageData[DictionaryResponse])
+@router.get("/list", response_model=PageData[DictionaryResponse])
 async def list_dictionaries(
     type: str | None = Query(None, description="字典类型筛选"),
     keyword: str | None = Query(None, description="关键词模糊匹配 type/dict_key/dict_value"),
