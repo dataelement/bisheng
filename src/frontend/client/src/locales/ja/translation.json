@@ -1507,7 +1507,17 @@
     "confirm_delete_action": "削除を確認",
     "delete_irreversible_warning": "この操作は取り消せません。慎重に削除してください！",
     "confirm_delete_files_count": "これら {{0}} 個のファイルを削除してもよろしいですか？",
-    "confirm_delete_folder_name": "フォルダ「{{0}}」を削除してもよろしいですか？"
+    "confirm_delete_folder_name": "フォルダ「{{0}}」を削除してもよろしいですか？",
+    "play": "再生",
+    "pause": "一時停止",
+    "mute": "ミュート",
+    "unmute": "ミュート解除",
+    "playback_speed": "再生速度",
+    "picture_in_picture": "ピクチャーインピクチャー",
+    "fullscreen": "全画面",
+    "exit_fullscreen": "全画面を終了",
+    "volume": "音量",
+    "progress": "再生位置"
   },
   "com_subscription": {
     "tab_channel": "チャンネル",

@@ -1584,7 +1584,17 @@
     "confirm_delete_action": "Confirm delete",
     "delete_irreversible_warning": "This action is irreversible. Please proceed with caution!",
     "confirm_delete_files_count": "Are you sure you want to delete these {{0}} file(s)?",
-    "confirm_delete_folder_name": "Are you sure you want to delete folder \"{{0}}\"?"
+    "confirm_delete_folder_name": "Are you sure you want to delete folder \"{{0}}\"?",
+    "play": "Play",
+    "pause": "Pause",
+    "mute": "Mute",
+    "unmute": "Unmute",
+    "playback_speed": "Playback speed",
+    "picture_in_picture": "Picture in picture",
+    "fullscreen": "Full screen",
+    "exit_fullscreen": "Exit full screen",
+    "volume": "Volume",
+    "progress": "Playback progress"
   },
   "com_subscription": {
     "tab_channel": "Channels",

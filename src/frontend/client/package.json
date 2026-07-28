@@ -67,7 +67,7 @@
     "@tanstack/react-table": "^8.11.7",
     "@tanstack/react-virtual": "^3",
     "axios": "^1.8.4",
-    "bisheng-icons": "^0.2.24",
+    "bisheng-icons": "^0.2.28",
     "class-variance-authority": "^0.6.0",
     "clsx": "^1.2.1",
     "copy-to-clipboard": "^3.3.3",

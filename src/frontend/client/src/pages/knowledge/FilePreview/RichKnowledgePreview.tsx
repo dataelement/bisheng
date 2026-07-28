@@ -7,6 +7,7 @@ import rehypeHighlight from "rehype-highlight";
 import remarkGfm from "remark-gfm";
 import type { KnowledgeFilePreview } from "~/api/knowledge";
 import { useLocalize } from "~/hooks";
+import { MediaPlayer } from "./MediaPlayer";
 import { resolveKnowledgePreviewUrl } from "./previewUrlUtils";
 import { TopBar } from "./TopBar";
 
@@ -262,18 +263,13 @@ export function RichKnowledgePreview({
                 {/* Side-by-side on md+: player left, transcript right, split by a single
                     divider line (no card border/shadow). Stacked on narrow screens. */}
                 <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-                    <div className="shrink-0 overflow-visible px-6 py-5 md:w-1/2 md:overflow-y-auto">
-                        {isVideo ? (
-                            <video
-                                className="max-h-[60vh] w-full rounded-[6px] bg-black"
-                                src={mediaPlaybackUrl}
-                                controls
-                            />
-                        ) : (
-                            <div className="overflow-visible py-2">
-                                <audio className="w-full" src={mediaPlaybackUrl} controls />
-                            </div>
-                        )}
+                    <div className="shrink-0 px-6 py-5 md:w-1/2 md:overflow-y-auto">
+                        <MediaPlayer
+                            kind={isVideo ? "video" : "audio"}
+                            src={mediaPlaybackUrl}
+                            allowDownload={allowDownload}
+                            onDownload={onDownloadFile}
+                        />
                     </div>
                     {mediaTextUrl ? (
                         <>
