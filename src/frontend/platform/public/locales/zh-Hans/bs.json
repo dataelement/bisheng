@@ -820,6 +820,8 @@
     "reportDescription": "报告生成描述...",
     "newButton": "新建",
     "importButton": "导入",
+    "saveTemplate": "保存",
+    "saveSuccess": "保存成功",
     "start": "开始",
     "formSettings": "表单设置",
     "requiredLabel": "必填",

@@ -8,7 +8,7 @@ from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 from bisheng.utils import generate_uuid
 from bisheng.workflow.callback.event import OutputMsgData
 from bisheng.workflow.nodes.base import BaseNode
-from bisheng.workflow.nodes.report.docx_replace import DocxReplacer
+from bisheng.workflow.nodes.report.docx_replace import DocxReplacer, normalize_placeholder_key
 from bisheng.workflow.nodes.report.text_classification import TextClassificationReport
 
 
@@ -40,7 +40,12 @@ class ReportNode(BaseNode):
                 workflow_variables = {}
                 text_classification = TextClassificationReport(temp_dir)
                 for one_variables in template_variables:
-                    variable_value = self.get_other_node_variable(one_variables)
+                    # Placeholders may carry a readable node-name prefix
+                    # (``name|node_id.field``); resolve by node id only. The map
+                    # stays keyed by the ORIGINAL text -- replacement matches the
+                    # document verbatim.
+                    lookup_key = normalize_placeholder_key(one_variables)
+                    variable_value = self.get_other_node_variable(lookup_key)
                     if type(variable_value) != str:
                         variable_value = str(variable_value)
                     variable_value = text_classification.get_all_classified_data(variable_value)
