@@ -143,8 +143,6 @@ async def test_list_accessible_ids_filters_objects_failing_tenant_gate(login_use
                   new_callable=AsyncMock), \
             patch.object(PermissionService, '_resource_ids_by_creator_user_ids',
                          AsyncMock(return_value=[])), \
-            patch.object(PermissionService, '_resource_ids_implicit_dept_admin_scope',
-                         AsyncMock(return_value=[])), \
             patch.object(PermissionService, '_resource_ids_child_tenant_admin_scope',
                          AsyncMock(return_value=[])), \
             patch.object(PermissionService, '_resource_tenant_map',
