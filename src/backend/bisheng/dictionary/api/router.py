@@ -4,5 +4,5 @@ from fastapi import APIRouter
 
 from bisheng.dictionary.api.endpoints.dictionary_endpoint import router as dictionary_endpoint
 
-router = APIRouter(prefix="/dictionaries")
-router.include_router(dictionary_endpoint)
+router = APIRouter()
+router.include_router(dictionary_endpoint, prefix="/dictionaries")
