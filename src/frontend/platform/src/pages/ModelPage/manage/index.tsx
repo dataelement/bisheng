@@ -99,11 +99,11 @@ function CustomTableRow({ data, index, user, onModel, onCheck, onVerified }) {
                                     {/* Verifying is a real call to the model, so it stays an
                                         explicit per-row action rather than anything automatic. */}
                                     <Button
-                                        variant="link"
+                                        variant="outline"
                                         size="sm"
                                         disabled={verifyingId === m.id}
                                         onClick={() => handleVerify(m.id)}
-                                        className={`ml-1 h-auto px-1 py-0 align-middle opacity-0 transition-opacity group-hover:opacity-100 ${verifyingId === m.id ? 'opacity-100' : ''}`}
+                                        className={`ml-2 h-6 rounded-md border-primary/30 bg-primary/5 px-2 align-middle text-xs font-normal text-primary shadow-none transition-opacity hover:bg-primary/10 hover:text-primary ${verifyingId === m.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
                                     >
                                         {verifyingId === m.id && <LoadingIcon className="mr-1 size-3" />}
                                         {t('model.updateStatus')}
