@@ -19,7 +19,8 @@ class DictionaryCreateRequest(BaseModel):
     """创建字典条目请求"""
 
     type: str = Field(..., max_length=64, description="字典类型")
-    value: str = Field(..., max_length=255, description="字典取值")
+    dict_key: str = Field(..., max_length=255, description="字典键")
+    dict_value: str = Field(..., max_length=255, description="字典取值")
     sort_order: int = Field(default=0, ge=0, description="排序权重")
     is_enabled: bool = Field(default=True, description="是否启用")
 
@@ -27,7 +28,7 @@ class DictionaryCreateRequest(BaseModel):
 class DictionaryUpdateRequest(BaseModel):
     """更新字典条目请求"""
 
-    value: str | None = Field(None, max_length=255, description="字典取值")
+    dict_value: str | None = Field(None, max_length=255, description="字典取值")
     sort_order: int | None = Field(None, ge=0, description="排序权重")
     is_enabled: bool | None = Field(None, description="是否启用")
 
@@ -39,7 +40,8 @@ class DictionaryResponse(BaseModel):
 
     id: int = Field(..., description="字典条目 ID")
     type: str = Field(..., description="字典类型")
-    value: str = Field(..., description="字典取值")
+    dict_key: str = Field(..., description="字典键")
+    dict_value: str = Field(..., description="字典取值")
     sort_order: int = Field(..., description="排序权重")
     is_enabled: bool = Field(..., description="是否启用")
     tenant_id: int = Field(..., description="租户 ID")

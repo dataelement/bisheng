@@ -38,13 +38,14 @@ class DictionaryService:
         """新增字典条目(管理员)"""
         self._ensure_admin(user)
 
-        existing = await self.repository.find_by_type_and_value(request.type, request.value)
+        existing = await self.repository.find_by_type_and_key(request.type, request.dict_key)
         if existing:
             raise DictionaryDuplicateError()
 
         entity = SystemDictionary(
             type=request.type,
-            value=request.value,
+            dict_key=request.dict_key,
+            dict_value=request.dict_value,
             sort_order=request.sort_order,
             is_enabled=request.is_enabled,
         )
@@ -64,14 +65,8 @@ class DictionaryService:
         if not entity:
             raise DictionaryNotFoundError()
 
-        if request.value is not None and request.value != entity.value:
-            existing = await self.repository.find_by_type_and_value(
-                entity.type,
-                request.value,
-            )
-            if existing and existing.id != dictionary_id:
-                raise DictionaryDuplicateError()
-            entity.value = request.value
+        if request.dict_value is not None:
+            entity.dict_value = request.dict_value
 
         if request.sort_order is not None:
             entity.sort_order = request.sort_order
@@ -99,6 +94,13 @@ class DictionaryService:
     async def get_by_id(self, dictionary_id: int) -> DictionaryResponse:
         """根据 ID 查询字典条目"""
         entity = await self.repository.find_by_id(dictionary_id)
+        if not entity:
+            raise DictionaryNotFoundError()
+        return DictionaryResponse.model_validate(entity)
+
+    async def get_by_key(self, dict_key: str) -> DictionaryResponse:
+        """根据 dict_key 查询启用的字典条目"""
+        entity = await self.repository.find_by_key(dict_key)
         if not entity:
             raise DictionaryNotFoundError()
         return DictionaryResponse.model_validate(entity)

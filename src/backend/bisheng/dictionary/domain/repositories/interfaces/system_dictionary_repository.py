@@ -10,12 +10,20 @@ class SystemDictionaryRepository(BaseRepository[SystemDictionary, int], ABC):
     """系统字典数据访问接口"""
 
     @abstractmethod
-    async def find_by_type_and_value(
+    async def find_by_type_and_key(
         self,
         dict_type: str,
-        value: str,
+        dict_key: str,
     ) -> SystemDictionary | None:
-        """根据类型和取值查询字典条目(用于唯一性校验)"""
+        """根据类型和键查询字典条目(用于唯一性校验)"""
+        pass
+
+    @abstractmethod
+    async def find_by_key(
+        self,
+        dict_key: str,
+    ) -> SystemDictionary | None:
+        """根据键查询启用的字典条目"""
         pass
 
     @abstractmethod

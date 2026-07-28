@@ -59,6 +59,16 @@ async def list_dictionaries_by_type(
     return resp_200(data=[item.model_dump() for item in result])
 
 
+@router.get("/key/{dict_key}", response_model=DictionaryResponse)
+async def get_dictionary_by_key(
+    dict_key: str = Path(..., description="字典键"),
+    service: DictionaryService = Depends(get_dictionary_service),
+):
+    """根据 dict_key 查询启用的字典条目"""
+    result = await service.get_by_key(dict_key)
+    return resp_200(data=result.model_dump())
+
+
 @router.get("/{dictionary_id}", response_model=DictionaryResponse)
 async def get_dictionary_by_id(
     dictionary_id: int,
@@ -72,7 +82,7 @@ async def get_dictionary_by_id(
 @router.get("", response_model=PageData[DictionaryResponse])
 async def list_dictionaries(
     type: str | None = Query(None, description="字典类型筛选"),
-    keyword: str | None = Query(None, description="关键词模糊匹配 type/value"),
+    keyword: str | None = Query(None, description="关键词模糊匹配 type/dict_key/dict_value"),
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(20, ge=1, le=500, description="每页数量"),
     service: DictionaryService = Depends(get_dictionary_service),

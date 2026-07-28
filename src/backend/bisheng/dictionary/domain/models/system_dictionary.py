@@ -30,8 +30,8 @@ class SystemDictionary(SQLModelSerializable, table=True):
         UniqueConstraint(
             "tenant_id",
             "type",
-            "value",
-            name="uk_system_dictionary_tenant_type_value",
+            "dict_key",
+            name="uk_system_dictionary_tenant_type_dict_key",
         ),
         {"comment": "System dictionary table for expert positions and other enums"},
     )
@@ -46,7 +46,12 @@ class SystemDictionary(SQLModelSerializable, table=True):
         description="Dictionary type code",
         sa_column=Column(String(64), nullable=False, index=True, comment="Dictionary type"),
     )
-    value: str = Field(
+    dict_key: str = Field(
+        ...,
+        description="Dictionary key",
+        sa_column=Column(String(255), nullable=False, comment="Dictionary key"),
+    )
+    dict_value: str = Field(
         ...,
         description="Dictionary value",
         sa_column=Column(String(255), nullable=False, comment="Dictionary value"),

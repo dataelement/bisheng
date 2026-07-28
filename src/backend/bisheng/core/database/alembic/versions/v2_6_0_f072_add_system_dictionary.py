@@ -127,7 +127,13 @@ def _create_table() -> None:
             comment="Dictionary type",
         ),
         sa.Column(
-            "value",
+            "dict_key",
+            sa.String(length=255),
+            nullable=False,
+            comment="Dictionary key",
+        ),
+        sa.Column(
+            "dict_value",
             sa.String(length=255),
             nullable=False,
             comment="Dictionary value",
@@ -168,8 +174,8 @@ def _create_table() -> None:
         sa.UniqueConstraint(
             "tenant_id",
             "type",
-            "value",
-            name="uk_system_dictionary_tenant_type_value",
+            "dict_key",
+            name="uk_system_dictionary_tenant_type_dict_key",
         ),
     )
 
@@ -181,7 +187,8 @@ def _seed_data() -> None:
             rows.append(
                 {
                     "type": dict_type,
-                    "value": value,
+                    "dict_key": f"{dict_type}_{index + 1:03d}",
+                    "dict_value": value,
                     "sort_order": index,
                     "is_enabled": True,
                     "tenant_id": 1,

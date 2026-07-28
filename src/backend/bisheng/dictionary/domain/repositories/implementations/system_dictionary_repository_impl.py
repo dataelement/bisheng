@@ -17,14 +17,29 @@ class SystemDictionaryRepositoryImpl(BaseRepositoryImpl[SystemDictionary, int], 
     def __init__(self, session: AsyncSession):
         super().__init__(session, SystemDictionary)
 
-    async def find_by_type_and_value(
+    async def find_by_type_and_key(
         self,
         dict_type: str,
-        value: str,
+        dict_key: str,
     ) -> SystemDictionary | None:
-        """根据类型和取值查询字典条目(用于唯一性校验)"""
+        """根据类型和键查询字典条目(用于唯一性校验)"""
         query = (
-            select(SystemDictionary).where(SystemDictionary.type == dict_type).where(SystemDictionary.value == value)
+            select(SystemDictionary)
+            .where(SystemDictionary.type == dict_type)
+            .where(SystemDictionary.dict_key == dict_key)
+        )
+        result = await self.session.exec(query)
+        return result.first()
+
+    async def find_by_key(
+        self,
+        dict_key: str,
+    ) -> SystemDictionary | None:
+        """根据键查询启用的字典条目"""
+        query = (
+            select(SystemDictionary)
+            .where(SystemDictionary.dict_key == dict_key)
+            .where(SystemDictionary.is_enabled == True)  # noqa: E712
         )
         result = await self.session.exec(query)
         return result.first()
@@ -45,7 +60,9 @@ class SystemDictionaryRepositoryImpl(BaseRepositoryImpl[SystemDictionary, int], 
         if keyword:
             like_pattern = f"%{keyword.strip()}%"
             query = query.where(
-                (SystemDictionary.type.ilike(like_pattern)) | (SystemDictionary.value.ilike(like_pattern))
+                (SystemDictionary.type.ilike(like_pattern))
+                | (SystemDictionary.dict_key.ilike(like_pattern))
+                | (SystemDictionary.dict_value.ilike(like_pattern))
             )
 
         count_query = select(func.count()).select_from(query.subquery())
