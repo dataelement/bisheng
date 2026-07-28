@@ -165,6 +165,9 @@ class ExpertService:
         sort_order: str = "desc",
         skip: int = 0,
         limit: int = 20,
+        answer_desc: Optional[bool] = None,
+        adoption_desc: Optional[bool] = None,
+        vote_desc: Optional[bool] = None,
     ) -> tuple[List[dict], int]:
         """列表查询专家"""
         sort_by_department = sort_by == "department"
@@ -179,6 +182,9 @@ class ExpertService:
             sort_order=sort_order,
             skip=0 if sort_by_department else skip,
             limit=None if sort_by_department else limit,
+            answer_desc=answer_desc,
+            adoption_desc=adoption_desc,
+            vote_desc=vote_desc,
         )
         experts_all = await self._build_expert_rows(experts)
         if sort_by_department:

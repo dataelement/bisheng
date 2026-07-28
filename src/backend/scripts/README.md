@@ -2,6 +2,43 @@
 
 This directory contains manual maintenance and migration scripts for the backend.
 
+## General Database Scripts
+
+### `execute_sql.py`
+
+连接 BiSheng 当前配置文件中的关系数据库并执行一条 SQL。脚本复用项目的
+`database_url` 加载、密码解密和 MySQL/DM8/SQLite 引擎配置。查询结果默认以表格输出，
+也支持 JSON、JSONL 和 CSV；默认最多输出 1000 行。
+
+只读语句可直接执行。写入、DDL、存储过程调用以及无法可靠判定为只读的语句必须显式添加
+`--apply`，成功后才会提交。可使用 `--config` 选择其他配置文件，使用 `--param` 绑定参数。
+
+```bash
+# 查询当前环境数据库
+PYTHONPATH=./ .venv/bin/python scripts/execute_sql.py \
+  --sql "SELECT user_id, user_name FROM user LIMIT 10"
+
+# 参数化查询并输出 JSON
+PYTHONPATH=./ .venv/bin/python scripts/execute_sql.py \
+  --sql "SELECT * FROM user WHERE user_id = :user_id" \
+  --param user_id=1 --format json
+
+# 从文件或标准输入读取 SQL
+PYTHONPATH=./ .venv/bin/python scripts/execute_sql.py \
+  --file /tmp/query.sql --format csv
+printf 'SHOW TABLES' | \
+  PYTHONPATH=./ .venv/bin/python scripts/execute_sql.py
+
+# 写入或 DDL 必须明确确认
+PYTHONPATH=./ .venv/bin/python scripts/execute_sql.py \
+  --sql "UPDATE user SET update_time = CURRENT_TIMESTAMP WHERE user_id = :user_id" \
+  --param user_id=1 --apply
+
+# 使用其他配置文件；0 表示输出全部结果
+PYTHONPATH=./ .venv/bin/python scripts/execute_sql.py \
+  --config config_3002.yaml --sql "SELECT * FROM user" --max-rows 0
+```
+
 ## Knowledge Space Scripts
 
 ### `knowledge_document_distribution_preflight.py`
@@ -221,6 +258,39 @@ Scope:
 - `--include-inflight` 在默认状态集合上增加 `WAITING` / `PROCESSING` / `REBUILDING`；
   `--only-inflight` 仅处理这三种执行中状态
 
+### `enqueue_reparse_knowledge_space_files.py`
+
+复用 `reparse_knowledge_space_files.py` 的文件筛选规则，但不在脚本进程内解析。
+默认 dry-run，仅输出候选统计；传入 `--apply` 后会将每个仍符合条件的文件更新为
+`WAITING`，清空旧的解析备注和相似文件标记，并携带文件所属 `tenant_id` 把
+`retry_knowledge_file_celery` 发布到 `knowledge_celery`。旧向量由 worker 的重试任务清理。
+
+Usage:
+
+```bash
+PYTHONPATH=./ .venv/bin/python scripts/enqueue_reparse_knowledge_space_files.py
+PYTHONPATH=./ .venv/bin/python scripts/enqueue_reparse_knowledge_space_files.py --apply
+PYTHONPATH=./ .venv/bin/python scripts/enqueue_reparse_knowledge_space_files.py \
+  --apply --space-id 10 --folder-id 20
+PYTHONPATH=./ .venv/bin/python scripts/enqueue_reparse_knowledge_space_files.py \
+  --apply --file-id 101 --file-id 102
+PYTHONPATH=./ .venv/bin/python scripts/enqueue_reparse_knowledge_space_files.py \
+  --space-level department --status failed --status timeout
+
+bash scripts/enqueue_reparse_knowledge_space_files.sh
+bash scripts/enqueue_reparse_knowledge_space_files.sh --apply --space-id 10
+```
+
+Scope 与状态筛选参数和上方本地重解析脚本一致，但不提供仅用于本地解析的 `--concurrency`。
+
+Safety:
+
+- 成功输出表示任务已被 broker 接受，不表示 worker 已经解析完成。
+- 执行 `--apply` 前必须确认 broker 和 `knowledge_celery` worker 可用，并先保存 dry-run 输出。
+- 单文件发布失败时脚本会尝试恢复其原始状态并继续；存在任何发布或恢复失败时最终返回非零退出码。
+- `--include-inflight` / `--only-inflight` 可能与正在运行的任务重复解析，只能在明确需要时使用。
+- 数据库状态提交与 Celery 发布不是原子事务；网络异常存在 broker 已接受但客户端未收到确认的不确定窗口。
+
 ### `move_knowledge_space_files.py`
 
 扫描一个或多个来源知识空间的 `SUCCESS` 真实文件，可按来源文件夹、门户一级分类 code、
@@ -428,6 +498,27 @@ Usage:
 
 ```bash
 PYTHONPATH=./ .venv/bin/python scripts/get_knowledge_file_chunks.py --knowledge-file-id 123
+```
+
+### `set_file_preview_count.py`
+
+按 `file_id` 将知识文件预览量（ES 中的 `portal_document_read` 与
+`mid_knowledge_space_content_stat` preview 记录）重置为指定值，默认 1000。
+默认 dry-run；传入 `--apply` 才会删除旧记录并写入新数据。
+
+Usage:
+
+```bash
+export config=config.yaml
+PYTHONPATH=./ .venv/bin/python scripts/set_file_preview_count.py --file-id 1294
+PYTHONPATH=./ .venv/bin/python scripts/set_file_preview_count.py --file-id 1294 --target 1000 --apply
+```
+
+Repo root wrapper:
+
+```bash
+export config=config.yaml
+./set_file_preview_count.sh --file-id 1294 --target 1000 --apply
 ```
 
 ### `export_daily_chat_messages.py`

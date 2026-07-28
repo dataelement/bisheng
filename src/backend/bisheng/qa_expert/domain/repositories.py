@@ -65,6 +65,9 @@ class ExpertRepository:
         sort_order: str = "desc",
         skip: int = 0,
         limit: Optional[int] = 20,
+        answer_desc: Optional[bool] = None,
+        adoption_desc: Optional[bool] = None,
+        vote_desc: Optional[bool] = None,
     ) -> tuple[List[Expert], int]:
         """列表查询专家"""
         async with get_async_db_session() as session:
@@ -97,19 +100,30 @@ class ExpertRepository:
             total = count_result.scalar() or 0
 
             # 3. 执行排序和分页查询。部门名称排序在 Service 完成，因为专家表只保存部门 ID。
-            expert_score = Expert.answer_count + Expert.adoption_count * 5 + Expert.vote_count * 2
-            sort_expressions = {
-                "expert_name": func.lower(Expert.expert_name),
-                "job_family": func.lower(func.coalesce(Expert.job_family, "")),
-                "job_category": func.lower(func.coalesce(Expert.job_category, "")),
-                "position": func.lower(func.coalesce(Expert.position, "")),
-                "major": func.lower(func.coalesce(Expert.major, "")),
-                "expert_score": expert_score,
-                "created_at": Expert.created_at,
-            }
-            sort_expression = sort_expressions.get(sort_by, Expert.created_at)
-            order_expression = sort_expression.asc() if sort_order == "asc" else sort_expression.desc()
-            data_stmt = base_stmt.order_by(order_expression, Expert.id.asc())
+            order_clauses: list = []
+            if answer_desc is not None:
+                order_clauses.append(Expert.answer_count.desc() if answer_desc else Expert.answer_count.asc())
+            if adoption_desc is not None:
+                order_clauses.append(Expert.adoption_count.desc() if adoption_desc else Expert.adoption_count.asc())
+            if vote_desc is not None:
+                order_clauses.append(Expert.vote_count.desc() if vote_desc else Expert.vote_count.asc())
+
+            if not order_clauses:
+                expert_score = Expert.answer_count + Expert.adoption_count * 5 + Expert.vote_count * 2
+                sort_expressions = {
+                    "expert_name": func.lower(Expert.expert_name),
+                    "job_family": func.lower(func.coalesce(Expert.job_family, "")),
+                    "job_category": func.lower(func.coalesce(Expert.job_category, "")),
+                    "position": func.lower(func.coalesce(Expert.position, "")),
+                    "major": func.lower(func.coalesce(Expert.major, "")),
+                    "expert_score": expert_score,
+                    "created_at": Expert.created_at,
+                }
+                sort_expression = sort_expressions.get(sort_by, Expert.created_at)
+                order_clauses.append(sort_expression.asc() if sort_order == "asc" else sort_expression.desc())
+
+            order_clauses.append(Expert.id.asc())
+            data_stmt = base_stmt.order_by(*order_clauses)
             if skip:
                 data_stmt = data_stmt.offset(skip)
             if limit is not None:

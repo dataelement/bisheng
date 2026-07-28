@@ -795,7 +795,6 @@ async def test_gate_creates_file_publish_target_role_department_admin_empty_exce
     async def fake_get_user_departments(user_ids: list[int]):
         primary_departments = {
             41: 300,
-            6001: 600,
         }
         return [
             SimpleNamespace(user_id=user_id, department_id=primary_departments[user_id], is_primary=1)
@@ -809,7 +808,7 @@ async def test_gate_creates_file_publish_target_role_department_admin_empty_exce
 
     async def fake_get_admins_by_departments(department_ids: list[int]):
         assert department_ids == [100, 200, 300]
-        return {300: [6001]}
+        return {}
 
     monkeypatch.setattr(
         "bisheng.approval.domain.services.shougang_approval_handler._resolve_space_roles_via_fga",

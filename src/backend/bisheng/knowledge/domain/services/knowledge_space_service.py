@@ -3597,10 +3597,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
         self._created_space_scope_by_id[int(knowledge_space.id)] = (level, owner_type, owner_id)
         log_perf_stage("scope_create")
 
-        # Clinic spaces are team-level spaces bound to a department; write the
-        # binding row so they appear under "团队/科室知识库" and department-scoped
-        # queries can find them.
-        if is_clinic and department_id is not None and KnowledgeSpaceLevelEnum.is_team_level(level):
+        # Department spaces and clinic spaces both require one canonical
+        # department binding. Portal discovery and department-file approval
+        # intentionally fail closed when scope and binding disagree.
+        should_create_department_binding = department_id is not None and (
+            level == KnowledgeSpaceLevelEnum.DEPARTMENT
+            or (is_clinic and KnowledgeSpaceLevelEnum.is_team_level(level))
+        )
+        if should_create_department_binding:
             try:
                 await DepartmentKnowledgeSpaceDao.acreate(
                     tenant_id=int(self.login_user.tenant_id),

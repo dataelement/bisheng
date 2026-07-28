@@ -2915,7 +2915,7 @@ async def test_file_publish_handler_resolves_space_role_sources_by_side(monkeypa
 
 
 @pytest.mark.asyncio
-async def test_file_publish_handler_rejects_cross_branch_admin_and_skips_applicant(monkeypatch):
+async def test_file_publish_handler_accepts_explicit_department_admin_regardless_primary_department(monkeypatch):
     from bisheng.approval.domain.services.shougang_approval_handler import KnowledgeSpaceFilePublishApprovalHandler
     from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
     from bisheng.database.models.department_admin_grant import DepartmentAdminGrantDao
@@ -2925,40 +2925,65 @@ async def test_file_publish_handler_rejects_cross_branch_admin_and_skips_applica
         5: SimpleNamespace(id=5, path="/1/4/5/"),
     }
     grants = {
-        5: [6],  # User 6 belongs to a sibling branch and is ineligible.
-        4: [4],  # The applicant is ineligible, so resolution must continue upward.
+        6: [9],  # 平级部门授权不得被查询。
+        5: [6],  # 用户 6 的主部门可在其他分支，显式部门 5 授权仍然有效。
+        4: [4],
         1: [8],
     }
-    primary_departments = {
-        4: 99,
-        6: 6,
-        8: 1,
-    }
-
-    async def fake_get_department(department_id: int):
-        return departments.get(department_id)
 
     async def fake_get_departments(department_ids: list[int]):
         return [departments[department_id] for department_id in department_ids if department_id in departments]
 
-    async def fake_get_admins(department_id: int):
-        return grants.get(department_id, [])
-
     async def fake_get_admins_by_departments(department_ids: list[int]):
+        assert department_ids == [1, 4, 5]
         return {department_id: grants.get(department_id, []) for department_id in department_ids}
 
-    async def fake_get_user_departments(user_ids: list[int]):
-        return [
-            SimpleNamespace(user_id=user_id, department_id=primary_departments[user_id], is_primary=1)
-            for user_id in user_ids
-            if user_id in primary_departments
-        ]
+    async def fail_get_user_departments(user_ids: list[int]):
+        raise AssertionError(f"候选管理员主部门不应参与资格判断: {user_ids}")
 
-    monkeypatch.setattr(DepartmentDao, "aget_by_id", fake_get_department)
     monkeypatch.setattr(DepartmentDao, "aget_by_ids", fake_get_departments)
-    monkeypatch.setattr(DepartmentAdminGrantDao, "aget_user_ids_by_department", fake_get_admins)
     monkeypatch.setattr(DepartmentAdminGrantDao, "aget_user_ids_by_departments", fake_get_admins_by_departments)
-    monkeypatch.setattr(UserDepartmentDao, "aget_by_user_ids", fake_get_user_departments)
+    monkeypatch.setattr(UserDepartmentDao, "aget_by_user_ids", fail_get_user_departments)
+
+    approvers = await handler.resolve_approvers(
+        {"sources": [{"type": "department_admin"}]},
+        SimpleNamespace(
+            tenant_id=1,
+            applicant_user_id=4,
+            applicant_department_id=5,
+            payload_snapshot={
+                "applicant_department_id": 5,
+                "source_space_id": 10,
+                "target_space_id": 20,
+            },
+        ),
+    )
+
+    assert approvers == [6]
+
+
+@pytest.mark.asyncio
+async def test_file_publish_handler_skips_applicant_and_uses_nearest_ancestor_admin(monkeypatch):
+    from bisheng.approval.domain.services.shougang_approval_handler import KnowledgeSpaceFilePublishApprovalHandler
+    from bisheng.database.models.department import DepartmentDao
+    from bisheng.database.models.department_admin_grant import DepartmentAdminGrantDao
+
+    handler = KnowledgeSpaceFilePublishApprovalHandler()
+
+    async def fake_get_departments(department_ids: list[int]):
+        assert department_ids == [5]
+        return [SimpleNamespace(id=5, path="/1/4/5/")]
+
+    async def fake_get_admins_by_departments(department_ids: list[int]):
+        assert department_ids == [1, 4, 5]
+        return {
+            5: [4],
+            4: [8],
+            1: [9],
+        }
+
+    monkeypatch.setattr(DepartmentDao, "aget_by_ids", fake_get_departments)
+    monkeypatch.setattr(DepartmentAdminGrantDao, "aget_user_ids_by_departments", fake_get_admins_by_departments)
 
     approvers = await handler.resolve_approvers(
         {"sources": [{"type": "department_admin"}]},

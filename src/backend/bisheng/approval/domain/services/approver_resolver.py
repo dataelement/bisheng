@@ -233,10 +233,11 @@ async def resolve_file_publish_department_admins(
 ) -> list[int]:
     """Resolve department-admin branches for the file-publish scenario only.
 
-    A candidate must hold the grant for the level currently being inspected,
-    belong primarily to the start department's own ancestor chain, and not be
-    the applicant.  Each branch stops at its nearest level with valid admins;
-    branch results are then merged as one OR-node approver list.
+    A candidate must hold the grant for the level currently being inspected
+    and not be the applicant. The candidate's own primary department does not
+    affect that explicit grant. Each branch only queries its start department
+    and ancestors, stops at the nearest level with valid admins, and is then
+    merged into one OR-node approver list.
     """
     from bisheng.database.models.department import DepartmentDao
     from bisheng.database.models.department_admin_grant import DepartmentAdminGrantDao
@@ -315,16 +316,6 @@ async def resolve_file_publish_department_admins(
         )
         return []
 
-    candidate_admin_ids = _normalize_unique_ids(
-        [
-            user_id
-            for department_id in all_candidate_department_ids
-            for user_id in admin_ids_by_department.get(department_id, [])
-        ],
-        value_name="department admin user_id",
-    )
-    primary_dept_by_admin = await _load_primary_department_ids(candidate_admin_ids)
-
     excluded_user_id: int | None = None
     if applicant_user_id is not None:
         try:
@@ -339,7 +330,6 @@ async def resolve_file_publish_department_admins(
     seen_result: set[int] = set()
     for start_department_id in ordered_start_department_ids:
         hierarchy_ids = hierarchy_by_start_department.get(start_department_id, [])
-        allowed_primary_department_ids = set(hierarchy_ids)
         for candidate_department_id in reversed(hierarchy_ids):
             valid_level_admins: list[int] = []
             seen_level: set[int] = set()
@@ -353,8 +343,6 @@ async def resolve_file_publish_department_admins(
                     )
                     continue
                 if admin_user_id == excluded_user_id or admin_user_id in seen_level:
-                    continue
-                if primary_dept_by_admin.get(admin_user_id) not in allowed_primary_department_ids:
                     continue
                 seen_level.add(admin_user_id)
                 valid_level_admins.append(admin_user_id)
