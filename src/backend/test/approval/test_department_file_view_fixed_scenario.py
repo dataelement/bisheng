@@ -101,7 +101,7 @@ def test_registry_exposes_fixed_department_file_view_preset() -> None:
 
 
 @pytest.mark.asyncio
-async def test_fixed_scenario_list_flags_and_enabled_only_update() -> None:
+async def test_system_scenario_list_flags_and_update() -> None:
     scenario = SimpleNamespace(
         id=1,
         tenant_id=1,
@@ -147,21 +147,12 @@ async def test_fixed_scenario_list_flags_and_enabled_only_update() -> None:
         )
 
     assert listed[0]["system_managed"] is True
-    assert listed[0]["structure_locked"] is True
+    assert listed[0]["structure_locked"] is False
     update_scenario.assert_awaited_once()
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "method,kwargs",
-    [
-        ("create_route", {"scenario_id": 1, "payload": {"route_name": "x", "route_type": "approval"}}),
-        ("create_flow", {"scenario_id": 1, "payload": {"flow_name": "x"}}),
-        ("delete_scenario", {"scenario_id": 1}),
-        ("reorder_routes", {"scenario_id": 1, "ordered_route_ids": []}),
-    ],
-)
-async def test_fixed_scenario_rejects_structure_mutations(method: str, kwargs: dict) -> None:
+async def test_system_scenario_identity_cannot_be_deleted() -> None:
     scenario = SimpleNamespace(
         id=1,
         tenant_id=1,
@@ -172,26 +163,41 @@ async def test_fixed_scenario_rejects_structure_mutations(method: str, kwargs: d
         new=AsyncMock(return_value=scenario),
     ):
         with pytest.raises(ApprovalFixedScenarioStructureLockedError):
-            await getattr(ApprovalScenarioAdminService, method)(
+            await ApprovalScenarioAdminService.delete_scenario(
                 tenant_id=1,
-                **kwargs,
+                scenario_id=1,
             )
 
 
 @pytest.mark.asyncio
-async def test_fixed_scenario_rejects_non_enabled_field_update() -> None:
+async def test_system_scenario_display_name_can_be_updated() -> None:
     scenario = SimpleNamespace(
         id=1,
         tenant_id=1,
         scenario_code="department_file_view_request",
+        scenario_name="部门文件查看审批",
+        display_name="部门文件查看审批",
+        enabled=True,
+        model_dump=lambda: {
+            "id": 1,
+            "scenario_name": "可配置部门文件审批",
+        },
     )
-    with patch(
-        "bisheng.approval.domain.services.approval_scenario_admin_service.ApprovalScenarioRepository.get_scenario",
-        new=AsyncMock(return_value=scenario),
+    with (
+        patch(
+            "bisheng.approval.domain.services.approval_scenario_admin_service.ApprovalScenarioRepository.get_scenario",
+            new=AsyncMock(return_value=scenario),
+        ),
+        patch(
+            "bisheng.approval.domain.services.approval_scenario_admin_service.ApprovalScenarioRepository.update_scenario",
+            new=AsyncMock(return_value=scenario),
+        ) as update_scenario,
     ):
-        with pytest.raises(ApprovalFixedScenarioStructureLockedError):
-            await ApprovalScenarioAdminService.update_scenario(
-                tenant_id=1,
-                scenario_id=1,
-                payload={"scenario_name": "篡改"},
-            )
+        result = await ApprovalScenarioAdminService.update_scenario(
+            tenant_id=1,
+            scenario_id=1,
+            payload={"scenario_name": "可配置部门文件审批"},
+        )
+
+    assert result["scenario_name"] == "可配置部门文件审批"
+    update_scenario.assert_awaited_once()

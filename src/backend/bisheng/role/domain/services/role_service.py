@@ -41,7 +41,6 @@ logger = logging.getLogger(__name__)
 BUILTIN_ROLE_IDS = {1, 2}
 SYSTEM_PRESET_CREATOR_NAME = '系统预设'
 
-
 class RoleService:
     """Stateless service for role CRUD operations."""
 

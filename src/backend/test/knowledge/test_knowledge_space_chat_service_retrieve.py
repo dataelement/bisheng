@@ -48,6 +48,8 @@ def _make_service(user_id: int = 42) -> KnowledgeSpaceChatService:
     svc = KnowledgeSpaceChatService(request=MagicMock(), login_user=login_user)
     svc.version_repo = MagicMock()
     svc.version_repo.find_non_primary_file_ids_by_knowledge_ids = AsyncMock(return_value=[])
+    svc.doc_repo = MagicMock()
+    svc.doc_repo.find_by_ids = AsyncMock(return_value=[])
     svc._require_space_view_permission = AsyncMock()
     return svc
 
@@ -81,16 +83,19 @@ async def test_openapi_chat_service_depends_on_developer_token_user():
     request = MagicMock()
     developer_user = MagicMock()
     version_repo = MagicMock()
+    doc_repo = MagicMock()
 
     service = await get_knowledge_space_chat_service_for_openapi(
         request=request,
         developer_user=developer_user,
         version_repo=version_repo,
+        doc_repo=doc_repo,
     )
 
     assert service.request is request
     assert service.login_user is developer_user
     assert service.version_repo is version_repo
+    assert service.doc_repo is doc_repo
 
 
 def test_openapi_file_list_depends_on_developer_token_user():
@@ -525,10 +530,12 @@ async def test_aretrieve_chunks_for_kb_invokes_retriever_and_tags_kb_id(monkeypa
     svc._resolve_kb_target_file_ids = AsyncMock(return_value=None)
     svc._build_folder_search_kwargs = AsyncMock(return_value=({"k": 100}, {"k": 100}))
 
+    milvus_retriever = MagicMock()
+    es_retriever = MagicMock()
     milvus_store = MagicMock()
-    milvus_store.as_retriever.return_value = MagicMock()
+    milvus_store.as_retriever.return_value = milvus_retriever
     es_store = MagicMock()
-    es_store.as_retriever.return_value = MagicMock()
+    es_store.as_retriever.return_value = es_retriever
     monkeypatch.setattr(
         svc_mod.KnowledgeRag,
         "init_knowledge_milvus_vectorstore",
@@ -544,10 +551,8 @@ async def test_aretrieve_chunks_for_kb_invokes_retriever_and_tags_kb_id(monkeypa
         _doc("hit-1", document_id=10, document_name="A.pdf", chunk_index=0),
         _doc("hit-2", document_id=10, document_name="A.pdf", chunk_index=1),
     ]
-    fake_tool = MagicMock()
-    fake_tool.ainvoke = AsyncMock(return_value=docs)
-    tool_factory = MagicMock(return_value=fake_tool)
-    monkeypatch.setattr(svc_mod, "KnowledgeRetrieverTool", tool_factory)
+    retrieve_visible = AsyncMock(return_value=docs)
+    svc._retrieve_visible_documents = retrieve_visible
 
     out = await svc._aretrieve_chunks_for_kb(
         kb_id=1,
@@ -558,9 +563,98 @@ async def test_aretrieve_chunks_for_kb_invokes_retriever_and_tags_kb_id(monkeypa
 
     assert [kb_id for kb_id, _ in out] == [1, 1]
     assert [d.page_content for _, d in out] == ["hit-1", "hit-2"]
-    # KnowledgeRetrieverTool constructed with the requested max_content
-    assert tool_factory.call_args.kwargs["max_content"] == 12345
-    fake_tool.ainvoke.assert_awaited_once_with("hello")
+    retrieve_visible.assert_awaited_once_with(
+        query="hello",
+        vector_retriever=milvus_retriever,
+        es_retriever=es_retriever,
+        max_content=12345,
+        sort_by_source_and_index=False,
+        knowledge_id=1,
+    )
+
+
+async def test_filter_projection_documents_rejects_stale_generation(monkeypatch):
+    svc = _make_service()
+    file_record = SimpleNamespace(
+        id=10,
+        knowledge_id=1,
+        file_type=svc_mod.FileType.FILE.value,
+        status=svc_mod.KnowledgeFileStatus.SUCCESS.value,
+        reference_document_id=100,
+        entry_status=svc_mod.KnowledgeFileEntryStatus.ACTIVE.value,
+        entry_type=svc_mod.KnowledgeFileEntryType.PUBLISH.value,
+        projection_status=svc_mod.KnowledgeFileProjectionStatus.READY.value,
+        desired_content_generation=3,
+        applied_content_generation=3,
+        desired_entry_generation=2,
+        applied_entry_generation=2,
+    )
+    monkeypatch.setattr(
+        svc_mod.KnowledgeFileDao,
+        "aget_file_by_ids",
+        AsyncMock(return_value=[file_record]),
+    )
+    svc.doc_repo.find_by_ids = AsyncMock(
+        return_value=[SimpleNamespace(id=100, primary_version_id=900)]
+    )
+    valid = Document(
+        page_content="valid",
+        metadata={
+            "document_id": 10,
+            "canonical_document_id": 100,
+            "canonical_version_id": 900,
+            "content_generation": 3,
+            "entry_generation": 2,
+            "chunk_index": 1,
+        },
+    )
+    stale = Document(
+        page_content="stale",
+        metadata={
+            **valid.metadata,
+            "content_generation": 2,
+        },
+    )
+
+    result = await svc._filter_visible_projection_documents(
+        [stale, valid],
+        knowledge_id=1,
+        preauthorized_file_ids={10},
+    )
+
+    assert [document.page_content for document in result] == ["valid"]
+
+
+async def test_aretrieve_chunks_dedupes_same_canonical_chunk_across_spaces():
+    svc = _make_service()
+    first = Document(
+        page_content="same",
+        metadata={
+            "document_id": 10,
+            "canonical_document_id": 100,
+            "canonical_version_id": 900,
+            "chunk_index": 1,
+        },
+    )
+    second = Document(
+        page_content="same",
+        metadata={
+            "document_id": 20,
+            "canonical_document_id": 100,
+            "canonical_version_id": 900,
+            "chunk_index": 1,
+        },
+    )
+    svc._aretrieve_chunks_for_kb = AsyncMock(
+        side_effect=[[(1, first)], [(2, second)]]
+    )
+
+    result = await svc.aretrieve_chunks(
+        query="hello",
+        knowledge_base_ids=[1, 2],
+    )
+
+    assert result == [(1, first)]
 
 
 # ---------------------------------------------------------------------------

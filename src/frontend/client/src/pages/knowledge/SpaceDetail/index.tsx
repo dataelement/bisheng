@@ -37,6 +37,7 @@ import { SearchParams } from "./CompoundSearchInput";
 import { EditTagsModal } from "./EditTagsModal";
 import { FileCard } from "./FileCard";
 import { FilePublishDialog } from "./FilePublishDialog";
+import { FileShareDialog } from "./FileShareDialog";
 import { FileTable } from "./FileTable";
 import { KnowledgeSpaceHeader } from "./KnowledgeSpaceHeader";
 import { KnowledgeSpaceShareDialog } from "./KnowledgeSpaceShareDialog";
@@ -49,6 +50,7 @@ import { MoveFolderDialog } from "./MoveFolderDialog";
 import { canOpenPermissionDialog, checkPermission } from "~/api/permission";
 import {
     hasKnowledgeSpacePermission,
+    hasRoleBasedSpaceActionBypass,
     useKnowledgeSpaceActionPermissions,
 } from "../hooks/useKnowledgeSpacePermissions";
 import { useLocalize, usePrefersMobileLayout, useScrollRevealRef } from "~/hooks";
@@ -330,10 +332,13 @@ export function KnowledgeSpaceContent({
     }, [onFileEncodingUpdatedProp, setFiles]);
 
     // 详情页只消费 share_space（分享按钮），按需只查这一项而非全部 4 个操作权限；
-    // creator/admin 由 fullAccessSpaceIds 直接放行，不发请求。
+    // creator（及非部门 admin）由 fullAccessSpaceIds 直接放行，不发请求。
     const { permissions: spaceActionPermissions } = useKnowledgeSpaceActionPermissions(
         [space.id],
-        { fullAccessSpaceIds: isAdmin ? [space.id] : [], permissionIds: ["share_space"] },
+        {
+            fullAccessSpaceIds: hasRoleBasedSpaceActionBypass(space) ? [space.id] : [],
+            permissionIds: ["share_space"],
+        },
     );
     // Version-management write entries (process-similar button, list "similar"
     // pill) gate on the user's OpenFGA relation to this space: creator (owner)
@@ -412,6 +417,16 @@ export function KnowledgeSpaceContent({
     const downloadingFileIdsRef = useRef<Set<string>>(new Set());
     const [moveEntryIds, setMoveEntryIds] = useState<Set<string>>(new Set());
     const [publishEntryIds, setPublishEntryIds] = useState<Set<string>>(new Set());
+    const shareEntryIds = useMemo(
+        () => space.spaceLevel === SpaceLevel.DEPARTMENT
+            ? new Set(
+                displayFiles
+                    .filter((file) => file.capabilities?.canShare)
+                    .map((file) => file.id),
+            )
+            : new Set<string>(),
+        [displayFiles, space.spaceLevel],
+    );
     const hasExternalFileActionPermissions = externalFileActionPermissions !== undefined;
     // 懒查询：加载时不再对所有文件逐项预检操作权限；仅当用户悬停/交互某一行（真正可能用到
     // 该行的编辑操作）时，才把该文件加入按需集合，触发查询它的 重命名/删除/移动/下载/权限管理 权限。
@@ -421,21 +436,62 @@ export function KnowledgeSpaceContent({
         setRequestedFilePermIds((prev) => (prev.has(key) ? prev : new Set(prev).add(key)));
     }, []);
     const [publishingFile, setPublishingFile] = useState<KnowledgeFile | null>(null);
+    const [sharingFile, setSharingFile] = useState<KnowledgeFile | null>(null);
     const [movingFile, setMovingFile] = useState<KnowledgeFile | null>(null);
     const [isBatchMoving, setIsBatchMoving] = useState(false);
     const permissionEntryProbeKey = displayFiles
         .filter((file) => !file.isCreating && /^\d+$/.test(String(file.id)))
         .map((file) => `${file.id}:${file.type}`)
         .join("|");
+    const applyCapabilities = useCallback((
+        base: ReadonlySet<string>,
+        capability: "canManageMembers" | "canEditContent" | "canDelete" | "canDownload" | "canMove" | "canPublish",
+    ) => new Set(
+        displayFiles
+            .filter((file) => {
+                if (file.type === FileType.FOLDER || !file.capabilities) {
+                    return base.has(file.id);
+                }
+                return file.capabilities[capability];
+            })
+            .map((file) => file.id),
+    ), [displayFiles]);
     const visiblePermissionEntryIds = useMemo(
         () => hideFilePermissionActions
             ? new Set<string>()
-            : externalFileActionPermissions?.permissionEntryIds ?? permissionEntryIds,
-        [externalFileActionPermissions, hideFilePermissionActions, permissionEntryIds],
+            : applyCapabilities(
+                externalFileActionPermissions?.permissionEntryIds
+                    ?? permissionEntryIds,
+                "canManageMembers",
+            ),
+        [
+            applyCapabilities,
+            externalFileActionPermissions,
+            hideFilePermissionActions,
+            permissionEntryIds,
+        ],
     );
-    const effectiveRenameEntryIds = externalFileActionPermissions?.renameEntryIds ?? renameEntryIds;
-    const effectiveDeleteEntryIds = externalFileActionPermissions?.deleteEntryIds ?? deleteEntryIds;
-    const effectiveDownloadEntryIds = externalFileActionPermissions?.downloadEntryIds ?? downloadEntryIds;
+    const effectiveRenameEntryIds = useMemo(
+        () => applyCapabilities(
+            externalFileActionPermissions?.renameEntryIds ?? renameEntryIds,
+            "canEditContent",
+        ),
+        [applyCapabilities, externalFileActionPermissions, renameEntryIds],
+    );
+    const effectiveDeleteEntryIds = useMemo(
+        () => applyCapabilities(
+            externalFileActionPermissions?.deleteEntryIds ?? deleteEntryIds,
+            "canDelete",
+        ),
+        [applyCapabilities, deleteEntryIds, externalFileActionPermissions],
+    );
+    const effectiveDownloadEntryIds = useMemo(
+        () => applyCapabilities(
+            externalFileActionPermissions?.downloadEntryIds ?? downloadEntryIds,
+            "canDownload",
+        ),
+        [applyCapabilities, downloadEntryIds, externalFileActionPermissions],
+    );
     const visibleDownloadEntryIds = useMemo(() => {
         if (!hideFolderDownload) return effectiveDownloadEntryIds;
         const folderIds = new Set(
@@ -445,7 +501,29 @@ export function KnowledgeSpaceContent({
         );
         return new Set(Array.from(effectiveDownloadEntryIds).filter((fileId) => !folderIds.has(fileId)));
     }, [effectiveDownloadEntryIds, hideFolderDownload, permissionEntryProbeKey]);
-    const effectiveMoveEntryIds = externalFileActionPermissions?.moveEntryIds ?? moveEntryIds;
+    const effectiveMoveEntryIds = useMemo(
+        () => applyCapabilities(
+            externalFileActionPermissions?.moveEntryIds ?? moveEntryIds,
+            "canMove",
+        ),
+        [applyCapabilities, externalFileActionPermissions, moveEntryIds],
+    );
+    const effectivePublishEntryIds = useMemo(
+        () => applyCapabilities(publishEntryIds, "canPublish"),
+        [applyCapabilities, publishEntryIds],
+    );
+    const effectiveMetadataEditableFileIds = useMemo(
+        () => applyCapabilities(
+            metadataEditableFileIds
+                ?? new Set(
+                    isAdmin
+                        ? displayFiles.map((file) => file.id)
+                        : [],
+                ),
+            "canEditContent",
+        ),
+        [applyCapabilities, displayFiles, isAdmin, metadataEditableFileIds],
+    );
     const canUseAddActions = canCreateFolder && !isSearching;
 
     const { showToast } = useToastContext();
@@ -1531,8 +1609,10 @@ export function KnowledgeSpaceContent({
                                             canDelete={effectiveDeleteEntryIds.has(file.id)}
                                             canDownload={visibleDownloadEntryIds.has(file.id)}
                                             downloadPending={downloadingFileIds.has(file.id)}
-                                            canPublish={publishEntryIds.has(file.id)}
+                                            canPublish={effectivePublishEntryIds.has(file.id)}
                                             onPublishFile={setPublishingFile}
+                                            canShare={shareEntryIds.has(file.id)}
+                                            onShareFile={setSharingFile}
                                             mobileListMode={isH5 && viewMode === "list"}
                                             versionManagementEnabled={versionManagementEnabled}
                                             onOpenVersionManagement={(f) => setVersionMgmtFile(f)}
@@ -1577,11 +1657,13 @@ export function KnowledgeSpaceContent({
                                     deleteEntryIds={effectiveDeleteEntryIds}
                                     downloadEntryIds={visibleDownloadEntryIds}
                                     downloadingEntryIds={downloadingFileIds}
-                                    publishEntryIds={publishEntryIds}
+                                    publishEntryIds={effectivePublishEntryIds}
+                                    shareEntryIds={shareEntryIds}
                                     onManagePermission={hideFilePermissionActions ? undefined : handleManagePermission}
                                     onMove={onMoveFile ? (file) => setMovingFile(file) : undefined}
                                     moveEntryIds={effectiveMoveEntryIds}
                                     onPublishFile={setPublishingFile}
+                                    onShareFile={setSharingFile}
                                     sortBy={sortBy}
                                     sortDirection={sortDirection}
                                     onSort={handleSort}
@@ -1592,7 +1674,7 @@ export function KnowledgeSpaceContent({
                                     canRetryFile={canRetryFile}
                                     retryActionLabel={retryActionLabel}
                                     enableEncodingClassification={enableEncodingClassification}
-                                    metadataEditableFileIds={metadataEditableFileIds}
+                                    metadataEditableFileIds={effectiveMetadataEditableFileIds}
                                     fileCategoryOptions={fileCategoryOptions}
                                     fileCategoryGroups={fileCategoryGroups}
                                     businessDomainOptions={businessDomainOptions}
@@ -1649,6 +1731,14 @@ export function KnowledgeSpaceContent({
                 versionManagementEnabled={versionManagementEnabled}
                 onOpenChange={(open) => {
                     if (!open) setPublishingFile(null);
+                }}
+            />
+            <FileShareDialog
+                open={Boolean(sharingFile)}
+                activeSpace={space}
+                file={sharingFile}
+                onOpenChange={(open) => {
+                    if (!open) setSharingFile(null);
                 }}
             />
 

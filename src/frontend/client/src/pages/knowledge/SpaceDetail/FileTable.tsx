@@ -16,6 +16,7 @@ import {
     PencilLineIcon,
     RefreshCw,
     Send,
+    Share2,
     Shield,
     Tag, Trash2,
     FileSearch
@@ -690,11 +691,13 @@ interface FileTableProps {
     downloadEntryIds?: Set<string>;
     downloadingEntryIds?: ReadonlySet<string>;
     publishEntryIds?: Set<string>;
+    shareEntryIds?: Set<string>;
     onManagePermission?: (id: string) => void;
     onMove?: (file: KnowledgeFile) => void;
     /** Entry IDs for which the current user has move permission (same as rename). */
     moveEntryIds?: Set<string>;
     onPublishFile?: (file: KnowledgeFile) => void;
+    onShareFile?: (file: KnowledgeFile) => void;
     sortBy: SortType | undefined;
     sortDirection: SortDirection | undefined;
     onSort: (sortBy: SortType) => void;
@@ -715,7 +718,7 @@ interface FileTableProps {
     retryActionLabel?: string;
 }
 
-export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, currentUserRole, onDownload, onEditTags, onRename, onDelete, onRetry, onAcceptAlias, onRejectAlias, onNavigateFolder, onPreview, onValidateName, onCancelCreate, onRequestPermissions, permissionEntryIds, renameEntryIds, deleteEntryIds, downloadEntryIds, downloadingEntryIds, publishEntryIds, onManagePermission, onMove, moveEntryIds, onPublishFile, sortBy, sortDirection, onSort, versionManagementEnabled, onOpenVersionManagement, onOpenVersionHistory, canManageMembers = false, enableEncodingClassification = false, metadataEditableFileIds, fileCategoryOptions = [], fileCategoryGroups = DEFAULT_PORTAL_FILE_CATEGORY_GROUPS, businessDomainOptions = [], encodingPrefix = DEFAULT_ENCODING_PREFIX, onFileEncodingUpdated, canRetryFile, retryActionLabel }: FileTableProps) {
+export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, currentUserRole, onDownload, onEditTags, onRename, onDelete, onRetry, onAcceptAlias, onRejectAlias, onNavigateFolder, onPreview, onValidateName, onCancelCreate, onRequestPermissions, permissionEntryIds, renameEntryIds, deleteEntryIds, downloadEntryIds, downloadingEntryIds, publishEntryIds, shareEntryIds, onManagePermission, onMove, moveEntryIds, onPublishFile, onShareFile, sortBy, sortDirection, onSort, versionManagementEnabled, onOpenVersionManagement, onOpenVersionHistory, canManageMembers = false, enableEncodingClassification = false, metadataEditableFileIds, fileCategoryOptions = [], fileCategoryGroups = DEFAULT_PORTAL_FILE_CATEGORY_GROUPS, businessDomainOptions = [], encodingPrefix = DEFAULT_ENCODING_PREFIX, onFileEncodingUpdated, canRetryFile, retryActionLabel }: FileTableProps) {
     // Shougang feature gate
     const { data: bsConfig } = useGetBsConfig();
     const shougangEnabled = bsConfig?.shougang?.enabled ?? false;
@@ -949,7 +952,9 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
                                 canDownload={Boolean(downloadEntryIds?.has(file.id))}
                                 downloadPending={Boolean(downloadingEntryIds?.has(file.id))}
                                 canPublish={Boolean(publishEntryIds?.has(file.id))}
+                                canShare={Boolean(shareEntryIds?.has(file.id))}
                                 onPublishFile={onPublishFile}
+                                onShareFile={onShareFile}
                                 columnWidths={columnWidths}
                                 showStatusColumn={showStatusColumn}
                                 showLeftShadow={showLeftShadow}
@@ -1033,7 +1038,9 @@ function FileRow({
     canDownload = false,
     downloadPending = false,
     canPublish = false,
+    canShare = false,
     onPublishFile,
+    onShareFile,
     columnWidths,
     showStatusColumn,
     showLeftShadow,
@@ -1083,9 +1090,11 @@ function FileRow({
     canDownload?: boolean;
     downloadPending?: boolean;
     canPublish?: boolean;
+    canShare?: boolean;
     canMove?: boolean;
     onMove?: () => void;
     onPublishFile?: (file: KnowledgeFile) => void;
+    onShareFile?: (file: KnowledgeFile) => void;
     columnWidths: Record<ColumnKey, number>;
     showStatusColumn: boolean;
     showLeftShadow: boolean;
@@ -1147,7 +1156,8 @@ function FileRow({
     const canEditTags = canEditEncoding && !isFolder;
     const canRetry = isAdmin && hasRetryOption;
     const showPublish = canPublish && Boolean(onPublishFile) && !isFolder;
-    const showMoreMenu = showPublish || canEditTags || canRename || canRetry || canDelete || canMove || Boolean(onManagePermission);
+    const showShare = canShare && Boolean(onShareFile) && !isFolder;
+    const showMoreMenu = showPublish || showShare || canEditTags || canRename || canRetry || canDelete || canMove || Boolean(onManagePermission);
     const namePreviewable = isKnowledgeItemPreviewable(file);
     const fileTags = Array.isArray(file.tags) ? file.tags : [];
     const fileEncodingText = file.fileEncoding?.trim() || "";
@@ -1219,6 +1229,17 @@ function FileRow({
                             >
                                 <Send className="mr-2 size-4" />
                                 发布
+                            </DropdownMenuItem>
+                        )}
+                        {showShare && (
+                            <DropdownMenuItem
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onShareFile?.(file);
+                                }}
+                            >
+                                <Share2 className="mr-2 size-4" />
+                                分享
                             </DropdownMenuItem>
                         )}
                         {canEditTags && (
@@ -1388,6 +1409,20 @@ function FileRow({
                     ) : (
                         <div className="flex flex-col min-w-0 flex-1">
                             <div className="flex items-center gap-1.5 min-w-0">
+                                {!isFolder && file.entryType && file.entryType !== "normal" && (
+                                    <span className="flex h-5 shrink-0 items-center rounded bg-[#f2f3f5] px-1.5 text-xs text-[#4e5969]">
+                                        {file.entryType === "manager"
+                                            ? "管理文件"
+                                            : file.entryType === "publish"
+                                                ? "发布文件"
+                                                : "分享文件"}
+                                    </span>
+                                )}
+                                {!isFolder && file.projectionReady === false && (
+                                    <span className="flex h-5 shrink-0 items-center rounded bg-[#fff7e8] px-1.5 text-xs text-[#f77234]">
+                                        同步中
+                                    </span>
+                                )}
                                 {versionManagementEnabled && file.is_multi_version && file.version_no != null && file.version_no >= 1 && (
                                     <span className="flex h-5 shrink-0 items-center justify-center rounded bg-[#E8F3FF] px-1.5 text-xs font-medium text-[#165DFF]">
                                         {`V${file.version_no}`}

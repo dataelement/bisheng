@@ -481,6 +481,24 @@ export interface KnowledgeFileSensitiveCheck {
     hits: SensitiveWordHit[];
 }
 
+export type KnowledgeDocumentEntryType =
+    | "normal"
+    | "manager"
+    | "publish"
+    | "share";
+
+export interface KnowledgeDocumentEntryCapabilities {
+    canView: boolean;
+    canPreview: boolean;
+    canDownload: boolean;
+    canMove: boolean;
+    canManageMembers: boolean;
+    canEditContent: boolean;
+    canPublish: boolean;
+    canShare: boolean;
+    canDelete: boolean;
+}
+
 export interface KnowledgeFile {
     id: string;
     name: string;
@@ -533,6 +551,19 @@ export interface KnowledgeFile {
     canDownload?: boolean;
     /** Marks a file projected from a valid department knowledge space. */
     isDepartmentFile?: boolean;
+    entryType?: KnowledgeDocumentEntryType;
+    entryStatus?: string | null;
+    canonicalDocumentId?: number | null;
+    canonicalVersionId?: number | null;
+    managerFileId?: number | null;
+    managerSpaceId?: number | null;
+    projectionStatus?: string;
+    projectionReady?: boolean;
+    desiredContentGeneration?: number;
+    appliedContentGeneration?: number;
+    desiredEntryGeneration?: number;
+    appliedEntryGeneration?: number;
+    capabilities?: KnowledgeDocumentEntryCapabilities;
     // Transient UI-only fields
     isCreating?: boolean;
     /** 0–100 upload progress for in-flight uploads */
@@ -1044,6 +1075,21 @@ export function mapChild(raw: any, spaceId: string): KnowledgeFile {
                 // Backend may return uppercase string like "FAILED" — normalize to lowercase enum value
                 ? statusVal.toLowerCase() as FileStatus
                 : undefined;
+    const rawCapabilities = raw?.capabilities;
+    const capabilities: KnowledgeDocumentEntryCapabilities | undefined =
+        rawCapabilities && typeof rawCapabilities === "object"
+            ? {
+                canView: Boolean(rawCapabilities.can_view),
+                canPreview: Boolean(rawCapabilities.can_preview),
+                canDownload: Boolean(rawCapabilities.can_download),
+                canMove: Boolean(rawCapabilities.can_move),
+                canManageMembers: Boolean(rawCapabilities.can_manage_members),
+                canEditContent: Boolean(rawCapabilities.can_edit_content),
+                canPublish: Boolean(rawCapabilities.can_publish),
+                canShare: Boolean(rawCapabilities.can_share),
+                canDelete: Boolean(rawCapabilities.can_delete),
+            }
+            : undefined;
 
     return {
         id: idVal !== undefined && idVal !== null ? String(idVal) : "",
@@ -1089,6 +1135,31 @@ export function mapChild(raw: any, spaceId: string): KnowledgeFile {
         isDepartmentFile: raw?.is_department_file !== undefined
             ? Boolean(raw.is_department_file)
             : undefined,
+        entryType: raw?.entry_type ?? undefined,
+        entryStatus: raw?.entry_status ?? undefined,
+        canonicalDocumentId: raw?.canonical_document_id ?? undefined,
+        canonicalVersionId: raw?.canonical_version_id ?? undefined,
+        managerFileId: capabilities?.canEditContent
+            ? raw?.manager_file_id ?? undefined
+            : undefined,
+        managerSpaceId: raw?.manager_space_id ?? undefined,
+        projectionStatus: raw?.projection_status ?? undefined,
+        projectionReady: raw?.projection_ready !== undefined
+            ? Boolean(raw.projection_ready)
+            : undefined,
+        desiredContentGeneration: raw?.desired_content_generation !== undefined
+            ? Number(raw.desired_content_generation)
+            : undefined,
+        appliedContentGeneration: raw?.applied_content_generation !== undefined
+            ? Number(raw.applied_content_generation)
+            : undefined,
+        desiredEntryGeneration: raw?.desired_entry_generation !== undefined
+            ? Number(raw.desired_entry_generation)
+            : undefined,
+        appliedEntryGeneration: raw?.applied_entry_generation !== undefined
+            ? Number(raw.applied_entry_generation)
+            : undefined,
+        capabilities,
     };
 }
 
@@ -2905,6 +2976,13 @@ export interface KnowledgeFilePreview {
     media_kind: string;
     html_preview_url: string;
     can_download: boolean;
+    entry_type?: KnowledgeDocumentEntryType;
+    canonical_document_id?: number | null;
+    canonical_version_id?: number | null;
+    manager_space_id?: number | null;
+    projection_status?: string;
+    projection_ready?: boolean;
+    capabilities?: Record<string, boolean>;
 }
 
 /**
@@ -2928,6 +3006,13 @@ export async function getFilePreviewApi(
         media_kind: data?.media_kind ?? "",
         html_preview_url: data?.html_preview_url ?? "",
         can_download: data?.can_download ?? false,
+        entry_type: data?.entry_type,
+        canonical_document_id: data?.canonical_document_id,
+        canonical_version_id: data?.canonical_version_id,
+        manager_space_id: data?.manager_space_id,
+        projection_status: data?.projection_status,
+        projection_ready: data?.projection_ready,
+        capabilities: data?.capabilities,
     };
 }
 
@@ -2951,6 +3036,13 @@ export async function getPortalFilePreviewApi(
         media_kind: data?.media_kind ?? "",
         html_preview_url: data?.html_preview_url ?? "",
         can_download: data?.can_download ?? false,
+        entry_type: data?.entry_type,
+        canonical_document_id: data?.canonical_document_id,
+        canonical_version_id: data?.canonical_version_id,
+        manager_space_id: data?.manager_space_id,
+        projection_status: data?.projection_status,
+        projection_ready: data?.projection_ready,
+        capabilities: data?.capabilities,
     };
 }
 

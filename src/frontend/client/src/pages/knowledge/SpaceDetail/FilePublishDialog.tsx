@@ -37,6 +37,14 @@ type FilePublishDialogProps = {
     versionManagementEnabled?: boolean;
 };
 
+function getPublishErrorMessage(error: unknown): string {
+    const detail = (error as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
+    if (typeof detail === "string" && detail.trim()) {
+        return detail.trim();
+    }
+    return error instanceof Error && error.message ? error.message : "提交发布申请失败";
+}
+
 export function FilePublishDialog({
     open,
     activeSpace,
@@ -215,6 +223,13 @@ export function FilePublishDialog({
 
     const handleSubmit = async () => {
         if (!activeSpace || !file || !targetSpaceId) return;
+        if (file.capabilities && !file.capabilities.canPublish) {
+            showToast({
+                message: "当前入口不能发布文件",
+                severity: NotificationSeverity.ERROR,
+            });
+            return;
+        }
         setSubmitting(true);
         try {
             const result = await submitShougangFilePublishApprovalApi({
@@ -238,39 +253,50 @@ export function FilePublishDialog({
             showToast({ message: "已提交发布申请", severity: NotificationSeverity.SUCCESS });
             onOpenChange(false);
         } catch (error) {
-            const message = error instanceof Error && error.message ? error.message : "提交发布申请失败";
+            const message = getPublishErrorMessage(error);
             showToast({ message, severity: NotificationSeverity.ERROR });
         } finally {
             setSubmitting(false);
         }
     };
 
-    const versionOptions: VersionOption[] = versionManagementEnabled ? [
-        ...candidates.map((item) => ({
-            key: `document:${item.target_document_id ?? item.document_id}`,
+    const candidateVersionOptions: VersionOption[] = candidates.flatMap((item) => {
+        const id = item.target_document_id ?? item.document_id;
+        if (id == null) return [];
+        return [{
+            key: `document:${id}`,
             type: "document" as const,
-            id: item.target_document_id ?? item.document_id,
+            id,
             title: item.title,
             source: "推荐" as const,
             docCode: item.doc_code,
             versionNo: item.current_primary_version_no,
             uploaderName: item.primary_uploader_name,
             uploadTime: item.primary_upload_time,
-        })),
-        ...searchResults.map((item) => ({
+        }];
+    });
+    const searchVersionOptions: VersionOption[] = searchResults.flatMap((item) => {
+        const id = item.target_file_id ?? item.document_id ?? item.target_document_id;
+        if (id == null) return [];
+        return [{
             key: item.target_file_id
                 ? `file:${item.target_file_id}`
-                : `document:${item.document_id ?? item.target_document_id}`,
+                : `document:${id}`,
             type: item.target_file_id ? "file" as const : "document" as const,
-            id: item.target_file_id ?? item.document_id ?? item.target_document_id,
+            id,
             title: item.title,
             source: "搜索" as const,
             docCode: item.doc_code,
             versionNo: item.current_primary_version_no,
             uploaderName: item.primary_uploader_name,
             uploadTime: item.primary_upload_time,
-        })),
-    ].filter((item, index, all) => item.id && all.findIndex((one) => one.key === item.key) === index) : [];
+        }];
+    });
+    const versionOptions: VersionOption[] = versionManagementEnabled
+        ? [...candidateVersionOptions, ...searchVersionOptions].filter(
+            (item, index, all) => all.findIndex((one) => one.key === item.key) === index,
+        )
+        : [];
     const selectedVersionOption = versionTarget
         ? versionOptions.find((option) => option.type === versionTarget.type && option.id === versionTarget.id)
         : null;

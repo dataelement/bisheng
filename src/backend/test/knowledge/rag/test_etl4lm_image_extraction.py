@@ -138,14 +138,14 @@ def test_rendered_image_keeps_existing_minio_url_contract(monkeypatch, tmp_path:
     loader = _loader(
         tmp_path,
         pdf_path,
-        image_object_dir="knowledge/images/10/20",
+        image_object_dir="knowledge/images/files/20",
         image_extraction_strategy="render_only",
     )
     monkeypatch.setattr(Etl4lmLoader, "_minio_bucket", property(lambda self: "bucket"))
 
     result = loader.extract_images([_partition([10, 20, 110, 70])])
 
-    assert result["figure-1"] == "/bucket/knowledge/images/10/20/figure-1.png"
+    assert result["figure-1"] == "/bucket/knowledge/images/files/20/figure-1.png"
 
 
 def test_retain_images_false_skips_all_image_generation(tmp_path: Path):

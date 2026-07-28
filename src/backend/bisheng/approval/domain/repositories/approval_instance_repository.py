@@ -37,7 +37,16 @@ class ApprovalInstanceRepository:
     _DUPLICATE_ACTIVE_STATUSES = ('pending', 'exception', 'execute_failed')
 
     @classmethod
-    async def create_instance(cls, row: ApprovalInstance) -> ApprovalInstance:
+    async def create_instance(
+        cls,
+        row: ApprovalInstance,
+        *,
+        session=None,
+    ) -> ApprovalInstance:
+        if session is not None:
+            session.add(row)
+            await session.flush()
+            return row
         async with get_async_db_session() as session:
             session.add(row)
             await session.commit()
@@ -45,7 +54,14 @@ class ApprovalInstanceRepository:
         return row
 
     @classmethod
-    async def get_instance(cls, instance_id: int) -> ApprovalInstance | None:
+    async def get_instance(
+        cls,
+        instance_id: int,
+        *,
+        session=None,
+    ) -> ApprovalInstance | None:
+        if session is not None:
+            return await session.get(ApprovalInstance, instance_id)
         async with get_async_db_session() as session:
             return await session.get(ApprovalInstance, instance_id)
 
@@ -79,6 +95,7 @@ class ApprovalInstanceRepository:
         business_key: str,
         applicant_user_id: int,
         active_statuses: list[str] | tuple[str, ...] | None = None,
+        session=None,
     ) -> ApprovalInstance | None:
         statuses = tuple(active_statuses) if active_statuses is not None else cls._DUPLICATE_ACTIVE_STATUSES
         if not statuses:
@@ -90,6 +107,8 @@ class ApprovalInstanceRepository:
             ApprovalInstance.applicant_user_id == applicant_user_id,
             ApprovalInstance.status.in_(statuses),
         ).order_by(ApprovalInstance.id.desc())
+        if session is not None:
+            return (await session.exec(statement)).first()
         async with get_async_db_session() as session:
             return (await session.exec(statement)).first()
 
@@ -124,9 +143,18 @@ class ApprovalInstanceRepository:
         return row
 
     @classmethod
-    async def create_tasks(cls, rows: list[ApprovalTask]) -> list[ApprovalTask]:
+    async def create_tasks(
+        cls,
+        rows: list[ApprovalTask],
+        *,
+        session=None,
+    ) -> list[ApprovalTask]:
         if not rows:
             return []
+        if session is not None:
+            session.add_all(rows)
+            await session.flush()
+            return rows
         async with get_async_db_session() as session:
             session.add_all(rows)
             try:
@@ -176,7 +204,16 @@ class ApprovalInstanceRepository:
             return list((await session.exec(statement)).all())
 
     @classmethod
-    async def create_exception(cls, row: ApprovalException) -> ApprovalException:
+    async def create_exception(
+        cls,
+        row: ApprovalException,
+        *,
+        session=None,
+    ) -> ApprovalException:
+        if session is not None:
+            session.add(row)
+            await session.flush()
+            return row
         async with get_async_db_session() as session:
             session.add(row)
             await session.commit()
@@ -210,7 +247,16 @@ class ApprovalInstanceRepository:
             return list((await session.exec(statement)).all())
 
     @classmethod
-    async def create_outbox(cls, row: ApprovalOutbox) -> ApprovalOutbox:
+    async def create_outbox(
+        cls,
+        row: ApprovalOutbox,
+        *,
+        session=None,
+    ) -> ApprovalOutbox:
+        if session is not None:
+            session.add(row)
+            await session.flush()
+            return row
         async with get_async_db_session() as session:
             session.add(row)
             await session.commit()
@@ -244,7 +290,16 @@ class ApprovalInstanceRepository:
             return list((await session.exec(statement)).all())
 
     @classmethod
-    async def create_action_log(cls, row: ApprovalActionLog) -> ApprovalActionLog:
+    async def create_action_log(
+        cls,
+        row: ApprovalActionLog,
+        *,
+        session=None,
+    ) -> ApprovalActionLog:
+        if session is not None:
+            session.add(row)
+            await session.flush()
+            return row
         async with get_async_db_session() as session:
             session.add(row)
             await session.commit()

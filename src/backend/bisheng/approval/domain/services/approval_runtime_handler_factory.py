@@ -7,9 +7,11 @@ from bisheng.approval.domain.services.knowledge_space_subscribe_scenario_handler
 from bisheng.approval.domain.services.menu_access_handler import MenuAccessApprovalHandler
 from bisheng.approval.domain.services.shougang_approval_handler import (
     FILE_PUBLISH_SCENARIO,
+    FILE_SHARE_SCENARIO,
     KNOWLEDGE_SPACE_CREATE_SCENARIO,
     KnowledgeSpaceCreateApprovalHandler,
     KnowledgeSpaceFilePublishApprovalHandler,
+    KnowledgeSpaceFileShareApprovalHandler,
 )
 from bisheng.common.models.space_channel_member import BusinessTypeEnum, SpaceChannelMemberDao
 from bisheng.common.repositories.implementations.space_channel_member_repository_impl import SpaceChannelMemberRepositoryImpl
@@ -39,6 +41,8 @@ async def build_runtime_handler(scenario_code: str) -> Any:
         return KnowledgeSpaceCreateApprovalHandler()
     if scenario_code == FILE_PUBLISH_SCENARIO:
         return KnowledgeSpaceFilePublishApprovalHandler()
+    if scenario_code == FILE_SHARE_SCENARIO:
+        return KnowledgeSpaceFileShareApprovalHandler()
     raise KeyError(f'handler not registered for scenario_code={scenario_code}')
 
 

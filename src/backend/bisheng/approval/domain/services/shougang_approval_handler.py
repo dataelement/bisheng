@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from types import SimpleNamespace
 from typing import Any
 
 from bisheng.approval.domain.services.approver_resolver import (
     resolve_approvers_from_sources,
-    resolve_department_admins_for_user_ids,
+    resolve_file_publish_department_admins,
 )
 from bisheng.approval.domain.services.knowledge_space_subscribe_scenario_handler import _resolve_space_roles_via_fga
 from bisheng.knowledge.domain.constants import normalize_business_domain_code
@@ -22,7 +23,9 @@ from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpace
 
 KNOWLEDGE_SPACE_CREATE_SCENARIO = "knowledge_space_create_request"
 FILE_PUBLISH_SCENARIO = "knowledge_space_file_publish_request"
+FILE_SHARE_SCENARIO = "knowledge_space_file_share_request"
 FILE_PUBLISH_DOMAIN_MISMATCH_MESSAGE = "您发布的文档与目标库不符"
+logger = logging.getLogger(__name__)
 
 _FILE_PUBLISH_TARGET_LEVELS: dict[KnowledgeSpaceLevelEnum, set[KnowledgeSpaceLevelEnum]] = {
     KnowledgeSpaceLevelEnum.PERSONAL: {
@@ -184,6 +187,7 @@ async def _resolve_file_publish_approvers(node_config: dict, req) -> list[int]:
         "target_knowledge_space_owner_department_admin",
         "target_knowledge_space_manager_department_admin",
     }
+    publish_department_admin_types = {"department_admin"} | target_department_admin_types
     payload_snapshot = getattr(req, "payload_snapshot", {}) or {}
     source_owner_ids: list[int] = []
     source_manager_ids: list[int] = []
@@ -198,6 +202,27 @@ async def _resolve_file_publish_approvers(node_config: dict, req) -> list[int]:
         if target_space_id:
             target_owner_ids, target_manager_ids = await _resolve_space_roles_via_fga(int(target_space_id))
 
+    publish_department_admin_ids: list[int] = []
+    if any(source.get("type") in publish_department_admin_types for source in sources):
+        start_department_ids: list[int] = []
+        start_user_ids: list[int] = []
+        if any(source.get("type") == "department_admin" for source in sources):
+            applicant_department_id = payload_snapshot.get("applicant_department_id")
+            if applicant_department_id is None:
+                applicant_department_id = getattr(req, "applicant_department_id", None)
+            if applicant_department_id:
+                start_department_ids.append(int(applicant_department_id))
+        if any(source.get("type") == "target_knowledge_space_owner_department_admin" for source in sources):
+            start_user_ids.extend(int(uid) for uid in target_owner_ids)
+        if any(source.get("type") == "target_knowledge_space_manager_department_admin" for source in sources):
+            start_user_ids.extend(int(uid) for uid in target_manager_ids)
+        publish_department_admin_ids = await resolve_file_publish_department_admins(
+            start_department_ids=start_department_ids,
+            start_user_ids=start_user_ids,
+            applicant_user_id=getattr(req, "applicant_user_id", None),
+        )
+
+    department_admins_added = False
     for source in sources:
         source_type = source.get("type", "")
         if source_type == "knowledge_space_owner":
@@ -212,12 +237,11 @@ async def _resolve_file_publish_approvers(node_config: dict, req) -> list[int]:
         elif source_type in ("target_knowledge_space_manager", "space_admin"):
             for uid in target_manager_ids:
                 _add(int(uid))
-        elif source_type == "target_knowledge_space_owner_department_admin":
-            for uid in await resolve_department_admins_for_user_ids([int(uid) for uid in target_owner_ids]):
-                _add(int(uid))
-        elif source_type == "target_knowledge_space_manager_department_admin":
-            for uid in await resolve_department_admins_for_user_ids([int(uid) for uid in target_manager_ids]):
-                _add(int(uid))
+        elif source_type in publish_department_admin_types:
+            if not department_admins_added:
+                for uid in publish_department_admin_ids:
+                    _add(int(uid))
+                department_admins_added = True
         else:
             for uid in await resolve_approvers_from_sources([source], req):
                 _add(int(uid))
@@ -429,7 +453,105 @@ class KnowledgeSpaceFilePublishApprovalHandler:
         scope = await KnowledgeSpaceScopeDao.aget_by_space_id(space_id)
         return scope.level if scope else KnowledgeSpaceLevelEnum.PERSONAL
 
+    async def _publish_distribution(
+        self,
+        instance_id: int,
+        payload_snapshot: dict,
+    ) -> dict:
+        from bisheng.core.database import get_async_db_session
+        from bisheng.knowledge.domain.repositories.implementations.knowledge_document_repository_impl import (
+            KnowledgeDocumentRepositoryImpl,
+        )
+        from bisheng.knowledge.domain.repositories.implementations.knowledge_document_version_repository_impl import (
+            KnowledgeDocumentVersionRepositoryImpl,
+        )
+        from bisheng.knowledge.domain.repositories.implementations.knowledge_file_repository_impl import (
+            KnowledgeFileRepositoryImpl,
+        )
+        from bisheng.knowledge.domain.services.knowledge_document_distribution_service import (
+            KnowledgeDocumentDistributionService,
+            PublishKnowledgeDocumentCommand,
+        )
+        from bisheng.knowledge.domain.services.knowledge_document_permission_activation_service import (
+            KnowledgeDocumentPermissionActivationService,
+        )
+
+        async with get_async_db_session() as session:
+            file_repository = KnowledgeFileRepositoryImpl(session)
+            service = KnowledgeDocumentDistributionService(
+                session=session,
+                document_repository=KnowledgeDocumentRepositoryImpl(session),
+                version_repository=KnowledgeDocumentVersionRepositoryImpl(session),
+                file_repository=file_repository,
+                permission_activation_service=KnowledgeDocumentPermissionActivationService(
+                    file_repository=file_repository,
+                ),
+            )
+            result = await service.publish_approved(
+                PublishKnowledgeDocumentCommand(
+                    tenant_id=int(payload_snapshot["tenant_id"]),
+                    approval_instance_id=int(instance_id),
+                    document_id=int(payload_snapshot["canonical_document_id"]),
+                    source_entry_id=int(payload_snapshot["source_entry_id"]),
+                    target_space_id=int(payload_snapshot["target_space_id"]),
+                    target_file_level_path=str(
+                        payload_snapshot.get("target_folder_level_path") or ""
+                    ),
+                    target_level=int(
+                        payload_snapshot.get("target_folder_level") or 0
+                    ),
+                    target_document_id=(
+                        int(payload_snapshot["target_document_id"])
+                        if payload_snapshot.get("target_document_id")
+                        else None
+                    ),
+                )
+            )
+        try:
+            from bisheng.worker.knowledge.document_projection import (
+                enqueue_document_projection_entries,
+            )
+
+            enqueue_document_projection_entries(
+                tenant_id=int(payload_snapshot["tenant_id"]),
+                entry_ids=[
+                    result.manager_file_id,
+                    result.publish_entry_id,
+                ],
+            )
+        except Exception:
+            logger.warning(
+                "F059 publish projection enqueue failed; Beat will recover "
+                "document_id=%s",
+                result.document_id,
+                exc_info=True,
+            )
+        logger.info(
+            "F059 publish applied tenant_id=%s document_id=%s "
+            "manager_entry_id=%s publish_entry_id=%s target_space_id=%s "
+            "idempotent=%s",
+            payload_snapshot["tenant_id"],
+            result.document_id,
+            result.manager_file_id,
+            result.publish_entry_id,
+            result.target_space_id,
+            result.idempotent,
+        )
+        return {
+            "document_id": result.document_id,
+            "file_id": result.manager_file_id,
+            "publish_entry_id": result.publish_entry_id,
+            "target_space_id": result.target_space_id,
+            "idempotent": result.idempotent,
+        }
+
     async def on_approved(self, instance_id: int, payload_snapshot: dict) -> dict:
+        if payload_snapshot.get("canonical_document_id") is not None:
+            return await self._publish_distribution(
+                instance_id,
+                payload_snapshot,
+            )
+
         from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
 
         source_space_id = int(payload_snapshot["source_space_id"])
@@ -591,6 +713,152 @@ class KnowledgeSpaceFilePublishApprovalHandler:
         return None
 
     async def on_withdrawn(self, instance_id: int, payload_snapshot: dict, reason: str | None) -> None:
+        return None
+
+
+class KnowledgeSpaceFileShareApprovalHandler:
+    scenario_code = FILE_SHARE_SCENARIO
+
+    async def validate(self, req, login_user) -> None:
+        return None
+
+    async def build_title(self, req) -> str:
+        source_name = (
+            req.payload_snapshot.get("source_file_name")
+            or req.business_name
+        )
+        target_name = req.payload_snapshot.get("target_space_name") or ""
+        return f"分享文件：{source_name} → {target_name}".rstrip()
+
+    async def build_detail(self, req) -> dict:
+        return {
+            "type": "knowledge_space_file_share",
+            "source_space_id": req.payload_snapshot.get("source_space_id"),
+            "source_space_name": req.payload_snapshot.get("source_space_name"),
+            "source_file_id": req.payload_snapshot.get("source_file_id"),
+            "source_file_name": req.payload_snapshot.get("source_file_name"),
+            "target_space_id": req.payload_snapshot.get("target_space_id"),
+            "target_space_name": req.payload_snapshot.get("target_space_name"),
+            "allow_download": bool(
+                req.payload_snapshot.get("allow_download")
+            ),
+            "reason": req.reason,
+            "applicant_user_id": req.applicant_user_id,
+            "applicant_user_name": req.applicant_user_name,
+        }
+
+    async def build_business_link(self, req) -> dict:
+        return {
+            "source_file_id": req.payload_snapshot.get("source_file_id"),
+            "target_space_id": req.payload_snapshot.get("target_space_id"),
+        }
+
+    async def resolve_approvers(self, node_config: dict, req) -> list[int]:
+        return await _resolve_file_publish_approvers(node_config, req)
+
+    async def on_approved(
+        self,
+        instance_id: int,
+        payload_snapshot: dict,
+    ) -> dict:
+        from bisheng.core.database import get_async_db_session
+        from bisheng.knowledge.domain.repositories.implementations.knowledge_document_repository_impl import (
+            KnowledgeDocumentRepositoryImpl,
+        )
+        from bisheng.knowledge.domain.repositories.implementations.knowledge_document_version_repository_impl import (
+            KnowledgeDocumentVersionRepositoryImpl,
+        )
+        from bisheng.knowledge.domain.repositories.implementations.knowledge_file_repository_impl import (
+            KnowledgeFileRepositoryImpl,
+        )
+        from bisheng.knowledge.domain.services.knowledge_document_distribution_service import (
+            KnowledgeDocumentDistributionService,
+            ShareKnowledgeDocumentCommand,
+        )
+        from bisheng.knowledge.domain.services.knowledge_document_permission_activation_service import (
+            KnowledgeDocumentPermissionActivationService,
+        )
+
+        async with get_async_db_session() as session:
+            file_repository = KnowledgeFileRepositoryImpl(session)
+            service = KnowledgeDocumentDistributionService(
+                session=session,
+                document_repository=KnowledgeDocumentRepositoryImpl(session),
+                version_repository=KnowledgeDocumentVersionRepositoryImpl(
+                    session
+                ),
+                file_repository=file_repository,
+                permission_activation_service=(
+                    KnowledgeDocumentPermissionActivationService(
+                        file_repository=file_repository,
+                    )
+                ),
+            )
+            result = await service.share_approved(
+                ShareKnowledgeDocumentCommand(
+                    tenant_id=int(payload_snapshot["tenant_id"]),
+                    approval_instance_id=int(instance_id),
+                    document_id=int(
+                        payload_snapshot["canonical_document_id"]
+                    ),
+                    source_entry_id=int(
+                        payload_snapshot["source_entry_id"]
+                    ),
+                    target_space_id=int(
+                        payload_snapshot["target_space_id"]
+                    ),
+                    allow_download=bool(
+                        payload_snapshot.get("allow_download")
+                    ),
+                )
+            )
+        try:
+            from bisheng.worker.knowledge.document_projection import (
+                enqueue_document_projection_entries,
+            )
+
+            enqueue_document_projection_entries(
+                tenant_id=int(payload_snapshot["tenant_id"]),
+                entry_ids=[result.share_entry_id],
+            )
+        except Exception:
+            logger.warning(
+                "F059 share projection enqueue failed; Beat will recover "
+                "document_id=%s",
+                result.document_id,
+                exc_info=True,
+            )
+        logger.info(
+            "F059 share applied tenant_id=%s document_id=%s "
+            "share_entry_id=%s target_space_id=%s idempotent=%s",
+            payload_snapshot["tenant_id"],
+            result.document_id,
+            result.share_entry_id,
+            result.target_space_id,
+            result.idempotent,
+        )
+        return {
+            "document_id": result.document_id,
+            "file_id": result.share_entry_id,
+            "manager_file_id": result.manager_file_id,
+            "target_space_id": result.target_space_id,
+            "idempotent": result.idempotent,
+        }
+
+    async def on_rejected(
+        self,
+        instance_id: int,
+        payload_snapshot: dict,
+        reason: str | None,
+    ) -> None:
+        return None
+
+    async def on_withdrawn(
+        self,
+        instance_id: int,
+        payload_snapshot: dict,
+        reason: str | None,
+    ) -> None:
         return None
 
 

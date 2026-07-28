@@ -9,13 +9,31 @@ from bisheng.approval.domain.models.approval_instance import (
     ApprovalTask,
     ApprovalTaskStatus,
 )
+from bisheng.approval.domain.models.approval_scenario import (
+    ApprovalFlowDefinition,
+    ApprovalFlowVersion,
+    ApprovalNodeDefinition,
+    ApprovalRouteRule,
+    ApprovalScenario,
+)
+from bisheng.approval.domain.schemas.approval_center_schema import (
+    ApprovalGateDecision,
+    ApprovalGateRequest,
+)
+from bisheng.approval.domain.services.approval_gate import ApprovalGate
+from bisheng.approval.domain.services.approval_registry import ApprovalRegistry
+from bisheng.approval.domain.services.department_file_view_handler import (
+    DepartmentFileViewApprovalHandler,
+)
 from bisheng.common.errcode.approval import (
     ApprovalApproverUnavailableError,
     ApprovalDepartmentFileGrantNotRevokableError,
     ApprovalDepartmentFileInvalidBindingError,
+    ApprovalFixedScenarioInvalidError,
     ApprovalReasonRequiredError,
     ApprovalRequestNotFoundError,
     ApprovalRequestPermissionDeniedError,
+    ApprovalScenarioDisabledError,
 )
 from bisheng.database.models.audit_log import AuditLog
 from bisheng.database.models.department import UserDepartment
@@ -38,7 +56,7 @@ class DepartmentFileViewApprovalService:
         session,
         file_repository,
         access_service,
-        provisioner,
+        provisioner=None,
     ) -> None:
         self.session = session
         self.file_repository = file_repository
@@ -85,10 +103,6 @@ class DepartmentFileViewApprovalService:
             if decision.status != DepartmentFileAccessStatus.APPROVAL_REQUIRED:
                 raise ApprovalDepartmentFileInvalidBindingError()
 
-            contract = await self.provisioner.get_contract(
-                tenant_id=tenant_id,
-                require_enabled=True,
-            )
             resource = await self.access_service.load_resource(file)
             if not resource.valid or resource.department_id is None or int(resource.file.knowledge_id) != int(space_id):
                 raise ApprovalDepartmentFileInvalidBindingError()
@@ -107,6 +121,37 @@ class DepartmentFileViewApprovalService:
                     status="allowed",
                     access_source="department_approver",
                 )
+
+            applicant_department_id = await self._get_applicant_department_id(
+                int(login_user.user_id)
+            )
+            route_context = {
+                "file_department_id": int(resource.department_id),
+                "file_knowledge_space_id": int(resource.file.knowledge_id),
+            }
+            if self.provisioner is None:
+                return await self._apply_with_gate(
+                    login_user=login_user,
+                    tenant_id=tenant_id,
+                    space_id=int(space_id),
+                    file_id=int(file_id),
+                    file=file,
+                    resource=resource,
+                    decision=decision,
+                    applicant_department_id=applicant_department_id,
+                    route_context=route_context,
+                    reason=reason,
+                    ip_address=ip_address,
+                )
+            contract = await self._get_application_contract(
+                tenant_id=tenant_id,
+                login_user=login_user,
+                applicant_department_id=applicant_department_id,
+                space_id=int(space_id),
+                file_id=int(file_id),
+                file_name=str(getattr(file, "file_name", "") or ""),
+                route_context=route_context,
+            )
 
             duplicate = await self._find_latest_instance(
                 tenant_id=tenant_id,
@@ -141,7 +186,6 @@ class DepartmentFileViewApprovalService:
                 space_name=str(getattr(resource.space, "name", "") or ""),
                 decision=decision,
             )
-            applicant_department_id = await self._get_applicant_department_id(int(login_user.user_id))
             instance = ApprovalInstance(
                 tenant_id=tenant_id,
                 scenario_code=self.SCENARIO_CODE,
@@ -167,6 +211,7 @@ class DepartmentFileViewApprovalService:
                     "space_name": str(getattr(resource.space, "name", "") or ""),
                     "department_id": int(resource.department_id),
                     "department_name": str(getattr(resource.department, "name", "") or ""),
+                    **route_context,
                 },
                 detail_snapshot={
                     **safe_metadata,
@@ -340,11 +385,9 @@ class DepartmentFileViewApprovalService:
                 instance=latest,
             )
 
-        contract = await self.provisioner.get_contract(
-            tenant_id=int(login_user.tenant_id),
-            require_enabled=False,
-        )
-        if not contract.scenario.enabled:
+        if not await self._is_scenario_enabled(
+            tenant_id=int(login_user.tenant_id)
+        ):
             return self._access_payload(
                 space_id=space_id,
                 file_id=file_id,
@@ -380,6 +423,248 @@ class DepartmentFileViewApprovalService:
             status=terminal_status,
             safe_metadata=safe_metadata,
             instance=latest,
+        )
+
+    async def _apply_with_gate(
+        self,
+        *,
+        login_user,
+        tenant_id: int,
+        space_id: int,
+        file_id: int,
+        file,
+        resource,
+        decision,
+        applicant_department_id: int | None,
+        route_context: dict,
+        reason: str,
+        ip_address: str | None,
+    ) -> dict:
+        payload_snapshot = {
+            "tenant_id": tenant_id,
+            "applicant_user_id": int(login_user.user_id),
+            "space_id": space_id,
+            "file_id": file_id,
+            "file_name": str(getattr(file, "file_name", "") or ""),
+            "space_name": str(getattr(resource.space, "name", "") or ""),
+            "department_id": int(resource.department_id),
+            "department_name": str(
+                getattr(resource.department, "name", "") or ""
+            ),
+            **route_context,
+        }
+        registry = ApprovalRegistry.with_default_presets()
+        registry.register_handler(
+            self.SCENARIO_CODE,
+            DepartmentFileViewApprovalHandler(),
+        )
+        result = await ApprovalGate(
+            registry=registry,
+            session=self.session,
+        ).request_or_pass(
+            ApprovalGateRequest(
+                tenant_id=tenant_id,
+                scenario_code=self.SCENARIO_CODE,
+                business_key=f"department-file:{space_id}:{file_id}",
+                business_resource_type="department_knowledge_file",
+                business_resource_id=str(file_id),
+                business_name=str(
+                    getattr(file, "file_name", "") or ""
+                ),
+                applicant_user_id=int(login_user.user_id),
+                applicant_user_name=str(login_user.user_name or ""),
+                applicant_department_id=applicant_department_id,
+                reason=reason,
+                payload_snapshot=payload_snapshot,
+                ip_address=ip_address,
+            )
+        )
+        status = {
+            ApprovalGateDecision.PASS: "pending",
+            ApprovalGateDecision.PENDING: "pending",
+            ApprovalGateDecision.EXCEPTION: "exception",
+        }[result.decision]
+        return {
+            "status": status,
+            "content_access": decision.status,
+            "space_id": space_id,
+            "file_id": file_id,
+            "instance_id": int(result.instance_id),
+            "latest_instance_status": (
+                ApprovalInstanceStatus.APPROVED
+                if result.decision == ApprovalGateDecision.PASS
+                else (
+                    ApprovalInstanceStatus.EXCEPTION
+                    if result.decision == ApprovalGateDecision.EXCEPTION
+                    else ApprovalInstanceStatus.PENDING
+                )
+            ),
+            "task_ids": [int(task_id) for task_id in result.task_ids],
+            "can_download": bool(decision.can_download),
+        }
+
+    async def _is_scenario_enabled(self, *, tenant_id: int) -> bool:
+        if self.provisioner is not None:
+            contract = await self.provisioner.get_contract(
+                tenant_id=tenant_id,
+                require_enabled=False,
+            )
+            return bool(contract.scenario.enabled)
+        scenario = (
+            (
+                await self.session.execute(
+                    select(ApprovalScenario).where(
+                        ApprovalScenario.tenant_id == tenant_id,
+                        ApprovalScenario.scenario_code == self.SCENARIO_CODE,
+                    )
+                )
+            )
+            .scalars()
+            .first()
+        )
+        return bool(scenario and scenario.enabled)
+
+    async def _get_application_contract(
+        self,
+        *,
+        tenant_id: int,
+        login_user,
+        applicant_department_id: int | None,
+        space_id: int,
+        file_id: int,
+        file_name: str,
+        route_context: dict,
+    ):
+        if self.provisioner is not None:
+            return await self.provisioner.get_contract(
+                tenant_id=tenant_id,
+                require_enabled=True,
+            )
+
+        scenario = (
+            (
+                await self.session.execute(
+                    select(ApprovalScenario).where(
+                        ApprovalScenario.tenant_id == tenant_id,
+                        ApprovalScenario.scenario_code == self.SCENARIO_CODE,
+                    )
+                )
+            )
+            .scalars()
+            .first()
+        )
+        if scenario is None or not scenario.enabled:
+            raise ApprovalScenarioDisabledError()
+
+        routes = list(
+            (
+                await self.session.execute(
+                    select(ApprovalRouteRule)
+                    .where(
+                        ApprovalRouteRule.tenant_id == tenant_id,
+                        ApprovalRouteRule.scenario_id == scenario.id,
+                        (ApprovalRouteRule.enabled == True),  # noqa: E712
+                    )
+                    .order_by(
+                        ApprovalRouteRule.sort_order.asc(),
+                        ApprovalRouteRule.id.asc(),
+                    )
+                    .with_for_update()
+                )
+            )
+            .scalars()
+            .all()
+        )
+        request = ApprovalGateRequest(
+            tenant_id=tenant_id,
+            scenario_code=self.SCENARIO_CODE,
+            business_key=f"department-file:{space_id}:{file_id}",
+            business_resource_type="department_knowledge_file",
+            business_resource_id=str(file_id),
+            business_name=file_name,
+            applicant_user_id=int(login_user.user_id),
+            applicant_user_name=str(login_user.user_name or ""),
+            applicant_department_id=applicant_department_id,
+            payload_snapshot=dict(route_context),
+        )
+        route = await ApprovalGate(registry=None)._match_first_route(
+            routes,
+            request,
+        )
+        if route is None or route.route_type == "pass":
+            # pass 与通用 outbox/grant 编排在后续 runtime task 中接入;
+            # 这里禁止退回固定流程, 避免忽略管理员配置。
+            raise ApprovalFixedScenarioInvalidError()
+
+        flow = (
+            (
+                await self.session.execute(
+                    select(ApprovalFlowDefinition)
+                    .where(
+                        ApprovalFlowDefinition.id
+                        == route.flow_definition_id,
+                        ApprovalFlowDefinition.tenant_id == tenant_id,
+                        ApprovalFlowDefinition.scenario_id == scenario.id,
+                        (ApprovalFlowDefinition.is_active == True),  # noqa: E712
+                    )
+                    .with_for_update()
+                )
+            )
+            .scalars()
+            .first()
+        )
+        if flow is None:
+            raise ApprovalFixedScenarioInvalidError()
+        flow_version = (
+            (
+                await self.session.execute(
+                    select(ApprovalFlowVersion)
+                    .where(
+                        ApprovalFlowVersion.tenant_id == tenant_id,
+                        ApprovalFlowVersion.flow_definition_id == flow.id,
+                        (ApprovalFlowVersion.is_active == True),  # noqa: E712
+                    )
+                    .order_by(
+                        ApprovalFlowVersion.version_no.desc(),
+                        ApprovalFlowVersion.id.desc(),
+                    )
+                    .with_for_update()
+                )
+            )
+            .scalars()
+            .first()
+        )
+        if flow_version is None:
+            raise ApprovalFixedScenarioInvalidError()
+        nodes = list(
+            (
+                await self.session.execute(
+                    select(ApprovalNodeDefinition)
+                    .where(
+                        ApprovalNodeDefinition.tenant_id == tenant_id,
+                        ApprovalNodeDefinition.flow_version_id
+                        == flow_version.id,
+                    )
+                    .order_by(
+                        ApprovalNodeDefinition.node_order.asc(),
+                        ApprovalNodeDefinition.id.asc(),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if not nodes:
+            raise ApprovalFixedScenarioInvalidError()
+
+        from types import SimpleNamespace
+
+        return SimpleNamespace(
+            scenario=scenario,
+            route=route,
+            flow=flow,
+            flow_version=flow_version,
+            node=nodes[0],
         )
 
     async def revoke(

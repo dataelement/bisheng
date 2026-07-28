@@ -54,7 +54,7 @@ describe("permission model scope info", () => {
       permissions: ["view_file", "delete_file", "view_folder", "share_file"],
       permissions_explicit: true,
       is_system: false,
-    })).toEqual(["view_file", "delete_file"]);
+    })).toEqual(["view_file", "share_file", "delete_file"]);
   });
 
   it("identifies and filters models without current resource permission items", () => {

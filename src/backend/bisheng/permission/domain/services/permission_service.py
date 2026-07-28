@@ -20,6 +20,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+import secrets
+from contextlib import AsyncExitStack
 from typing import List, Optional, Set
 
 from bisheng.core.openfga.exceptions import FGAConnectionError, FGAWriteError
@@ -239,6 +241,69 @@ class PermissionService:
         Expands department subjects to include sub-departments when include_children=True.
         Delegates to batch_write_tuples() for FGA writes + FailedTuple compensation.
         """
+        direct_user_grants = {}
+        if object_type in {"knowledge_space", "folder", "knowledge_file"}:
+            from bisheng.permission.domain.services.department_transfer_grant_guard import (
+                KnowledgeGrantSignature,
+            )
+
+            direct_user_grants: dict[int, list[KnowledgeGrantSignature]] = {}
+            for grant in grants or []:
+                if grant.subject_type != "user" or grant.relation == "owner":
+                    continue
+                direct_user_grants.setdefault(int(grant.subject_id), []).append(
+                    KnowledgeGrantSignature(
+                        resource_type=object_type,
+                        resource_id=str(object_id),
+                        relation=grant.relation,
+                        model_id=getattr(grant, "model_id", None),
+                    )
+                )
+        if not direct_user_grants:
+            await cls._authorize_operations(
+                object_type=object_type,
+                object_id=object_id,
+                grants=grants,
+                revokes=revokes,
+                enforce_fga_success=enforce_fga_success,
+            )
+            return
+
+        from bisheng.permission.domain.services.department_transfer_grant_guard import (
+            _DepartmentTransferUserLock,
+            protect_knowledge_direct_grants,
+        )
+
+        operation_id = secrets.token_hex(16)
+        async with AsyncExitStack() as locks:
+            for target_user_id in sorted(direct_user_grants):
+                await locks.enter_async_context(_DepartmentTransferUserLock(target_user_id))
+            for target_user_id, signatures in direct_user_grants.items():
+                await protect_knowledge_direct_grants(
+                    user_id=target_user_id,
+                    grants=signatures,
+                    source="permission_service",
+                    operation_id=operation_id,
+                    lock_held=True,
+                )
+            await cls._authorize_operations(
+                object_type=object_type,
+                object_id=object_id,
+                grants=grants,
+                revokes=revokes,
+                enforce_fga_success=enforce_fga_success,
+            )
+
+    @classmethod
+    async def _authorize_operations(
+        cls,
+        *,
+        object_type: str,
+        object_id: str,
+        grants: List[AuthorizeGrantItem] = None,
+        revokes: List[AuthorizeRevokeItem] = None,
+        enforce_fga_success: bool = False,
+    ) -> None:
         operations: List[TupleOperation] = []
         affected_user_ids: set[int] = set()
         fga_objects = [f'{object_type}:{object_id}']
@@ -1088,8 +1153,6 @@ class PermissionService:
             creator_id = await cls._get_resource_creator(object_type, object_id)
             if creator_id is not None and creator_id == user_id:
                 return PermissionLevel.owner.value
-            if creator_id is not None and await cls._implicit_dept_admin_covers(user_id, creator_id):
-                return PermissionLevel.can_manage.value
             department_space_level = await cls._implicit_department_space_member_level(
                 user_id,
                 object_type,
@@ -1134,30 +1197,6 @@ class PermissionService:
         return False
 
     @classmethod
-    async def _implicit_dept_admin_covers(cls, viewer_user_id: int, creator_user_id: int) -> bool:
-        """当前用户作为部门管理员时，其管辖部门子树是否覆盖创建者的任职部门之一。"""
-        if viewer_user_id == creator_user_id:
-            return False
-        from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
-
-        admin_depts = await DepartmentDao.aget_user_admin_departments(viewer_user_id)
-        if not admin_depts:
-            return False
-        subtree: Set[int] = set()
-        for ad in admin_depts:
-            if ad and getattr(ad, 'path', None):
-                subtree |= set(await DepartmentDao.aget_subtree_ids(ad.path))
-        if not subtree:
-            return False
-        uds = await UserDepartmentDao.aget_user_departments(creator_user_id)
-        if not uds:
-            return False
-        for ud in uds:
-            if int(ud.department_id) in subtree:
-                return True
-        return False
-
-    @classmethod
     async def _implicit_department_space_member_level(
         cls,
         user_id: int,
@@ -1179,26 +1218,6 @@ class PermissionService:
         if any(int(row.department_id) == int(binding.department_id) for row in user_departments):
             return PermissionLevel.can_read.value
         return None
-
-    @classmethod
-    async def _distinct_user_ids_in_departments(cls, department_ids: Set[int]) -> Set[int]:
-        if not department_ids:
-            return set()
-        from bisheng.core.database import get_async_db_session
-        from bisheng.database.models.department import UserDepartment
-        from sqlmodel import col, select
-
-        async with get_async_db_session() as session:
-            stmt = select(UserDepartment.user_id).where(
-                col(UserDepartment.department_id).in_(list(department_ids)),
-            )
-            result = await session.exec(stmt)
-            rows = result.all()
-        out: Set[int] = set()
-        for row in rows:
-            uid = row[0] if isinstance(row, tuple) else row
-            out.add(int(uid))
-        return out
 
     @classmethod
     async def _resource_ids_by_creator_user_ids(
@@ -1455,15 +1474,6 @@ class PermissionService:
                 *(str(one) for one in creator_owned_ids),
             ]))
 
-        implicit_ids = await cls._resource_ids_implicit_dept_admin_scope(
-            user_id, object_type,
-        )
-        if implicit_ids:
-            ordered_ids = list(dict.fromkeys([
-                *ordered_ids,
-                *(str(one) for one in implicit_ids),
-            ]))
-
         tenant_admin_scope_ids = await cls._resource_ids_child_tenant_admin_scope(
             login_user, object_type,
         )
@@ -1476,49 +1486,6 @@ class PermissionService:
         return await cls._filter_ids_by_tenant_gate(
             user_id, object_type, ordered_ids, login_user,
         )
-
-    @classmethod
-    async def _resource_ids_implicit_dept_admin_scope(
-        cls, viewer_user_id: int, object_type: str,
-    ) -> List[str]:
-        """部门管理员在 list_objects 并集中额外可见的资源（子树成员创建）。"""
-        if object_type not in cls._IMPLICIT_SCOPE_RESOURCE_TYPES:
-            return []
-        from bisheng.database.models.department import DepartmentDao
-
-        admin_depts = await DepartmentDao.aget_user_admin_departments(viewer_user_id)
-        logger.info(
-            '[implicit-scope] viewer=%s type=%s admin_depts=%s',
-            viewer_user_id, object_type,
-            [(d.id, getattr(d, 'name', None), getattr(d, 'path', None)) for d in admin_depts or []],
-        )
-        if not admin_depts:
-            return []
-        subtree: Set[int] = set()
-        for ad in admin_depts:
-            if ad and getattr(ad, 'path', None):
-                ids = await DepartmentDao.aget_subtree_ids(ad.path)
-                logger.info(
-                    '[implicit-scope] subtree from path=%s ids=%s',
-                    ad.path, ids,
-                )
-                subtree |= set(ids)
-        if not subtree:
-            logger.info('[implicit-scope] empty subtree for viewer=%s', viewer_user_id)
-            return []
-        member_uids = await cls._distinct_user_ids_in_departments(subtree)
-        logger.info(
-            '[implicit-scope] viewer=%s subtree=%s members=%s',
-            viewer_user_id, sorted(subtree), sorted(member_uids),
-        )
-        if not member_uids:
-            return []
-        ids = await cls._resource_ids_by_creator_user_ids(object_type, member_uids)
-        logger.info(
-            '[implicit-scope] viewer=%s type=%s resource_ids=%s',
-            viewer_user_id, object_type, ids,
-        )
-        return ids
 
     @classmethod
     async def _legacy_alias_object_types(

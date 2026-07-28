@@ -1,7 +1,9 @@
 import { render, waitFor } from "@testing-library/react";
 import { checkPermission } from "~/api/permission";
 import { useAuthContext } from "~/hooks";
+import { SpaceLevel, SpaceRole } from "~/api/knowledge";
 import {
+    hasRoleBasedSpaceActionBypass,
     useKnowledgeSpaceActionPermissions,
     type KnowledgeSpaceActionPermission,
 } from "./useKnowledgeSpacePermissions";
@@ -15,6 +17,29 @@ function Probe({ permissionIds }: { permissionIds?: readonly KnowledgeSpaceActio
     useKnowledgeSpaceActionPermissions(["s1"], { permissionIds });
     return null;
 }
+
+describe("hasRoleBasedSpaceActionBypass", () => {
+    it("creator always bypasses permission API", () => {
+        expect(hasRoleBasedSpaceActionBypass({
+            role: SpaceRole.CREATOR,
+            spaceLevel: SpaceLevel.DEPARTMENT,
+        })).toBe(true);
+    });
+
+    it("department admin role does not bypass permission API", () => {
+        expect(hasRoleBasedSpaceActionBypass({
+            role: SpaceRole.ADMIN,
+            spaceLevel: SpaceLevel.DEPARTMENT,
+        })).toBe(false);
+    });
+
+    it("team admin role bypasses permission API", () => {
+        expect(hasRoleBasedSpaceActionBypass({
+            role: SpaceRole.ADMIN,
+            spaceLevel: SpaceLevel.TEAM,
+        })).toBe(true);
+    });
+});
 
 describe("useKnowledgeSpaceActionPermissions permissionIds", () => {
     beforeEach(() => {

@@ -7,6 +7,7 @@ GET  /api/v1/resources/{resource_type}/{resource_id}/permissions — List resour
 import json
 import logging
 import uuid
+from contextvars import ContextVar
 
 from fastapi import APIRouter, Depends, Query
 
@@ -61,6 +62,10 @@ from bisheng.permission.domain.tool_permission_template import (
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+_bindings_read_snapshot: ContextVar[list[dict] | None] = ContextVar(
+    "permission_relation_bindings_read_snapshot",
+    default=None,
+)
 
 
 def _enqueue_recommendation_projection_resource_refreshes(
@@ -272,13 +277,13 @@ async def _save_relation_models(models: list[dict]) -> None:
 
 async def _get_bindings() -> list[dict]:
     """只读；禁止每次读取都把绑定表写回空数组。"""
-    row = await ConfigDao.aget_config_by_key(_RELATION_MODEL_BINDINGS_KEY)
-    if not row or not (row.value or "").strip():
-        return []
-    try:
-        bindings = json.loads(row.value or "[]")
-    except Exception:
-        return []
+    from bisheng.permission.domain.services.permission_relation_binding_service import (
+        PermissionRelationBindingService,
+    )
+
+    service = PermissionRelationBindingService()
+    bindings = await service.get_bindings()
+    _bindings_read_snapshot.set([dict(binding) for binding in bindings])
     normalized = await _migrate_legacy_knowledge_library_bindings(bindings)
     if normalized != bindings:
         await _save_bindings(normalized)
@@ -286,10 +291,35 @@ async def _get_bindings() -> list[dict]:
 
 
 async def _save_bindings(bindings: list[dict]) -> None:
-    await ConfigDao.insert_or_update_config(
-        _RELATION_MODEL_BINDINGS_KEY,
-        json.dumps(bindings, ensure_ascii=False),
+    from bisheng.permission.domain.services.permission_relation_binding_service import (
+        PermissionRelationBindingService,
     )
+
+    original = _bindings_read_snapshot.get()
+    service = PermissionRelationBindingService()
+    if original is None:
+        await service.replace_all(bindings)
+        return
+
+    original_map = {binding.get("key"): binding for binding in original if binding.get("key")}
+    desired_map = {binding.get("key"): binding for binding in bindings if binding.get("key")}
+
+    def _apply_delta(current: list[dict]) -> list[dict]:
+        current_map = {
+            binding.get("key"): binding for binding in current if binding.get("key")
+        }
+        for key, original_binding in original_map.items():
+            if key in desired_map:
+                continue
+            if current_map.get(key) == original_binding:
+                current_map.pop(key, None)
+        for key, desired_binding in desired_map.items():
+            if original_map.get(key) != desired_binding:
+                current_map[key] = desired_binding
+        return list(current_map.values())
+
+    await service.mutate(_apply_delta)
+    _bindings_read_snapshot.set([dict(binding) for binding in bindings])
 
 
 async def _migrate_legacy_knowledge_library_bindings(bindings: list[dict]) -> list[dict]:

@@ -4,8 +4,15 @@ from sqlalchemy import case, func, or_, text, update
 from sqlmodel import select, col
 
 from bisheng.core.database import get_async_db_session, get_sync_db_session
-from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao, KnowledgeFile, KnowledgeFileStatus, \
-    FileType, FileSource
+from bisheng.knowledge.domain.models.knowledge_file import (
+    FileSource,
+    FileType,
+    KnowledgeFile,
+    KnowledgeFileDao,
+    KnowledgeFileEntryStatus,
+    KnowledgeFileEntryType,
+    KnowledgeFileStatus,
+)
 
 
 # F027 AD-14: file extension priority for "file_type" sort order.
@@ -213,6 +220,20 @@ class SpaceFileDao(KnowledgeFileDao):
                 exact_path = f"/{parent_id}"
             path_filter = KnowledgeFile.file_level_path == exact_path
         filters = [KnowledgeFile.knowledge_id == knowledge_id, path_filter]
+        filters.extend(
+            [
+                or_(
+                    KnowledgeFile.reference_document_id.is_(None),
+                    KnowledgeFile.entry_status
+                    == KnowledgeFileEntryStatus.ACTIVE.value,
+                ),
+                or_(
+                    KnowledgeFile.entry_type.is_(None),
+                    KnowledgeFile.entry_type
+                    != KnowledgeFileEntryType.PROJECTION_TOMBSTONE.value,
+                ),
+            ]
+        )
         if file_ids:
             filters.append(KnowledgeFile.id.in_(file_ids))
         if file_type is not None:
@@ -367,6 +388,7 @@ class SpaceFileDao(KnowledgeFileDao):
                 exact_path = f"/{parent_id}"
             path_filter = KnowledgeFile.file_level_path == exact_path
         filters = [KnowledgeFile.knowledge_id == knowledge_id, path_filter]
+        filters.append(KnowledgeFileDao.active_inventory_predicate())
         if file_ids:
             filters.append(KnowledgeFile.id.in_(file_ids))
 
@@ -403,6 +425,7 @@ class SpaceFileDao(KnowledgeFileDao):
         statement = select(func.sum(KnowledgeFile.file_size)).where(
             KnowledgeFile.user_id == user_id,
             KnowledgeFile.file_type == 1,
+            KnowledgeFileDao.physical_storage_predicate(),
             col(KnowledgeFile.file_source).in_([FileSource.SPACE_UPLOAD.value,
                                                 FileSource.CHANNEL.value]),
         )

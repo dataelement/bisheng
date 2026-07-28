@@ -47,6 +47,9 @@ def _make_svc():
     svc = KnowledgeSpaceService.__new__(KnowledgeSpaceService)
     svc._load_folder_stat_counts = AsyncMock(return_value={})
     svc._load_file_tags_batch = AsyncMock(return_value={9001: [{"tag_name": "x"}]})
+    svc.doc_repo = None
+    svc.version_repo = None
+    svc._entry_permission_ids_by_file = {9001: set()}
     svc.get_logo_share_link = Mock(return_value="thumb")
     return svc
 
@@ -58,6 +61,10 @@ def _make_file(file_id: int):
     f.thumbnails = ""
     f.abstract = "摘要"
     f.similar_status = 0
+    f.reference_document_id = None
+    f.entry_type = None
+    f.allow_download = False
+    f.knowledge_id = 10
     f.model_dump.return_value = {"id": file_id, "file_name": "a.pdf", "file_type": FileType.FILE.value}
     return f
 
@@ -83,3 +90,30 @@ async def test_extra_info_enriches_files_by_default():
     assert result[0]["tags"] == [{"tag_name": "x"}]
     assert "version_no" in result[0]
     svc._load_file_tags_batch.assert_awaited()
+
+
+@pytest.mark.asyncio
+async def test_logical_entry_reuses_current_primary_tags_without_leaking_source_id():
+    svc = _make_svc()
+    logical = _make_file(9001)
+    svc._load_document_distribution_info = AsyncMock(
+        return_value={
+            9001: {
+                "_tag_source_file_id": 100,
+                "entry_type": "share",
+            }
+        }
+    )
+    svc._load_file_tags_batch = AsyncMock(
+        return_value={100: [{"tag_name": "canonical"}]}
+    )
+
+    result = await svc._handle_file_folder_extra_info(
+        [logical],
+        include_folder_counts=True,
+        enrich_files=True,
+    )
+
+    svc._load_file_tags_batch.assert_awaited_once_with([100])
+    assert result[0]["tags"] == [{"tag_name": "canonical"}]
+    assert "_tag_source_file_id" not in result[0]

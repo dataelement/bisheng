@@ -343,12 +343,13 @@ class QuestionRepository:
 
     async def get_answer_count_by_domain(self) -> list[dict]:
         async with get_async_db_session() as session:
+            # 从统计问题回答数量，按业务域分组改成统计问题数量，按业务域分组
             stmt = select(
                 Question.business_domain,
-                func.sum(Question.answer_count).label("answer_count"),
+                func.count(Question.id).label("question_count"),
             ).group_by(Question.business_domain)
             result = (await session.exec(stmt)).all()
-            return [{"business_domain": row.business_domain, "answer_count": row.answer_count} for row in result]
+            return [{"business_domain": row.business_domain, "answer_count": row.question_count} for row in result]
 
 
 class QAExpertStatsRepository:

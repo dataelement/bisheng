@@ -61,7 +61,12 @@ _RESOURCE_COUNT_TEMPLATES: dict[str, str] = {
     # No status filter: a parse failure / timeout still leaves an object on
     # disk until the user explicitly deletes the row, so it must continue
     # to count against the quota until then.
-    "knowledge_space_file": "SELECT COALESCE(SUM(file_size), 0) FROM knowledgefile WHERE {col}=:{param} AND file_source IN ('channel','space_upload')",
+    "knowledge_space_file": (
+        "SELECT COALESCE(SUM(file_size), 0) FROM knowledgefile "
+        "WHERE {col}=:{param} AND file_source IN ('channel','space_upload') "
+        "AND COALESCE(entry_type, '') NOT IN "
+        "('publish','share','projection_tombstone')"
+    ),
     # KI-01 fix: channel has no `status` column either; removed filter to
     # avoid silent 0 counts via _count_resource's try/except.
     "channel": "SELECT COUNT(*) FROM channel WHERE {col}=:{param}",
@@ -81,7 +86,12 @@ _RESOURCE_COUNT_TEMPLATES: dict[str, str] = {
     "dashboard": "SELECT COUNT(*) FROM flow WHERE {col}=:{param} AND flow_type=15 AND status!=0",
     # F016 T02: tenant-only resource types.
     # storage_gb: total bytes of active knowledge files; converted to GB in _count_resource.
-    "storage_gb": "SELECT COALESCE(SUM(file_size), 0) FROM knowledgefile WHERE {col}=:{param} AND file_source IN ('channel','space_upload')",
+    "storage_gb": (
+        "SELECT COALESCE(SUM(file_size), 0) FROM knowledgefile "
+        "WHERE {col}=:{param} AND file_source IN ('channel','space_upload') "
+        "AND COALESCE(entry_type, '') NOT IN "
+        "('publish','share','projection_tombstone')"
+    ),
     # user_count and model_tokens_monthly handled outside this dict — they
     # need cross-dialect identifier quoting (`user`, `delete` are reserved
     # on DM8) and portable first-of-month math (no DATE_FORMAT on DM8).

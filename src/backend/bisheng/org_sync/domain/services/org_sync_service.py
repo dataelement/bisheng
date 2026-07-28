@@ -631,6 +631,18 @@ class OrgSyncService:
             if op.new_primary_dept_external_id
             else None
         )
+        prepared = None
+        if op.touch_primary and new_primary_id and op.old_primary_dept_id is not None:
+            from bisheng.permission.domain.services.primary_department_change_coordinator import (
+                prepare_primary_department_change,
+            )
+
+            prepared = await prepare_primary_department_change(
+                user_id=op.user_id,
+                old_department_id=int(op.old_primary_dept_id),
+                new_department_id=int(new_primary_id),
+                trigger_source="org_sync",
+            )
 
         for dept_id in op.remove_secondary_dept_ids:
             if op.old_primary_dept_id and int(dept_id) == int(op.old_primary_dept_id):
@@ -647,19 +659,35 @@ class OrgSyncService:
             )
 
         if op.touch_primary and new_primary_id and op.old_primary_dept_id is not None:
-            await UserDepartmentDao.aremove_member(op.user_id, op.old_primary_dept_id)
-            tuple_ops = DepartmentChangeHandler.on_member_removed(
-                op.old_primary_dept_id,
-                op.user_id,
-            )
-            await DepartmentChangeHandler.execute_async(tuple_ops)
+            try:
+                await UserDepartmentDao.aremove_member(op.user_id, op.old_primary_dept_id)
+                tuple_ops = DepartmentChangeHandler.on_member_removed(
+                    op.old_primary_dept_id,
+                    op.user_id,
+                )
+                await DepartmentChangeHandler.execute_async(tuple_ops)
 
-            await UserDepartmentDao.aadd_member(
-                op.user_id,
-                new_primary_id,
-                is_primary=1,
-                source=config.provider,
+                await UserDepartmentDao.aadd_member(
+                    op.user_id,
+                    new_primary_id,
+                    is_primary=1,
+                    source=config.provider,
+                )
+            except Exception as exc:
+                from bisheng.permission.domain.services.primary_department_change_coordinator import (
+                    cancel_primary_department_change,
+                )
+
+                await cancel_primary_department_change(
+                    prepared,
+                    reason=f"primary_department_update_failed:{type(exc).__name__}",
+                )
+                raise
+            from bisheng.permission.domain.services.primary_department_change_coordinator import (
+                activate_primary_department_change,
             )
+
+            await activate_primary_department_change(prepared)
             tuple_ops = DepartmentChangeHandler.on_members_added(
                 new_primary_id,
                 [op.user_id],

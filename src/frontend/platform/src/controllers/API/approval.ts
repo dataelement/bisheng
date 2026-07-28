@@ -5,6 +5,18 @@ export interface ApprovalConditionFieldOption {
   label: string;
 }
 
+export interface ApprovalConditionOptionsPage {
+  items: Array<{
+    value: string;
+    label: string;
+    department_id?: number;
+    department_name?: string;
+  }>;
+  total: number;
+  page: number;
+  page_size: number;
+}
+
 export interface ApprovalConditionFieldDescriptor {
   field: string;
   label?: string;
@@ -151,6 +163,21 @@ export async function updateApprovalScenarioApi(
 
 export async function listApprovalRoutesApi(scenarioId: number): Promise<ApprovalRouteItem[]> {
   return await axios.get(`/api/v1/approval/admin/scenarios/${scenarioId}/routes`);
+}
+
+export async function listApprovalConditionOptionsApi(
+  scenarioId: number,
+  params: {
+    field: string;
+    keyword?: string;
+    page?: number;
+    page_size?: number;
+  },
+): Promise<ApprovalConditionOptionsPage> {
+  return await axios.get(
+    `/api/v1/approval/admin/scenarios/${scenarioId}/condition-options`,
+    { params },
+  );
 }
 
 export async function createApprovalRouteApi(

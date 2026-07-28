@@ -42,6 +42,9 @@ from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
 from bisheng.knowledge.domain.models.knowledge_file import (
     FileType,
     KnowledgeFileDao,
+    KnowledgeFileEntryStatus,
+    KnowledgeFileEntryType,
+    KnowledgeFileProjectionStatus,
     KnowledgeFileStatus,
 )
 from bisheng.knowledge.domain.services.department_file_view_access_service import (
@@ -63,6 +66,8 @@ class KnowledgeSpaceChatService:
         self.request = request
         self.login_user = login_user
         self.department_file_view_access_service = None
+        self.doc_repo = None
+        self.version_repo = None
 
     def _permission_service(self):
         from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
@@ -201,7 +206,16 @@ class KnowledgeSpaceChatService:
         es_vector = await KnowledgeRag.init_knowledge_es_vectorstore(knowledge=space)
         es_retriever = es_vector.as_retriever(search_kwargs={"filter": [{"term": {"metadata.document_id": file_id}}]})
         telemetry_logged = False
-        async for one in self.space_rag(session, vector_retriever, es_retriever, query, model_id, None):
+        async for one in self.space_rag(
+            session,
+            vector_retriever,
+            es_retriever,
+            query,
+            model_id,
+            None,
+            knowledge_id=knowledge_id,
+            preauthorized_file_ids={int(file_id)},
+        ):
             if not telemetry_logged and not isinstance(one, StreamRetryEvent):
                 self._log_portal_document_qa_success(knowledge_id=knowledge_id, file_id=file_id)
                 telemetry_logged = True
@@ -231,21 +245,32 @@ class KnowledgeSpaceChatService:
             logger.exception("Failed to log portal document QA telemetry.")
 
     async def space_rag(
-        self, session, vector_retriever, es_retriever, query: str, model_id: int, tags: Any = None
+        self,
+        session,
+        vector_retriever,
+        es_retriever,
+        query: str,
+        model_id: int,
+        tags: Any = None,
+        *,
+        knowledge_id: int | None = None,
+        preauthorized_file_ids: set[int] | None = None,
     ) -> AsyncIterator[ChatResponse | StreamRetryEvent]:
         try:
             llm, space_conf = await self.get_space_llm_config(model_id=model_id)
         except Exception as error:
             raise StreamStageError(error, stage="config") from error
 
-        retriever_tool = KnowledgeRetrieverTool(
-            vector_retriever=vector_retriever,
-            elastic_retriever=es_retriever,
-            max_content=space_conf.max_chunk_size,
-            sort_by_source_and_index=True,
-        )
         try:
-            finally_docs: list[Document] = await retriever_tool.ainvoke(query)
+            finally_docs = await self._retrieve_visible_documents(
+                query=query,
+                vector_retriever=vector_retriever,
+                es_retriever=es_retriever,
+                max_content=space_conf.max_chunk_size,
+                sort_by_source_and_index=True,
+                knowledge_id=knowledge_id,
+                preauthorized_file_ids=preauthorized_file_ids,
+            )
         except Exception as error:
             raise StreamStageError(error, stage="retrieval") from error
         logger.debug(f"retrieved_finally_docs: {len(finally_docs)}")
@@ -601,7 +626,15 @@ class KnowledgeSpaceChatService:
             es_retriever = es_vector.as_retriever(search_kwargs=es_kwargs)
 
         # executeQuery(vector_retriever, es_retriever, query)
-        async for one in self.space_rag(session, vector_retriever, es_retriever, query, model_id, tags):
+        async for one in self.space_rag(
+            session,
+            vector_retriever,
+            es_retriever,
+            query,
+            model_id,
+            tags,
+            knowledge_id=knowledge_id,
+        ):
             yield one
 
     async def get_space_llm_config(self, model_id: int) -> tuple[BaseChatModel, KnowledgeSpaceConfig]:
@@ -725,7 +758,7 @@ class KnowledgeSpaceChatService:
             if isinstance(chunks, BaseException):
                 raise chunks
             flattened.extend(chunks)
-        return flattened[:top_k]
+        return self._dedupe_cross_knowledge_chunks(flattened)[:top_k]
 
     async def _aretrieve_chunks_for_kb(
         self,
@@ -763,14 +796,278 @@ class KnowledgeSpaceChatService:
         vector_retriever = milvus_vector.as_retriever(search_kwargs=milvus_kwargs)
         es_retriever = es_vector.as_retriever(search_kwargs=es_kwargs)
 
+        docs = await self._retrieve_visible_documents(
+            query=query,
+            vector_retriever=vector_retriever,
+            es_retriever=es_retriever,
+            max_content=max_content,
+            sort_by_source_and_index=False,
+            knowledge_id=kb_id,
+        )
+        return [(kb_id, d) for d in docs]
+
+    @staticmethod
+    def _canonical_metadata(document: Document) -> tuple[dict[str, Any], dict[str, Any]]:
+        metadata = dict(document.metadata or {})
+        user_metadata = metadata.get("user_metadata")
+        return metadata, user_metadata if isinstance(user_metadata, dict) else {}
+
+    @classmethod
+    def _canonical_chunk_key(cls, document: Document) -> tuple[Any, Any, int]:
+        metadata, canonical_metadata = cls._canonical_metadata(document)
+        document_id = (
+            metadata.get("canonical_document_id")
+            or canonical_metadata.get("canonical_document_id")
+            or metadata.get("document_id")
+            or metadata.get("file_id")
+            or metadata.get("source")
+            or metadata.get("document_name")
+            or id(document)
+        )
+        version_id = (
+            metadata.get("canonical_version_id")
+            or canonical_metadata.get("canonical_version_id")
+            or document_id
+        )
+        chunk_index = metadata.get("chunk_index")
+        if chunk_index is None:
+            chunk_index = canonical_metadata.get("chunk_index", 0)
+        try:
+            normalized_chunk_index = int(chunk_index or 0)
+        except (TypeError, ValueError):
+            normalized_chunk_index = 0
+        return document_id, version_id, normalized_chunk_index
+
+    @classmethod
+    def _dedupe_cross_knowledge_chunks(
+        cls,
+        chunks: list[tuple[int, Document]],
+    ) -> list[tuple[int, Document]]:
+        seen: set[tuple[Any, Any, int]] = set()
+        output: list[tuple[int, Document]] = []
+        for knowledge_id, document in chunks:
+            key = cls._canonical_chunk_key(document)
+            if key in seen:
+                continue
+            seen.add(key)
+            output.append((knowledge_id, document))
+        return output
+
+    @staticmethod
+    def _metadata_int(
+        metadata: dict[str, Any],
+        canonical_metadata: dict[str, Any],
+        key: str,
+    ) -> int:
+        value = metadata.get(key)
+        if value is None:
+            value = canonical_metadata.get(key)
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return 0
+
+    async def _filter_visible_projection_documents(
+        self,
+        documents: list[Document],
+        *,
+        knowledge_id: int,
+        preauthorized_file_ids: set[int] | None = None,
+    ) -> list[Document]:
+        if not documents:
+            return []
+
+        parsed_documents: list[
+            tuple[Document, dict[str, Any], dict[str, Any], int]
+        ] = []
+        for document in documents:
+            metadata, canonical_metadata = self._canonical_metadata(document)
+            file_id = self._metadata_int(
+                metadata,
+                canonical_metadata,
+                "document_id",
+            ) or self._metadata_int(metadata, canonical_metadata, "file_id")
+            if file_id > 0:
+                parsed_documents.append(
+                    (document, metadata, canonical_metadata, file_id)
+                )
+        if not parsed_documents:
+            return []
+
+        files = await KnowledgeFileDao.aget_file_by_ids(
+            sorted({item[3] for item in parsed_documents})
+        )
+        file_map = {
+            int(file.id): file
+            for file in files
+            if int(file.knowledge_id) == int(knowledge_id)
+            and int(file.file_type) == FileType.FILE.value
+            and int(file.status) == KnowledgeFileStatus.SUCCESS.value
+        }
+
+        preauthorized = {
+            int(file_id) for file_id in (preauthorized_file_ids or set())
+        }
+        visible_file_ids = set(preauthorized) & set(file_map)
+        for file_id, file in file_map.items():
+            if file_id in visible_file_ids:
+                continue
+            try:
+                await self._require_file_view_permission(
+                    int(file.knowledge_id),
+                    file_id,
+                )
+            except (NotFoundError, SpacePermissionDeniedError):
+                continue
+            visible_file_ids.add(file_id)
+
+        document_ids = sorted(
+            {
+                int(file.reference_document_id)
+                for file_id, file in file_map.items()
+                if file_id in visible_file_ids
+                and file.reference_document_id is not None
+            }
+        )
+        document_map = {}
+        if document_ids and self.doc_repo is not None:
+            canonical_documents = await self.doc_repo.find_by_ids(document_ids)
+            document_map = {
+                int(document.id): document
+                for document in canonical_documents
+                if document.id is not None
+            }
+
+        output: list[Document] = []
+        for document, metadata, canonical_metadata, file_id in parsed_documents:
+            file = file_map.get(file_id)
+            if file is None or file_id not in visible_file_ids:
+                continue
+            if file.reference_document_id is None:
+                output.append(document)
+                continue
+
+            canonical_document = document_map.get(
+                int(file.reference_document_id)
+            )
+            if canonical_document is None:
+                continue
+            if (
+                file.entry_status != KnowledgeFileEntryStatus.ACTIVE.value
+                or file.entry_type
+                not in {
+                    KnowledgeFileEntryType.MANAGER.value,
+                    KnowledgeFileEntryType.PUBLISH.value,
+                    KnowledgeFileEntryType.SHARE.value,
+                }
+                or file.projection_status
+                != KnowledgeFileProjectionStatus.READY.value
+                or int(file.applied_content_generation)
+                < int(file.desired_content_generation)
+                or int(file.applied_entry_generation)
+                < int(file.desired_entry_generation)
+            ):
+                continue
+
+            canonical_document_id = self._metadata_int(
+                metadata,
+                canonical_metadata,
+                "canonical_document_id",
+            )
+            canonical_version_id = self._metadata_int(
+                metadata,
+                canonical_metadata,
+                "canonical_version_id",
+            )
+            content_generation = self._metadata_int(
+                metadata,
+                canonical_metadata,
+                "content_generation",
+            )
+            entry_generation = self._metadata_int(
+                metadata,
+                canonical_metadata,
+                "entry_generation",
+            )
+            if (
+                canonical_document_id != int(file.reference_document_id)
+                or canonical_document.primary_version_id is None
+                or canonical_version_id
+                != int(canonical_document.primary_version_id)
+                or content_generation
+                != int(file.desired_content_generation)
+                or entry_generation != int(file.desired_entry_generation)
+            ):
+                continue
+            output.append(document)
+        return output
+
+    async def _retrieve_visible_documents(
+        self,
+        *,
+        query: str,
+        vector_retriever,
+        es_retriever,
+        max_content: int,
+        sort_by_source_and_index: bool,
+        knowledge_id: int | None,
+        preauthorized_file_ids: set[int] | None = None,
+    ) -> list[Document]:
+        vector_documents: list[Document] = []
+        es_documents: list[Document] = []
+        if vector_retriever is not None:
+            vector_documents = await asyncio.to_thread(
+                vector_retriever.invoke,
+                query,
+            )
+        if es_retriever is not None:
+            es_documents = await es_retriever.ainvoke(query)
+
+        if knowledge_id is not None:
+            tagged_documents = [
+                Document(
+                    page_content=document.page_content,
+                    metadata={
+                        **dict(document.metadata or {}),
+                        "__f059_retriever": retriever,
+                    },
+                )
+                for retriever, documents in (
+                    ("vector", vector_documents),
+                    ("elastic", es_documents),
+                )
+                for document in documents
+            ]
+            visible_documents = await self._filter_visible_projection_documents(
+                tagged_documents,
+                knowledge_id=knowledge_id,
+                preauthorized_file_ids=preauthorized_file_ids,
+            )
+            vector_documents = []
+            es_documents = []
+            for document in visible_documents:
+                metadata = dict(document.metadata or {})
+                retriever = metadata.pop("__f059_retriever", None)
+                visible_document = Document(
+                    page_content=document.page_content,
+                    metadata=metadata,
+                )
+                if retriever == "vector":
+                    vector_documents.append(visible_document)
+                elif retriever == "elastic":
+                    es_documents.append(visible_document)
+
         retriever_tool = KnowledgeRetrieverTool(
             vector_retriever=vector_retriever,
             elastic_retriever=es_retriever,
             max_content=max_content,
-            sort_by_source_and_index=False,
+            sort_by_source_and_index=sort_by_source_and_index,
         )
-        docs: list[Document] = await retriever_tool.ainvoke(query)
-        return [(kb_id, d) for d in docs]
+        return retriever_tool._rrf_rerank(
+            vector_documents,
+            es_documents,
+            query,
+        )
 
     @staticmethod
     async def get_history(chat_id: str, limit: int = 4) -> list[BaseMessage]:

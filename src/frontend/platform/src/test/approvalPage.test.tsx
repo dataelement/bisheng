@@ -11,6 +11,7 @@ const listApprovalScenarioPresetsApi = vi.fn();
 const listApprovalScenariosApi = vi.fn();
 const listApprovalExceptionsApi = vi.fn();
 const listApprovalRoutesApi = vi.fn();
+const listApprovalConditionOptionsApi = vi.fn();
 const listApprovalFlowsApi = vi.fn();
 const listApprovalNodesApi = vi.fn();
 const createApprovalScenarioApi = vi.fn();
@@ -141,6 +142,7 @@ vi.mock("@/controllers/API/approval", () => ({
   listApprovalScenariosApi: (...a: any[]) => listApprovalScenariosApi(...a),
   listApprovalExceptionsApi: (...a: any[]) => listApprovalExceptionsApi(...a),
   listApprovalRoutesApi: (...a: any[]) => listApprovalRoutesApi(...a),
+  listApprovalConditionOptionsApi: (...a: any[]) => listApprovalConditionOptionsApi(...a),
   listApprovalFlowsApi: (...a: any[]) => listApprovalFlowsApi(...a),
   listApprovalNodesApi: (...a: any[]) => listApprovalNodesApi(...a),
   createApprovalScenarioApi: (...a: any[]) => createApprovalScenarioApi(...a),
@@ -227,6 +229,12 @@ beforeEach(() => {
   listApprovalScenariosApi.mockResolvedValue([SCENARIO]);
   listApprovalExceptionsApi.mockResolvedValue([EXCEPTION]);
   listApprovalRoutesApi.mockResolvedValue([ROUTE]);
+  listApprovalConditionOptionsApi.mockResolvedValue({
+    items: [],
+    total: 0,
+    page: 1,
+    page_size: 100,
+  });
   listApprovalFlowsApi.mockResolvedValue([FLOW]);
   listApprovalNodesApi.mockResolvedValue([NODE]);
   createApprovalScenarioApi.mockResolvedValue({ id: 2 });
@@ -367,8 +375,21 @@ describe("ApprovalPage", () => {
     });
   });
 
-  it("keeps the fixed department-file scenario structure read-only", async () => {
-    const user = userEvent.setup();
+  it("keeps the department-file system identity while allowing structure editing", async () => {
+    listApprovalScenarioPresetsApi.mockResolvedValue([
+      {
+        scenario_code: "department_file_view_request",
+        scenario_name: "部门文件查看审批",
+        handler_key: "department_file_view_request",
+        condition_fields: [
+          "applicant_role",
+          "applicant_department_id",
+          "file_department_id",
+          "file_knowledge_space_id",
+        ],
+        approver_source_types: ["department_file_approvers"],
+      },
+    ]);
     listApprovalScenariosApi.mockResolvedValue([
       {
         id: 66,
@@ -376,7 +397,7 @@ describe("ApprovalPage", () => {
         scenario_name: "部门文件查看审批",
         enabled: true,
         system_managed: true,
-        structure_locked: true,
+        structure_locked: false,
       },
     ]);
     listApprovalRoutesApi.mockResolvedValue([
@@ -411,29 +432,76 @@ describe("ApprovalPage", () => {
 
     render(<ApprovalPage />);
 
+    expect(await screen.findByText("系统内置")).toBeInTheDocument();
     expect(
-      await screen.findByText("系统内置，流程结构只读"),
-    ).toBeInTheDocument();
+      screen.queryByText("系统内置，流程结构只读"),
+    ).not.toBeInTheDocument();
     expect(screen.getByText("固定部门审批分支")).toBeInTheDocument();
     expect(screen.getByText("文件所属部门管理员审批")).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: /新增分支/ }),
-    ).not.toBeInTheDocument();
+      screen.getByRole("button", { name: /新增分支/ }),
+    ).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: /编辑节点/ }),
-    ).not.toBeInTheDocument();
+      screen.getByRole("button", { name: /编辑节点/ }),
+    ).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: /新建流程/ }),
-    ).not.toBeInTheDocument();
+      screen.getByRole("button", { name: /新建流程/ }),
+    ).toBeInTheDocument();
+  });
 
-    const switches = screen.getAllByRole("switch");
-    expect(switches).toHaveLength(1);
-    await user.click(switches[0]);
-    await waitFor(() => {
-      expect(updateApprovalScenarioApi).toHaveBeenCalledWith(66, {
-        enabled: false,
-      });
+  it("loads department knowledge-space conditions only from approval options", async () => {
+    const user = userEvent.setup();
+    listApprovalScenarioPresetsApi.mockResolvedValue([
+      {
+        scenario_code: "department_file_view_request",
+        scenario_name: "部门文件查看审批",
+        handler_key: "department_file_view_request",
+        condition_fields: ["file_knowledge_space_id"],
+        approver_source_types: ["department_file_approvers"],
+      },
+    ]);
+    listApprovalScenariosApi.mockResolvedValue([
+      {
+        id: 66,
+        scenario_code: "department_file_view_request",
+        scenario_name: "部门文件查看审批",
+        enabled: true,
+        system_managed: true,
+        structure_locked: false,
+      },
+    ]);
+    listApprovalRoutesApi.mockResolvedValue([]);
+    listApprovalConditionOptionsApi.mockResolvedValue({
+      items: [
+        {
+          value: "202",
+          label: "部门空间B（研发部）",
+          department_id: 7,
+          department_name: "研发部",
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 100,
     });
+
+    render(<ApprovalPage />);
+    await screen.findAllByText("部门文件查看审批");
+    await user.click(screen.getByRole("button", { name: /新增分支/ }));
+    await user.selectOptions(
+      getSelectWithOptionValue("file_knowledge_space_id"),
+      "file_knowledge_space_id",
+    );
+
+    expect(await screen.findByText("部门空间B（研发部）")).toBeInTheDocument();
+    expect(listApprovalConditionOptionsApi).toHaveBeenCalledWith(66, {
+      field: "file_knowledge_space_id",
+      keyword: "",
+      page: 1,
+      page_size: 100,
+    });
+    expect(getManagedKnowledgeSpacesApi).not.toHaveBeenCalled();
+    expect(getDepartmentKnowledgeSpacesApi).not.toHaveBeenCalled();
   });
 
   it("opens route dialog, creates a route and reloads routes", async () => {

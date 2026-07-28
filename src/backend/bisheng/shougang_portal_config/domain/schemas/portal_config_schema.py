@@ -96,6 +96,34 @@ class PortalDomainConfig(BaseModel):
         return self
 
 
+class PortalCategoryCardConfig(BaseModel):
+    code: str = ""
+    name: str = ""
+    image: str = ""
+    space_ids: list[int] = Field(default_factory=list)
+    enabled: bool = True
+
+    @field_validator("space_ids")
+    @classmethod
+    def normalize_space_ids(cls, space_ids: list[int]) -> list[int]:
+        normalized: list[int] = []
+        for space_id in space_ids:
+            if space_id <= 0:
+                raise ValueError("space id must be positive")
+            if space_id not in normalized:
+                normalized.append(space_id)
+        return normalized
+
+    @model_validator(mode="after")
+    def normalize(self):
+        self.code = _strip(self.code).upper()
+        self.name = _strip(self.name)
+        self.image = _strip(self.image)
+        if not self.code:
+            raise ValueError("category card code is required")
+        return self
+
+
 class PortalSectionConfig(BaseModel):
     title: str
     tag: str
@@ -427,6 +455,7 @@ class PortalSiteConfig(BaseModel):
 
 class PortalConfig(BaseModel):
     domains: list[PortalDomainConfig] = Field(default_factory=list)
+    category_cards: list[PortalCategoryCardConfig] = Field(default_factory=list)
     sections: list[PortalSectionConfig] = Field(default_factory=list)
     document_types: list[PortalDocumentTypeConfig] = Field(default_factory=list)
     qa: PortalQAConfig

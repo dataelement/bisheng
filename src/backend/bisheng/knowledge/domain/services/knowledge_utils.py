@@ -189,11 +189,13 @@ class KnowledgeUtils(BaseService):
 
     @classmethod
     def get_knowledge_file_image_dir(cls, doc_id: str, knowledge_id: int = None) -> str:
-        """Get file image atminioStorage directory for"""
-        if knowledge_id:
-            return f"knowledge/images/{knowledge_id}/{doc_id}"
-        else:
-            return f"tmp/images/{doc_id}"
+        """Return a storage path that survives knowledge-space ownership moves.
+
+        ``doc_id`` is the stable physical KnowledgeFile ID for persisted
+        files. ``knowledge_id`` remains accepted for call-site compatibility
+        but must not participate in the object key.
+        """
+        return f"knowledge/images/files/{doc_id}"
 
     @classmethod
     def get_knowledge_file_object_name(cls, file_id: int, file_name: str) -> str:

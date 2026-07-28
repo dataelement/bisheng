@@ -17,6 +17,8 @@ interface PortalFileCategoryDropdownProps {
     clearable?: boolean;
     variant?: "default" | "fileTable";
     ariaLabel: string;
+    /** Show a bottom "AI 自动生成" option that resolves to an empty selection. */
+    showAiOption?: boolean;
     onChange: (option: PortalFileSubcategoryOption | null) => void | Promise<void>;
     onClick?: (event: MouseEvent<HTMLDivElement>) => void;
 }
@@ -59,6 +61,7 @@ export function PortalFileCategoryDropdown({
     clearable = false,
     variant = "default",
     ariaLabel,
+    showAiOption = false,
     onChange,
     onClick,
 }: PortalFileCategoryDropdownProps) {
@@ -190,6 +193,22 @@ export function PortalFileCategoryDropdown({
                     </div>
                 );
             })}
+            {showAiOption ? (
+                <div className={s.uploadCategoryGroup}>
+                    <button
+                        type="button"
+                        className={`${s.uploadCategoryGroupButton} ${!hasValue ? s.uploadCategoryChildButtonActive : ""}`}
+                        disabled={disabled}
+                        onClick={() => {
+                            void onChange(null);
+                            setExpandedCategoryCode(null);
+                            setOpen(false);
+                        }}
+                    >
+                        <span>AI 自动生成</span>
+                    </button>
+                </div>
+            ) : null}
         </div>
     ) : null;
 

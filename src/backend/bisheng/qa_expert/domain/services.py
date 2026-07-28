@@ -35,6 +35,7 @@ from bisheng.qa_expert.domain.repositories import (
 )
 from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.database.models.department import DepartmentDao
+from bisheng.user.domain.models.user import UserDao
 
 
 # ==================== 错误定义 ====================
@@ -91,6 +92,22 @@ class ExpertService:
     def __init__(self):
         self.repository = ExpertRepository()
 
+    @staticmethod
+    async def _sync_wechat_user_id(user_id: Optional[int], wechat_user_id: Optional[str]) -> None:
+        """将企业微信用户ID同步到关联的user表。"""
+        if user_id is None:
+            return
+        new_id = (wechat_user_id or "").strip() or None
+        user = await UserDao.aget_user(user_id)
+        if not user:
+            return
+        current_id = getattr(user, "wechat_user_id", None) or None
+        if not new_id or new_id == current_id:
+            return
+        user.wechat_user_id = new_id
+        user.update_time = datetime.now()
+        await UserDao.aupdate_user(user)
+
     async def create_expert(self, request: ExpertCreateRequest) -> Expert:
         """创建专家（后台管理员操作）"""
         # 检查是否已是专家
@@ -109,6 +126,7 @@ class ExpertService:
             job_category=request.job_category,
         )
         temp_expert = await self.repository.create(expert)
+        await self._sync_wechat_user_id(temp_expert.user_id, request.wechat_user_id)
         depart = await DepartmentDao.aget_by_id(temp_expert.depart_ment)
         if depart:
             temp_expert.depart_ment = depart.name
@@ -123,7 +141,9 @@ class ExpertService:
             raise ExpertNotFoundError()
 
         update_data = request.dict(exclude_unset=True)
+        wechat_user_id = update_data.pop("wechat_user_id", None)
         temp_expert = await self.repository.update(expert_id, **update_data)
+        await self._sync_wechat_user_id(temp_expert.user_id, wechat_user_id)
         expert_dict = temp_expert.model_dump()
         expert_dict["department_id"] = temp_expert.depart_ment
         depart = await DepartmentDao.aget_by_id(temp_expert.depart_ment)
@@ -204,17 +224,23 @@ class ExpertService:
 
     async def _build_expert_rows(self, experts: List[Expert]) -> List[dict]:
         department_ids: set[int] = set()
+        user_ids: list[int] = []
         for expert in experts:
             try:
                 if expert.depart_ment:
                     department_ids.add(int(expert.depart_ment))
             except (TypeError, ValueError):
                 pass
+            if expert.user_id:
+                user_ids.append(expert.user_id)
 
         departments = await DepartmentDao.aget_by_ids(sorted(department_ids))
         department_names = {
             int(department.id): department.name for department in departments if department.id is not None
         }
+
+        users = await UserDao.aget_user_by_ids(list(set(user_ids))) or []
+        wechat_user_ids = {user.user_id: user.wechat_user_id for user in users if user.user_id is not None}
 
         experts_all = []
         for expert in experts:
@@ -228,6 +254,7 @@ class ExpertService:
             expert_dict["expert_score"] = (
                 int(expert.answer_count or 0) + int(expert.adoption_count or 0) * 5 + int(expert.vote_count or 0) * 2
             )
+            expert_dict["wechat_user_id"] = wechat_user_ids.get(expert.user_id)
             experts_all.append(expert_dict)
         return experts_all
 

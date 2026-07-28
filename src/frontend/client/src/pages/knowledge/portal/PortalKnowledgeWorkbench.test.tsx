@@ -311,6 +311,10 @@ jest.mock("../CreateKnowledgeSpaceDrawer", () => ({
 jest.mock("../hooks/useKnowledgeSpacePermissions", () => ({
     useKnowledgeSpaceActionPermissions: (...args: any[]) => mockUseKnowledgeSpaceActionPermissions(...args),
     isSystemAdmin: (role?: string) => role === "admin",
+    hasRoleBasedSpaceActionBypass: (space: { role?: string; spaceLevel?: string }) => (
+        space.role === "creator"
+        || (space.role === "admin" && space.spaceLevel !== "department")
+    ),
     hasKnowledgeSpacePermission: (
         permissions: Record<string, string[]>,
         spaceId: string | number,
@@ -2528,6 +2532,50 @@ describe("PortalKnowledgeWorkbench", () => {
         await waitFor(() => {
             expect(getShougangFilePublishTargetSpacesApi).toHaveBeenCalledWith("department-1");
         });
+    });
+
+    test.each([
+        ["公共知识库", SpaceLevel.PUBLIC, true, false],
+        ["部门知识库", SpaceLevel.DEPARTMENT, true, true],
+        ["无分享权限的部门知识库", SpaceLevel.DEPARTMENT, false, false],
+        ["团队知识库", SpaceLevel.TEAM, true, false],
+        ["科室知识库", SpaceLevel.TEAM_KS, true, false],
+        ["个人知识库", SpaceLevel.PERSONAL, true, false],
+    ])("%s文件分享入口仅在部门层级且有权限时展示", async (_label, spaceLevel, canShare, expectedVisible) => {
+        const space = makeSpace(`${spaceLevel}-1`, `${_label}01`, {
+            role: SpaceRole.ADMIN,
+            spaceLevel,
+        });
+        const file = makeFile("303", "可分享制度.pdf", {
+            type: FileType.PDF,
+            status: FileStatus.SUCCESS,
+            spaceId: space.id,
+            capabilities: {
+                canShare,
+            },
+        });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: spaceLevel === SpaceLevel.PUBLIC ? [space] : [],
+            departmentSpaces: spaceLevel === SpaceLevel.DEPARTMENT ? [space] : [],
+            teamSpaces: [SpaceLevel.TEAM, SpaceLevel.TEAM_KS].includes(spaceLevel) ? [space] : [],
+            personalSpaces: spaceLevel === SpaceLevel.PERSONAL ? [space] : [],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({
+            data: [file],
+            total: 1,
+        } as any);
+        jest.mocked(getSpaceInfoApi).mockResolvedValue(space as any);
+
+        renderWorkbench(`/knowledge-portal?spaceId=${space.id}`);
+
+        const fileRow = await screen.findByTestId("file-tree-row-303");
+        fireEvent.mouseEnter(fileRow);
+
+        if (expectedVisible) {
+            expect(within(fileRow).getByRole("button", { name: "分享" })).toBeInTheDocument();
+        } else {
+            expect(within(fileRow).queryByRole("button", { name: "分享" })).not.toBeInTheDocument();
+        }
     });
 
     test("hides publish action without knowledge space publish permission", async () => {

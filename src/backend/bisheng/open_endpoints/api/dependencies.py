@@ -17,7 +17,13 @@ from bisheng.developer_token.domain.schemas import (
     DeveloperTokenPrincipal,
 )
 from bisheng.developer_token.domain.services import DeveloperTokenService
-from bisheng.knowledge.api.dependencies import get_knowledge_document_version_repository
+from bisheng.knowledge.api.dependencies import (
+    get_knowledge_document_repository,
+    get_knowledge_document_version_repository,
+)
+from bisheng.knowledge.domain.repositories.interfaces.knowledge_document_repository import (
+    KnowledgeDocumentRepository,
+)
 from bisheng.knowledge.domain.repositories.implementations.knowledge_file_repository_impl import (
     KnowledgeFileRepositoryImpl,
 )
@@ -100,6 +106,9 @@ async def get_knowledge_space_chat_service_for_openapi(
     request: Request,
     developer_user: UserPayload = Depends(get_developer_token_user),
     version_repo: KnowledgeDocumentVersionRepository = Depends(get_knowledge_document_version_repository),
+    doc_repo: KnowledgeDocumentRepository = Depends(
+        get_knowledge_document_repository
+    ),
 ) -> "KnowledgeSpaceChatService":
     """KnowledgeSpaceChatService bound to the authenticated developer-token user.
 
@@ -110,6 +119,7 @@ async def get_knowledge_space_chat_service_for_openapi(
 
     service = KnowledgeSpaceChatService(request=request, login_user=developer_user)
     service.version_repo = version_repo
+    service.doc_repo = doc_repo
     return service
 
 

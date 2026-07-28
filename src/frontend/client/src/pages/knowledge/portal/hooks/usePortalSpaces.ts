@@ -13,6 +13,7 @@ import {
 import { useAuthContext } from "~/hooks";
 import {
     hasKnowledgeSpacePermission,
+    hasRoleBasedSpaceActionBypass,
     isSystemAdmin,
     useKnowledgeSpaceActionPermissions,
     type KnowledgeSpaceActionPermission,
@@ -36,7 +37,7 @@ export function resolveSpacePermissions(
     space: KnowledgeSpace,
     spaceActionPermissions: Record<string, KnowledgeSpaceActionPermission[]>,
 ): SpaceActionPermissions {
-    const hasFullAccess = space.role === SpaceRole.CREATOR || space.role === SpaceRole.ADMIN;
+    const hasFullAccess = hasRoleBasedSpaceActionBypass(space);
     const hasPermission = (permissionId: KnowledgeSpaceActionPermission) => (
         hasFullAccess || hasKnowledgeSpacePermission(spaceActionPermissions, space.id, permissionId)
     );
@@ -234,13 +235,13 @@ export function usePortalSpaces({
     );
     const fullAccessSpaceIds = useMemo(
         () => selectableSpaces
-            .filter((space) => space.role === SpaceRole.CREATOR || space.role === SpaceRole.ADMIN)
+            .filter((space) => hasRoleBasedSpaceActionBypass(space))
             .map((space) => space.id),
         [selectableSpaces],
     );
     // 懒查询：打开知识库界面时不再批量查询所有空间的操作权限；只有当用户打开某个空间的
     // 更多菜单（需要展示 空间设置/成员管理/删除 等编辑操作）时，才把该空间加入按需查询集合。
-    // creator/admin（fullAccessSpaceIds）与系统管理员由 role 直接判定，无需真正发请求。
+    // creator（及非部门空间的 admin）由 role 直接判定；部门空间 admin 必须走 checkPermission。
     const [requestedPermissionSpaceIds, setRequestedPermissionSpaceIds] = useState<string[]>([]);
     const requestSpacePermissions = useCallback((spaceId: string | number) => {
         const key = String(spaceId);

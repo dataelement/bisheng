@@ -46,6 +46,28 @@ describe("resolveSpacePermissions（个人知识库只有编辑功能）", () =>
         expect(perms.canDeleteSpace).toBe(true);
         expect(perms.canManageMembers).toBe(true);
     });
+
+    it("部门库：role=admin 不能仅凭列表角色展示删除/成员管理（须走权限 API）", () => {
+        const perms = resolveSpacePermissions(
+            makeSpace({ spaceLevel: SpaceLevel.DEPARTMENT, role: SpaceRole.ADMIN }),
+            {},
+        );
+        expect(perms.canEditSpace).toBe(false);
+        expect(perms.canDeleteSpace).toBe(false);
+        expect(perms.canManageMembers).toBe(false);
+    });
+
+    it("部门库：role=admin 且权限 API 返回 delete/manage 时才展示对应操作", () => {
+        const perms = resolveSpacePermissions(
+            makeSpace({ id: "3989", spaceLevel: SpaceLevel.DEPARTMENT, role: SpaceRole.ADMIN }),
+            {
+                "3989": ["edit_space", "delete_space", "manage_space_relation"],
+            },
+        );
+        expect(perms.canEditSpace).toBe(true);
+        expect(perms.canDeleteSpace).toBe(true);
+        expect(perms.canManageMembers).toBe(true);
+    });
 });
 
 describe("mergeDepartmentSpaces", () => {

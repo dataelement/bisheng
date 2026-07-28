@@ -113,7 +113,6 @@ class TestPermissionServiceCheck:
         with patch.object(PermissionService, '_get_fga', return_value=mock_fga), \
              patch.object(PermissionService, '_evaluate_tenant_gate', new_callable=AsyncMock, return_value=(False, None)), \
              patch.object(PermissionService, '_get_resource_creator', new_callable=AsyncMock, return_value=99), \
-             patch.object(PermissionService, '_implicit_dept_admin_covers', new_callable=AsyncMock, return_value=False), \
              patch.object(PermissionService, '_implicit_department_space_member_level',
                           new_callable=AsyncMock, return_value='can_read'), \
              patch('bisheng.permission.domain.services.permission_cache.PermissionCache.get_check',
@@ -230,8 +229,6 @@ class TestPermissionServiceListAccessible:
         with patch.object(PermissionService, '_get_fga', return_value=None), \
              patch.object(PermissionService, '_resource_ids_by_creator_user_ids',
                           new_callable=AsyncMock, return_value=['wf-owned']), \
-             patch.object(PermissionService, '_resource_ids_implicit_dept_admin_scope',
-                          new_callable=AsyncMock, return_value=[]), \
              patch.object(PermissionService, '_resource_ids_child_tenant_admin_scope',
                           new_callable=AsyncMock, return_value=[]), \
              patch.object(PermissionService, '_filter_ids_by_tenant_gate',

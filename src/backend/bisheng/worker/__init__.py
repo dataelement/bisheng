@@ -16,6 +16,11 @@ from bisheng.worker.knowledge.file_worker import (
     refresh_file_similarity_candidates_celery,
     retry_knowledge_file_celery,
 )
+from bisheng.worker.knowledge.document_projection import (
+    fanout_document_projection_scan,
+    process_document_projection,
+    scan_tenant_document_projections,
+)
 from bisheng.worker.knowledge.pdf_artifact_worker import (
     generate_knowledge_file_pdf_celery,
 )
@@ -49,6 +54,10 @@ from bisheng.worker.org_sync.reconcile_tasks import (
     report_ts_conflicts_weekly,
 )
 from bisheng.worker.org_sync.tasks import check_org_sync_schedules, execute_org_sync
+from bisheng.worker.permission.department_transfer_cleanup import (
+    process_event,
+    scan_due_events,
+)
 from bisheng.worker.permission.retry_failed_tuples import retry_failed_tuples
 from bisheng.worker.portal_course.tasks import (
     process_portal_course_media_cleanup,

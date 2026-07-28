@@ -111,11 +111,42 @@ def _patch_file_publish_submit_dependencies(
     monkeypatch.setattr(service, "_ensure_can_publish_file", AsyncMock(return_value=None))
     monkeypatch.setattr(service, "_ensure_publish_target_space", AsyncMock(return_value=target_space))
     monkeypatch.setattr(service, "_ensure_publish_target_folder", AsyncMock(return_value=None))
+    monkeypatch.setattr(
+        service,
+        "_normalize_publish_source",
+        AsyncMock(
+            return_value=SimpleNamespace(
+                document_id=900,
+                manager_file_id=int(source_file.id),
+                manager_space_id=int(source_file.knowledge_id),
+            )
+        ),
+    )
     monkeypatch.setattr(service, "_get_primary_department_id", AsyncMock(return_value=9))
     monkeypatch.setattr(service, "_task_approver_user_ids", AsyncMock(return_value=[]))
     if service.notification_service is None:
         service.notification_service = SimpleNamespace(enqueue_file_publish=AsyncMock())
     return source_file, target_space
+
+
+@pytest.fixture(autouse=True)
+def _stub_canonical_publish_source(monkeypatch):
+    """Keep legacy submit tests isolated from the F059 database normalization."""
+    from bisheng.approval.domain.services.shougang_approval_service import (
+        ShougangApprovalService,
+    )
+
+    monkeypatch.setattr(
+        ShougangApprovalService,
+        "_normalize_publish_source",
+        AsyncMock(
+            return_value=SimpleNamespace(
+                document_id=900,
+                manager_file_id=100,
+                manager_space_id=10,
+            )
+        ),
+    )
 
 
 @pytest.mark.asyncio
@@ -1030,6 +1061,10 @@ async def test_file_publish_submit_persists_target_folder_snapshot(monkeypatch):
     assert gate_req.payload_snapshot["target_folder_name"] == "制度目录"
     assert gate_req.payload_snapshot["target_folder_level"] == 3
     assert gate_req.payload_snapshot["target_folder_level_path"] == "/300/301"
+    assert gate_req.business_key == "knowledge-file-publish:document:900:target:20"
+    assert gate_req.business_resource_id == "900:20"
+    assert gate_req.payload_snapshot["canonical_document_id"] == 900
+    assert gate_req.payload_snapshot["source_entry_id"] == 100
 
 
 @pytest.mark.asyncio
@@ -1108,6 +1143,57 @@ async def test_file_publish_submit_allows_matching_target_business_domain(monkey
     )
 
     service.approval_gate.request_or_pass.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_file_publish_submit_rejects_duplicate_target_content(monkeypatch):
+    from bisheng.approval.domain.schemas.shougang_approval_schema import (
+        ShougangFilePublishSubmitReq,
+    )
+    from bisheng.approval.domain.services.shougang_approval_service import (
+        PUBLISH_DUPLICATE_CONTENT_MESSAGE,
+        ShougangApprovalService,
+    )
+
+    service = ShougangApprovalService(
+        approval_gate=SimpleNamespace(request_or_pass=AsyncMock())
+    )
+    source_file, _ = _patch_file_publish_submit_dependencies(
+        monkeypatch,
+        service,
+    )
+    source_file.md5 = "same-md5"
+    duplicate_check = AsyncMock(
+        side_effect=HTTPException(
+            status_code=409,
+            detail=PUBLISH_DUPLICATE_CONTENT_MESSAGE,
+        )
+    )
+    monkeypatch.setattr(
+        service,
+        "_ensure_publish_target_content_not_duplicate",
+        duplicate_check,
+        raising=False,
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await service.submit_file_publish(
+            req=ShougangFilePublishSubmitReq(
+                source_space_id=10,
+                source_file_id=100,
+                target_space_id=20,
+            ),
+            login_user=_login_user(),
+        )
+
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail == PUBLISH_DUPLICATE_CONTENT_MESSAGE
+    duplicate_check.assert_awaited_once_with(
+        tenant_id=1,
+        source_file=source_file,
+        target_space_id=20,
+    )
+    service.approval_gate.request_or_pass.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -2394,6 +2480,41 @@ async def test_file_publish_handler_links_version_with_selected_folder_path(monk
 
 
 @pytest.mark.asyncio
+async def test_new_file_publish_approval_uses_distribution_without_copy(monkeypatch):
+    from bisheng.approval.domain.services.shougang_approval_handler import (
+        KnowledgeSpaceFilePublishApprovalHandler,
+    )
+
+    handler = KnowledgeSpaceFilePublishApprovalHandler()
+    distribution = AsyncMock(
+        return_value={
+            "document_id": 900,
+            "file_id": 100,
+            "publish_entry_id": 188,
+            "target_space_id": 20,
+            "idempotent": False,
+        }
+    )
+    copy_file = Mock()
+    monkeypatch.setattr(handler, "_publish_distribution", distribution)
+    monkeypatch.setattr(handler, "_copy_file", copy_file)
+
+    payload = {
+        "tenant_id": 1,
+        "canonical_document_id": 900,
+        "source_entry_id": 100,
+        "source_space_id": 10,
+        "source_file_id": 100,
+        "target_space_id": 20,
+    }
+    result = await handler.on_approved(102, payload)
+
+    distribution.assert_awaited_once_with(102, payload)
+    copy_file.assert_not_called()
+    assert result["publish_entry_id"] == 188
+
+
+@pytest.mark.asyncio
 async def test_copy_file_tags_copies_approved_and_pending_review_tags(monkeypatch):
     from bisheng.approval.domain.services.shougang_approval_handler import _copy_file_tags
     from bisheng.database.models.group_resource import ResourceTypeEnum
@@ -2794,6 +2915,69 @@ async def test_file_publish_handler_resolves_space_role_sources_by_side(monkeypa
 
 
 @pytest.mark.asyncio
+async def test_file_publish_handler_rejects_cross_branch_admin_and_skips_applicant(monkeypatch):
+    from bisheng.approval.domain.services.shougang_approval_handler import KnowledgeSpaceFilePublishApprovalHandler
+    from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
+    from bisheng.database.models.department_admin_grant import DepartmentAdminGrantDao
+
+    handler = KnowledgeSpaceFilePublishApprovalHandler()
+    departments = {
+        5: SimpleNamespace(id=5, path="/1/4/5/"),
+    }
+    grants = {
+        5: [6],  # User 6 belongs to a sibling branch and is ineligible.
+        4: [4],  # The applicant is ineligible, so resolution must continue upward.
+        1: [8],
+    }
+    primary_departments = {
+        4: 99,
+        6: 6,
+        8: 1,
+    }
+
+    async def fake_get_department(department_id: int):
+        return departments.get(department_id)
+
+    async def fake_get_departments(department_ids: list[int]):
+        return [departments[department_id] for department_id in department_ids if department_id in departments]
+
+    async def fake_get_admins(department_id: int):
+        return grants.get(department_id, [])
+
+    async def fake_get_admins_by_departments(department_ids: list[int]):
+        return {department_id: grants.get(department_id, []) for department_id in department_ids}
+
+    async def fake_get_user_departments(user_ids: list[int]):
+        return [
+            SimpleNamespace(user_id=user_id, department_id=primary_departments[user_id], is_primary=1)
+            for user_id in user_ids
+            if user_id in primary_departments
+        ]
+
+    monkeypatch.setattr(DepartmentDao, "aget_by_id", fake_get_department)
+    monkeypatch.setattr(DepartmentDao, "aget_by_ids", fake_get_departments)
+    monkeypatch.setattr(DepartmentAdminGrantDao, "aget_user_ids_by_department", fake_get_admins)
+    monkeypatch.setattr(DepartmentAdminGrantDao, "aget_user_ids_by_departments", fake_get_admins_by_departments)
+    monkeypatch.setattr(UserDepartmentDao, "aget_by_user_ids", fake_get_user_departments)
+
+    approvers = await handler.resolve_approvers(
+        {"sources": [{"type": "department_admin"}]},
+        SimpleNamespace(
+            tenant_id=1,
+            applicant_user_id=4,
+            applicant_department_id=5,
+            payload_snapshot={
+                "applicant_department_id": 5,
+                "source_space_id": 10,
+                "target_space_id": 20,
+            },
+        ),
+    )
+
+    assert approvers == [8]
+
+
+@pytest.mark.asyncio
 async def test_file_publish_handler_resolves_target_role_department_admins(monkeypatch):
     from bisheng.approval.domain.services.shougang_approval_handler import KnowledgeSpaceFilePublishApprovalHandler
     from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
@@ -2806,10 +2990,19 @@ async def test_file_publish_handler_resolves_target_role_department_admins(monke
         return [41], [42, 43]
 
     async def fake_get_user_departments(user_ids: list[int]):
+        primary_departments = {
+            41: 300,
+            42: 400,
+            43: 500,
+            1001: 100,
+            2001: 200,
+            2002: 200,
+            4001: 400,
+        }
         return [
-            SimpleNamespace(user_id=41, department_id=300, is_primary=1),
-            SimpleNamespace(user_id=42, department_id=400, is_primary=1),
-            SimpleNamespace(user_id=43, department_id=500, is_primary=1),
+            SimpleNamespace(user_id=user_id, department_id=primary_departments[user_id], is_primary=1)
+            for user_id in user_ids
+            if user_id in primary_departments
         ]
 
     async def fake_get_departments(department_ids: list[int]):

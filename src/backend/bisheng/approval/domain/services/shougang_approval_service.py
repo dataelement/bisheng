@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from time import perf_counter
+from types import SimpleNamespace
 from typing import Any, Optional
 
 from fastapi import HTTPException
@@ -25,6 +26,9 @@ from bisheng.approval.domain.schemas.shougang_approval_schema import (
     ShougangFilePublishSubmitReq,
     ShougangFilePublishTargetSpace,
     ShougangFilePublishTargetSpacesResp,
+    ShougangFileShareSubmitReq,
+    ShougangFileShareTargetSpace,
+    ShougangFileShareTargetSpacesResp,
     ShougangKnowledgeSpaceCreateSubmitReq,
     ShougangKnowledgeSpaceCreateValidateReq,
     ShougangKnowledgeSpaceCreateValidateResp,
@@ -34,9 +38,11 @@ from bisheng.approval.domain.services.approval_registry import ApprovalRegistry
 from bisheng.approval.domain.services.shougang_approval_handler import (
     FILE_PUBLISH_DOMAIN_MISMATCH_MESSAGE,
     FILE_PUBLISH_SCENARIO,
+    FILE_SHARE_SCENARIO,
     KNOWLEDGE_SPACE_CREATE_SCENARIO,
     KnowledgeSpaceCreateApprovalHandler,
     KnowledgeSpaceFilePublishApprovalHandler,
+    KnowledgeSpaceFileShareApprovalHandler,
     ensure_file_publish_business_domain_matches,
 )
 from bisheng.common.errcode.approval import (
@@ -52,11 +58,16 @@ from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum, KnowledgeDao
 from bisheng.knowledge.domain.models.knowledge_file import (
     FileType,
     KnowledgeFileDao,
+    KnowledgeFileEntryStatus,
+    KnowledgeFileEntryType,
     KnowledgeFileStatus,
 )
 from bisheng.knowledge.domain.models.knowledge_space_scope import (
     KnowledgeSpaceLevelEnum,
     KnowledgeSpaceScopeDao,
+)
+from bisheng.knowledge.domain.services.knowledge_document_distribution_service import (
+    PUBLISH_DUPLICATE_CONTENT_MESSAGE,
 )
 from bisheng.tenant.domain.services.tenant_service import TenantService
 
@@ -100,6 +111,7 @@ class ShougangApprovalService:
         registry = ApprovalRegistry.with_default_presets()
         registry.register_handler(KNOWLEDGE_SPACE_CREATE_SCENARIO, KnowledgeSpaceCreateApprovalHandler())
         registry.register_handler(FILE_PUBLISH_SCENARIO, KnowledgeSpaceFilePublishApprovalHandler())
+        registry.register_handler(FILE_SHARE_SCENARIO, KnowledgeSpaceFileShareApprovalHandler())
         return ApprovalGate(registry=registry)
 
     @staticmethod
@@ -194,11 +206,11 @@ class ShougangApprovalService:
         self,
         *,
         tenant_id: int,
-        source_file_id: int,
+        source_document_id: int,
         target_space_id: int,
     ) -> None:
         """Raise when the same file-to-space publish is already pending or execute-failed."""
-        business_resource_id = f"{source_file_id}:{target_space_id}"
+        business_resource_id = f"{source_document_id}:{target_space_id}"
         pending = await ApprovalInstanceRepository.find_pending_instance_by_business_resource_id(
             tenant_id=tenant_id,
             scenario_code=FILE_PUBLISH_SCENARIO,
@@ -208,6 +220,148 @@ class ShougangApprovalService:
         )
         if pending:
             raise ApprovalDuplicatePendingError(msg="已经发布过的文档还在审批中")
+
+    async def _ensure_publish_target_content_not_duplicate(
+        self,
+        *,
+        tenant_id: int,
+        source_file,
+        target_space_id: int,
+    ) -> None:
+        source_md5 = str(getattr(source_file, "md5", None) or "").strip()
+        if not source_md5:
+            return
+
+        from bisheng.core.database import get_async_db_session
+        from bisheng.knowledge.domain.repositories.implementations.knowledge_file_repository_impl import (
+            KnowledgeFileRepositoryImpl,
+        )
+
+        async with get_async_db_session() as session:
+            duplicate = await KnowledgeFileRepositoryImpl(
+                session
+            ).has_visible_content_in_space(
+                tenant_id=int(tenant_id),
+                knowledge_id=int(target_space_id),
+                md5=source_md5,
+            )
+        if duplicate:
+            raise HTTPException(
+                status_code=409,
+                detail=PUBLISH_DUPLICATE_CONTENT_MESSAGE,
+            )
+
+    async def _normalize_publish_source(
+        self,
+        *,
+        tenant_id: int,
+        source_file_id: int,
+    ):
+        from bisheng.core.database import get_async_db_session
+        from bisheng.knowledge.domain.repositories.implementations.knowledge_document_repository_impl import (
+            KnowledgeDocumentRepositoryImpl,
+        )
+        from bisheng.knowledge.domain.repositories.implementations.knowledge_document_version_repository_impl import (
+            KnowledgeDocumentVersionRepositoryImpl,
+        )
+        from bisheng.knowledge.domain.repositories.implementations.knowledge_file_repository_impl import (
+            KnowledgeFileRepositoryImpl,
+        )
+        from bisheng.knowledge.domain.services.knowledge_document_distribution_service import (
+            KnowledgeDocumentDistributionService,
+        )
+        from bisheng.knowledge.domain.services.knowledge_document_permission_activation_service import (
+            KnowledgeDocumentPermissionActivationService,
+        )
+
+        async with get_async_db_session() as session:
+            file_repository = KnowledgeFileRepositoryImpl(session)
+            service = KnowledgeDocumentDistributionService(
+                session=session,
+                document_repository=KnowledgeDocumentRepositoryImpl(session),
+                version_repository=KnowledgeDocumentVersionRepositoryImpl(session),
+                file_repository=file_repository,
+                permission_activation_service=KnowledgeDocumentPermissionActivationService(
+                    file_repository=file_repository,
+                ),
+            )
+            return await service.normalize_manager(
+                tenant_id=tenant_id,
+                source_file_id=source_file_id,
+            )
+
+    async def _normalize_share_source(
+        self,
+        *,
+        tenant_id: int,
+        source_file,
+        target_space_id: int,
+    ):
+        entry_type = getattr(source_file, "entry_type", None)
+        if entry_type == KnowledgeFileEntryType.SHARE.value:
+            raise HTTPException(status_code=400, detail="分享入口不能再次分享")
+        if entry_type == KnowledgeFileEntryType.PUBLISH.value:
+            if (
+                getattr(source_file, "entry_status", None)
+                != KnowledgeFileEntryStatus.ACTIVE.value
+                or not getattr(source_file, "reference_document_id", None)
+            ):
+                raise HTTPException(status_code=409, detail="分享来源状态已变化")
+            canonical_source = SimpleNamespace(
+                document_id=int(source_file.reference_document_id),
+                manager_file_id=int(source_file.id),
+                manager_space_id=int(source_file.knowledge_id),
+            )
+        else:
+            try:
+                canonical_source = await self._normalize_publish_source(
+                    tenant_id=tenant_id,
+                    source_file_id=int(source_file.id),
+                )
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=409,
+                    detail="仅当前管理入口或发布入口可分享",
+                ) from exc
+
+        from bisheng.core.database import get_async_db_session
+        from bisheng.knowledge.domain.repositories.implementations.knowledge_file_repository_impl import (
+            KnowledgeFileRepositoryImpl,
+        )
+
+        async with get_async_db_session() as session:
+            existing = await KnowledgeFileRepositoryImpl(
+                session
+            ).find_entry_in_space_for_update(
+                int(canonical_source.document_id),
+                int(target_space_id),
+            )
+        if existing is not None:
+            raise HTTPException(
+                status_code=409,
+                detail="目标知识库已存在该文档入口",
+            )
+        return canonical_source
+
+    async def _ensure_file_share_not_in_pending_approval(
+        self,
+        *,
+        tenant_id: int,
+        document_id: int,
+        target_space_id: int,
+    ) -> None:
+        business_resource_id = f"{document_id}:{target_space_id}"
+        pending = await ApprovalInstanceRepository.find_pending_instance_by_business_resource_id(
+            tenant_id=tenant_id,
+            scenario_code=FILE_SHARE_SCENARIO,
+            business_resource_id=business_resource_id,
+            exclude_applicant_user_id=None,
+            active_statuses=None,
+        )
+        if pending:
+            raise ApprovalDuplicatePendingError(
+                msg="该文档分享到目标知识库的申请仍在审批中"
+            )
 
     async def _task_approver_user_ids(self, task_ids: list[int]) -> list[int]:
         approver_user_ids: list[int] = []
@@ -427,6 +581,215 @@ class ShougangApprovalService:
         )
         data = self._gate_result_to_dict(result)
         data['created'] = False
+        return data
+
+    async def _validate_file_share_source(
+        self,
+        *,
+        source_space,
+        source_file,
+        source_level,
+        space_service,
+    ) -> None:
+        if source_level != KnowledgeSpaceLevelEnum.DEPARTMENT:
+            raise HTTPException(
+                status_code=400,
+                detail="仅部门知识库支持同级分享",
+            )
+        if source_file.file_type == FileType.DIR.value:
+            raise HTTPException(status_code=400, detail="文件夹不支持分享")
+        if source_file.status != KnowledgeFileStatus.SUCCESS.value:
+            raise HTTPException(
+                status_code=400,
+                detail="仅解析成功文件可分享",
+            )
+        if (
+            getattr(source_file, "entry_type", None)
+            == KnowledgeFileEntryType.SHARE.value
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="分享入口不能再次分享",
+            )
+        await space_service._require_permission_id(
+            "knowledge_file",
+            int(source_file.id),
+            "share_file",
+            space_id=int(source_space.id),
+        )
+
+    async def _ensure_file_share_target_space(
+        self,
+        *,
+        source_space_id: int,
+        target_space_id: int,
+        space_service,
+    ):
+        if int(source_space_id) == int(target_space_id):
+            raise HTTPException(
+                status_code=400,
+                detail="分享目标不能是来源知识库",
+            )
+        target_space = await KnowledgeDao.aquery_by_id(target_space_id)
+        if (
+            not target_space
+            or target_space.type != KnowledgeTypeEnum.SPACE.value
+        ):
+            raise HTTPException(status_code=404, detail="目标知识空间不存在")
+        scope = await KnowledgeSpaceScopeDao.aget_by_space_id(target_space_id)
+        target_level = (
+            scope.level if scope else KnowledgeSpaceLevelEnum.PERSONAL
+        )
+        if target_level != KnowledgeSpaceLevelEnum.DEPARTMENT:
+            raise HTTPException(
+                status_code=400,
+                detail="分享目标必须是其他部门知识库",
+            )
+        await space_service._require_permission_id(
+            "knowledge_space",
+            target_space_id,
+            "view_space",
+        )
+        return target_space
+
+    async def list_file_share_target_spaces(
+        self,
+        *,
+        source_space_id: int,
+        source_file_id: int,
+        space_service,
+    ) -> ShougangFileShareTargetSpacesResp:
+        source_space, source_file, source_level = (
+            await self._load_publish_source(
+                source_space_id,
+                source_file_id,
+            )
+        )
+        await self._validate_file_share_source(
+            source_space=source_space,
+            source_file=source_file,
+            source_level=source_level,
+            space_service=space_service,
+        )
+        grouped = await space_service.get_grouped_spaces()
+        spaces = [
+            space
+            for space in list(grouped.department_spaces or [])
+            if int(space.id) != int(source_space_id)
+        ]
+        items = [
+            ShougangFileShareTargetSpace(
+                id=int(space.id),
+                name=space.name,
+                space_level=space.space_level,
+                owner_name=space.owner_name,
+            )
+            for space in spaces
+        ]
+        return ShougangFileShareTargetSpacesResp(
+            data=items,
+            total=len(items),
+        )
+
+    async def submit_file_share(
+        self,
+        *,
+        req: ShougangFileShareSubmitReq,
+        login_user,
+        space_service,
+    ) -> dict:
+        source_space, source_file, source_level = (
+            await self._load_publish_source(
+                req.source_space_id,
+                req.source_file_id,
+            )
+        )
+        await self._validate_file_share_source(
+            source_space=source_space,
+            source_file=source_file,
+            source_level=source_level,
+            space_service=space_service,
+        )
+        target_space = await self._ensure_file_share_target_space(
+            source_space_id=req.source_space_id,
+            target_space_id=req.target_space_id,
+            space_service=space_service,
+        )
+        canonical_source = await self._normalize_share_source(
+            tenant_id=int(login_user.tenant_id),
+            source_file=source_file,
+            target_space_id=int(target_space.id),
+        )
+        await self._ensure_file_share_not_in_pending_approval(
+            tenant_id=int(login_user.tenant_id),
+            document_id=int(canonical_source.document_id),
+            target_space_id=int(target_space.id),
+        )
+
+        applicant_department_id = await self._get_primary_department_id(
+            login_user
+        )
+        file_name = (
+            getattr(source_file, "file_name", None)
+            or getattr(source_file, "name", None)
+            or str(source_file.id)
+        )
+        approval_req = ApprovalGateRequest(
+            tenant_id=int(login_user.tenant_id),
+            scenario_code=FILE_SHARE_SCENARIO,
+            business_key=(
+                "knowledge-file-share:"
+                f"document:{canonical_source.document_id}:"
+                f"target:{target_space.id}"
+            ),
+            business_resource_type=FILE_SHARE_SCENARIO,
+            business_resource_id=(
+                f"{canonical_source.document_id}:{target_space.id}"
+            ),
+            business_name=f"分享文件：{file_name}",
+            applicant_user_id=int(login_user.user_id),
+            applicant_user_name=login_user.user_name,
+            applicant_department_id=applicant_department_id,
+            reason=req.reason.strip(),
+            payload_snapshot={
+                "tenant_id": int(login_user.tenant_id),
+                "applicant_user_id": int(login_user.user_id),
+                "applicant_user_name": login_user.user_name,
+                "applicant_department_id": applicant_department_id,
+                "source_space_id": int(source_space.id),
+                "source_space_name": source_space.name,
+                "source_space_level": self._enum_value(source_level),
+                "source_file_id": int(source_file.id),
+                "source_file_name": file_name,
+                "canonical_document_id": int(
+                    canonical_source.document_id
+                ),
+                "source_entry_id": int(source_file.id),
+                "target_space_id": int(target_space.id),
+                "target_space_name": target_space.name,
+                "target_space_level": (
+                    KnowledgeSpaceLevelEnum.DEPARTMENT.value
+                ),
+                "allow_download": bool(req.allow_download),
+            },
+            duplicate_active_statuses=[
+                ApprovalInstanceStatus.PENDING,
+                ApprovalInstanceStatus.EXECUTE_FAILED,
+            ],
+        )
+        result = await self._request_or_create_config_exception(
+            req=approval_req,
+            scenario_name="部门知识文件分享审批",
+            handler=KnowledgeSpaceFileShareApprovalHandler(),
+        )
+        await self._send_approval_message(
+            login_user=login_user,
+            result=result,
+            business_name=f"分享文件：{file_name}",
+            action_code="request_knowledge_space_file_share",
+        )
+        data = self._gate_result_to_dict(result)
+        data["created"] = False
         return data
 
     async def _load_publish_source(self, source_space_id: int, source_file_id: int):
@@ -759,6 +1122,10 @@ class ShougangApprovalService:
             space_service=space_service,
         )
         target_folder_payload = self._target_folder_payload(target_folder)
+        canonical_source = await self._normalize_publish_source(
+            tenant_id=int(login_user.tenant_id),
+            source_file_id=int(source_file.id),
+        )
         performance['base_validation_ms'] = (perf_counter() - stage_started_at) * 1000
 
         performance['failed_stage'] = 'target_validation'
@@ -780,13 +1147,18 @@ class ShougangApprovalService:
             if matched_document is None:
                 raise HTTPException(status_code=400, detail='目标文档不可用于发布')
             target_document_title = matched_document.title
+        await self._ensure_publish_target_content_not_duplicate(
+            tenant_id=int(login_user.tenant_id),
+            source_file=source_file,
+            target_space_id=int(target_space.id),
+        )
         performance['target_validation_ms'] = (perf_counter() - stage_started_at) * 1000
 
         performance['failed_stage'] = 'pending_check'
         stage_started_at = perf_counter()
         await self._ensure_file_publish_not_in_pending_approval(
             tenant_id=login_user.tenant_id,
-            source_file_id=int(source_file.id),
+            source_document_id=int(canonical_source.document_id),
             target_space_id=int(target_space.id),
         )
         performance['pending_check_ms'] = (perf_counter() - stage_started_at) * 1000
@@ -798,9 +1170,15 @@ class ShougangApprovalService:
         approval_req = ApprovalGateRequest(
             tenant_id=login_user.tenant_id,
             scenario_code=FILE_PUBLISH_SCENARIO,
-            business_key=f"knowledge-file-publish:file:{req.source_file_id}:target:{req.target_space_id}:user:{login_user.user_id}",
+            business_key=(
+                "knowledge-file-publish:"
+                f"document:{canonical_source.document_id}:"
+                f"target:{req.target_space_id}"
+            ),
             business_resource_type='knowledge_space_file_publish_request',
-            business_resource_id=f"{req.source_file_id}:{req.target_space_id}",
+            business_resource_id=(
+                f"{canonical_source.document_id}:{req.target_space_id}"
+            ),
             business_name=f"发布文件：{file_name}",
             applicant_user_id=login_user.user_id,
             applicant_user_name=login_user.user_name,
@@ -816,6 +1194,8 @@ class ShougangApprovalService:
                 'source_space_level': self._enum_value(source_level),
                 'source_file_id': int(source_file.id),
                 'source_file_name': file_name,
+                'canonical_document_id': int(canonical_source.document_id),
+                'source_entry_id': int(canonical_source.manager_file_id),
                 'target_space_id': int(target_space.id),
                 'target_space_name': target_space.name,
                 'target_space_level': target_level,

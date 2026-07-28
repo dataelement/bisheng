@@ -195,6 +195,7 @@ CREATE TABLE IF NOT EXISTS knowledge (
     auto_tag_enabled INTEGER NOT NULL DEFAULT 0,
     auto_tag_library_id INTEGER,
     business_domain_codes JSON,
+    sort_weight INTEGER,
     metadata_fields JSON,
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
@@ -320,6 +321,7 @@ CREATE TABLE IF NOT EXISTS knowledgefile (
     knowledge_id INTEGER NOT NULL,
     thumbnails VARCHAR(512),
     file_name VARCHAR(200) NOT NULL,
+    alias_name VARCHAR(200),
     file_type INTEGER DEFAULT 1,
     file_source VARCHAR(32),
     level INTEGER DEFAULT 0,
@@ -342,6 +344,24 @@ CREATE TABLE IF NOT EXISTS knowledgefile (
     similar_status INTEGER NOT NULL DEFAULT 0,
     updater_id INTEGER,
     updater_name VARCHAR(255),
+    reference_document_id INTEGER,
+    entry_type VARCHAR(24),
+    entry_status VARCHAR(16),
+    predecessor_logic_file_id INTEGER,
+    share_source_file_id INTEGER,
+    allow_download INTEGER NOT NULL DEFAULT 0,
+    approval_instance_id INTEGER,
+    projection_previous_file_id INTEGER,
+    desired_content_generation INTEGER NOT NULL DEFAULT 0,
+    applied_content_generation INTEGER NOT NULL DEFAULT 0,
+    desired_entry_generation INTEGER NOT NULL DEFAULT 0,
+    applied_entry_generation INTEGER NOT NULL DEFAULT 0,
+    projection_status VARCHAR(16) NOT NULL DEFAULT 'pending',
+    projection_retry_count INTEGER NOT NULL DEFAULT 0,
+    projection_next_retry_at DATETIME,
+    projection_lease_owner VARCHAR(64),
+    projection_lease_until DATETIME,
+    projection_last_error TEXT,
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
 )"""
@@ -349,10 +369,14 @@ CREATE TABLE IF NOT EXISTS knowledgefile (
 TABLE_KNOWLEDGE_DOCUMENT = """\
 CREATE TABLE IF NOT EXISTS knowledge_document (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id INTEGER NOT NULL,
     knowledge_id INTEGER NOT NULL,
     file_level_path VARCHAR(512),
     level INTEGER DEFAULT 0,
     primary_version_id INTEGER,
+    predecessor_logic_file_id INTEGER,
+    content_generation INTEGER NOT NULL DEFAULT 0,
+    lifecycle_status VARCHAR(16) NOT NULL DEFAULT 'active',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
 )"""
@@ -366,7 +390,8 @@ CREATE TABLE IF NOT EXISTS knowledge_document_version (
     is_primary INTEGER NOT NULL DEFAULT 0,
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    CONSTRAINT uk_kdv_document_version UNIQUE (document_id, version_no)
+    CONSTRAINT uk_kdv_document_version UNIQUE (document_id, version_no),
+    CONSTRAINT uk_kdv_knowledge_file UNIQUE (knowledge_file_id)
 )"""
 
 TABLE_KNOWLEDGE_FILE_SIMILARITY_CANDIDATE = """\
@@ -693,6 +718,72 @@ INDEX_PHSC_TENANT_BATCH = """\
 CREATE INDEX IF NOT EXISTS ix_phsc_tenant_batch
     ON portal_hot_search_candidate (tenant_id, batch_id)"""
 
+TABLE_DEPARTMENT_TRANSFER_PERMISSION_CLEANUP_EVENT = """\
+CREATE TABLE IF NOT EXISTS department_transfer_permission_cleanup_event (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id INTEGER NOT NULL DEFAULT 1,
+    event_key VARCHAR(128) NOT NULL UNIQUE,
+    user_id INTEGER NOT NULL,
+    old_department_id INTEGER NOT NULL,
+    new_department_id INTEGER NOT NULL,
+    trigger_source VARCHAR(32) NOT NULL,
+    status VARCHAR(24) NOT NULL DEFAULT 'preparing',
+    requested_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    changed_at DATETIME,
+    deadline_at DATETIME,
+    completed_at DATETIME,
+    overdue_at DATETIME,
+    next_retry_at DATETIME,
+    retry_count INTEGER NOT NULL DEFAULT 0,
+    snapshot_complete INTEGER NOT NULL DEFAULT 0,
+    total_count INTEGER NOT NULL DEFAULT 0,
+    revoked_count INTEGER NOT NULL DEFAULT 0,
+    protected_count INTEGER NOT NULL DEFAULT 0,
+    skipped_count INTEGER NOT NULL DEFAULT 0,
+    failed_count INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT,
+    create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+)"""
+
+TABLE_DEPARTMENT_TRANSFER_PERMISSION_CLEANUP_ITEM = """\
+CREATE TABLE IF NOT EXISTS department_transfer_permission_cleanup_item (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id INTEGER NOT NULL DEFAULT 1,
+    event_id INTEGER NOT NULL,
+    item_key VARCHAR(255) NOT NULL,
+    item_type VARCHAR(32) NOT NULL,
+    user_id INTEGER NOT NULL,
+    resource_type VARCHAR(32) NOT NULL,
+    resource_id VARCHAR(64) NOT NULL,
+    root_space_id INTEGER,
+    relation VARCHAR(32),
+    source_ref VARCHAR(128),
+    snapshot JSON NOT NULL,
+    status VARCHAR(24) NOT NULL DEFAULT 'pending',
+    protected_at DATETIME,
+    protected_source VARCHAR(32),
+    processed_at DATETIME,
+    retry_count INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT,
+    create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(event_id, item_key)
+)"""
+
+INDEX_DTPC_STATUS_RETRY = """\
+CREATE INDEX IF NOT EXISTS idx_dtpc_status_retry
+    ON department_transfer_permission_cleanup_event (status, next_retry_at)"""
+INDEX_DTPC_USER_CHANGED = """\
+CREATE INDEX IF NOT EXISTS idx_dtpc_user_changed
+    ON department_transfer_permission_cleanup_event (user_id, changed_at)"""
+INDEX_DTPC_ITEM_USER_STATUS = """\
+CREATE INDEX IF NOT EXISTS idx_dtpc_item_user_status
+    ON department_transfer_permission_cleanup_item (user_id, status)"""
+INDEX_DTPC_ITEM_EVENT_STATUS = """\
+CREATE INDEX IF NOT EXISTS idx_dtpc_item_event_status
+    ON department_transfer_permission_cleanup_item (event_id, status)"""
+
 
 # ---------------------------------------------------------------------------
 # Registry & helpers
@@ -738,6 +829,8 @@ TABLE_DEFINITIONS: dict[str, str] = {
     "portal_hot_search_snapshot": TABLE_PORTAL_HOT_SEARCH_SNAPSHOT,
     "portal_hot_search_batch_run": TABLE_PORTAL_HOT_SEARCH_BATCH_RUN,
     "portal_hot_search_candidate": TABLE_PORTAL_HOT_SEARCH_CANDIDATE,
+    "department_transfer_permission_cleanup_event": TABLE_DEPARTMENT_TRANSFER_PERMISSION_CLEANUP_EVENT,
+    "department_transfer_permission_cleanup_item": TABLE_DEPARTMENT_TRANSFER_PERMISSION_CLEANUP_ITEM,
 }
 
 # Indexes emitted after CREATE TABLE via create_all_tables.
@@ -760,6 +853,10 @@ INDEX_DEFINITIONS: list[str] = [
     INDEX_PHSBR_TENANT_TIME,
     INDEX_PHSBR_TENANT_BATCH,
     INDEX_PHSC_TENANT_BATCH,
+    INDEX_DTPC_STATUS_RETRY,
+    INDEX_DTPC_USER_CHANGED,
+    INDEX_DTPC_ITEM_USER_STATUS,
+    INDEX_DTPC_ITEM_EVENT_STATUS,
 ]
 
 
