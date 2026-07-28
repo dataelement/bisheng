@@ -26,6 +26,7 @@ import {
 import { ExpandableSearchField } from "~/components/ui/ExpandableSearchField";
 import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
+import { AUDIO_FILE_EXTENSIONS, VIDEO_FILE_EXTENSIONS } from "../knowledgeUtils";
 import { useDynamicEllipsis } from "../hooks/useDynamicEllipsis";
 import { DynamicEllipsisName } from "../sidebar/DynamicEllipsisName";
 import { MoveToFolderTree, type FolderSelectPayload } from "./MoveToFolderTree";
@@ -74,6 +75,8 @@ const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "bmp", "gif", "webp"];
 /** Right-panel file glyph — mirrors the table-mode icon (FileTable.tsx). */
 function fileGlyph(name: string) {
     const ext = name.split(".").pop()?.toLowerCase() || "";
+    if ((AUDIO_FILE_EXTENSIONS as readonly string[]).includes(ext)) return Outlined.FileAudio;
+    if ((VIDEO_FILE_EXTENSIONS as readonly string[]).includes(ext)) return Outlined.FileVideo;
     return IMAGE_EXTENSIONS.includes(ext) ? Outlined.FileImage : Outlined.File;
 }
 
