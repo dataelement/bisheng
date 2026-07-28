@@ -1,10 +1,14 @@
 """Object naming for files a user uploads inside a conversation.
 
-Conversation attachments live in the main bucket under a per-conversation
-prefix, which is what lets deleting a conversation wipe its files in one
-prefixed sweep. The stored name is a uuid: the original filename is display
-metadata carried on the message, never an identity -- two users uploading
-"1.png" must not land on the same object.
+Attachments live in the main bucket, grouped by uploader. They are NOT grouped
+by conversation: the first upload of a new chat happens before the chat exists
+(the client still holds "new" and the backend assigns the id when the message
+is sent), so a conversation id simply isn't available at naming time. Deleting
+a conversation therefore collects object names from its messages rather than
+sweeping a prefix -- the message already carries them.
+
+The stored name is a uuid: the original filename is display metadata on the
+message, never an identity -- two users uploading "1.png" must not collide.
 """
 
 import os
@@ -17,9 +21,9 @@ CHAT_OBJECT_PREFIX = "chat/"
 _MAX_EXT_LEN = 10
 
 
-def chat_object_prefix(chat_id: str) -> str:
-    """Prefix holding every attachment of one conversation."""
-    return f"{CHAT_OBJECT_PREFIX}{chat_id}/"
+def chat_object_prefix(user_id: int | str) -> str:
+    """Prefix holding one user's conversation attachments."""
+    return f"{CHAT_OBJECT_PREFIX}{user_id}/"
 
 
 def _safe_extension(filename: str) -> str:
@@ -41,6 +45,6 @@ def _safe_extension(filename: str) -> str:
     return ext
 
 
-def build_chat_object_name(chat_id: str, filename: str) -> str:
-    """Storage object name for one attachment of one conversation."""
-    return f"{chat_object_prefix(chat_id)}{uuid4().hex}{_safe_extension(filename)}"
+def build_chat_object_name(user_id: int | str, filename: str) -> str:
+    """Storage object name for one conversation attachment."""
+    return f"{chat_object_prefix(user_id)}{uuid4().hex}{_safe_extension(filename)}"
