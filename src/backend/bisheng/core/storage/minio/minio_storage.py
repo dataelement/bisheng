@@ -575,34 +575,6 @@ class MinioStorage(BaseStorage, ABC):
 
         self.minio_client_sync.remove_object(bucket_name, object_name)
 
-    async def remove_objects_by_prefix(self, prefix: str, bucket_name: str | None = None) -> tuple[int, int]:
-        return await asyncio.to_thread(self.remove_objects_by_prefix_sync, prefix=prefix, bucket_name=bucket_name)
-
-    def remove_objects_by_prefix_sync(self, prefix: str, bucket_name: str | None = None) -> tuple[int, int]:
-        """Delete every object under `prefix`. Returns (deleted, failed).
-
-        Used to drop a conversation's attachments in one sweep. Deletion keeps
-        going when an individual object fails: a single unreachable object must
-        not leave the rest of the conversation's files behind.
-        """
-        # An empty or root prefix would match the whole bucket. There is no
-        # legitimate caller for that, and the blast radius is the entire store.
-        if not prefix or not prefix.strip().strip("/"):
-            raise ValueError("remove_objects_by_prefix: refusing to delete without a real prefix")
-
-        if bucket_name is None:
-            bucket_name = self.bucket
-
-        deleted = failed = 0
-        for obj in self.minio_client_sync.list_objects(bucket_name, prefix=prefix, recursive=True):
-            try:
-                self.minio_client_sync.remove_object(bucket_name, obj.object_name)
-                deleted += 1
-            except S3Error:
-                logger.exception("failed to remove object {} from {}", obj.object_name, bucket_name)
-                failed += 1
-        return deleted, failed
-
     async def get_share_link(self, object_name, bucket=None, clear_host: bool = True, expire_days: int = 7) -> str:
         """
         DapatkanminioFile sharing link

@@ -12,7 +12,12 @@ message, never an identity -- two users uploading "1.png" must not collide.
 """
 
 import os
+from urllib.parse import unquote, urlparse
 from uuid import uuid4
+
+from loguru import logger
+
+from bisheng.core.storage.minio.minio_manager import get_minio_storage
 
 CHAT_OBJECT_PREFIX = "chat/"
 
@@ -48,3 +53,64 @@ def _safe_extension(filename: str) -> str:
 def build_chat_object_name(user_id: int | str, filename: str) -> str:
     """Storage object name for one conversation attachment."""
     return f"{chat_object_prefix(user_id)}{uuid4().hex}{_safe_extension(filename)}"
+
+
+def temp_object_name_from_url(file_url: str, tmp_bucket: str) -> str | None:
+    """Object name inside the temp bucket, read back off the link we issued.
+
+    Uploads answer with a presigned link (`[host]/<bucket>/<object>?…`), and the
+    client hands that same link back on the message, so the object name is
+    recoverable without asking the upload endpoints to return anything new.
+    Returns None when the link doesn't point into the temp bucket -- the file is
+    then either already permanent or not ours to move.
+    """
+    if not file_url:
+        return None
+    path = urlparse(file_url).path
+    marker = f"/{tmp_bucket}/"
+    idx = path.find(marker)
+    if idx == -1:
+        return None
+    return unquote(path[idx + len(marker) :]) or None
+
+
+async def promote_chat_attachments(files: list[dict] | None, user_id: int | str) -> list[dict]:
+    """Move a message's attachments out of the temp bucket, in place.
+
+    Called when the message is sent, not when the file is uploaded: whatever is
+    never sent stays in temp and is reclaimed by that bucket's 3-day rule, so
+    abandoned uploads cost nothing and need no separate sweeper.
+
+    Each promoted file gains an `object_name` pointing at the permanent copy —
+    that field is what later resolves a fresh link and what conversation
+    deletion removes. A file that already has one is left alone (task-mode
+    uploads land in the main bucket to begin with).
+
+    One attachment failing must not cost the others or the message itself, so
+    failures are logged and that file is simply left without `object_name`.
+    """
+    if not files:
+        return []
+
+    minio_client = await get_minio_storage()
+    for file in files:
+        if not isinstance(file, dict) or file.get("object_name"):
+            continue
+        source_object = temp_object_name_from_url(
+            file.get("filepath") or file.get("file_path") or "", minio_client.tmp_bucket
+        )
+        if not source_object:
+            continue
+        dest_object = build_chat_object_name(user_id, file.get("filename") or file.get("file_name") or "")
+        try:
+            await minio_client.copy_object(
+                source_bucket=minio_client.tmp_bucket,
+                source_object=source_object,
+                dest_bucket=minio_client.bucket,
+                dest_object=dest_object,
+            )
+        except Exception:
+            logger.exception("failed to promote chat attachment {} for user {}", source_object, user_id)
+            continue
+        file["object_name"] = dest_object
+    return files
