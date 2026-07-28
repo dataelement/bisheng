@@ -123,6 +123,43 @@ async def _seed_distribution(async_db_session: AsyncSession) -> None:
     await async_db_session.commit()
 
 
+async def _seed_ordinary_primary(
+    async_db_session: AsyncSession,
+    *,
+    include_document: bool = True,
+    document_tenant_id: int = 7,
+    document_space_id: int = 10,
+) -> None:
+    rows = [
+        KnowledgeFile(
+            id=103,
+            tenant_id=7,
+            knowledge_id=10,
+            file_name="ordinary.pdf",
+            object_name="tenant/7/ordinary.pdf",
+        ),
+        KnowledgeDocumentVersion(
+            id=502,
+            document_id=92,
+            knowledge_file_id=103,
+            version_no=1,
+            is_primary=True,
+        ),
+    ]
+    if include_document:
+        rows.insert(
+            0,
+            KnowledgeDocument(
+                id=92,
+                tenant_id=document_tenant_id,
+                knowledge_id=document_space_id,
+                primary_version_id=502,
+            ),
+        )
+    async_db_session.add_all(rows)
+    await async_db_session.commit()
+
+
 def _resolver(
     async_db_session: AsyncSession,
     permission_loader=_all_permissions,
@@ -264,3 +301,60 @@ async def test_durable_reference_selects_requested_active_entry_and_rechecks_per
     )
     assert externally_authorized.entry_file_id == 102
     assert externally_authorized.capabilities.can_view is False
+
+
+@pytest.mark.asyncio
+async def test_durable_reference_resolves_ordinary_primary_without_distribution(
+    async_db_session: AsyncSession,
+):
+    await _seed_ordinary_primary(async_db_session)
+    entry_resolver = _resolver(async_db_session)
+    durable_resolver = KnowledgeDocumentDurableReferenceResolver(
+        entry_resolver=entry_resolver,
+        version_repository=KnowledgeDocumentVersionRepositoryImpl(
+            async_db_session
+        ),
+        file_repository=KnowledgeFileRepositoryImpl(async_db_session),
+    )
+
+    resolved = await durable_resolver.resolve(
+        tenant_id=7,
+        requested_space_id=10,
+        durable_file_id=103,
+    )
+
+    assert resolved.entry_type == "normal"
+    assert resolved.entry_file_id == 103
+    assert resolved.content_file_id == 103
+    assert resolved.capabilities.can_view is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("include_document", "document_tenant_id", "document_space_id", "error"),
+    [
+        (False, 7, 10, "does not exist"),
+        (True, 8, 10, "tenant"),
+        (True, 7, 20, "space"),
+    ],
+)
+async def test_ordinary_version_rejects_invalid_document_identity(
+    async_db_session: AsyncSession,
+    include_document: bool,
+    document_tenant_id: int,
+    document_space_id: int,
+    error: str,
+):
+    await _seed_ordinary_primary(
+        async_db_session,
+        include_document=include_document,
+        document_tenant_id=document_tenant_id,
+        document_space_id=document_space_id,
+    )
+
+    with pytest.raises(KnowledgeDocumentEntryResolutionError, match=error):
+        await _resolver(async_db_session).resolve(
+            tenant_id=7,
+            space_id=10,
+            file_id=103,
+        )

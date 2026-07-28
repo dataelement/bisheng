@@ -95,6 +95,18 @@ _CONDITION_FIELD_OPTIONS: dict[str, ApprovalPresetConditionField] = {
         type='selector',
         selector_type='knowledge_space_publish_target',
     ),
+    'file_department_id': ApprovalPresetConditionField(
+        field='file_department_id',
+        label='文件所属部门',
+        type='selector',
+        selector_type='department',
+    ),
+    'file_knowledge_space_id': ApprovalPresetConditionField(
+        field='file_knowledge_space_id',
+        label='文件所属知识库',
+        type='selector',
+        selector_type='department_knowledge_space',
+    ),
 }
 
 
@@ -108,7 +120,10 @@ _APPROVER_SOURCE_OPTIONS: dict[str, ApprovalPresetApproverSource] = {
     'channel_manager': ApprovalPresetApproverSource(source_type='channel_manager', label='频道 Manager'),
     'space_admin': ApprovalPresetApproverSource(source_type='space_admin', label='知识空间管理员'),
     'knowledge_space_owner': ApprovalPresetApproverSource(source_type='knowledge_space_owner', label='知识空间 Owner'),
-    'knowledge_space_manager': ApprovalPresetApproverSource(source_type='knowledge_space_manager', label='知识空间 Manager'),
+    'knowledge_space_manager': ApprovalPresetApproverSource(
+        source_type='knowledge_space_manager',
+        label='知识空间 Manager',
+    ),
     'target_knowledge_space_owner': ApprovalPresetApproverSource(
         source_type='target_knowledge_space_owner',
         label='目标知识空间 Owner',
@@ -182,7 +197,12 @@ class ApprovalRegistry:
                 scenario_name='知识空间加入审批',
                 handler_key='knowledge_space_subscribe_request',
                 condition_fields=['applicant_role'],
-                approver_source_types=['direct_user', 'department_admin', 'knowledge_space_owner', 'knowledge_space_manager'],
+                approver_source_types=[
+                    'direct_user',
+                    'department_admin',
+                    'knowledge_space_owner',
+                    'knowledge_space_manager',
+                ],
             )
         )
         registry.register_preset(
@@ -232,7 +252,12 @@ class ApprovalRegistry:
                 scenario_code='department_file_view_request',
                 scenario_name='部门文件查看审批',
                 handler_key='department_file_view_request',
-                condition_fields=[],
+                condition_fields=[
+                    'applicant_role',
+                    'applicant_department_id',
+                    'file_department_id',
+                    'file_knowledge_space_id',
+                ],
                 approver_source_types=['department_file_approvers'],
             )
         )

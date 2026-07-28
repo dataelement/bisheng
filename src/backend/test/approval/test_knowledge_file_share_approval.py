@@ -97,13 +97,10 @@ def _source_file(*, entry_type=KnowledgeFileEntryType.MANAGER.value):
 
 @pytest.fixture(autouse=True)
 def _no_pending_approval(monkeypatch):
-    from bisheng.common.services.config_service import settings
+    from bisheng.approval.domain.services import shougang_approval_service
 
-    monkeypatch.setattr(
-        settings.knowledge.distribution,
-        "writer_enabled",
-        True,
-    )
+    # 新发布/分享不得依赖任何运行时开关。
+    monkeypatch.setattr(shougang_approval_service, "settings", object(), raising=False)
     monkeypatch.setattr(
         "bisheng.approval.domain.services.shougang_approval_service."
         "ApprovalInstanceRepository.find_pending_instance_by_business_resource_id",
@@ -265,53 +262,14 @@ def test_share_scenario_is_registered_with_fixed_role_sources():
 
 
 @pytest.mark.asyncio
-async def test_distribution_writer_flag_rejects_without_old_copy_fallback(
-    monkeypatch,
-):
-    from bisheng.common.services.config_service import settings
-
-    service = ShougangApprovalService(approval_gate=_approval_gate())
-    load_source = AsyncMock()
-    monkeypatch.setattr(
-        settings.knowledge.distribution,
-        "writer_enabled",
-        False,
-    )
-    monkeypatch.setattr(service, "_load_publish_source", load_source)
-
-    with pytest.raises(HTTPException) as exc_info:
-        await service.submit_file_share(
-            req=ShougangFileShareSubmitReq(
-                source_space_id=10,
-                source_file_id=100,
-                target_space_id=20,
-                reason="开关关闭",
-            ),
-            login_user=_login_user(),
-            space_service=_space_service(),
-        )
-
-    assert exc_info.value.status_code == 503
-    load_source.assert_not_awaited()
-
-
-@pytest.mark.asyncio
-async def test_legacy_share_creation_flag_does_not_affect_existing_read_paths(
-    monkeypatch,
-):
+async def test_legacy_share_creation_is_permanently_disabled():
     from bisheng.common.errcode.knowledge import (
         KnowledgeShareCreationDisabledError,
     )
-    from bisheng.common.services.config_service import settings
     from bisheng.knowledge.domain.services.knowledge_space_service import (
         KnowledgeSpaceService,
     )
 
-    monkeypatch.setattr(
-        settings.knowledge.distribution,
-        "legacy_share_creation_enabled",
-        False,
-    )
     service = object.__new__(KnowledgeSpaceService)
 
     with pytest.raises(KnowledgeShareCreationDisabledError):

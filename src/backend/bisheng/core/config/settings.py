@@ -619,25 +619,6 @@ class KnowledgePdfWatermarkConf(BaseModel):
         return self
 
 
-class KnowledgeDistributionConf(BaseModel):
-    """F059 canonical publish/share rollout switches."""
-
-    writer_enabled: bool = Field(
-        default=False,
-        description=(
-            "Enable new canonical publish/share submissions. Existing "
-            "logical entries remain readable when disabled."
-        ),
-    )
-    legacy_share_creation_enabled: bool = Field(
-        default=False,
-        description=(
-            "Allow creation of legacy link/invite shares. Existing tokens "
-            "remain readable independently."
-        ),
-    )
-
-
 class KnowledgeConf(BaseModel):
     """Knowledge Configure"""
 
@@ -657,11 +638,6 @@ class KnowledgeConf(BaseModel):
         default_factory=KnowledgePdfWatermarkConf,
         description="Portal PDF Watermark Configure",
     )
-    distribution: KnowledgeDistributionConf = Field(
-        default_factory=KnowledgeDistributionConf,
-        description="Canonical publish/share distribution rollout",
-    )
-
     @property
     def image_parser_enabled(self) -> bool:
         """Whether the active loader_provider can parse images (and richer PDFs).

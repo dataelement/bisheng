@@ -22,13 +22,20 @@ from bisheng.approval.domain.schemas.approval_center_schema import (
     ApprovalGateResult,
 )
 from bisheng.common.errcode.approval import ApprovalScenarioDisabledError
-from bisheng.database.models.audit_log import AuditLogDao
+from bisheng.database.models.audit_log import AuditLog, AuditLogDao
 
 FILE_PUBLISH_SCENARIO_CODE = "knowledge_space_file_publish_request"
 FILE_PUBLISH_ALLOWED_CONDITION_FIELDS = frozenset({
     "applicant_role",
     "source_space_level",
     "target_space_level",
+})
+DEPARTMENT_FILE_VIEW_SCENARIO_CODE = "department_file_view_request"
+DEPARTMENT_FILE_VIEW_ALLOWED_CONDITION_FIELDS = frozenset({
+    "applicant_role",
+    "applicant_department_id",
+    "file_department_id",
+    "file_knowledge_space_id",
 })
 
 
@@ -90,14 +97,33 @@ class ApprovalGate:
         scenario_repository: Any = ApprovalScenarioRepository,
         instance_repository: Any = ApprovalInstanceRepository,
         route_matcher: Callable[[list[Any], ApprovalGateRequest], Awaitable[Any | None]] | None = None,
+        session: Any | None = None,
     ) -> None:
         self.registry = registry
         self.scenario_repository = scenario_repository
         self.instance_repository = instance_repository
         self.route_matcher = route_matcher or self._match_first_route
+        self.session = session
+
+    async def _scenario_call(self, method_name: str, *args, **kwargs):
+        if self.session is not None:
+            kwargs["session"] = self.session
+        method = getattr(self.scenario_repository, method_name)
+        return await method(*args, **kwargs)
+
+    async def _instance_call(self, method_name: str, *args, **kwargs):
+        if self.session is not None:
+            kwargs["session"] = self.session
+        method = getattr(self.instance_repository, method_name)
+        return await method(*args, **kwargs)
+
+    async def _commit_shared_session(self) -> None:
+        if self.session is not None:
+            await self.session.commit()
 
     async def request_or_pass(self, req: ApprovalGateRequest) -> ApprovalGateResult:
-        duplicate = await self.instance_repository.find_duplicate_active_instance(
+        duplicate = await self._instance_call(
+            "find_duplicate_active_instance",
             tenant_id=req.tenant_id,
             scenario_code=req.scenario_code,
             business_key=req.business_key,
@@ -114,11 +140,26 @@ class ApprovalGate:
         detail_snapshot = await handler.build_detail(req)
         business_name = await handler.build_title(req)
 
-        scenario = await self.scenario_repository.get_scenario_by_code(req.tenant_id, req.scenario_code)
+        scenario = await self._scenario_call(
+            "get_scenario_by_code",
+            req.tenant_id,
+            req.scenario_code,
+        )
         if not scenario or not scenario.enabled:
             raise ApprovalScenarioDisabledError()
 
-        route_rules = await self.scenario_repository.list_route_rules(req.tenant_id, scenario.id)
+        route_kwargs = {}
+        if self.session is not None:
+            route_kwargs = {
+                "for_update": True,
+                "enabled_only": True,
+            }
+        route_rules = await self._scenario_call(
+            "list_route_rules",
+            req.tenant_id,
+            scenario.id,
+            **route_kwargs,
+        )
         matched_route = await self.route_matcher(route_rules, req)
         if not matched_route:
             return await self._create_exception_result(
@@ -131,7 +172,8 @@ class ApprovalGate:
             )
 
         if matched_route.route_type == "pass":
-            instance = await self.instance_repository.create_instance(
+            instance = await self._instance_call(
+                "create_instance",
                 ApprovalInstance(
                     tenant_id=req.tenant_id,
                     scenario_code=req.scenario_code,
@@ -152,7 +194,8 @@ class ApprovalGate:
                 )
             )
             # PASS route still needs to execute the business handler via outbox
-            outbox = await self.instance_repository.create_outbox(
+            outbox = await self._instance_call(
+                "create_outbox",
                 ApprovalOutbox(
                     tenant_id=req.tenant_id,
                     instance_id=instance.id,
@@ -161,8 +204,7 @@ class ApprovalGate:
                     payload_snapshot=req.payload_snapshot,
                 )
             )
-            self._dispatch_outbox_task(outbox.id)
-            await AuditLogDao.ainsert_v2(
+            await self._write_audit(
                 tenant_id=req.tenant_id,
                 operator_id=0,
                 operator_tenant_id=req.tenant_id,
@@ -180,11 +222,37 @@ class ApprovalGate:
                 object_name=business_name,
                 ip_address=req.ip_address,
             )
+            await self._commit_shared_session()
+            self._dispatch_outbox_task(outbox.id)
             return ApprovalGateResult(decision=ApprovalGateDecision.PASS, instance_id=instance.id)
 
-        flow_version = await self.scenario_repository.get_active_flow_version(
+        flow_kwargs = {"for_update": True} if self.session is not None else {}
+        if self.session is not None:
+            flow_definition = await self._scenario_call(
+                "get_flow_definition",
+                matched_route.flow_definition_id,
+                **flow_kwargs,
+            )
+            if (
+                flow_definition is None
+                or flow_definition.tenant_id != req.tenant_id
+                or flow_definition.scenario_id != scenario.id
+                or not flow_definition.is_active
+            ):
+                return await self._create_exception_result(
+                    req=req,
+                    scenario_name=scenario.scenario_name,
+                    handler_key=req.scenario_code,
+                    business_name=business_name,
+                    detail_snapshot=detail_snapshot,
+                    exception_type=ApprovalExceptionType.ROUTE_MISSING,
+                )
+
+        flow_version = await self._scenario_call(
+            "get_active_flow_version",
             req.tenant_id,
             matched_route.flow_definition_id,
+            **flow_kwargs,
         )
         if not flow_version:
             return await self._create_exception_result(
@@ -196,7 +264,11 @@ class ApprovalGate:
                 exception_type=ApprovalExceptionType.ROUTE_MISSING,
             )
 
-        node_definitions = await self.scenario_repository.list_node_definitions(req.tenant_id, flow_version.id)
+        node_definitions = await self._scenario_call(
+            "list_node_definitions",
+            req.tenant_id,
+            flow_version.id,
+        )
         first_node = node_definitions[0] if node_definitions else None
         approvers = []
         if first_node:
@@ -215,7 +287,8 @@ class ApprovalGate:
                 node=first_node,
             )
 
-        instance = await self.instance_repository.create_instance(
+        instance = await self._instance_call(
+            "create_instance",
             ApprovalInstance(
                 tenant_id=req.tenant_id,
                 scenario_code=req.scenario_code,
@@ -237,7 +310,8 @@ class ApprovalGate:
                 current_node_name=first_node.node_name,
             )
         )
-        tasks = await self.instance_repository.create_tasks(
+        tasks = await self._instance_call(
+            "create_tasks",
             [
                 ApprovalTask(
                     tenant_id=req.tenant_id,
@@ -255,7 +329,8 @@ class ApprovalGate:
             ]
         )
         task_ids = [task.id for task in tasks]
-        await self.instance_repository.create_action_log(
+        await self._instance_call(
+            "create_action_log",
             ApprovalActionLog(
                 tenant_id=req.tenant_id,
                 instance_id=instance.id,
@@ -265,7 +340,7 @@ class ApprovalGate:
                 detail={},
             )
         )
-        await AuditLogDao.ainsert_v2(
+        await self._write_audit(
             tenant_id=req.tenant_id,
             operator_id=req.applicant_user_id,
             operator_tenant_id=req.tenant_id,
@@ -285,6 +360,7 @@ class ApprovalGate:
             object_name=business_name,
             ip_address=req.ip_address,
         )
+        await self._commit_shared_session()
 
         # Nobody approves their own request: if the first node resolves to the applicant
         # it is approved immediately, which may cascade through later self-approved nodes
@@ -296,7 +372,10 @@ class ApprovalGate:
         if await center_service.auto_approve_self_tasks(instance=instance, tasks=tasks):
             # decide_task updated the instance behind our back; re-read to see whether the
             # cascade finished the whole flow rather than stopping at a later node.
-            refreshed = await self.instance_repository.get_instance(instance.id)
+            refreshed = await self._instance_call(
+                "get_instance",
+                instance.id,
+            )
             if refreshed is not None and refreshed.status == ApprovalInstanceStatus.APPROVED:
                 return ApprovalGateResult(decision=ApprovalGateDecision.PASS, instance_id=instance.id)
 
@@ -323,7 +402,8 @@ class ApprovalGate:
         status = ApprovalInstanceStatus.EXCEPTION
         if exception_type == ApprovalExceptionType.EXECUTE_FAILED:
             status = ApprovalInstanceStatus.EXECUTE_FAILED
-        instance = await self.instance_repository.create_instance(
+        instance = await self._instance_call(
+            "create_instance",
             ApprovalInstance(
                 tenant_id=req.tenant_id,
                 scenario_code=req.scenario_code,
@@ -359,7 +439,8 @@ class ApprovalGate:
                     "node_mode": getattr(node, "node_mode", None),
                 }
             )
-        await self.instance_repository.create_exception(
+        await self._instance_call(
+            "create_exception",
             ApprovalException(
                 tenant_id=req.tenant_id,
                 instance_id=instance.id,
@@ -369,7 +450,7 @@ class ApprovalGate:
         )
         # Audit the submission even when the instance lands in exception state — every
         # instance creation must leave a trace per the approval module compliance rule.
-        await AuditLogDao.ainsert_v2(
+        await self._write_audit(
             tenant_id=req.tenant_id,
             operator_id=req.applicant_user_id,
             operator_tenant_id=req.tenant_id,
@@ -394,6 +475,7 @@ class ApprovalGate:
             object_name=business_name,
             ip_address=req.ip_address,
         )
+        await self._commit_shared_session()
         # Notify tenant admins so they can handle the exception
         await self._notify_admins_of_exception(
             tenant_id=req.tenant_id,
@@ -407,6 +489,28 @@ class ApprovalGate:
             instance_id=instance.id,
             exception_type=exception_type,
         )
+
+    async def _write_audit(self, **payload) -> None:
+        if self.session is None:
+            await AuditLogDao.ainsert_v2(**payload)
+            return
+        metadata = payload.pop("metadata", None)
+        self.session.add(
+            AuditLog(
+                tenant_id=payload.get("tenant_id"),
+                operator_id=payload.get("operator_id"),
+                operator_name=payload.get("operator_name"),
+                operator_tenant_id=payload.get("operator_tenant_id"),
+                action=payload.get("action"),
+                target_type=payload.get("target_type"),
+                target_id=payload.get("target_id"),
+                reason=payload.get("reason"),
+                audit_metadata=metadata,
+                object_name=payload.get("object_name"),
+                ip_address=payload.get("ip_address"),
+            )
+        )
+        await self.session.flush()
 
     @staticmethod
     def _dispatch_outbox_task(outbox_id: int) -> None:
@@ -483,7 +587,12 @@ class ApprovalGate:
             match_config = getattr(route, "match_config", {}) or {}
             conditions = match_config.get("conditions")
             if isinstance(conditions, list):
-                if req.scenario_code != FILE_PUBLISH_SCENARIO_CODE:
+                allowed_fields = None
+                if req.scenario_code == FILE_PUBLISH_SCENARIO_CODE:
+                    allowed_fields = FILE_PUBLISH_ALLOWED_CONDITION_FIELDS
+                elif req.scenario_code == DEPARTMENT_FILE_VIEW_SCENARIO_CODE:
+                    allowed_fields = DEPARTMENT_FILE_VIEW_ALLOWED_CONDITION_FIELDS
+                if allowed_fields is None:
                     continue
                 operator = str(match_config.get("operator") or "and").lower()
                 if operator != "and":
@@ -495,7 +604,7 @@ class ApprovalGate:
                     if not isinstance(condition, dict) or not condition.get("field"):
                         continue
                     field = str(condition.get("field", ""))
-                    if field not in FILE_PUBLISH_ALLOWED_CONDITION_FIELDS:
+                    if field not in allowed_fields:
                         has_unsupported_condition = True
                         break
                     normalized_conditions.append(condition)

@@ -11,6 +11,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.review_tags import ReviewTagLink
 from bisheng.database.models.tag import TagLink
+from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
 from bisheng.knowledge.domain.models.knowledge_document_version import (
     KnowledgeDocumentVersion,
@@ -32,6 +33,7 @@ from bisheng.knowledge.domain.repositories.implementations.knowledge_file_reposi
     KnowledgeFileRepositoryImpl,
 )
 from bisheng.knowledge.domain.services.knowledge_document_distribution_service import (
+    PUBLISH_DUPLICATE_CONTENT_MESSAGE,
     KnowledgeDocumentDistributionError,
     KnowledgeDocumentDistributionService,
     PublishKnowledgeDocumentCommand,
@@ -65,6 +67,18 @@ def _service(
 async def _seed_manager(session: AsyncSession) -> None:
     session.add_all(
         [
+            Knowledge(
+                id=10,
+                tenant_id=7,
+                name="来源空间",
+                type=KnowledgeTypeEnum.SPACE.value,
+            ),
+            Knowledge(
+                id=20,
+                tenant_id=7,
+                name="目标空间",
+                type=KnowledgeTypeEnum.SPACE.value,
+            ),
             KnowledgeDocument(
                 id=91,
                 tenant_id=7,
@@ -236,6 +250,122 @@ async def test_publish_rejects_non_manager_source(
 
     with pytest.raises(KnowledgeDocumentDistributionError, match="manager"):
         await _service(async_db_session).publish_approved(_command())
+
+
+@pytest.mark.asyncio
+async def test_publish_approved_rejects_duplicate_content_before_preparing(
+    async_db_session: AsyncSession,
+):
+    await _seed_manager(async_db_session)
+    async_db_session.add(
+        KnowledgeFile(
+            id=300,
+            tenant_id=7,
+            knowledge_id=20,
+            file_name="已存在.pdf",
+            md5="abc",
+            status=KnowledgeFileStatus.SUCCESS.value,
+        )
+    )
+    await async_db_session.commit()
+    tuple_writer = AsyncMock()
+
+    with pytest.raises(
+        KnowledgeDocumentDistributionError,
+        match=PUBLISH_DUPLICATE_CONTENT_MESSAGE,
+    ):
+        await _service(
+            async_db_session,
+            tuple_writer=tuple_writer,
+        ).publish_approved(_command())
+
+    repository = KnowledgeFileRepositoryImpl(async_db_session)
+    manager = await repository.find_by_id(100)
+    entries = await repository.find_distribution_entries_by_document_id(91)
+    assert manager.knowledge_id == 10
+    assert manager.entry_status == KnowledgeFileEntryStatus.ACTIVE.value
+    assert [entry.entry_type for entry in entries] == [
+        KnowledgeFileEntryType.MANAGER.value
+    ]
+    tuple_writer.assert_not_awaited()
+
+
+@pytest.mark.parametrize("source_md5", [None, "different-md5"])
+@pytest.mark.asyncio
+async def test_publish_allows_missing_md5_or_same_name_with_different_content(
+    async_db_session: AsyncSession,
+    source_md5: str | None,
+):
+    await _seed_manager(async_db_session)
+    repository = KnowledgeFileRepositoryImpl(async_db_session)
+    manager = await repository.find_by_id(100)
+    manager.md5 = source_md5
+    async_db_session.add(manager)
+    async_db_session.add(
+        KnowledgeFile(
+            id=300,
+            tenant_id=7,
+            knowledge_id=20,
+            file_name="canonical.pdf",
+            md5="abc",
+            status=KnowledgeFileStatus.SUCCESS.value,
+        )
+    )
+    await async_db_session.commit()
+
+    result = await _service(async_db_session).publish_approved(_command())
+
+    assert result.target_space_id == 20
+    assert (await repository.find_by_id(100)).knowledge_id == 20
+
+
+@pytest.mark.asyncio
+async def test_publish_late_duplicate_conflict_restores_visible_source_state(
+    async_db_session: AsyncSession,
+    monkeypatch,
+):
+    await _seed_manager(async_db_session)
+    tuple_writer = AsyncMock()
+    service = _service(async_db_session, tuple_writer=tuple_writer)
+    duplicate_checks = AsyncMock(
+        side_effect=[
+            None,
+            KnowledgeDocumentDistributionError(
+                PUBLISH_DUPLICATE_CONTENT_MESSAGE
+            ),
+        ]
+    )
+    monkeypatch.setattr(
+        service,
+        "_ensure_publish_target_content_not_duplicate",
+        duplicate_checks,
+        raising=False,
+    )
+
+    with pytest.raises(
+        KnowledgeDocumentDistributionError,
+        match=PUBLISH_DUPLICATE_CONTENT_MESSAGE,
+    ):
+        await service.publish_approved(_command())
+
+    repository = KnowledgeFileRepositoryImpl(async_db_session)
+    manager = await repository.find_by_id(100)
+    entries = await repository.find_distribution_entries_by_document_id(91)
+    assert manager.knowledge_id == 10
+    assert manager.entry_status == KnowledgeFileEntryStatus.ACTIVE.value
+    assert manager.approval_instance_id is None
+    assert [entry.entry_type for entry in entries] == [
+        KnowledgeFileEntryType.MANAGER.value
+    ]
+    assert duplicate_checks.await_count == 2
+    assert duplicate_checks.await_args_list[1].kwargs == {
+        "lock_target_space": True,
+        "source_md5": "abc",
+    }
+    assert tuple_writer.await_count == 2
+    cleanup_operations = tuple_writer.await_args_list[1].args[0]
+    assert cleanup_operations
+    assert {operation.action for operation in cleanup_operations} == {"delete"}
 
 
 @pytest.mark.asyncio
@@ -605,3 +735,64 @@ async def test_publish_merge_rejects_distributed_target(
                 target_document_id=92,
             )
         )
+
+
+@pytest.mark.asyncio
+async def test_publish_merge_rejects_duplicate_current_target_content(
+    async_db_session: AsyncSession,
+):
+    await _seed_manager(async_db_session)
+    source_versions = await KnowledgeDocumentVersionRepositoryImpl(
+        async_db_session
+    ).find_by_document_id(91)
+    await async_db_session.delete(source_versions[0])
+    async_db_session.add_all(
+        [
+            KnowledgeDocument(
+                id=92,
+                tenant_id=7,
+                knowledge_id=20,
+                primary_version_id=601,
+            ),
+            KnowledgeFile(
+                id=200,
+                tenant_id=7,
+                knowledge_id=20,
+                file_name="target-v1.pdf",
+                object_name="tenant/7/target-v1.pdf",
+                md5="abc",
+                status=KnowledgeFileStatus.SUCCESS.value,
+            ),
+            KnowledgeDocumentVersion(
+                id=601,
+                document_id=92,
+                knowledge_file_id=200,
+                version_no=1,
+                is_primary=True,
+            ),
+        ]
+    )
+    await async_db_session.commit()
+
+    with pytest.raises(
+        KnowledgeDocumentDistributionError,
+        match=PUBLISH_DUPLICATE_CONTENT_MESSAGE,
+    ):
+        await _service(async_db_session).publish_approved(
+            PublishKnowledgeDocumentCommand(
+                tenant_id=7,
+                approval_instance_id=7002,
+                document_id=91,
+                source_entry_id=100,
+                target_space_id=20,
+                target_document_id=92,
+            )
+        )
+
+    assert (
+        await KnowledgeDocumentRepositoryImpl(async_db_session).find_by_id(91)
+    ) is not None
+    source_version = await KnowledgeDocumentVersionRepositoryImpl(
+        async_db_session
+    ).find_by_knowledge_file_id(100)
+    assert source_version.document_id == 91

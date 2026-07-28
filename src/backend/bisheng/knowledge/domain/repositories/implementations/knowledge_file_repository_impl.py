@@ -2,17 +2,26 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import and_, case, delete, or_, update
+from sqlalchemy import and_, case, delete, exists, or_, update
+from sqlalchemy.orm import aliased
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.common.repositories.implementations.base_repository_impl import BaseRepositoryImpl
+from bisheng.knowledge.domain.models.knowledge_document import (
+    KnowledgeDocument,
+    KnowledgeDocumentLifecycleStatus,
+)
+from bisheng.knowledge.domain.models.knowledge_document_version import (
+    KnowledgeDocumentVersion,
+)
 from bisheng.knowledge.domain.models.knowledge_file import (
     FileType,
     KnowledgeFile,
     KnowledgeFileEntryStatus,
     KnowledgeFileEntryType,
     KnowledgeFileProjectionStatus,
+    KnowledgeFileStatus,
 )
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository import KnowledgeFileRepository
 
@@ -124,6 +133,105 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
         )
         result = await self.session.execute(stmt)
         return result.scalars().first()
+
+    async def has_visible_content_in_space(
+        self,
+        *,
+        tenant_id: int,
+        knowledge_id: int,
+        md5: str,
+    ) -> bool:
+        if not md5:
+            return False
+
+        any_version = select(KnowledgeDocumentVersion.id).where(
+            KnowledgeDocumentVersion.knowledge_file_id == KnowledgeFile.id
+        )
+        primary_version = (
+            select(KnowledgeDocumentVersion.id)
+            .join(
+                KnowledgeDocument,
+                KnowledgeDocument.primary_version_id
+                == KnowledgeDocumentVersion.id,
+            )
+            .where(
+                KnowledgeDocumentVersion.knowledge_file_id
+                == KnowledgeFile.id,
+                KnowledgeDocument.tenant_id == tenant_id,
+                KnowledgeDocument.lifecycle_status
+                == KnowledgeDocumentLifecycleStatus.ACTIVE.value,
+            )
+        )
+        physical_stmt = (
+            select(KnowledgeFile.id)
+            .where(
+                KnowledgeFile.tenant_id == tenant_id,
+                KnowledgeFile.knowledge_id == knowledge_id,
+                KnowledgeFile.file_type == FileType.FILE.value,
+                KnowledgeFile.status == KnowledgeFileStatus.SUCCESS.value,
+                KnowledgeFile.md5 == md5,
+                or_(
+                    KnowledgeFile.entry_type.is_(None),
+                    and_(
+                        KnowledgeFile.entry_type
+                        == KnowledgeFileEntryType.MANAGER.value,
+                        KnowledgeFile.entry_status
+                        == KnowledgeFileEntryStatus.ACTIVE.value,
+                    ),
+                ),
+                or_(
+                    ~exists(any_version),
+                    exists(primary_version),
+                ),
+            )
+            .limit(1)
+        )
+        physical_result = await self.session.exec(physical_stmt)
+        if physical_result.first() is not None:
+            return True
+
+        logical_entry = aliased(KnowledgeFile)
+        content_file = aliased(KnowledgeFile)
+        logical_stmt = (
+            select(logical_entry.id)
+            .join(
+                KnowledgeDocument,
+                KnowledgeDocument.id
+                == logical_entry.reference_document_id,
+            )
+            .join(
+                KnowledgeDocumentVersion,
+                KnowledgeDocumentVersion.id
+                == KnowledgeDocument.primary_version_id,
+            )
+            .join(
+                content_file,
+                content_file.id
+                == KnowledgeDocumentVersion.knowledge_file_id,
+            )
+            .where(
+                logical_entry.tenant_id == tenant_id,
+                logical_entry.knowledge_id == knowledge_id,
+                col(logical_entry.entry_type).in_(
+                    [
+                        KnowledgeFileEntryType.PUBLISH.value,
+                        KnowledgeFileEntryType.SHARE.value,
+                    ]
+                ),
+                logical_entry.entry_status
+                == KnowledgeFileEntryStatus.ACTIVE.value,
+                KnowledgeDocument.tenant_id == tenant_id,
+                KnowledgeDocument.lifecycle_status
+                == KnowledgeDocumentLifecycleStatus.ACTIVE.value,
+                content_file.tenant_id == tenant_id,
+                content_file.file_type == FileType.FILE.value,
+                content_file.status == KnowledgeFileStatus.SUCCESS.value,
+                content_file.md5 == md5,
+            )
+            .limit(1)
+        )
+        logical_result = await self.session.exec(logical_stmt)
+        return logical_result.first() is not None
 
     async def find_manager_for_update(
         self,

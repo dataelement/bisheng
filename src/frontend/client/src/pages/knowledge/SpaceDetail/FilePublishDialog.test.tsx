@@ -306,4 +306,36 @@ describe("FilePublishDialog", () => {
         });
         expect(onOpenChange).not.toHaveBeenCalledWith(false);
     });
+
+    test("目标知识库存在相同内容时展示后端提示且不关闭弹窗", async () => {
+        mockGetSimilarCandidates.mockResolvedValue({ data: [] });
+        const onOpenChange = jest.fn();
+        mockSubmitApproval.mockRejectedValue({
+            response: {
+                status: 409,
+                data: { detail: "目标知识库已存在相同内容的文件，不能重复发布" },
+            },
+        });
+
+        render(
+            <FilePublishDialog
+                open
+                activeSpace={activeSpace}
+                file={file}
+                onOpenChange={onOpenChange}
+                versionManagementEnabled
+            />,
+        );
+
+        await waitFor(() => expect(screen.getByRole("button", { name: "提交申请" })).toBeEnabled());
+        fireEvent.click(screen.getByRole("button", { name: "提交申请" }));
+
+        await waitFor(() => {
+            expect(mockShowToast).toHaveBeenCalledWith({
+                message: "目标知识库已存在相同内容的文件，不能重复发布",
+                severity: "error",
+            });
+        });
+        expect(onOpenChange).not.toHaveBeenCalledWith(false);
+    });
 });

@@ -66,8 +66,10 @@ from bisheng.knowledge.domain.models.knowledge_space_scope import (
     KnowledgeSpaceLevelEnum,
     KnowledgeSpaceScopeDao,
 )
+from bisheng.knowledge.domain.services.knowledge_document_distribution_service import (
+    PUBLISH_DUPLICATE_CONTENT_MESSAGE,
+)
 from bisheng.tenant.domain.services.tenant_service import TenantService
-from bisheng.common.services.config_service import settings
 
 logger = logging.getLogger(__name__)
 
@@ -218,6 +220,36 @@ class ShougangApprovalService:
         )
         if pending:
             raise ApprovalDuplicatePendingError(msg="已经发布过的文档还在审批中")
+
+    async def _ensure_publish_target_content_not_duplicate(
+        self,
+        *,
+        tenant_id: int,
+        source_file,
+        target_space_id: int,
+    ) -> None:
+        source_md5 = str(getattr(source_file, "md5", None) or "").strip()
+        if not source_md5:
+            return
+
+        from bisheng.core.database import get_async_db_session
+        from bisheng.knowledge.domain.repositories.implementations.knowledge_file_repository_impl import (
+            KnowledgeFileRepositoryImpl,
+        )
+
+        async with get_async_db_session() as session:
+            duplicate = await KnowledgeFileRepositoryImpl(
+                session
+            ).has_visible_content_in_space(
+                tenant_id=int(tenant_id),
+                knowledge_id=int(target_space_id),
+                md5=source_md5,
+            )
+        if duplicate:
+            raise HTTPException(
+                status_code=409,
+                detail=PUBLISH_DUPLICATE_CONTENT_MESSAGE,
+            )
 
     async def _normalize_publish_source(
         self,
@@ -666,11 +698,6 @@ class ShougangApprovalService:
         login_user,
         space_service,
     ) -> dict:
-        if not settings.knowledge.distribution.writer_enabled:
-            raise HTTPException(
-                status_code=503,
-                detail="知识发布与分享新链路尚未启用",
-            )
         source_space, source_file, source_level = (
             await self._load_publish_source(
                 req.source_space_id,
@@ -1011,11 +1038,6 @@ class ShougangApprovalService:
         space_service=None,
         version_service=None,
     ) -> dict:
-        if not settings.knowledge.distribution.writer_enabled:
-            raise HTTPException(
-                status_code=503,
-                detail="知识发布与分享新链路尚未启用",
-            )
         started_at = perf_counter()
         performance: dict[str, float | str] = {
             'base_validation_ms': 0.0,
@@ -1125,6 +1147,11 @@ class ShougangApprovalService:
             if matched_document is None:
                 raise HTTPException(status_code=400, detail='目标文档不可用于发布')
             target_document_title = matched_document.title
+        await self._ensure_publish_target_content_not_duplicate(
+            tenant_id=int(login_user.tenant_id),
+            source_file=source_file,
+            target_space_id=int(target_space.id),
+        )
         performance['target_validation_ms'] = (perf_counter() - stage_started_at) * 1000
 
         performance['failed_stage'] = 'pending_check'

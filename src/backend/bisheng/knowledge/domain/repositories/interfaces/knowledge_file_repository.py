@@ -42,6 +42,16 @@ class KnowledgeFileRepository(BaseRepository[KnowledgeFile, int], ABC):
         """Lock the active/preparing entry for a document in one space."""
         ...
 
+    async def has_visible_content_in_space(
+        self,
+        *,
+        tenant_id: int,
+        knowledge_id: int,
+        md5: str,
+    ) -> bool:
+        """判断目标空间当前可见文件是否已包含相同物理内容。"""
+        ...
+
     async def find_manager_for_update(
         self,
         document_id: int,
