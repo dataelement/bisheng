@@ -12,6 +12,7 @@ import {
   getRebacSchemaApi,
   getRelationModelsApi,
   getToolPermissionTemplateApi,
+  updateRelationModelApi,
 } from "@/controllers/API/permission";
 import { darkContext } from "@/contexts/darkContext";
 import { locationContext } from "@/contexts/locationContext";
@@ -109,6 +110,7 @@ const mockedGetRebacSchemaApi = vi.mocked(getRebacSchemaApi);
 const mockedGetRelationModelsApi = vi.mocked(getRelationModelsApi);
 const mockedGetKnowledgeSpacePermissionTemplateApi = vi.mocked(getKnowledgeSpacePermissionTemplateApi);
 const mockedGetToolPermissionTemplateApi = vi.mocked(getToolPermissionTemplateApi);
+const mockedUpdateRelationModelApi = vi.mocked(updateRelationModelApi);
 
 const adminUser = {
   user_id: 1,
@@ -446,7 +448,7 @@ describe("Relation model regressions", () => {
     expect(screen.getByText("后端查看空间")).toBeInTheDocument();
   });
 
-  it("keeps space share but hides folder and file share permissions in relation models", async () => {
+  it("keeps folder share hidden while exposing file share in relation models", async () => {
     mockedGetRelationModelsApi.mockResolvedValue([
       {
         id: "owner",
@@ -492,14 +494,59 @@ describe("Relation model regressions", () => {
 
     expect(await screen.findByText("system.permissionTemplate.sectionKnowledgeSpace")).toBeInTheDocument();
     expect(screen.getByText("system.permissionTemplate.view_space")).toBeInTheDocument();
-    expect(screen.getByText("system.permissionTemplate.share_space")).toBeInTheDocument();
+    expect(screen.getByText("分享空间")).toBeInTheDocument();
     expect(screen.getByText("system.permissionTemplate.manage_space_relation")).toBeInTheDocument();
     expect(screen.getByText("system.permissionTemplate.view_folder")).toBeInTheDocument();
     expect(screen.getByText("system.permissionTemplate.manage_folder_relation")).toBeInTheDocument();
     expect(screen.getByText("system.permissionTemplate.view_file")).toBeInTheDocument();
+    expect(screen.getByText("system.permissionTemplate.share_file")).toBeInTheDocument();
     expect(screen.getByText("system.permissionTemplate.manage_file_relation")).toBeInTheDocument();
     expect(screen.queryByText("分享文件夹")).not.toBeInTheDocument();
-    expect(screen.queryByText("分享文件")).not.toBeInTheDocument();
+  });
+
+  it("persists file share when an administrator enables it for a relation model", async () => {
+    mockedUpdateRelationModelApi.mockResolvedValue(null);
+    mockedGetRelationModelsApi.mockResolvedValue([
+      {
+        id: "custom_file_sharer",
+        name: "文件分享人",
+        relation: "manager",
+        grant_tier: "manager",
+        permissions: ["view_file"],
+        permissions_explicit: true,
+        is_system: false,
+      },
+    ] as any);
+    mockedGetKnowledgeSpacePermissionTemplateApi.mockResolvedValue({
+      title: "知识空间模块",
+      columns: [
+        {
+          title: "文件级",
+          items: [
+            { id: "view_file", label: "查看文件", relation: "can_read" },
+            { id: "share_file", label: "分享文件", relation: "can_manage" },
+          ],
+        },
+      ],
+    } as any);
+
+    await openRebacTab();
+
+    const shareFileCheckbox = getPermissionCheckbox("system.permissionTemplate.share_file");
+    expect(shareFileCheckbox).not.toBeChecked();
+
+    fireEvent.click(shareFileCheckbox);
+    fireEvent.click(screen.getByRole("button", { name: "system.relationModelUpdateButton" }));
+
+    await waitFor(() => {
+      expect(mockedUpdateRelationModelApi).toHaveBeenCalledWith(
+        "custom_file_sharer",
+        {
+          name: "文件分享人",
+          permissions: expect.arrayContaining(["view_file", "share_file"]),
+        },
+      );
+    });
   });
 
   it("renders create folder, upload file, and publish file under the space-level knowledge-space column", async () => {
