@@ -110,7 +110,7 @@ function CustomTableRow({ data, index, user, onModel, onCheck, onVerified }) {
                                     </Button>
                                 </TableCell>
                                 <TableCell className="text-gray-500">
-                                    {m.status_update_time || '—'}
+                                    {m.status_update_time?.replace('T', ' ') || '—'}
                                 </TableCell>
                                 <TableCell>
                                     <Switch
