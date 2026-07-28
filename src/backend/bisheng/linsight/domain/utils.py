@@ -92,11 +92,17 @@ async def get_all_files_from_session(
 
 
 # Workspace zones of the task working dir (design §9.3.2). ``output/`` is the
-# delivery zone; ``scratch/`` is intermediate state and ``uploads/`` holds the
-# user's own source files — neither is ever a deliverable.
+# delivery zone. Everything in NON_DELIVERABLE_ZONES is provisioned or scratch
+# state that the agent did not author as a product:
+#   scratch/ — intermediate files the agent explicitly marked as throwaway
+#   uploads/ — the user's own source files
+#   skills/  — skill bundles the platform copies in at task start
+#              (skill_provisioning.WORKSPACE_SKILLS_DIR)
 OUTPUT_ZONE = "output"
 SCRATCH_ZONE = "scratch"
 UPLOADS_ZONE = "uploads"
+SKILLS_ZONE = "skills"
+NON_DELIVERABLE_ZONES = frozenset({SCRATCH_ZONE, UPLOADS_ZONE, SKILLS_ZONE})
 
 
 def snapshot_file_paths(file_dir: str) -> set[str]:
@@ -207,8 +213,11 @@ def select_deliverables(file_details: list[dict], baseline_paths: set[str] | Non
        start-of-run ``baseline_paths``; without it this criterion is skipped rather
        than guessed at.
 
-    ``scratch/`` (intermediate) and ``uploads/`` (the user's own sources) are never
-    deliverables under either criterion.
+    ``NON_DELIVERABLE_ZONES`` is excluded under BOTH criteria. ``skills/`` matters
+    most for criterion 2: the platform copies skill bundles into the workspace at
+    task start — after the baseline snapshot — so without the exclusion every
+    ``SKILL.md`` in every provisioned bundle counts as "created this run" and a run
+    that produced no output/ file delivers ~100 skill files as its result.
 
     Replaces the legacy "file name appears verbatim in the answer" heuristic, which
     was both too weak (the model routinely finishes without naming its file, so a
@@ -228,7 +237,7 @@ def select_deliverables(file_details: list[dict], baseline_paths: set[str] | Non
     for file_info in file_details:
         rel_path = file_info.get("rel_path") or os.path.basename(file_info.get("file_path") or "")
         zone = _zone_of(rel_path)
-        if zone in (SCRATCH_ZONE, UPLOADS_ZONE):
+        if zone in NON_DELIVERABLE_ZONES:
             continue
         candidates.append((file_info, zone))
 

@@ -50,12 +50,26 @@ def test_output_zone_files_are_the_deliverables():
     assert _names(select_deliverables(details)) == ["output/报告.xlsx"]
 
 
-def test_scratch_and_uploads_are_never_deliverables():
-    """Even with output/ empty and everything newly created, intermediate state and
-    the user's own sources stay out of the result panel."""
-    details = [_detail("scratch/step1.csv"), _detail("uploads/source.md")]
+def test_scratch_uploads_and_skills_are_never_deliverables():
+    """Even with output/ empty and everything newly created, intermediate state,
+    the user's own sources and provisioned skill bundles stay out of the panel."""
+    details = [_detail("scratch/step1.csv"), _detail("uploads/source.md"), _detail("skills/xlsx/SKILL.md")]
     baseline: set[str] = set()
     assert select_deliverables(details, baseline_paths=baseline) == []
+
+
+def test_provisioned_skill_bundles_never_become_the_result():
+    """Regression (114, 2026-07-28): skill bundles are copied into the workspace at
+    task START — after the baseline snapshot — so criterion 2 saw ~100 SKILL.md /
+    themes.md files as "created this run". A task whose code interpreter produced
+    nothing then delivered 104 skill files, headlined "已为您整理好 SKILL.md 等 104
+    个文件". Provisioned bundles are inputs, exactly like uploads/."""
+    details = [_detail(f"skills/skill-{i}/SKILL.md", mtime=float(i)) for i in range(104)]
+    assert select_deliverables(details, baseline_paths=set()) == []
+
+    # and a real deliverable alongside them wins cleanly, with no bundle noise
+    details.append(_detail("output/报告.xlsx", mtime=1.0))
+    assert _names(select_deliverables(details, baseline_paths=set())) == ["output/报告.xlsx"]
 
 
 def test_output_zone_wins_over_newer_root_file():
