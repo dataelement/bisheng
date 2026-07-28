@@ -29,36 +29,9 @@ from ..models.user_role import UserRoleDao
 
 logger = logging.getLogger(__name__)
 
-# 部门管理员：工作台 + 管理后台全量菜单（含路由用的 sys、仅 UI 的 log/system_config）
-_DEPARTMENT_ADMIN_WEB_MENU_FULL = frozenset(
-    {
-        "workstation",
-        "admin",
-        "build",
-        "create_app",
-        "knowledge",
-        "create_knowledge",
-        "knowledge_space",
-        "model",
-        "tool",
-        "mcp",
-        "channel",
-        "evaluation",
-        "dataset",
-        "mark_task",
-        "board",
-        "subscription",
-        "home",
-        "linsight_task_mode",
-        "apps",
-        "frontend",
-        "backend",
-        "create_dashboard",
-        "log",
-        "system_config",
-        "sys",
-    }
-)
+# Department admins always receive the admin-console parent and system menu.
+# All other business menus continue to come from role or personal grants.
+_DEPARTMENT_ADMIN_WEB_MENU_SYSTEM = frozenset({"admin", "system_config", "sys"})
 
 # 角色管理 UI：一级「工作台 / 管理后台」关闭时，二级项仍存库但不应对用户生效（与 Roles.tsx 一致）
 _WORKBENCH_ENTRY_KEYS = frozenset({"workstation", "frontend"})
@@ -82,6 +55,7 @@ _ROLE_UI_ADMIN_CHILDREN = frozenset(
         "build",
         "create_app",
         "evaluation",
+        "dataset",
         "mark_task",
     }
 )
@@ -675,7 +649,8 @@ class LoginUser(BaseModel):
         """Resolve role key(s) and web_menu.
 
         - AC-13: multi-role web_menu is the **union** of each role's WEB_MENU entries.
-        - Department admins get workstation + admin console menus in full (PRD 2.5).
+        - Department admins always get the system menu; business menus still come from
+          role or personal grants.
         - ``system_config`` is only granted via super-admin or department-admin; it is
           stripped for other users even if legacy role_access rows exist.
         """
@@ -702,7 +677,7 @@ class LoginUser(BaseModel):
             )
             web_menu = list(set(web_menu) | set(personal_menu))
             if is_department_admin:
-                web_menu = list(set(web_menu) | set(_DEPARTMENT_ADMIN_WEB_MENU_FULL))
+                web_menu = list(set(web_menu) | set(_DEPARTMENT_ADMIN_WEB_MENU_SYSTEM))
             else:
                 web_menu = [m for m in web_menu if m not in ("system_config", "sys")]
             web_menu = _effective_web_menu_strip_orphans(web_menu)

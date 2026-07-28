@@ -183,7 +183,7 @@ export default function NewChat({
                     aria-label={localize('com_nav_start_new_task')}
                     onClick={handleNewTask}
                   >
-                    <Outlined.Binoculars size={16} className='text-[#1A1A1A]' />
+                    <Outlined.ListSuccess size={16} className='text-[#1A1A1A]' />
                     <span className="text-[14px] leading-[20px] whitespace-nowrap">{localize('com_nav_start_new_task')}</span>
                   </Button>
                 )}
@@ -217,7 +217,7 @@ export default function NewChat({
                 aria-label={localize('com_nav_start_new_task')}
                 onClick={handleNewTask}
               >
-                <Outlined.Binoculars size={16} className='text-[#1A1A1A]' />
+                <Outlined.ListSuccess size={16} className='text-[#1A1A1A]' />
                 <span className="text-[13px] leading-[20px] whitespace-nowrap">{localize('com_nav_start_new_task')}</span>
               </Button>
             )}

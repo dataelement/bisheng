@@ -9,6 +9,7 @@ import Tip from "@/components/bs-ui/tooltip/tip";
 import { cn } from "@/utils";
 import { ChevronDown, CircleHelp, Link2, Upload } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { knowledgeUploadCapabilities } from "../knowledgeUploadCapabilities";
 
 interface AddKnowledgeFileMenuProps {
     disabled?: boolean;
@@ -53,13 +54,15 @@ export default function AddKnowledgeFileMenu({
                         </Tip>
                     ) : null}
                 </DropdownMenuItem>
-                <DropdownMenuItem
-                    className="h-9 cursor-pointer gap-2 px-3"
-                    onSelect={onWebLink}
-                >
-                    <Link2 className="size-4" />
-                    <span>{t("webLink", { defaultValue: "网页链接" })}</span>
-                </DropdownMenuItem>
+                {knowledgeUploadCapabilities.webLink && (
+                    <DropdownMenuItem
+                        className="h-9 cursor-pointer gap-2 px-3"
+                        onSelect={onWebLink}
+                    >
+                        <Link2 className="size-4" />
+                        <span>{t("webLink", { defaultValue: "网页链接" })}</span>
+                    </DropdownMenuItem>
+                )}
             </DropdownMenuContent>
         </DropdownMenu>
     );

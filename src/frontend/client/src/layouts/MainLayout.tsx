@@ -10,7 +10,6 @@ import { usePrefersMobileLayout, useScrollRevealRef } from '~/hooks';
 import { bishengConfState } from '~/pages/appChat/store/atoms';
 import { useGetBsConfig } from '~/hooks/queries/data-provider';
 import { useAuthContext, useLocalize } from '~/hooks';
-import { Tooltip, TooltipContent, TooltipTrigger } from '~/components/ui/Tooltip2';
 import { Button } from '~/components/ui/Button';
 import { LoadingIcon } from '~/components/ui/icon/Loading';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '~/components/ui/Dialog';
@@ -41,36 +40,34 @@ interface SidebarItemProps {
 
 function SidebarItem({ icon, activeIcon, to, active, label, showLabel = false, onNavigate }: SidebarItemProps) {
   return (
-    <Tooltip delayDuration={0}>
-      <TooltipTrigger asChild>
-        <NavLink
-          to={to}
-          onClick={onNavigate}
+    <NavLink
+      to={to}
+      onClick={onNavigate}
+      className={cn(
+        'flex cursor-pointer rounded-lg transition-colors hover:bg-[#f2f3f5]',
+        showLabel
+          ? 'mx-2 h-[44px] items-center justify-start gap-2 px-2 py-2'
+          : 'w-14 flex-col items-center justify-center gap-0.5 py-2',
+      )}
+    >
+      {React.cloneElement((active && activeIcon ? activeIcon : icon) as React.ReactElement, {
+        className: cn(showLabel ? 'size-4' : 'size-5', active ? 'text-blue-500' : 'text-[#818181]'),
+      })}
+      {showLabel ? (
+        <span className={cn('text-[14px] leading-[20px]', active ? 'text-blue-500' : 'text-[#212121]')}>
+          {label}
+        </span>
+      ) : (
+        <span
           className={cn(
-            'flex cursor-pointer rounded-lg transition-colors',
-            showLabel
-              ? 'mx-2 h-[44px] items-center justify-start gap-2 px-2 py-2 hover:bg-[#f2f3f5]'
-              : 'items-center justify-center p-3 hover:bg-[#f2f3f5]',
+            'max-w-full break-words text-center text-[10px] leading-[18px]',
+            active ? 'font-medium text-blue-500' : 'text-[#818181]',
           )}
         >
-          {React.cloneElement((active && activeIcon ? activeIcon : icon) as React.ReactElement, {
-            className: cn(showLabel ? 'size-4' : 'size-5', active ? "text-blue-500" : "text-[#818181]"),
-          })}
-          {showLabel ? (
-            <span className={cn('text-[14px] leading-[20px]', active ? 'text-blue-500' : 'text-[#212121]')}>
-              {label}
-            </span>
-          ) : null}
-        </NavLink>
-      </TooltipTrigger>
-      {!showLabel ? (
-        // z-[110]: sit above the workspace fullscreen overlay (z-[100]) so the rail
-        // tooltip isn't clipped behind it when the preview is expanded.
-        <TooltipContent side="right" sideOffset={8} className="z-[110]">
           {label}
-        </TooltipContent>
-      ) : null}
-    </Tooltip>
+        </span>
+      )}
+    </NavLink>
   );
 }
 

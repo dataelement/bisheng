@@ -70,6 +70,7 @@ import {
     sidebarListMoreMenuDangerLabelClassName,
 } from "~/components/SidebarListMoreMenu";
 import { cn, getFullWidthLength } from "~/utils";
+import { knowledgeUploadCapabilities } from "../knowledgeUploadCapabilities";
 
 interface KnowledgeSpaceContentProps {
     space: KnowledgeSpace;
@@ -553,7 +554,7 @@ export function KnowledgeSpaceContent({
     const [webLinkSubmitting, setWebLinkSubmitting] = useState(false);
 
     const triggerWebLink = () => {
-        if (!canUploadFile) return;
+        if (!knowledgeUploadCapabilities.webLink || !canUploadFile) return;
         setWebLinkDialogOpen(true);
     };
 
@@ -1221,7 +1222,7 @@ export function KnowledgeSpaceContent({
                                             <span className={sidebarListMoreMenuLabelClassName}>{localize("com_knowledge.upload_file")}</span>
                                         </DropdownMenuItem>
                                     )}
-                                    {canUploadFile && (
+                                    {canUploadFile && knowledgeUploadCapabilities.webLink && (
                                         <DropdownMenuItem className={sidebarListMoreMenuItemClassName} onClick={triggerWebLink}>
                                             <Link2 className={sidebarListMoreMenuIconClassName} />
                                             <span className={sidebarListMoreMenuLabelClassName}>{localize("com_knowledge.web_link")}</span>
@@ -1336,7 +1337,7 @@ export function KnowledgeSpaceContent({
                                     {localize("com_knowledge.upload_file")}
                                 </DropdownMenuItem>
                             )}
-                            {canUploadFile && (
+                            {canUploadFile && knowledgeUploadCapabilities.webLink && (
                                 <DropdownMenuItem onClick={triggerWebLink} className="cursor-pointer">
                                     <Link2 className="mr-2 size-4" />
                                     {localize("com_knowledge.web_link")}
@@ -1572,59 +1573,61 @@ export function KnowledgeSpaceContent({
                 }
             />
 
-            <Dialog
-                open={webLinkDialogOpen}
-                onOpenChange={(open) => {
-                    setWebLinkDialogOpen(open);
-                    if (!open) resetWebLinkDialog();
-                }}
-            >
-                <DialogContent className="max-w-[520px]">
-                    <DialogHeader>
-                        <DialogTitle>{localize("com_knowledge.web_link_import_title")}</DialogTitle>
-                    </DialogHeader>
-                    <div className="space-y-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="knowledge-web-link-url">{localize("com_knowledge.web_link_url")}</Label>
-                            <Input
-                                id="knowledge-web-link-url"
-                                value={webLinkUrl}
-                                onChange={(e) => setWebLinkUrl(e.target.value)}
-                                placeholder="https://example.com/article"
-                                disabled={webLinkSubmitting}
-                            />
+            {knowledgeUploadCapabilities.webLink && (
+                <Dialog
+                    open={webLinkDialogOpen}
+                    onOpenChange={(open) => {
+                        setWebLinkDialogOpen(open);
+                        if (!open) resetWebLinkDialog();
+                    }}
+                >
+                    <DialogContent className="max-w-[520px]">
+                        <DialogHeader>
+                            <DialogTitle>{localize("com_knowledge.web_link_import_title")}</DialogTitle>
+                        </DialogHeader>
+                        <div className="space-y-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="knowledge-web-link-url">{localize("com_knowledge.web_link_url")}</Label>
+                                <Input
+                                    id="knowledge-web-link-url"
+                                    value={webLinkUrl}
+                                    onChange={(e) => setWebLinkUrl(e.target.value)}
+                                    placeholder="https://example.com/article"
+                                    disabled={webLinkSubmitting}
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="knowledge-web-link-title">{localize("com_knowledge.web_link_title")}</Label>
+                                <Input
+                                    id="knowledge-web-link-title"
+                                    value={webLinkTitle}
+                                    onChange={(e) => setWebLinkTitle(e.target.value)}
+                                    placeholder={localize("com_knowledge.web_link_title_placeholder")}
+                                    disabled={webLinkSubmitting}
+                                />
+                            </div>
                         </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="knowledge-web-link-title">{localize("com_knowledge.web_link_title")}</Label>
-                            <Input
-                                id="knowledge-web-link-title"
-                                value={webLinkTitle}
-                                onChange={(e) => setWebLinkTitle(e.target.value)}
-                                placeholder={localize("com_knowledge.web_link_title_placeholder")}
+                        <DialogFooter>
+                            <button
+                                type="button"
+                                className="inline-flex h-9 items-center justify-center rounded-md border border-[#e5e6eb] bg-white px-4 text-sm text-[#4e5969] hover:bg-[#f7f8fa]"
+                                onClick={() => setWebLinkDialogOpen(false)}
                                 disabled={webLinkSubmitting}
-                            />
-                        </div>
-                    </div>
-                    <DialogFooter>
-                        <button
-                            type="button"
-                            className="inline-flex h-9 items-center justify-center rounded-md border border-[#e5e6eb] bg-white px-4 text-sm text-[#4e5969] hover:bg-[#f7f8fa]"
-                            onClick={() => setWebLinkDialogOpen(false)}
-                            disabled={webLinkSubmitting}
-                        >
-                            {localize("com_knowledge.cancel")}
-                        </button>
-                        <button
-                            type="button"
-                            className="inline-flex h-9 items-center justify-center rounded-md bg-primary px-4 text-sm text-white hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
-                            onClick={() => submitWebLink(false)}
-                            disabled={webLinkSubmitting}
-                        >
-                            {webLinkSubmitting ? localize("com_knowledge.importing") : localize("com_knowledge.import")}
-                        </button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+                            >
+                                {localize("com_knowledge.cancel")}
+                            </button>
+                            <button
+                                type="button"
+                                className="inline-flex h-9 items-center justify-center rounded-md bg-primary px-4 text-sm text-white hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+                                onClick={() => submitWebLink(false)}
+                                disabled={webLinkSubmitting}
+                            >
+                                {webLinkSubmitting ? localize("com_knowledge.importing") : localize("com_knowledge.import")}
+                            </button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+            )}
 
             {permTarget && (
                 <KnowledgeSpaceShareDialog
