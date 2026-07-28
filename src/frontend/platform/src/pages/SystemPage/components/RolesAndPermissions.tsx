@@ -45,7 +45,7 @@ import Roles from "./Roles"
 type TemplatePermission = { id: string; label: string; relation: string }
 type TemplateSection = { title: string; columns: { title: string; items: TemplatePermission[] }[] }
 
-const HIDDEN_RELATION_PERMISSION_IDS = new Set(["share_folder", "share_file"])
+const HIDDEN_RELATION_PERMISSION_IDS = new Set(["share_folder"])
 
 const RELATION_LEVEL: Record<string, number> = {
   viewer: 1,

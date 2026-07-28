@@ -162,12 +162,22 @@ class KnowledgeDocumentEntryResolver:
             document = await self.document_repository.find_by_id(
                 int(version.document_id)
             )
+            if document is None:
+                raise KnowledgeDocumentEntryResolutionError(
+                    "canonical document does not exist"
+                )
+            self._validate_document_identity(document, tenant_id=tenant_id)
             if (
-                document is not None
-                and int(document.primary_version_id or 0) != int(version.id or 0)
+                not version.is_primary
+                or int(document.primary_version_id or 0)
+                != int(version.id or 0)
             ):
                 raise KnowledgeDocumentEntryResolutionError(
                     "historical physical version is not an ordinary access entry"
+                )
+            if int(document.knowledge_id) != int(space_id):
+                raise KnowledgeDocumentEntryResolutionError(
+                    "canonical document space mismatch"
                 )
 
         permission_ids = await self._permission_ids(
@@ -379,20 +389,26 @@ class KnowledgeDocumentDurableReferenceResolver:
                 "durable reference tenant mismatch"
             )
 
-        document_id = durable_file.reference_document_id
-        if document_id is None:
-            version = await self.version_repository.find_by_knowledge_file_id(
-                int(durable_file_id)
-            )
-            document_id = version.document_id if version is not None else None
-
-        if document_id is None:
+        try:
             resolved = await self.entry_resolver.resolve(
                 tenant_id=tenant_id,
                 space_id=requested_space_id,
                 file_id=durable_file_id,
             )
-        else:
+        except KnowledgeDocumentEntryResolutionError as direct_error:
+            document_id = durable_file.reference_document_id
+            if document_id is None:
+                version = (
+                    await self.version_repository.find_by_knowledge_file_id(
+                        int(durable_file_id)
+                    )
+                )
+                document_id = (
+                    version.document_id if version is not None else None
+                )
+            if document_id is None:
+                raise direct_error
+
             candidates = await self.file_repository.find_distribution_entries_by_document_id(
                 int(document_id),
                 statuses={KnowledgeFileEntryStatus.ACTIVE.value},
