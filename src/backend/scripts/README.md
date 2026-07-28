@@ -500,6 +500,27 @@ Usage:
 PYTHONPATH=./ .venv/bin/python scripts/get_knowledge_file_chunks.py --knowledge-file-id 123
 ```
 
+### `set_file_preview_count.py`
+
+按 `file_id` 将知识文件预览量（ES 中的 `portal_document_read` 与
+`mid_knowledge_space_content_stat` preview 记录）重置为指定值，默认 1000。
+默认 dry-run；传入 `--apply` 才会删除旧记录并写入新数据。
+
+Usage:
+
+```bash
+export config=config.yaml
+PYTHONPATH=./ .venv/bin/python scripts/set_file_preview_count.py --file-id 1294
+PYTHONPATH=./ .venv/bin/python scripts/set_file_preview_count.py --file-id 1294 --target 1000 --apply
+```
+
+Repo root wrapper:
+
+```bash
+export config=config.yaml
+./set_file_preview_count.sh --file-id 1294 --target 1000 --apply
+```
+
 ### `export_daily_chat_messages.py`
 
 Export 日常模式（`flow_type = 15`）对话内容，默认导出最近 30 天消息并按会话聚合为 JSON。
