@@ -185,6 +185,7 @@
   "com_bschoose_confirm": "确认",
   "com_bschoose_confirmed": "已确认",
   "com_case_featured": "$t(linsight)精选案例",
+  "com_chat_image_expired": "图片已失效，无法查看",
   "com_chat_knowledge_empty_no_org_kbs": "暂无组织知识库",
   "com_chat_knowledge_empty_no_spaces": "暂无知识空间",
   "com_chat_knowledge_placeholder_search_space": "搜索知识空间名称",

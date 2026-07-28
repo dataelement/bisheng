@@ -12,6 +12,9 @@ const API = {
     agentMessages: (conversationId: string) =>
         `/api/v1/workstation/messages/${conversationId}/agent`,
     sseChat: () => `/api/v1/workstation/chat/completions`,
+    // Links handed out at upload time expire; ask for a fresh one at render.
+    attachmentUrl: (conversationId: string, fileId: string) =>
+        `/api/v1/chat/${conversationId}/files/${fileId}/url`,
     abortChat: () => `/api/v1/workstation/chat/completions/abort`,
     deleteConversation: (id: string) => `/api/v1/chat/${id}`,
     bsConfig: () => `/api/v1/workstation/config`,
@@ -639,4 +642,24 @@ export async function getFolderChatHistory(
     const items: StreamHistoryItem[] = Array.isArray(res?.data) ? res.data : [];
     // Backend returns newest-first; reverse for chronological order
     return items.reverse().map(parseStreamHistoryItem);
+}
+
+/**
+ * Fresh link for one attachment of one conversation.
+ *
+ * The link stored on the message was signed at upload time and expires; the
+ * backend re-signs from the object it recorded for that conversation. Returns
+ * null when the file is no longer retrievable (cleared storage, or an upload
+ * from before attachments were kept), which the caller renders as such.
+ */
+export async function getAttachmentUrl(
+    conversationId: string,
+    fileId: string,
+): Promise<string | null> {
+    try {
+        const res: any = await http.get(API.attachmentUrl(conversationId, fileId));
+        return (res?.data ?? res)?.url ?? null;
+    } catch {
+        return null;
+    }
 }
