@@ -234,6 +234,13 @@ export default defineConfig(({ command, mode }) => {
           {
             src: 'node_modules/pdfjs-dist/build/pdf.worker.min.js',
             dest: './'
+          },
+          {
+            // Full CMap set for PDFs using CID-keyed, non-embedded CJK fonts
+            // (e.g. GBK-EUC-H from CEB-converted government docs) — without the
+            // matching .bcmap the text layer renders blank.
+            src: 'node_modules/pdfjs-dist/cmaps/*',
+            dest: 'cmaps/'
           }
         ]
       }),

@@ -67,8 +67,8 @@ export default defineConfig(({ command, mode }) => {
   // 必须从 .env.development.local 等文件加载；仅用 process.env 时配置阶段读不到 VITE_ 变量，会回落到 7860，
   // 导致 /api/department-limit/*（仅 Gateway 提供）打到 bisheng 出现 404。
   const env = loadEnv(mode, path.resolve(__dirname), "");
-  const target = env.VITE_PROXY_TARGET || "http://127.0.0.1:7860";
-  const fileServiceTarget = env.VITE_MINIO_PROXY_TARGET || "http://127.0.0.1:9100";
+  const target = env.VITE_PROXY_TARGET || "http://192.168.106.120:3002/";
+  const fileServiceTarget = env.VITE_MINIO_PROXY_TARGET || "http://192.168.106.120:3002/";
   // MinIO presigned URLs sign the Host header; this proxy's host MUST equal the
   // backend config.yaml object_storage.minio.sharepoint or every object 403s.
   if (command === 'serve') {
@@ -157,6 +157,14 @@ export default defineConfig(({ command, mode }) => {
           {
             src: 'node_modules/pdfjs-dist/build/pdf.worker.min.js',
             dest: './'
+          },
+          {
+            // Full CMap set for PDFs using CID-keyed, non-embedded CJK fonts
+            // (e.g. GBK-EUC-H from CEB-converted government docs). Supersedes
+            // the 3 hand-picked .bcmap files in public/cmaps, which were
+            // missing GBK-EUC-H and left such PDFs rendering blank.
+            src: 'node_modules/pdfjs-dist/cmaps/*',
+            dest: 'cmaps/'
           }
         ]
       }),
