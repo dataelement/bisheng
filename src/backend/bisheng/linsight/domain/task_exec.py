@@ -32,6 +32,7 @@ from bisheng.linsight.domain.models.linsight_session_version import (
     SessionVersionStatusEnum,
 )
 from bisheng.linsight.domain.services.agent_factory import _resolve_model, create_linsight_agent
+from bisheng.linsight.domain.services.binary_content_guard import CODE_INTERPRETER_TOOL
 from bisheng.linsight.domain.services.state_message_manager import (
     LinsightStateMessageManager,
     MessageData,
@@ -108,6 +109,9 @@ class LinsightWorkflowTask:
         # Files present in ``file_dir`` before the agent ran (set by
         # _init_file_directory); the deliverable scan diffs against it.
         self._baseline_files: set[str] = set()
+        # Set per run in _create_agent; gates every prompt hint that names the
+        # code interpreter (prompt ⟺ tool lockstep).
+        self._has_code_interpreter: bool = False
         self.session_version_id: str | None = None
         self.llm: BaseChatModel | None = None  # For storageLLMInstances
 
@@ -581,6 +585,21 @@ class LinsightWorkflowTask:
                     file_name = os.path.basename(downloadable[i].get("markdown_file_path") or "")
                     logger.error(f"This content failed to load {file_name}: {result}")
 
+            # Second track: the ORIGINAL spreadsheets / documents. The code
+            # interpreter's file list is built from ``os.walk(file_dir)``
+            # (workbench_impl._init_bisheng_code_tool), so an original that never
+            # lands here is invisible to pandas / python-docx / fitz — which is the
+            # whole point of keeping it. Best-effort: a miss costs the precise-data
+            # track, never the task.
+            raw_files = [f for f in downloadable if f.get("raw_filename") and f.get("original_file_path")]
+            if raw_files:
+                raw_results = await asyncio.gather(
+                    *[self._download_raw_original(f, file_dir) for f in raw_files], return_exceptions=True
+                )
+                for i, result in enumerate(raw_results):
+                    if isinstance(result, Exception):
+                        logger.warning(f"Original not prefetched {raw_files[i].get('raw_filename')}: {result}")
+
         # Baseline for deliverable detection: everything present BEFORE the agent
         # runs (i.e. the prefetched upload sources). Captured here — after the
         # prefetch, at the single point every driver goes through — so the
@@ -614,6 +633,28 @@ class LinsightWorkflowTask:
             logger.error(f"Download failed {object_name}: {e}")
             raise
 
+    async def _download_raw_original(self, file_info: dict, target_dir: str) -> str:
+        """Prefetch the ORIGINAL upload next to its markdown view.
+
+        Mirrors ``_download_file`` but reads ``original_file_path`` (formal
+        bucket) and lands under ``raw_filename`` — the same name the workspace
+        uses, so a path the model saw in ``ls`` resolves identically inside the
+        code interpreter.
+        """
+        object_name = file_info["original_file_path"]
+        file_path = os.path.join(target_dir, file_info["raw_filename"])
+        minio_client = await get_minio_storage()
+        file_url = await minio_client.get_share_link(object_name, clear_host=False)
+        http_client = await get_http_client()
+
+        with open(file_path, "wb") as f:
+            async for chunk in http_client.stream(method="GET", url=str(file_url)):
+                f.write(chunk)
+
+        if not os.path.exists(file_path) or os.path.getsize(file_path) == 0:
+            raise ValueError(f"Original download failed or empty: {object_name}")
+        return file_path
+
     async def _generate_tools(self, session_model: LinsightSessionVersion) -> list:
         """Build Tool List"""
         if not session_model.tools:
@@ -638,6 +679,13 @@ class LinsightWorkflowTask:
         """
         from bisheng.linsight.domain.services.skill_provisioning import materialize_session_skills
         from bisheng.linsight.domain.services.workspace_backend import WorkspaceBackend
+
+        # Whether the code interpreter is actually bound this run (it is injected
+        # only when the user selected it). Everything that points the model at it —
+        # the uploaded-files pointer block and the binary read guard — must stay in
+        # lockstep with this flag, or we recreate the "told to call a tool that
+        # isn't there" failure mode.
+        self._has_code_interpreter = any(getattr(t, "name", None) == CODE_INTERPRETER_TOOL for t in tools)
 
         minio = await get_minio_storage()
         backend = WorkspaceBackend(svid=session_model.id, minio=minio, file_dir=self.file_dir)
@@ -815,7 +863,9 @@ class LinsightWorkflowTask:
 
         async def agent_execution():
             """Agent performs a task via astream + mapper."""
-            file_list = await LinsightWorkbenchImpl.prepare_file_list(session_model)
+            file_list = await LinsightWorkbenchImpl.prepare_file_list(
+                session_model, has_code_interpreter=self._has_code_interpreter
+            )
             # F035 Track J: rebuild prior conversation context (by chat_id) so a
             # fresh task turn answers with the whole conversation in view, not just
             # this turn's question (the per-session checkpointer can't see earlier
