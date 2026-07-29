@@ -178,10 +178,12 @@ class LinsightWorkflowTask:
         except TaskAlreadyInProgressError:
             logger.warning(f"Task already in progress: session_version_id={self.session_version_id}")
         except TaskExecutionError as e:
-            logger.error(
-                f"Task execution failed: {e} : session_version_id={self.session_version_id}",
-                exc_info=True,
-            )
+            # NEVER pass exc_info= to loguru: it has no such kwarg, so ANY kwarg makes
+            # it str.format() the message. Provider errors embed literal braces
+            # (``Error code: 429 - {'error': {...}}``), which format() reads as a
+            # replacement field -> KeyError raised inside this except clause, skipping
+            # _handle_execution_error and stranding the session IN_PROGRESS forever.
+            logger.exception(f"Task execution failed: {e} : session_version_id={self.session_version_id}")
             await self._handle_execution_error(e)
         except Exception as e:
             logger.exception(f"Unknown error: session_version_id={self.session_version_id}")
