@@ -6360,6 +6360,21 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if perf is not None:
             perf.space_count = len(spaces)
         if not spaces:
+            if req.recommendation == "personalized_v1":
+                logger.info(
+                    "[diag][portal.recommendation] {}",
+                    json.dumps(
+                        {
+                            "empty_reason": "no_visible_space",
+                            "result_count": 0,
+                            "stage": "resolve_spaces",
+                            "tenant_id": int(get_current_tenant_id() or DEFAULT_TENANT_ID),
+                            "user_id": int(self.login_user.user_id),
+                            "visible_space_count": 0,
+                        },
+                        sort_keys=True,
+                    ),
+                )
             return self._build_shougang_portal_search_response([])
 
         if (
@@ -6434,6 +6449,21 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if perf is not None:
             perf.space_count = len(spaces)
         if not spaces:
+            if req.recommendation == "personalized_v1":
+                logger.info(
+                    "[diag][portal.recommendation] {}",
+                    json.dumps(
+                        {
+                            "empty_reason": "no_visible_space",
+                            "result_count": 0,
+                            "stage": "resolve_spaces",
+                            "tenant_id": int(get_current_tenant_id() or DEFAULT_TENANT_ID),
+                            "user_id": int(self.login_user.user_id),
+                            "visible_space_count": 0,
+                        },
+                        sort_keys=True,
+                    ),
+                )
             return self._build_shougang_portal_search_response([])
 
         if req.recommendation == "personalized_v1":
@@ -6470,6 +6500,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         req: ShougangPortalFileBrowseReq,
         spaces: list[Knowledge],
     ) -> dict:
+        diagnostic_started_at = time.monotonic()
         tenant_id = int(get_current_tenant_id() or DEFAULT_TENANT_ID)
         space_ids = [int(space.id) for space in spaces]
         visible_space_ids = set(space_ids)
@@ -6484,6 +6515,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
         shuffle_days = int(config.portal.recommendation.stable_shuffle_cycle_days) if config is not None else 7
         cache_scope = self._personalized_recommendation_cache_scope(req)
         uses_top_n_cache = cache_scope is not None
+        redis_state_available = True
+        pool_ready = False
+        fallback_used = False
+        first_candidate_count = 0
+        ordered_candidate_count = 0
 
         redis_repository = PortalRecommendationRedisRepositoryImpl()
         try:
@@ -6586,6 +6622,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 )
         except Exception:
             logger.warning("portal recommendation Redis state unavailable; using projection cold start")
+            redis_state_available = False
             behavior_version = 0
             pool_version = "projection"
             interest_entries = []
@@ -6625,6 +6662,23 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         tag_file_ids = await self._get_shougang_portal_tag_file_ids(space_ids, req.tag)
         if req.tag and not tag_file_ids:
+            logger.info(
+                "[diag][portal.recommendation] {}",
+                json.dumps(
+                    {
+                        "duration_ms": round((time.monotonic() - diagnostic_started_at) * 1000, 2),
+                        "empty_reason": "tag_has_no_candidate",
+                        "interest_entry_count": len(interest_entries),
+                        "result_count": 0,
+                        "stage": "candidate_filter",
+                        "tenant_id": tenant_id,
+                        "user_domain_count": len(user_domains),
+                        "user_id": int(self.login_user.user_id),
+                        "visible_space_count": len(visible_space_ids),
+                    },
+                    sort_keys=True,
+                ),
+            )
             return self._build_shougang_portal_search_response([])
         allowed_tag_file_ids = set(tag_file_ids or []) if req.tag else None
 
@@ -6779,6 +6833,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if user_domains
             else merge_sources(interest_candidates, generic_candidates)
         )
+        first_candidate_count = len(first_candidates)
         try:
             read_at_by_key = await redis_repository.list_recent_reads(
                 tenant_id,
@@ -6886,6 +6941,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if not cache_stable and len(selected) < target_count:
             selected = []
             ordered = score(first_candidates)
+            ordered_candidate_count = len(ordered)
             selected = await recommendation_service.select_authorized_top_n(
                 ordered,
                 top_n=target_count,
@@ -6894,6 +6950,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 state=authorization_state,
             )
         if not cache_stable and len(selected) < target_count and user_domains:
+            fallback_used = True
             if not generic_candidates:
                 lazy_generic_pool: list[PortalRecommendationCandidate] = []
                 if active_pool_version:
@@ -6944,6 +7001,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     limit=PortalRecommendationService.MAX_LIGHTWEIGHT_CANDIDATES,
                 )
             ordered = score(merge_sources(first_candidates, generic_candidates))
+            ordered_candidate_count = len(ordered)
             selected = await recommendation_service.select_authorized_top_n(
                 ordered,
                 top_n=target_count,
@@ -6986,6 +7044,69 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 )
             except Exception:
                 logger.warning("portal recommendation Top-N cache unavailable")
+        empty_reason = ""
+        if not items:
+            if authorization_state.unavailable_reason:
+                empty_reason = authorization_state.unavailable_reason
+            elif authorization_state.time_budget_reached:
+                empty_reason = "permission_time_budget_reached"
+            elif authorization_state.check_limit_reached:
+                empty_reason = "permission_check_limit_reached"
+            elif ordered_candidate_count == 0 and not cached_candidates:
+                empty_reason = (
+                    "generic_pool_empty"
+                    if not user_domains and not interest_candidates
+                    else "no_eligible_candidate"
+                )
+            elif authorization_state.error_count > 0 and authorization_state.allowed_count == 0:
+                empty_reason = "permission_check_failed_closed"
+            elif authorization_state.denied_count > 0 and authorization_state.allowed_count == 0:
+                empty_reason = "all_candidates_permission_denied"
+            elif selected and not ordered_files:
+                empty_reason = "selected_files_no_longer_available"
+            elif ordered_files:
+                empty_reason = "result_mapping_filtered"
+            else:
+                empty_reason = "no_authorized_result"
+        logger.info(
+            "[diag][portal.recommendation] {}",
+            json.dumps(
+                {
+                    "authorization_allowed_count": authorization_state.allowed_count,
+                    "authorization_check_count": authorization_state.checks,
+                    "authorization_denied_count": authorization_state.denied_count,
+                    "authorization_error_count": authorization_state.error_count,
+                    "authorization_fast_allowed_count": authorization_state.fast_allowed_count,
+                    "authorization_ineligible_count": authorization_state.ineligible_count,
+                    "cache_candidate_count": len(cached_candidates),
+                    "cache_hit": cached_top_n_hit,
+                    "cache_stable": cache_stable,
+                    "candidate_count": ordered_candidate_count,
+                    "domain_candidate_count": len(domain_candidates),
+                    "duration_ms": round((time.monotonic() - diagnostic_started_at) * 1000, 2),
+                    "empty_reason": empty_reason,
+                    "fallback_used": fallback_used,
+                    "first_candidate_count": first_candidate_count,
+                    "generic_candidate_count": len(generic_candidates),
+                    "interest_candidate_count": len(interest_candidates),
+                    "interest_entry_count": len(interest_entries),
+                    "permission_check_limit_reached": authorization_state.check_limit_reached,
+                    "permission_time_budget_reached": authorization_state.time_budget_reached,
+                    "pool_ready": pool_ready,
+                    "pool_source": "redis" if active_pool_version else "projection",
+                    "redis_state_available": redis_state_available,
+                    "result_count": len(items),
+                    "selected_count": len(selected),
+                    "stage": "complete",
+                    "target_count": target_count,
+                    "tenant_id": tenant_id,
+                    "user_domain_count": len(user_domains),
+                    "user_id": int(self.login_user.user_id),
+                    "visible_space_count": len(visible_space_ids),
+                },
+                sort_keys=True,
+            ),
+        )
         return self._build_shougang_portal_search_response(items, limit=target_count)
 
     @staticmethod
