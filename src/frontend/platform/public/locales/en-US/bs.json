@@ -2105,6 +2105,7 @@
     "18115": "The approval flow has no nodes configured. Please add nodes before retrying.",
     "18116": "Approval flow not found",
     "18117": "This flow is still referenced by branches. Please unbind it from all branches before deleting.",
+    "18124": "This configuration is referenced by approval records and cannot be deleted",
     "19000": "Permission denied",
     "19001": "Permission check failed",
     "19002": "Authorization service unavailable",

@@ -10,7 +10,10 @@ from bisheng.approval.domain.models.approval_scenario import (
 )
 from bisheng.approval.domain.repositories.approval_query_repository import ApprovalQueryRepository
 from bisheng.approval.domain.repositories.approval_scenario_repository import ApprovalScenarioRepository
-from bisheng.approval.domain.services.approval_registry import ApprovalRegistry
+from bisheng.approval.domain.services.approval_registry import (
+    UNIVERSAL_CONDITION_FIELDS,
+    ApprovalRegistry,
+)
 from bisheng.common.errcode.approval import (
     ApprovalConditionOptionInvalidError,
     ApprovalFixedScenarioStructureLockedError,
@@ -410,7 +413,7 @@ class ApprovalScenarioAdminService:
             raise ApprovalConditionOptionInvalidError()
 
         preset = ApprovalRegistry.with_default_presets().get_preset(scenario.scenario_code)
-        allowed_fields = set(preset.condition_fields if preset else [])
+        allowed_fields = set(preset.condition_fields if preset else []) | set(UNIVERSAL_CONDITION_FIELDS)
         match_config = payload.get("match_config") or {}
         raw_conditions = match_config.get("conditions")
         if raw_conditions is None:

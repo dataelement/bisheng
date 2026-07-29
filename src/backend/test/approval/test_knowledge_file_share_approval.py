@@ -641,7 +641,7 @@ def test_share_scenario_is_registered_with_fixed_role_sources():
     preset = ApprovalRegistry.with_default_presets().get_preset(FILE_SHARE_SCENARIO)
 
     assert preset is not None
-    assert preset.condition_fields == []
+    assert preset.condition_fields == ["applicant_role"]
     assert preset.approver_source_types == [
         "knowledge_space_owner",
         "knowledge_space_manager",

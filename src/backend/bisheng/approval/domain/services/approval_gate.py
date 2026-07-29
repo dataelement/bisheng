@@ -21,6 +21,7 @@ from bisheng.approval.domain.schemas.approval_center_schema import (
     ApprovalGateRequest,
     ApprovalGateResult,
 )
+from bisheng.approval.domain.services.approval_registry import UNIVERSAL_CONDITION_FIELDS
 from bisheng.common.errcode.approval import ApprovalScenarioDisabledError
 from bisheng.database.models.audit_log import AuditLog, AuditLogDao
 
@@ -529,14 +530,15 @@ class ApprovalGate:
         )
 
     def _allowed_condition_fields(self, scenario_code: str) -> frozenset[str]:
-        """Return preset-allowed match fields for a scenario; empty if unknown/unconfigurable."""
+        """Return allowed match fields for a scenario (preset fields + universal identity)."""
         get_preset = getattr(self.registry, "get_preset", None)
         if get_preset is None:
-            return frozenset()
+            return UNIVERSAL_CONDITION_FIELDS
         preset = get_preset(scenario_code)
         if preset is None:
-            return frozenset()
-        return frozenset(getattr(preset, "condition_fields", None) or [])
+            return UNIVERSAL_CONDITION_FIELDS
+        preset_fields = frozenset(getattr(preset, "condition_fields", None) or [])
+        return preset_fields | UNIVERSAL_CONDITION_FIELDS
 
     async def _match_first_route(self, route_rules: list[Any], req: ApprovalGateRequest) -> Any | None:
         """Evaluate route conditions top-to-bottom; return the first matching enabled route.
