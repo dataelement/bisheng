@@ -124,7 +124,7 @@ class DictionaryService:
         keyword: str | None = None,
         page: int = 1,
         page_size: int = 20,
-        sort_order: bool | None = None,
+        sort_by: bool | None = None,
         enabled: bool | None = None,
     ) -> PageData[DictionaryResponse]:
         """分页查询字典条目"""
@@ -133,7 +133,7 @@ class DictionaryService:
             keyword=keyword,
             page=page,
             page_size=page_size,
-            sort_order=sort_order,
+            sort_by=sort_by,
             enabled=enabled,
         )
         data = [DictionaryResponse.model_validate(entity) for entity in entities]

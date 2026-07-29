@@ -50,7 +50,7 @@ class SystemDictionaryRepositoryImpl(BaseRepositoryImpl[SystemDictionary, int], 
         keyword: str | None = None,
         page: int = 1,
         page_size: int = 20,
-        sort_order: bool | None = None,
+        sort_by: bool | None = None,
         enabled: bool | None = None,
     ) -> tuple[list[SystemDictionary], int]:
         """分页查询字典条目,返回 (数据列表, 总数)"""
@@ -75,7 +75,7 @@ class SystemDictionaryRepositoryImpl(BaseRepositoryImpl[SystemDictionary, int], 
         offset = (page - 1) * page_size
         query = (
             query.order_by(
-                SystemDictionary.sort_order.desc() if sort_order is not None and not sort_order else SystemDictionary.id.asc(),
+                SystemDictionary.sort_order.desc() if sort_by is not None and not sort_by else SystemDictionary.id.asc(),
                 SystemDictionary.id.asc(),
             )
             .offset(offset)
