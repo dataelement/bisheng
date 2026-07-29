@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { SettingIcon } from "@/components/bs-icons";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/bs-ui/sheet";
 import { Switch } from "@/components/bs-ui/switch";

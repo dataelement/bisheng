@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 // components/AudioPlayButton.tsx
 import { textToSpeech } from '@/controllers/API/workbench';
 import { Loader, Volume2 } from 'lucide-react';

@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useRecoilState } from 'recoil';
 import { Settings2 } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';

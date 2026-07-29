@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { generateUUID } from "~/utils";
 import request from "./request";
 

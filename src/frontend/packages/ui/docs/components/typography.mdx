@@ -1,0 +1,107 @@
+# 字体 Typography
+
+九档 semantic 字号（自带字重）+ 两档字重，纯系统字体栈（零 webfont 加载）。**组件与业务代码只用 semantic 类**（`text-body` / `text-h1`…），不写裸 `text-sm` 或数值。规范全文见「文档 → 设计规范 → 字体 Typography」。
+
+> 本页表格均从设计 token 单一源 `~/design-token.cjs` 渲染，与 Tailwind 主题、组件消费的是同一份数据。
+
+## 字体栈 Font Family
+
+```tsx
+import { FONT_FAMILY } from '~/design-token.cjs';
+
+const SAMPLES = {
+  base: ['毕昇平台让大模型应用触手可及', 'The quick brown fox jumps over the lazy dog 0123456789'],
+  mono: ['wf_a1b2c3 · 0123456789', 'const answer = 42; // code sample'],
+};
+
+export default () => (
+  <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+    {Object.entries(FONT_FAMILY).map(([key, f]) => (
+      <div key={key} style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+        <div style={{ width: 190, flexShrink: 0 }}>
+          <code style={{ fontSize: 13 }}>{f.token}</code>
+          <div style={{ fontSize: 12, color: 'rgb(var(--text-3))', marginTop: 2 }}>
+            类名 <code>{f.cls}</code>
+          </div>
+          <div style={{ fontSize: 12, color: 'rgb(var(--text-3))', marginTop: 2 }}>{f.usage}</div>
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {SAMPLES[key].map((s) => (
+            <div key={s} className={f.cls} style={{ fontSize: 16, lineHeight: '24px', color: 'rgb(var(--text-1))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {s}
+            </div>
+          ))}
+          <div style={{ fontSize: 11, fontFamily: 'monospace', color: 'rgb(var(--text-3))', marginTop: 6, wordBreak: 'break-all' }}>
+            {f.stack.join(', ')}
+          </div>
+        </div>
+      </div>
+    ))}
+  </div>
+);
+```
+
+同一份字体栈覆盖所有设备：macOS/iOS 命中 San Francisco + 苹方，Windows 命中 Segoe UI + 微软雅黑，Android 命中 Roboto + 思源黑体，无需为移动端单独配置。
+
+## 字号阶梯 Semantic
+
+九档，token 即 Tailwind 类名，**自带字重与行高**。示例为该档实时渲染；窗口缩到 ≤768px 可看移动端重映射（同一类名自动换档）。
+
+```tsx
+import { TYPE_SCALE } from '~/design-token.cjs';
+
+export default () => (
+  <div style={{ display: 'flex', flexDirection: 'column' }}>
+    <div style={{ display: 'flex', gap: 16, padding: '6px 0', fontSize: 12, color: 'rgb(var(--text-3))' }}>
+      <span style={{ width: 110, flexShrink: 0 }}>Token</span>
+      <span style={{ width: 80, flexShrink: 0 }}>桌面</span>
+      <span style={{ width: 80, flexShrink: 0 }}>移动</span>
+      <span style={{ width: 40, flexShrink: 0 }}>字重</span>
+      <span>实时示例</span>
+    </div>
+    {TYPE_SCALE.map((s) => (
+      <div
+        key={s.name}
+        style={{ display: 'flex', gap: 16, alignItems: 'center', padding: '10px 0', borderBottom: '1px solid rgb(var(--border-base))' }}
+      >
+        <code style={{ width: 110, flexShrink: 0, fontSize: 13 }}>text-{s.name}</code>
+        <span style={{ width: 80, flexShrink: 0, fontSize: 12, color: 'rgb(var(--text-3))', fontVariantNumeric: 'tabular-nums' }}>{s.desktop[0]} / {s.desktop[1]}</span>
+        <span style={{ width: 80, flexShrink: 0, fontSize: 12, color: 'rgb(var(--text-3))', fontVariantNumeric: 'tabular-nums' }}>{s.mobile[0]} / {s.mobile[1]}</span>
+        <span style={{ width: 40, flexShrink: 0, fontSize: 12, color: 'rgb(var(--text-3))' }}>{s.weight}</span>
+        <div className={`text-${s.name}`} style={{ color: 'rgb(var(--text-1))', minWidth: 0 }}>{s.usage}</div>
+      </div>
+    ))}
+  </div>
+);
+```
+
+## 字重 Font Weight
+
+只用 400 / 500 两档，**禁用 600 / 700**。
+
+```tsx
+import { FONT_WEIGHT } from '~/design-token.cjs';
+
+export default () => (
+  <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+    {FONT_WEIGHT.map((w) => (
+      <div key={w.name} style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+        <div style={{ width: 190, flexShrink: 0 }}>
+          <code style={{ fontSize: 13 }}>{w.token}</code>
+          <div style={{ fontSize: 12, color: 'rgb(var(--text-3))', marginTop: 2 }}>
+            类名 <code>{w.cls}</code> · {w.value}
+          </div>
+        </div>
+        <div style={{ fontSize: 18, lineHeight: '26px', fontWeight: w.value, color: 'rgb(var(--text-1))' }}>{w.usage}</div>
+      </div>
+    ))}
+  </div>
+);
+```
+
+## 使用规则
+
+- 组件与业务代码只用 semantic 类（`text-body` / `text-h1`…），不写裸 `text-sm` 或数值字号。
+- 字重只用 `font-normal`(400) / `font-medium`(500) 两档。
+- 标题层级连续使用（h1→h2→h3），不跳级取字号。
+- 数字/金额加 `tabular-nums`；ID、代码用 `font-mono`。

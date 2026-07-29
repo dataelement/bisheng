@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { Tabs, TabsList, TabsTrigger } from "@/components/bs-ui/tabs";
 import { QuestionTooltip } from "@/components/bs-ui/tooltip";
 import React, { useMemo } from 'react';

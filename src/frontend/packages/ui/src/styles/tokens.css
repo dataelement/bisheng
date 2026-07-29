@@ -1,0 +1,201 @@
+/* ============================================================
+ * @bisheng/ui design tokens — v0 契约
+ * 双层结构:primitive(原始数值源)+ semantic(组件唯一可消费层)。
+ * 值与 client/src/style.css 完全一致(种子来源);client 迁移完成前
+ * 两份并存且必须保持同步,platform 接入时直接 @import 本文件。
+ * 覆盖范围 v0:字体阶梯 / Arco 中性色 / 功能色 / 品牌色 / Button 语义 token。
+ * ============================================================ */
+
+:root {
+  /* ---------- Typography (基础-字体规范.md) ---------- */
+  /* Primitive — desktop scale (line height = size + 8px) */
+  --font-size-1: 0.75rem;    --line-height-1: 1.25rem;   /* 12 / 20 */
+  --font-size-2: 0.8125rem;  --line-height-2: 1.3125rem; /* 13 / 21 */
+  --font-size-3: 0.875rem;   --line-height-3: 1.375rem;  /* 14 / 22 */
+  --font-size-4: 1rem;       --line-height-4: 1.5rem;    /* 16 / 24 */
+  --font-size-5: 1.125rem;   --line-height-5: 1.625rem;  /* 18 / 26 */
+  --font-size-6: 1.25rem;    --line-height-6: 1.75rem;   /* 20 / 28 */
+  --font-size-7: 1.5rem;     --line-height-7: 2rem;      /* 24 / 32 */
+  --font-size-8: 1.875rem;   --line-height-8: 2.375rem;  /* 30 / 38 */
+  --font-size-9: 2.25rem;    --line-height-9: 2.75rem;   /* 36 / 44 */
+
+  /* Semantic — consumed via tailwind preset fontSize (text-caption / text-body / text-h1 …) */
+  --text-caption: var(--font-size-1);  --leading-caption: var(--line-height-1);
+  --text-body-sm: var(--font-size-2);  --leading-body-sm: var(--line-height-2);
+  --text-body: var(--font-size-3);     --leading-body: var(--line-height-3);
+  --text-h4: var(--font-size-4);       --leading-h4: var(--line-height-4);
+  --text-h3: var(--font-size-5);       --leading-h3: var(--line-height-5);
+  --text-h2: var(--font-size-6);       --leading-h2: var(--line-height-6);
+  --text-h1: var(--font-size-7);       --leading-h1: var(--line-height-7);
+  --text-display: var(--font-size-8);  --leading-display: var(--line-height-8);
+  --text-metric: var(--font-size-9);   --leading-metric: var(--line-height-9);
+
+  /* ---------- Neutral colors (基础-色彩规范.md, Arco ramp) ---------- */
+  /* Primitive — Arco gray 1-10 (RGB channel triplets for `/<alpha>` support) */
+  --arco-gray-1: 247 248 250;   /* #F7F8FA */
+  --arco-gray-2: 242 243 245;   /* #F2F3F5 */
+  --arco-gray-3: 229 230 235;   /* #E5E6EB */
+  --arco-gray-4: 201 205 212;   /* #C9CDD4 */
+  --arco-gray-5: 169 174 184;   /* #A9AEB8 */
+  --arco-gray-6: 134 144 156;   /* #86909C */
+  --arco-gray-7: 107 119 133;   /* #6B7785 */
+  --arco-gray-8: 78 89 105;     /* #4E5969 */
+  --arco-gray-9: 39 46 59;      /* #272E3B */
+  --arco-gray-10: 29 33 41;     /* #1D2129 */
+
+  /* Semantic — neutral text / fill / border (components use ONLY these) */
+  --text-1: var(--arco-gray-10);      /* primary text: titles, body */
+  --text-2: var(--arco-gray-8);       /* secondary text */
+  --text-3: var(--arco-gray-6);       /* hint / timestamp / placeholder */
+  --text-4: var(--arco-gray-4);       /* disabled text */
+  --fill-1: var(--arco-gray-1);       /* hover bg / light page bg */
+  --fill-2: var(--arco-gray-2);       /* active bg / filled control base */
+  --fill-3: var(--arco-gray-3);       /* filled hover */
+  --fill-4: var(--arco-gray-4);       /* filled active */
+  --border-base: var(--arco-gray-3);  /* regular border */
+  --border-deep: var(--arco-gray-4);  /* emphasized divider / hover border */
+  --bg-page: 255 255 255;             /* page surface */
+
+  /* Semantic — functional (theme-INDEPENDENT: never follow the brand switch) */
+  --success: 0 180 42;          /* #00B42A (Arco green-6) */
+  --success-hover: 35 195 67;   /* #23C343 */
+  --success-active: 0 154 41;   /* #009A29 */
+  --success-tint: 232 255 234;  /* #E8FFEA */
+  --warning: 255 125 0;         /* #FF7D00 (Arco orange-6) */
+  --warning-hover: 255 154 46;  /* #FF9A2E */
+  --warning-active: 210 95 0;   /* #D25F00 */
+  --warning-tint: 255 247 232;  /* #FFF7E8 */
+  --danger: 245 63 63;          /* #F53F3F (= --btn-danger) */
+  --danger-hover: 214 55 58;    /* #D6373A */
+  --danger-active: 208 47 51;   /* #D02F33 */
+  --danger-tint: 255 236 232;   /* #FFECE8 — TAG bg only */
+
+  /* ---------- Brand palette (blue default; .theme-green overrides) ---------- */
+  --brand-50: 232 243 255;   /* #E8F3FF — light tint / selection bg */
+  --brand-100: 190 218 255;  /* #BEDAFF */
+  --brand-200: 148 191 255;  /* #94BFFF */
+  --brand-300: 106 161 255;  /* #6AA1FF */
+  --brand-400: 64 128 255;   /* #4080FF */
+  --brand-500: 22 93 255;    /* #165DFF — main brand blue */
+  --brand-600: 2 77 227;     /* #024DE3 — button / pressed */
+  --brand-700: 2 57 171;     /* #0239AB */
+  --brand-800: 4 43 128;     /* #042B80 */
+  --brand-900: 5 29 82;      /* #051D52 */
+  --brand-main: 22 93 255;   /* #165DFF */
+  --brand-muted: 87 115 180; /* #5773B4 — muted/low-sat brand accent */
+
+  /* ---------- Button semantic tokens (组件-Button按钮.md §5.1) ---------- */
+  --btn-gray-text: 78 89 105;      /* #4E5969 — default-color button text */
+  --btn-gray-solid-bg: 78 89 105;  /* #4E5969 — default SOLID fill (+white text) */
+  --btn-gray-border: 229 230 235;  /* #E5E6EB — default-color button border */
+  --btn-fill-1: 247 248 250;       /* #F7F8FA — neutral fill ramp: hover bg */
+  --btn-fill-2: 242 243 245;       /* #F2F3F5 — active bg / filled base */
+  --btn-fill-3: 229 230 235;       /* #E5E6EB — filled hover */
+  --btn-fill-4: 201 205 212;       /* #C9CDD4 — filled active */
+  --btn-danger: 245 63 63;         /* #F53F3F */
+  --btn-danger-hover: 214 55 58;   /* #D6373A */
+  --btn-danger-active: 208 47 51;  /* #D02F33 */
+  --btn-disabled-border: 217 217 217; /* #D9D9D9 — bordered variants, disabled */
+  --btn-disabled-bg: 245 245 245;     /* #F5F5F5 — disabled fill */
+  --btn-disabled-text: 191 191 191;   /* #BFBFBF — disabled text */
+
+  /* ---------- Radius scale (shadcn-compatible: lg=8 / md=6 / sm=4) ---------- */
+  --radius: 0.5rem;
+}
+
+/* Dark mode — neutral + semantic layers auto-flip (custom props resolve lazily
+ * at use time). Brand and functional dark ramps still pending (keep light
+ * values — known debt, mirrors client/src/style.css). */
+.dark {
+  --arco-gray-1: 23 23 26;      /* #17171A */
+  --arco-gray-2: 46 46 48;      /* #2E2E30 */
+  --arco-gray-3: 72 72 73;      /* #484849 */
+  --arco-gray-4: 95 95 96;      /* #5F5F60 */
+  --arco-gray-5: 120 120 122;   /* #78787A */
+  --arco-gray-6: 146 146 147;   /* #929293 */
+  --arco-gray-7: 171 171 172;   /* #ABABAC */
+  --arco-gray-8: 197 197 197;   /* #C5C5C5 */
+  --arco-gray-9: 223 223 223;   /* #DFDFDF */
+  --arco-gray-10: 246 246 246;  /* #F6F6F6 */
+  --bg-page: 18 18 18;          /* #121212 — page surface, dark */
+
+  /* Disabled button, dark: subtle raised inert fill + muted (not invisible)
+     text/border. */
+  --btn-disabled-bg: 42 42 42;      /* #2A2A2A */
+  --btn-disabled-text: 120 120 122; /* gray-5 dark — muted but legible */
+  --btn-disabled-border: 95 95 96;  /* gray-4 dark — visible edge */
+
+  /* Button neutral, dark: text flips light; border + fill ramp follow the dark
+     gray ramp so filled/hover/active lighten (correct elevation on #121212). */
+  --btn-gray-text: 197 197 197;    /* gray-8 dark #C5C5C5 — light text */
+  --btn-gray-solid-bg: 95 95 96;   /* gray-4 dark #5F5F60 — solid fill */
+  --btn-gray-border: 72 72 73;     /* gray-3 dark #484849 */
+  --btn-fill-1: 38 38 40;          /* #262628 — text/outlined hover */
+  --btn-fill-2: 46 46 48;          /* gray-2 dark — filled base */
+  --btn-fill-3: 72 72 73;          /* gray-3 dark — filled hover */
+  --btn-fill-4: 95 95 96;          /* gray-4 dark — filled active */
+}
+
+/* Mobile (≤768px) remap of the SEMANTIC typography layer only:
+ * body raised (14→16), headings lowered (24→22) — flatter ladder.
+ * Component classNames stay unchanged. */
+@media (max-width: 768px) {
+  :root {
+    --text-body-sm: var(--font-size-3);  --leading-body-sm: var(--line-height-3); /* 13→14 */
+    --text-body: var(--font-size-4);     --leading-body: var(--line-height-4);    /* 14→16 */
+    --text-h3: 1.0625rem;                --leading-h3: 1.5625rem;                 /* 18→17 / 25 */
+    --text-h2: var(--font-size-5);       --leading-h2: var(--line-height-5);      /* 20→18 */
+    --text-h1: 1.375rem;                 --leading-h1: 1.875rem;                  /* 24→22 / 30 */
+    --text-display: 1.625rem;            --leading-display: 2.125rem;             /* 30→26 / 34 */
+    --text-metric: var(--font-size-8);   --leading-metric: var(--line-height-8);  /* 36→30 */
+  }
+}
+
+/* Green brand theme — toggled via `theme-green` class on <html>. */
+.theme-green {
+  --brand-50: 228 241 231;   /* #E4F1E7 */
+  --brand-100: 204 228 210;  /* #CCE4D2 */
+  --brand-200: 163 210 176;  /* #A3D2B0 */
+  --brand-300: 111 186 133;  /* #6FBA85 */
+  --brand-400: 61 155 92;    /* #3D9B5C */
+  --brand-500: 22 156 71;    /* #169C47 — main brand green (FIXED) */
+  --brand-600: 9 139 53;     /* #098B35 */
+  --brand-700: 7 105 41;     /* #076929 */
+  --brand-800: 7 78 32;      /* #074E20 */
+  --brand-900: 6 50 22;      /* #063216 */
+  --brand-main: 22 156 71;   /* #169C47 */
+  --brand-muted: 92 138 119; /* #5C8A77 */
+}
+
+/* Brand primary button — GREEN theme override (组件-Button按钮.md §6.2,
+ * agreed tech debt until the theme mechanism is reworked). */
+.theme-green .btn-brand-primary:not(:disabled) {
+  background-color: #169c47 !important;
+  color: #fff !important;
+}
+.theme-green .btn-brand-primary:not(:disabled):hover {
+  background-color: #148f41 !important;
+}
+@media not ((hover: hover) and (pointer: fine)) {
+  .theme-green .btn-brand-primary:not(:disabled):active {
+    background-color: #12813b !important;
+  }
+}
+.theme-green .btn-brand-primary:not(:disabled) > svg {
+  color: #fff !important;
+}
+
+/* Touch hit-area expansion (§5.5): invisible ≥44×44 hot zone on touch devices
+ * while the visual size stays unchanged. Base components set `relative` + this
+ * class; never hand-roll per page. */
+@media (hover: none) and (pointer: coarse) {
+  .btn-touch-hit::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: max(100%, 44px);
+    height: max(100%, 44px);
+    transform: translate(-50%, -50%);
+  }
+}

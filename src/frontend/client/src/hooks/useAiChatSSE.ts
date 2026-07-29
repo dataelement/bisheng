@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 /**
  * SSE hook for v2.5 Agent-mode chat streaming.
  *

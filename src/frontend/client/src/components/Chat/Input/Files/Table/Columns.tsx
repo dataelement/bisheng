@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 
 import { ArrowUpDown, Database } from 'lucide-react';
 import { FileSources, FileContext } from '~/types/chat';

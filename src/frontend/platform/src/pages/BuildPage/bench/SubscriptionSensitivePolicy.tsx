@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { Checkbox } from "@/components/bs-ui/checkBox";
 import { Textarea } from "@/components/bs-ui/input";
 import { Label } from "@/components/bs-ui/label";

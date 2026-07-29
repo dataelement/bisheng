@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog"
 import { useToast } from "@/components/bs-ui/toast/use-toast"
 import { generateUUID } from "@/components/bs-ui/utils"

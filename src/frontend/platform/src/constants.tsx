@@ -184,7 +184,7 @@ flow(inputs)`;
 function buildTweakObject(tweak) {
   tweak.forEach((el) => {
     Object.keys(el).forEach((key) => {
-      for (let kp in el[key]) {
+      for (const kp in el[key]) {
         try {
           el[key][kp] = JSON.parse(el[key][kp]);
         } catch { }

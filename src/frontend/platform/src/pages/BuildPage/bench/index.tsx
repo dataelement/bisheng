@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 // src/features/chat-config/ChatConfig.tsx
 import { Button } from "@/components/bs-ui/button";
 import { CardContent } from "@/components/bs-ui/card";

@@ -59,7 +59,7 @@ export function ExportSelectionButton({
             type="button"
             onClick={handleClick}
             className={cn(
-                'flex size-6 items-center justify-center rounded-[6px] backdrop-blur-[4px] transition-colors hover:bg-[#F7F7F7]',
+                'flex size-6 items-center justify-center rounded-md backdrop-blur-[4px] transition-colors hover:bg-[#F7F7F7]',
                 active && 'bg-[#F0F0F0]',
                 className,
             )}

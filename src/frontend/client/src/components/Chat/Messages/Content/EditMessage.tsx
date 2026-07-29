@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useRef, useEffect, useCallback } from 'react';
 import { useRecoilState, useRecoilValue } from 'recoil';
 import { useForm } from 'react-hook-form';

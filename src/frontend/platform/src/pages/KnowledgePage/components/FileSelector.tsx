@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { FileIcon } from "@/components/bs-icons/file";
 import { truncateString } from "@/util/utils";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@radix-ui/react-dropdown-menu';

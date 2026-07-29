@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import React, { forwardRef } from "react";
 import Load from "./Load.svg?react";
 import { cname } from "../../bs-ui/utils";

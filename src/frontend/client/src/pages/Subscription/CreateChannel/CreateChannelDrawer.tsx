@@ -473,7 +473,7 @@ export function CreateChannelDrawer({
                                                     }
                                                 }}
                                                 placeholder={localize("com_subscription.enter_channel_description")}
-                                                className="min-h-[80px] text-[14px] bg-[#fff] rounded-[6px] border-[#E5E6EB] pr-14 shadow-none"
+                                                className="min-h-[80px] text-[14px] bg-[#fff] rounded-md border-[#E5E6EB] pr-14 shadow-none"
                                             />
                                         </div>
                                     </div>
@@ -609,7 +609,7 @@ export function CreateChannelDrawer({
                                             />
                                         </div>
                                         {form.createSubChannel && (
-                                            <div className="overflow-hidden rounded-[6px] border border-[#E5E6EB] divide-y divide-[#E5E6EB]">
+                                            <div className="overflow-hidden rounded-md border border-[#E5E6EB] divide-y divide-[#E5E6EB]">
                                                 {form.subChannels.map((sub) => (
                                                     <SubChannelBlock
                                                         key={sub.id}
@@ -713,7 +713,7 @@ export function CreateChannelDrawer({
                                 <Button
                                     variant="secondary"
                                     onClick={() => handleClose(false)}
-                                    className="inline-flex h-8 items-center justify-center rounded-[6px] border-none bg-[#F2F3F5] px-4 text-[14px] leading-none !font-normal text-[#4E5969] hover:bg-[#E5E6EB] touch-mobile:flex-1"
+                                    className="inline-flex h-8 items-center justify-center rounded-md border-none bg-[#F2F3F5] px-4 text-[14px] leading-none !font-normal text-[#4E5969] hover:bg-[#E5E6EB] touch-mobile:flex-1"
                                 >
                                     {localize("cancel")}
                                 </Button>
@@ -783,7 +783,7 @@ export function CreateChannelDrawer({
                                             form.setSubmitting(false);
                                         }
                                     }}
-                                    className="inline-flex h-8 items-center justify-center rounded-[6px] border-none bg-blue-500 px-4 text-[14px] leading-none !font-normal text-white hover:bg-blue-400 disabled:opacity-50 touch-mobile:flex-1 btn-brand-primary"
+                                    className="inline-flex h-8 items-center justify-center rounded-md border-none bg-blue-500 px-4 text-[14px] leading-none !font-normal text-white hover:bg-blue-400 disabled:opacity-50 touch-mobile:flex-1 btn-brand-primary"
                                 >
                                     {isEditMode
                                         ? form.submitting ? localize("com_subscription.saving") : localize("com_subscription.save")

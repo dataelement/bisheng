@@ -203,12 +203,12 @@ export function SubjectSearchUser({
           placeholder={localize("com_permission.search_user")}
           value={keyword}
           onChange={handleInput}
-          className="h-8 w-full rounded-[6px] border border-[#EBECF0] bg-white pl-9 pr-3 text-[14px] text-[#212121] outline-none transition-colors placeholder:text-[#999999] focus:border-[#C9CDD4]"
+          className="h-8 w-full rounded-md border border-[#EBECF0] bg-white pl-9 pr-3 text-[14px] text-[#212121] outline-none transition-colors placeholder:text-[#999999] focus:border-[#C9CDD4]"
         />
       </div>
       <div
         ref={scrollRef}
-        className="scrollbar-os min-h-0 flex-1 overflow-y-auto rounded-[6px] border border-[#EBECF0]"
+        className="scrollbar-os min-h-0 flex-1 overflow-y-auto rounded-md border border-[#EBECF0]"
       >
         {loading && (
           <div className="py-4 text-center text-sm text-gray-500">

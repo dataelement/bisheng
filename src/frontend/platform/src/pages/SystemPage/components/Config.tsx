@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useContext, useEffect, useRef, useState } from "react";
 import AceEditor from "react-ace";
 import { useTranslation } from "react-i18next";

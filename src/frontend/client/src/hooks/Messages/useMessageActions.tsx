@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useRecoilValue } from 'recoil';
 import { useCallback, useMemo } from 'react';
 import { isAssistantsEndpoint, isAgentsEndpoint } from '~/types/chat';

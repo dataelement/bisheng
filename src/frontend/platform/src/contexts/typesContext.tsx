@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { createContext, ReactNode, useEffect, useState } from "react";
 import { Node } from "@xyflow/react";
 import { getAll } from "../controllers/API";

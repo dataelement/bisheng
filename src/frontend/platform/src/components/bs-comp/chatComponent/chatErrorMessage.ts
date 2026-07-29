@@ -33,7 +33,7 @@ export function resolveChatErrorMessage(
     payload: ChatErrorPayload | null | undefined,
     translate: Translate,
 ): string {
-    const fallbackMessage = payload?.status_message || "error";
+    const fallbackMessage = payload?.status_message || String(translate("api_errors:fallback") ?? "");
     const statusCode = payload?.status_code;
 
     const interpolationParams =
@@ -41,7 +41,7 @@ export function resolveChatErrorMessage(
     const translatedMessage =
         statusCode === undefined || statusCode === null || statusCode === ""
             ? fallbackMessage
-            : translate(`errors.${statusCode}`, {
+            : translate(`api_errors:${statusCode}`, {
                 ...interpolationParams,
                 defaultValue: fallbackMessage,
             });

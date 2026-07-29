@@ -113,7 +113,7 @@ function KeywordTagInput({ keywords, onChange }: KeywordTagInputProps) {
 
     return (
         <div
-            className="min-h-[32px] w-full rounded-[6px] border border-[#EBECF0] bg-white px-[8px] py-[3px] flex flex-wrap items-center gap-[4px] cursor-text focus-within:border-[#DDDDDD] focus-within:ring-2 focus-within:ring-[#F1F5F9]"
+            className="min-h-[32px] w-full rounded-md border border-[#EBECF0] bg-white px-[8px] py-[3px] flex flex-wrap items-center gap-[4px] cursor-text focus-within:border-[#DDDDDD] focus-within:ring-2 focus-within:ring-[#F1F5F9]"
             onClick={() => inputRef.current?.focus()}
         >
             {keywords.map((kw, idx) => (
@@ -234,7 +234,7 @@ export function FilterConditionEditor({
                 <button
                     type="button"
                     onClick={addCondition}
-                    className="inline-flex items-center gap-[4px] rounded-[6px] border border-[#EBECF0] bg-white/50 backdrop-blur-[4px] px-[12px] py-[3px] text-[14px] leading-[22px] text-[#212121] hover:bg-[#F8F8F8]"
+                    className="inline-flex items-center gap-[4px] rounded-md border border-[#EBECF0] bg-white/50 backdrop-blur-[4px] px-[12px] py-[3px] text-[14px] leading-[22px] text-[#212121] hover:bg-[#F8F8F8]"
                     title={localize("com_subscription.add_condition")}
                 >
                     <SquarePlus className="size-4 shrink-0 text-[#212121]" strokeWidth={1.5} />
@@ -269,7 +269,7 @@ export function FilterConditionEditor({
                         <RefreshCcw className="absolute size-3.5 opacity-0 group-hover/btn:opacity-100 transition-opacity pointer-events-none text-blue-500" />
                     </button>
                     {/* 连接线（包住所有条件行） */}
-                    <div className="pointer-events-none absolute left-[25px] top-[14px] bottom-[14px] w-[9px] rounded-l-[8px] border-l border-y border-[#C9CDD4]" />
+                    <div className="pointer-events-none absolute left-[25px] top-[14px] bottom-[14px] w-[9px] rounded-l-lg border-l border-y border-[#C9CDD4]" />
                 </>
             )}
 
@@ -282,7 +282,7 @@ export function FilterConditionEditor({
                             className="flex items-start gap-[4px]"
                         >
                             {/* 包含 / 不包含 切换 */}
-                            <div className="mt-0 flex flex-shrink-0 rounded-[6px] bg-[#F8F8F8] p-[3px]">
+                            <div className="mt-0 flex flex-shrink-0 rounded-md bg-[#F8F8F8] p-[3px]">
                                 <button
                                     type="button"
                                     onClick={() => updateCondition(condIndex, { include: true })}
@@ -341,7 +341,7 @@ export function FilterConditionEditor({
                     <button
                         type="button"
                         onClick={addCondition}
-                        className="inline-flex items-center gap-[4px] rounded-[6px] border border-[#EBECF0] bg-white/50 backdrop-blur-[4px] px-[12px] py-[3px] text-[14px] leading-[22px] text-[#212121] hover:bg-[#F8F8F8]"
+                        className="inline-flex items-center gap-[4px] rounded-md border border-[#EBECF0] bg-white/50 backdrop-blur-[4px] px-[12px] py-[3px] text-[14px] leading-[22px] text-[#212121] hover:bg-[#F8F8F8]"
                         title={localize("com_subscription.add_condition")}
                     >
                         <SquarePlus className="size-4 shrink-0 text-[#212121]" strokeWidth={1.5} />

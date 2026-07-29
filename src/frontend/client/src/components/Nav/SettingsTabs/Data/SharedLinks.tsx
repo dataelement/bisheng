@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useCallback, useState, useMemo, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import debounce from 'lodash/debounce';

@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { Label } from "@/components/bs-ui/label";
 import MultiSelect from "@/components/bs-ui/select/multi";
 import { Tabs, TabsList, TabsTrigger } from "@/components/bs-ui/tabs";
@@ -217,7 +218,7 @@ export default function KnowledgeSelectItem({ data, nodeId, onChange, onVarEvent
         }
         for (const el of value) {
             // Check if variable exists in flow
-            let _error = isVarInFlow(nodeId, flow.nodes, el.value, '');
+            const _error = isVarInFlow(nodeId, flow.nodes, el.value, '');
             if (_error) {
                 _errorKeys.push(el.value);
                 error = _error;

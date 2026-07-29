@@ -1,0 +1,289 @@
+{/* 工作档头（站点不渲染）：
+设计系统 · 阴影与圆角 v1 提案 · 2026-07-23
+状态：正文按定稿口吻撰写，两档投影取值与弹窗圆角 16px 待设计师验收；验收通过后按「给实现窗口」落 token。
+两档投影取值 = 基准组件已落地值：浮层档取自 DropdownMenu.tsx / Select.tsx，模态档取自 OriginalDialog.tsx / ConfirmContext.tsx。
+配套：01-设计规范.md（圆角/阴影两节 2026-07-23 迁出归口本文）、design-token.mdx（RADIUS 表，SSOT src/design-token.cjs）、组件-Modal弹窗.md（弹窗圆角 8vs16 以本文 16px 为准，其待决策清单该项可勾销）、组件-Button按钮.md（控件三档圆角先例）。
+现状扫描见文末附录 A（2026-07-23，仅迁移参考）。
+§1「控件档 / 容器档」两分法的来源：非外部标准，是对已落地事实的归纳——design-token.cjs RADIUS 表各档 usage、按钮规范三档 4/6/8 先例、C 套弹窗 16px 落地值、01-设计规范 2026-07-15「控件圆角跟按钮三档走，容器类单独档」方向建议。
+§1.4 贴边直角规则的依据案例：ApprovalCenterDialog.tsx:390-395（移动端全屏 rounded-none / PC md:rounded-xl，设计师 2026-07-23 认可为合理先例）、EditTagsModal.tsx:222 同款；Dialog.tsx:46 sm:rounded-lg（移动端贴边直角）、AlertDialog.tsx:45 移动端贴底滑入属同一逻辑。规则家在本文，多端适配原则只放指针。 */}
+
+import { RADIUS } from '~/design-token.cjs';
+
+export const mono = 'ui-monospace, "SF Mono", "Cascadia Mono", Consolas, "Liberation Mono", monospace';
+export const POPUP_SHADOW = '0 2px 16px -2px rgba(0, 23, 66, 0.10)';
+export const MODAL_SHADOW = '0 0 16px 0 rgba(3, 7, 117, 0.05)';
+
+export const figWrap = { display: 'flex', flexWrap: 'wrap', gap: 24, margin: '16px 0 8px' };
+export const figCap = { fontSize: 13, color: 'rgb(var(--text-3))', marginTop: 10, lineHeight: '20px' };
+export const codeTxt = { fontFamily: mono, fontSize: 12.5, color: 'rgb(var(--text-2))' };
+export const okTag = { color: '#00b42a', fontWeight: 500 };
+export const badTag = { color: '#f53f3f', fontWeight: 500 };
+
+export const RadiusLadder = () => (
+  <div style={figWrap}>
+    {RADIUS.map((r) => (
+      <div key={r.name} style={{ width: 148 }}>
+        <div style={{ height: 76, display: 'flex', alignItems: 'center' }}>
+          <div
+            style={{
+              width: 64,
+              height: r.px >= 999 ? 40 : 64,
+              borderRadius: r.px >= 999 ? 9999 : Math.min(r.px, 32),
+              border: '1px solid rgb(var(--brand-500))',
+              background: 'rgb(var(--brand-50))',
+            }}
+          />
+        </div>
+        <div style={{ marginTop: 8, fontSize: 13, color: 'rgb(var(--text-1))' }}>
+          <span style={codeTxt}>{r.name}</span>
+          <span style={{ color: 'rgb(var(--text-3))' }}>&ensp;{r.px >= 999 ? '9999px' : `${r.px}px`}</span>
+        </div>
+        <div style={{ fontSize: 12.5, lineHeight: '18px', color: 'rgb(var(--text-3))', marginTop: 2 }}>{r.usage}</div>
+      </div>
+    ))}
+  </div>
+);
+
+export const NestFig = ({ inner, good, label }) => (
+  <div style={{ width: 220 }}>
+    <div
+      style={{
+        width: 200,
+        height: 120,
+        borderRadius: 16,
+        border: '1px solid rgb(var(--border-base))',
+        background: 'rgb(var(--bg-page))',
+        padding: 8,
+      }}
+    >
+      <div
+        style={{
+          width: '100%',
+          height: '100%',
+          borderRadius: inner,
+          background: 'rgb(var(--brand-50))',
+          border: '1px solid rgb(var(--brand-500))',
+        }}
+      />
+    </div>
+    <div style={figCap}>
+      <span style={good ? okTag : badTag}>{good ? '✅ 推荐' : '❌ 不推荐'}</span>&ensp;{label}
+    </div>
+  </div>
+);
+
+export const NestDemo = () => (
+  <div style={figWrap}>
+    <NestFig inner={8} good={true} label="外层 16px、内边距 8px → 内层 8px，内外圆弧同心" />
+    <NestFig inner={16} good={false} label="内层照抄外层 16px，四角挤出月牙形空隙" />
+  </div>
+);
+
+export const ShadowCard = ({ shadow, radius, title, code, note }) => (
+  <div style={{ width: 260 }}>
+    <div
+      style={{
+        height: 150,
+        borderRadius: 12,
+        background: 'rgb(var(--fill-1))',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <div
+        style={{
+          width: 190,
+          height: 96,
+          borderRadius: radius,
+          background: 'rgb(var(--bg-page))',
+          border: '1px solid rgb(var(--border-base))',
+          boxShadow: shadow,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: 13,
+          color: 'rgb(var(--text-2))',
+        }}
+      >
+        {title}
+      </div>
+    </div>
+    <div style={figCap}>
+      <span style={codeTxt}>{code}</span>
+      {note && <><br />{note}</>}
+    </div>
+  </div>
+);
+
+export const ShadowTiers = () => (
+  <div style={figWrap}>
+    <ShadowCard shadow={POPUP_SHADOW} radius={12} title="下拉 / 气泡" code="shadow-popup · 圆角 xl" note="浮层投影：轻、贴近内容" />
+    <ShadowCard shadow={MODAL_SHADOW} radius={16} title="弹窗 / 抽屉" code="shadow-modal · 圆角 2xl" note="模态投影：大而弥散，浮得最高" />
+  </div>
+);
+
+export const ShadowContrast = () => (
+  <div style={figWrap}>
+    <div style={{ width: 260 }}>
+      <div style={{ height: 150, borderRadius: 12, background: 'rgb(var(--fill-1))', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ width: 190, height: 96, borderRadius: 12, background: 'rgb(var(--bg-page))', border: '1px solid rgb(var(--border-base))', boxShadow: POPUP_SHADOW }} />
+      </div>
+      <div style={figCap}><span style={okTag}>✅ 推荐</span>&ensp;浮层投影：蓝黑淡投影，把浮层轻轻托起</div>
+    </div>
+    <div style={{ width: 260 }}>
+      <div style={{ height: 150, borderRadius: 12, background: 'rgb(var(--fill-1))', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ width: 190, height: 96, borderRadius: 12, background: 'rgb(var(--bg-page))', border: '1px solid rgb(var(--border-base))', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -4px rgba(0,0,0,0.1)' }} />
+      </div>
+      <div style={figCap}><span style={badTag}>❌ 不推荐</span>&ensp;纯黑预设投影：又重又灰，且不在两档之内</div>
+    </div>
+  </div>
+);
+
+# 阴影与圆角规范 Elevation
+
+阴影与圆角共同塑造界面的层次：圆角决定一块表面看起来有多柔和，阴影决定它「浮」得有多高。两者都只从固定的档位里取值——圆角八档、投影两档，按场景选档，不自造数值。
+
+## 1. 圆角 Radius
+
+界面里的圆角分两类：跟着控件尺寸走的**控件档**，和跟着容器大小走的**容器档**。先判断你在做哪一类，再按下面的阶梯取值。
+
+### 1.1 阶梯一览
+
+<RadiusLadder />
+
+类名即 token 名（`rounded-sm` 就是 4px 档），完整的 CSS 变量与 Tailwind 类对照见「设计变量 Design Token」页。
+
+### 1.2 控件圆角：跟尺寸档走
+
+- **控件（按钮、输入框、选择器、菜单项）的圆角随自身尺寸取 sm / md / lg（4 / 6 / 8px）**：small 控件用 4px、medium 用 6px、large 用 8px。同一行里的控件尺寸档一致，圆角自然对齐。按钮三档即照此取（见「组件 → Button」）。
+- **拿不准就用 md（6px）**——它是 medium 控件的默认档，也是界面里最常见的控件圆角。
+- **胶囊与圆形用 full**：头像、pill 标签、圆形 icon 按钮。圆形按钮仅限单 icon 按钮，限制见「组件 → Button」。
+
+### 1.3 容器圆角：跟容器大小走
+
+- **卡片、下拉面板用 xl（12px）；弹窗、大卡片容器用 2xl（16px）；抽屉、超大容器用 3xl（24px）；特大区块用 4xl（32px）**。容器越大，圆角越大，浮起的层看起来才不生硬。
+- **弹窗统一 16px**。
+
+### 1.4 贴边的角不留圆角
+
+圆角属于「浮在内容之上的独立表面」。同一个容器换到移动端时，如果它铺满屏幕或贴住了屏幕边缘，贴边的角就改用直角——不是换一档更小的圆角，而是贴边侧归零：
+
+- **移动端全屏展示**：四角全部直角。例如一个弹窗在 PC 端悬浮时用 12px，到移动端整页铺满，四角就改直角。
+- **移动端从底部滑入贴底**：只保留顶部两角的容器档圆角，底部两角直角。
+- 悬浮形态不变的容器（移动端仍居中、四周留边）圆角照 §1.3 取，不因屏幕变窄而缩档。
+
+多端断点与判定口径见「多端适配 Responsive」，本条是圆角侧的细则。
+
+### 1.5 嵌套圆角
+
+**内层圆角 = 外层圆角 − 内边距**（结果归并到最近档位，最小 4px），这样内外两段圆弧同心，角部间隙均匀。例如弹窗（16px）内边距 8px 时，贴边卡片用 8px；内层照抄外层的圆角，四角就会挤出月牙形空隙。
+
+<NestDemo />
+
+### 1.6 正误对照
+
+| ✅ 推荐 | ❌ 不推荐 | 原因 |
+|---|---|---|
+| `rounded-2xl`（弹窗 16px） | `rounded-[20px]` | 20px 不在阶梯上；同类弹窗一个 16 一个 20，并排就对不齐 |
+| `rounded-sm`（4px） | `rounded-[5px]`、`rounded-[0.185rem]` | 离散值与 4px 肉眼难辨，却让「同一控件同一圆角」失效 |
+| `rounded-sm` | `rounded`（裸类） | 两者同为 4px，但裸类不带 token 名，统一写 `rounded-sm` 才看得出档位 |
+
+## 2. 阴影 Shadow
+
+BISHENG 的投影走「淡」路线：带一点蓝黑色、透明度很低，负责把浮层轻轻托起来，而不是砸出一圈黑晕。投影只有两档，按元素浮起的高度取。
+
+### 2.1 投影两档
+
+| 档位 | 投影值 | Tailwind 类（即 token 名） | 用在哪 |
+|---|---|---|---|
+| 浮层投影 Popup | `0 2px 16px -2px rgba(0,23,66,0.10)` | `shadow-popup` | 下拉菜单、选择器面板、气泡卡片、悬浮提示——点开即现、点外即走的临时浮层 |
+| 模态投影 Modal | `0 0 16px 0 rgba(3,7,117,0.05)` | `shadow-modal` | 弹窗、抽屉——要求用户处理完才关闭的打断式浮层 |
+
+<ShadowTiers />
+
+档位与类名是同一个 token 的两面：token 存「名字 + 值」，Tailwind 类名是代码里取用它的写法，两者同名同物。业务代码取用类名即可，不要自己写投影值。
+
+### 2.2 使用规则
+
+- **投影颜色用蓝黑，不用纯黑**：两档的投影色都带一点蓝、透明度不超过 10%。纯黑投影在浅色界面上发灰发脏，和淡投影混排还会打乱层次。按两档取值，这条自动满足。
+- **页面内静止的区块不加投影**：普通卡片、表格、表单区用边框和填充分层。只有真正浮在内容之上的元素（下拉、气泡、弹窗、抽屉）和拖拽中的元素才带投影——什么都浮起来，等于什么都没浮起来。
+- **只用这两档，不自造投影**：两档之外的任何投影——包括 Tailwind 自带的预设投影档和手写的投影值——都不使用。第三方组件自带的投影可以整个去掉，但不能改成别的值。
+- **投影可以和 1px 浅色边框搭配**：弹窗常用「淡投影 + 边框」的组合，暗色模式下投影不明显时边框还能帮浮层勾出轮廓。是否带边框由各组件自定，不作硬性要求。
+
+### 2.3 正误对照
+
+<ShadowContrast />
+
+| ✅ 推荐 | ❌ 不推荐 | 原因 |
+|---|---|---|
+| 下拉面板：`shadow-popup`（浮层投影） | `shadow-lg`（Tailwind 纯黑预设） | 一次违反两条规则：投影不在两档内，颜色是纯黑——又重又灰，和蓝黑淡投影混排会打乱层次 |
+| 静态卡片：只用边框分层 | 页面里每张卡都加投影 | 投影表达的是「浮起的高度」，静态内容浮起来没有意义，还让真正的浮层失去对比 |
+
+## 3. 使用约定
+
+- **圆角与投影一律取表内档位**：出现表外的手写值即视为未走规范；确属例外的，在对应组件文档里写明原因并注明「见阴影与圆角规范」。
+- **新档位先进规范、再进代码**：要用新的圆角或投影值，先由设计师在本文与 design token 里定档，之后才能出现在代码里，不允许先用后补——这就是本站所说「规范评审」的全部含义：设计师定夺 + 文档与 token 先行。
+
+{/* ## 附录 A：现状扫描存档（2026-07-23，仅迁移参考）——站点不渲染
+
+口径：`src/frontend/client/src` 的 *.tsx / *.ts / *.jsx，排除 `_gallery/`，2026-07-23 扫描（grep 文本级计数，含少量注释/字符串误差）。
+
+### A.1 圆角用量
+
+总计 1429 处 / 424 文件。预设档分布：md 434 · lg 309 · full 224 · 裸 rounded 102 · xl 86 · 2xl 62 · sm 54 · none 30 · 3xl 4 · xs 3（非阶梯类，随迁移清理）· 方向变体（t/b/l/r）合计约 30。
+
+任意值 81 处 / 12 种，归并映射（迁移时执行）：
+
+| 任意值 | 处数 | 归并到 |
+|---|---|---|
+| `rounded-[4px]` | 35 | `rounded-sm`（同值改写） |
+| `rounded-[20px]` | 12 | `rounded-2xl`（16px，弹窗先例 20→16，C 套 2026-07-02 已做过同款归并） |
+| `rounded-[2px]` | 7 | `rounded-sm`（4px） |
+| `rounded-[12px]` | 6 | `rounded-xl`（同值改写） |
+| `rounded-[10px]` | 6 | `rounded-xl`（12px）或按上下文归 `rounded-lg`（8px），逐处判断 |
+| `rounded-[5px]` | 5 | `rounded-md`（6px） |
+| `rounded-[6px]` | 3 | `rounded-md`（同值改写） |
+| `rounded-l-[24px]` | 2 | `rounded-l-3xl`（同值改写） |
+| `rounded-[8px]` | 2 | `rounded-lg`（同值改写） |
+| `rounded-t-[12px]` / `rounded-t-[10px]` | 1 + 1 | `rounded-t-xl` |
+| `rounded-[0.185rem]` | 1 | `rounded-sm`（≈3px→4px） |
+
+### A.2 阴影用量
+
+总计 260 处 / 168 文件：
+
+- Tailwind 预设档 117 处：lg 41 · md 29 · sm 28 · xl 10 · 2xl 9 —— 全部待归并到两档或删除（静态区块去投影）。
+- `shadow-none` 30 处：符合「压第三方默认」用法的保留。
+- 任意值 94 处 / 44 种。头部即两档提案来源：`0_2px_16px_-2px_rgba(0,23,66,0.10)` ×8（DropdownMenu / Select / SelectDropDownPop 系）= 浮层档；`0_0_16px_0_rgba(3,7,117,0.05)`（OriginalDialog / ConfirmContext）= 模态档。其余为长尾蓝黑系（rgba(3,7,117,·) / rgba(0,17,147,·) / rgba(117,145,212,·) / #072258 系）与纯黑系杂值。
+- style.css 自定义类：`.shadow-stroke` 13 处（inset 1px 半透明描边圆环，头像轮廓用，非投影）、`shadow-outline` 6 处。去留待迁移期定（见给实现窗口 6）。
+
+### A.3 关键代码锚点
+
+- 模态档落地：`src/components/ui/OriginalDialog.tsx:65`、`src/Providers/ConfirmContext.tsx:112`（`rounded-2xl border border-[#ebebeb] shadow-[0_0_16px_0_rgba(3,7,117,0.05)]`）。
+- 浮层档落地：`src/components/ui/DropdownMenu.tsx:47/64`、`src/components/ui/Select.tsx:81`（`shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]`，这三处目前 `border-0`；边框非硬性规则（设计师 2026-07-23 批注），是否补由设计师随迁移定夺）。
+- 圆角接线：`tailwind.config.cjs:288`（lg=var(--radius)=8px、md=−2、sm=−4、4xl=2rem）；`packages/ui/src/styles/tokens.css:103`（`--radius: 0.5rem`）。 */}
+
+{/* ## 给实现窗口（token 落地步骤）——站点不渲染
+
+设计师验收两档投影值 + 弹窗 16px 后执行：
+
+1. `src/design-token.cjs` 新增 `SHADOW` 数组（popup / modal 两档，值见 §2.1）并入 `tailwindTheme.boxShadow`；`packages/ui/src/styles/tokens.css` 落 `--shadow-popup` / `--shadow-modal` CSS 变量（boxShadow 引变量，方便暗色模式后续单独调）。
+1a. §2.2「只用这两档」的 agent 执行口径：禁用 Tailwind 预设 `shadow-sm` / `shadow-md` / `shadow-lg` / `shadow-xl` / `shadow-2xl` 与一切 `shadow-[…]` 任意值；`shadow-none` 仅用于压掉第三方组件自带投影，不得用任意值替换第三方投影。正文按元规范 §0 写成白话，此处是精确清单。
+2. `packages/ui/tailwind-preset.cjs` 的 borderRadius 缺 `'4xl': '2rem'`（client 的 tailwind.config.cjs:294 已有）——补齐，否则库内组件用不了 rounded-4xl。
+3. Dialog 基座含 `sm:rounded-lg`，业务覆写圆角必须连 `sm:` 变体一起写（`rounded-2xl sm:rounded-2xl`）；弹窗统一 16px 落地时直接改基座为 `rounded-2xl`，此坑随之消失。
+4. 弹窗边框 `border-[#ebebeb]` 属裸 hex，迁移时换语义 token `border-border-base`（色彩规范 semantic 层）。
+5. `design-token.mdx` 增加「阴影 Shadow」节，从 SSOT 渲染（SHADOW 进 cjs 之后做，别手抄值）。
+6. 待决策（不阻塞 v1）：① 两档投影色是否统一为同一蓝黑基色（现浮层 rgba(0,23,66,·) vs 模态 rgba(3,7,117,·)，肉眼几乎无差）；② `.shadow-stroke`（13 处）/ `shadow-outline`（6 处）两个自定义类的去留；③ 暗色模式是否为投影单独给值（现方案：同值不调）；④ 下拉基准（DropdownMenu / Select）是否补 1px 边框（边框已改为非硬性，见 §2.2）。
+7. 组件-Modal弹窗.md 待决策清单「圆角：弹窗用几 px？」可勾销，标注「2026-07-23 定 16px，见基础-阴影与圆角规范」。
+8. 归并迁移照总纲节奏：设计师逐批点名、每批一笔提交；映射表见附录 A.1，投影迁移优先加 shadow-lg 41 处（下拉/浮层聚集）。
+
+（sidebar 注册与 01-设计规范 指针已随本次建档完成：rspress.config.ts「设计规范」组新增本页入口，改 config 后需重启 dev 服务。） */}
+
+{/* ## 改动记录——站点不渲染
+
+| 日期 | 改了什之 | 涉及 | 提交 |
+|---|---|---|---|
+| 2026-07-23 | 建档 v1 提案：圆角八档使用规则（控件跟尺寸 4/6/8、容器 12/16/24/32、弹窗定 16px 终结 8vs16、嵌套=外层−内边距、禁任意值）；投影两档 popup/modal（取下拉/弹窗基准组件已落地值）+「淡投影+1px 边框」配套规则；全量现状扫描存档（rounded 1429 处 / shadow 260 处，口径见附录 A）；01-设计规范 圆角/阴影两节迁出归口本文，总纲看板与 rspress 侧栏同步 | 本文件、01-设计规范.md、00-总纲.md、rspress.config.ts | 待 committer 窗口提交 |
+| 2026-07-23 | v1.2 展示层去迁移工程措辞：正文（§1.2/1.3/1.4/1.6/2.1/2.2/3）删「已落地 / 现行基准 / 验收后 / 接线完成前 / 迁移归并 / 存量归并」等迁移状态描述，只留设计规则；迁移事实与归并映射原样保留在隐藏区（附录 A、给实现窗口、本改动记录） | 本文件 | 待 committer 窗口提交 |
+| 2026-07-23 | v1.1 按设计师 7 条批注修订：① 工作档头补「控件/容器两分法」来源口径；② 新增 §1.4 贴边直角（移动端全屏/贴底容器贴边侧直角，认可审批中心先例，多端适配原则加指针）；③ §2.1 说明 token 与 Tailwind 类名同名同物、验收后进 design token 页；④「投影必须搭 1px 边框」降级为非硬性搭配（§2.2 末条），相关 ❌ 例与附录锚点同步改；⑤「只用两档」正文改白话，精确类名清单移隐藏区（给实现窗口 1a）；⑥「不用纯黑投影」升级为 §2.2 规则条；⑦ §3「规范评审」写实为「设计师定夺 + 先改规范再写代码」 | 本文件、基础-多端适配原则.md | 待 committer 窗口提交 | */}

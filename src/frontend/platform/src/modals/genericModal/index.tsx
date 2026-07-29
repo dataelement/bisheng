@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { FileText, Variable } from "lucide-react";
 import { useContext, useEffect, useRef, useState } from "react";
 import SanitizedHTMLWrapper from "../../components/SanitizedHTMLWrapper";
@@ -71,12 +72,12 @@ export default function GenericModal({
       matches.push(`{${match[1]}}`);
     }
 
-    let invalid_chars = [];
-    let fixed_variables = [];
-    let input_variables = matches;
-    for (let variable of input_variables) {
-      let new_var = variable;
-      for (let char of INVALID_CHARACTERS) {
+    const invalid_chars = [];
+    const fixed_variables = [];
+    const input_variables = matches;
+    for (const variable of input_variables) {
+      const new_var = variable;
+      for (const char of INVALID_CHARACTERS) {
         if (variable.includes(char)) {
           invalid_chars.push(new_var);
         }

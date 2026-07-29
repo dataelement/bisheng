@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useRecoilValue } from 'recoil';
 import type { TMessageProps } from '~/common';
 import MinimalHoverButtons from '~/components/Chat/Messages/MinimalHoverButtons';

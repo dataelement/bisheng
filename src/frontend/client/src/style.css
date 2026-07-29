@@ -235,6 +235,9 @@ html {
      RGB channels so the Tailwind `btn-*` colors keep `/<alpha>` working.
      Light-mode values only for now (dark mode inherits them — known debt). */
   --btn-gray-text: 78 89 105;      /* #4E5969 — default-color button text */
+  --btn-gray-solid-bg: 78 89 105;  /* #4E5969 — default SOLID fill (+white text);
+                                      split from gray-text so dark can flip the
+                                      TEXT role light without breaking the fill */
   --btn-gray-border: 229 230 235;  /* #E5E6EB — default-color button border */
   --btn-fill-1: 247 248 250;       /* #F7F8FA — neutral fill ramp: hover bg */
   --btn-fill-2: 242 243 245;       /* #F2F3F5 — active bg / filled base */
@@ -243,6 +246,8 @@ html {
   --btn-danger: 245 63 63;         /* #F53F3F */
   --btn-danger-hover: 214 55 58;   /* #D6373A */
   --btn-danger-active: 208 47 51;  /* #D02F33 */
+  --btn-disabled-bg: 245 245 245;     /* #F5F5F5 — disabled fill (was black/4% flat) */
+  --btn-disabled-text: 191 191 191;   /* #BFBFBF — disabled text (was black/25% flat) */
   --btn-disabled-border: 217 217 217; /* #D9D9D9 — bordered variants, disabled */
 
   /* Illustration palette — empty-state SVG illustrations use --illus-* instead
@@ -431,6 +436,27 @@ html {
   --arco-gray-9: 223 223 223;   /* #DFDFDF */
   --arco-gray-10: 246 246 246;  /* #F6F6F6 */
   --bg-page: 18 18 18;          /* #121212 — page surface, dark */
+
+  /* Disabled button, dark: a subtle raised inert fill + muted (not invisible)
+     text/border. Light used black overlays on white; dark mirrors with a
+     lightened neutral so disabled reads as greyed-out on #121212, not gone. */
+  --btn-disabled-bg: 42 42 42;      /* #2A2A2A */
+  --btn-disabled-text: 120 120 122; /* gray-5 dark — muted but legible */
+  --btn-disabled-border: 95 95 96;  /* gray-4 dark — visible edge */
+
+  /* Button neutral (default color), dark: text flips light, border + the
+     fill ramp follow the dark gray ramp so filled/hover/active lighten (the
+     correct elevation direction on #121212). Danger stays as-is (red is
+     dark-safe); brand tints are handled per-variant in Button.tsx. */
+  --btn-gray-text: 197 197 197;    /* gray-8 dark #C5C5C5 — light text */
+  --btn-gray-solid-bg: 95 95 96;   /* gray-4 dark #5F5F60 — solid fill, white text 4.9:1 */
+  --btn-gray-border: 72 72 73;     /* gray-3 dark #484849 */
+  --btn-fill-1: 38 38 40;          /* #262628 — text/outlined hover: raised a
+                                      notch above gray-1 (#17171A ≈ page #121212,
+                                      hover was invisible) yet below fill-2 */
+  --btn-fill-2: 46 46 48;          /* gray-2 dark — filled base */
+  --btn-fill-3: 72 72 73;          /* gray-3 dark — filled hover */
+  --btn-fill-4: 95 95 96;          /* gray-4 dark — filled active */
 }
 
 .gizmo {

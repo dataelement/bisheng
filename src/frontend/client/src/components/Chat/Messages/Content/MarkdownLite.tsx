@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { memo } from 'react';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';

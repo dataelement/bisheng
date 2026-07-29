@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useEffect, useMemo, useState } from "react"
 import { useMessageStore } from "./messageStore"
 import { useTranslation } from "react-i18next"

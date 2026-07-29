@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { UploadIcon } from "@/components/bs-icons";
 import { useDropzone } from "react-dropzone";
 import { useTranslation } from "react-i18next";

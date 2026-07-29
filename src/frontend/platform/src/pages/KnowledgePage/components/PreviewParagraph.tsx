@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { LoadingIcon } from "@/components/bs-icons/loading";
 import { Button } from "@/components/bs-ui/button";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
@@ -304,7 +305,9 @@ export default function PreviewParagraph({ fileId, page = 1, previewCount, edit,
         return () => container.removeEventListener('scroll', handleScroll);
     }, [chunks.length]);
 
-    return <div className="pt-3 relative w-full">
+    // flex chain lets a `flex-1 min-h-0` className fill a bounded parent (upload
+    // step 3); fixed-height classNames (knowledge detail) are unaffected.
+    return <div className="pt-3 relative w-full flex-1 min-h-0 flex flex-col">
         {loading && (
             <div className="absolute left-0 top-0 z-10 flex h-full w-full items-center justify-center bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
                 <LoadingIcon />

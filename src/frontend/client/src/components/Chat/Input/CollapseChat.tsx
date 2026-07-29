@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import React from 'react';
 import { Minimize2 } from 'lucide-react';
 import { TooltipAnchor } from '~/components/ui';

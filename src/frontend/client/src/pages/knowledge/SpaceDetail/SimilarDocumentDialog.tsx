@@ -58,7 +58,7 @@ function PendingFileRow({ entry, isSelected, onClick }: PendingFileRowProps) {
             type="button"
             onClick={onClick}
             className={[
-                "w-full text-left px-3 py-3 transition-colors rounded-[8px] flex items-start gap-2 mb-1",
+                "w-full text-left px-3 py-3 transition-colors rounded-lg flex items-start gap-2 mb-1",
                 "hover:bg-[#f2f3f5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
                 isSelected ? "bg-[#F0F5FF]" : "bg-transparent",
             ].join(" ")}
@@ -114,7 +114,7 @@ function RecommendationCard({ entry, disabled, onLink }: RecommendationCardProps
         : `当前主版本 V${entry.current_primary_version_no ?? 1}`;
 
     return (
-        <div className="flex items-center justify-between gap-3 rounded-[8px] border border-[#EBECF0] bg-white px-4 py-3 hover:border-blue-500 hover:bg-[#F4F8FF] transition-colors group">
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-[#EBECF0] bg-white px-4 py-3 hover:border-blue-500 hover:bg-[#F4F8FF] transition-colors group">
             <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 mb-1">
                     <Tooltip>
@@ -147,7 +147,7 @@ function RecommendationCard({ entry, disabled, onLink }: RecommendationCardProps
                 onClick={() =>
                     onLink({ document_id: entry.target_document_id, title: entry.title })
                 }
-                className="h-8 shrink-0 rounded-[6px] bg-blue-500 px-4 text-[12px] text-white hover:bg-blue-400 btn-brand-primary"
+                className="h-8 shrink-0 rounded-md bg-blue-500 px-4 text-[12px] text-white hover:bg-blue-400 btn-brand-primary"
             >
                 <Link2 className="mr-1.5 size-4" />
                 {localize("com_knowledge.version.btn_link_as_new_version")}
@@ -181,7 +181,7 @@ function SearchResultRow({ entry, disabled, onLink }: SearchResultRowProps) {
                 size="sm"
                 disabled={disabled}
                 onClick={() => onLink({ document_id: entry.document_id, title: entry.title })}
-                className="h-7 shrink-0 rounded-[6px] bg-blue-500 px-3 text-xs text-white hover:bg-blue-400 btn-brand-primary"
+                className="h-7 shrink-0 rounded-md bg-blue-500 px-3 text-xs text-white hover:bg-blue-400 btn-brand-primary"
             >
                 <Link2 className="mr-1.5 size-3" />
                 {localize("com_knowledge.version.btn_link_as_new_version")}
@@ -290,7 +290,7 @@ function RightPanel({
     return (
         <div className="flex flex-col gap-5 px-5 py-4 h-full">
             {/* ── Section 1: Current file ─────────────────────────────── */}
-            <section className="rounded-[8px] border border-[#EBECF0] bg-[#FAFAFA] px-4 py-3 flex items-start justify-between shrink-0">
+            <section className="rounded-lg border border-[#EBECF0] bg-[#FAFAFA] px-4 py-3 flex items-start justify-between shrink-0">
                 <div className="flex-1 min-w-0 pr-4">
                     <p className="text-[12px] text-[#86909c] mb-1">
                         {localize("com_knowledge.version.section_current_file")}
@@ -321,7 +321,7 @@ function RightPanel({
             </section>
 
             {/* ── Sections 2 & 3: Recommendations and Search ──────────── */}
-            <div className="shrink-0 flex flex-col gap-5 rounded-[8px] border border-[#EBECF0] bg-[#FAFAFA] p-4">
+            <div className="shrink-0 flex flex-col gap-5 rounded-lg border border-[#EBECF0] bg-[#FAFAFA] p-4">
                 {/* ── Section 2: Recommendations ──────────────────────────── */}
                 <section>
                     <h3 className="mb-0.5 text-[14px] font-medium text-[#1d2129]">
@@ -368,14 +368,14 @@ function RightPanel({
                             onChange={(e) => setKeyword(e.target.value)}
                             onKeyDown={handleKeyDown}
                             placeholder={localize("com_knowledge.version.search_placeholder")}
-                            className="h-8 flex-1 rounded-[6px] border-[#EBECF0] text-[12px] bg-white"
+                            className="h-8 flex-1 rounded-md border-[#EBECF0] text-[12px] bg-white"
                         />
                         <Button
                             type="button"
                             variant="outline"
                             size="sm"
                             onClick={handleSearchSubmit}
-                            className="h-8 rounded-[6px] px-4 text-[12px] text-[#4e5969] bg-white border-[#EBECF0]"
+                            className="h-8 rounded-md px-4 text-[12px] text-[#4e5969] bg-white border-[#EBECF0]"
                         >
                             <Search className="mr-1.5 size-4" />
                             {localize("com_knowledge.version.search_button")}
@@ -385,13 +385,13 @@ function RightPanel({
                     {/* Search results or placeholder */}
                     {!hasSearched ? (
                         // Centered placeholder hint when no keyword has been entered
-                        <div className="flex h-16 items-center justify-center rounded-[6px] border border-dashed border-[#EBECF0] bg-white">
+                        <div className="flex h-16 items-center justify-center rounded-md border border-dashed border-[#EBECF0] bg-white">
                             <p className="text-[14px] text-[#c9cdd4]">
                                 {localize("com_knowledge.version.search_placeholder")}
                             </p>
                         </div>
                     ) : (
-                        <div className="rounded-[6px] border border-[#EBECF0] bg-white">
+                        <div className="rounded-md border border-[#EBECF0] bg-white">
                             {searchLoading ? (
                                 <div className="flex h-16 items-center justify-center">
                                     <Loader2 className="size-5 animate-spin text-[#86909c]" />
@@ -418,7 +418,7 @@ function RightPanel({
             </div>
 
             {/* ── Section 4: Skip linking ─────────────────────────────── */}
-            <section className="mt-auto shrink-0 rounded-[8px] border border-dashed border-[#EBECF0] bg-white px-4 py-3 flex items-center justify-between">
+            <section className="mt-auto shrink-0 rounded-lg border border-dashed border-[#EBECF0] bg-white px-4 py-3 flex items-center justify-between">
                 <div>
                     <h3 className="mb-1 text-[14px] font-medium text-[#1d2129]">
                         {localize("com_knowledge.version.section_dismiss")}
@@ -433,7 +433,7 @@ function RightPanel({
                     size="sm"
                     disabled={dismissPending || isLinking}
                     onClick={onDismiss}
-                    className="h-8 shrink-0 rounded-[6px] px-4 text-[12px] text-[#4e5969]"
+                    className="h-8 shrink-0 rounded-md px-4 text-[12px] text-[#4e5969]"
                 >
                     <Check className="mr-1.5 size-4" />
                     {localize("com_knowledge.version.btn_dismiss")}
@@ -601,7 +601,7 @@ export function SimilarDocumentDialog({
                     <Button
                         type="button"
                         variant="outline"
-                        className="h-8 rounded-[6px] px-4 font-normal"
+                        className="h-8 rounded-md px-4 font-normal"
                         onClick={() => onOpenChange(false)}
                     >
                         {localize("com_knowledge.version.btn_close")}

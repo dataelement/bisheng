@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { RadialProgressType } from "../../types/components";
 
 export default function RadialProgressComponent({

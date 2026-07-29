@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import type { InfiniteData, UseMutationResult } from '@tanstack/react-query';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type * as t from '~/types/chat';

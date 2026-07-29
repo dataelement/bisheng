@@ -452,7 +452,7 @@ export default function AiChatMessages({
                     <button
                         type="button"
                         onClick={scrollToBottom}
-                        className="flex items-center h-8 justify-center gap-2 rounded-[6px] border border-[#EBECF0] bg-white/80 backdrop-blur-[4px] px-2.5 text-sm leading-5 text-neutral-800 hover:bg-white/90 transition-colors"
+                        className="flex items-center h-8 justify-center gap-2 rounded-md border border-[#EBECF0] bg-white/80 backdrop-blur-[4px] px-2.5 text-sm leading-5 text-neutral-800 hover:bg-white/90 transition-colors"
                     >
                         <ArrowDownIcon size={16} />
                         <span className="text-sm">回到底部</span>

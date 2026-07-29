@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { BookOpenIcon } from '@/components/bs-icons/bookOpen';
 import { GithubIcon } from '@/components/bs-icons/github';
 import { LoadingIcon } from '@/components/bs-icons/loading';

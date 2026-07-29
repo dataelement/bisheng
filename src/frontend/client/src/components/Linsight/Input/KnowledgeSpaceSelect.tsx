@@ -168,7 +168,7 @@ export function KnowledgeSpaceSelect({ value, disabled = false, onChange, compac
                 <div className="relative shrink-0">
                     <SearchIcon className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
                     <Input
-                        className="h-[28px] rounded-[6px] border border-[#ECECEC] bg-white pl-8 text-xs focus-visible:ring-1 focus-visible:ring-blue-500/20"
+                        className="h-[28px] rounded-md border border-[#ECECEC] bg-white pl-8 text-xs focus-visible:ring-1 focus-visible:ring-blue-500/20"
                         placeholder={localize('com_chat_knowledge_placeholder_search_space')}
                         value={keyword}
                         onChange={(e) => setKeyword(e.target.value)}

@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { Textarea } from "@/components/bs-ui/input";
 import { Label } from "@/components/bs-ui/label";
 import { useEffect, useState } from "react";

@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import {
     TableBody,
     TableCell,
@@ -21,7 +22,7 @@ import { SortType, SortDirection, FileStatus, FileType, KnowledgeFile, SpaceRole
 import { formatBytes } from "~/utils";
 import { useInlineRename } from "../hooks/useInlineRename";
 import { useKnowledgeMoveDrag } from "../hooks/useKnowledgeMoveDrag";
-import { formatTime, getKnowledgeApprovalStatusLabel, isKnowledgeApprovalRejected, isKnowledgeItemPreviewable, isKnowledgeItemUploading } from "../knowledgeUtils";
+import { AUDIO_FILE_EXTENSIONS, VIDEO_FILE_EXTENSIONS, formatTime, getKnowledgeApprovalStatusLabel, isKnowledgeApprovalRejected, isKnowledgeItemPreviewable, isKnowledgeItemUploading } from "../knowledgeUtils";
 import { useLocalize, useScrollRevealRef } from "~/hooks";
 import { useGetBsConfig } from "~/hooks/queries/endpoints/queries";
 import { useToastContext } from "~/Providers";
@@ -43,9 +44,26 @@ const renderHighlightedName = (text: string, keyword?: string) => {
     );
 };
 
+const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "bmp", "gif", "webp"];
+
+/** Line-art icon for the name cell in table mode; folders are handled by the caller. */
+const renderRowFileIcon = (file: KnowledgeFile) => {
+    const ext = file.name.split(".").pop()?.toLowerCase() || "";
+    if (file.type === FileType.AUDIO || (AUDIO_FILE_EXTENSIONS as readonly string[]).includes(ext)) {
+        return <Outlined.FileAudio className="size-[14px]" />;
+    }
+    if (file.type === FileType.VIDEO || (VIDEO_FILE_EXTENSIONS as readonly string[]).includes(ext)) {
+        return <Outlined.FileVideo className="size-[14px]" />;
+    }
+    if (IMAGE_EXTENSIONS.includes(ext)) {
+        return <Outlined.FileImage className="size-[14px]" />;
+    }
+    return <Outlined.File className="size-[14px]" />;
+};
+
 /** 状态列悬停：下载 / 更多 — 白底、细灰边、8px 圆角 */
 const FILE_ROW_ACTION_BTN_CLASS =
-    "size-7 shrink-0 flex items-center justify-center rounded-[8px] border border-[#ECECEC] bg-white text-[#4e5969] hover:bg-[#f7f7f7] transition-colors";
+    "size-7 shrink-0 flex items-center justify-center rounded-lg border border-[#ECECEC] bg-white text-[#4e5969] hover:bg-[#f7f7f7] transition-colors";
 
 // ============================================================
 // 列定义：key、最小宽度、初始宽度
@@ -1073,9 +1091,7 @@ function FileRow({
                     )}>
                         {isFolder
                             ? <Outlined.FolderClose className="size-[14px]" />
-                            : (['png', 'jpg', 'jpeg', 'bmp', 'gif', 'webp'].includes(file.name.split('.').pop()?.toLowerCase() || "")
-                                ? <Outlined.FileImage className="size-[14px]" />
-                                : <Outlined.File className="size-[14px]" />)
+                            : renderRowFileIcon(file)
                         }
                     </div>
                     {isRenaming ? (

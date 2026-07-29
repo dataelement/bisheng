@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import i18next from "i18next"
 import { useEffect, useContext } from "react"
 import { locationContext } from "../../../contexts/locationContext"
@@ -87,7 +88,7 @@ export default function Word({ data, workflow }) {
 
     // Sign editorConfig with JWT and then create editor
     const initEditor = async () => {
-        let finalConfig = { ...editorConfig }
+        const finalConfig = { ...editorConfig }
         try {
             const res = await getOfficeTokenApi(editorConfig)
             if (res.token) {

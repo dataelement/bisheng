@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import AssistantSetting from "@/components/Pro/security/AssistantSetting";
 import { TitleIconBg } from "@/components/bs-comp/cardComponent";
 import AppAvator from "@/components/bs-comp/cardComponent/avatar";
@@ -34,7 +35,7 @@ export default function Setting() {
   const { t } = useTranslation();
 
   const { appConfig } = useContext(locationContext)
-  let { assistantState, dispatchAssistant } = useAssistantStore();
+  const { assistantState, dispatchAssistant } = useAssistantStore();
 
   return (
     <div

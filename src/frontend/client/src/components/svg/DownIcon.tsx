@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { cn } from '~/utils';
 export default function DownIcon({ className = '', ...props }) {
     return (

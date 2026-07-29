@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Dialog, DialogContent, DialogHeader, DialogDescription } from '@/components/bs-ui/dialog';
