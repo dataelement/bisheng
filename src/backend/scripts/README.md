@@ -117,6 +117,25 @@ Exit codes:
 - `4`：真实删除、分步核验或恢复执行失败。
 - `5`：审计报告无法持久化；脚本不会在该状态下继续新的业务删除。
 
+### `strip_abstract_labels.py`
+
+剥离历史 `knowledgefile.abstract` 中由旧摘要 prompt 写入的装饰标签（`【文档类型】` / `【摘要】`）。门户详情已有「文档摘要」标题，这些前缀会造成重复展示。默认 dry-run；传入 `--apply` 后写回 MySQL（不刷 ES）。清洗逻辑与入库 `AbstractTransformer` 共用。
+
+Usage:
+
+```bash
+PYTHONPATH=./ .venv/bin/python scripts/strip_abstract_labels.py
+PYTHONPATH=./ .venv/bin/python scripts/strip_abstract_labels.py --apply
+PYTHONPATH=./ .venv/bin/python scripts/strip_abstract_labels.py --apply --file-id 123
+PYTHONPATH=./ .venv/bin/python scripts/strip_abstract_labels.py --apply --limit 500
+```
+
+Scope:
+
+- 仅 MySQL `knowledgefile.abstract`
+- 候选条件：`abstract` 含 `【摘要】` 或 `【文档类型】`
+- 不重跑 LLM、不重解析、不更新 ES `metadata.abstract`
+
 ### `backfill_file_similarity_candidates.py`
 
 回填历史知识空间文件的相似候选缓存表 `knowledge_file_similarity_candidate`。默认 dry-run，只统计将刷新的文件；传入 `--apply` 后会逐个调用相似候选刷新逻辑，写入候选明细并同步更新 `knowledgefile.similar_status`。可通过 `--sleep-ms` 降低回填期间 CPU 压力。
