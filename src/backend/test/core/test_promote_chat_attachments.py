@@ -67,6 +67,16 @@ class TestPromoteChatAttachments:
         assert "object_name" not in promoted[0]  # stays unresolvable, flagged to the user later
         assert promoted[1]["object_name"].startswith(f"{CHAT_OBJECT_PREFIX}7/")
 
+    async def test_workflow_chat_names_the_link_file_url(self, storage):
+        # Each upload path spells the link field differently; workflow chat says
+        # file_url, and reading only `filepath` silently promoted nothing.
+        files = [{"file_id": "f1", "file_name": "a.png", "file_url": "/bisheng-tmp/abc.png"}]
+
+        promoted = await promote_chat_attachments(files, user_id=7)
+
+        storage.copy_object.assert_awaited_once()
+        assert promoted[0]["object_name"].startswith(f"{CHAT_OBJECT_PREFIX}7/")
+
     async def test_extension_is_carried_over_from_the_display_name(self, storage):
         files = [{"file_id": "f1", "filename": "报告.PDF", "filepath": "/bisheng-tmp/xyz.pdf"}]
 
