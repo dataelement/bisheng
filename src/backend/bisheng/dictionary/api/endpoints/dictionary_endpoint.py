@@ -110,11 +110,20 @@ async def list_dictionaries(
 @router.get("/export", response_class=StreamingResponse)
 async def export_dictionaries(
     type: str | None = Query(None, description="字典类型筛选(数据库英文 code)"),
+    keyword: str | None = Query(None, description="关键词模糊匹配 type/dict_key/dict_value"),
+    sort_by: bool | None = Query(None, description="排序顺序, True 升序, False 降序"),
+    is_enabled: bool | None = Query(None, description="是否启用筛选"),
     user: UserPayload = Depends(UserPayload.get_login_user),
     service: DictionaryService = Depends(get_dictionary_service),
 ):
     """导出字典数据为 Excel(管理员)"""
-    data = await service.export(user, dict_type=type)
+    data = await service.export(
+        user,
+        dict_type=type,
+        keyword=keyword,
+        sort_by=sort_by,
+        is_enabled=is_enabled,
+    )
     filename = f"dictionary_export_{type or 'all'}.xlsx"
     return StreamingResponse(
         BytesIO(data),

@@ -54,6 +54,9 @@ class SystemDictionaryRepository(BaseRepository[SystemDictionary, int], ABC):
     async def find_all_for_export(
         self,
         dict_type: str | None = None,
+        keyword: str | None = None,
+        sort_by: bool | None = None,
+        is_enabled: bool | None = None,
     ) -> list[SystemDictionary]:
-        """查询所有字典条目用于导出,可选按类型筛选"""
+        """查询所有字典条目用于导出,支持 type/keyword/sort_by/is_enabled 筛选"""
         pass

@@ -113,14 +113,27 @@ class SystemDictionaryRepositoryImpl(BaseRepositoryImpl[SystemDictionary, int], 
     async def find_all_for_export(
         self,
         dict_type: str | None = None,
+        keyword: str | None = None,
+        sort_by: bool | None = None,
+        is_enabled: bool | None = None,
     ) -> list[SystemDictionary]:
-        """查询所有字典条目用于导出,可选按类型筛选"""
+        """查询所有字典条目用于导出,支持 type/keyword/sort_by/is_enabled 筛选"""
         query = select(SystemDictionary)
+
         if dict_type:
             query = query.where(SystemDictionary.type == dict_type)
+
+        if keyword:
+            like_pattern = f"%{keyword.strip()}%"
+            query = query.where(
+                (SystemDictionary.dict_key.ilike(like_pattern)) | (SystemDictionary.dict_value.ilike(like_pattern))
+            )
+
+        if is_enabled is not None:
+            query = query.where(SystemDictionary.is_enabled == is_enabled)
+
         query = query.order_by(
-            SystemDictionary.type.asc(),
-            SystemDictionary.sort_order.asc(),
+            SystemDictionary.sort_order.desc() if sort_by is not None and not sort_by else SystemDictionary.id.asc(),
             SystemDictionary.id.asc(),
         )
         result = await self.session.exec(query)

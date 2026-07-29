@@ -159,11 +159,23 @@ class DictionaryService:
         data = [DictionaryResponse.model_validate(entity) for entity in entities]
         return PageData(data=data, total=total)
 
-    async def export(self, user: UserPayload, dict_type: str | None = None) -> bytes:
-        """导出字典数据为 Excel 字节流,管理员权限"""
+    async def export(
+        self,
+        user: UserPayload,
+        dict_type: str | None = None,
+        keyword: str | None = None,
+        sort_by: bool | None = None,
+        is_enabled: bool | None = None,
+    ) -> bytes:
+        """导出字典数据为 Excel 字节流,管理员权限,支持 list_page 同款筛选"""
         self._ensure_admin(user)
 
-        entities = await self.repository.find_all_for_export(dict_type)
+        entities = await self.repository.find_all_for_export(
+            dict_type=dict_type,
+            keyword=keyword,
+            sort_by=sort_by,
+            is_enabled=is_enabled,
+        )
         if not entities:
             raise DictionaryExportEmptyError()
 
