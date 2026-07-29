@@ -21,21 +21,7 @@ export default function MessageUser({ useName, data, showButton, disabledSearch 
     const [config] = useRecoilState(bishengConfState)
     const localize = useLocalize()
 
-    // History returns the attachments as the raw JSON string held in the
-    // message row, while a live send hands over an array — normalise both.
-    const files = useMemo(() => {
-        const raw = data.files
-        if (Array.isArray(raw)) return raw
-        if (typeof raw === 'string' && raw) {
-            try {
-                const parsed = JSON.parse(raw)
-                return Array.isArray(parsed) ? parsed : []
-            } catch {
-                return []
-            }
-        }
-        return []
-    }, [data.files])
+    const files = useMemo(() => (Array.isArray(data.files) ? data.files : []), [data.files])
 
     const msg = useMemo(() => {
         const res = typeof data.message === 'string' ? data.message : data.message[data.chatKey]
