@@ -573,6 +573,19 @@ function AssistantBubble({
         }
         return { ...parseMessageText(message.text || ""), finalTextIdx: -1 };
     }, [message.text, message.events, isAgentNative]);
+
+    // True only when `regularContent` came from the events timeline's trailing
+    // text block — i.e. it is a real answer the model streamed in. Every other
+    // path falls back to `message.text`, which `onError` overwrites with the
+    // error copy, so `regularContent` alone can't tell answer from error text.
+    const hasAnswerBody = finalTextIdx >= 0 && !!regularContent;
+
+    // What the failure notice says. When an answer body survived, the specific
+    // provider error is noise — what matters is that the answer is cut short.
+    const errorNotice = hasAnswerBody
+        ? localize("workstation.chat.answer_interrupted")
+        : message.errorText || regularContent || localize("workstation.chat.answer_failed");
+
     const { data: bsConfig } = useGetBsConfig()
 
     const modelName = message.sender || "AI";
@@ -681,30 +694,12 @@ function AssistantBubble({
                     </div>
                 )}
 
-                {/* Error state */}
-                {showWaiting ? null : message.error ? (
-                    isTransientError ? (
-                        // Transient upstream hiccup (rate limit / busy): calm neutral
-                        // notice + Retry (re-sends the last user message via regenerate),
-                        // never the red error bubble.
-                        <ServiceBusyNotice
-                            desc={regularContent || localize("api_errors.12046")}
-                            onRetry={onRegenerate}
-                        />
-                    ) : (
-                        <div
-                            className={cn(
-                                "text-red-500 bg-red-50 px-3 py-2",
-                                knowledgeChatLayout
-                                    ? "rounded-[2px] text-[14px] leading-[22px]"
-                                    : "text-sm rounded-[10px]"
-                            )}
-                        >
-                            {regularContent || "发生错误，请重试"}
-                        </div>
-                    )
-                ) : (
-                    /* Main content — uses existing Markdown with citation support */
+                {/* Main content — uses existing Markdown with citation support.
+                    Rendered even when the turn carries an error, as long as a real
+                    answer body streamed in: a stream that fails *after* emitting text
+                    must keep its markdown + citation rendering instead of degrading to
+                    raw text (which also leaks the private-use citation markers). */}
+                {!showWaiting && (hasAnswerBody || !message.error) && (
                     <div
                         className={cn(
                             "bs-mkdown message-content overflow-hidden break-words [word-break:break-all]",
@@ -730,6 +725,36 @@ function AssistantBubble({
                             />
                         )}
                     </div>
+                )}
+
+                {/* Error state — replaces the body when nothing streamed in, and sits
+                    below it when a partial answer did. */}
+                {!showWaiting && message.error && (
+                    isTransientError ? (
+                        // Transient upstream hiccup (rate limit / busy): calm neutral
+                        // notice + Retry (re-sends the last user message via regenerate),
+                        // never the red error bubble.
+                        <ServiceBusyNotice
+                            desc={
+                                hasAnswerBody
+                                    ? errorNotice
+                                    : message.errorText || localize("api_errors.12046")
+                            }
+                            onRetry={onRegenerate}
+                        />
+                    ) : (
+                        <div
+                            className={cn(
+                                "text-red-500 bg-red-50 px-3 py-2",
+                                hasAnswerBody && "mt-2",
+                                knowledgeChatLayout
+                                    ? "rounded-[2px] text-[14px] leading-[22px]"
+                                    : "text-sm rounded-[10px]"
+                            )}
+                        >
+                            {errorNotice}
+                        </div>
+                    )
                 )}
 
                 {/* Action buttons (only show when not streaming). Suppressed on the

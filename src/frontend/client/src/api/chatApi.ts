@@ -124,6 +124,10 @@ export interface ChatMessage {
         ServiceBusyNotice + Retry for transient codes (rate limit / busy) vs the red
         error bubble for terminal ones. */
     errorCode?: number;
+    /** Human-readable failure copy for an errored assistant row. Kept apart from
+        `text` so a stream that failed *after* emitting an answer keeps that answer
+        renderable — overwriting `text` would destroy it. */
+    errorText?: string;
     unfinished?: boolean;
     isCreatedByUser?: boolean;
     createdAt?: string;
