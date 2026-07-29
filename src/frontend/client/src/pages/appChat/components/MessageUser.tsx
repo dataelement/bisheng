@@ -21,6 +21,22 @@ export default function MessageUser({ useName, data, showButton, disabledSearch 
     const [config] = useRecoilState(bishengConfState)
     const localize = useLocalize()
 
+    // History returns the attachments as the raw JSON string held in the
+    // message row, while a live send hands over an array — normalise both.
+    const files = useMemo(() => {
+        const raw = data.files
+        if (Array.isArray(raw)) return raw
+        if (typeof raw === 'string' && raw) {
+            try {
+                const parsed = JSON.parse(raw)
+                return Array.isArray(parsed) ? parsed : []
+            } catch {
+                return []
+            }
+        }
+        return []
+    }, [data.files])
+
     const msg = useMemo(() => {
         const res = typeof data.message === 'string' ? data.message : data.message[data.chatKey]
         // hack   handle user input json
@@ -29,16 +45,16 @@ export default function MessageUser({ useName, data, showButton, disabledSearch 
         // Attachment names are prepended to the text on the way to the workflow
         // node, which still needs them. Once the attachments render on their
         // own, showing those names again just duplicates them.
-        const names = (data.files || []).map((f) => f.file_name || f.name).filter(Boolean)
+        const names = files.map((f) => f.file_name || f.name).filter(Boolean)
         if (!names.length) return text
         const lines = text.split('\n')
         while (lines.length && names.includes(lines[0])) lines.shift()
         return lines.join('\n')
-    }, [data.message, data.files])
+    }, [data.message, files])
 
     const images = useMemo(
-        () => (data.files || []).filter((f) => isImageFileName(f.file_name || f.name)),
-        [data.files],
+        () => files.filter((f) => isImageFileName(f.file_name || f.name)),
+        [files],
     )
 
     const handleResend = (send) => {
