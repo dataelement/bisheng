@@ -12802,6 +12802,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 folder_path_name=self._folder_path_name_from_map(file.file_level_path, folder_map),
                 status=file.status,
                 file_encoding=file.file_encoding,
+                file_subcategory_code=getattr(file, "file_subcategory_code", None),
                 tags=file_tags.get(int(file.id), []),
                 abstract=file.abstract or "",
                 create_time=self._format_datetime(file.create_time),

@@ -815,6 +815,11 @@ class ShougangPortalUploadedFileResp(BaseModel):
     folder_path_name: str = "根目录"
     status: int | None = None
     file_encoding: str | None = None
+    file_subcategory_code: str | None = Field(
+        default=None,
+        max_length=16,
+        description="Second-level file category code persisted on the knowledge file",
+    )
     tags: list[dict] = Field(default_factory=list)
     abstract: str = ""
     create_time: str = ""
