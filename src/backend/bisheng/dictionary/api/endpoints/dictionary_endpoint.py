@@ -85,6 +85,8 @@ async def get_dictionary_by_id(
 async def list_dictionaries(
     type: str | None = Query(None, description="字典类型筛选"),
     keyword: str | None = Query(None, description="关键词模糊匹配 type/dict_key/dict_value"),
+    sort_order: bool | None = Query(None, description="排序顺序, True 升序, False 降序"),
+    enabled: bool | None = Query(None, description="是否启用筛选"),
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(20, ge=1, le=500, description="每页数量"),
     service: DictionaryService = Depends(get_dictionary_service),
@@ -95,5 +97,7 @@ async def list_dictionaries(
         keyword=keyword,
         page=page,
         page_size=page_size,
+        sort_order=sort_order,
+        enabled=enabled,
     )
     return resp_200(data=result.model_dump())

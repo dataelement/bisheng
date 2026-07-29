@@ -50,6 +50,8 @@ class SystemDictionaryRepositoryImpl(BaseRepositoryImpl[SystemDictionary, int], 
         keyword: str | None = None,
         page: int = 1,
         page_size: int = 20,
+        sort_order: bool | None = None,
+        enabled: bool | None = None,
     ) -> tuple[list[SystemDictionary], int]:
         """分页查询字典条目,返回 (数据列表, 总数)"""
         query = select(SystemDictionary)
@@ -63,6 +65,9 @@ class SystemDictionaryRepositoryImpl(BaseRepositoryImpl[SystemDictionary, int], 
                 (SystemDictionary.dict_key.ilike(like_pattern)) | (SystemDictionary.dict_value.ilike(like_pattern))
             )
 
+        if enabled is not None:
+            query = query.where(SystemDictionary.is_enabled == enabled)  # noqa: E712
+
         count_query = select(func.count()).select_from(query.subquery())
         count_result = await self.session.exec(count_query)
         total = count_result.one()
@@ -70,8 +75,8 @@ class SystemDictionaryRepositoryImpl(BaseRepositoryImpl[SystemDictionary, int], 
         offset = (page - 1) * page_size
         query = (
             query.order_by(
-                SystemDictionary.sort_order.asc(),
-                SystemDictionary.id.desc(),
+                SystemDictionary.sort_order.desc() if sort_order is not None and not sort_order else SystemDictionary.id.asc(),
+                SystemDictionary.id.asc(),
             )
             .offset(offset)
             .limit(page_size)

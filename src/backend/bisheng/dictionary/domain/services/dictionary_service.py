@@ -107,9 +107,9 @@ class DictionaryService:
             raise DictionaryNotFoundError()
         return DictionaryResponse.model_validate(entity)
 
-    async def get_list_by_type(self, dict_type: str) -> list[DictionaryResponse]:
+    async def get_list_by_type(self, dict_type: str, page: int = 1, page_size: int = 20) -> list[DictionaryResponse]:
         """根据 dict_type 查询启用的字典条目列表"""
-        entities = await self.repository.find_by_type(dict_type)
+        entities = await self.repository.find_by_type(dict_type, page, page_size)   
         if not entities:
             raise DictionaryNotFoundError()
         return [DictionaryResponse.model_validate(entity) for entity in entities]
@@ -124,6 +124,8 @@ class DictionaryService:
         keyword: str | None = None,
         page: int = 1,
         page_size: int = 20,
+        sort_order: bool | None = None,
+        enabled: bool | None = None,
     ) -> PageData[DictionaryResponse]:
         """分页查询字典条目"""
         entities, total = await self.repository.find_page(
@@ -131,6 +133,8 @@ class DictionaryService:
             keyword=keyword,
             page=page,
             page_size=page_size,
+            sort_order=sort_order,
+            enabled=enabled,
         )
         data = [DictionaryResponse.model_validate(entity) for entity in entities]
         return PageData(data=data, total=total)
