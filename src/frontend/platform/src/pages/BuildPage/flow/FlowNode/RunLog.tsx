@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { LoadIcon } from "@/components/bs-icons/loading";
 import { Button } from "@/components/bs-ui/button";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger } from "@/components/bs-ui/select";

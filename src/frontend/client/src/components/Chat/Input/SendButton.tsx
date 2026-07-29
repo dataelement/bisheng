@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import React, { forwardRef } from 'react';
 import { useWatch } from 'react-hook-form';
 import type { Control } from 'react-hook-form';

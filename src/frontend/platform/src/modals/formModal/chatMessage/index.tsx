@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import MessageMarkDown from "@/pages/BuildPage/flow/FlowChat/MessageMarkDown";
 import Convert from "ansi-to-html";
 import { ChevronDown } from "lucide-react";
@@ -125,7 +126,7 @@ export default function ChatMessage({
                   ? template?.split("\n")?.map((line, index) => {
                     const regex = /{([^}]+)}/g;
                     let match;
-                    let parts = [];
+                    const parts = [];
                     let lastIndex = 0;
                     while ((match = regex.exec(line)) !== null) {
                       // Push text up to the match

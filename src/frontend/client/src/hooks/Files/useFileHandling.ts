@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { v4 } from 'uuid';
 import debounce from 'lodash/debounce';
 import { useQueryClient } from '@tanstack/react-query';

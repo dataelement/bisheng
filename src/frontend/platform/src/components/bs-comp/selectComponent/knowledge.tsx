@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import MultiSelect from "@/components/bs-ui/select/multi";
 import { Tabs, TabsList, TabsTrigger } from "@/components/bs-ui/tabs";
 import { readFileLibDatabase } from "@/controllers/API";

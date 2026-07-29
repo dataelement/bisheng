@@ -1,5 +1,4 @@
-from typing import List, Optional
-
+import json
 from loguru import logger
 
 from bisheng.api.services.audit_log import AuditLogService
@@ -8,10 +7,12 @@ from bisheng.api.v1.schema.base_schema import PageList
 from bisheng.api.v1.schema.chat_schema import AppChatList
 from bisheng.api.v1.schema.workflow import WorkflowEventType
 from bisheng.api.v1.schemas import ChatList
+from bisheng.chat_session.domain.services.chat_message_service import _resolve_leaf_tenant_id
+from bisheng.chat_session.utils import get_session_app_type
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
-from bisheng.common.errcode.http_error import UnAuthorizedError
-from bisheng.common.schemas.telemetry.event_data_schema import NewMessageSessionEventData, DeleteMessageSessionEventData
+from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
+from bisheng.common.schemas.telemetry.event_data_schema import DeleteMessageSessionEventData, NewMessageSessionEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.base import BaseService
 from bisheng.core.logger import trace_id_var
@@ -19,21 +20,20 @@ from bisheng.database.models.assistant import AssistantDao
 from bisheng.database.models.flow import FlowDao, FlowType
 from bisheng.database.models.mark_record import MarkRecordDao, MarkRecordStatus
 from bisheng.database.models.mark_task import MarkTaskDao
+from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.message import ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao, SensitiveStatus
 from bisheng.database.models.user_group import UserGroupDao
-from bisheng.chat_session.domain.services.chat_message_service import _resolve_leaf_tenant_id
-from bisheng.chat_session.utils import get_session_app_type
 from bisheng.user.domain.models.user import UserDao
 
 
 class ChatSessionService:
     """Chat session lifecycle services."""
 
-
     @staticmethod
-    async def get_chat_history(chat_id: str, flow_id: str, message_id: Optional[str] = None,
-                               page_size: Optional[int] = 20) -> List['ChatMessageHistoryResponse']:
+    async def get_chat_history(
+        chat_id: str, flow_id: str, message_id: str | None = None, page_size: int | None = 20
+    ) -> list["ChatMessageHistoryResponse"]:
         """Retrieve chat history for a user."""
         from bisheng.api.v1.schema.chat_schema import ChatMessageHistoryResponse
 
@@ -43,19 +43,16 @@ class ChatSessionService:
         if not session_info or session_info.flow_id != flow_id:
             return []
 
-        history = await ChatMessageDao.afilter_message_by_chat_id(chat_id=chat_id, flow_id=flow_id,
-                                                                  message_id=message_id, page_size=page_size)
+        history = await ChatMessageDao.afilter_message_by_chat_id(
+            chat_id=chat_id, flow_id=flow_id, message_id=message_id, page_size=page_size
+        )
         if history:
             user_info = await UserDao.aget_user(user_id=session_info.user_id)
-            history = ChatMessageHistoryResponse.from_chat_message_objs(
-                history,
-                user_info,
-                session_info
-            )
+            history = ChatMessageHistoryResponse.from_chat_message_objs(history, user_info, session_info)
         return history
 
     @staticmethod
-    async def get_session_info(chat_id: str) -> Optional[MessageSession]:
+    async def get_session_info(chat_id: str) -> MessageSession | None:
         """Get session details with logo URL resolved."""
         res = await MessageSessionDao.async_get_one(chat_id)
         if res:
@@ -66,6 +63,81 @@ class ChatSessionService:
     async def rename_session(conversation_id: str, name: str) -> None:
         """Rename a chat session."""
         await MessageSessionDao.update_session_name(conversation_id, name)
+
+    @staticmethod
+    async def _own_conversation_or_raise(chat_id: str, login_user: UserPayload) -> MessageSession:
+        """Load a conversation, refusing anyone who doesn't own it."""
+        session_chat = await MessageSessionDao.async_get_one(chat_id)
+        if not session_chat or session_chat.is_delete:
+            raise NotFoundError.http_exception()
+        if session_chat.user_id != login_user.user_id:
+            raise UnAuthorizedError.http_exception()
+        return session_chat
+
+    @staticmethod
+    def _attachments_of(messages: list) -> list[dict]:
+        """Every attachment recorded across a conversation's messages."""
+        attachments = []
+        for message in messages:
+            if not message.files:
+                continue
+            try:
+                files = json.loads(message.files)
+            except (TypeError, ValueError):
+                logger.warning("unparsable files payload on message of chat {}", getattr(message, "chat_id", "?"))
+                continue
+            attachments.extend(f for f in files or [] if isinstance(f, dict))
+        return attachments
+
+    @staticmethod
+    async def _remove_attachments(chat_id: str) -> None:
+        """Drop the files a deleted conversation was holding.
+
+        Deletion is a soft delete with no way back, so the files have no reader
+        left. Best-effort on purpose: failing to reach storage must not leave
+        the user staring at a conversation that refuses to disappear.
+        """
+        try:
+            messages = await ChatMessageDao.aget_messages_by_chat_id(chat_id=chat_id, limit=1000)
+            object_names = {
+                f["object_name"] for f in ChatSessionService._attachments_of(messages) if f.get("object_name")
+            }
+            if not object_names:
+                return
+            minio_client = await get_minio_storage()
+            for object_name in object_names:
+                try:
+                    await minio_client.remove_object(object_name=object_name)
+                except Exception:
+                    logger.exception("failed to remove attachment {} of chat {}", object_name, chat_id)
+        except Exception:
+            logger.exception("failed to clean up attachments of chat {}", chat_id)
+
+    @staticmethod
+    async def resolve_attachment_url(chat_id: str, file_id: str, login_user: UserPayload) -> str:
+        """Issue a fresh link for one attachment of one conversation.
+
+        The link handed out at upload time expires, so the client comes back
+        here when it renders. The object name is read from what we stored on the
+        conversation's messages and never taken from the caller -- signing a
+        caller-supplied name would open the whole bucket to anyone with an
+        account.
+        """
+        await ChatSessionService._own_conversation_or_raise(chat_id, login_user)
+
+        messages = await ChatMessageDao.aget_messages_by_chat_id(chat_id=chat_id, limit=1000)
+        for attachment in ChatSessionService._attachments_of(messages):
+            if str(attachment.get("file_id")) != str(file_id):
+                continue
+            object_name = attachment.get("object_name")
+            if not object_name:
+                # Written before attachments were made permanent: the file is
+                # gone with the temp bucket. Say so rather than guess.
+                break
+            minio_client = await get_minio_storage()
+            return await minio_client.get_share_link(object_name)
+
+        raise NotFoundError.http_exception()
 
     @staticmethod
     async def delete_session(chat_id: str, login_user: UserPayload, request_ip: str) -> None:
@@ -87,6 +159,7 @@ class ChatSessionService:
                 await AuditLogService.delete_chat_workflow(login_user, request_ip, flow_info)
 
         await MessageSessionDao.delete_session(chat_id)
+        await ChatSessionService._remove_attachments(chat_id)
 
         await telemetry_service.log_event(
             user_id=login_user.user_id,
@@ -99,11 +172,11 @@ class ChatSessionService:
     def get_app_chat_list(
         *,
         login_user: UserPayload,
-        keyword: Optional[str] = None,
-        mark_user: Optional[str] = None,
-        mark_status: Optional[int] = None,
-        task_id: Optional[int] = None,
-        flow_type: Optional[int] = None,
+        keyword: str | None = None,
+        mark_user: str | None = None,
+        mark_status: int | None = None,
+        task_id: int | None = None,
+        flow_type: int | None = None,
         page_num: int = 1,
         page_size: int = 20,
     ) -> PageList:
@@ -117,20 +190,20 @@ class ChatSessionService:
         if task_id:
             if not login_user.is_admin():
                 task = MarkTaskDao.get_task_byid(task_id)
-                if str(login_user.user_id) not in task.process_users.split(','):
+                if str(login_user.user_id) not in task.process_users.split(","):
                     raise UnAuthorizedError()
                 if user_groups:
                     task = MarkTaskDao.get_task_byid(task_id)
-                    group_flow_ids = task.app_id.split(',')
+                    group_flow_ids = task.app_id.split(",")
                     if not group_flow_ids:
                         return PageList(list=[], total=0)
                 else:
                     task = MarkTaskDao.get_task_byid(task_id)
-                    if str(login_user.user_id) not in task.process_users.split(','):
+                    if str(login_user.user_id) not in task.process_users.split(","):
                         raise UnAuthorizedError()
-                    group_flow_ids = MarkTaskDao.get_task_byid(task_id).app_id.split(',')
+                    group_flow_ids = MarkTaskDao.get_task_byid(task_id).app_id.split(",")
             else:
-                group_flow_ids = MarkTaskDao.get_task_byid(task_id).app_id.split(',')
+                group_flow_ids = MarkTaskDao.get_task_byid(task_id).app_id.split(",")
 
         if keyword:
             flows = FlowDao.get_flow_list_by_name(name=keyword)
@@ -182,16 +255,16 @@ class ChatSessionService:
                 if mark_status != tmp.mark_status:
                     continue
             if mark_user:
-                users = [int(u) for u in mark_user.split(',')]
+                users = [int(u) for u in mark_user.split(",")]
                 if tmp.mark_id not in users:
                     continue
             result.append(tmp)
 
-        result = result[(page_num - 1) * page_size: page_num * page_size]
+        result = result[(page_num - 1) * page_size : page_num * page_size]
         return PageList(list=result, total=total)
 
     @staticmethod
-    def get_user_session_list(user_id: int, page: int = 1, limit: int = 10) -> List[ChatList]:
+    def get_user_session_list(user_id: int, page: int = 1, limit: int = 10) -> list[ChatList]:
         """List daily chat and linsight sessions for a user, sorted by update_time descending."""
         allowed_flow_types = [FlowType.WORKSTATION.value, FlowType.LINSIGHT.value]
 
@@ -221,7 +294,7 @@ class ChatSessionService:
                 flow_name=one.flow_name,
                 flow_type=one.flow_type,
                 name=one.name,
-                logo=BaseService.get_logo_share_link(one.flow_logo) if one.flow_logo else '',
+                logo=BaseService.get_logo_share_link(one.flow_logo) if one.flow_logo else "",
                 latest_message=latest_messages.get(one.chat_id, None),
                 create_time=one.create_time,
                 update_time=one.update_time,
@@ -235,7 +308,7 @@ class ChatSessionService:
         flow_id: str,
         login_user: UserPayload,
         request_ip: str,
-    ) -> Optional[MessageSession]:
+    ) -> MessageSession | None:
         """Get existing session or create a new one with audit log and telemetry.
 
         Used when adding messages to ensure a session exists.
@@ -254,29 +327,33 @@ class ChatSessionService:
 
         flow_info = FlowDao.get_flow_by_id(flow_id)
         if flow_info:
-            session_info = MessageSessionDao.insert_one(MessageSession(
-                chat_id=chat_id,
-                flow_id=flow_id,
-                flow_type=flow_info.flow_type,
-                flow_name=flow_info.name,
-                user_id=login_user.user_id,
-                sensitive_status=SensitiveStatus.VIOLATIONS.value,
-                tenant_id=leaf_tenant_id,
-            ))
+            session_info = MessageSessionDao.insert_one(
+                MessageSession(
+                    chat_id=chat_id,
+                    flow_id=flow_id,
+                    flow_type=flow_info.flow_type,
+                    flow_name=flow_info.name,
+                    user_id=login_user.user_id,
+                    sensitive_status=SensitiveStatus.VIOLATIONS.value,
+                    tenant_id=leaf_tenant_id,
+                )
+            )
             if flow_info.flow_type == FlowType.WORKFLOW.value:
                 AuditLogService.create_chat_workflow(login_user, request_ip, flow_id, flow_info)
         else:
             assistant_info = AssistantDao.get_one_assistant(flow_id)
             if assistant_info:
-                session_info = MessageSessionDao.insert_one(MessageSession(
-                    chat_id=chat_id,
-                    flow_id=flow_id,
-                    flow_type=FlowType.ASSISTANT.value,
-                    flow_name=assistant_info.name,
-                    user_id=login_user.user_id,
-                    sensitive_status=SensitiveStatus.VIOLATIONS.value,
-                    tenant_id=leaf_tenant_id,
-                ))
+                session_info = MessageSessionDao.insert_one(
+                    MessageSession(
+                        chat_id=chat_id,
+                        flow_id=flow_id,
+                        flow_type=FlowType.ASSISTANT.value,
+                        flow_name=assistant_info.name,
+                        user_id=login_user.user_id,
+                        sensitive_status=SensitiveStatus.VIOLATIONS.value,
+                        tenant_id=leaf_tenant_id,
+                    )
+                )
                 AuditLogService.create_chat_assistant(login_user, request_ip, flow_id)
 
         if session_info:

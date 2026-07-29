@@ -382,7 +382,7 @@ export function CreateKnowledgeSpaceDrawer({
                             <div className="flex gap-3">
                                 <Button
                                     variant="secondary"
-                                    className="inline-flex h-8 min-w-[100px] items-center justify-center rounded-[6px] border border-blue-500 bg-white px-4 text-[14px] font-normal leading-none text-blue-500 hover:bg-blue-50"
+                                    className="inline-flex h-8 min-w-[100px] items-center justify-center rounded-md border border-blue-500 bg-white px-4 text-[14px] font-normal leading-none text-blue-500 hover:bg-blue-50"
                                     onClick={() => {
                                         onViewSpace?.();
                                         onOpenChange(false);
@@ -391,7 +391,7 @@ export function CreateKnowledgeSpaceDrawer({
                                     {localize("com_subscription.goto_knowledge_space")}
                                 </Button>
                                 <Button
-                                    className="inline-flex h-8 min-w-[100px] items-center justify-center rounded-[6px] bg-blue-500 px-4 text-[14px] font-normal leading-none text-white hover:bg-blue-400 btn-brand-primary"
+                                    className="inline-flex h-8 min-w-[100px] items-center justify-center rounded-md bg-blue-500 px-4 text-[14px] font-normal leading-none text-white hover:bg-blue-400 btn-brand-primary"
                                     onClick={() => {
                                         onManageMembers?.();
                                         onOpenChange(false);
@@ -492,7 +492,7 @@ export function CreateKnowledgeSpaceDrawer({
                                             }
                                         }}
                                         placeholder={localize("com_subscription.enter_knowledge_space_description")}
-                                        className="min-h-[104px] rounded-[6px] border-[#E5E6EB] bg-[#fff] text-[14px]"
+                                        className="min-h-[104px] rounded-md border-[#E5E6EB] bg-[#fff] text-[14px]"
                                     />
                                 </div>
                             </div>
@@ -638,7 +638,7 @@ export function CreateKnowledgeSpaceDrawer({
                                             onValueChange={handleAutoTagModeChange}
                                             className="space-y-3"
                                         >
-                                            <TabsList className="h-8 gap-1 rounded-[6px] border border-[#E5E6EB] bg-white p-1">
+                                            <TabsList className="h-8 gap-1 rounded-md border border-[#E5E6EB] bg-white p-1">
                                                 <TabsTrigger
                                                     value="library"
                                                     className="min-w-0 px-3 py-1 text-[13px] data-[state=active]:bg-blue-50 data-[state=active]:text-blue-500"
@@ -743,7 +743,7 @@ export function CreateKnowledgeSpaceDrawer({
                                                         value={autoTagCustomTagsText}
                                                         onChange={(e) => setAutoTagCustomTagsText(e.target.value)}
                                                         placeholder={localize("com_knowledge.auto_tag_custom_tags_placeholder")}
-                                                        className="min-h-[120px] resize-none rounded-[6px] border-[#E5E6EB] bg-white pr-24 text-[14px]"
+                                                        className="min-h-[120px] resize-none rounded-md border-[#E5E6EB] bg-white pr-24 text-[14px]"
                                                     />
                                                     <button
                                                         type="button"
@@ -774,14 +774,14 @@ export function CreateKnowledgeSpaceDrawer({
                     <div className="sticky bottom-0 z-10 mt-auto mx-6 flex justify-end gap-3 border-t border-[#E5E6EB] bg-white px-0 pb-5 pt-10 touch-mobile:mx-0 touch-mobile:gap-2 touch-mobile:px-0 touch-mobile:pt-4">
                         <Button
                             variant="secondary"
-                            className="inline-flex h-8 items-center justify-center rounded-[6px] border-none bg-[#F2F3F5] px-4 text-[14px] leading-none !font-normal text-[#4E5969] hover:bg-[#E5E6EB] touch-mobile:flex-1"
+                            className="inline-flex h-8 items-center justify-center rounded-md border-none bg-[#F2F3F5] px-4 text-[14px] leading-none !font-normal text-[#4E5969] hover:bg-[#E5E6EB] touch-mobile:flex-1"
                             onClick={() => onOpenChange(false)}
                         >
                             {localize("com_knowledge.cancel")}
                         </Button>
                         <Button
                             disabled={submitting}
-                            className="inline-flex h-8 items-center justify-center rounded-[6px] border-none bg-blue-500 px-4 text-[14px] leading-none !font-normal text-white hover:bg-blue-400 disabled:opacity-50 disabled:cursor-not-allowed touch-mobile:flex-1 btn-brand-primary"
+                            className="inline-flex h-8 items-center justify-center rounded-md border-none bg-blue-500 px-4 text-[14px] leading-none !font-normal text-white hover:bg-blue-400 disabled:opacity-50 disabled:cursor-not-allowed touch-mobile:flex-1 btn-brand-primary"
                             onClick={handleConfirm}
                         >
                             {submitting

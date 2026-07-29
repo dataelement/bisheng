@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { Slider } from '@/components/bs-ui/slider';
 import { Switch } from '@/components/bs-ui/switch';
 import {

@@ -1,0 +1,81 @@
+# 二次确认弹窗 Confirm
+
+删除 / 危险操作时的「确认 / 取消」小弹窗。标准实现是全局服务 `useConfirm()`（`ConfirmContext`，底层 AlertDialog），分 destructive / default 两档，标准**已定稿**、全站已收敛。迁移台账见「文档 → 组件规范 → Modal 弹窗」§二点五。
+
+## 两个变体
+
+- **destructive（危险态）**：红图标 + 红标题 + 暂不 / 确认删除——删除等不可逆操作。
+- **default（普通态）**：橙色警示图标 + 主色确认——可逆但需用户知情的操作。
+
+```tsx
+import { RecoilRoot } from 'recoil';
+import '~/locales/i18n';
+import store from '~/store';
+import { ConfirmProvider, useConfirm } from '~/Providers/ConfirmContext';
+import { Button } from '~/components/ui/Button';
+
+function Demos() {
+  const confirm = useConfirm();
+  const rows = [
+    [
+      '危险态 variant: destructive — 删除等不可逆操作',
+      () =>
+        confirm({
+          variant: 'destructive',
+          description:
+            '确认删除知识空间 "默认组织的知识空间" 吗？此操作不可逆，请谨慎删除！',
+        }),
+    ],
+    [
+      '普通态 variant: default — 可逆但需用户知情',
+      () =>
+        confirm({
+          variant: 'default',
+          description: '切换频道后未保存的编辑将丢失，是否继续？',
+        }),
+    ],
+  ] as const;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {rows.map(([label, onClick]) => (
+        <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ width: 340, flexShrink: 0, fontSize: 13, color: 'rgb(var(--text-2))' }}>
+            {label}
+          </span>
+          <Button color="default" variant="outlined" onClick={onClick}>
+            打开
+          </Button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export default () => (
+  <RecoilRoot initializeState={({ set }) => set(store.lang, 'zh-Hans')}>
+    <ConfirmProvider>
+      <Demos />
+    </ConfirmProvider>
+  </RecoilRoot>
+);
+```
+
+业务用法：`const ok = await confirm({ variant: 'destructive', title, description, confirmText }); if (!ok) return; mutate(...)` —— Esc / 点遮罩关闭也会 resolve `false`，不会挂起调用方。
+
+## 规格 Anatomy
+
+| 部位 | 值 | 备注 |
+|---|---|---|
+| 弹窗容器 | `rounded-2xl p-5 gap-4` + border `#ebebeb` + 淡投影 | 圆角 16 / padding 20 |
+| 遮罩 | `bg-gray-500/90` + `backdrop-blur-md` | 灰底毛玻璃 |
+| 标题 | `text-base font-medium leading-6` | |
+| 确认按钮 | 两档：danger `#f53f3f` / primary 品牌主色 | 语义红不换肤；特例可自定义 |
+| 取消按钮 | 白底描边 `hover:bg-[#f7f8fa]`，`focus-visible` 焦点环 | 默认文案「暂不」 |
+
+## 使用规则
+
+- 危险操作（删除等）用 `variant: 'destructive'`；可逆但需确认的用 `default`。**不要自拼确认弹窗**。
+- Loading 统一走服务内置的 pending 态，禁止业务页自塞 Spinner。
+- 带表单输入的弹窗不是二次确认——属于普通 Modal（见「Modal 弹窗」）。
+
+> demo 里的 `RecoilRoot` + `ConfirmProvider` 只是文档站的挂载脚手架；业务页在 App 全局已具备，直接 `useConfirm()` 即可。

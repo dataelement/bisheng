@@ -11,7 +11,7 @@ import { cn } from "~/utils";
  * white surface, 8px corner radius, no hard border, soft shadow.
  */
 export const actionMenuSurfaceClassName =
-    "rounded-[8px] border-0 bg-white shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]";
+    "rounded-lg border-0 bg-white shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]";
 
 /** Default content frame: 160px wide, 8px padding, z-100 so it sits above
  *  any mobile drawer overlays. Width can be overridden via the `width` prop
@@ -22,7 +22,7 @@ export const actionMenuContentClassName = cn(
 );
 
 const itemBaseClassName =
-    "flex w-full cursor-pointer items-center gap-2 rounded-[6px] px-2 py-[5px] text-sm leading-[22px] outline-none transition-colors";
+    "flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-[5px] text-sm leading-[22px] outline-none transition-colors";
 
 const itemRegularClassName = cn(
     itemBaseClassName,

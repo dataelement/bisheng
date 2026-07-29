@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { Button } from "@/components/bs-ui/button";
 import { generateUUID } from "@/components/bs-ui/utils";
 import { locationContext } from "@/contexts/locationContext";

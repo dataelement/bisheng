@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { CircleHelp, Import } from "lucide-react";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";

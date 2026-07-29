@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useRecoilValue } from 'recoil';
 import { QueryKeys, dataService } from '~/types/chat';
 import { useQuery, useQueryClient } from '@tanstack/react-query';

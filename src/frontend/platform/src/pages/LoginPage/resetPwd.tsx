@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { ArrowLeft } from "lucide-react";
 import { useEffect, useRef } from "react";

@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { z } from 'zod';
 import _axios from 'axios';
 import { URL } from 'url';

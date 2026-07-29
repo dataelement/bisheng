@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { Suspense } from 'react';
 import { useRecoilValue } from 'recoil';
 import type { TMessage, TMessageContentParts } from '~/types/chat';

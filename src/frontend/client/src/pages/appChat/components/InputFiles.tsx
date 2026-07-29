@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 
 import { Loader2, X } from "lucide-react";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";

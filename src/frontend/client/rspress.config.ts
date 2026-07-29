@@ -7,7 +7,7 @@ import autoprefixer from 'autoprefixer';
 /**
  * Component-library docs site (rspress).
  *
- * - Docs root is the gitignored `docs-ui-refactor/` at the repo root (design specs).
+ * - Docs root is `packages/ui/docs/` (design specs, git-tracked with @bisheng/ui).
  * - Real ui components are imported via the `~` / `@` alias (mirrors vite.config).
  * - @rspress/plugin-preview renders live component demos inside markdown.
  * - i18n and custom theme intentionally NOT enabled yet.
@@ -17,10 +17,14 @@ import autoprefixer from 'autoprefixer';
 const clientSrc = path.join(__dirname, 'src');
 
 export default defineConfig({
-  // req 2: docs root = bisheng/docs-ui-refactor
-  root: path.join(__dirname, '../../../docs-ui-refactor'),
-  title: 'BiSheng 组件库',
-  description: 'BiSheng client 设计规范 + 组件库',
+  // Docs live with the component library: src/frontend/packages/ui/docs
+  // (git-tracked; the site stays hosted in client until the app-coupled demos
+  // finish migrating onto @bisheng/ui).
+  root: path.join(__dirname, '../packages/ui/docs'),
+  // Build output next to the docs source (gitignored; CI artifact only).
+  outDir: path.join(__dirname, '../packages/ui/doc_build'),
+  title: 'BISHENG 组件库',
+  description: 'BISHENG client 设计规范 + 组件库',
   lang: 'zh', // single language — i18n intentionally not enabled (req 5)
   // No SSG: demos import real app components, whose dependency tree reaches
   // browser/node-conditional packages (@dicebear/converter resolves its `node`
@@ -38,9 +42,10 @@ export default defineConfig({
   plugins: [pluginPreview({ previewMode: 'internal' })],
 
   route: {
-    // 00-总纲 is the Claude-window working charter, not reader material —
-    // keep it out of the site entirely (routes AND search index).
-    exclude: ['**/00-总纲.md'],
+    // Working/meta docs that are not reader material — kept out of the site
+    // entirely (routes AND search index): 00-总纲 (Claude-window charter) and
+    // 元-文档撰写规范 (how-to-author-these-docs guide, for authors only).
+    exclude: ['**/00-总纲.md', '**/元-文档撰写规范.md', '**/scripts/**'],
   },
 
   themeConfig: {
@@ -56,34 +61,59 @@ export default defineConfig({
     sidebar: {
       // 组件 section — component demos
       '/components/': [
-        { text: '组件总览', link: '/components/index' },
-        { text: 'Typography 字体', link: '/components/typography' },
-        { text: 'Color 色彩', link: '/components/color' },
-        { text: 'Button 按钮', link: '/components/button' },
-        { text: 'Modal 弹窗', link: '/components/modal' },
-        { text: 'Confirm 二次确认', link: '/components/confirm' },
-        { text: 'Feedback 点赞点踩', link: '/components/feedback' },
-        { text: 'Icon 图标', link: '/components/icon' },
-        { text: 'Illustration 插画', link: '/components/illustration' },
+        // antd-style categorized sidebar (mirrors the 文档 side): groups by kind.
+        // Foundations (typography/color/icon/illustration) live together; real
+        // components split by antd category.
+        {
+          text: '基础 Foundation',
+          items: [
+            { text: '字体 Typography', link: '/components/typography' },
+            { text: '色彩 Color', link: '/components/color' },
+            { text: '图标 Icon', link: '/components/icon' },
+            { text: '插画 Illustration', link: '/components/illustration' },
+          ],
+        },
+        {
+          text: '通用 General',
+          items: [
+            { text: '按钮 Button', link: '/components/button' },
+          ],
+        },
+        {
+          text: '反馈 Feedback',
+          items: [
+            { text: '弹窗 Modal', link: '/components/modal' },
+            { text: '二次确认 Confirm', link: '/components/confirm' },
+            { text: '点赞点踩 Feedback', link: '/components/feedback' },
+          ],
+        },
       ],
       // 文档 section — the existing design-spec markdown (kept flat, not moved)
       '/': [
         {
+          text: '设计模式',
+          items: [
+            { text: '文案 Copywriting', link: '/基础-文案规范' },
+            { text: '多端适配 Responsive', link: '/基础-多端适配原则' },
+            { text: '滚动条 Scrollbar', link: '/基础-滚动条规范' },
+          ],
+        },
+        {
           text: '设计规范',
           items: [
+            { text: '设计变量 Design Token', link: '/design-token' },
             { text: '字体 Typography', link: '/基础-字体规范' },
             { text: '色彩 Color', link: '/基础-色彩规范' },
-            { text: '多端适配', link: '/基础-多端适配原则' },
             { text: '图标 Icon', link: '/基础-图标规范' },
             { text: '插画 Illustration', link: '/基础-插画规范' },
-            { text: '滚动条', link: '/基础-滚动条规范' },
+            { text: '阴影与圆角 Elevation', link: '/基础-阴影与圆角规范' },
           ],
         },
         {
           text: '组件规范',
           items: [
-            { text: 'Button 按钮', link: '/组件-Button按钮' },
-            { text: 'Modal 弹窗', link: '/组件-Modal弹窗' },
+            { text: '按钮 Button', link: '/组件-Button按钮' },
+            { text: '弹窗 Modal', link: '/组件-Modal弹窗' },
           ],
         },
       ],
@@ -120,6 +150,12 @@ export default defineConfig({
       alias: {
         '~': clientSrc,
         '@': clientSrc,
+        // Spec pages (packages/ui/docs/*.mdx) live outside this project, so a
+        // bare `bisheng-icons` import resolves from the docs dir and misses the
+        // package installed here. Alias it to the local install so spec mdx can
+        // embed real icon components (plugin-preview fenced demos already
+        // resolve it via the client context; this covers page-body imports).
+        'bisheng-icons': path.join(__dirname, 'node_modules/bisheng-icons'),
         $fonts: path.join(__dirname, 'public/fonts'),
         // `import { URL } from 'url'` in api code must not resolve to the npm
         // `url` package (no URL named export) — shim with the browser global.
@@ -146,7 +182,17 @@ export default defineConfig({
           filter: (url: string) => !url.startsWith('/') && !url.startsWith('$fonts'),
         },
       },
-      rspack: (config) => {
+      rspack: (config, { rspack }) => {
+        // node:-scheme imports reached only on node-only paths (e.g.
+        // @dicebear/core toFile → import('node:fs/promises') via the ~/hooks
+        // barrel) — replace with an empty stub; rspack has no node: handling.
+        config.plugins = config.plugins || [];
+        config.plugins.push(
+          new rspack.NormalModuleReplacementPlugin(
+            /^node:fs\/promises$/,
+            path.join(__dirname, 'stubs/empty-module.ts'),
+          ),
+        );
         config.resolve = config.resolve || {};
         // filenamify (ESM, imports node:path — an unbundlable scheme) comes
         // in via the ~/hooks barrel (usePresets); no demo executes it. The
@@ -178,7 +224,7 @@ export default defineConfig({
           // run, and MDX rejects the `<!-- site-hide -->` HTML comments this
           // loader relies on. Spec .mdx pages are authored reader-clean instead.
           test: /\.md$/,
-          include: [path.join(__dirname, '../../../docs-ui-refactor')],
+          include: [path.join(__dirname, '../packages/ui/docs')],
           enforce: 'pre',
           use: [path.join(__dirname, 'plugins/strip-internal-loader.cjs')],
         });

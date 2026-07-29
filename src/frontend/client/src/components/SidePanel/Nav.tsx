@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useState } from 'react';
 import * as AccordionPrimitive from '@radix-ui/react-accordion';
 import type { NavLink, NavProps } from '~/common';

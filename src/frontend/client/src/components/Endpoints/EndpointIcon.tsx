@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { isAssistantsEndpoint } from '~/types/chat';
 import type {
   TConversation,

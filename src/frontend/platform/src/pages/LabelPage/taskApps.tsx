@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import ColFilterUser from "@/components/bs-comp/tableComponent/ColFilterUser";
 import { ThunmbIcon } from "@/components/bs-icons";
 import { Button } from "@/components/bs-ui/button";

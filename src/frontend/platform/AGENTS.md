@@ -6,9 +6,9 @@ Cross-app boundary + hard rules common to both apps: root `AGENTS.md §4` (singl
 ## Commands (cwd: `src/frontend/platform/`)
 
 ```bash
-npm install
-npm start -- --host 0.0.0.0                                          # dev server on :3001
-VITE_PROXY_TARGET=http://localhost:8180 npm start -- --host 0.0.0.0  # commercial gateway proxy mode
+pnpm install   # run at src/frontend/ (pnpm workspace root; npm is disabled)
+pnpm start -- --host 0.0.0.0                                          # dev server on :3001
+VITE_PROXY_TARGET=http://localhost:8180 pnpm start -- --host 0.0.0.0  # commercial gateway proxy mode
 ```
 
 ## Tech Stack
@@ -18,8 +18,9 @@ Vite 5 + React 18 + TypeScript + TailwindCSS 3 + Radix UI (bs-ui) + **Zustand** 
 - **Path Aliases**: `@/` → `src/`.
 - **HTTP Requests**: wrapper is `@/controllers/request.ts`; API modules in `@/controllers/API/`.
 - **State Management**: Zustand stores in `@/store/` (cross-page); React Context (`@/contexts/`) for UI-scoped state (alerts, theme, tabs).
+- **Frozen deps (lint-enforced via `no-restricted-imports`; existing usage suppressed)**: `react-query` v3 (unmaintained; @tanstack migration pending, ledger #6) — new data fetching uses the API Layer Pattern below; `xlsx` / `xlsx-populate` (vulnerable / duplicated, ledger #7); `react-color`, `react-beautiful-dnd` (deprecated, ledger #8). Do not add new imports of any of these.
 - **UI Components**: `@/components/bs-ui/` (Radix-based). Icons from `@/components/bs-icons/`.
-- **Workflow editor**: `@xyflow/react` (**not** `react-flow-renderer`); nodes in `src/CustomNodes/`.
+- **Workflow editor**: `@xyflow/react` (**not** `react-flow-renderer`); nodes in `src/pages/BuildPage/flow/FlowNode/`. (Legacy skill editor + `src/CustomNodes/` were removed with the skill module.)
 - **Toast**: `import { toast } from "@/components/bs-ui/toast/use-toast"; toast({ title, variant: 'error' | 'success', description })`.
 - **Confirm Dialogs**: `import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"`.
 - **i18n**: `useTranslation()` from react-i18next → `t()`. Locale files at `public/locales/{en-US,zh-Hans,ja}/{ns}.json`. Namespaces: bs, flow, model, tool, dashboard, knowledge.

@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 
 import { FileSearch2, Loader2 } from "lucide-react";
 import { useContext, useEffect, useState } from "react";

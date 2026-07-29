@@ -565,7 +565,7 @@ export function ArticleList({
                                 onClick={handleToggleUnread}
                                 disabled={mobileDropdownOpen}
                                 className={cn(
-                                    "shrink-0 rounded-[6px] border px-3 py-[3px] text-sm transition-colors whitespace-nowrap",
+                                    "shrink-0 rounded-md border px-3 py-[3px] text-sm transition-colors whitespace-nowrap",
                                     onlyUnread
                                         ? "border-transparent bg-primary/20 text-primary"
                                         : "border-[#E5E6EB] bg-white text-gray-800",
@@ -743,7 +743,7 @@ export function ArticleList({
                                 className="min-w-0"
                             />
                             <MultiSourceSelect
-                                className="h-8 min-w-[140px] max-w-full shrink-0 rounded-[6px]"
+                                className="h-8 min-w-[140px] max-w-full shrink-0 rounded-md"
                                 options={sourceOptions}
                                 value={selectedSources}
                                 onChange={handleSourcesChange}
@@ -752,7 +752,7 @@ export function ArticleList({
                                 type="button"
                                 onClick={handleToggleUnread}
                                 className={cn(
-                                    "shrink-0 rounded-[6px] border px-4 py-[5px] text-sm transition-colors whitespace-nowrap",
+                                    "shrink-0 rounded-md border px-4 py-[5px] text-sm transition-colors whitespace-nowrap",
                                     onlyUnread
                                         ? "border-transparent bg-primary/20 text-primary"
                                         : "border-[#ECECEC] bg-white text-gray-800 fine-pointer:hover:bg-gray-50",

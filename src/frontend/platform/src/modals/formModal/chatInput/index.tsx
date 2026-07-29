@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { Lock, LucideSend, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 import { classNames } from "../../../utils";

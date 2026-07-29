@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { Input } from "@/components/bs-ui/input";
 import { Label } from "@/components/bs-ui/label";
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";

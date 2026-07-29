@@ -271,7 +271,7 @@ export function ArticleDetail({ article, loading = false, screenFull = false, sh
                             {/* Mobile keeps the toolbar AI button (opens the full-screen overlay);
                                 PC uses the bottom AI dock instead. */}
                             {isNarrowShell && !aiAssistantOpen && <button
-                                className="ai-btn-border-draw flex items-center gap-1 text-xs transition-colors px-1.5 h-6 rounded-[6px]"
+                                className="ai-btn-border-draw flex items-center gap-1 text-xs transition-colors px-1.5 h-6 rounded-md"
                                 onClick={() => onAiAssistant?.()}
                             >
                                 <span className="ai-btn-shimmer-overlay" />

@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { cn } from "@/utils";
 import { useRef, useState } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "../popover";

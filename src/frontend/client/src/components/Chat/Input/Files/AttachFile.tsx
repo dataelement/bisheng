@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import React, { useRef } from 'react';
 import { FileUpload, TooltipAnchor } from '~/components/ui';
 import { AttachmentIcon } from '~/components/svg';

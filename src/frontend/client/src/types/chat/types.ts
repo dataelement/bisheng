@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import type OpenAI from 'openai';
 import type { InfiniteData } from '@tanstack/react-query';
 import type {

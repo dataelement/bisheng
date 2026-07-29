@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 /**
  * TagPicker — floating popup that displays available tags.
  * Triggered when user types '#' in the chat input.

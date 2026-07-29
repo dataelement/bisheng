@@ -1,0 +1,35 @@
+{
+  "name": "bisheng-frontend",
+  "private": true,
+  "packageManager": "pnpm@9.15.9",
+  "scripts": {
+    "dev:client": "pnpm --filter bishengchat dev",
+    "dev:platform": "pnpm --filter bisheng dev",
+    "dev:ui": "pnpm --filter bishengchat dev:docs",
+    "build:client": "pnpm --filter bishengchat build",
+    "build:platform": "pnpm --filter bisheng build",
+    "build": "pnpm --filter bisheng build && pnpm --filter bishengchat build",
+    "build:docs": "pnpm --filter bishengchat build:docs",
+    "lint": "pnpm --filter bisheng lint && pnpm --filter bishengchat lint && pnpm --filter @bisheng/ui lint && pnpm --filter @bisheng/file-viewers lint",
+    "typecheck": "pnpm --filter bisheng typecheck && pnpm --filter bishengchat typecheck && pnpm --filter @bisheng/file-viewers typecheck",
+    "locales:build": "pnpm --filter @bisheng/locales build",
+    "locales:watch": "pnpm --filter @bisheng/locales watch",
+    "locales:check": "pnpm --filter @bisheng/locales check",
+    "check-i18n": "node scripts/check-i18n.mjs",
+    "preinstall": "npx only-allow pnpm"
+  },
+  "pnpm": {
+    "overrides": {
+      "rollup@>=4.45.0": "4.44.1",
+      "vite@>=6.4.2": "6.4.1"
+    }
+  },
+  "devDependencies": {
+    "@eslint/js": "^9",
+    "eslint": "^9",
+    "eslint-plugin-react-hooks": "^5",
+    "globals": "^17.7.0",
+    "typescript-eslint": "^8",
+    "typescript-strict-plugin": "^2.4.4"
+  }
+}

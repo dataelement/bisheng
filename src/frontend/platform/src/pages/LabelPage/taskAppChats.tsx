@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import MessagePanne from "@/components/bs-comp/chatComponent/MessagePanne";
 import { useMessageStore } from "@/components/bs-comp/chatComponent/messageStore";
 import { Button } from "@/components/bs-ui/button";
@@ -76,7 +77,7 @@ export default function index() {
     const [status, setStatus] = React.useState(LabelStatus.Unlabeled)
     const [isSelf, setIsSelf] = useState(false)
     const loading = false;
-    const { loadAssistantState, destroy } = useAssistantStore()
+    const { destroy } = useAssistantStore()
     const { loadHistoryMsg, loadMoreHistoryMsg, changeChatId, clearMsgs } = useMessageStore()
     const { loadHistoryMsg: loadFlowHistoryMsg,
         loadMoreHistoryMsg: loadMoreFlowHistoryMsg,

@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { AssistantIcon } from "@/components/bs-icons";
 import Avator from "@/components/bs-ui/input/avator";
 import { uploadFileWithProgress } from "@/modals/UploadModal/upload";

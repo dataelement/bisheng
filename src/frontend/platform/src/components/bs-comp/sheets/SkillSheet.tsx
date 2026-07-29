@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useState } from "react";
 import { readOnlineFlows } from "../../../controllers/API/flow";
 import { FlowType } from "../../../types/flow";

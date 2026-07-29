@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useContext, useEffect, useRef, useState } from "react";
 import { useNodes } from "@xyflow/react";
 import { ChatType } from "../../types/chat";

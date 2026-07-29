@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 
 import { Button } from "@/components/bs-ui/button";
 import { Checkbox } from "@/components/bs-ui/checkBox";
@@ -17,7 +18,7 @@ export default function FormSet({ data, onChange, onSave, onCancel }) {
     }, [data])
 
     const handleCheckboxChange = (val, name) => {
-        let temp = form.wordsType
+        const temp = form.wordsType
         // setForm({ ...form, wordsType: [1] })
         val ? setForm({
             ...form, wordsType: [...temp, name]

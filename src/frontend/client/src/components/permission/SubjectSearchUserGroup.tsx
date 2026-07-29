@@ -84,10 +84,10 @@ export function SubjectSearchUserGroup({
           placeholder={localize("com_permission.search_user_group")}
           value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
-          className="h-8 w-full rounded-[6px] border border-[#EBECF0] bg-white pl-9 pr-3 text-[14px] text-[#212121] outline-none transition-colors placeholder:text-[#999999] focus:border-[#C9CDD4]"
+          className="h-8 w-full rounded-md border border-[#EBECF0] bg-white pl-9 pr-3 text-[14px] text-[#212121] outline-none transition-colors placeholder:text-[#999999] focus:border-[#C9CDD4]"
         />
       </div>
-      <div className="scrollbar-os min-h-0 flex-1 overflow-y-auto rounded-[6px] border border-[#EBECF0]">
+      <div className="scrollbar-os min-h-0 flex-1 overflow-y-auto rounded-md border border-[#EBECF0]">
         {loading && (
           <div className="py-4 text-center text-sm text-gray-500">
             {localize("com_ui_loading")}

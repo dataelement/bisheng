@@ -125,13 +125,13 @@ export const ConfirmProvider = ({ children }: { children: React.ReactNode }) => 
                     <AlertDialogFooter className="w-full flex-row gap-2 sm:space-x-0">
                         <AlertDialogCancel
                             onClick={handleCancel}
-                            className="mt-0 h-auto flex-1 rounded-[6px] border-[#ebecf0] bg-white/50 px-4 py-[5px] text-sm font-normal text-[#070038] backdrop-blur-[4px] hover:bg-[#f7f8fa] focus:ring-0 focus:ring-offset-0 focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 sm:mt-0 sm:flex-none"
+                            className="mt-0 h-auto flex-1 rounded-md border-[#ebecf0] bg-white/50 px-4 py-[5px] text-sm font-normal text-[#070038] backdrop-blur-[4px] hover:bg-[#f7f8fa] focus:ring-0 focus:ring-offset-0 focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 sm:mt-0 sm:flex-none"
                         >
                             {options.cancelText || defaultCancel}
                         </AlertDialogCancel>
                         <AlertDialogAction
                             onClick={handleConfirm}
-                            className={`h-auto flex-1 rounded-[6px] px-4 py-[5px] text-sm font-normal text-white focus:ring-0 focus:ring-offset-0 focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 sm:flex-none ${confirmColor}`}
+                            className={`h-auto flex-1 rounded-md px-4 py-[5px] text-sm font-normal text-white focus:ring-0 focus:ring-offset-0 focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 sm:flex-none ${confirmColor}`}
                         >
                             {options.confirmText || defaultConfirm}
                         </AlertDialogAction>

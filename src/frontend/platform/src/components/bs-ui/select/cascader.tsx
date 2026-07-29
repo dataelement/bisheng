@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { LoadIcon } from "@/components/bs-icons";
 import { ChevronRight, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";

@@ -1,6 +1,7 @@
+// @ts-strict-ignore
 import MultiSelect from "@/components/bs-ui/select/multi";
 import { getUsersApi } from "@/controllers/API/user";
-import { debounce } from "lodash";
+import { debounce } from "lodash-es";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 interface UserOption {

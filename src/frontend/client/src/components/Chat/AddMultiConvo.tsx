@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { PlusCircle } from 'lucide-react';
 import { isAssistantsEndpoint } from '~/types/chat';
 import type { TConversation } from '~/types/chat';

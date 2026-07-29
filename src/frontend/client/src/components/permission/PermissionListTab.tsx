@@ -526,7 +526,7 @@ export function PermissionListTab({
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
             placeholder={getSearchPlaceholder(listTab)}
-            className="h-8 w-full rounded-[6px] border border-[#EBECF0] bg-white pl-9 pr-3 text-[14px] text-[#212121] outline-none transition-colors placeholder:text-[#999999] focus:border-[#C9CDD4]"
+            className="h-8 w-full rounded-md border border-[#EBECF0] bg-white pl-9 pr-3 text-[14px] text-[#212121] outline-none transition-colors placeholder:text-[#999999] focus:border-[#C9CDD4]"
           />
         </div>
 
@@ -601,7 +601,7 @@ export function PermissionListTab({
                           <DropdownMenuTrigger asChild>
                             <button
                               type="button"
-                              className="inline-flex h-8 w-[96px] items-center justify-end gap-1 rounded-[6px] px-2 text-[14px] leading-[22px] text-[#999999] transition-colors hover:bg-[#F7F7F7]"
+                              className="inline-flex h-8 w-[96px] items-center justify-end gap-1 rounded-md px-2 text-[14px] leading-[22px] text-[#999999] transition-colors hover:bg-[#F7F7F7]"
                             >
                               <span className="truncate">{getPermissionLabel(entry)}</span>
                               <ChevronDown className="size-3.5 shrink-0 text-[#999999]" />
@@ -609,7 +609,7 @@ export function PermissionListTab({
                           </DropdownMenuTrigger>
                           <DropdownMenuContent
                             align="end"
-                            className="z-[120] max-h-[240px] w-[100px] overflow-x-hidden overflow-y-auto overscroll-none rounded-[8px] border-0 bg-white p-1 shadow-[0px_6px_20px_1px_rgba(117,145,212,0.12)] scrollbar-hide [&::-webkit-scrollbar]:!w-0 [&::-webkit-scrollbar]:!h-0"
+                            className="z-[120] max-h-[240px] w-[100px] overflow-x-hidden overflow-y-auto overscroll-none rounded-lg border-0 bg-white p-1 shadow-[0px_6px_20px_1px_rgba(117,145,212,0.12)] scrollbar-hide [&::-webkit-scrollbar]:!w-0 [&::-webkit-scrollbar]:!h-0"
                           >
                             {canModifyEntry && (!isOwner || canManageOwnerEntry) && entryModelOptions.map((model) => {
                               const active = model.id === currentModelId;
@@ -617,7 +617,7 @@ export function PermissionListTab({
                                 <DropdownMenuItem
                                   key={model.id}
                                   className={cn(
-                                    "rounded-[6px] px-2 py-[5px] text-[14px] leading-[22px]",
+                                    "rounded-md px-2 py-[5px] text-[14px] leading-[22px]",
                                     active
                                       ? "bg-blue-500/[0.07] text-blue-500 data-[highlighted]:bg-blue-500/[0.07] data-[highlighted]:text-blue-500"
                                       : "text-[#212121] data-[highlighted]:bg-[#F7F7F7] data-[highlighted]:text-[#212121]",
@@ -636,7 +636,7 @@ export function PermissionListTab({
                             {canDeleteEntrySubject && (
                               <DropdownMenuItem
                                 aria-label={localize("com_permission.remove")}
-                                className="rounded-[6px] px-2 py-[5px] text-[14px] leading-[22px] text-[#F53F3F] data-[highlighted]:bg-[#FFF2F0] data-[highlighted]:text-[#F53F3F]"
+                                className="rounded-md px-2 py-[5px] text-[14px] leading-[22px] text-[#F53F3F] data-[highlighted]:bg-[#FFF2F0] data-[highlighted]:text-[#F53F3F]"
                                 onSelect={() => {
                                   void handleDeleteSubject(entry);
                                 }}

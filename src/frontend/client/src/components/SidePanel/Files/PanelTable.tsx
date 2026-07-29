@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useState, useCallback, useMemo } from 'react';
 import { ArrowUpLeft } from 'lucide-react';
 import { useSetRecoilState } from 'recoil';
