@@ -489,7 +489,7 @@ describe("ApprovalPage", () => {
     await screen.findAllByText("部门文件查看审批");
     await user.click(screen.getByRole("button", { name: /新增分支/ }));
     await user.selectOptions(
-      getSelectWithOptionValue("file_knowledge_space_id"),
+      screen.getByLabelText("条件 1 字段"),
       "file_knowledge_space_id",
     );
 
@@ -773,14 +773,14 @@ describe("ApprovalPage", () => {
     await user.click(screen.getByRole("button", { name: /新增分支/ }));
     await screen.findByText("新增条件分支");
 
-    const fieldSelect = getSelectWithOptionValue("space_level");
+    const fieldSelect = screen.getByLabelText("条件 1 字段");
     expect(within(fieldSelect).getByRole("option", { name: "知识空间类型" })).toHaveValue("space_level");
     expect(within(fieldSelect).getByRole("option", { name: "申请人部门" })).toHaveValue("applicant_department_id");
     expect(within(fieldSelect).queryByRole("option", { name: "空间可见性" })).not.toBeInTheDocument();
 
     await user.selectOptions(fieldSelect, "space_level");
 
-    const valueSelect = getSelectWithOptionValue("personal");
+    const valueSelect = screen.getByLabelText("条件 1 值");
     expect(within(valueSelect).getByRole("option", { name: "公共" })).toHaveValue("public");
     expect(within(valueSelect).getByRole("option", { name: "部门" })).toHaveValue("department");
     expect(within(valueSelect).getByRole("option", { name: "团队" })).toHaveValue("team");
@@ -795,7 +795,10 @@ describe("ApprovalPage", () => {
       expect(createApprovalRouteApi).toHaveBeenCalledWith(
         34,
         expect.objectContaining({
-          match_config: { field: "space_level", value: "personal" },
+          match_config: {
+            operator: "and",
+            conditions: [{ field: "space_level", value: "personal" }],
+          },
         }),
       );
     });
@@ -828,11 +831,10 @@ describe("ApprovalPage", () => {
     await user.click(screen.getByRole("button", { name: /新增分支/ }));
     await screen.findByText("新增条件分支");
 
-    const fieldSelect = getSelectWithOptionValue("applicant_department_id");
-    await user.selectOptions(fieldSelect, "applicant_department_id");
+    await user.selectOptions(screen.getByLabelText("条件 1 字段"), "applicant_department_id");
 
     await waitFor(() => expect(getDepartmentTreeApi).toHaveBeenCalled());
-    const departmentSelect = getSelectWithOptionValue("7");
+    const departmentSelect = screen.getByLabelText("条件 1 值");
     expect(within(departmentSelect).getByRole("option", { name: "研发部" })).toHaveValue("7");
 
     await user.selectOptions(departmentSelect, "7");
@@ -844,7 +846,64 @@ describe("ApprovalPage", () => {
       expect(createApprovalRouteApi).toHaveBeenCalledWith(
         34,
         expect.objectContaining({
-          match_config: { field: "applicant_department_id", value: "7" },
+          match_config: {
+            operator: "and",
+            conditions: [{ field: "applicant_department_id", value: "7" }],
+          },
+        }),
+      );
+    });
+  });
+
+  it("creates a non-publish route with multiple AND conditions", async () => {
+    const user = userEvent.setup();
+    listApprovalScenarioPresetsApi.mockResolvedValue([
+      {
+        scenario_code: "knowledge_space_create_request",
+        scenario_name: "知识空间创建审批",
+        handler_key: "knowledge_space_create_request",
+        condition_fields: ["applicant_role", "space_level", "applicant_department_id"],
+        approver_source_types: ["direct_user", "department_admin", "role_user"],
+      },
+    ]);
+    listApprovalScenariosApi.mockResolvedValue([
+      {
+        id: 34,
+        scenario_code: "knowledge_space_create_request",
+        scenario_name: "知识空间创建审批",
+        enabled: true,
+      },
+    ]);
+    listApprovalRoutesApi.mockResolvedValue([]);
+
+    render(<ApprovalPage />);
+    await screen.findAllByText("知识空间创建审批");
+
+    await user.click(screen.getByRole("button", { name: /新增分支/ }));
+    await screen.findByText("新增条件分支");
+
+    await user.type(screen.getByPlaceholderText("如：管理员直接通过"), "部门管理员创建部门空间");
+    await user.selectOptions(screen.getByLabelText("条件 1 字段"), "applicant_role");
+    await user.selectOptions(screen.getByLabelText("条件 1 值"), "dept_admin");
+    await user.click(screen.getByRole("button", { name: "添加条件" }));
+    expect(screen.getByText("AND")).toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText("条件 2 字段"), "space_level");
+    await user.selectOptions(screen.getByLabelText("条件 2 值"), "department");
+    await user.selectOptions(getSelectWithOptionValue("pass"), "pass");
+    await user.click(screen.getByRole("button", { name: "保存" }));
+
+    await waitFor(() => {
+      expect(createApprovalRouteApi).toHaveBeenCalledWith(
+        34,
+        expect.objectContaining({
+          route_name: "部门管理员创建部门空间",
+          match_config: {
+            operator: "and",
+            conditions: [
+              { field: "applicant_role", value: "dept_admin" },
+              { field: "space_level", value: "department" },
+            ],
+          },
         }),
       );
     });
