@@ -24,20 +24,6 @@ from bisheng.approval.domain.schemas.approval_center_schema import (
 from bisheng.common.errcode.approval import ApprovalScenarioDisabledError
 from bisheng.database.models.audit_log import AuditLog, AuditLogDao
 
-FILE_PUBLISH_SCENARIO_CODE = "knowledge_space_file_publish_request"
-FILE_PUBLISH_ALLOWED_CONDITION_FIELDS = frozenset({
-    "applicant_role",
-    "source_space_level",
-    "target_space_level",
-})
-DEPARTMENT_FILE_VIEW_SCENARIO_CODE = "department_file_view_request"
-DEPARTMENT_FILE_VIEW_ALLOWED_CONDITION_FIELDS = frozenset({
-    "applicant_role",
-    "applicant_department_id",
-    "file_department_id",
-    "file_knowledge_space_id",
-})
-
 
 async def _get_user_role_labels(user_id: int, tenant_id: int) -> frozenset[str]:
     """Return the full set of identity labels for a user.
@@ -191,7 +177,7 @@ class ApprovalGate:
                     payload_snapshot=req.payload_snapshot,
                     detail_snapshot=detail_snapshot,
                     route_rule_id=getattr(matched_route, "id", None),
-                )
+                ),
             )
             # PASS route still needs to execute the business handler via outbox
             outbox = await self._instance_call(
@@ -202,7 +188,7 @@ class ApprovalGate:
                     handler_key=req.scenario_code,
                     status=ApprovalOutboxStatus.PENDING,
                     payload_snapshot=req.payload_snapshot,
-                )
+                ),
             )
             await self._write_audit(
                 tenant_id=req.tenant_id,
@@ -308,7 +294,7 @@ class ApprovalGate:
                 payload_snapshot=req.payload_snapshot,
                 detail_snapshot=detail_snapshot,
                 current_node_name=first_node.node_name,
-            )
+            ),
         )
         tasks = await self._instance_call(
             "create_tasks",
@@ -326,7 +312,7 @@ class ApprovalGate:
                     status=ApprovalTaskStatus.PENDING,
                 )
                 for approver_user_id in approvers
-            ]
+            ],
         )
         task_ids = [task.id for task in tasks]
         await self._instance_call(
@@ -338,7 +324,7 @@ class ApprovalGate:
                 operator_user_id=req.applicant_user_id,
                 operator_user_name=req.applicant_user_name,
                 detail={},
-            )
+            ),
         )
         await self._write_audit(
             tenant_id=req.tenant_id,
@@ -423,7 +409,7 @@ class ApprovalGate:
                 payload_snapshot=req.payload_snapshot,
                 detail_snapshot=detail_snapshot,
                 current_node_name=current_node_name,
-            )
+            ),
         )
         exception_detail: dict[str, Any] = {
             "scenario_code": req.scenario_code,
@@ -446,7 +432,7 @@ class ApprovalGate:
                 instance_id=instance.id,
                 exception_type=exception_type,
                 detail=exception_detail,
-            )
+            ),
         )
         # Audit the submission even when the instance lands in exception state — every
         # instance creation must leave a trace per the approval module compliance rule.
@@ -542,6 +528,16 @@ class ApprovalGate:
             instance_id=instance_id,
         )
 
+    def _allowed_condition_fields(self, scenario_code: str) -> frozenset[str]:
+        """Return preset-allowed match fields for a scenario; empty if unknown/unconfigurable."""
+        get_preset = getattr(self.registry, "get_preset", None)
+        if get_preset is None:
+            return frozenset()
+        preset = get_preset(scenario_code)
+        if preset is None:
+            return frozenset()
+        return frozenset(getattr(preset, "condition_fields", None) or [])
+
     async def _match_first_route(self, route_rules: list[Any], req: ApprovalGateRequest) -> Any | None:
         """Evaluate route conditions top-to-bottom; return the first matching enabled route.
 
@@ -555,7 +551,8 @@ class ApprovalGate:
            "conditions": [
              {"field": "source_space_level", "value": "team"},
              {"field": "target_space_level", "value": "public"}
-           ]}                            → file publish only; all conditions must match
+           ]}                            → all conditions must match (AND); fields must be
+                                           in the scenario preset's condition_fields
 
         applicant_role condition uses "包含即命中" semantics:
           a user may have multiple labels simultaneously (e.g. admin + dept_admin).
@@ -568,6 +565,7 @@ class ApprovalGate:
           "regular_user" → 普通用户 (catch-all, every user has this label)
         """
         user_labels: frozenset[str] | None = None  # lazily resolved; shared across routes
+        allowed_fields = self._allowed_condition_fields(req.scenario_code)
 
         async def condition_matches(field: str, expected: str) -> bool:
             nonlocal user_labels
@@ -587,12 +585,7 @@ class ApprovalGate:
             match_config = getattr(route, "match_config", {}) or {}
             conditions = match_config.get("conditions")
             if isinstance(conditions, list):
-                allowed_fields = None
-                if req.scenario_code == FILE_PUBLISH_SCENARIO_CODE:
-                    allowed_fields = FILE_PUBLISH_ALLOWED_CONDITION_FIELDS
-                elif req.scenario_code == DEPARTMENT_FILE_VIEW_SCENARIO_CODE:
-                    allowed_fields = DEPARTMENT_FILE_VIEW_ALLOWED_CONDITION_FIELDS
-                if allowed_fields is None:
+                if not allowed_fields:
                     continue
                 operator = str(match_config.get("operator") or "and").lower()
                 if operator != "and":

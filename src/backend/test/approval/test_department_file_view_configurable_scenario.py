@@ -63,16 +63,10 @@ def test_department_file_view_preset_exposes_trusted_route_conditions() -> None:
         "file_department_id",
         "file_knowledge_space_id",
     ]
-    descriptors = {
-        descriptor.field: descriptor
-        for descriptor in preset.condition_field_options
-    }
+    descriptors = {descriptor.field: descriptor for descriptor in preset.condition_field_options}
     assert descriptors["applicant_department_id"].selector_type == "department"
     assert descriptors["file_department_id"].selector_type == "department"
-    assert (
-        descriptors["file_knowledge_space_id"].selector_type
-        == "department_knowledge_space"
-    )
+    assert descriptors["file_knowledge_space_id"].selector_type == "department_knowledge_space"
 
 
 @pytest.mark.asyncio
@@ -189,8 +183,7 @@ async def test_valid_department_space_options_support_search_and_pagination() ->
 
     with (
         patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service."
-            "DepartmentKnowledgeSpaceDao.aget_all",
+            "bisheng.knowledge.domain.services.knowledge_space_service.DepartmentKnowledgeSpaceDao.aget_all",
             new=AsyncMock(return_value=bindings),
         ),
         patch.object(
@@ -199,28 +192,22 @@ async def test_valid_department_space_options_support_search_and_pagination() ->
             new=AsyncMock(return_value={20, 30}),
         ),
         patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service."
-            "KnowledgeDao.async_get_spaces_by_ids",
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_spaces_by_ids",
             new=AsyncMock(return_value=spaces),
         ),
         patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service."
-            "DepartmentDao.aget_by_ids",
+            "bisheng.knowledge.domain.services.knowledge_space_service.DepartmentDao.aget_by_ids",
             new=AsyncMock(return_value=departments),
         ),
     ):
-        searched = (
-            await KnowledgeSpaceService.list_valid_department_space_options(
-                keyword="炼钢",
-                page=1,
-                page_size=20,
-            )
+        searched = await KnowledgeSpaceService.list_valid_department_space_options(
+            keyword="炼钢",
+            page=1,
+            page_size=20,
         )
-        second_page = (
-            await KnowledgeSpaceService.list_valid_department_space_options(
-                page=2,
-                page_size=1,
-            )
+        second_page = await KnowledgeSpaceService.list_valid_department_space_options(
+            page=2,
+            page_size=1,
         )
 
     assert searched["total"] == 1
@@ -272,8 +259,36 @@ async def test_route_save_revalidates_department_space_option() -> None:
 
 
 @pytest.mark.asyncio
+async def test_route_save_rejects_non_and_match_operator() -> None:
+    scenario = SimpleNamespace(
+        id=1,
+        tenant_id=1,
+        scenario_code="menu_access_request",
+    )
+    payload = {
+        "route_name": "OR 不被支持",
+        "route_type": "pass",
+        "flow_definition_id": None,
+        "match_config": {
+            "operator": "or",
+            "conditions": [
+                {"field": "applicant_role", "value": "admin"},
+                {"field": "menu_key", "value": "knowledge"},
+            ],
+        },
+    }
+
+    with pytest.raises(ApprovalConditionOptionInvalidError):
+        await ApprovalScenarioAdminService._validate_route_payload(
+            tenant_id=1,
+            scenario=scenario,
+            payload=payload,
+        )
+
+
+@pytest.mark.asyncio
 async def test_route_matcher_accepts_only_trusted_department_file_context() -> None:
-    gate = ApprovalGate(registry=AsyncMock())
+    gate = ApprovalGate(registry=ApprovalRegistry.with_default_presets())
     routes = [
         SimpleNamespace(
             id=1,
@@ -337,8 +352,7 @@ async def config_lifecycle_session_factory(monkeypatch):
             yield session
 
     monkeypatch.setattr(
-        "bisheng.approval.domain.repositories.approval_scenario_repository."
-        "get_async_db_session",
+        "bisheng.approval.domain.repositories.approval_scenario_repository.get_async_db_session",
         factory,
     )
     yield factory
@@ -489,22 +503,20 @@ async def test_node_edit_creates_new_version_and_preserves_historical_nodes(
         instance_id = int(historical_instance.id)
         await session.commit()
 
-    _, new_version, created_nodes, _ = (
-        await ApprovalScenarioRepository.replace_flow_nodes_safely(
-            tenant_id=1,
-            flow_definition_id=flow_id,
-            nodes_payload=[
-                {
-                    "node_code": "new",
-                    "node_name": "新审批节点",
-                    "node_order": 0,
-                    "node_mode": "and",
-                    "approver_config": {
-                        "sources": ["knowledge_space_owner"],
-                    },
-                }
-            ],
-        )
+    _, new_version, created_nodes, _ = await ApprovalScenarioRepository.replace_flow_nodes_safely(
+        tenant_id=1,
+        flow_definition_id=flow_id,
+        nodes_payload=[
+            {
+                "node_code": "new",
+                "node_name": "新审批节点",
+                "node_order": 0,
+                "node_mode": "and",
+                "approver_config": {
+                    "sources": ["knowledge_space_owner"],
+                },
+            }
+        ],
     )
 
     async with config_lifecycle_session_factory() as session:
@@ -585,10 +597,7 @@ async def test_flow_with_historical_version_reference_cannot_be_deleted(
             flow_definition_id=flow_id,
         )
 
-    assert (
-        await ApprovalScenarioRepository.get_flow_definition(flow_id)
-        is not None
-    )
+    assert await ApprovalScenarioRepository.get_flow_definition(flow_id) is not None
 
 
 @pytest.mark.asyncio
@@ -634,9 +643,7 @@ async def test_apply_and_route_delete_interleavings_have_no_dangling_route_id(
             return None
 
         async def commit(self) -> None:
-            state.referenced = bool(
-                state.referenced or state.pending_reference
-            )
+            state.referenced = bool(state.referenced or state.pending_reference)
             if self.holds_route_lock:
                 self.holds_route_lock = False
                 lock.release()
@@ -662,12 +669,8 @@ async def test_apply_and_route_delete_interleavings_have_no_dangling_route_id(
     instance_repository = SimpleNamespace(
         find_duplicate_active_instance=AsyncMock(return_value=None),
         create_instance=AsyncMock(side_effect=create_instance),
-        create_outbox=AsyncMock(
-            side_effect=lambda row, **_: row.model_copy(update={"id": 11})
-        ),
-        create_exception=AsyncMock(
-            side_effect=lambda row, **_: row.model_copy(update={"id": 12})
-        ),
+        create_outbox=AsyncMock(side_effect=lambda row, **_: row.model_copy(update={"id": 11})),
+        create_exception=AsyncMock(side_effect=lambda row, **_: row.model_copy(update={"id": 12})),
     )
     gate = ApprovalGate(
         registry=SimpleNamespace(
@@ -776,12 +779,8 @@ async def test_gate_holds_locked_route_until_shared_transaction_commit() -> None
     )
     instance_repository = SimpleNamespace(
         find_duplicate_active_instance=AsyncMock(return_value=None),
-        create_instance=AsyncMock(
-            side_effect=lambda row, **_: row.model_copy(update={"id": 10})
-        ),
-        create_outbox=AsyncMock(
-            side_effect=lambda row, **_: row.model_copy(update={"id": 11})
-        ),
+        create_instance=AsyncMock(side_effect=lambda row, **_: row.model_copy(update={"id": 10})),
+        create_outbox=AsyncMock(side_effect=lambda row, **_: row.model_copy(update={"id": 11})),
     )
     gate = ApprovalGate(
         registry=SimpleNamespace(
@@ -819,14 +818,8 @@ async def test_gate_holds_locked_route_until_shared_transaction_commit() -> None
         enabled_only=True,
     )
     instance_repository.create_instance.assert_awaited_once()
-    assert (
-        instance_repository.create_instance.await_args.kwargs["session"]
-        is session
-    )
-    assert (
-        instance_repository.create_outbox.await_args.kwargs["session"]
-        is session
-    )
+    assert instance_repository.create_instance.await_args.kwargs["session"] is session
+    assert instance_repository.create_outbox.await_args.kwargs["session"] is session
     session.commit.assert_awaited_once()
     gate._dispatch_outbox_task.assert_called_once_with(11)
 

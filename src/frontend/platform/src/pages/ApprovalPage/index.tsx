@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, ChevronUp, Eye, Filter, Pencil, Plus, Trash2, Users } from "lucide-react";
 import { toast } from "@/components/bs-ui/toast/use-toast";
-import SelectSearch from "@/components/bs-ui/select/select";
 import { getRolesApi, getUsersApi } from "@/controllers/API/user";
 import { Switch } from "@/components/bs-ui/switch";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
@@ -529,20 +528,16 @@ function RouteDialog({
     match_config: ApprovalRouteMatchConfig;
   }) => void;
 }) {
-  const isPublishRoute = isFilePublishScenario(scenarioCode);
+  const supportsMultiCondition = conditionFields.length > 0;
   const [name, setName] = useState(initial.route_name ?? "");
   const [type, setType] = useState(initial.route_type ?? "flow");
   const [flowId, setFlowId] = useState(
     initial.flow_definition_id ? String(initial.flow_definition_id) : "",
   );
-  const initialSingleMatchConfig = isSingleMatchConfig(initial.match_config) ? initial.match_config : null;
-  const [condField, setCondField] = useState(initialSingleMatchConfig?.field ?? "");
-  const [condValue, setCondValue] = useState(initialSingleMatchConfig?.value ?? "");
   const [conditions, setConditions] = useState<MatchCondition[]>(() =>
     routeConditionsFromMatchConfig(initial.match_config),
   );
   const [systemRoles, setSystemRoles] = useState<{ value: string; label: string }[]>([]);
-  const [roleSearch, setRoleSearch] = useState("");
   const [targetSpaces, setTargetSpaces] = useState<TargetSpaceOption[]>([]);
   const [targetSpaceSearch, setTargetSpaceSearch] = useState("");
   const [targetSpacesLoaded, setTargetSpacesLoaded] = useState(false);
@@ -561,11 +556,7 @@ function RouteDialog({
       setName(initial.route_name ?? "");
       setType(initial.route_type ?? "flow");
       setFlowId(initial.flow_definition_id ? String(initial.flow_definition_id) : "");
-      const singleMatchConfig = isSingleMatchConfig(initial.match_config) ? initial.match_config : null;
-      setCondField(singleMatchConfig?.field ?? "");
-      setCondValue(singleMatchConfig?.value ?? "");
       setConditions(routeConditionsFromMatchConfig(initial.match_config));
-      setRoleSearch("");
       setTargetSpaceSearch("");
       setTargetSpacesLoaded(false);
       setTargetSpacesLoading(false);
@@ -605,12 +596,12 @@ function RouteDialog({
         label: t(v.label, { defaultValue: v.value }),
       }));
   };
-  const allRoleValues = getConditionValueOptions(condField);
-  // Apply search filter for applicant_role (search against translated label)
-  const effectiveValues = condField === 'applicant_role' && roleSearch
-    ? allRoleValues.filter((v) => v.label.toLowerCase().includes(roleSearch.toLowerCase()))
-    : allRoleValues;
-  const hasEnumValues = allRoleValues.length > 0;
+  const conditionFieldsInUse = conditions.map((condition) => condition.field ?? "");
+  const needsDepartmentOptions = conditionFieldsInUse.some((field) =>
+    ["applicant_department_id", "file_department_id"].includes(field),
+  );
+  const needsTargetSpaceIdOptions = conditionFieldsInUse.includes("target_space_id");
+  const needsFileKnowledgeSpaceOptions = conditionFieldsInUse.includes("file_knowledge_space_id");
   const filteredTargetSpaces = targetSpaceSearch
     ? targetSpaces.filter((space) =>
         space.label.toLowerCase().includes(targetSpaceSearch.toLowerCase()),
@@ -621,9 +612,8 @@ function RouteDialog({
         department.label.toLowerCase().includes(departmentSearch.toLowerCase()),
       )
     : departments;
-
   useEffect(() => {
-    if (!open || condField !== "target_space_id" || targetSpacesLoaded || targetSpacesLoading) return;
+    if (!open || !needsTargetSpaceIdOptions || targetSpacesLoaded || targetSpacesLoading) return;
 
     setTargetSpacesLoading(true);
     setTargetSpacesLoadFailed(false);
@@ -651,10 +641,10 @@ function RouteDialog({
     }).finally(() => {
       setTargetSpacesLoading(false);
     });
-  }, [open, condField, targetSpacesLoaded, targetSpacesLoading, targetSpacesLoadAttempt]);
+  }, [open, needsTargetSpaceIdOptions, targetSpacesLoaded, targetSpacesLoading, targetSpacesLoadAttempt]);
 
   useEffect(() => {
-    if (!open || condField !== "file_knowledge_space_id" || !scenarioId) return;
+    if (!open || !needsFileKnowledgeSpaceOptions || !scenarioId) return;
     let cancelled = false;
     const timer = window.setTimeout(() => {
       setTargetSpacesLoading(true);
@@ -686,7 +676,7 @@ function RouteDialog({
     };
   }, [
     open,
-    condField,
+    needsFileKnowledgeSpaceOptions,
     scenarioId,
     targetSpaceSearch,
     targetSpacesLoadAttempt,
@@ -702,7 +692,7 @@ function RouteDialog({
   useEffect(() => {
     if (
       !open
-      || !["applicant_department_id", "file_department_id"].includes(condField)
+      || !needsDepartmentOptions
       || departmentsLoaded
       || departmentsLoading
     ) return;
@@ -719,7 +709,7 @@ function RouteDialog({
     }).finally(() => {
       setDepartmentsLoading(false);
     });
-  }, [open, condField, departmentsLoaded, departmentsLoading, departmentsLoadAttempt]);
+  }, [open, needsDepartmentOptions, departmentsLoaded, departmentsLoading, departmentsLoadAttempt]);
 
   const retryLoadDepartments = () => {
     setDepartmentsLoaded(false);
@@ -728,49 +718,52 @@ function RouteDialog({
     setDepartmentsLoadAttempt((attempt) => attempt + 1);
   };
 
-  const handleFieldChange = (f: string) => {
-    setCondField(f);
-    setCondValue(""); // reset value when field changes
+  const handleConditionFieldChange = (index: number, field: string) => {
+    setConditions((prev) => prev.map((condition, i) =>
+      i === index ? { field, value: "" } : condition,
+    ));
     setTargetSpaceSearch("");
     setDepartmentSearch("");
   };
 
-  const handlePublishConditionFieldChange = (index: number, field: string) => {
-    setConditions((prev) => prev.map((condition, i) =>
-      i === index ? { field, value: "" } : condition,
-    ));
-  };
-
-  const handlePublishConditionValueChange = (index: number, value: string) => {
+  const handleConditionValueChange = (index: number, value: string) => {
     setConditions((prev) => prev.map((condition, i) =>
       i === index ? { ...condition, value } : condition,
     ));
   };
 
-  const addPublishCondition = () => {
+  const addCondition = () => {
     setConditions((prev) => [...prev, { field: "", value: "" }]);
   };
 
-  const removePublishCondition = (index: number) => {
+  const removeCondition = (index: number) => {
     setConditions((prev) => {
       const next = prev.filter((_, i) => i !== index);
       return next.length > 0 ? next : [{ field: "", value: "" }];
     });
   };
 
-  const targetSpaceConditionInvalid = ["target_space_id", "file_knowledge_space_id"].includes(condField) && (
+  const hasIncompleteSpaceCondition = conditions.some((condition) =>
+    ["target_space_id", "file_knowledge_space_id"].includes(condition.field ?? "")
+    && !condition.value,
+  );
+  const hasIncompleteDepartmentCondition = conditions.some((condition) =>
+    ["applicant_department_id", "file_department_id"].includes(condition.field ?? "")
+    && !condition.value,
+  );
+  const targetSpaceConditionInvalid = (needsTargetSpaceIdOptions || needsFileKnowledgeSpaceOptions) && (
     targetSpacesLoading ||
     targetSpacesLoadFailed ||
     !targetSpacesLoaded ||
-    !condValue
+    hasIncompleteSpaceCondition
   );
-  const departmentConditionInvalid = ["applicant_department_id", "file_department_id"].includes(condField) && (
+  const departmentConditionInvalid = needsDepartmentOptions && (
     departmentsLoading ||
     departmentsLoadFailed ||
     !departmentsLoaded ||
-    !condValue
+    hasIncompleteDepartmentCondition
   );
-  const publishConditionsInvalid = isPublishRoute && conditions.some((condition) => condition.field && !condition.value);
+  const multiConditionsInvalid = supportsMultiCondition && conditions.some((condition) => condition.field && !condition.value);
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
@@ -792,222 +785,173 @@ function RouteDialog({
           {/* Condition */}
           <div className="rounded-lg border border-border-subtle bg-gray-50 p-3 space-y-3">
             <div className="text-xs font-medium text-text-secondary">{t("approvalPage.matchConditionHint")}</div>
-            {isPublishRoute ? (
+            {supportsMultiCondition ? (
               <div className="space-y-2">
                 {conditions.map((condition, index) => {
-                  const valueOptions = getConditionValueOptions(condition.field ?? "");
+                  const field = condition.field ?? "";
+                  const valueOptions = getConditionValueOptions(field);
                   const rowNumber = index + 1;
+                  const isDepartmentField = ["applicant_department_id", "file_department_id"].includes(field);
+                  const isSpaceField = ["target_space_id", "file_knowledge_space_id"].includes(field);
                   return (
-                    <div key={index} className="flex items-center gap-2">
-                      <select
-                        aria-label={`条件 ${rowNumber} 字段`}
-                        value={condition.field ?? ""}
-                        onChange={(e) => handlePublishConditionFieldChange(index, e.target.value)}
-                        className="h-9 flex-1 rounded-lg border border-border-subtle bg-white px-2 text-sm text-text-primary outline-none"
-                      >
-                        <option value="">{t("approvalPage.noCondition")}</option>
-                        {conditionFields.map((f) => (
-                          <option key={f} value={f}>
-                            {CONDITION_FIELD_META[f]
-                              ? t(CONDITION_FIELD_META[f].label, { defaultValue: f })
-                              : t(`approvalPage.condition.${f}`, { defaultValue: f })}
-                          </option>
-                        ))}
-                      </select>
-                      {condition.field && <span className="text-xs text-text-secondary">=</span>}
-                      {condition.field && valueOptions.length > 0 && (
+                    <div key={index} className="space-y-1">
+                      {index > 0 && (
+                        <div className="text-[11px] font-medium text-text-secondary">
+                          {t("approvalPage.conditionOperatorAnd", { defaultValue: "AND" })}
+                        </div>
+                      )}
+                      <div className="flex items-start gap-2">
                         <select
-                          aria-label={`条件 ${rowNumber} 值`}
-                          value={condition.value ?? ""}
-                          onChange={(e) => handlePublishConditionValueChange(index, e.target.value)}
+                          aria-label={`条件 ${rowNumber} 字段`}
+                          value={field}
+                          onChange={(e) => handleConditionFieldChange(index, e.target.value)}
                           className="h-9 flex-1 rounded-lg border border-border-subtle bg-white px-2 text-sm text-text-primary outline-none"
                         >
-                          <option value="">{t("approvalPage.pleaseSelect")}</option>
-                          {valueOptions.map((v) => (
-                            <option key={v.value} value={v.value}>
-                              {v.label}
+                          <option value="">{t("approvalPage.noCondition")}</option>
+                          {conditionFields.map((f) => (
+                            <option key={f} value={f}>
+                              {CONDITION_FIELD_META[f]
+                                ? t(CONDITION_FIELD_META[f].label, { defaultValue: f })
+                                : t(`approvalPage.condition.${f}`, { defaultValue: f })}
                             </option>
                           ))}
                         </select>
-                      )}
-                      {condition.field && valueOptions.length === 0 && (
-                        <input
-                          aria-label={`条件 ${rowNumber} 值`}
-                          value={condition.value ?? ""}
-                          onChange={(e) => handlePublishConditionValueChange(index, e.target.value)}
-                          placeholder={t("approvalPage.inputConditionValue")}
-                          className="h-9 flex-1 rounded-lg border border-border-subtle bg-white px-2 text-sm text-text-primary outline-none"
-                        />
-                      )}
-                      {conditions.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => removePublishCondition(index)}
-                          className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border-subtle bg-white text-text-secondary hover:bg-gray-50"
-                          aria-label={`${t("approvalPage.removeCondition", { defaultValue: "删除条件" })} ${rowNumber}`}
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      )}
+                        {field && <span className="mt-2 text-xs text-text-secondary">=</span>}
+                        {isDepartmentField && (
+                          <div className="flex-1 space-y-2">
+                            {departmentsLoading ? (
+                              <p className="text-xs text-text-secondary">{t("approvalPage.loading")}</p>
+                            ) : departmentsLoadFailed ? (
+                              <div className="flex items-center gap-2">
+                                <p className="text-xs text-red-500">{t("approvalPage.departmentLoadFailed", { defaultValue: "部门加载失败" })}</p>
+                                <button
+                                  type="button"
+                                  onClick={retryLoadDepartments}
+                                  className="text-xs text-primary hover:underline"
+                                >
+                                  {t("approvalPage.retry", { defaultValue: "重试" })}
+                                </button>
+                              </div>
+                            ) : departments.length > 0 ? (
+                              <>
+                                <input
+                                  value={departmentSearch}
+                                  onChange={(e) => setDepartmentSearch(e.target.value)}
+                                  placeholder={t("approvalPage.searchDepartment", { defaultValue: "搜索部门" })}
+                                  className="h-9 w-full rounded-lg border border-border-subtle bg-white px-2 text-sm text-text-primary outline-none"
+                                />
+                                <select
+                                  aria-label={`条件 ${rowNumber} 值`}
+                                  value={condition.value ?? ""}
+                                  onChange={(e) => handleConditionValueChange(index, e.target.value)}
+                                  className="h-9 w-full rounded-lg border border-border-subtle bg-white px-2 text-sm text-text-primary outline-none"
+                                >
+                                  <option value="">{t("approvalPage.pleaseSelect")}</option>
+                                  {filteredDepartments.map((department) => (
+                                    <option key={department.value} value={department.value}>
+                                      {department.label}
+                                    </option>
+                                  ))}
+                                </select>
+                              </>
+                            ) : (
+                              <p className="text-xs text-text-secondary">{t("approvalPage.noDepartments", { defaultValue: "暂无可用部门" })}</p>
+                            )}
+                          </div>
+                        )}
+                        {isSpaceField && (
+                          <div className="flex-1 space-y-2">
+                            {targetSpacesLoading ? (
+                              <p className="text-xs text-text-secondary">{t("approvalPage.loading")}</p>
+                            ) : targetSpacesLoadFailed ? (
+                              <div className="flex items-center gap-2">
+                                <p className="text-xs text-red-500">{t("approvalPage.targetSpaceLoadFailed", { defaultValue: "目标知识空间加载失败" })}</p>
+                                <button
+                                  type="button"
+                                  onClick={retryLoadTargetSpaces}
+                                  className="text-xs text-primary hover:underline"
+                                >
+                                  {t("approvalPage.retry", { defaultValue: "重试" })}
+                                </button>
+                              </div>
+                            ) : targetSpaces.length > 0 ? (
+                              <>
+                                <input
+                                  value={targetSpaceSearch}
+                                  onChange={(e) => setTargetSpaceSearch(e.target.value)}
+                                  placeholder={t("approvalPage.searchTargetSpace", { defaultValue: "搜索知识空间" })}
+                                  className="h-9 w-full rounded-lg border border-border-subtle bg-white px-2 text-sm text-text-primary outline-none"
+                                />
+                                <select
+                                  aria-label={`条件 ${rowNumber} 值`}
+                                  value={condition.value ?? ""}
+                                  onChange={(e) => handleConditionValueChange(index, e.target.value)}
+                                  className="h-9 w-full rounded-lg border border-border-subtle bg-white px-2 text-sm text-text-primary outline-none"
+                                >
+                                  <option value="">{t("approvalPage.pleaseSelect")}</option>
+                                  {filteredTargetSpaces.map((space) => (
+                                    <option key={space.value} value={space.value}>
+                                      {space.label}
+                                    </option>
+                                  ))}
+                                </select>
+                              </>
+                            ) : (
+                              <p className="text-xs text-text-secondary">{t("approvalPage.noTargetSpaces", { defaultValue: "暂无可用目标知识空间" })}</p>
+                            )}
+                          </div>
+                        )}
+                        {!isDepartmentField && !isSpaceField && field && valueOptions.length > 0 && (
+                          <select
+                            aria-label={`条件 ${rowNumber} 值`}
+                            value={condition.value ?? ""}
+                            onChange={(e) => handleConditionValueChange(index, e.target.value)}
+                            className="h-9 flex-1 rounded-lg border border-border-subtle bg-white px-2 text-sm text-text-primary outline-none"
+                          >
+                            <option value="">{t("approvalPage.pleaseSelect")}</option>
+                            {valueOptions.map((v) => (
+                              <option key={v.value} value={v.value}>
+                                {v.label}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                        {!isDepartmentField && !isSpaceField && field && valueOptions.length === 0 && (
+                          <input
+                            aria-label={`条件 ${rowNumber} 值`}
+                            value={condition.value ?? ""}
+                            onChange={(e) => handleConditionValueChange(index, e.target.value)}
+                            placeholder={t("approvalPage.inputConditionValue")}
+                            className="h-9 flex-1 rounded-lg border border-border-subtle bg-white px-2 text-sm text-text-primary outline-none"
+                          />
+                        )}
+                        {conditions.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeCondition(index)}
+                            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border-subtle bg-white text-text-secondary hover:bg-gray-50"
+                            aria-label={`${t("approvalPage.removeCondition", { defaultValue: "删除条件" })} ${rowNumber}`}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
                 <button
                   type="button"
-                  onClick={addPublishCondition}
+                  onClick={addCondition}
                   className="inline-flex items-center gap-1 rounded border border-dashed border-border-subtle bg-white px-2.5 py-1.5 text-xs text-text-secondary hover:bg-gray-50"
                 >
                   <Plus size={12} />
                   {t("approvalPage.addCondition", { defaultValue: "添加条件" })}
                 </button>
-                {publishConditionsInvalid && (
+                {multiConditionsInvalid && (
                   <p className="text-xs text-amber-500">{t("approvalPage.conditionValueWarning")}</p>
                 )}
               </div>
-            ) : (
-            <>
-            <div className="flex items-center gap-2">
-              <select
-                value={condField}
-                onChange={(e) => handleFieldChange(e.target.value)}
-                className="h-9 flex-1 rounded-lg border border-border-subtle bg-white px-2 text-sm text-text-primary outline-none"
-              >
-                <option value="">{t("approvalPage.noCondition")}</option>
-                {conditionFields.map((f) => (
-                  <option key={f} value={f}>
-                    {CONDITION_FIELD_META[f]
-                      ? t(CONDITION_FIELD_META[f].label, { defaultValue: f })
-                      : t(`approvalPage.condition.${f}`, { defaultValue: f })}
-                  </option>
-                ))}
-              </select>
-              {condField && (
-                <>
-                  <span className="text-xs text-text-secondary">=</span>
-                  {["applicant_department_id", "file_department_id"].includes(condField) ? (
-                    <div className="flex-1 space-y-2">
-                      {departmentsLoading ? (
-                        <p className="text-xs text-text-secondary">{t("approvalPage.loading")}</p>
-                      ) : departmentsLoadFailed ? (
-                        <div className="flex items-center gap-2">
-                          <p className="text-xs text-red-500">{t("approvalPage.departmentLoadFailed", { defaultValue: "部门加载失败" })}</p>
-                          <button
-                            type="button"
-                            onClick={retryLoadDepartments}
-                            className="text-xs text-primary hover:underline"
-                          >
-                            {t("approvalPage.retry", { defaultValue: "重试" })}
-                          </button>
-                        </div>
-                      ) : departments.length > 0 ? (
-                        <>
-                          <input
-                            value={departmentSearch}
-                            onChange={(e) => setDepartmentSearch(e.target.value)}
-                            placeholder={t("approvalPage.searchDepartment", { defaultValue: "搜索部门" })}
-                            className="h-9 w-full rounded-lg border border-border-subtle bg-white px-2 text-sm text-text-primary outline-none"
-                          />
-                          <select
-                            value={condValue}
-                            onChange={(e) => setCondValue(e.target.value)}
-                            className="h-9 w-full rounded-lg border border-border-subtle bg-white px-2 text-sm text-text-primary outline-none"
-                          >
-                            <option value="">{t("approvalPage.pleaseSelect")}</option>
-                            {filteredDepartments.map((department) => (
-                              <option key={department.value} value={department.value}>
-                                {department.label}
-                              </option>
-                            ))}
-                          </select>
-                        </>
-                      ) : (
-                        <p className="text-xs text-text-secondary">{t("approvalPage.noDepartments", { defaultValue: "暂无可用部门" })}</p>
-                      )}
-                    </div>
-                  ) : ["target_space_id", "file_knowledge_space_id"].includes(condField) ? (
-                    <div className="flex-1 space-y-2">
-                      {targetSpacesLoading ? (
-                        <p className="text-xs text-text-secondary">{t("approvalPage.loading")}</p>
-                      ) : targetSpacesLoadFailed ? (
-                        <div className="flex items-center gap-2">
-                          <p className="text-xs text-red-500">{t("approvalPage.targetSpaceLoadFailed", { defaultValue: "目标知识空间加载失败" })}</p>
-                          <button
-                            type="button"
-                            onClick={retryLoadTargetSpaces}
-                            className="text-xs text-primary hover:underline"
-                          >
-                            {t("approvalPage.retry", { defaultValue: "重试" })}
-                          </button>
-                        </div>
-                      ) : targetSpaces.length > 0 ? (
-                        <>
-                          <input
-                            value={targetSpaceSearch}
-                            onChange={(e) => setTargetSpaceSearch(e.target.value)}
-                            placeholder={t("approvalPage.searchTargetSpace", { defaultValue: "搜索知识空间" })}
-                            className="h-9 w-full rounded-lg border border-border-subtle bg-white px-2 text-sm text-text-primary outline-none"
-                          />
-                          <select
-                            value={condValue}
-                            onChange={(e) => setCondValue(e.target.value)}
-                            className="h-9 w-full rounded-lg border border-border-subtle bg-white px-2 text-sm text-text-primary outline-none"
-                          >
-                            <option value="">{t("approvalPage.pleaseSelect")}</option>
-                            {filteredTargetSpaces.map((space) => (
-                              <option key={space.value} value={space.value}>
-                                {space.label}
-                              </option>
-                            ))}
-                          </select>
-                        </>
-                      ) : (
-                        <p className="text-xs text-text-secondary">{t("approvalPage.noTargetSpaces", { defaultValue: "暂无可用目标知识空间" })}</p>
-                      )}
-                    </div>
-                  ) : hasEnumValues ? (
-                    condField === 'applicant_role' ? (
-                      // Searchable dropdown for applicant_role (may have many system roles)
-                      <div className="flex-1">
-                        <SelectSearch
-                          value={condValue}
-                          options={effectiveValues}
-                          selectPlaceholder={t("approvalPage.pleaseSelect")}
-                          inputPlaceholder={t("approvalPage.searchRole")}
-                          onValueChange={(v) => setCondValue(v)}
-                          onChange={(e) => setRoleSearch(e.target.value)}
-                          onOpenChange={() => setRoleSearch("")}
-                        />
-                      </div>
-                    ) : (
-                      <select
-                        value={condValue}
-                        onChange={(e) => setCondValue(e.target.value)}
-                        className="h-9 flex-1 rounded-lg border border-border-subtle bg-white px-2 text-sm text-text-primary outline-none"
-                      >
-                        <option value="">{t("approvalPage.pleaseSelect")}</option>
-                        {effectiveValues.map((v) => (
-                          <option key={v.value} value={v.value}>
-                            {v.label}
-                          </option>
-                        ))}
-                      </select>
-                    )
-                  ) : (
-                    <input
-                      value={condValue}
-                      onChange={(e) => setCondValue(e.target.value)}
-                      placeholder={t("approvalPage.inputConditionValue")}
-                      className="h-9 flex-1 rounded-lg border border-border-subtle bg-white px-2 text-sm text-text-primary outline-none"
-                    />
-                  )}
-                </>
-              )}
-            </div>
-            {condField && !condValue && (
-              <p className="text-xs text-amber-500">{t("approvalPage.conditionValueWarning")}</p>
-            )}
-            </>
-            )}
+            ) : null}
           </div>
 
           {/* Route type */}
@@ -1053,15 +997,15 @@ function RouteDialog({
           </button>
           <button
             type="button"
-            disabled={!name.trim() || (type === "flow" && !flowId) || targetSpaceConditionInvalid || departmentConditionInvalid || publishConditionsInvalid}
+            disabled={!name.trim() || (type === "flow" && !flowId) || targetSpaceConditionInvalid || departmentConditionInvalid || multiConditionsInvalid}
             onClick={() =>
               onConfirm({
                 route_name: name.trim(),
                 route_type: type,
                 flow_definition_id: type === "flow" && flowId ? Number(flowId) : null,
-                match_config: isPublishRoute
+                match_config: supportsMultiCondition
                   ? buildAndMatchConfig(conditions)
-                  : (condField ? { field: condField, value: condValue } : {}),
+                  : {},
               })
             }
             className="rounded-lg bg-primary px-4 py-2 text-sm text-primary-foreground disabled:opacity-60"
