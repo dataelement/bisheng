@@ -7,6 +7,7 @@ import rehypeHighlight from "rehype-highlight";
 import remarkGfm from "remark-gfm";
 import type { KnowledgeFilePreview } from "~/api/knowledge";
 import { useLocalize } from "~/hooks";
+import { cn } from "~/utils";
 import { MediaPlayer } from "./MediaPlayer";
 import { resolveKnowledgePreviewUrl } from "./previewUrlUtils";
 import { TopBar } from "./TopBar";
@@ -65,9 +66,63 @@ function extractMarkdownSection(markdown: string, heading: string): string {
     return (nextHeading >= 0 ? rest.slice(0, nextHeading) : rest).trim();
 }
 
-function MarkdownBody({ content }: { content: string }) {
+interface TranscriptCue {
+    /** Raw timestamp label, e.g. "00:00:03 - 00:00:05". */
+    time: string;
+    text: string;
+}
+
+/** A cue line opens with its timestamp in brackets: "[00:00:03 - 00:00:05] …". */
+const CUE_PATTERN = /^\[(\d{1,2}:\d{2}(?::\d{2})?(?:\s*-\s*\d{1,2}:\d{2}(?::\d{2})?)?)\]\s*/;
+
+/**
+ * Split a transcript into timestamp/text pairs so the time can be rendered as its
+ * own label instead of running inline with the sentence. Lines without a leading
+ * timestamp continue the cue above them; text before the first cue is returned as
+ * `preamble`. No cue found → the caller falls back to plain markdown.
+ */
+function parseTranscriptCues(markdown: string): { preamble: string; cues: TranscriptCue[] } {
+    const cues: TranscriptCue[] = [];
+    const preambleLines: string[] = [];
+
+    for (const rawLine of markdown.split("\n")) {
+        const line = rawLine.trim();
+        if (!line) continue;
+        const match = line.match(CUE_PATTERN);
+        if (match) {
+            cues.push({ time: match[1].replace(/\s*-\s*/, " - "), text: line.slice(match[0].length).trim() });
+        } else if (cues.length) {
+            const last = cues[cues.length - 1];
+            last.text = last.text ? `${last.text} ${line}` : line;
+        } else {
+            preambleLines.push(line);
+        }
+    }
+
+    return { preamble: preambleLines.join("\n\n"), cues };
+}
+
+/* Transcript markdown matches the cue text size. `.prose` (vendored typography CSS)
+   hard-sets its own font-size from --markdown-font-size — the global chat font-size
+   preference — and is emitted after the utilities, so the override needs `!`. */
+const TRANSCRIPT_MARKDOWN_SIZE = "!text-body";
+
+function TranscriptCueList({ cues }: { cues: TranscriptCue[] }) {
     return (
-        <div className="prose prose-sm max-w-none text-[#1d2129]">
+        <ol className="space-y-4">
+            {cues.map((cue, index) => (
+                <li key={`${cue.time}-${index}`}>
+                    <div className="text-caption tabular-nums text-text-3">{cue.time}</div>
+                    <p className="mt-1 text-body text-text-1">{cue.text}</p>
+                </li>
+            ))}
+        </ol>
+    );
+}
+
+function MarkdownBody({ content, className }: { content: string; className?: string }) {
+    return (
+        <div className={cn("prose prose-sm max-w-none text-[#1d2129]", className)}>
             <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
                 rehypePlugins={[[rehypeHighlight, { detect: true, ignoreMissing: true }]]}
@@ -190,10 +245,13 @@ function MediaTranscriptTabs({ fileUrl }: { fileUrl: string }) {
     const entryText = extractMarkdownSection(content, "入库文本") || content;
     const recognizedText = extractMarkdownSection(content, "识别文本") || content;
     const activeContent = activeTab === "recognized" ? recognizedText : entryText;
+    const { preamble, cues } = parseTranscriptCues(activeContent);
 
     return (
         <section className="flex h-full min-h-0 flex-col bg-white">
-            <div className="flex shrink-0 items-center px-6 py-3">
+            {/* 12px inset: the segmented control's own 3px padding lines its label
+                up with the 16px-inset transcript text below. */}
+            <div className="flex shrink-0 items-center px-3 pt-4">
                 {/* Segmented control — mirrors the include/exclude tabs in
                     Subscription/CreateChannel/FilterConditionEditor. */}
                 <div className="flex flex-shrink-0 rounded-[6px] bg-[#F8F8F8] p-[3px]">
@@ -224,8 +282,16 @@ function MediaTranscriptTabs({ fileUrl }: { fileUrl: string }) {
             ) : error ? (
                 <div className="flex flex-1 items-center justify-center text-sm text-[#86909c]">{error}</div>
             ) : (
-                <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-28 pt-2">
-                    <MarkdownBody content={activeContent} />
+                // pb clears the AI dock pinned at the bottom of the page.
+                <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-[114px] pt-3">
+                    {cues.length ? (
+                        <>
+                            {preamble ? <MarkdownBody content={preamble} className={TRANSCRIPT_MARKDOWN_SIZE} /> : null}
+                            <TranscriptCueList cues={cues} />
+                        </>
+                    ) : (
+                        <MarkdownBody content={activeContent} className={TRANSCRIPT_MARKDOWN_SIZE} />
+                    )}
                 </div>
             )}
         </section>
@@ -263,7 +329,7 @@ export function RichKnowledgePreview({
                 {/* Side-by-side on md+: player left, transcript right, split by a single
                     divider line (no card border/shadow). Stacked on narrow screens. */}
                 <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-                    <div className="shrink-0 px-6 py-5 md:w-1/2 md:overflow-y-auto">
+                    <div className="shrink-0 p-4 md:w-1/2 md:overflow-y-auto">
                         <MediaPlayer
                             kind={isVideo ? "video" : "audio"}
                             src={mediaPlaybackUrl}

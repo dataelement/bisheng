@@ -402,7 +402,7 @@ export function MediaPlayer({ kind, src, allowDownload = false, onDownload }: Me
             className={cn(
                 "relative overflow-hidden",
                 onDarkStage ? "bg-black" : "bg-fill-2",
-                fullscreen ? "flex h-full w-full flex-col justify-center" : "rounded-[6px]",
+                fullscreen ? "flex h-full w-full flex-col justify-center" : "rounded-[12px]",
             )}
         >
             {isVideo ? (
@@ -437,7 +437,8 @@ export function MediaPlayer({ kind, src, allowDownload = false, onDownload }: Me
             )}
             <div
                 className={cn(
-                    "absolute inset-x-0 bottom-0 flex items-center gap-3 px-3 pb-2 pt-8",
+                    // pt keeps room for the scrim above the controls.
+                    "absolute inset-x-0 bottom-0 flex items-center gap-3 px-2 pb-2 pt-8",
                     onDarkStage
                         ? "bg-gradient-to-t from-black/70 to-transparent text-white"
                         : "text-text-2",
