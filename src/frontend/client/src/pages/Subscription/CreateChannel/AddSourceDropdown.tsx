@@ -19,17 +19,26 @@ const MAX_SOURCES = 200;
 const MAX_NAME_DISPLAY = 20;
 
 /**
- * "Fix the link, then press Enter" guidance shown after a WeChat article URL
- * fails to resolve. The 「公众号链接」 phrase inside the sentence is highlighted
- * and carries a hover tooltip explaining where to copy a valid link from.
+ * A sentence with one highlighted phrase that hovers open the "where do I copy
+ * a WeChat article link from" tooltip. Used both after a link fails to resolve
+ * and when a search turns up nothing — each passes its own copy, since the two
+ * moments word the advice differently.
  *
  * The sentence is one i18n key with a `{{link}}` placeholder so translators keep
  * control of word order; it is split back apart on the localized phrase.
  */
-export function WechatLinkRetryHint({ className }: { className?: string }) {
+export function WechatLinkHint({
+    className,
+    sentenceKey,
+    labelKey,
+}: {
+    className?: string;
+    sentenceKey: string;
+    labelKey: string;
+}) {
     const localize = useLocalize();
-    const linkLabel = localize("com_subscription.wechat_link_label");
-    const sentence = localize("com_subscription.wechat_link_retry_hint", { link: linkLabel });
+    const linkLabel = localize(labelKey);
+    const sentence = localize(sentenceKey, { link: linkLabel });
     const splitAt = sentence.indexOf(linkLabel);
 
     const highlighted = (
@@ -386,10 +395,14 @@ export function AddSourceDropdown({
                                 <div className="mb-4">
                                     <ListWebLinkIllustration className="mx-auto block w-[120px] h-[120px]" />
                                 </div>
-                                <p className="text-[14px] font-normal leading-6 text-[#999999] whitespace-pre-line">
-                                    {localize("com_subscription.no_source_collected") ||
-                                        localize("com_subscription.source_not_indexed_try_full_url")}
-                                </p>
+                                {/* One line: the sentence reads as a single
+                                    instruction, so it is kept unwrapped and the
+                                    panel scrolls rather than breaking it. */}
+                                <WechatLinkHint
+                                    className="max-w-full whitespace-nowrap"
+                                    sentenceKey="com_subscription.no_source_collected"
+                                    labelKey="com_subscription.wechat_article_link_label"
+                                />
                             </div>
                         )}
                         {mgr.viewMode === "noResultUrl" && (
@@ -431,7 +444,11 @@ export function AddSourceDropdown({
                                     <CrawlingIllustration className="w-[120px] h-[120px]" />
                                 </div>
                                 {mgr.wechatLinkFailed ? (
-                                    <WechatLinkRetryHint className="mb-5 max-w-[300px]" />
+                                    <WechatLinkHint
+                                        className="mb-5 max-w-[300px]"
+                                        sentenceKey="com_subscription.wechat_link_retry_hint"
+                                        labelKey="com_subscription.wechat_link_label"
+                                    />
                                 ) : (
                                     <p className="text-[14px] font-normal text-[#999999] mb-5">
                                         {localize("com_subscription.detect_wechat_link") || localize("com_subscription.official_account_link_detected_adding")}
