@@ -51,7 +51,7 @@ class SystemDictionaryRepositoryImpl(BaseRepositoryImpl[SystemDictionary, int], 
         page: int = 1,
         page_size: int = 20,
         sort_by: bool | None = None,
-        enabled: bool | None = None,
+        is_enabled: bool | None = None,
     ) -> tuple[list[SystemDictionary], int]:
         """分页查询字典条目,返回 (数据列表, 总数)"""
         query = select(SystemDictionary)
@@ -65,8 +65,8 @@ class SystemDictionaryRepositoryImpl(BaseRepositoryImpl[SystemDictionary, int], 
                 (SystemDictionary.dict_key.ilike(like_pattern)) | (SystemDictionary.dict_value.ilike(like_pattern))
             )
 
-        if enabled is not None:
-            query = query.where(SystemDictionary.is_enabled == enabled)  # noqa: E712
+        if is_enabled is not None:
+            query = query.where(SystemDictionary.is_enabled == is_enabled)
 
         count_query = select(func.count()).select_from(query.subquery())
         count_result = await self.session.exec(count_query)
@@ -75,7 +75,9 @@ class SystemDictionaryRepositoryImpl(BaseRepositoryImpl[SystemDictionary, int], 
         offset = (page - 1) * page_size
         query = (
             query.order_by(
-                SystemDictionary.sort_order.desc() if sort_by is not None and not sort_by else SystemDictionary.id.asc(),
+                SystemDictionary.sort_order.desc()
+                if sort_by is not None and not sort_by
+                else SystemDictionary.id.asc(),
                 SystemDictionary.id.asc(),
             )
             .offset(offset)
@@ -97,9 +99,29 @@ class SystemDictionaryRepositoryImpl(BaseRepositoryImpl[SystemDictionary, int], 
             query = query.where(SystemDictionary.is_enabled == True)  # noqa: E712
 
         offset = (page - 1) * page_size
+        query = (
+            query.order_by(
+                SystemDictionary.sort_order.asc(),
+                SystemDictionary.id.asc(),
+            )
+            .offset(offset)
+            .limit(page_size)
+        )
+        result = await self.session.exec(query)
+        return list(result.all())
+
+    async def find_all_for_export(
+        self,
+        dict_type: str | None = None,
+    ) -> list[SystemDictionary]:
+        """查询所有字典条目用于导出,可选按类型筛选"""
+        query = select(SystemDictionary)
+        if dict_type:
+            query = query.where(SystemDictionary.type == dict_type)
         query = query.order_by(
+            SystemDictionary.type.asc(),
             SystemDictionary.sort_order.asc(),
             SystemDictionary.id.asc(),
-        ).offset(offset).limit(page_size)
+        )
         result = await self.session.exec(query)
         return list(result.all())
