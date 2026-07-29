@@ -27,8 +27,10 @@ export function MessageImage({
 
   useEffect(() => {
     let cancelled = false;
+    // A just-sent message reaches here before the backend has assigned the
+    // conversation its id. That's "not yet", not "gone" — keep waiting, or the
+    // placeholder flashes up on every image the user sends.
     if (!conversationId || !fileId) {
-      setFailed(true);
       return;
     }
     setFailed(false);
@@ -47,19 +49,34 @@ export function MessageImage({
     };
   }, [conversationId, fileId]);
 
+  // Debug aid: the resolved link and the ids it was resolved from are on the
+  // wrapper, so a broken picture can be traced from devtools without digging
+  // through React state.
+  const debugAttrs = {
+    'data-chat-id': conversationId,
+    'data-file-id': fileId,
+    'data-attachment-url': url ?? undefined,
+  };
+
   if (failed) {
-    return <InvalidImagePlaceholder />;
+    return <InvalidImagePlaceholder {...debugAttrs} />;
   }
 
   if (!url) {
     // Same footprint as the thumbnail so the message doesn't jump once it lands.
-    return <div className="h-[120px] w-[160px] animate-pulse rounded-lg bg-surface-secondary" />;
+    return (
+      <div
+        {...debugAttrs}
+        className="h-[120px] w-[160px] animate-pulse rounded-lg bg-fill-2"
+      />
+    );
   }
 
   return (
     <Dialog.Root>
       <Dialog.Trigger asChild>
         <img
+          {...debugAttrs}
           src={url}
           alt={altText ?? ''}
           onError={() => setFailed(true)}

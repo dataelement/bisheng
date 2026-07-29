@@ -8,11 +8,15 @@ import { cn } from '~/utils';
  * cleared. It keeps the message's shape instead of leaving a broken image, and
  * says why so the user doesn't take it for a loading failure worth retrying.
  */
-export function InvalidImagePlaceholder({ className }: { className?: string }) {
+export function InvalidImagePlaceholder({
+  className,
+  ...rest
+}: { className?: string } & React.HTMLAttributes<HTMLDivElement>) {
   const localize = useLocalize();
 
   return (
     <div
+      {...rest}
       className={cn(
         'flex h-[120px] w-[160px] flex-col items-center justify-center gap-2 rounded-lg',
         'border border-border-light bg-surface-secondary text-text-secondary',

@@ -206,7 +206,10 @@ export default function useChatHelpers() {
                             files: _files.map(el => ({
                                 // 兼容
                                 file_name: el.file_name || el.name,
-                                file_url: el.file_url || el.url || el.path
+                                file_url: el.file_url || el.url || el.path,
+                                // Keep the id: it's what an image attachment is
+                                // looked up by when its link is re-issued.
+                                file_id: el.file_id
                             })),
                             is_bot,
                             message: msg,
