@@ -536,7 +536,9 @@ class RedisCallback(BaseCallback):
         # Attachments the user sent become permanent here, not at upload time —
         # uploads sit in the temp bucket, which clears itself every 3 days.
         # Only the user's own files: what the workflow produced is out of scope.
-        if not chat_response.is_bot:
+        # Keyed on category, not is_bot: that field defaults to True, so a
+        # question would have been skipped.
+        if chat_response.category == "question":
             promote_chat_attachments_sync(chat_response.files, self.user_id)
 
         message = ChatMessageDao.insert_one(

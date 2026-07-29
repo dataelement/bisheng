@@ -81,7 +81,10 @@ def _plan_promotions(files: list[dict], user_id: int | str, tmp_bucket: str) -> 
         if not isinstance(file, dict) or file.get("object_name"):
             # Already permanent — task-mode uploads land in the main bucket.
             continue
-        source_object = temp_object_name_from_url(file.get("filepath") or file.get("file_path") or "", tmp_bucket)
+        # The upload endpoints disagree on the field name for the link they
+        # issued -- daily/task say filepath, workflow chat says file_url.
+        source_url = file.get("filepath") or file.get("file_path") or file.get("file_url") or ""
+        source_object = temp_object_name_from_url(source_url, tmp_bucket)
         if not source_object:
             continue
         dest_object = build_chat_object_name(user_id, file.get("filename") or file.get("file_name") or "")
