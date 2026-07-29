@@ -333,7 +333,9 @@ export function AddSourceDropdown({
                                 onChange={(e) => setInputValue(e.target.value)}
                                 onKeyDown={(e) => {
                                     if (e.key === "Enter") {
-                                        mgr.setSearchKeyword(inputValue.trim());
+                                        // Submit, not just "set the keyword": pressing Enter
+                                        // again on an unchanged link has to retry it.
+                                        mgr.submitSearch(inputValue.trim());
                                     }
                                 }}
                                 placeholder={localize("com_subscription.enter_official_account")}
@@ -445,7 +447,7 @@ export function AddSourceDropdown({
                                 </div>
                                 {mgr.wechatLinkFailed ? (
                                     <WechatLinkHint
-                                        className="mb-5 max-w-[300px]"
+                                        className="mb-5 max-w-full whitespace-nowrap"
                                         sentenceKey="com_subscription.wechat_link_retry_hint"
                                         labelKey="com_subscription.wechat_link_label"
                                     />
