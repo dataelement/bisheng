@@ -17,37 +17,51 @@ export function MessageImage({
   conversationId,
   fileId,
   altText,
+  initialUrl,
 }: {
   conversationId?: string;
   fileId?: string;
   altText?: string;
+  /** Link the client already holds from the upload, if any. */
+  initialUrl?: string;
 }) {
-  const [url, setUrl] = useState<string | null>(null);
+  // Stored links carry the internal storage host, which the browser can't
+  // reach — same swap the download card does.
+  const toReachable = (u?: string | null) =>
+    u ? u.replace(/https?:\/\/[^/]+/, __APP_ENV__.BASE_URL) : null;
+
+  const [url, setUrl] = useState<string | null>(toReachable(initialUrl));
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    // A just-sent message reaches here before the backend has assigned the
-    // conversation its id. That's "not yet", not "gone" — keep waiting, or the
-    // placeholder flashes up on every image the user sends.
+    // Nothing to ask for, and nothing to show either.
     if (!conversationId || !fileId) {
+      if (!initialUrl) {
+        return;
+      }
+      setUrl(toReachable(initialUrl));
       return;
     }
     setFailed(false);
+    // The upload link renders straight away — a message the user just sent
+    // isn't in the database yet, so asking the backend for a link would come
+    // back empty and read as a dead image. The re-issued link replaces it when
+    // it arrives, which is what makes an old conversation work.
     getAttachmentUrl(conversationId, fileId).then((fresh) => {
       if (cancelled) {
         return;
       }
       if (fresh) {
-        setUrl(fresh);
-      } else {
+        setUrl(toReachable(fresh));
+      } else if (!initialUrl) {
         setFailed(true);
       }
     });
     return () => {
       cancelled = true;
     };
-  }, [conversationId, fileId]);
+  }, [conversationId, fileId, initialUrl]);
 
   // Debug aid: the resolved link and the ids it was resolved from are on the
   // wrapper, so a broken picture can be traced from devtools without digging
