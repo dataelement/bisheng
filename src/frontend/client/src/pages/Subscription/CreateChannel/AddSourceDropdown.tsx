@@ -1,4 +1,4 @@
-import { Minus, Plus, Search, X, XCircle } from "lucide-react";
+import { Minus, Plus, Search, X } from "lucide-react";
 import { useState, useEffect, useRef, type MouseEvent } from "react";
 import { Button } from "~/components/ui/Button";
 import { Checkbox } from "~/components/ui/Checkbox";
@@ -10,18 +10,75 @@ import { useSourceManager } from "../hooks/useSourceManager";
 import { useConfirm } from "~/Providers";
 import { ChannelRightSmallUpIcon } from "~/components/icons/channels";
 import { ListWebLinkIllustration, EmptyStateIllustration, CrawlingIllustration } from "~/components/illustrations";
-import {
-    AlertDialog,
-    AlertDialogAction,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle
-} from "~/components/ui/AlertDialog";
+import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
+// Imported as a module (not a /public URL) so the bundler resolves it against
+// the app's base path and fingerprints it — no env-var lookup at render time.
+import wechatCopyLinkGuide from "./wechat-copy-link-guide.png";
 
 const MAX_SOURCES = 200;
 const MAX_NAME_DISPLAY = 20;
+
+/**
+ * A sentence with one highlighted phrase that hovers open the "where do I copy
+ * a WeChat article link from" tooltip. Used both after a link fails to resolve
+ * and when a search turns up nothing — each passes its own copy, since the two
+ * moments word the advice differently.
+ *
+ * The sentence is one i18n key with a `{{link}}` placeholder so translators keep
+ * control of word order; it is split back apart on the localized phrase.
+ */
+export function WechatLinkHint({
+    className,
+    sentenceKey,
+    labelKey,
+}: {
+    className?: string;
+    sentenceKey: string;
+    labelKey: string;
+}) {
+    const localize = useLocalize();
+    const linkLabel = localize(labelKey);
+    const sentence = localize(sentenceKey, { link: linkLabel });
+    const splitAt = sentence.indexOf(linkLabel);
+
+    const highlighted = (
+        <Tooltip>
+            <TooltipTrigger asChild>
+                {/* mx-1 gives the highlighted phrase breathing room from the grey
+                    text on both sides; CJK copy has no natural word spacing. */}
+                <span className="mx-1 cursor-pointer text-blue-500 no-underline">{linkLabel}</span>
+            </TooltipTrigger>
+            <TooltipContent
+                side="top"
+                className="w-[280px] max-w-[280px] rounded-md border-none bg-white p-3 text-left text-xs leading-5 text-text-3 shadow-[0_4px_16px_rgba(0,0,0,0.12)]"
+                arrowClassName="bg-white fill-white"
+            >
+                <img src={wechatCopyLinkGuide} alt="" className="mx-auto mb-2 w-[160px] rounded" />
+                {/* Size/colour live on the <p> itself, matching the sentence that
+                    owns the trigger — inheriting from the panel lets the panel's
+                    own text-* classes compete with them. */}
+                <p className="text-[12px] leading-5 text-[#999999]">
+                    {localize("com_subscription.wechat_link_copy_tip")}
+                </p>
+            </TooltipContent>
+        </Tooltip>
+    );
+
+    // Defensive: a translation that dropped the placeholder still renders readably.
+    if (splitAt === -1) {
+        return <p className={cn("text-[14px] font-normal text-[#999999]", className)}>{sentence}</p>;
+    }
+
+    return (
+        <p className={cn("text-[14px] font-normal leading-[22px] text-[#999999]", className)}>
+            {/* Trim the seam so `mx-1` is the only gap — languages that already
+                separate words with spaces would otherwise read as a double space. */}
+            {sentence.slice(0, splitAt).replace(/\s+$/, "")}
+            {highlighted}
+            {sentence.slice(splitAt + linkLabel.length).replace(/^\s+/, "")}
+        </p>
+    );
+}
 
 /** 网站行：文本只展示（无超链接样式与点击），跳转入口收口到末尾箭头按钮上；箭头仅 hover 时露出 */
 function WebsiteSourceLink({
@@ -276,7 +333,9 @@ export function AddSourceDropdown({
                                 onChange={(e) => setInputValue(e.target.value)}
                                 onKeyDown={(e) => {
                                     if (e.key === "Enter") {
-                                        mgr.setSearchKeyword(inputValue.trim());
+                                        // Submit, not just "set the keyword": pressing Enter
+                                        // again on an unchanged link has to retry it.
+                                        mgr.submitSearch(inputValue.trim());
                                     }
                                 }}
                                 placeholder={localize("com_subscription.enter_official_account")}
@@ -338,10 +397,14 @@ export function AddSourceDropdown({
                                 <div className="mb-4">
                                     <ListWebLinkIllustration className="mx-auto block w-[120px] h-[120px]" />
                                 </div>
-                                <p className="text-[14px] font-normal leading-6 text-[#999999] whitespace-pre-line">
-                                    {localize("com_subscription.no_source_collected") ||
-                                        localize("com_subscription.source_not_indexed_try_full_url")}
-                                </p>
+                                {/* One line: the sentence reads as a single
+                                    instruction, so it is kept unwrapped and the
+                                    panel scrolls rather than breaking it. */}
+                                <WechatLinkHint
+                                    className="max-w-full whitespace-nowrap"
+                                    sentenceKey="com_subscription.no_source_collected"
+                                    labelKey="com_subscription.wechat_article_link_label"
+                                />
                             </div>
                         )}
                         {mgr.viewMode === "noResultUrl" && (
@@ -382,9 +445,17 @@ export function AddSourceDropdown({
                                 <div className="mb-4">
                                     <CrawlingIllustration className="w-[120px] h-[120px]" />
                                 </div>
-                                <p className="text-[14px] font-normal text-[#999999] mb-5">
-                                    {localize("com_subscription.detect_wechat_link") || localize("com_subscription.official_account_link_detected_adding")}
-                                </p>
+                                {mgr.wechatLinkFailed ? (
+                                    <WechatLinkHint
+                                        className="mb-5 max-w-full whitespace-nowrap"
+                                        sentenceKey="com_subscription.wechat_link_retry_hint"
+                                        labelKey="com_subscription.wechat_link_label"
+                                    />
+                                ) : (
+                                    <p className="text-[14px] font-normal text-[#999999] mb-5">
+                                        {localize("com_subscription.detect_wechat_link") || localize("com_subscription.official_account_link_detected_adding")}
+                                    </p>
+                                )}
                                 <Button
                                     variant="secondary"
                                     onClick={mgr.handleClearSearch}
@@ -500,46 +571,6 @@ export function AddSourceDropdown({
                     )}
                 </div>
             )}
-
-            {/* 公众号添加失败弹窗 */}
-            <AlertDialog
-                open={mgr.wechatAddError}
-                onOpenChange={(open) => {
-                    if (!open) {
-                        mgr.setWechatAddError(false);
-                    }
-                }}
-            >
-                <AlertDialogContent className="max-w-[420px] rounded-2xl p-0 border-none shadow-[0_8px_24px_rgba(15,23,42,0.18)]">
-                    <div className="">
-                        <div className="flex items-start justify-between">
-                            <div className="flex items-center">
-                                <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-[#FEECEC] ml-4 mr-3">
-                                    <XCircle className="size-4 text-[#F53F3F]" />
-                                </span>
-                                <AlertDialogHeader className="text-left mt-6">
-                                    <AlertDialogTitle className="text-[16px] font-semibold text-[#1D2129]">{localize("com_subscription.channel_add_failed")}</AlertDialogTitle>
-                                    <AlertDialogDescription className="mt-2 text-[14px] text-[#4E5969]">{localize("com_subscription.try_adding_again")}</AlertDialogDescription>
-                                </AlertDialogHeader>
-                            </div>
-                            <button
-                                type="button"
-                                className="mt-1 text-[#C9CDD4] hover:text-[#4E5969]"
-                                onClick={() => mgr.setWechatAddError(false)}
-                            >
-                                <X className="size-4" />
-                            </button>
-                        </div>
-                    </div>
-                    <div className="px-6 pb-4 flex justify-end">
-                        <AlertDialogAction
-                            onClick={() => mgr.setWechatAddError(false)}
-                            className="h-8 px-6 rounded-md inline-flex items-center justify-center leading-none border border-[#E5E6EB] bg-white text-[14px] !font-normal text-[#4E5969] hover:bg-[#F7F8FA]"
-                        >{localize("com_subscription.cancel")}</AlertDialogAction>
-                    </div>
-                </AlertDialogContent>
-            </AlertDialog>
-
         </div>
     );
 }

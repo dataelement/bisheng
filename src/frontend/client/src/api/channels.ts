@@ -707,8 +707,11 @@ export async function addWechatSourceApi(body: {
     [key: string]: any;
 }, options?: any): Promise<any> {
     // options supports AbortController signal, e.g. { signal }
+    // showError is off on purpose: failures are surfaced by the caller's own
+    // "link not recognized" dialog + inline guidance, so the generic red toast
+    // would only duplicate it.
     return await request.post(`/api/v1/channel/manager/add_wechat_source`, body, {
-        showError: true,
+        showError: false,
         ...options,
     });
 }
