@@ -26,6 +26,7 @@ from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     ChatReq,
     KnowledgeSpaceFolderStatsReq,
+    ShougangPortalAdvancedFileSearchReq,
     ShougangPortalDomainBindableSpacesResp,
     ShougangPortalDomainFileCountReq,
     ShougangPortalDomainFileCountResp,
@@ -424,6 +425,15 @@ async def search_shougang_portal_files(
     svc: Any = Depends(get_knowledge_space_service),
 ) -> Any:
     result = await svc.search_shougang_portal_files(req)
+    return resp_200(ShougangPortalFileSearchResp(**result).model_dump(mode="json"))
+
+
+@router.post("/files/advanced-search")
+async def advanced_search_shougang_portal_files(
+    req: ShougangPortalAdvancedFileSearchReq,
+    svc: Any = Depends(get_knowledge_space_service),
+) -> Any:
+    result = await svc.advanced_search_shougang_portal_files(req)
     return resp_200(ShougangPortalFileSearchResp(**result).model_dump(mode="json"))
 
 

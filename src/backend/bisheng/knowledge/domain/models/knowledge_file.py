@@ -1,11 +1,11 @@
 import json
-from datetime import datetime
+from datetime import date, datetime, time, timedelta
 from enum import Enum
 from typing import Any, ClassVar, Literal
 
 # if TYPE_CHECKING:
 from pydantic import field_validator
-from sqlalchemy import Boolean, Column, DateTime, Index, Integer, String, Text, and_, case, exists, or_, text
+from sqlalchemy import Boolean, Column, DateTime, Index, Integer, String, Text, and_, case, cast, exists, or_, text
 from sqlmodel import Field, col, delete, func, select, update
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -1032,6 +1032,175 @@ class KnowledgeFileDao(KnowledgeFileBase):
             statement = statement.order_by(col(KnowledgeFile.update_time).asc(), col(KnowledgeFile.id).asc())
         else:
             statement = statement.order_by(col(KnowledgeFile.update_time).desc(), col(KnowledgeFile.id).desc())
+
+        safe_limit = min(max(int(limit or 20), 1), 500)
+        statement = statement.limit(safe_limit)
+        async with get_async_db_session() as session:
+            return (await session.exec(statement)).all()
+
+    @classmethod
+    async def asearch_portal_advanced_cursor(
+        cls,
+        *,
+        knowledge_ids: list[int],
+        status: list[int] | None = None,
+        tag_ids: list[int] | None = None,
+        file_ext: str | None = None,
+        document_type: str | None = None,
+        file_subcategory_code: str | None = None,
+        business_domain_code: str | None = None,
+        all_keywords: str | None = None,
+        exact_phrase: str | None = None,
+        any_keywords: str | None = None,
+        exclude_keywords: str | None = None,
+        search_field: Literal["file_name", "summary", "tags"] = "file_name",
+        updated_from: date | None = None,
+        updated_to: date | None = None,
+        order_sort: str = "desc",
+        cursor: list[Any] | None = None,
+        limit: int = 20,
+    ) -> list[KnowledgeFile]:
+        from bisheng.database.models.group_resource import ResourceTypeEnum
+        from bisheng.database.models.tag import Tag, TagLink
+        from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
+        from bisheng.knowledge.domain.models.knowledge_document_version import (
+            KnowledgeDocumentVersion,
+        )
+
+        unique_knowledge_ids = list(
+            dict.fromkeys(int(knowledge_id) for knowledge_id in knowledge_ids if int(knowledge_id) > 0)
+        )
+        if not unique_knowledge_ids:
+            return []
+
+        statement = select(KnowledgeFile).where(
+            KnowledgeFile.knowledge_id.in_(unique_knowledge_ids),
+            KnowledgeFile.file_type == FileType.FILE.value,
+            col(KnowledgeFile.deleted_at).is_(None),
+        )
+        statement = cls._build_file_filters_statement(
+            statement,
+            status=status,
+        )
+
+        normalized_ext = (file_ext or "").strip().lower().lstrip(".")
+        if normalized_ext:
+            statement = statement.where(func.lower(KnowledgeFile.file_name).like(f"%.{normalized_ext}"))
+        normalized_document_type = (document_type or "").strip().upper()
+        if normalized_document_type:
+            statement = statement.where(KnowledgeFile.file_encoding.like(f"%-{normalized_document_type}-%"))
+        normalized_subcategory = (file_subcategory_code or "").strip().upper()
+        if normalized_subcategory:
+            statement = statement.where(KnowledgeFile.file_subcategory_code == normalized_subcategory)
+        normalized_domain = (business_domain_code or "").strip().upper()
+        if normalized_domain:
+            statement = statement.where(KnowledgeFile.file_encoding.like(f"%-{normalized_domain}-%"))
+
+        primary_file_id = (
+            select(KnowledgeDocumentVersion.knowledge_file_id)
+            .join(
+                KnowledgeDocument,
+                KnowledgeDocument.primary_version_id == KnowledgeDocumentVersion.id,
+            )
+            .where(KnowledgeDocument.id == KnowledgeFile.reference_document_id)
+            .correlate(KnowledgeFile)
+            .scalar_subquery()
+        )
+        tag_source_file_id = func.coalesce(primary_file_id, KnowledgeFile.id)
+
+        def tag_exists(
+            *,
+            keyword: str | None = None,
+            required_tag_ids: list[int] | None = None,
+        ):
+            tag_statement = (
+                select(TagLink.id)
+                .join(Tag, Tag.id == TagLink.tag_id)
+                .where(
+                    TagLink.resource_type == ResourceTypeEnum.SPACE_FILE.value,
+                    TagLink.resource_id == cast(tag_source_file_id, String),
+                )
+                .correlate(KnowledgeFile)
+            )
+            if required_tag_ids:
+                tag_statement = tag_statement.where(TagLink.tag_id.in_(required_tag_ids))
+            if keyword:
+                tag_statement = tag_statement.where(
+                    func.lower(func.coalesce(Tag.name, "")).contains(
+                        keyword,
+                        autoescape=True,
+                    )
+                )
+            return exists(tag_statement)
+
+        if tag_ids:
+            statement = statement.where(tag_exists(required_tag_ids=tag_ids))
+
+        if search_field == "summary":
+            searchable_text = func.lower(func.coalesce(KnowledgeFile.abstract, ""))
+        else:
+            searchable_text = func.lower(func.coalesce(KnowledgeFile.file_name, ""))
+
+        def matches_keyword(keyword: str):
+            if search_field == "tags":
+                return tag_exists(keyword=keyword)
+            return searchable_text.contains(keyword, autoescape=True)
+
+        all_terms = [term.casefold() for term in (all_keywords or "").split() if term.strip()]
+        any_terms = [term.casefold() for term in (any_keywords or "").split() if term.strip()]
+        excluded_terms = [term.casefold() for term in (exclude_keywords or "").split() if term.strip()]
+        normalized_phrase = (exact_phrase or "").strip().casefold()
+        for term in all_terms:
+            statement = statement.where(matches_keyword(term))
+        if normalized_phrase:
+            statement = statement.where(matches_keyword(normalized_phrase))
+        if any_terms:
+            statement = statement.where(or_(*(matches_keyword(term) for term in any_terms)))
+        if excluded_terms:
+            statement = statement.where(~or_(*(matches_keyword(term) for term in excluded_terms)))
+
+        if updated_from is not None:
+            statement = statement.where(KnowledgeFile.update_time >= datetime.combine(updated_from, time.min))
+        if updated_to is not None:
+            statement = statement.where(
+                KnowledgeFile.update_time < datetime.combine(updated_to + timedelta(days=1), time.min)
+            )
+
+        normalized_order_sort = "asc" if str(order_sort or "").lower() == "asc" else "desc"
+        if cursor and len(cursor) >= 2:
+            cursor_update_time = cursor[0]
+            cursor_id = int(cursor[1])
+            if normalized_order_sort == "asc":
+                statement = statement.where(
+                    or_(
+                        col(KnowledgeFile.update_time) > cursor_update_time,
+                        and_(
+                            col(KnowledgeFile.update_time) == cursor_update_time,
+                            col(KnowledgeFile.id) > cursor_id,
+                        ),
+                    )
+                )
+            else:
+                statement = statement.where(
+                    or_(
+                        col(KnowledgeFile.update_time) < cursor_update_time,
+                        and_(
+                            col(KnowledgeFile.update_time) == cursor_update_time,
+                            col(KnowledgeFile.id) < cursor_id,
+                        ),
+                    )
+                )
+
+        if normalized_order_sort == "asc":
+            statement = statement.order_by(
+                col(KnowledgeFile.update_time).asc(),
+                col(KnowledgeFile.id).asc(),
+            )
+        else:
+            statement = statement.order_by(
+                col(KnowledgeFile.update_time).desc(),
+                col(KnowledgeFile.id).desc(),
+            )
 
         safe_limit = min(max(int(limit or 20), 1), 500)
         statement = statement.limit(safe_limit)

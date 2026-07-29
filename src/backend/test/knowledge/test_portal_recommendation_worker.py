@@ -1,5 +1,6 @@
 # ruff: noqa: E402
 
+import json
 import sys
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -105,7 +106,15 @@ def test_heat_config_fingerprint_is_canonical_and_changes_with_heat_parameters()
 @pytest.mark.asyncio
 async def test_interest_worker_merges_current_query_even_before_es_refresh(monkeypatch):
     build = AsyncMock(return_value=[("10:101", 3.0)])
+    diagnostic_payloads: list[dict] = []
+
+    def capture_log(message, payload):
+        if message == "[diag][portal.recommendation.interest_refresh] {}":
+            diagnostic_payloads.append(json.loads(payload))
+
     monkeypatch.setattr(PortalRecommendationBehaviorService, "build_interest_top50", build)
+    worker_module = sys.modules["bisheng.worker.knowledge.portal_recommendation"]
+    monkeypatch.setattr(worker_module.logger, "info", capture_log)
     token = current_tenant_id.set(5)
     try:
         result = await _rebuild_user_interest_async(
@@ -120,6 +129,11 @@ async def test_interest_worker_merges_current_query_even_before_es_refresh(monke
     assert build.await_args.kwargs["tenant_id"] == 5
     assert build.await_args.kwargs["user_id"] == 7
     assert build.await_args.kwargs["current_query"] == "safety"
+    assert diagnostic_payloads[0]["current_query_present"] is True
+    assert diagnostic_payloads[0]["interest_count"] == 1
+    assert diagnostic_payloads[0]["tenant_id"] == 5
+    assert diagnostic_payloads[0]["user_id"] == 7
+    assert "safety" not in json.dumps(diagnostic_payloads[0])
 
 
 def test_worker_task_imports_are_registered_explicitly():

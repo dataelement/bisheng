@@ -59,6 +59,7 @@ function spaceLevelLabel(level?: SpaceLevel): string {
         [SpaceLevel.PUBLIC]: "公共知识库",
         [SpaceLevel.DEPARTMENT]: "部门知识库",
         [SpaceLevel.TEAM]: "团队/科室知识库",
+        [SpaceLevel.TEAM_KS]: "团队/科室知识库",
         [SpaceLevel.PERSONAL]: "个人知识库",
     };
     return level ? (map[level] ?? level) : "-";
@@ -153,12 +154,20 @@ export function PortalInfoDrawer({
     const versionText = formatVersionText(selectedFile?.version_no);
     const operatorName = selectedFile?.user_name || "-";
     const updaterName = selectedFile?.updater_name || selectedFile?.user_name || "-";
+    const isSharedFile = selectedFile?.entryType === "share";
+    const sourceDepartmentName = isSharedFile
+        ? (selectedFile?.sourceDepartmentName || "-")
+        : (selectedFile ? (activeSpace?.ownerName || "-") : "-");
     const sourceSpaceName = selectedFile
-        ? (selectedFile.sourceSpaceName
-            || (selectedFile.spaceId && selectedFile.spaceId === activeSpace?.id ? activeSpace?.name : "")
-            || (selectedFile.spaceId ? `知识库 ${selectedFile.spaceId}` : "-"))
+        ? (isSharedFile
+            ? (selectedFile.sourceSpaceName || "-")
+            : (selectedFile.sourceSpaceName
+                || (selectedFile.spaceId && selectedFile.spaceId === activeSpace?.id ? activeSpace?.name : "")
+                || (selectedFile.spaceId ? `知识库 ${selectedFile.spaceId}` : "-")))
         : "-";
-    const sourcePath = selectedFile?.sourcePath || selectedFile?.folderPath || documentPath || "-";
+    const sourcePath = isSharedFile
+        ? (selectedFile?.sourcePath || "-")
+        : (selectedFile?.sourcePath || selectedFile?.folderPath || documentPath || "-");
     const detailTabs = DETAIL_TABS;
 
     const renderDetailItem = (label: string, value: string | number | null | undefined) => (
@@ -360,9 +369,10 @@ export function PortalInfoDrawer({
                         aria-labelledby="portal-drawer-tab-source"
                         className={s.detailList}
                     >
+                        {isSharedFile ? renderDetailItem("文件来源", "分享文件") : null}
                         {renderDetailItem("创建人", operatorName)}
                         {renderDetailItem("最后修改人", updaterName)}
-                        {renderDetailItem("部门", selectedFile ? (activeSpace?.ownerName || "-") : "-")}
+                        {renderDetailItem("部门", sourceDepartmentName)}
                         {renderDetailItem("知识库", sourceSpaceName)}
                         {renderDetailItem("路径", sourcePath)}
                     </div>

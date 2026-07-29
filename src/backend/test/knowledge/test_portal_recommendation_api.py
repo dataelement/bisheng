@@ -1,3 +1,4 @@
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -8,6 +9,33 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     ShougangPortalFileSearchReq,
 )
 from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
+
+
+@pytest.mark.asyncio
+async def test_personalized_empty_visible_scope_emits_diagnostic_reason(monkeypatch):
+    service = object.__new__(KnowledgeSpaceService)
+    service.login_user = SimpleNamespace(user_id=1001)
+    service._get_shougang_portal_visible_search_spaces = AsyncMock(return_value=[])
+    payloads: list[dict] = []
+
+    def capture_log(message, payload):
+        if message == "[diag][portal.recommendation] {}":
+            payloads.append(json.loads(payload))
+
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.services.knowledge_space_service.logger.info",
+        capture_log,
+    )
+
+    result = await service._browse_shougang_portal_files_impl(
+        ShougangPortalFileBrowseReq(recommendation="personalized_v1")
+    )
+
+    assert result["data"] == []
+    assert payloads[0]["empty_reason"] == "no_visible_space"
+    assert payloads[0]["result_count"] == 0
+    assert payloads[0]["user_id"] == 1001
+    assert payloads[0]["visible_space_count"] == 0
 
 
 @pytest.mark.asyncio

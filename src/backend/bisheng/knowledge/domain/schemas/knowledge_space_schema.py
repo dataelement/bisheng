@@ -1,3 +1,4 @@
+from datetime import date
 from enum import Enum
 from typing import Any, Literal
 
@@ -473,6 +474,26 @@ class ShougangPortalFileSearchReq(ShougangPortalFileBrowseReq):
     )
 
 
+class ShougangPortalAdvancedFileSearchReq(ShougangPortalFileBrowseReq):
+    all_keywords: str | None = Field(default=None, max_length=200)
+    exact_phrase: str | None = Field(default=None, max_length=200)
+    any_keywords: str | None = Field(default=None, max_length=200)
+    exclude_keywords: str | None = Field(default=None, max_length=200)
+    search_field: Literal["file_name", "summary", "tags"] = "file_name"
+    updated_from: date | None = None
+    updated_to: date | None = None
+    sort: Literal["updated_at", "updated_at_desc", "updated_at_asc"] = Field(
+        default="updated_at_desc",
+        description="Sort mode: updated_at / updated_at_desc / updated_at_asc",
+    )
+
+    @model_validator(mode="after")
+    def validate_updated_range(self):
+        if self.updated_from is not None and self.updated_to is not None and self.updated_from > self.updated_to:
+            raise ValueError("updated_from must not be later than updated_to")
+        return self
+
+
 class ShougangPortalFileTagResp(BaseModel):
     tag_name: str = ""
     resource_type: str = ""
@@ -511,6 +532,7 @@ class ShougangPortalFileItemResp(BaseModel):
         "allowed",
         "approval_required",
         "unavailable",
+        "check_required",
     ] = "allowed"
     access_source: str | None = None
     is_department_file: bool = False

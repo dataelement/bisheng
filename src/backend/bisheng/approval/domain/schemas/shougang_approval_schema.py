@@ -60,10 +60,22 @@ class ShougangFilePublishTargetSpace(BaseModel):
     name: str
     space_level: KnowledgeSpaceLevelEnum
     owner_name: str | None = None
+    can_browse_files: bool = False
 
 
 class ShougangFilePublishTargetSpacesResp(BaseModel):
     data: list[ShougangFilePublishTargetSpace] = Field(default_factory=list)
+    total: int = 0
+
+
+class ShougangFilePublishTargetFolder(BaseModel):
+    id: int
+    name: str
+    level: int
+
+
+class ShougangFilePublishTargetFoldersResp(BaseModel):
+    data: list[ShougangFilePublishTargetFolder] = Field(default_factory=list)
     total: int = 0
 
 
@@ -101,10 +113,22 @@ class ShougangFileShareTargetSpacesResp(BaseModel):
     total: int = 0
 
 
+class ShougangFileShareTargetFolder(BaseModel):
+    id: int
+    name: str
+    level: int
+
+
+class ShougangFileShareTargetFoldersResp(BaseModel):
+    data: list[ShougangFileShareTargetFolder] = Field(default_factory=list)
+    total: int = 0
+
+
 class ShougangFileShareSubmitReq(BaseModel):
     source_space_id: int = Field(..., gt=0)
     source_file_id: int = Field(..., gt=0)
     target_space_id: int = Field(..., gt=0)
+    target_folder_id: int | None = Field(default=None, gt=0)
     reason: str = Field(..., min_length=1, max_length=2000)
     allow_download: bool = False
 

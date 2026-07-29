@@ -355,6 +355,13 @@ export interface ShougangFilePublishTargetSpace {
   name: string;
   space_level?: SpaceLevel;
   owner_name?: string | null;
+  can_browse_files?: boolean;
+}
+
+export interface ShougangFilePublishTargetFolder {
+  id: number | string;
+  name: string;
+  level: number;
 }
 
 export interface ShougangFilePublishDocumentEntry {
@@ -403,7 +410,10 @@ export async function submitShougangKnowledgeSpaceCreateApprovalApi(
   return result;
 }
 
-export async function getShougangFilePublishTargetSpacesApi(sourceSpaceId: string | number): Promise<{
+export async function getShougangFilePublishTargetSpacesApi(
+  sourceSpaceId: string | number,
+  sourceFileId: string | number,
+): Promise<{
   data: ShougangFilePublishTargetSpace[];
   total: number;
 }> {
@@ -412,10 +422,34 @@ export async function getShougangFilePublishTargetSpacesApi(sourceSpaceId: strin
     {
       params: {
         source_space_id: sourceSpaceId,
+        source_file_id: sourceFileId,
       },
     },
   );
   return unwrapPaged<ShougangFilePublishTargetSpace>(response);
+}
+
+export async function getShougangFilePublishTargetFoldersApi(
+  sourceSpaceId: string | number,
+  sourceFileId: string | number,
+  targetSpaceId: string | number,
+  parentId: string | number | null,
+): Promise<{ data: ShougangFilePublishTargetFolder[]; total: number }> {
+  const response = await request.get<ApiResponse<{
+    data: ShougangFilePublishTargetFolder[];
+    total: number;
+  }>>(
+    "/api/v1/approval/shougang/file-publish/target-folders",
+    {
+      params: {
+        source_space_id: sourceSpaceId,
+        source_file_id: sourceFileId,
+        target_space_id: targetSpaceId,
+        parent_id: parentId ?? undefined,
+      },
+    },
+  );
+  return unwrapPaged<ShougangFilePublishTargetFolder>(response);
 }
 
 export async function getShougangFilePublishSimilarCandidatesApi(
@@ -487,6 +521,12 @@ export interface ShougangFileShareEntry {
   create_time?: string | null;
 }
 
+export interface ShougangFileShareTargetFolder {
+  id: number | string;
+  name: string;
+  level: number;
+}
+
 export async function getShougangFileShareTargetSpacesApi(
   sourceSpaceId: string | number,
   sourceFileId: string | number,
@@ -506,10 +546,34 @@ export async function getShougangFileShareTargetSpacesApi(
   return unwrapPaged<ShougangFileShareTargetSpace>(response);
 }
 
+export async function getShougangFileShareTargetFoldersApi(
+  sourceSpaceId: string | number,
+  sourceFileId: string | number,
+  targetSpaceId: string | number,
+  parentId: string | number | null,
+): Promise<{ data: ShougangFileShareTargetFolder[]; total: number }> {
+  const response = await request.get<ApiResponse<{
+    data: ShougangFileShareTargetFolder[];
+    total: number;
+  }>>(
+    "/api/v1/approval/shougang/file-share/target-folders",
+    {
+      params: {
+        source_space_id: sourceSpaceId,
+        source_file_id: sourceFileId,
+        target_space_id: targetSpaceId,
+        parent_id: parentId ?? undefined,
+      },
+    },
+  );
+  return unwrapPaged<ShougangFileShareTargetFolder>(response);
+}
+
 export async function submitShougangFileShareApprovalApi(data: {
   source_space_id: string | number;
   source_file_id: string | number;
   target_space_id: string | number;
+  target_folder_id?: number | null;
   reason: string;
   allow_download: boolean;
 }): Promise<ShougangApprovalSubmitResult> {

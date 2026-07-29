@@ -33,6 +33,8 @@ class SystemDictionaryRepository(BaseRepository[SystemDictionary, int], ABC):
         keyword: str | None = None,
         page: int = 1,
         page_size: int = 20,
+        sort_by: bool | None = None,
+        enabled: bool | None = None,
     ) -> tuple[list[SystemDictionary], int]:
         """分页查询字典条目,返回 (数据列表, 总数)"""
         pass
@@ -41,6 +43,8 @@ class SystemDictionaryRepository(BaseRepository[SystemDictionary, int], ABC):
     async def find_by_type(
         self,
         dict_type: str,
+        page: int = 1,
+        page_size: int = 20,
         only_enabled: bool = True,
     ) -> list[SystemDictionary]:
         """根据类型查询字典条目列表"""

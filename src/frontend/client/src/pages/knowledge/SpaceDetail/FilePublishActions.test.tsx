@@ -328,4 +328,87 @@ describe("普通知识空间文件发布入口", () => {
 
         expect(screen.queryByRole("button", { name: "发布" })).not.toBeInTheDocument();
     });
+
+    test("分享入口在表格视图中保持只读且不能再次分发", () => {
+        const sharedFile = {
+            ...baseFile,
+            entryType: "share",
+            is_multi_version: true,
+            version_no: 2,
+        } as KnowledgeFile;
+
+        render(
+            <FileTable
+                files={[sharedFile]}
+                selectedFiles={new Set()}
+                handleSelectAll={jest.fn()}
+                handleSelectFile={jest.fn()}
+                isAdmin
+                currentUserRole={SpaceRole.ADMIN}
+                onDownload={jest.fn()}
+                onEditTags={jest.fn()}
+                onRename={jest.fn()}
+                onDelete={jest.fn()}
+                onRetry={jest.fn()}
+                onNavigateFolder={jest.fn()}
+                onPreview={jest.fn()}
+                onValidateName={() => null}
+                sortBy={SortType.UPDATE_TIME}
+                sortDirection={SortDirection.DESC}
+                onSort={jest.fn()}
+                renameEntryIds={new Set([sharedFile.id])}
+                publishEntryIds={new Set([sharedFile.id])}
+                shareEntryIds={new Set([sharedFile.id])}
+                metadataEditableFileIds={new Set([sharedFile.id])}
+                versionManagementEnabled
+                onOpenVersionManagement={jest.fn()}
+                onPublishFile={jest.fn()}
+                onShareFile={jest.fn()}
+            />
+        );
+
+        expect(screen.queryByRole("button", { name: "发布" })).not.toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: "分享" })).not.toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: "编辑标签" })).not.toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: "重命名" })).not.toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: "版本管理" })).not.toBeInTheDocument();
+    });
+
+    test("分享入口在卡片视图中保持只读且不能再次分发", () => {
+        const sharedFile = {
+            ...baseFile,
+            entryType: "share",
+            is_multi_version: true,
+            version_no: 2,
+        } as KnowledgeFile;
+
+        render(
+            <FileCard
+                file={sharedFile}
+                userRole={SpaceRole.ADMIN}
+                isSelected={false}
+                onSelect={jest.fn()}
+                onDownload={jest.fn()}
+                onRename={jest.fn()}
+                onDelete={jest.fn()}
+                onEditTags={jest.fn()}
+                onRetry={jest.fn()}
+                onNavigateFolder={jest.fn()}
+                onPreview={jest.fn()}
+                canRename
+                canPublish
+                canShare
+                versionManagementEnabled
+                onOpenVersionManagement={jest.fn()}
+                onPublishFile={jest.fn()}
+                onShareFile={jest.fn()}
+            />
+        );
+
+        expect(screen.queryByRole("button", { name: "发布" })).not.toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: "分享" })).not.toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: "编辑标签" })).not.toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: "重命名" })).not.toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: "版本管理" })).not.toBeInTheDocument();
+    });
 });

@@ -6,9 +6,11 @@ const mockListEntries = jest.fn();
 const mockSubmit = jest.fn();
 const mockRevoke = jest.fn();
 const mockShowToast = jest.fn();
+const mockGetTargetFolders = jest.fn();
 
 jest.mock("~/api/approval", () => ({
     getShougangFileShareTargetSpacesApi: (...args: any[]) => mockGetTargets(...args),
+    getShougangFileShareTargetFoldersApi: (...args: any[]) => mockGetTargetFolders(...args),
     listShougangFileShareEntriesApi: (...args: any[]) => mockListEntries(...args),
     submitShougangFileShareApprovalApi: (...args: any[]) => mockSubmit(...args),
     revokeShougangFileShareApi: (...args: any[]) => mockRevoke(...args),
@@ -48,6 +50,7 @@ describe("FileShareDialog", () => {
         mockListEntries.mockResolvedValue({ data: [], total: 0 });
         mockSubmit.mockResolvedValue({ decision: "pending" });
         mockRevoke.mockResolvedValue({});
+        mockGetTargetFolders.mockResolvedValue({ data: [], total: 0 });
     });
 
     test("提交同级部门分享原因和水印下载策略", async () => {
@@ -61,7 +64,7 @@ describe("FileShareDialog", () => {
             />,
         );
 
-        await screen.findByRole("option", { name: "生产部知识库" });
+        await screen.findByRole("button", { name: "选择生产部知识库根目录" });
         fireEvent.change(screen.getByPlaceholderText("请输入分享原因"), {
             target: { value: "  联合检修使用  " },
         });
@@ -77,11 +80,54 @@ describe("FileShareDialog", () => {
                 source_space_id: "10",
                 source_file_id: "100",
                 target_space_id: "20",
+                target_folder_id: null,
                 reason: "联合检修使用",
                 allow_download: true,
             });
         });
         expect(onOpenChange).toHaveBeenCalledWith(false);
+    });
+
+    test("展开全部部门目标并提交所选目录", async () => {
+        mockGetTargets.mockResolvedValue({
+            data: [
+                { id: 20, name: "生产部知识库", space_level: "department" },
+                { id: 30, name: "无读取权限部门", space_level: "department" },
+            ],
+            total: 2,
+        });
+        mockGetTargetFolders.mockResolvedValueOnce({
+            data: [{ id: 301, name: "检修制度", level: 0 }],
+            total: 1,
+        });
+
+        render(
+            <FileShareDialog
+                open
+                activeSpace={activeSpace}
+                file={managerFile}
+                onOpenChange={jest.fn()}
+            />,
+        );
+
+        expect(await screen.findByText("部门知识库")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "选择无读取权限部门根目录" })).toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: "展开无读取权限部门目录" }));
+        await waitFor(() => {
+            expect(mockGetTargetFolders).toHaveBeenCalledWith("10", "100", 30, null);
+        });
+        fireEvent.click(await screen.findByRole("button", { name: "选择目录检修制度" }));
+        fireEvent.change(screen.getByPlaceholderText("请输入分享原因"), {
+            target: { value: "跨部门复用" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: "提交审批" }));
+
+        await waitFor(() => {
+            expect(mockSubmit).toHaveBeenCalledWith(expect.objectContaining({
+                target_space_id: "30",
+                target_folder_id: 301,
+            }));
+        });
     });
 
     test("管理入口可以撤回已有分享", async () => {

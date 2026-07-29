@@ -100,6 +100,10 @@ export function FileCard({
         "(hover: hover) and (pointer: fine)",
     );
     const isCreating = !!file.isCreating;
+    const isReadonlyDistributionEntry = (
+        file.entryType === "share"
+        || file.entryType === "publish"
+    );
     const [hovered, setHovered] = useState(false);
     const [moreMenuOpen, setMoreMenuOpen] = useState(false);
     // 触屏/无 hover 设备上操作按钮常驻显示、不会触发 hover，需在挂载时即请求该文件权限，
@@ -269,7 +273,7 @@ export function FileCard({
                 同步中
             </span>
         );
-        const similarIndicator = versionManagementEnabled && canManageMembers && file.has_similar && !file.is_multi_version && (
+        const similarIndicator = versionManagementEnabled && !isReadonlyDistributionEntry && canManageMembers && file.has_similar && !file.is_multi_version && (
             <button
                 type="button"
                 onClick={(e) => {
@@ -330,11 +334,12 @@ export function FileCard({
     );
     const hasRetryOption = Boolean(onRetry && (canRetryFile ? canRetryFile(file) : defaultCanRetry));
     const retryText = retryActionLabel ?? localize("com_knowledge.retry");
-    const canEditTags = isAdmin && !isFolder;
+    const canEditTags = isAdmin && !isFolder && !isReadonlyDistributionEntry;
+    const canRenameContent = canRename && !isReadonlyDistributionEntry;
     const canRetry = isAdmin && hasRetryOption;
-    const showPublish = canPublish && Boolean(onPublishFile) && !isFolder;
-    const showShare = canShare && Boolean(onShareFile) && !isFolder;
-    const showMoreMenu = showPublish || showShare || canEditTags || canRename || canRetry || canDelete || Boolean(onManagePermission);
+    const showPublish = canPublish && Boolean(onPublishFile) && !isFolder && !isReadonlyDistributionEntry;
+    const showShare = canShare && Boolean(onShareFile) && !isFolder && file.entryType !== "share";
+    const showMoreMenu = showPublish || showShare || canEditTags || canRenameContent || canRetry || canDelete || Boolean(onManagePermission);
     /** 有「更多」时下载只在菜单内；无更多（普通成员/预览）时单独显示下载图标 */
     const showInlineDownloadButton = canDownload && !hideDownloadActions && !showMoreMenu;
     const showMenuDownloadItem = canDownload && !hideDownloadActions;
@@ -505,7 +510,7 @@ export function FileCard({
                                                 {localize("com_knowledge.edit_tags")}
                                             </DropdownMenuItem>
                                         )}
-                                        {canRename && (
+                                        {canRenameContent && (
                                             <DropdownMenuItem
                                                 onClick={(e) => {
                                                     e.stopPropagation();
@@ -526,7 +531,7 @@ export function FileCard({
                                                 {retryText}
                                             </DropdownMenuItem>
                                         )}
-                                        {versionManagementEnabled && !isFolder && file.status === FileStatus.SUCCESS && isAdmin && (
+                                        {versionManagementEnabled && !isFolder && !isReadonlyDistributionEntry && file.status === FileStatus.SUCCESS && isAdmin && (
                                             <DropdownMenuItem
                                                 onClick={(e) => { e.stopPropagation(); onOpenVersionManagement?.(file); }}
                                                 className="flex items-center"
@@ -696,7 +701,7 @@ export function FileCard({
                                         {localize("com_knowledge.edit_tags")}
                                     </DropdownMenuItem>
                                 )}
-                                {canRename && (
+                                {canRenameContent && (
                                     <DropdownMenuItem
                                         onClick={(e) => {
                                             e.stopPropagation();
@@ -717,7 +722,7 @@ export function FileCard({
                                         {retryText}
                                     </DropdownMenuItem>
                                 )}
-                                {versionManagementEnabled && !isFolder && file.status === FileStatus.SUCCESS && isAdmin && (
+                                {versionManagementEnabled && !isFolder && !isReadonlyDistributionEntry && file.status === FileStatus.SUCCESS && isAdmin && (
                                     <DropdownMenuItem
                                         onClick={(e) => { e.stopPropagation(); onOpenVersionManagement?.(file); }}
                                         className="flex items-center"

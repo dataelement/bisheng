@@ -144,6 +144,8 @@ class QuestionCreateRequest(BaseModel):
     experts_names: Optional[str] = Field(default=None, description="邀请专家名称，多个用分号;分割")
 
     image_url: Optional[str] = Field(default=None, max_length=1024, schema_extra={"comment": "图片URL"})
+    file_url: Optional[str] = Field(default=None, max_length=1024, schema_extra={"comment": "文件URL"})
+    file_name: Optional[str] = Field(default=None, max_length=512, schema_extra={"comment": "文件名"})
 
     @field_validator("description")
     @classmethod
@@ -177,6 +179,8 @@ class QuestionUpdateRequest(BaseModel):
     invited_experts: Optional[str] = Field(default=None, description="邀请专家ID，多个用分号;分割")
     experts_names: Optional[str] = Field(default=None, description="邀请专家名称，多个用分号;分割")
     image_url: Optional[str] = Field(default=None, max_length=1024, description="图片URL")
+    file_url: Optional[str] = Field(default=None, max_length=1024, description="文件URL")
+    file_name: Optional[str] = Field(default=None, max_length=512, description="文件名")
     status: int | str | None = Field(default=None, description="状态: unsolved/solved/closed/pending")
     created_by: Optional[str] = Field(default=None, description="创建人")
 
@@ -253,6 +257,9 @@ class QuestionDetailResponse(BaseModel):
     invited_experts: List[int]
     experts_names: Optional[str] = Field(default=None, description="邀请专家名称，多个用分号;分割")
     adopted_answer_id: Optional[int]
+    image_url: Optional[str] = Field(default=None, description="图片URL")
+    file_url: Optional[str] = Field(default=None, description="文件URL")
+    file_name: Optional[str] = Field(default=None, description="文件名")
     vote_count: int
     answer_count: int
     view_count: int

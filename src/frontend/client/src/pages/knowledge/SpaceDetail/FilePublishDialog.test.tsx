@@ -7,9 +7,11 @@ const mockSearchDocuments = jest.fn();
 const mockSubmitApproval = jest.fn();
 const mockShowToast = jest.fn();
 const mockListKnowledgeFolders = jest.fn();
+const mockGetTargetFolders = jest.fn();
 
 jest.mock("~/api/approval", () => ({
     getShougangFilePublishTargetSpacesApi: (...args: any[]) => mockGetTargetSpaces(...args),
+    getShougangFilePublishTargetFoldersApi: (...args: any[]) => mockGetTargetFolders(...args),
     getShougangFilePublishSimilarCandidatesApi: (...args: any[]) => mockGetSimilarCandidates(...args),
     searchShougangFilePublishDocumentsApi: (...args: any[]) => mockSearchDocuments(...args),
     submitShougangFilePublishApprovalApi: (...args: any[]) => mockSubmitApproval(...args),
@@ -52,10 +54,11 @@ describe("FilePublishDialog", () => {
         jest.clearAllMocks();
         mockGetTargetSpaces.mockResolvedValue({
             data: [
-                { id: 20, name: "公共空间", space_level: "public" },
-                { id: 21, name: "部门空间", space_level: "department" },
+                { id: 20, name: "公共空间", space_level: "public", can_browse_files: true },
+                { id: 21, name: "部门空间", space_level: "department", can_browse_files: true },
             ],
         });
+        mockGetTargetFolders.mockResolvedValue({ data: [], total: 0 });
         mockListKnowledgeFolders.mockResolvedValue({ items: [], total: 0 });
         mockSearchDocuments.mockResolvedValue({ data: [] });
         mockSubmitApproval.mockResolvedValue({});
@@ -75,7 +78,7 @@ describe("FilePublishDialog", () => {
             />,
         );
 
-        await waitFor(() => expect(mockGetTargetSpaces).toHaveBeenCalledWith(10));
+        await waitFor(() => expect(mockGetTargetSpaces).toHaveBeenCalledWith(10, 100));
         await waitFor(() => expect(mockGetSimilarCandidates).toHaveBeenCalledWith(100, "20"));
 
         expect(screen.getByText("申请理由")).toBeInTheDocument();
@@ -185,13 +188,13 @@ describe("FilePublishDialog", () => {
     test("按类型展示目标空间目录树并提交所选目录", async () => {
         mockGetTargetSpaces.mockResolvedValue({
             data: [
-                { id: 20, name: "公共空间", space_level: "public" },
-                { id: 30, name: "团队空间", space_level: "team" },
+                { id: 20, name: "公共空间", space_level: "public", can_browse_files: true },
+                { id: 30, name: "团队空间", space_level: "team", can_browse_files: true },
             ],
         });
         mockGetSimilarCandidates.mockResolvedValue({ data: [] });
-        mockListKnowledgeFolders.mockResolvedValueOnce({
-            items: [{ id: 301, file_name: "制度目录", file_type: 0, file_size: null }],
+        mockGetTargetFolders.mockResolvedValueOnce({
+            data: [{ id: 301, name: "制度目录", level: 1 }],
             total: 1,
         });
 
@@ -211,8 +214,9 @@ describe("FilePublishDialog", () => {
 
         fireEvent.click(screen.getByRole("button", { name: "展开团队空间目录" }));
         await waitFor(() => {
-            expect(mockListKnowledgeFolders).toHaveBeenCalledWith({ space_id: 30, parent_id: null });
+            expect(mockGetTargetFolders).toHaveBeenCalledWith(10, 100, 30, null);
         });
+        expect(mockListKnowledgeFolders).not.toHaveBeenCalled();
         fireEvent.click(await screen.findByRole("button", { name: "选择目录制度目录" }));
         fireEvent.click(screen.getByRole("button", { name: "提交申请" }));
 
@@ -228,11 +232,11 @@ describe("FilePublishDialog", () => {
 
     test("知识空间节点不使用文件夹图标", async () => {
         mockGetTargetSpaces.mockResolvedValue({
-            data: [{ id: 20, name: "公共空间", space_level: "public" }],
+            data: [{ id: 20, name: "公共空间", space_level: "public", can_browse_files: true }],
         });
         mockGetSimilarCandidates.mockResolvedValue({ data: [] });
-        mockListKnowledgeFolders.mockResolvedValueOnce({
-            items: [{ id: 301, file_name: "制度目录", file_type: 0, file_size: null }],
+        mockGetTargetFolders.mockResolvedValueOnce({
+            data: [{ id: 301, name: "制度目录", level: 1 }],
             total: 1,
         });
 
@@ -252,6 +256,41 @@ describe("FilePublishDialog", () => {
         fireEvent.click(screen.getByRole("button", { name: "展开公共空间目录" }));
         const folderButton = await screen.findByRole("button", { name: "选择目录制度目录" });
         expect(folderButton.querySelector(".lucide-folder, .lucide-folder-open")).not.toBeNull();
+    });
+
+    test("无目标读取权限时只允许选择目录且不查询目标文件", async () => {
+        mockGetTargetSpaces.mockResolvedValue({
+            data: [{
+                id: 20,
+                name: "部门空间",
+                space_level: "department",
+                can_browse_files: false,
+            }],
+        });
+        mockGetTargetFolders.mockResolvedValue({
+            data: [{ id: 301, name: "制度目录", level: 1 }],
+            total: 1,
+        });
+
+        render(
+            <FilePublishDialog
+                open
+                activeSpace={activeSpace}
+                file={file}
+                onOpenChange={jest.fn()}
+                versionManagementEnabled
+            />,
+        );
+
+        expect(await screen.findByText("无目标库读取权限，仅可选择发布目录")).toBeInTheDocument();
+        expect(screen.getByLabelText("版本管理")).toBeDisabled();
+        expect(screen.getByPlaceholderText("搜索目标空间文档...")).toBeDisabled();
+        expect(mockGetSimilarCandidates).not.toHaveBeenCalled();
+        expect(mockSearchDocuments).not.toHaveBeenCalled();
+
+        fireEvent.click(screen.getByRole("button", { name: "展开部门空间目录" }));
+        fireEvent.click(await screen.findByRole("button", { name: "选择目录制度目录" }));
+        expect(mockGetTargetFolders).toHaveBeenCalledWith(10, 100, 20, null);
     });
 
     test("发布弹窗限制在视口内并让内容区滚动", async () => {

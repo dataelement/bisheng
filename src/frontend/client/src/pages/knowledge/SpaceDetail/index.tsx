@@ -449,13 +449,32 @@ export function KnowledgeSpaceContent({
     ) => new Set(
         displayFiles
             .filter((file) => {
+                const isReadonlyDistributionEntry = (
+                    file.entryType === "share"
+                    || file.entryType === "publish"
+                );
+                if (
+                    file.type !== FileType.FOLDER
+                    && isReadonlyDistributionEntry
+                    && (capability === "canEditContent" || capability === "canPublish")
+                ) {
+                    return false;
+                }
                 if (file.type === FileType.FOLDER || !file.capabilities) {
+                    return base.has(file.id);
+                }
+                if (
+                    capability === "canDelete"
+                    && file.entryType === "share"
+                    && !isAdmin
+                    && requestedFilePermIds.has(file.id)
+                ) {
                     return base.has(file.id);
                 }
                 return file.capabilities[capability];
             })
             .map((file) => file.id),
-    ), [displayFiles]);
+    ), [displayFiles, isAdmin, requestedFilePermIds]);
     const visiblePermissionEntryIds = useMemo(
         () => hideFilePermissionActions
             ? new Set<string>()
@@ -1103,6 +1122,18 @@ export function KnowledgeSpaceContent({
             type: target.type === FileType.FOLDER ? "folder" : "knowledge_file",
         });
     };
+
+    const handleFilePermissionChanged = useCallback(() => {
+        if (!permTarget) {
+            return;
+        }
+        setRequestedFilePermIds((previous) => {
+            const next = new Set(previous);
+            next.add(permTarget.id);
+            return next;
+        });
+        onDeleteFile("");
+    }, [onDeleteFile, permTarget]);
 
     const handleSelectAll = (isAllSelectedOnPage: boolean) => {
         const newSelected = new Set(selectedFiles);
@@ -1857,6 +1888,7 @@ export function KnowledgeSpaceContent({
                     showShareTab={false}
                     showMembersTab={false}
                     showPermissionTab
+                    onPermissionChanged={handleFilePermissionChanged}
                     spaceLevel={space.spaceLevel}
                     grantSubjectScopeSpaceId={space.id}
                 />

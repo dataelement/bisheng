@@ -112,7 +112,12 @@ async def _seed_document(
     await session.commit()
 
 
-def _command(*, source_entry_id: int = 100) -> ShareKnowledgeDocumentCommand:
+def _command(
+    *,
+    source_entry_id: int = 100,
+    target_file_level_path: str = "",
+    target_level: int = 0,
+) -> ShareKnowledgeDocumentCommand:
     return ShareKnowledgeDocumentCommand(
         tenant_id=7,
         approval_instance_id=8001,
@@ -120,6 +125,8 @@ def _command(*, source_entry_id: int = 100) -> ShareKnowledgeDocumentCommand:
         source_entry_id=source_entry_id,
         target_space_id=30,
         allow_download=True,
+        target_file_level_path=target_file_level_path,
+        target_level=target_level,
     )
 
 
@@ -139,16 +146,12 @@ async def test_share_creates_payload_free_active_entry_without_moving_manager(
     await _seed_document(async_db_session, source_type=source_type)
     service = _service(async_db_session)
 
-    result = await service.share_approved(
-        _command(source_entry_id=source_entry_id)
-    )
+    result = await service.share_approved(_command(source_entry_id=source_entry_id))
 
     repository = KnowledgeFileRepositoryImpl(async_db_session)
     manager = await repository.find_by_id(100)
     share = await repository.find_by_id(result.share_entry_id)
-    document = await KnowledgeDocumentRepositoryImpl(
-        async_db_session
-    ).find_by_id(91)
+    document = await KnowledgeDocumentRepositoryImpl(async_db_session).find_by_id(91)
 
     assert manager.knowledge_id == 20
     assert manager.object_name == "tenant/7/canonical.pdf"
@@ -164,6 +167,31 @@ async def test_share_creates_payload_free_active_entry_without_moving_manager(
     assert share.desired_content_generation == 4
 
 
+def test_share_entry_uses_selected_target_folder():
+    share = KnowledgeDocumentDistributionService._create_share_entry(
+        source_entry=KnowledgeFile(
+            id=100,
+            tenant_id=7,
+            knowledge_id=20,
+            file_name="canonical.pdf",
+            status=KnowledgeFileStatus.SUCCESS.value,
+        ),
+        document=KnowledgeDocument(
+            id=91,
+            tenant_id=7,
+            knowledge_id=20,
+            content_generation=4,
+        ),
+        command=_command(
+            target_file_level_path="/300/301",
+            target_level=2,
+        ),
+    )
+
+    assert share.file_level_path == "/300/301"
+    assert share.level == 2
+
+
 @pytest.mark.asyncio
 async def test_share_permission_failure_leaves_hidden_preparing_entry(
     async_db_session: AsyncSession,
@@ -177,14 +205,8 @@ async def test_share_permission_failure_leaves_hidden_preparing_entry(
     with pytest.raises(KnowledgeDocumentDistributionError, match="permission"):
         await service.share_approved(_command())
 
-    entries = await KnowledgeFileRepositoryImpl(
-        async_db_session
-    ).find_distribution_entries_by_document_id(91)
-    share = next(
-        entry
-        for entry in entries
-        if entry.entry_type == KnowledgeFileEntryType.SHARE.value
-    )
+    entries = await KnowledgeFileRepositoryImpl(async_db_session).find_distribution_entries_by_document_id(91)
+    share = next(entry for entry in entries if entry.entry_type == KnowledgeFileEntryType.SHARE.value)
     assert share.entry_status == KnowledgeFileEntryStatus.PREPARING.value
 
 
