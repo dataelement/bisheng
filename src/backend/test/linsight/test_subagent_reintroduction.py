@@ -77,7 +77,7 @@ def test_agent_factory_subagent_excludes_hitl():
 
     # required SubAgent keys present; the safety-critical optional keys absent
     assert set(spec.keys()) == {"name", "description", "system_prompt", "tools"}
-    assert "model" not in spec, "omitting model => subagent inherits parent tenant model (graph.py:608)"
+    assert "model" not in spec, "omitting model => subagent inherits parent tenant model (graph.py:633)"
     assert "permissions" not in spec, "permissions would derive a filesystem interrupt source (§3.1)"
     assert "interrupt_on" not in spec, "interrupt_on would add HumanInTheLoopMiddleware (§3.1)"
 
