@@ -775,6 +775,33 @@ describe("mapChild", () => {
     });
   });
 
+  it("maps share source metadata without replacing the receiver placement", () => {
+    const file = mapChild(
+      {
+        id: 20,
+        knowledge_id: 2,
+        file_name: "shared.pdf",
+        file_type: 1,
+        file_level_path: "/receiver-folder",
+        entry_type: "share",
+        source_space_id: 1,
+        source_space_name: "来源知识库",
+        source_department_name: "来源部门",
+        source_path: "来源知识库>源目录/shared.pdf",
+      },
+      "2",
+    );
+
+    expect(file).toMatchObject({
+      spaceId: "2",
+      folderPath: "/receiver-folder",
+      sourceSpaceId: "1",
+      sourceSpaceName: "来源知识库",
+      sourceDepartmentName: "来源部门",
+      sourcePath: "来源知识库>源目录/shared.pdf",
+    });
+  });
+
   it("maps summary directly when backend provides summary", () => {
     const file = mapChild(
       {

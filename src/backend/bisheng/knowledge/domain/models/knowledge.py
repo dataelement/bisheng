@@ -895,6 +895,47 @@ class KnowledgeDao(KnowledgeBase):
             return result.all()
 
     @classmethod
+    async def async_get_space_source_metadata_by_ids(
+        cls,
+        space_ids: List[int],
+    ) -> Dict[int, Tuple[str, str]]:
+        """批量读取来源知识库名称及其绑定部门名称。"""
+        if not space_ids:
+            return {}
+
+        from bisheng.database.models.department import Department
+        from bisheng.knowledge.domain.models.department_knowledge_space import DepartmentKnowledgeSpace
+
+        statement = (
+            select(
+                Knowledge.id,
+                Knowledge.name,
+                Department.name,
+            )
+            .outerjoin(
+                DepartmentKnowledgeSpace,
+                DepartmentKnowledgeSpace.space_id == Knowledge.id,
+            )
+            .outerjoin(
+                Department,
+                Department.id == DepartmentKnowledgeSpace.department_id,
+            )
+            .where(
+                Knowledge.id.in_(space_ids),
+                Knowledge.type == KnowledgeTypeEnum.SPACE.value,
+            )
+        )
+        async with get_async_db_session() as session:
+            result = await session.exec(statement)
+            return {
+                int(space_id): (
+                    str(space_name or space_id),
+                    str(department_name or ''),
+                )
+                for space_id, space_name, department_name in result.all()
+            }
+
+    @classmethod
     async def async_update_sort_weights(cls, weight_by_space_id: Dict[int, int]) -> None:
         """Write manual sort weights for the given spaces.
 
