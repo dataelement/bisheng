@@ -100,6 +100,7 @@ export default function MessageUser({ useName, data, showButton, disabledSearch 
                                         conversationId={data.chat_id || chatId}
                                         fileId={file.file_id}
                                         altText={file.file_name || file.name}
+                                        initialUrl={file.file_url || file.filepath}
                                     />
                                 ))}
                             </div>

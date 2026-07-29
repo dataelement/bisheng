@@ -118,6 +118,7 @@ function UploadedFileList({ files, conversationId }: { files: any[]; conversatio
                             conversationId={conversationId}
                             fileId={file.file_id}
                             altText={file.name || file.file_name}
+                            initialUrl={file.filepath || file.file_path || file.file_url}
                         />
                     ))}
                 </div>
