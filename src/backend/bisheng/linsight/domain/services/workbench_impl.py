@@ -91,6 +91,30 @@ class LinsightWorkbenchImpl:
     # latency on every task start.
     _RAW_KEEP_MAX_BYTES = 50 * 1024 * 1024
 
+    # ``mimetypes`` reads the SYSTEM mime database, which on a stock Linux image
+    # (every deploy target, and CI) knows nothing about the OOXML types — xlsx /
+    # docx / pptx all resolve to None there and every original lands in MinIO as
+    # application/octet-stream, so the browser downloads instead of previewing.
+    # macOS ships them, which is why this only shows up off the dev machine.
+    # Pin the ones we actually carry so the stored content type is platform-stable.
+    _RAW_CONTENT_TYPES = {
+        "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "xls": "application/vnd.ms-excel",
+        "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "doc": "application/msword",
+        "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "ppt": "application/vnd.ms-powerpoint",
+        "pdf": "application/pdf",
+        "csv": "text/csv",
+        "ofd": "application/ofd",
+    }
+
+    @classmethod
+    def _content_type_for(cls, filename: str) -> str:
+        """Content type for a raw original, independent of the host mime database."""
+        ext = os.path.splitext(filename or "")[1].lower().lstrip(".")
+        return cls._RAW_CONTENT_TYPES.get(ext) or mimetypes.guess_type(filename or "")[0] or "application/octet-stream"
+
     class LinsightError(Exception):
         """LinsightRelated Errors"""
 
@@ -735,7 +759,9 @@ class LinsightWorkbenchImpl:
             bucket_name=minio_client.bucket,
             object_name=object_key,
             file=file_bytes,
-            content_type="text/markdown" if as_markdown else "application/octet-stream",
+            # An unparsed original keeps its real type too, so the attachment chip
+            # and any download serve it as what it is.
+            content_type="text/markdown" if as_markdown else cls._content_type_for(filename),
         )
 
         entry["workspace_path"] = f"/{rel_path}"
@@ -781,7 +807,7 @@ class LinsightWorkbenchImpl:
 
             raw_filename = cls._dedupe_workspace_name(safe_name, used_names)
             rel_path = f"uploads/{raw_filename}"
-            content_type = mimetypes.guess_type(raw_filename)[0] or "application/octet-stream"
+            content_type = cls._content_type_for(raw_filename)
             await minio_client.put_object(
                 bucket_name=minio_client.bucket,
                 object_name=f"{WORKSPACE_PREFIX}/{chat_id}/{rel_path}",

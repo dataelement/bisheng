@@ -298,3 +298,14 @@ async def test_pointer_block_announces_unsupported_type():
 
     assert "访谈录音.mp3" in block
     assert "无法解析" in block
+
+
+def test_content_type_is_platform_independent():
+    """`mimetypes` reads the SYSTEM database: a stock Linux image (every deploy
+    target, and CI) returns None for OOXML, so relying on it stored every original
+    as octet-stream off the dev machine."""
+    assert "spreadsheetml" in Impl._content_type_for("销售数据.xlsx")
+    assert "wordprocessingml" in Impl._content_type_for("报告.DOCX")  # case-insensitive
+    assert Impl._content_type_for("合同.pdf") == "application/pdf"
+    assert Impl._content_type_for("data.csv") == "text/csv"
+    assert Impl._content_type_for("unknown.bin") == "application/octet-stream"
