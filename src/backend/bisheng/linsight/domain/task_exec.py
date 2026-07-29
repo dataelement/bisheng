@@ -32,6 +32,7 @@ from bisheng.linsight.domain.models.linsight_session_version import (
     SessionVersionStatusEnum,
 )
 from bisheng.linsight.domain.services.agent_factory import _resolve_model, create_linsight_agent
+from bisheng.linsight.domain.services.binary_content_guard import CODE_INTERPRETER_TOOL
 from bisheng.linsight.domain.services.state_message_manager import (
     LinsightStateMessageManager,
     MessageData,
@@ -40,6 +41,7 @@ from bisheng.linsight.domain.services.state_message_manager import (
 from bisheng.linsight.domain.services.stream_event_mapper import StreamEventMapper
 from bisheng.linsight.domain.services.tool_loop_middleware import LinsightToolLoopError
 from bisheng.linsight.domain.services.workbench_impl import LinsightWorkbenchImpl
+from bisheng.linsight.domain.services.workspace_backend import UPLOADS_DIR
 from bisheng.tool.domain.services.tool import ToolServices
 from bisheng_langchain.linsight.const import TaskStatus
 from bisheng_langchain.linsight.event import BaseEvent, ExecStep, GenerateSubTask, NeedUserInput, TaskEnd, TaskStart
@@ -105,6 +107,12 @@ class LinsightWorkflowTask:
         self._partial_salvage: str | None = None
         self._partial_error: BaseException | None = None
         self.file_dir: str | None = None
+        # Files present in ``file_dir`` before the agent ran (set by
+        # _init_file_directory); the deliverable scan diffs against it.
+        self._baseline_files: set[str] = set()
+        # Set per run in _create_agent; gates every prompt hint that names the
+        # code interpreter (prompt ⟺ tool lockstep).
+        self._has_code_interpreter: bool = False
         self.session_version_id: str | None = None
         self.llm: BaseChatModel | None = None  # For storageLLMInstances
 
@@ -171,10 +179,12 @@ class LinsightWorkflowTask:
         except TaskAlreadyInProgressError:
             logger.warning(f"Task already in progress: session_version_id={self.session_version_id}")
         except TaskExecutionError as e:
-            logger.error(
-                f"Task execution failed: {e} : session_version_id={self.session_version_id}",
-                exc_info=True,
-            )
+            # NEVER pass exc_info= to loguru: it has no such kwarg, so ANY kwarg makes
+            # it str.format() the message. Provider errors embed literal braces
+            # (``Error code: 429 - {'error': {...}}``), which format() reads as a
+            # replacement field -> KeyError raised inside this except clause, skipping
+            # _handle_execution_error and stranding the session IN_PROGRESS forever.
+            logger.exception(f"Task execution failed: {e} : session_version_id={self.session_version_id}")
             await self._handle_execution_error(e)
         except Exception as e:
             logger.exception(f"Unknown error: session_version_id={self.session_version_id}")
@@ -458,6 +468,9 @@ class LinsightWorkflowTask:
         # the prior turn's deliverables. New-turn path only (resume reuses the same
         # svid workspace). Best-effort — never blocks the turn.
         await self._seed_workspace_from_previous(session_model)
+        # Must run between the seed and tool construction: the code interpreter's
+        # file list is snapshotted from file_dir when the tool is built.
+        await self._sync_workspace_originals(session_model)
 
         # Initialization Execution Component
         self.llm = await self._get_llm(session_model)
@@ -556,29 +569,48 @@ class LinsightWorkflowTask:
         file_dir = os.path.normpath(file_dir)
         os.makedirs(file_dir, exist_ok=True)
 
-        if not session_model.files:
-            return file_dir
+        if session_model.files:
+            # Only entries that carry a parsed-markdown object can be prefetched. A
+            # file without ``markdown_file_path`` (e.g. an org-KB reference, or a file
+            # still parsing) must be SKIPPED — not crash task startup. (The agent reads
+            # uploaded sources through the WorkspaceBackend ``uploads/`` keys anyway, so
+            # this local prefetch is best-effort cache warming, not the access path.)
+            downloadable = [f for f in session_model.files if isinstance(f, dict) and f.get("markdown_file_path")]
+            skipped = len(session_model.files) - len(downloadable)
+            if skipped:
+                logger.warning(f"{skipped} uploaded file(s) without markdown_file_path skipped for local prefetch")
 
-        # Only entries that carry a parsed-markdown object can be prefetched. A
-        # file without ``markdown_file_path`` (e.g. an org-KB reference, or a file
-        # still parsing) must be SKIPPED — not crash task startup. (The agent reads
-        # uploaded sources through the WorkspaceBackend ``uploads/`` keys anyway, so
-        # this local prefetch is best-effort cache warming, not the access path.)
-        downloadable = [f for f in session_model.files if isinstance(f, dict) and f.get("markdown_file_path")]
-        skipped = len(session_model.files) - len(downloadable)
-        if skipped:
-            logger.warning(f"{skipped} uploaded file(s) without markdown_file_path skipped for local prefetch")
+            # Concurrent downloads
+            download_tasks = [self._download_file(file_info, file_dir) for file_info in downloadable]
 
-        # Concurrent downloads
-        download_tasks = [self._download_file(file_info, file_dir) for file_info in downloadable]
+            results = await asyncio.gather(*download_tasks, return_exceptions=True)
 
-        results = await asyncio.gather(*download_tasks, return_exceptions=True)
+            # Record Download Failed Files
+            for i, result in enumerate(results):
+                if isinstance(result, Exception):
+                    file_name = os.path.basename(downloadable[i].get("markdown_file_path") or "")
+                    logger.error(f"This content failed to load {file_name}: {result}")
 
-        # Record Download Failed Files
-        for i, result in enumerate(results):
-            if isinstance(result, Exception):
-                file_name = os.path.basename(downloadable[i].get("markdown_file_path") or "")
-                logger.error(f"This content failed to load {file_name}: {result}")
+            # Second track: the ORIGINAL spreadsheets / documents. The code
+            # interpreter's file list is built from ``os.walk(file_dir)``
+            # (workbench_impl._init_bisheng_code_tool), so an original that never
+            # lands here is invisible to pandas / python-docx / fitz — which is the
+            # whole point of keeping it. Best-effort: a miss costs the precise-data
+            # track, never the task.
+            raw_files = [f for f in downloadable if f.get("raw_filename") and f.get("original_file_path")]
+            if raw_files:
+                raw_results = await asyncio.gather(
+                    *[self._download_raw_original(f, file_dir) for f in raw_files], return_exceptions=True
+                )
+                for i, result in enumerate(raw_results):
+                    if isinstance(result, Exception):
+                        logger.warning(f"Original not prefetched {raw_files[i].get('raw_filename')}: {result}")
+
+        # Baseline for deliverable detection: everything present BEFORE the agent
+        # runs (i.e. the prefetched upload sources). Captured here — after the
+        # prefetch, at the single point every driver goes through — so the
+        # completion scan can tell what the agent actually produced.
+        self._baseline_files = linsight_execute_utils.snapshot_file_paths(file_dir)
 
         return file_dir
 
@@ -607,6 +639,34 @@ class LinsightWorkflowTask:
             logger.error(f"Download failed {object_name}: {e}")
             raise
 
+    async def _download_raw_original(self, file_info: dict, target_dir: str) -> str:
+        """Prefetch the ORIGINAL upload next to its markdown view.
+
+        Mirrors ``_download_file`` but reads ``original_file_path`` (formal bucket)
+        and lands under ``uploads/<raw_filename>``. The subdirectory is load-bearing:
+        the workspace key is ``uploads/x.xlsx`` and that is the path the pointer
+        block hands the model, while the code interpreter resolves paths relative to
+        ``file_dir``. Landing the original flat here (the original implementation)
+        meant the one path the model was told about did not exist in the sandbox —
+        the whole point of carrying the original was lost. The markdown track stays
+        flat on purpose: it is only ever read through ``read_file``, which goes to
+        the workspace, so it needs no local path parity.
+        """
+        object_name = file_info["original_file_path"]
+        file_path = os.path.join(target_dir, UPLOADS_DIR, file_info["raw_filename"])
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+        minio_client = await get_minio_storage()
+        file_url = await minio_client.get_share_link(object_name, clear_host=False)
+        http_client = await get_http_client()
+
+        with open(file_path, "wb") as f:
+            async for chunk in http_client.stream(method="GET", url=str(file_url)):
+                f.write(chunk)
+
+        if not os.path.exists(file_path) or os.path.getsize(file_path) == 0:
+            raise ValueError(f"Original download failed or empty: {object_name}")
+        return file_path
+
     async def _generate_tools(self, session_model: LinsightSessionVersion) -> list:
         """Build Tool List"""
         if not session_model.tools:
@@ -631,6 +691,13 @@ class LinsightWorkflowTask:
         """
         from bisheng.linsight.domain.services.skill_provisioning import materialize_session_skills
         from bisheng.linsight.domain.services.workspace_backend import WorkspaceBackend
+
+        # Whether the code interpreter is actually bound this run (it is injected
+        # only when the user selected it). Everything that points the model at it —
+        # the uploaded-files pointer block and the binary read guard — must stay in
+        # lockstep with this flag, or we recreate the "told to call a tool that
+        # isn't there" failure mode.
+        self._has_code_interpreter = any(getattr(t, "name", None) == CODE_INTERPRETER_TOOL for t in tools)
 
         minio = await get_minio_storage()
         backend = WorkspaceBackend(svid=session_model.id, minio=minio, file_dir=self.file_dir)
@@ -683,6 +750,54 @@ class LinsightWorkflowTask:
                 )
         except Exception as e:
             logger.warning(f"workspace seed-from-previous skipped (non-fatal): {e}")
+
+    async def _sync_workspace_originals(self, session_model: LinsightSessionVersion) -> None:
+        """Make workspace originals reachable by the code interpreter this turn.
+
+        ``_init_file_directory`` prefetches originals from THIS turn's ``files``,
+        which is empty on a follow-up ("总结一下刚才那个表") — the originals only
+        exist in the workspace, copied there by the seed. The code interpreter's
+        file list is built from the local ``file_dir``, so without this step the
+        model sees ``uploads/x.xlsx`` in ``ls``, is told by the pointer block that
+        it can compute on it, and then finds nothing in the sandbox.
+
+        Runs after the seed and before tools are built. Idempotent: on a fresh turn
+        the prefetch already wrote these files and ``_materialize`` serves them from
+        cache. Best-effort — losing the precise-data track must never fail the turn.
+        """
+        try:
+            from bisheng.linsight.domain.services.workspace_backend import WorkspaceBackend
+
+            minio = await get_minio_storage()
+            backend = WorkspaceBackend(svid=session_model.id, minio=minio, file_dir=self.file_dir)
+            ls_res = await backend.als(UPLOADS_DIR)
+            if getattr(ls_res, "error", None):
+                return
+
+            synced: list[str] = []
+            for entry in ls_res.entries or []:
+                rel = str(entry.get("path") or "").lstrip("/")
+                # Markdown views are already local (or are read through read_file,
+                # which goes to MinIO anyway); only the originals need a local copy.
+                if not rel.startswith(f"{UPLOADS_DIR}/") or rel.endswith(".md"):
+                    continue
+                local_path = os.path.join(self.file_dir, rel)
+                if os.path.exists(local_path):
+                    continue
+                if await asyncio.to_thread(backend.ensure_local, rel):
+                    synced.append(local_path)
+
+            if synced:
+                # These arrived AFTER _init_file_directory took the baseline, so
+                # without this they would look like files the agent produced and be
+                # delivered back to the user as this turn's output.
+                self._baseline_files.update(synced)
+                logger.info(
+                    "Synced {} workspace original(s) into the local task dir for the code interpreter",
+                    len(synced),
+                )
+        except Exception as e:
+            logger.warning(f"workspace original sync skipped (non-fatal): {e}")
 
     # ==================== Mission Execution ====================
 
@@ -808,7 +923,9 @@ class LinsightWorkflowTask:
 
         async def agent_execution():
             """Agent performs a task via astream + mapper."""
-            file_list = await LinsightWorkbenchImpl.prepare_file_list(session_model)
+            file_list = await LinsightWorkbenchImpl.prepare_file_list(
+                session_model, has_code_interpreter=self._has_code_interpreter
+            )
             # F035 Track J: rebuild prior conversation context (by chat_id) so a
             # fresh task turn answers with the whole conversation in view, not just
             # this turn's question (the per-session checkpointer can't see earlier
@@ -1366,7 +1483,7 @@ class LinsightWorkflowTask:
         # for an empty output/, so a greeting still yields nothing here.
         file_details = await linsight_execute_utils.read_file_directory(self.file_dir)
         final_files = await linsight_execute_utils.get_final_result_file(
-            session_model=session_model, file_details=file_details, answer=answer
+            session_model=session_model, file_details=file_details, baseline_paths=self._baseline_files
         )
         # Synthesize a fallback report ONLY when the model actually planned work but
         # produced no deliverable — never for a trivial greeting/Q&A with no output.
@@ -1424,7 +1541,7 @@ class LinsightWorkflowTask:
         # the success / direct-answer paths).
         file_details = await linsight_execute_utils.read_file_directory(self.file_dir)
         final_files = await linsight_execute_utils.get_final_result_file(
-            session_model=session_model, file_details=file_details, answer=answer
+            session_model=session_model, file_details=file_details, baseline_paths=self._baseline_files
         )
         if not final_files:
             final_files = await linsight_execute_utils.build_fallback_report_file(
@@ -1460,7 +1577,7 @@ class LinsightWorkflowTask:
             answer = (self._final_result.answer or "").strip() or (self._last_assistant_text or "").strip()
 
             final_result_files = await linsight_execute_utils.get_final_result_file(
-                session_model=session_model, file_details=file_details, answer=answer
+                session_model=session_model, file_details=file_details, baseline_paths=self._baseline_files
             )
             # F035 backstop: weak models can finish without ever writing an output/
             # deliverable (they loop on write_todos), leaving no report. Synthesize
