@@ -545,7 +545,9 @@ export interface KnowledgeFile {
     updater_name?: string;        // mapped from updater_name — last updater of this file
     folderPath?: string;          // mapped from folder_path / file_level_path
     sourcePath?: string;          // mapped from source_path
-    sourceSpaceName?: string;     // mapped from knowledge_name / space_name
+    sourceSpaceId?: string;       // mapped from source_space_id for direct share origin
+    sourceSpaceName?: string;     // mapped from source_space_name / knowledge_name / space_name
+    sourceDepartmentName?: string; // mapped from source_department_name for direct share origin
     /** Department portal content decision. This never replaces backend authorization. */
     contentAccess?: "allowed" | "approval_required" | "unavailable" | string;
     /** Existing download_file decision, independent from department view approval. */
@@ -1131,7 +1133,11 @@ export function mapChild(raw: any, spaceId: string): KnowledgeFile {
         updater_name: raw?.updater_name ?? undefined,
         folderPath: raw?.folder_path ?? raw?.file_level_path ?? undefined,
         sourcePath: raw?.source_path ?? undefined,
-        sourceSpaceName: raw?.knowledge_name ?? raw?.space_name ?? undefined,
+        sourceSpaceId: raw?.source_space_id !== undefined && raw?.source_space_id !== null
+            ? String(raw.source_space_id)
+            : undefined,
+        sourceSpaceName: raw?.source_space_name ?? raw?.knowledge_name ?? raw?.space_name ?? undefined,
+        sourceDepartmentName: raw?.source_department_name ?? undefined,
         contentAccess: raw?.content_access ?? undefined,
         canDownload: raw?.can_download !== undefined ? Boolean(raw.can_download) : undefined,
         isDepartmentFile: raw?.is_department_file !== undefined

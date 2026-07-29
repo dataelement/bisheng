@@ -97,10 +97,9 @@ async def test_create_favorite_idempotent_returns_existing():
                                  user_metadata={"favorite_reference": {"source_space_id": 1, "source_file_id": 2}})
     with patch("bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id",
                new=AsyncMock(return_value=source_space)), \
-         patch("bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.query_by_id",
-               new=AsyncMock(return_value=source_file)), \
+         patch.object(KnowledgeSpaceService, "_get_authorized_shougang_portal_file",
+                      new=AsyncMock(return_value=(source_file, [source_space]))), \
          patch.object(KnowledgeSpaceService, "_ensure_space_file", new=lambda self, f, sid: f), \
-         patch.object(KnowledgeSpaceService, "_require_permission_id", new=AsyncMock()), \
          patch.object(KnowledgeSpaceService, "_ensure_favorite_space", new=AsyncMock(return_value=fav_space)), \
          patch.object(KnowledgeSpaceService, "_find_favorite_reference", new=AsyncMock(return_value=existing_ref)), \
          patch.object(KnowledgeSpaceService, "_create_favorite_reference", new=AsyncMock()) as creator:
@@ -110,6 +109,60 @@ async def test_create_favorite_idempotent_returns_existing():
         assert resp.space_id == 200
         assert resp.source_space_id == 1 and resp.source_file_id == 2
         creator.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_create_favorite_uses_department_view_access_decision():
+    from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
+    from bisheng.knowledge.domain.schemas.knowledge_space_schema import ShougangPortalFavoriteCreateReq
+
+    svc = _make_service()
+    source_space = Knowledge(id=1, name="src", user_id=3, type=3)
+    source_file = KnowledgeFile(
+        id=2,
+        knowledge_id=1,
+        user_id=3,
+        file_name="doc.pdf",
+        file_type=1,
+        status=2,
+    )
+    fav_space = Knowledge(id=200, name="我的收藏", user_id=7, type=3, is_favorite=True)
+    existing_ref = KnowledgeFile(
+        id=999,
+        knowledge_id=200,
+        user_id=7,
+        file_name="doc.pdf",
+        user_metadata={"favorite_reference": {"source_space_id": 1, "source_file_id": 2}},
+    )
+    authorized = AsyncMock(return_value=(source_file, [source_space]))
+    with patch(
+        "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id",
+        new=AsyncMock(return_value=source_space),
+    ), patch(
+        "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.query_by_id",
+        new=AsyncMock(return_value=source_file),
+    ), patch.object(
+        KnowledgeSpaceService,
+        "_get_authorized_shougang_portal_file",
+        new=authorized,
+    ), patch.object(
+        KnowledgeSpaceService,
+        "_require_permission_id",
+        new=AsyncMock(side_effect=AssertionError("不应绕过部门文件审批授权")),
+    ), patch.object(
+        KnowledgeSpaceService,
+        "_ensure_favorite_space",
+        new=AsyncMock(return_value=fav_space),
+    ), patch.object(
+        KnowledgeSpaceService,
+        "_find_favorite_reference",
+        new=AsyncMock(return_value=existing_ref),
+    ):
+        await svc.create_shougang_portal_favorite(
+            ShougangPortalFavoriteCreateReq(source_space_id=1, source_file_id=2),
+        )
+
+    authorized.assert_awaited_once_with(space_id=1, file_id=2)
 
 
 @pytest.mark.asyncio
@@ -124,12 +177,11 @@ async def test_create_favorite_creates_reference_when_absent():
                             user_metadata={"favorite_reference": {"source_space_id": 1, "source_file_id": 2}})
     with patch("bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id",
                new=AsyncMock(return_value=source_space)), \
-         patch("bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.query_by_id",
-               new=AsyncMock(return_value=source_file)), \
+         patch.object(KnowledgeSpaceService, "_get_authorized_shougang_portal_file",
+                      new=AsyncMock(return_value=(source_file, [source_space]))), \
          patch("bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_knowledge_update_time_by_id",
                new=AsyncMock()), \
          patch.object(KnowledgeSpaceService, "_ensure_space_file", new=lambda self, f, sid: f), \
-         patch.object(KnowledgeSpaceService, "_require_permission_id", new=AsyncMock()), \
          patch.object(KnowledgeSpaceService, "_ensure_favorite_space", new=AsyncMock(return_value=fav_space)), \
          patch.object(KnowledgeSpaceService, "_find_favorite_reference", new=AsyncMock(return_value=None)), \
          patch.object(KnowledgeSpaceService, "_create_favorite_reference", new=AsyncMock(return_value=new_ref)) as creator:

@@ -234,6 +234,7 @@ Usage:
 PYTHONPATH=./ .venv/bin/python scripts/reparse_knowledge_space_files.py
 PYTHONPATH=./ .venv/bin/python scripts/reparse_knowledge_space_files.py --apply
 PYTHONPATH=./ .venv/bin/python scripts/reparse_knowledge_space_files.py --apply --concurrency 4
+PYTHONPATH=./ .venv/bin/python scripts/reparse_knowledge_space_files.py --apply --concurrency 4 --report-file /var/log/bisheng/reparse.jsonl
 PYTHONPATH=./ .venv/bin/python scripts/reparse_knowledge_space_files.py --apply --space-id 10 --folder-id 20
 PYTHONPATH=./ .venv/bin/python scripts/reparse_knowledge_space_files.py --apply --file-id 101 --file-id 102
 PYTHONPATH=./ .venv/bin/python scripts/reparse_knowledge_space_files.py --space-level public
@@ -257,6 +258,18 @@ Scope:
 - `--status` 不可与兼容参数 `--include-inflight` / `--only-inflight` 同时使用
 - `--include-inflight` 在默认状态集合上增加 `WAITING` / `PROCESSING` / `REBUILDING`；
   `--only-inflight` 仅处理这三种执行中状态
+
+Progress and report:
+
+- `--apply` 会实时输出每个文件的开始、成功/失败、`completed/total`、百分比、成功/失败计数和累计耗时
+- 每次 apply 默认生成 `./reparse_reports/reparse-{run_id}.jsonl`；可用 `--report-file` 指定其他新路径
+- JSONL 逐行记录 `run_started`、`selection_completed`、`processing_started`、`file_started`、
+  `file_completed`、`run_completed`；文件事件包含开始时间、结束时间、用时、最终状态和错误
+- 报告由独立线程通过共享队列串行写入并逐行刷新；运行期间可以直接读取已完成的 JSON 行
+- 指定的报告文件已存在时脚本会拒绝覆盖；目录创建、序列化或写入失败会导致脚本非零退出
+- 单文件普通 Python 异常会被独立记录，其他文件继续执行；原生崩溃、解释器退出和永久阻塞不在隔离范围内
+- 提高 `--concurrency` 会同时增加数据库、Milvus、Elasticsearch、MinIO 和解析服务压力，应按环境容量设置
+- dry-run 不创建 JSONL 报告，也不会执行文件解析
 
 ### `enqueue_reparse_knowledge_space_files.py`
 

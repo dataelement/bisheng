@@ -3,12 +3,16 @@
 签名测试用 AST 避免重依赖导入（参照 test_list_children_endpoint.py）；
 行为测试直接调 _handle_file_folder_extra_info，mock DB 依赖。
 """
+
 import ast
+from contextlib import asynccontextmanager
 from pathlib import Path
-from unittest.mock import AsyncMock, Mock
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
+from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
 from bisheng.knowledge.domain.models.knowledge_file import FileType
 from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
 
@@ -84,9 +88,7 @@ async def test_extra_info_skips_file_enrichment_when_disabled():
 @pytest.mark.asyncio
 async def test_extra_info_enriches_files_by_default():
     svc = _make_svc()
-    result = await svc._handle_file_folder_extra_info(
-        [_make_file(9001)], include_folder_counts=True, enrich_files=True
-    )
+    result = await svc._handle_file_folder_extra_info([_make_file(9001)], include_folder_counts=True, enrich_files=True)
     assert result[0]["tags"] == [{"tag_name": "x"}]
     assert "version_no" in result[0]
     svc._load_file_tags_batch.assert_awaited()
@@ -104,9 +106,7 @@ async def test_logical_entry_reuses_current_primary_tags_without_leaking_source_
             }
         }
     )
-    svc._load_file_tags_batch = AsyncMock(
-        return_value={100: [{"tag_name": "canonical"}]}
-    )
+    svc._load_file_tags_batch = AsyncMock(return_value={100: [{"tag_name": "canonical"}]})
 
     result = await svc._handle_file_folder_extra_info(
         [logical],
@@ -117,3 +117,137 @@ async def test_logical_entry_reuses_current_primary_tags_without_leaking_source_
     svc._load_file_tags_batch.assert_awaited_once_with([100])
     assert result[0]["tags"] == [{"tag_name": "canonical"}]
     assert "_tag_source_file_id" not in result[0]
+
+
+@pytest.mark.asyncio
+async def test_share_entry_enrichment_keeps_target_folder_and_adds_direct_source_metadata():
+    svc = _make_svc()
+    logical = _make_file(9001)
+    logical.entry_type = "share"
+    logical.share_source_file_id = 7001
+    logical.model_dump.return_value = {
+        "id": 9001,
+        "knowledge_id": 20,
+        "file_name": "制度.pdf",
+        "file_type": FileType.FILE.value,
+        "file_level_path": "/900",
+        "entry_type": "share",
+        "share_source_file_id": 7001,
+    }
+    svc._resolve_shougang_portal_source_metadata = AsyncMock(
+        return_value={
+            9001: {
+                "source_space_id": 10,
+                "source_space_name": "来源知识库",
+                "source_department_name": "来源部门",
+                "source_folder_path": "来源知识库/源目录",
+                "source_path": "来源知识库>源目录/制度.pdf",
+            }
+        }
+    )
+
+    result = await svc._handle_file_folder_extra_info([logical])
+
+    assert result[0]["file_level_path"] == "/900"
+    assert result[0]["source_space_id"] == 10
+    assert result[0]["source_space_name"] == "来源知识库"
+    assert result[0]["source_department_name"] == "来源部门"
+    assert result[0]["source_path"] == "来源知识库>源目录/制度.pdf"
+
+
+@pytest.mark.asyncio
+async def test_share_source_metadata_resolves_share_source_entry_instead_of_receiver_or_manager():
+    svc = _make_svc()
+    svc.version_repo = SimpleNamespace(
+        find_primary_versions_by_file_ids=AsyncMock(
+            side_effect=AssertionError("share source must not fall back to canonical manager")
+        )
+    )
+    svc.doc_repo = SimpleNamespace(
+        find_by_ids=AsyncMock(side_effect=AssertionError("share source must not fall back to canonical manager"))
+    )
+    source_file = SimpleNamespace(
+        id=7001,
+        knowledge_id=10,
+        file_name="制度.pdf",
+        file_level_path="/701",
+        file_type=FileType.FILE.value,
+    )
+    source_folder = SimpleNamespace(
+        id=701,
+        knowledge_id=10,
+        file_name="源目录",
+        file_level_path="",
+        file_type=FileType.DIR.value,
+    )
+
+    async def fake_get_files(file_ids):
+        ids = {int(file_id) for file_id in file_ids}
+        if 7001 in ids:
+            return [source_file]
+        return [source_folder] if 701 in ids else []
+
+    with (
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_file_by_ids",
+            new_callable=AsyncMock,
+            side_effect=fake_get_files,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_space_source_metadata_by_ids",
+            new_callable=AsyncMock,
+            return_value={10: ("来源知识库", "来源部门")},
+        ),
+    ):
+        result = await svc._resolve_shougang_portal_source_metadata(
+            [
+                {
+                    "id": 9001,
+                    "knowledge_id": 20,
+                    "file_name": "制度.pdf",
+                    "file_level_path": "/900",
+                    "entry_type": "share",
+                    "share_source_file_id": 7001,
+                }
+            ]
+        )
+
+    assert result == {
+        9001: {
+            "source_space_id": 10,
+            "source_space_name": "来源知识库",
+            "source_department_name": "来源部门",
+            "source_folder_path": "来源知识库/源目录",
+            "source_path": "来源知识库>源目录/制度.pdf",
+        }
+    }
+
+
+@pytest.mark.asyncio
+async def test_source_space_metadata_query_returns_department_name_without_extra_lookup():
+    session = SimpleNamespace(
+        exec=AsyncMock(
+            return_value=SimpleNamespace(
+                all=lambda: [
+                    (10, "来源知识库", "来源部门"),
+                    (11, "无绑定知识库", None),
+                ]
+            )
+        )
+    )
+
+    @asynccontextmanager
+    async def fake_session():
+        yield session
+
+    with patch(
+        "bisheng.knowledge.domain.models.knowledge.get_async_db_session",
+        new=fake_session,
+    ):
+        result = await KnowledgeDao.async_get_space_source_metadata_by_ids([10, 11])
+
+    assert result == {
+        10: ("来源知识库", "来源部门"),
+        11: ("无绑定知识库", ""),
+    }
+    session.exec.assert_awaited_once()

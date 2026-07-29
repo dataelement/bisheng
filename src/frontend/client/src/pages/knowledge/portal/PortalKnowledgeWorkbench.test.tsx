@@ -864,6 +864,72 @@ describe("PortalKnowledgeWorkbench", () => {
         });
     });
 
+    test("ordinary members see readonly tags and share source after department file access is allowed", async () => {
+        const favoriteSpace = makeDefaultFavoriteSpace();
+        const departmentSpace = makeSpace("department-allowed-share", "接收知识库", {
+            role: SpaceRole.MEMBER,
+            spaceLevel: SpaceLevel.DEPARTMENT,
+            ownerName: "接收部门",
+        });
+        const sharedFile = makeFile("share-allowed-1", "共享制度.md", {
+            spaceId: "department-allowed-share",
+            contentAccess: "allowed",
+            canDownload: false,
+            isDepartmentFile: true,
+            entryType: "share",
+            tags: [{ id: "8", name: "AI标签" }],
+            sourceDepartmentName: "来源部门",
+            sourceSpaceId: "source-space",
+            sourceSpaceName: "来源知识库",
+            sourcePath: "来源知识库>源目录/共享制度.md",
+        });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [],
+            personalSpaces: [favoriteSpace],
+        } as any);
+        jest.mocked(getPortalDiscoverableSpacesApi).mockResolvedValue([departmentSpace] as any);
+        jest.mocked(getPortalSpaceChildrenApi).mockResolvedValue({
+            data: [sharedFile],
+            page_size: 20,
+            has_more: false,
+            next_cursor: null,
+        });
+        jest.mocked(getDepartmentFileViewStatusApi).mockResolvedValue({
+            spaceId: "department-allowed-share",
+            fileId: "share-allowed-1",
+            status: "allowed",
+            contentAccess: "allowed",
+            canDownload: false,
+            safeMetadata: { file_name: "共享制度.md" },
+        } as any);
+
+        renderWorkbench();
+
+        fireEvent.click(await screen.findByRole("button", { name: "展开部门知识库" }));
+        const departmentRow = await screen.findByTestId("space-row-department-allowed-share");
+        fireEvent.click(within(departmentRow).getByRole("button", { name: "接收知识库" }));
+
+        const workspace = await screen.findByTestId("portal-file-workspace");
+        expect(within(workspace).getAllByText("AI标签").length).toBeGreaterThan(0);
+        fireEvent.click(within(workspace).getByRole("button", { name: "打开共享制度.md" }));
+        const rail = await screen.findByTestId("portal-tool-rail");
+        fireEvent.click(within(rail).getByRole("button", { name: "来源" }));
+        const drawer = await screen.findByTestId("portal-info-drawer");
+
+        expect(getPortalSpaceChildrenApi).toHaveBeenCalledWith(expect.objectContaining({
+            space_id: "department-allowed-share",
+        }));
+        expect(getSpaceChildrenApi).not.toHaveBeenCalledWith(expect.objectContaining({
+            space_id: "department-allowed-share",
+        }));
+        expect(drawer).toHaveTextContent("分享文件");
+        expect(drawer).toHaveTextContent("来源部门");
+        expect(drawer).toHaveTextContent("来源知识库");
+        expect(drawer).toHaveTextContent("来源知识库>源目录/共享制度.md");
+    });
+
     test("ordinary department spaces lazy load folder counts from the portal-safe endpoint", async () => {
         const favoriteSpace = makeDefaultFavoriteSpace();
         const departmentSpace = makeSpace("department-1", "炼钢部知识库", {
@@ -3617,6 +3683,54 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(within(rail).queryByRole("button", { name: "智能入库" })).not.toBeInTheDocument();
         expect(within(rail).queryByRole("button", { name: "复杂版本管理" })).not.toBeInTheDocument();
         expect(within(rail).queryByRole("button", { name: "外部链接" })).not.toBeInTheDocument();
+    });
+
+    test("shows share identity and direct source location in the source drawer", async () => {
+        const targetSpace = makeSpace("target-space", "被分享知识库", {
+            spaceLevel: SpaceLevel.DEPARTMENT,
+            role: SpaceRole.ADMIN,
+            ownerName: "接收部门",
+        });
+        const sharedFile = makeFile("share-201", "共享制度.pdf", {
+            spaceId: "target-space",
+            entryType: "share",
+            folderPath: "/receiver-folder",
+            sourceSpaceId: "source-space",
+            sourceSpaceName: "来源知识库",
+            sourceDepartmentName: "来源部门",
+            sourcePath: "来源知识库>源目录/共享制度.pdf",
+        });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [targetSpace],
+            teamSpaces: [],
+            personalSpaces: [],
+        } as any);
+        jest.mocked(getSpaceInfoApi).mockResolvedValue(targetSpace as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({
+            data: [sharedFile],
+            page_size: 20,
+            has_more: false,
+            next_cursor: null,
+        } as any);
+
+        renderWorkbench("/knowledge-portal?spaceId=target-space");
+
+        const fileRow = await screen.findByTestId("file-tree-row-share-201");
+        fireEvent.click(within(fileRow).getByRole("button", { name: "打开共享制度.pdf" }));
+        const rail = await screen.findByTestId("portal-tool-rail");
+        fireEvent.click(within(rail).getByRole("button", { name: "来源" }));
+        const drawer = await screen.findByTestId("portal-info-drawer");
+
+        expect(drawer).toHaveTextContent("来源部门");
+        expect(drawer).toHaveTextContent("文件来源");
+        expect(drawer).toHaveTextContent("分享文件");
+        expect(drawer).toHaveTextContent("来源知识库");
+        expect(drawer).toHaveTextContent("来源知识库>源目录/共享制度.pdf");
+        expect(getSpaceInfoApi).not.toHaveBeenCalledWith("source-space");
+        expect(drawer).not.toHaveTextContent("接收部门");
+        expect(drawer).not.toHaveTextContent("被分享知识库");
+        expect(drawer).not.toHaveTextContent("/receiver-folder");
     });
 
     test("shows drawer tabs with screenshot-aligned detail fields", async () => {

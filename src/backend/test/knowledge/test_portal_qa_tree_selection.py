@@ -141,6 +141,8 @@ async def test_portal_qa_tree_keeps_unauthorized_department_file_disabled(
         "async_list_children",
         AsyncMock(return_value=[denied_file]),
     )
+    enrich = AsyncMock(side_effect=AssertionError("未授权文件不得加载标签或分享来源元数据"))
+    monkeypatch.setattr(service, "_handle_file_folder_extra_info", enrich)
 
     result = await service.list_shougang_portal_qa_children(
         space_id=7103,
@@ -169,6 +171,101 @@ async def test_portal_qa_tree_keeps_unauthorized_department_file_disabled(
             "is_department_file": True,
         }
     ]
+    enrich.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_portal_qa_tree_exposes_readonly_tags_and_share_source_for_authorized_member(
+    monkeypatch,
+):
+    service = svc_mod.KnowledgeSpaceService(
+        request=SimpleNamespace(headers={}),
+        login_user=SimpleNamespace(user_id=7, user_name="tester"),
+    )
+    allowed_file = _file(9302, space_id=7103)
+    denied_file = _file(9303, space_id=7103)
+    service.department_file_view_access_service = SimpleNamespace(
+        evaluate_files=AsyncMock(
+            return_value={
+                9302: DepartmentFileAccessDecision(
+                    file_id=9302,
+                    space_id=7103,
+                    status=DepartmentFileAccessStatus.ALLOWED,
+                    department_id=33,
+                    can_download=False,
+                ),
+                9303: DepartmentFileAccessDecision(
+                    file_id=9303,
+                    space_id=7103,
+                    status=DepartmentFileAccessStatus.APPROVAL_REQUIRED,
+                    department_id=33,
+                    can_download=False,
+                ),
+            }
+        )
+    )
+    monkeypatch.setattr(
+        service,
+        "_get_shougang_portal_qa_space",
+        AsyncMock(return_value=(SimpleNamespace(id=7103), True)),
+    )
+    monkeypatch.setattr(
+        service,
+        "_resolve_shougang_portal_source_paths",
+        AsyncMock(return_value=({9302: "接收知识库", 9303: "接收知识库"}, {})),
+    )
+    monkeypatch.setattr(
+        svc_mod.SpaceFileDao,
+        "async_list_children",
+        AsyncMock(return_value=[allowed_file, denied_file]),
+    )
+    enrich = AsyncMock(
+        return_value=[
+            {
+                **allowed_file.model_dump(),
+                "entry_type": "share",
+                "tags": [{"id": 8, "tag_name": "AI标签"}],
+                "user_name": "分享人",
+                "updater_name": "修改人",
+                "source_department_name": "来源部门",
+                "source_space_id": 7001,
+                "source_space_name": "来源知识库",
+                "source_path": "来源知识库>源目录/file-9302.md",
+            }
+        ]
+    )
+    monkeypatch.setattr(service, "_handle_file_folder_extra_info", enrich)
+
+    result = await service.list_shougang_portal_qa_children(
+        space_id=7103,
+        parent_id=None,
+        cursor=None,
+        page_size=10,
+        discovery_scope="public_and_department",
+    )
+
+    item = result["data"][0]
+    assert item["content_access"] == "allowed"
+    assert item["folder_path"] == "接收知识库"
+    assert item["entry_type"] == "share"
+    assert item["tags"] == [{"id": 8, "tag_name": "AI标签"}]
+    assert item["user_name"] == "分享人"
+    assert item["updater_name"] == "修改人"
+    assert item["source_department_name"] == "来源部门"
+    assert item["source_space_id"] == 7001
+    assert item["source_space_name"] == "来源知识库"
+    assert item["source_path"] == "来源知识库>源目录/file-9302.md"
+    assert "share_source_file_id" not in item
+    denied_item = result["data"][1]
+    assert denied_item["content_access"] == "approval_required"
+    assert "tags" not in denied_item
+    assert "entry_type" not in denied_item
+    assert "source_path" not in denied_item
+    enrich.assert_awaited_once_with(
+        [allowed_file],
+        include_folder_counts=False,
+        enrich_files=True,
+    )
 
 
 @pytest.mark.asyncio
