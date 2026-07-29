@@ -74,7 +74,7 @@ class Question(SQLModel, table=True):
     
     experts_names: Optional[str] = Field(default=None, description="邀请专家名称，多个用分号;分割")
     image_url: Optional[str] = Field(default=None, max_length=1024, schema_extra={"comment": "图片URL"})
-
+    file_url: Optional[str] = Field(default=None, max_length=1024, schema_extra={"comment": "文件URL"})
     # 采纳的最佳回答
     adopted_answer_id: Optional[int] = None
     # 统计字段
