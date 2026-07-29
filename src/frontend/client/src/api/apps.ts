@@ -149,6 +149,7 @@ export async function getChatHistoryApi({ flowId, chatId, flowType, id, shareTok
             const _category = _isSend ? 'question' : category
             const _files = (files ? JSON.parse(files) : []).map(file => {
                 return {
+                    ...file,
                     file_name: file.file_name || file.name,
                     file_url: file.file_url || file.path,
                 }
