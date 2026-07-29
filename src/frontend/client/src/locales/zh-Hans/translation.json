@@ -2294,6 +2294,11 @@
       "spaceNotFound": "知识空间不存在或已删除",
       "folderNotFound": "文件夹不存在或已删除",
       "renderFailed": "文件生成失败，请稍后重试"
+    },
+    "chat": {
+      "answer_interrupted": "本次回答在生成过程中中断，以上内容可能不完整。",
+      "answer_failed": "发生错误，请重试",
+      "connection_lost": "网络连接中断，请重试"
     }
   },
   "com_linsight_legacy_sop": "历史 SOP 文档（旧版会话）"

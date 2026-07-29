@@ -2288,6 +2288,11 @@
       "spaceNotFound": "ナレッジスペースが見つかりません/削除されました",
       "folderNotFound": "フォルダが見つかりません/削除されました",
       "renderFailed": "ファイル生成に失敗しました。再度お試しください"
+    },
+    "chat": {
+      "answer_interrupted": "この回答は生成中に中断されました。上記の内容は不完全な可能性があります。",
+      "answer_failed": "エラーが発生しました。もう一度お試しください",
+      "connection_lost": "接続が切断されました。もう一度お試しください"
     }
   },
   "com_linsight_legacy_sop": "旧バージョンの SOP ドキュメント"
