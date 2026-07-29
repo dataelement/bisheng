@@ -14,6 +14,8 @@ from bisheng.dictionary.domain.repositories.interfaces.system_dictionary_reposit
 from bisheng.dictionary.domain.schemas.dictionary_schema import (
     DictionaryCreateRequest,
     DictionaryResponse,
+    DictionaryTypeEnum,
+    DictionaryTypeResponse,
     DictionaryUpdateRequest,
 )
 
@@ -98,17 +100,23 @@ class DictionaryService:
             raise DictionaryNotFoundError()
         return DictionaryResponse.model_validate(entity)
 
-    async def get_by_key(self, dict_key: str) -> DictionaryResponse:
-        """根据 dict_key 查询启用的字典条目"""
-        entity = await self.repository.find_by_key(dict_key)
+    async def find_by_type_and_key(self, dict_type: str, dict_key: str) -> DictionaryResponse:
+        """根据 dict_type 和 dict_key 查询启用的字典条目"""
+        entity = await self.repository.find_by_type_and_key(dict_type, dict_key)
         if not entity:
             raise DictionaryNotFoundError()
         return DictionaryResponse.model_validate(entity)
 
-    async def list_by_type(self, dict_type: str) -> list[DictionaryResponse]:
-        """根据类型查询启用的字典条目列表"""
-        entities = await self.repository.find_by_type(dict_type, only_enabled=True)
+    async def get_list_by_type(self, dict_type: str) -> list[DictionaryResponse]:
+        """根据 dict_type 查询启用的字典条目列表"""
+        entities = await self.repository.find_by_type(dict_type)
+        if not entities:
+            raise DictionaryNotFoundError()
         return [DictionaryResponse.model_validate(entity) for entity in entities]
+
+    async def list_by_type(self) -> list[DictionaryTypeResponse]:
+        """查询所有字典类型"""
+        return [DictionaryTypeResponse(name=member.value, type=member.name.lower()) for member in DictionaryTypeEnum]
 
     async def list_page(
         self,

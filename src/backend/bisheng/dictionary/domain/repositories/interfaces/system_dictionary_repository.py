@@ -41,6 +41,8 @@ class SystemDictionaryRepository(BaseRepository[SystemDictionary, int], ABC):
     async def find_by_type(
         self,
         dict_type: str,
+        page: int = 1,
+        page_size: int = 20,
         only_enabled: bool = True,
     ) -> list[SystemDictionary]:
         """根据类型查询字典条目列表"""

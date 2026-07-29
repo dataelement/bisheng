@@ -8,6 +8,7 @@ from bisheng.dictionary.api.dependencies import get_dictionary_service
 from bisheng.dictionary.domain.schemas.dictionary_schema import (
     DictionaryCreateRequest,
     DictionaryResponse,
+    DictionaryTypeResponse,
     DictionaryUpdateRequest,
 )
 from bisheng.dictionary.domain.services.dictionary_service import DictionaryService
@@ -49,24 +50,25 @@ async def delete_dictionary(
     return resp_200(data=True)
 
 
-@router.get("/type/{dict_type}", response_model=list[DictionaryResponse])
+@router.get("/types", response_model=list[DictionaryTypeResponse])
 async def list_dictionaries_by_type(
-    dict_type: str = Path(..., description="字典类型"),
     service: DictionaryService = Depends(get_dictionary_service),
 ):
-    """根据类型查询启用的字典条目列表"""
-    result = await service.list_by_type(dict_type)
+    """查询所有字典类型"""
+    result = await service.list_by_type()
     return resp_200(data=[item.model_dump() for item in result])
 
 
-@router.get("/key/{dict_key}", response_model=DictionaryResponse)
-async def get_dictionary_by_key(
-    dict_key: str = Path(..., description="字典键"),
+@router.get("/type/{dict_type}", response_model=list[DictionaryResponse])
+async def get_dictionary_by_type(
+    dict_type: str = Path(..., description="字典类型"),
+    page: int = Query(1, ge=1, description="页码"),
+    page_size: int = Query(20, ge=1, le=500, description="每页数量"),
     service: DictionaryService = Depends(get_dictionary_service),
 ):
-    """根据 dict_key 查询启用的字典条目"""
-    result = await service.get_by_key(dict_key)
-    return resp_200(data=result.model_dump())
+    """根据 dict_type 查询启用的字典条目列表"""
+    result = await service.get_list_by_type(dict_type, page, page_size)  
+    return resp_200(data=result)
 
 
 @router.get("/query/{dictionary_id}", response_model=DictionaryResponse)

@@ -9,10 +9,10 @@ from pydantic import BaseModel, ConfigDict, Field
 class DictionaryTypeEnum(str, Enum):
     """字典类型枚举"""
 
-    EXPERT_POSITION = "expert_position"
-    EXPERT_TITLE = "expert_title"
-    EXPERT_JOB_FAMILY = "expert_job_family"
-    EXPERT_JOB_CATEGORY = "expert_job_category"
+    EXPERT_MAJOR = "岗位"
+    EXPERT_POSITION = "职务"
+    EXPERT_JOB_FAMILY = "职位族"
+    EXPERT_JOB_CATEGORY = "职位类"
 
 
 class DictionaryCreateRequest(BaseModel):
@@ -47,3 +47,10 @@ class DictionaryResponse(BaseModel):
     tenant_id: int = Field(..., description="租户 ID")
     create_time: datetime = Field(..., description="创建时间")
     update_time: datetime | None = Field(None, description="更新时间")
+
+
+class DictionaryTypeResponse(BaseModel):
+    """字典类型响应"""
+
+    type: str = Field(..., description="字典类型值")
+    name: str = Field(..., description="字典类型名称")
