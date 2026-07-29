@@ -344,11 +344,16 @@ class RedisCallback(BaseCallback):
         return
 
     async def async_set_user_input(
-        self, data: dict, message_id: int = None, message_content: str = None, verify_input: bool = False
+        self,
+        data: dict,
+        message_id: int = None,
+        message_content: str = None,
+        verify_input: bool = False,
+        files: list | None = None,
     ):
         if self.chat_id and message_id:
             message_db = await ChatMessageDao.aget_message_by_id(message_id)
-            await self.async_update_old_message(data, message_db, message_content, verify_input)
+            await self.async_update_old_message(data, message_db, message_content, verify_input, files)
         # Notify Asynchronous Task User Input
         await self.redis_client.aset(self.workflow_input_key, data, expiration=self.workflow_expire_time)
         return
@@ -376,7 +381,12 @@ class RedisCallback(BaseCallback):
 
     @classmethod
     def _update_old_message(
-        cls, user_input: dict, message_db: ChatMessage, message_content: str, verify_input: bool = False
+        cls,
+        user_input: dict,
+        message_db: ChatMessage,
+        message_content: str,
+        verify_input: bool = False,
+        files: list | None = None,
     ):
         """
         if ChatResponse is not None: add new message
@@ -415,14 +425,22 @@ class RedisCallback(BaseCallback):
             return ChatResponse(
                 message=user_input_message,
                 category="question",
+                # Carry the attachments as data, not just as filenames appended
+                # to the text — that is what lets them render and be kept.
+                files=files or [],
             ), None
         message_db.message = json.dumps(old_message, ensure_ascii=False)
         return None, message_db
 
     def update_old_message(
-        self, user_input: dict, message_db: ChatMessage, message_content: str, verify_input: bool = False
+        self,
+        user_input: dict,
+        message_db: ChatMessage,
+        message_content: str,
+        verify_input: bool = False,
+        files: list | None = None,
     ):
-        chat_response, message = self._update_old_message(user_input, message_db, message_content, verify_input)
+        chat_response, message = self._update_old_message(user_input, message_db, message_content, verify_input, files)
         if chat_response:
             self.save_chat_message(chat_response)
             return
@@ -430,9 +448,14 @@ class RedisCallback(BaseCallback):
             ChatMessageDao.update_message_model(message)
 
     async def async_update_old_message(
-        self, user_input: dict, message_db: ChatMessage, message_content: str, verify_input: bool = False
+        self,
+        user_input: dict,
+        message_db: ChatMessage,
+        message_content: str,
+        verify_input: bool = False,
+        files: list | None = None,
     ):
-        chat_response, message = self._update_old_message(user_input, message_db, message_content, verify_input)
+        chat_response, message = self._update_old_message(user_input, message_db, message_content, verify_input, files)
         if chat_response:
             self.save_chat_message(chat_response)
             return

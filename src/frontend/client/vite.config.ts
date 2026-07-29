@@ -103,8 +103,8 @@ export default defineConfig(({ command, mode }) => {
   // VITE_DEV_MINIO_TARGET, whose host MUST match the backend `sharepoint` config —
   // SigV4 presigned URLs sign the Host header, so a mismatch yields 403
   // SignatureDoesNotMatch (e.g. set http://localhost:9000 when sharepoint=localhost:9000).
-  const minioTarget = env.VITE_DEV_MINIO_TARGET || 'http://192.168.106.120:3002/';
-  const apiTarget = env.VITE_DEV_API_TARGET || 'http://192.168.106.120:3002/';
+  const minioTarget = env.VITE_DEV_MINIO_TARGET || 'http://192.168.106.105:3001/';
+  const apiTarget = env.VITE_DEV_API_TARGET || 'http://192.168.106.105:3001/';
 
   return {
     base: app_env.BASE_URL || '/',
@@ -147,9 +147,9 @@ export default defineConfig(({ command, mode }) => {
           target: minioTarget,
           changeOrigin: true,
           secure: false,
-          rewrite: (path) => {
-            return path.replace(/^\/workspace/, '');
-          },
+          // rewrite: (path) => {
+          //   return path.replace(/^\/workspace/, '');
+          // },
         },
       },
     },
