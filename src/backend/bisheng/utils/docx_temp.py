@@ -1233,7 +1233,7 @@ class DocxTemplateRender(object):
             return table._tbl
 
         except Exception as e:
-            logger.error(f"Form element creation failed: {str(e)}", exc_info=True)
+            logger.exception(f"Form element creation failed: {str(e)}")
             return None
 
     def _create_new_paragraph_after_table(self, parent, table_index, style_info=None):
@@ -1270,7 +1270,7 @@ class DocxTemplateRender(object):
             return new_paragraph
 
         except Exception as e:
-            logger.error(f"Failed to create new paragraph: {str(e)}", exc_info=True)
+            logger.exception(f"Failed to create new paragraph: {str(e)}")
             return None
 
     def _extract_paragraph_style_info(self, paragraph):
