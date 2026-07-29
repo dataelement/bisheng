@@ -46,6 +46,8 @@ from langgraph.prebuilt.tool_node import ToolCallRequest
 from langgraph.types import Command
 from loguru import logger
 
+from bisheng.linsight.domain.services.workspace_backend import BINARY_READ_ERROR_PREFIX
+
 READ_FILE_TOOL = "read_file"
 # Bound only when the user selected it, so every prompt/hint that names it must be
 # gated on its presence in the run's tool list. Lives here because the guard's hint
@@ -119,6 +121,56 @@ def _non_text_block_types(content: Any) -> set[str]:
     return found
 
 
+# Inlined rather than importing `string`/`re`: frozenset membership is one pass and
+# keeps this module import-light.
+_B64_CHARS = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=-_")
+_B64_SAMPLE_CHARS = 8192
+
+
+def _is_valid_base64(value: Any) -> bool:
+    """Cheap structural check that ``value`` could be base64 (no decode).
+
+    The failure mode this exists for is a payload that is really replace-decoded
+    binary: such a string is dominated by U+FFFD from its very first bytes, so an
+    alphabet test on the head is decisive. Two deliberate looseness choices:
+
+    - only the head is sampled, keeping the cost constant for multi-MB images on a
+      check that runs for every outgoing request;
+    - padding is NOT required and the URL-safe alphabet is accepted, because a
+      length-mod-4 rule would reject unpadded-but-valid payloads — false-flagging a
+      good image is worse than passing a bad one, which the provider rejects anyway.
+    """
+    if not isinstance(value, str) or not value:
+        return False
+    head = "".join(value[:_B64_SAMPLE_CHARS].split())
+    if not head:
+        return False
+    return set(head) <= _B64_CHARS
+
+
+def _broken_image_payload(block: dict) -> bool:
+    """True when an ``image`` block carries a payload that is not valid base64.
+
+    ``image`` is the one multimodal shape we forward to the provider, so a corrupt
+    one is worse than a dropped one: the request either 400s or the model
+    hallucinates over noise. Data-URI (`image_url`) forms are checked after the
+    comma; a plain http(s) URL has no payload to validate and passes through.
+    """
+    block_type = block.get("type")
+    if block_type == "image":
+        # Absent payload -> nothing to validate (e.g. a provider-side file id).
+        payload = block.get("base64") or block.get("data")
+        return payload is not None and not _is_valid_base64(payload)
+    if block_type == "image_url":
+        raw = block.get("image_url")
+        url = raw.get("url") if isinstance(raw, dict) else raw
+        if not isinstance(url, str) or not url.startswith("data:"):
+            return False
+        _, _, payload = url.partition(",")
+        return not _is_valid_base64(payload)
+    return False
+
+
 class BinaryReadGuardMiddleware(AgentMiddleware):
     """Replace binary ``read_file`` payloads with an actionable text hint.
 
@@ -149,8 +201,24 @@ class BinaryReadGuardMiddleware(AgentMiddleware):
             logger.info("[linsight-binary-guard] read_file returned {} block(s) for {}", sorted(blocked), file_path)
             return _replace_tool_content(result, _binary_read_hint(file_path, self._has_code_interpreter))
 
+        # The backend now refuses binary reads itself (workspace_backend
+        # ``_binary_read_result``) and marks the error. It cannot know whether the
+        # code interpreter is bound this run, so upgrade its terse message to the
+        # routed hint here — the one place that does know.
+        if isinstance(content, str) and BINARY_READ_ERROR_PREFIX in content:
+            logger.info("[linsight-binary-guard] backend refused a binary read for {}", file_path)
+            return _replace_tool_content(result, _binary_read_hint(file_path, self._has_code_interpreter))
+
+        # Backstop for payloads the backend never saw (a different backend, a tool
+        # that reads bytes itself). Post-P0 the workspace no longer produces this.
         if isinstance(content, str) and _looks_like_mojibake(content):
             logger.info("[linsight-binary-guard] read_file returned mojibake for {}", file_path)
+            return _replace_tool_content(result, _binary_read_hint(file_path, self._has_code_interpreter))
+
+        # A corrupt image survives `_non_text_block_types` (image is allowed) but is
+        # useless to the model and may 400 the request — treat it like any binary.
+        if isinstance(content, list) and any(isinstance(b, dict) and _broken_image_payload(b) for b in content):
+            logger.info("[linsight-binary-guard] read_file returned an invalid image payload for {}", file_path)
             return _replace_tool_content(result, _binary_read_hint(file_path, self._has_code_interpreter))
 
         return result
@@ -166,22 +234,37 @@ def _replace_tool_content(message: ToolMessage, text: str) -> ToolMessage:
 
 
 class ModelContentGuardMiddleware(AgentMiddleware):
-    """Strip provider-hostile content blocks from every outgoing model request."""
+    """Strip provider-hostile content blocks from every outgoing model request.
+
+    Args:
+        has_code_interpreter: whether the sandboxed code interpreter is bound this
+            run. Gates the replacement text's suggested route, same lockstep rule
+            as ``BinaryReadGuardMiddleware`` and the uploaded-files pointer block.
+    """
+
+    def __init__(self, has_code_interpreter: bool = False) -> None:
+        super().__init__()
+        self._has_code_interpreter = has_code_interpreter
 
     async def awrap_model_call(
         self,
         request: ModelRequest,
         handler: Callable[[ModelRequest], Awaitable[ModelResponse]],
     ) -> ModelResponse:
-        sanitized, stripped = _sanitize_messages(request.messages)
+        sanitized, stripped = _sanitize_messages(request.messages, self._has_code_interpreter)
         if stripped:
             logger.warning("[linsight-content-guard] stripped {} block(s) before model call", sorted(stripped))
             request = request.override(messages=sanitized)
         return await handler(request)
 
 
-def _sanitize_messages(messages: list) -> tuple[list, set[str]]:
+def _sanitize_messages(messages: list, has_code_interpreter: bool = False) -> tuple[list, set[str]]:
     """Return ``(messages, stripped_types)`` with blocked blocks turned into text."""
+    route = (
+        " Use bisheng_code_interpreter to inspect the original file instead."
+        if has_code_interpreter
+        else " No code execution tool is available this run; answer from the parsed text view."
+    )
     stripped: set[str] = set()
     out = []
     for message in messages:
@@ -200,8 +283,21 @@ def _sanitize_messages(messages: list) -> tuple[list, set[str]]:
                     {
                         "type": "text",
                         "text": f"[System] A `{block['type']}` attachment was removed here: this model "
-                        f"endpoint cannot accept it. Use bisheng_code_interpreter to inspect the "
-                        f"original file instead.",
+                        f"endpoint cannot accept it.{route}",
+                    }
+                )
+                continue
+            # `image` stays (it is the one shape endpoints accept) — unless its
+            # payload is not real base64, in which case forwarding it either 400s
+            # the request or feeds the model noise it will confabulate over.
+            if isinstance(block, dict) and _broken_image_payload(block):
+                stripped.add("image:invalid-base64")
+                changed = True
+                new_content.append(
+                    {
+                        "type": "text",
+                        "text": "[System] An image attachment was removed here: its payload is not "
+                        f"valid base64 and cannot be rendered.{route}",
                     }
                 )
                 continue
@@ -217,3 +313,17 @@ def _sanitize_messages(messages: list) -> tuple[list, set[str]]:
         out.append(message.model_copy(update={"content": new_content}))
 
     return out, stripped
+
+
+def build_binary_guards(has_code_interpreter: bool) -> list[AgentMiddleware]:
+    """The pair of guards every graph that owns ``read_file`` must carry.
+
+    Middleware is per-subgraph in langgraph: a subagent's model and tool calls are
+    NOT wrapped by the parent graph's stack, so each one needs its own instances.
+    Returning them from a single factory means a new subagent (e.g. the planned
+    data-analyst) gets both by construction instead of by remembering to.
+    """
+    return [
+        BinaryReadGuardMiddleware(has_code_interpreter=has_code_interpreter),
+        ModelContentGuardMiddleware(has_code_interpreter=has_code_interpreter),
+    ]

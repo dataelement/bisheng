@@ -170,7 +170,11 @@ async def test_pointer_block_exposes_raw_and_guidance():
     block = (await Impl.prepare_file_list(session_with(files), has_code_interpreter=True))[0]
 
     assert "path: /uploads/销售数据.md" in block
-    assert "raw: /uploads/销售数据.xlsx" in block
+    # RELATIVE: the code interpreter resolves against its working directory, where
+    # the original sits at uploads/<name>. A leading slash would point at the
+    # filesystem root and fail — the model can only reach it via the relative form.
+    assert "raw: uploads/销售数据.xlsx" in block
+    assert "raw: /uploads/销售数据.xlsx" not in block
     assert "bisheng_code_interpreter" in block
     assert "pandas" in block
 
@@ -229,6 +233,68 @@ async def test_pointer_block_omits_unbound_code_interpreter():
     ]
     block = (await Impl.prepare_file_list(session_with(files), has_code_interpreter=False))[0]
 
-    assert "raw: /uploads/销售数据.xlsx" in block  # still disclosed
+    assert "raw: uploads/销售数据.xlsx" in block  # still disclosed
     assert "bisheng_code_interpreter" not in block
     assert "没有可用的代码执行工具" in block
+
+
+# --------------------------------------------------------------------------
+# unsupported originals (P5): nothing in the workspace can open them
+# --------------------------------------------------------------------------
+
+
+def test_original_is_usable_gate():
+    assert Impl._original_is_usable("data.xlsx")  # code interpreter
+    assert Impl._original_is_usable("notes.txt")  # read_file
+    assert Impl._original_is_usable("表格.CSV")  # case-insensitive
+    assert Impl._original_is_usable("photo.png")  # image block
+    assert not Impl._original_is_usable("song.mp3")
+    assert not Impl._original_is_usable("clip.mp4")
+    assert not Impl._original_is_usable("bundle.zip")
+    assert not Impl._original_is_usable("")
+
+
+async def test_unsupported_original_is_not_written_to_workspace():
+    """An mp3 no parser, no read_file and no code interpreter can open is pure
+    cost: storage, a confusing ls entry, and a wasted tool call."""
+    minio = FakeMinio({})
+    submit = SimpleNamespace(file_id="f7", file_name="访谈录音.mp3")
+    local = __import__("tempfile").NamedTemporaryFile(suffix=".mp3", delete=False)
+    local.write(b"ID3\x03\x00\x00\x00")
+    local.close()
+
+    entry = await Impl._keep_original_in_workspace(
+        submit, "访谈录音.mp3", "chat1", minio, local.name, RuntimeError("no loader"), set()
+    )
+
+    assert entry["parsing_status"] == "unsupported"
+    assert entry["valid"] is False
+    assert "workspace_path" not in entry
+    assert not any(k.startswith("workspace/") for k in minio.puts)
+    # still recoverable by the user from the formal bucket
+    assert "linsight/chat1/f7.mp3" in minio.puts
+
+
+async def test_usable_unparsed_original_still_lands():
+    minio = FakeMinio({})
+    submit = SimpleNamespace(file_id="f8", file_name="扫描件.pdf")
+    local = __import__("tempfile").NamedTemporaryFile(suffix=".pdf", delete=False)
+    local.write(b"%PDF-1.4 broken")
+    local.close()
+
+    entry = await Impl._keep_original_in_workspace(
+        submit, "扫描件.pdf", "chat1", minio, local.name, RuntimeError("etl 403"), set()
+    )
+
+    assert entry["parsing_status"] == "failed"
+    assert entry["workspace_path"] == "/uploads/扫描件.pdf"
+
+
+async def test_pointer_block_announces_unsupported_type():
+    """Silence here means the user sees the attachment accepted while the model
+    never hears of it."""
+    files = [{"valid": False, "original_filename": "访谈录音.mp3", "parsing_status": "unsupported"}]
+    block = (await Impl.prepare_file_list(session_with(files), has_code_interpreter=True))[0]
+
+    assert "访谈录音.mp3" in block
+    assert "无法解析" in block

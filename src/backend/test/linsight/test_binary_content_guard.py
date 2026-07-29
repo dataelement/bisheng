@@ -216,3 +216,129 @@ async def test_hint_omits_unbound_code_interpreter():
     assert "bisheng_code_interpreter" not in result.content
     assert "/uploads/report.md" in result.content  # the route that still works
     assert "没有可用的代码执行工具" in result.content
+
+
+# --------------------------------------------------------------------------
+# Backend-refusal upgrade + image payload validation (P0/P1 follow-up)
+# --------------------------------------------------------------------------
+
+
+async def test_backend_binary_error_upgraded_to_routed_hint():
+    """The backend refuses binary reads itself now, but it cannot know whether the
+    code interpreter is bound this run — the guard is the layer that does."""
+    from bisheng.linsight.domain.services.workspace_backend import BINARY_READ_ERROR_PREFIX
+
+    refusal = ToolMessage(
+        content=f"Error: {BINARY_READ_ERROR_PREFIX} 'uploads/data.xlsx' is a binary file and cannot be read as text.",
+        name="read_file",
+        tool_call_id="c1",
+        status="error",
+    )
+    mw = BinaryReadGuardMiddleware(has_code_interpreter=True)
+    result = await mw.awrap_tool_call(read_call("/uploads/data.xlsx"), handler_returning(refusal))
+
+    assert "bisheng_code_interpreter" in result.content
+    assert "pandas" in result.content
+
+
+async def test_backend_binary_error_without_code_interpreter():
+    from bisheng.linsight.domain.services.workspace_backend import BINARY_READ_ERROR_PREFIX
+
+    refusal = ToolMessage(
+        content=f"Error: {BINARY_READ_ERROR_PREFIX} 'uploads/data.xlsx' is binary.",
+        name="read_file",
+        tool_call_id="c1",
+        status="error",
+    )
+    mw = BinaryReadGuardMiddleware(has_code_interpreter=False)
+    result = await mw.awrap_tool_call(read_call("/uploads/data.xlsx"), handler_returning(refusal))
+
+    assert "bisheng_code_interpreter" not in result.content
+    assert "没有可用的代码执行工具" in result.content
+
+
+async def test_ordinary_tool_error_passes_through():
+    """Only OUR binary marker is upgraded; a plain not-found must stay verbatim."""
+    msg = ToolMessage(content="Error: File '/output/nope.md' not found", name="read_file", tool_call_id="c1")
+    mw = BinaryReadGuardMiddleware(has_code_interpreter=True)
+    result = await mw.awrap_tool_call(read_call("/output/nope.md"), handler_returning(msg))
+
+    assert result.content == "Error: File '/output/nope.md' not found"
+
+
+async def test_valid_image_block_survives_read_guard():
+    """Post-P0 the backend emits REAL base64 for images; that must reach the model
+    (it is the one multimodal shape endpoints accept)."""
+    import base64
+
+    payload = base64.standard_b64encode(b"\x89PNG\r\n\x1a\n" + b"\x00" * 32).decode("ascii")
+    msg = ToolMessage(
+        content_blocks=[{"type": "image", "base64": payload, "mime_type": "image/png"}],
+        name="read_file",
+        tool_call_id="c1",
+    )
+    mw = BinaryReadGuardMiddleware(has_code_interpreter=True)
+    result = await mw.awrap_tool_call(read_call("/output/chart.png"), handler_returning(msg))
+
+    assert isinstance(result.content, list)
+    assert result.content[0]["type"] == "image"
+
+
+async def test_corrupt_image_block_replaced_by_read_guard():
+    """A mojibake payload dressed as an image would 400 the request or feed the
+    model noise — worse than dropping it."""
+    msg = ToolMessage(
+        content_blocks=[{"type": "image", "base64": "���PNG�", "mime_type": "image/png"}],
+        name="read_file",
+        tool_call_id="c1",
+    )
+    mw = BinaryReadGuardMiddleware(has_code_interpreter=True)
+    result = await mw.awrap_tool_call(read_call("/output/chart.png"), handler_returning(msg))
+
+    assert isinstance(result.content, str)
+    assert "/output/chart.png" in result.content
+
+
+async def test_corrupt_image_stripped_before_model_call():
+    mw = ModelContentGuardMiddleware(has_code_interpreter=False)
+    request = FakeModelRequest(
+        messages=[HumanMessage(content=[{"type": "image", "base64": "���", "mime_type": "image/png"}])]
+    )
+    seen = {}
+
+    async def handler(req):
+        seen["messages"] = req.messages
+        return AIMessage(content="ok")
+
+    await mw.awrap_model_call(request, handler)
+
+    block = seen["messages"][0].content[0]
+    assert block["type"] == "text"
+    assert "base64" in block["text"]
+    # prompt ⟺ tool lockstep applies to this replacement text too
+    assert "bisheng_code_interpreter" not in block["text"]
+
+
+async def test_http_image_url_is_not_flagged():
+    """No inline payload to validate — a plain URL must pass untouched."""
+    mw = ModelContentGuardMiddleware()
+    block = {"type": "image_url", "image_url": {"url": "https://example.com/a.png"}}
+    request = FakeModelRequest(messages=[HumanMessage(content=[block])])
+    seen = {}
+
+    async def handler(req):
+        seen["messages"] = req.messages
+        return AIMessage(content="ok")
+
+    await mw.awrap_model_call(request, handler)
+    assert seen["messages"][0].content == [block]
+
+
+def test_build_binary_guards_pairs_both_layers():
+    """A new subagent must get both guards by construction — its subgraph is never
+    wrapped by the parent's middleware."""
+    from bisheng.linsight.domain.services.binary_content_guard import build_binary_guards
+
+    guards = build_binary_guards(has_code_interpreter=True)
+    assert [type(g).__name__ for g in guards] == ["BinaryReadGuardMiddleware", "ModelContentGuardMiddleware"]
+    assert all(g._has_code_interpreter for g in guards)
