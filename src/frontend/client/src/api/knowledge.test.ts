@@ -613,6 +613,7 @@ describe("listMyUploadedFilesApi", () => {
             folder_path_name: "能源管理",
             status: 1,
             file_encoding: "SGGF-STD-EM-20260600000001",
+            file_subcategory_code: "STD",
             tags: [{ id: 1, name: "能源" }],
             abstract: "摘要",
             create_time: "2026-06-02 10:00:00",
@@ -640,6 +641,7 @@ describe("listMyUploadedFilesApi", () => {
       name: "能源管理标准.pdf",
       folderPathName: "能源管理",
       fileEncoding: "SGGF-STD-EM-20260600000001",
+      fileSubcategoryCode: "STD",
     });
   });
 });
