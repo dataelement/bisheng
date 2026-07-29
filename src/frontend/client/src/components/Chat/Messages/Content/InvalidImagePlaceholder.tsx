@@ -18,13 +18,20 @@ export function InvalidImagePlaceholder({
     <div
       {...rest}
       className={cn(
-        'flex h-[120px] w-[160px] flex-col items-center justify-center gap-2 rounded-lg',
-        'border border-border-light bg-surface-secondary text-text-secondary',
+        // pt against a centered stack nudges it down by half the padding — 6px
+        // here, enough to sit off dead-center without looking misaligned.
+        'flex size-[100px] flex-col items-center justify-center gap-2 rounded-lg pt-3',
+        // Same tint as the thumbnail it stands in for, and no border: in a row
+        // of pictures the missing one should hold the place quietly rather than
+        // draw a frame around itself.
+        'bg-[#F8F8F8] text-text-3/60',
         className,
       )}
     >
-      <Outlined.FileImage className="size-7 opacity-60" />
-      <span className="px-2 text-center text-xs leading-tight">
+      <Outlined.FileImage className="size-5" />
+      {/* pre-line so a translation can place its own break; zh splits the two
+          clauses onto their own lines rather than letting 100px decide. */}
+      <span className="whitespace-pre-line px-2 text-center text-caption leading-tight">
         {localize('com_chat_image_expired')}
       </span>
     </div>
