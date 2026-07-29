@@ -120,6 +120,58 @@ async def test_logical_entry_reuses_current_primary_tags_without_leaking_source_
 
 
 @pytest.mark.asyncio
+async def test_logical_entry_reuses_current_primary_file_size_and_version():
+    svc = _make_svc()
+    logical = _make_file(9001)
+    logical.reference_document_id = 501
+    logical.entry_type = "share"
+    logical.file_size = 0
+    logical.allow_download = False
+    logical.entry_status = "active"
+    logical.desired_content_generation = 1
+    logical.applied_content_generation = 1
+    logical.desired_entry_generation = 1
+    logical.applied_entry_generation = 1
+    logical.projection_status = "ready"
+    svc._entry_permission_ids_by_file = {9001: {"view_file"}}
+    svc.doc_repo = SimpleNamespace(
+        find_by_ids=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    id=501,
+                    knowledge_id=10,
+                    primary_version_id=601,
+                )
+            ]
+        )
+    )
+    svc.version_repo = SimpleNamespace(
+        find_by_ids=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    id=601,
+                    document_id=501,
+                    knowledge_file_id=7001,
+                    version_no=3,
+                )
+            ]
+        )
+    )
+    primary_file = SimpleNamespace(id=7001, file_size=2048)
+
+    with patch(
+        "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_file_by_ids",
+        new_callable=AsyncMock,
+        return_value=[primary_file],
+    ) as load_files:
+        result = await svc._load_document_distribution_info([logical])
+
+    assert result[9001]["file_size"] == 2048
+    assert result[9001]["version_no"] == 3
+    load_files.assert_awaited_once_with([7001])
+
+
+@pytest.mark.asyncio
 async def test_share_entry_enrichment_keeps_target_folder_and_adds_direct_source_metadata():
     svc = _make_svc()
     logical = _make_file(9001)

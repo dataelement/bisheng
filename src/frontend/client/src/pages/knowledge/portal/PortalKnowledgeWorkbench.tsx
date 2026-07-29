@@ -17,9 +17,6 @@ import {
     deleteSpaceApi,
     downloadWatermarkedKnowledgeFileApi,
     getFilePreviewApi,
-    getPortalFilePreviewApi,
-    getPortalSpaceFolderStatsApi,
-    getPortalSpaceChildrenApi,
     getPublicSpaceFilePermissionsApi,
     getSpaceChildrenApi,
     getSpaceFolderStatsApi,
@@ -32,11 +29,6 @@ import {
     updateFileEncoding,
     updateSpaceApi,
 } from "~/api/knowledge";
-import {
-    applyDepartmentFileViewApi,
-    getDepartmentFileViewStatusApi,
-    type DepartmentFileViewAccess,
-} from "~/api/approval";
 import { checkPermission, canOpenPermissionDialog } from "~/api/permission";
 import { NotificationSeverity } from "~/common";
 import {
@@ -92,7 +84,6 @@ import type { SearchParams } from "../SpaceDetail/CompoundSearchInput";
 import { isFavoriteSpace } from "./favoriteView";
 import { buildPublicFileActionPermissions } from "./publicFilePermissions";
 import PortalFavoritesPanel from "./components/PortalFavoritesPanel";
-import { DepartmentFileAccessGate } from "./components/DepartmentFileAccessGate";
 import { PortalDialogs } from "./components/PortalDialogs";
 import { PortalHeaderActions } from "./components/PortalHeaderActions";
 import { PortalPreviewWorkspace } from "./components/PortalPreviewWorkspace";
@@ -116,37 +107,17 @@ const getPortalSpaceLevel = (space?: KnowledgeSpace | null) => (
 const WEB_LINK_DUPLICATE_ERROR_CODES = new Set([18021, 18023]);
 const PORTAL_LOCATION_MESSAGE = "shougang-portal:knowledge-location";
 
-const isReadOnlyDepartmentDiscoverySpace = (space?: KnowledgeSpace | null) => (
-    getPortalSpaceLevel(space) === SpaceLevel.DEPARTMENT
-    && space?.role !== SpaceRole.CREATOR
-    && space?.role !== SpaceRole.ADMIN
-);
-
 async function getPortalWorkbenchChildren(
-    space: KnowledgeSpace | null,
+    _space: KnowledgeSpace | null,
     params: Parameters<typeof getSpaceChildrenApi>[0],
 ) {
-    if (isReadOnlyDepartmentDiscoverySpace(space)) {
-        return getPortalSpaceChildrenApi({
-            space_id: params.space_id,
-            parent_id: params.parent_id,
-            cursor: params.cursor,
-            page_size: params.page_size,
-        });
-    }
     return getSpaceChildrenApi(params);
 }
 
 async function getPortalWorkbenchFolderStats(
-    space: KnowledgeSpace | null,
+    _space: KnowledgeSpace | null,
     params: Parameters<typeof getSpaceFolderStatsApi>[0],
 ) {
-    if (isReadOnlyDepartmentDiscoverySpace(space)) {
-        return getPortalSpaceFolderStatsApi({
-            space_id: params.space_id,
-            folder_ids: params.folder_ids,
-        });
-    }
     return getSpaceFolderStatsApi(params);
 }
 
@@ -338,10 +309,6 @@ export default function PortalKnowledgeWorkbench() {
     // Download permission for the currently previewed file, returned authoritatively
     // by the preview endpoint (same gate the download endpoint enforces).
     const [selectedFileDownloadable, setSelectedFileDownloadable] = useState(false);
-    const [departmentFileAccess, setDepartmentFileAccess] = useState<DepartmentFileViewAccess | null>(null);
-    const [departmentFileAccessLoading, setDepartmentFileAccessLoading] = useState(false);
-    const [departmentFileApplying, setDepartmentFileApplying] = useState(false);
-    const [departmentFileAccessError, setDepartmentFileAccessError] = useState("");
     const [downloadPending, setDownloadPending] = useState(false);
     const downloadPendingRef = useRef(false);
     const activeSpaceIdRef = useRef<string | undefined>();
@@ -709,10 +676,14 @@ export default function PortalKnowledgeWorkbench() {
     const canDownloadSelectedFile = Boolean(
         selectedFile
         && (
-            isActiveSpacePublic
-            || isActiveSpaceAdmin
-            || selectedFileDownloadable
-            || effectiveDownloadEntryIds.has(selectedFile.id)
+            selectedFile.entryType === "share"
+                ? selectedFileDownloadable
+                : (
+                    isActiveSpacePublic
+                    || isActiveSpaceAdmin
+                    || selectedFileDownloadable
+                    || effectiveDownloadEntryIds.has(selectedFile.id)
+                )
         ),
     );
     const visiblePermissionEntryIds = useMemo(
@@ -793,6 +764,14 @@ export default function PortalKnowledgeWorkbench() {
             setCanEditSelectedFileEncoding(false);
             return;
         }
+        if (
+            file.entryType === "share"
+            || file.entryType === "publish"
+            || file.capabilities?.canEditContent === false
+        ) {
+            setCanEditSelectedFileEncoding(false);
+            return;
+        }
         if (isSystemAdmin || isActiveSpaceAdmin) {
             setCanEditSelectedFileEncoding(true);
             return;
@@ -836,6 +815,8 @@ export default function PortalKnowledgeWorkbench() {
         selectedFile?.id,
         selectedFile?.type,
         selectedFile?.isCreating,
+        selectedFile?.entryType,
+        selectedFile?.capabilities?.canEditContent,
     ]);
 
     const setRootFiles = useCallback<Dispatch<SetStateAction<KnowledgeFile[]>>>((value) => {
@@ -1662,9 +1643,6 @@ export default function PortalKnowledgeWorkbench() {
     useEffect(() => {
         if (!activeSpace || !selectedFile || isFolder(selectedFile)) {
             setPreview({ loading: false, fileUrl: "", fileType: "", error: "", previewData: null });
-            setDepartmentFileAccess(null);
-            setDepartmentFileAccessLoading(false);
-            setDepartmentFileAccessError("");
             return;
         }
 
@@ -1680,11 +1658,7 @@ export default function PortalKnowledgeWorkbench() {
         }
 
         let cancelled = false;
-        const isDepartmentPortalFile = Boolean(selectedFile.isDepartmentFile);
         setSelectedFileDownloadable(false);
-        setDepartmentFileAccess(null);
-        setDepartmentFileAccessLoading(isDepartmentPortalFile);
-        setDepartmentFileAccessError("");
         setPreview({
             loading: true,
             fileUrl: "",
@@ -1693,37 +1667,12 @@ export default function PortalKnowledgeWorkbench() {
             previewData: null,
         });
 
-        const loadPreview = () => (
-            isDepartmentPortalFile
-                ? getPortalFilePreviewApi(selectedFile.spaceId || activeSpace.id, selectedFile.id)
-                : getFilePreviewApi(selectedFile.spaceId || activeSpace.id, selectedFile.id)
-        );
-        const accessPromise = isDepartmentPortalFile
-            ? getDepartmentFileViewStatusApi(
-                selectedFile.spaceId || activeSpace.id,
-                selectedFile.id,
-            ).then((access) => {
-                if (cancelled) return null;
-                setDepartmentFileAccess(access);
-                setDepartmentFileAccessLoading(false);
-                setSelectedFileDownloadable(access.canDownload);
-                return access.status === "allowed" ? loadPreview() : null;
-            })
-            : loadPreview();
-
-        accessPromise
+        getFilePreviewApi(
+            selectedFile.spaceId || activeSpace.id,
+            selectedFile.id,
+        )
             .then((res) => {
                 if (cancelled) return;
-                if (!res) {
-                    setPreview({
-                        loading: false,
-                        fileUrl: "",
-                        fileType: extractExt(selectedFile.name),
-                        error: "",
-                        previewData: null,
-                    });
-                    return;
-                }
                 setSelectedFileDownloadable(Boolean(res.can_download));
                 const resolvedPreview = {
                     ...res,
@@ -1758,10 +1707,6 @@ export default function PortalKnowledgeWorkbench() {
             })
             .catch(() => {
                 if (cancelled) return;
-                setDepartmentFileAccessLoading(false);
-                if (isDepartmentPortalFile) {
-                    setDepartmentFileAccessError("查看权限状态加载失败，请稍后重试。");
-                }
                 setPreview({
                     loading: false,
                     fileUrl: "",
@@ -1775,34 +1720,6 @@ export default function PortalKnowledgeWorkbench() {
             cancelled = true;
         };
     }, [activeSpace, selectedFile]);
-
-    const handleApplyDepartmentFileView = useCallback(async (reason: string) => {
-        if (!selectedFile || !activeSpace) return;
-        setDepartmentFileApplying(true);
-        setDepartmentFileAccessError("");
-        try {
-            const access = await applyDepartmentFileViewApi(
-                selectedFile.spaceId || activeSpace.id,
-                selectedFile.id,
-                reason,
-            );
-            setDepartmentFileAccess(access);
-            setSelectedFileDownloadable(access.canDownload);
-            patchFileById(selectedFile.id, (file) => ({
-                ...file,
-                contentAccess: access.contentAccess,
-                canDownload: access.canDownload,
-            }));
-            showToast({
-                message: access.status === "allowed" ? "已获得查看权限" : "查看申请已提交",
-                severity: NotificationSeverity.SUCCESS,
-            });
-        } catch (error: any) {
-            setDepartmentFileAccessError(error?.message || "查看申请提交失败，请稍后重试。");
-        } finally {
-            setDepartmentFileApplying(false);
-        }
-    }, [activeSpace, patchFileById, selectedFile, showToast]);
 
     const showUnavailable = useCallback(() => {
         showToast({ message: "暂未开放", severity: NotificationSeverity.INFO });
@@ -2785,38 +2702,6 @@ export default function PortalKnowledgeWorkbench() {
                     documentPath={documentPath}
                     isPersonalSpace={isActiveSpacePersonal}
                     preview={preview}
-                    contentOverride={
-                        selectedFile.isDepartmentFile
-                        && (departmentFileAccessLoading || departmentFileAccess?.status !== "allowed")
-                            ? departmentFileAccessLoading
-                                ? (
-                                    <div className="flex h-full items-center justify-center text-sm text-gray-500">
-                                        正在检查文件查看权限...
-                                    </div>
-                                )
-                                : departmentFileAccess
-                                    ? (
-                                        <DepartmentFileAccessGate
-                                            access={departmentFileAccess}
-                                            applying={departmentFileApplying}
-                                            error={departmentFileAccessError}
-                                            onApply={handleApplyDepartmentFileView}
-                                            onOpenRequests={() => {
-                                                approvalBridge.setApprovalDialogTarget({
-                                                    tab: "my_requests",
-                                                    instanceId: departmentFileAccess.instanceId,
-                                                });
-                                                approvalBridge.setApprovalDialogOpen(true);
-                                            }}
-                                        />
-                                    )
-                                    : (
-                                        <div className="flex h-full items-center justify-center text-sm text-red-600">
-                                            {departmentFileAccessError || "查看权限状态加载失败，请稍后重试。"}
-                                        </div>
-                                    )
-                            : undefined
-                    }
                     selectedFile={selectedFile}
                     summaryExpanded={summaryExpanded}
                     onAiDrawerOpenChange={setAiDrawerOpen}

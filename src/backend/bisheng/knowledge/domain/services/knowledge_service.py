@@ -43,7 +43,10 @@ from bisheng.common.errcode.knowledge import (
     KnowledgeTagNotExistError,
     KnowledgeTenantMismatchError,
 )
-from bisheng.common.errcode.knowledge_space import SpaceFileSizeLimitError
+from bisheng.common.errcode.knowledge_space import (
+    KnowledgeDocumentManagerRequiredError,
+    SpaceFileSizeLimitError,
+)
 from bisheng.common.schemas.api import PageInfiniteCursorData
 from bisheng.core.ai import FakeEmbeddings
 from bisheng.core.cache.redis_manager import get_redis_client, get_redis_client_sync
@@ -70,27 +73,28 @@ from bisheng.knowledge.domain.models.knowledge import (
 from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFile,
     KnowledgeFileDao,
+    KnowledgeFileEntryType,
     KnowledgeFileStatus,
     ParseType,
 )
-from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository import KnowledgeFileRepository
-from bisheng.knowledge.domain.repositories.interfaces.knowledge_repository import KnowledgeRepository
 from bisheng.knowledge.domain.repositories.implementations.department_file_view_grant_repository_impl import (
     DepartmentFileViewGrantRepositoryImpl,
 )
 from bisheng.knowledge.domain.repositories.implementations.knowledge_file_repository_impl import (
     KnowledgeFileRepositoryImpl,
 )
+from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository import KnowledgeFileRepository
+from bisheng.knowledge.domain.repositories.interfaces.knowledge_repository import KnowledgeRepository
 from bisheng.knowledge.domain.schemas.knowledge_schema import (
     AddKnowledgeMetadataFieldsReq,
     UpdateKnowledgeMetadataFieldsReq,
 )
-from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import KnowledgeAuditTelemetryService
-from bisheng.knowledge.domain.services.knowledge_metadata_service import KnowledgeMetadataService
-from bisheng.knowledge.domain.services.knowledge_permission_service import KnowledgePermissionService
 from bisheng.knowledge.domain.services.department_file_view_lifecycle_service import (
     DepartmentFileViewLifecycleService,
 )
+from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import KnowledgeAuditTelemetryService
+from bisheng.knowledge.domain.services.knowledge_metadata_service import KnowledgeMetadataService
+from bisheng.knowledge.domain.services.knowledge_permission_service import KnowledgePermissionService
 from bisheng.knowledge.domain.services.tag_library_tag_service import TagLibraryTagService
 from bisheng.llm.domain.const import LLMModelType
 from bisheng.user.domain.models.user import UserDao
@@ -116,6 +120,17 @@ class KnowledgeService(KnowledgeUtils):
 
     permission_service = KnowledgePermissionService()
     audit_telemetry_service = KnowledgeAuditTelemetryService()
+
+    @staticmethod
+    def _require_mutable_document_entry(file_record: KnowledgeFile) -> None:
+        """旧知识接口也必须遵守逻辑文档的管理入口写边界。"""
+        if (
+            file_record.reference_document_id is None
+            and file_record.entry_type is None
+        ):
+            return
+        if file_record.entry_type != KnowledgeFileEntryType.MANAGER.value:
+            raise KnowledgeDocumentManagerRequiredError()
 
     def __init__(
         self,
@@ -1880,10 +1895,10 @@ class KnowledgeService(KnowledgeUtils):
 
     @classmethod
     def delete_knowledge_file(cls, request: Request, login_user: UserPayload, file_ids: list[int]):
-        from bisheng.worker.knowledge import file_worker
         from bisheng.knowledge.domain.services.knowledge_pdf_artifact_service import (
             get_pdf_artifact_deletion_snapshots_sync,
         )
+        from bisheng.worker.knowledge import file_worker
 
         knowledge_file = KnowledgeFileDao.select_list(file_ids)
         if not knowledge_file:
@@ -2656,6 +2671,7 @@ class KnowledgeService(KnowledgeUtils):
         file_record = await KnowledgeFileDao.query_by_id(file_id)
         if not file_record or file_record.knowledge_id != knowledge_id:
             raise NotFoundError(msg="文档不存在")
+        cls._require_mutable_document_entry(file_record)
 
         await cls._validate_knowledge_tag_ids(knowledge_id, tag_ids, knowledge=knowledge)
 
@@ -2678,7 +2694,10 @@ class KnowledgeService(KnowledgeUtils):
         await cls._validate_knowledge_tag_ids(knowledge_id, tag_ids, knowledge=knowledge)
 
         files = await KnowledgeFileDao.aget_file_by_ids(file_ids)
-        valid_file_ids = [f.id for f in files if f.knowledge_id == knowledge_id]
+        valid_files = [f for f in files if f.knowledge_id == knowledge_id]
+        for file_record in valid_files:
+            cls._require_mutable_document_entry(file_record)
+        valid_file_ids = [f.id for f in valid_files]
         if not valid_file_ids:
             return
 

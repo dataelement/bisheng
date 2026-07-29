@@ -5768,6 +5768,15 @@ class KnowledgeSpaceService(KnowledgeUtils):
         authorized_metadata_by_id: dict[int, dict] = {}
         if authorized_files:
             try:
+                await self._enrich_with_version_info(authorized_files)
+            except Exception:
+                logger.exception(
+                    "Failed to enrich authorized portal QA files with version metadata "
+                    "space_id=%s file_count=%s",
+                    space_id,
+                    len(authorized_files),
+                )
+            try:
                 authorized_metadata = await self._handle_file_folder_extra_info(
                     authorized_files,
                     include_folder_counts=False,
@@ -5834,6 +5843,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     "tags",
                     "summary",
                     "file_size",
+                    "version_no",
+                    "capabilities",
                     "file_encoding",
                     "file_subcategory_code",
                     "user_name",
@@ -12113,6 +12124,19 @@ class KnowledgeSpaceService(KnowledgeUtils):
             else []
         )
         version_map = {int(version.id): version for version in primary_versions}
+        primary_file_ids = sorted(
+            {
+                int(version.knowledge_file_id)
+                for version in primary_versions
+                if version.knowledge_file_id is not None
+            }
+        )
+        primary_files = (
+            await KnowledgeFileDao.aget_file_by_ids(primary_file_ids)
+            if primary_file_ids
+            else []
+        )
+        primary_file_map = {int(file.id): file for file in primary_files}
 
         info: dict[int, dict] = {}
         for item in file_items:
@@ -12140,6 +12164,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 if document is not None and document.primary_version_id is not None
                 else None
             )
+            primary_file = (
+                primary_file_map.get(int(primary_version.knowledge_file_id))
+                if primary_version is not None
+                else None
+            )
             canonical_document_id = (
                 int(document.id) if document is not None else getattr(item, "_canonical_document_id", None)
             )
@@ -12158,7 +12187,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 if is_distribution
                 else True
             )
-            info[int(item.id)] = {
+            item_info = {
                 "_tag_source_file_id": (
                     int(primary_version.knowledge_file_id) if primary_version is not None else int(item.id)
                 ),
@@ -12178,6 +12207,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 "projection_ready": projection_ready,
                 "capabilities": capability_payload,
             }
+            if primary_version is not None:
+                item_info["version_no"] = int(primary_version.version_no)
+            if primary_file is not None:
+                item_info["file_size"] = int(primary_file.file_size or 0)
+            info[int(item.id)] = item_info
         return info
 
     async def _handle_file_folder_extra_info(

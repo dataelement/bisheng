@@ -23,6 +23,17 @@ type SpaceFolderTreeState = {
     folders: TargetFolderNode[];
 };
 
+export interface TargetFolderListItem {
+    id: string | number;
+    name?: string;
+    file_name?: string;
+}
+
+export type TargetFolderLoader = (
+    spaceId: string | number,
+    parentId: string | number | null,
+) => Promise<TargetFolderListItem[]>;
+
 interface FilePublishTargetTreeProps {
     loading: boolean;
     targetSpaces: ShougangFilePublishTargetSpace[];
@@ -30,6 +41,8 @@ interface FilePublishTargetTreeProps {
     targetFolderId: string | null;
     onSelectRoot: (spaceId: string | number) => void;
     onSelectFolder: (spaceId: string | number, folderId: string | number) => void;
+    loadFolders?: TargetFolderLoader;
+    emptyText?: string;
 }
 
 const TARGET_LEVEL_LABELS: Record<PublishTargetLevel, string> = {
@@ -74,6 +87,8 @@ export function FilePublishTargetTree({
     targetFolderId,
     onSelectRoot,
     onSelectFolder,
+    loadFolders,
+    emptyText = "暂无可发布目标",
 }: FilePublishTargetTreeProps) {
     const { showToast } = useToastContext();
     const [targetFolderTrees, setTargetFolderTrees] = useState<Record<string, SpaceFolderTreeState>>({});
@@ -123,14 +138,19 @@ export function FilePublishTargetTree({
             },
         }));
         try {
-            const res = await listKnowledgeFolders({ space_id: spaceId, parent_id: null });
+            const items = loadFolders
+                ? await loadFolders(spaceId, null)
+                : (await listKnowledgeFolders({
+                    space_id: spaceId,
+                    parent_id: null,
+                })).items;
             setTargetFolderTrees((prev) => ({
                 ...prev,
                 [key]: {
                     expanded: prev[key]?.expanded ?? true,
                     loading: false,
                     loaded: true,
-                    folders: (res.items || []).map(mapFolderNode),
+                    folders: (items || []).map(mapFolderNode),
                 },
             }));
         } catch {
@@ -182,7 +202,12 @@ export function FilePublishTargetTree({
             },
         }));
         try {
-            const res = await listKnowledgeFolders({ space_id: spaceId, parent_id: folderId });
+            const items = loadFolders
+                ? await loadFolders(spaceId, folderId)
+                : (await listKnowledgeFolders({
+                    space_id: spaceId,
+                    parent_id: folderId,
+                })).items;
             setTargetFolderTrees((prev) => ({
                 ...prev,
                 [spaceKey]: {
@@ -191,7 +216,7 @@ export function FilePublishTargetTree({
                         ...node,
                         loading: false,
                         loaded: true,
-                        children: (res.items || []).map(mapFolderNode),
+                        children: (items || []).map(mapFolderNode),
                     })),
                 },
             }));
@@ -257,7 +282,7 @@ export function FilePublishTargetTree({
         return <div className="px-2 py-6 text-center text-sm text-[#86909c]">加载中...</div>;
     }
     if (targetSpaceGroups.length === 0) {
-        return <div className="px-2 py-6 text-center text-sm text-[#86909c]">暂无可发布目标</div>;
+        return <div className="px-2 py-6 text-center text-sm text-[#86909c]">{emptyText}</div>;
     }
 
     return (

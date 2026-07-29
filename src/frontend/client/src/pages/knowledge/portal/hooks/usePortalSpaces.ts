@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetState
 import { useQuery } from "@tanstack/react-query";
 import {
     getCreateSpaceOptionsApi,
-    getPortalDiscoverableSpacesApi,
     getSpaceInfoApi,
     getSpacesByLevelApi,
     SpaceLevel,
@@ -47,17 +46,6 @@ export function resolveSpacePermissions(
         canDeleteSpace: isPersonal ? false : hasPermission("delete_space"),
         canManageMembers: isPersonal ? false : hasPermission("manage_space_relation"),
     };
-}
-
-export function mergeDepartmentSpaces(
-    discoverableSpaces: KnowledgeSpace[],
-    accessibleSpaces: KnowledgeSpace[],
-): KnowledgeSpace[] {
-    const merged = new Map(discoverableSpaces.map((space) => [String(space.id), space]));
-    for (const space of accessibleSpaces) {
-        merged.set(String(space.id), space);
-    }
-    return Array.from(merged.values());
 }
 
 interface UsePortalSpacesParams {
@@ -121,17 +109,11 @@ export function usePortalSpaces({
         placeholderData: (prev) => prev,
     });
     const departmentSpacesQuery = useQuery({
-        queryKey: ["knowledgeSpaces", "level", SpaceLevel.DEPARTMENT, "portalDiscovery"],
-        queryFn: async () => {
-            const [discoverableSpaces, accessibleSpaces] = await Promise.all([
-                getPortalDiscoverableSpacesApi(),
-                getSpacesByLevelApi(SpaceLevel.DEPARTMENT, { order_by: SpaceSortType.SORT_WEIGHT }),
-            ]);
-            return mergeDepartmentSpaces(
-                discoverableSpaces.filter((space) => space.spaceLevel === SpaceLevel.DEPARTMENT),
-                accessibleSpaces,
-            );
-        },
+        queryKey: ["knowledgeSpaces", "level", SpaceLevel.DEPARTMENT],
+        queryFn: () => getSpacesByLevelApi(
+            SpaceLevel.DEPARTMENT,
+            { order_by: SpaceSortType.SORT_WEIGHT },
+        ),
         enabled: shouldLoadGroup("department"),
         placeholderData: (prev) => prev,
     });
@@ -204,6 +186,7 @@ export function usePortalSpaces({
             [SpaceLevel.PUBLIC]: admin && Boolean(createOptions?.canCreatePublic),
             [SpaceLevel.DEPARTMENT]: admin && Boolean(createOptions?.canCreateDepartment),
             [SpaceLevel.TEAM]: Boolean(createOptions?.canCreateTeam),
+            [SpaceLevel.TEAM_KS]: Boolean(createOptions?.canCreateTeam),
             // 个人知识库不允许手动新建（我的收藏 / {用户名}的知识库 由系统按需自动创建）
             [SpaceLevel.PERSONAL]: false,
         };

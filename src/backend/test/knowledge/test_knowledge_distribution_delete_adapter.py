@@ -18,6 +18,10 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFileEntryStatus,
     KnowledgeFileEntryType,
 )
+from bisheng.knowledge.domain.schemas.knowledge_document_distribution_schema import (
+    KnowledgeDocumentEntryCapabilities,
+    ResolvedKnowledgeDocumentEntry,
+)
 from bisheng.knowledge.domain.services.knowledge_document_distribution_service import (
     DeleteManagerResult,
     KnowledgeDocumentDistributionError,
@@ -25,10 +29,6 @@ from bisheng.knowledge.domain.services.knowledge_document_distribution_service i
 )
 from bisheng.knowledge.domain.services.knowledge_space_service import (
     KnowledgeSpaceService,
-)
-from bisheng.knowledge.domain.schemas.knowledge_document_distribution_schema import (
-    KnowledgeDocumentEntryCapabilities,
-    ResolvedKnowledgeDocumentEntry,
 )
 
 
@@ -362,3 +362,40 @@ async def test_canonical_write_gate_allows_authorized_active_manager() -> None:
     resolved = await service._require_document_content_manager(manager)
 
     assert resolved.entry_file_id == 100
+
+
+async def test_legacy_file_tag_api_rejects_share_entry_before_writing(
+    monkeypatch,
+) -> None:
+    from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
+
+    share = _entry(KnowledgeFileEntryType.SHARE)
+    monkeypatch.setattr(
+        KnowledgeService,
+        "_get_writable_knowledge",
+        AsyncMock(return_value=SimpleNamespace(id=20)),
+    )
+    monkeypatch.setattr(
+        KnowledgeService,
+        "_validate_knowledge_tag_ids",
+        AsyncMock(),
+    )
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.services.knowledge_service.KnowledgeFileDao.query_by_id",
+        AsyncMock(return_value=share),
+    )
+    write_tags = AsyncMock()
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.services.knowledge_service.TagDao.aupdate_resource_tags",
+        write_tags,
+    )
+
+    with pytest.raises(KnowledgeDocumentManagerRequiredError):
+        await KnowledgeService.update_file_tags(
+            _service().login_user,
+            knowledge_id=20,
+            file_id=101,
+            tag_ids=[1],
+        )
+
+    write_tags.assert_not_awaited()

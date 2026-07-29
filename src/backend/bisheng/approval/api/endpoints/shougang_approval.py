@@ -53,12 +53,34 @@ async def submit_knowledge_space_create(
 @router.get("/file-publish/target-spaces")
 async def list_file_publish_target_spaces(
     source_space_id: int = Query(..., gt=0),
+    source_file_id: int = Query(..., gt=0),
     _: UserPayload = Depends(UserPayload.get_login_user),
     space_service=Depends(get_knowledge_space_service),
 ):
     service = ShougangApprovalService(message_service=getattr(space_service, "message_service", None))
     data = await service.list_file_publish_target_spaces(
         source_space_id=source_space_id,
+        source_file_id=source_file_id,
+        space_service=space_service,
+    )
+    return resp_200(data)
+
+
+@router.get("/file-publish/target-folders")
+async def list_file_publish_target_folders(
+    source_space_id: int = Query(..., gt=0),
+    source_file_id: int = Query(..., gt=0),
+    target_space_id: int = Query(..., gt=0),
+    parent_id: int | None = Query(default=None, gt=0),
+    _: UserPayload = Depends(UserPayload.get_login_user),
+    space_service=Depends(get_knowledge_space_service),
+):
+    service = ShougangApprovalService(message_service=getattr(space_service, "message_service", None))
+    data = await service.list_file_publish_target_folders(
+        source_space_id=source_space_id,
+        source_file_id=source_file_id,
+        target_space_id=target_space_id,
+        parent_id=parent_id,
         space_service=space_service,
     )
     return resp_200(data)
@@ -134,6 +156,26 @@ async def list_file_share_target_spaces(
     data = await service.list_file_share_target_spaces(
         source_space_id=source_space_id,
         source_file_id=source_file_id,
+        space_service=space_service,
+    )
+    return resp_200(data)
+
+
+@router.get("/file-share/target-folders")
+async def list_file_share_target_folders(
+    source_space_id: int = Query(..., gt=0),
+    source_file_id: int = Query(..., gt=0),
+    target_space_id: int = Query(..., gt=0),
+    parent_id: int | None = Query(default=None, gt=0),
+    _: UserPayload = Depends(UserPayload.get_login_user),
+    space_service=Depends(get_knowledge_space_service),
+):
+    service = ShougangApprovalService(message_service=getattr(space_service, "message_service", None))
+    data = await service.list_file_share_target_folders(
+        source_space_id=source_space_id,
+        source_file_id=source_file_id,
+        target_space_id=target_space_id,
+        parent_id=parent_id,
         space_service=space_service,
     )
     return resp_200(data)

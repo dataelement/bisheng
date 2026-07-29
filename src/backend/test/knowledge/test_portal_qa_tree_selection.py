@@ -225,6 +225,19 @@ async def test_portal_qa_tree_exposes_readonly_tags_and_share_source_for_authori
                 **allowed_file.model_dump(),
                 "entry_type": "share",
                 "tags": [{"id": 8, "tag_name": "AI标签"}],
+                "file_size": 2048,
+                "version_no": 3,
+                "capabilities": {
+                    "can_view": True,
+                    "can_preview": True,
+                    "can_download": False,
+                    "can_move": True,
+                    "can_manage_members": True,
+                    "can_edit_content": False,
+                    "can_publish": False,
+                    "can_share": False,
+                    "can_delete": True,
+                },
                 "user_name": "分享人",
                 "updater_name": "修改人",
                 "source_department_name": "来源部门",
@@ -249,6 +262,11 @@ async def test_portal_qa_tree_exposes_readonly_tags_and_share_source_for_authori
     assert item["folder_path"] == "接收知识库"
     assert item["entry_type"] == "share"
     assert item["tags"] == [{"id": 8, "tag_name": "AI标签"}]
+    assert item["file_size"] == 2048
+    assert item["version_no"] == 3
+    assert item["capabilities"]["can_edit_content"] is False
+    assert item["capabilities"]["can_publish"] is False
+    assert item["capabilities"]["can_share"] is False
     assert item["user_name"] == "分享人"
     assert item["updater_name"] == "修改人"
     assert item["source_department_name"] == "来源部门"

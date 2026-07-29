@@ -1123,6 +1123,10 @@ function FileRow({
     const localize = useLocalize();
     const [moreMenuOpen, setMoreMenuOpen] = useState(false);
     const isFolder = file.type === FileType.FOLDER;
+    const isReadonlyDistributionEntry = (
+        file.entryType === "share"
+        || file.entryType === "publish"
+    );
     const isCreating = !!file.isCreating;
     // 每格统一底色 + 同一套 transition，避免固定列用 group-hover、其余列透出 tr:hover 时不同步闪一下
     const rowBg = isSelected
@@ -1153,11 +1157,12 @@ function FileRow({
     );
     const hasRetryOption = canRetryFile ? canRetryFile(file) : defaultCanRetry;
     const retryText = retryActionLabel ?? localize("com_knowledge.retry");
-    const canEditTags = canEditEncoding && !isFolder;
+    const canEditTags = canEditEncoding && !isFolder && !isReadonlyDistributionEntry;
+    const canRenameContent = canRename && !isReadonlyDistributionEntry;
     const canRetry = isAdmin && hasRetryOption;
-    const showPublish = canPublish && Boolean(onPublishFile) && !isFolder;
-    const showShare = canShare && Boolean(onShareFile) && !isFolder;
-    const showMoreMenu = showPublish || showShare || canEditTags || canRename || canRetry || canDelete || canMove || Boolean(onManagePermission);
+    const showPublish = canPublish && Boolean(onPublishFile) && !isFolder && !isReadonlyDistributionEntry;
+    const showShare = canShare && Boolean(onShareFile) && !isFolder && file.entryType !== "share";
+    const showMoreMenu = showPublish || showShare || canEditTags || canRenameContent || canRetry || canDelete || canMove || Boolean(onManagePermission);
     const namePreviewable = isKnowledgeItemPreviewable(file);
     const fileTags = Array.isArray(file.tags) ? file.tags : [];
     const fileEncodingText = file.fileEncoding?.trim() || "";
@@ -1253,7 +1258,7 @@ function FileRow({
                                 {localize("com_knowledge.edit_tags")}
                             </DropdownMenuItem>
                         )}
-                        {canRename && (
+                        {canRenameContent && (
                             <DropdownMenuItem
                                 onClick={(e) => {
                                     e.stopPropagation();
@@ -1297,7 +1302,7 @@ function FileRow({
                                 {localize("com_permission.manage_permission")}
                             </DropdownMenuItem>
                         )}
-                        {versionManagementEnabled && !isFolder && file.status === FileStatus.SUCCESS && isAdmin && (
+                        {versionManagementEnabled && !isFolder && !isReadonlyDistributionEntry && file.status === FileStatus.SUCCESS && isAdmin && (
                             <DropdownMenuItem
                                 onClick={(e) => {
                                     e.stopPropagation();
@@ -1428,7 +1433,7 @@ function FileRow({
                                         {`V${file.version_no}`}
                                     </span>
                                 )}
-                                {versionManagementEnabled && canManageMembers && file.has_similar && !file.is_multi_version && (
+                                {versionManagementEnabled && !isReadonlyDistributionEntry && canManageMembers && file.has_similar && !file.is_multi_version && (
                                     <button
                                         type="button"
                                         onClick={(e) => {
@@ -1483,7 +1488,7 @@ function FileRow({
                                         <span className="shrink-0">原文件名：</span>
                                         <span className="truncate">{file.name}</span>
                                     </div>
-                                    {canRename && (onAcceptAlias || onRejectAlias) && (
+                                    {canRenameContent && (onAcceptAlias || onRejectAlias) && (
                                         <div className="flex shrink-0 items-center gap-1">
                                             {onAcceptAlias && (
                                                 <button

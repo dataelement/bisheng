@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
+    getShougangFileShareTargetFoldersApi,
     getShougangFileShareTargetSpacesApi,
     listShougangFileShareEntriesApi,
     revokeShougangFileShareApi,
@@ -18,6 +19,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from "~/components/ui";
+import { FilePublishTargetTree } from "./FilePublishTargetTree";
 
 interface FileShareDialogProps {
     open: boolean;
@@ -35,6 +37,7 @@ export function FileShareDialog({
     const { showToast } = useToastContext();
     const [targetSpaces, setTargetSpaces] = useState<ShougangFileShareTargetSpace[]>([]);
     const [targetSpaceId, setTargetSpaceId] = useState("");
+    const [targetFolderId, setTargetFolderId] = useState<string | null>(null);
     const [reason, setReason] = useState("");
     const [allowDownload, setAllowDownload] = useState(false);
     const [entries, setEntries] = useState<ShougangFileShareEntry[]>([]);
@@ -46,6 +49,7 @@ export function FileShareDialog({
         if (!open || !activeSpace || !file) {
             setTargetSpaces([]);
             setTargetSpaceId("");
+            setTargetFolderId(null);
             setReason("");
             setAllowDownload(false);
             setEntries([]);
@@ -70,6 +74,7 @@ export function FileShareDialog({
                         ? String(targets.data[0].id)
                         : "",
                 );
+                setTargetFolderId(null);
                 setEntries(currentEntries.data || []);
             })
             .catch((error) => {
@@ -90,6 +95,20 @@ export function FileShareDialog({
         };
     }, [activeSpace, file, open, showToast]);
 
+    const loadTargetFolders = useCallback(async (
+        spaceId: string | number,
+        parentId: string | number | null,
+    ) => {
+        if (!activeSpace || !file) return [];
+        const result = await getShougangFileShareTargetFoldersApi(
+            activeSpace.id,
+            file.id,
+            spaceId,
+            parentId,
+        );
+        return result.data || [];
+    }, [activeSpace, file]);
+
     const handleSubmit = async () => {
         const normalizedReason = reason.trim();
         if (!activeSpace || !file || !targetSpaceId || !normalizedReason) return;
@@ -99,6 +118,9 @@ export function FileShareDialog({
                 source_space_id: activeSpace.id,
                 source_file_id: file.id,
                 target_space_id: targetSpaceId,
+                target_folder_id: targetFolderId
+                    ? Number(targetFolderId)
+                    : null,
                 reason: normalizedReason,
                 allow_download: allowDownload,
             });
@@ -151,34 +173,38 @@ export function FileShareDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-xl">
+            <DialogContent className="!flex max-h-[calc(100dvh-48px)] w-[min(640px,calc(100vw-48px))] max-w-none flex-col overflow-hidden">
                 <DialogHeader>
                     <DialogTitle>分享文件</DialogTitle>
                 </DialogHeader>
 
-                <div className="space-y-4 py-2">
+                <div className="min-h-0 flex-1 space-y-4 overflow-y-auto py-2 pr-1">
                     <div className="rounded-md bg-[#f7f8fa] px-3 py-2 text-sm text-[#4e5969]">
                         {file?.name || "未选择文件"}
                     </div>
 
-                    <label className="block space-y-2 text-sm">
-                        <span className="text-[#1d2129]">接收部门知识库</span>
-                        <select
-                            value={targetSpaceId}
-                            onChange={(event) => setTargetSpaceId(event.target.value)}
-                            disabled={loading}
-                            className="h-9 w-full rounded border border-[#c9cdd4] bg-white px-3 outline-none focus:border-[#165dff]"
-                        >
-                            {targetSpaces.length === 0 && (
-                                <option value="">暂无可分享目标</option>
-                            )}
-                            {targetSpaces.map((space) => (
-                                <option key={space.id} value={String(space.id)}>
-                                    {space.name}
-                                </option>
-                            ))}
-                        </select>
-                    </label>
+                    <div className="space-y-2 text-sm">
+                        <span className="text-[#1d2129]">接收部门目标位置</span>
+                        <div className="max-h-64 overflow-y-auto rounded border border-[#c9cdd4] bg-white p-2">
+                            <FilePublishTargetTree
+                                key={`${activeSpace?.id || ""}:${file?.id || ""}`}
+                                loading={loading}
+                                targetSpaces={targetSpaces}
+                                targetSpaceId={targetSpaceId}
+                                targetFolderId={targetFolderId}
+                                onSelectRoot={(spaceId) => {
+                                    setTargetSpaceId(String(spaceId));
+                                    setTargetFolderId(null);
+                                }}
+                                onSelectFolder={(spaceId, folderId) => {
+                                    setTargetSpaceId(String(spaceId));
+                                    setTargetFolderId(String(folderId));
+                                }}
+                                loadFolders={loadTargetFolders}
+                                emptyText="暂无可分享目标"
+                            />
+                        </div>
+                    </div>
 
                     <label className="block space-y-2 text-sm">
                         <span className="text-[#1d2129]">分享原因</span>
