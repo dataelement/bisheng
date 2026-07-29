@@ -41,6 +41,7 @@ from bisheng.linsight.domain.services.state_message_manager import (
 from bisheng.linsight.domain.services.stream_event_mapper import StreamEventMapper
 from bisheng.linsight.domain.services.tool_loop_middleware import LinsightToolLoopError
 from bisheng.linsight.domain.services.workbench_impl import LinsightWorkbenchImpl
+from bisheng.linsight.domain.services.workspace_backend import UPLOADS_DIR
 from bisheng.tool.domain.services.tool import ToolServices
 from bisheng_langchain.linsight.const import TaskStatus
 from bisheng_langchain.linsight.event import BaseEvent, ExecStep, GenerateSubTask, NeedUserInput, TaskEnd, TaskStart
@@ -467,6 +468,9 @@ class LinsightWorkflowTask:
         # the prior turn's deliverables. New-turn path only (resume reuses the same
         # svid workspace). Best-effort — never blocks the turn.
         await self._seed_workspace_from_previous(session_model)
+        # Must run between the seed and tool construction: the code interpreter's
+        # file list is snapshotted from file_dir when the tool is built.
+        await self._sync_workspace_originals(session_model)
 
         # Initialization Execution Component
         self.llm = await self._get_llm(session_model)
@@ -638,13 +642,19 @@ class LinsightWorkflowTask:
     async def _download_raw_original(self, file_info: dict, target_dir: str) -> str:
         """Prefetch the ORIGINAL upload next to its markdown view.
 
-        Mirrors ``_download_file`` but reads ``original_file_path`` (formal
-        bucket) and lands under ``raw_filename`` — the same name the workspace
-        uses, so a path the model saw in ``ls`` resolves identically inside the
-        code interpreter.
+        Mirrors ``_download_file`` but reads ``original_file_path`` (formal bucket)
+        and lands under ``uploads/<raw_filename>``. The subdirectory is load-bearing:
+        the workspace key is ``uploads/x.xlsx`` and that is the path the pointer
+        block hands the model, while the code interpreter resolves paths relative to
+        ``file_dir``. Landing the original flat here (the original implementation)
+        meant the one path the model was told about did not exist in the sandbox —
+        the whole point of carrying the original was lost. The markdown track stays
+        flat on purpose: it is only ever read through ``read_file``, which goes to
+        the workspace, so it needs no local path parity.
         """
         object_name = file_info["original_file_path"]
-        file_path = os.path.join(target_dir, file_info["raw_filename"])
+        file_path = os.path.join(target_dir, UPLOADS_DIR, file_info["raw_filename"])
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
         minio_client = await get_minio_storage()
         file_url = await minio_client.get_share_link(object_name, clear_host=False)
         http_client = await get_http_client()
@@ -740,6 +750,54 @@ class LinsightWorkflowTask:
                 )
         except Exception as e:
             logger.warning(f"workspace seed-from-previous skipped (non-fatal): {e}")
+
+    async def _sync_workspace_originals(self, session_model: LinsightSessionVersion) -> None:
+        """Make workspace originals reachable by the code interpreter this turn.
+
+        ``_init_file_directory`` prefetches originals from THIS turn's ``files``,
+        which is empty on a follow-up ("总结一下刚才那个表") — the originals only
+        exist in the workspace, copied there by the seed. The code interpreter's
+        file list is built from the local ``file_dir``, so without this step the
+        model sees ``uploads/x.xlsx`` in ``ls``, is told by the pointer block that
+        it can compute on it, and then finds nothing in the sandbox.
+
+        Runs after the seed and before tools are built. Idempotent: on a fresh turn
+        the prefetch already wrote these files and ``_materialize`` serves them from
+        cache. Best-effort — losing the precise-data track must never fail the turn.
+        """
+        try:
+            from bisheng.linsight.domain.services.workspace_backend import WorkspaceBackend
+
+            minio = await get_minio_storage()
+            backend = WorkspaceBackend(svid=session_model.id, minio=minio, file_dir=self.file_dir)
+            ls_res = await backend.als(UPLOADS_DIR)
+            if getattr(ls_res, "error", None):
+                return
+
+            synced: list[str] = []
+            for entry in ls_res.entries or []:
+                rel = str(entry.get("path") or "").lstrip("/")
+                # Markdown views are already local (or are read through read_file,
+                # which goes to MinIO anyway); only the originals need a local copy.
+                if not rel.startswith(f"{UPLOADS_DIR}/") or rel.endswith(".md"):
+                    continue
+                local_path = os.path.join(self.file_dir, rel)
+                if os.path.exists(local_path):
+                    continue
+                if await asyncio.to_thread(backend.ensure_local, rel):
+                    synced.append(local_path)
+
+            if synced:
+                # These arrived AFTER _init_file_directory took the baseline, so
+                # without this they would look like files the agent produced and be
+                # delivered back to the user as this turn's output.
+                self._baseline_files.update(synced)
+                logger.info(
+                    "Synced {} workspace original(s) into the local task dir for the code interpreter",
+                    len(synced),
+                )
+        except Exception as e:
+            logger.warning(f"workspace original sync skipped (non-fatal): {e}")
 
     # ==================== Mission Execution ====================
 

@@ -35,8 +35,7 @@ from langgraph.types import interrupt
 from bisheng.common.services.config_service import settings
 from bisheng.linsight.domain.services.binary_content_guard import (
     CODE_INTERPRETER_TOOL,
-    BinaryReadGuardMiddleware,
-    ModelContentGuardMiddleware,
+    build_binary_guards,
 )
 from bisheng.linsight.domain.services.resilience_middleware import build_resilience_middleware
 from bisheng.linsight.domain.services.tool_loop_middleware import build_tool_loop_breaker_middleware
@@ -688,8 +687,7 @@ async def create_linsight_agent(
     middlewares: list = [
         build_resilience_middleware(linsight_conf, is_subagent=False),
         build_tool_loop_breaker_middleware(linsight_conf, is_subagent=False),
-        BinaryReadGuardMiddleware(has_code_interpreter=has_code_interpreter),
-        ModelContentGuardMiddleware(),
+        *build_binary_guards(has_code_interpreter),
     ]
 
     # F035 Track D — skills (RE-ENABLED 2026-06-24, Fork X). The run's allowed skill
@@ -762,8 +760,7 @@ async def create_linsight_agent(
         # reading an original would fail the whole task. It sees the same code
         # interpreter as the main graph (not in _SUBAGENT_TOOL_DENY), so the flag
         # carries over; revisit if it is ever added to that deny list.
-        BinaryReadGuardMiddleware(has_code_interpreter=has_code_interpreter),
-        ModelContentGuardMiddleware(),
+        *build_binary_guards(has_code_interpreter),
         # Same tail language directive on the subagent's own stack (last -> after
         # its TodoList/Filesystem framework prompts), so the researcher also
         # reasons in the user's language.

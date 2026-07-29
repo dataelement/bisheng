@@ -45,6 +45,7 @@ from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
 from bisheng.tool.domain.services.executor import ToolExecutor
 from bisheng.utils import util
 from bisheng.utils.util import async_calculate_md5
+from bisheng_langchain.gpts.tools.code_interpreter.e2b_executor import SIZE_AUTOPUSH
 
 
 @dataclass
@@ -477,6 +478,12 @@ class LinsightWorkbenchImpl:
         name + extension (``uploads/<name>.<ext>``) even though it couldn't be
         converted to markdown. Marked ``valid=False`` so the attachment chip shows
         a failed state.
+
+        The original always reaches the formal bucket (the user can still download
+        what they uploaded), but it only enters the WORKSPACE when something there
+        could actually consume it — see ``_original_is_usable``. An mp3 that no
+        parser, no ``read_file`` and no code interpreter can open is pure cost:
+        storage, a confusing ``ls`` entry, and a wasted tool call.
         """
 
         def _read_bytes(path: str) -> bytes:
@@ -488,16 +495,40 @@ class LinsightWorkbenchImpl:
         formal_object = f"linsight/{chat_id}/{submit_file.file_id}{ext}"
         await minio_client.put_object(bucket_name=minio_client.bucket, object_name=formal_object, file=raw)
 
+        usable = cls._original_is_usable(file_name)
         entry: dict = {
             "file_id": submit_file.file_id,
             "original_filename": file_name,
-            "parsing_status": "failed",
+            "parsing_status": "failed" if usable else "unsupported",
             "valid": False,
-            "error_message": f"file parse failed, original kept: {error}",
+            "error_message": (
+                f"file parse failed, original kept: {error}"
+                if usable
+                else f"unsupported file type, original not usable in the workspace: {error}"
+            ),
             "markdown_file_path": formal_object,
         }
-        await cls._write_attachment_to_workspace(entry, chat_id, minio_client, as_markdown=False, used_names=used_names)
+        if usable:
+            await cls._write_attachment_to_workspace(
+                entry, chat_id, minio_client, as_markdown=False, used_names=used_names
+            )
         return entry
+
+    # Types whose raw bytes are still worth carrying into the workspace after a
+    # failed parse: text-like ones are directly readable via ``read_file``, and
+    # _RAW_KEEP_EXTS / _IMAGE_EXTS have a consumer (code interpreter, image block).
+    _TEXT_LIKE_EXTS = frozenset(
+        {
+            "txt", "csv", "tsv", "md", "markdown", "json", "jsonl", "xml", "html", "htm",
+            "log", "yaml", "yml", "ini", "conf", "toml", "sql", "py", "js", "ts", "sh",
+        }
+    )  # fmt: skip
+
+    @classmethod
+    def _original_is_usable(cls, filename: str) -> bool:
+        """Whether an unparsed original has any consumer inside the workspace."""
+        ext = os.path.splitext(filename or "")[1].lower().lstrip(".")
+        return ext in cls._TEXT_LIKE_EXTS or ext in cls._RAW_KEEP_EXTS or ext in cls._IMAGE_EXTS
 
     @classmethod
     async def _ingest_one_file(
@@ -908,6 +939,13 @@ class LinsightWorkbenchImpl:
                 # then ``read_file`` it and blow up the task. Announce it instead,
                 # with the one route that actually works.
                 if not file.get("workspace_path"):
+                    # No workspace object at all. An unsupported type (mp3/mp4/zip)
+                    # is deliberately not carried in, but staying silent about it
+                    # means the user sees their attachment accepted while the model
+                    # never hears of it. Expired metadata stays skipped — there is
+                    # nothing to say beyond "re-upload", which the chip already says.
+                    if file.get("parsing_status") == "unsupported":
+                        items.append(f"- name: {name}\n  note: 该格式无法解析，也无法在工作区中读取，本次不可用")
                     continue
                 has_unparsed = True
                 items.append(f"- path: {path}\n  name: {name}\n  note: 解析失败，工作区只有原件（不可 read_file）")
@@ -922,7 +960,11 @@ class LinsightWorkbenchImpl:
             raw_path = file.get("raw_workspace_path")
             if raw_path:
                 has_raw = True
-                item += f"\n  raw: {raw_path}"
+                # Rendered RELATIVE on purpose. The code interpreter resolves paths
+                # against its working directory (the local task dir / sandbox root),
+                # where the original lives at ``uploads/<name>``; a leading slash
+                # would send it to the filesystem root and fail.
+                item += f"\n  raw: {raw_path.lstrip('/')}"
             items.append(item)
 
         if not items:
@@ -938,7 +980,8 @@ class LinsightWorkbenchImpl:
                     "说明：path 指向可直接 read_file 的文本视图；raw 指向同名原件"
                     "（表格/文档的精确数据、单元格、样式、页面结构都在原件里）。"
                     "需要精确数值或做数据分析时，用 bisheng_code_interpreter 读 raw 原件"
-                    "（Excel 用 pandas/openpyxl，Word 用 python-docx，PDF 用 fitz），不要 read_file 原件。\n"
+                    "（Excel 用 pandas/openpyxl，Word 用 python-docx，PDF 用 fitz），不要 read_file 原件。"
+                    "raw 是相对当前工作目录的路径，在代码里直接用该相对路径打开。\n"
                 )
             else:
                 # No code interpreter this run: the original is unusable, so do not
@@ -1288,11 +1331,37 @@ class LinsightWorkbenchImpl:
         # Default60Validity period of minutes
         code_config["config"]["e2b"]["timeout"] = 3600
         code_config["config"]["e2b"]["keep_sandbox"] = True
+        # ``file_list`` is the E2B copy-in set: E2bCodeExecutor.__init__ reads every
+        # entry fully into worker memory and pushes it into the sandbox up front.
+        # E2B's own contract caps that at SIZE_AUTOPUSH — anything larger is meant to
+        # be requested explicitly per run — while the dual-track ingest keeps
+        # originals up to _RAW_KEEP_MAX_BYTES (50MB), which LocalExecutor serves for
+        # free through local_sync_path. Filter here so the E2B ceiling is honoured
+        # without shrinking what the local executor can reach.
         file_list = []
+        oversized: list[str] = []
         for root, dirs, files in os.walk(file_dir):
             for file in files:
                 file_path = os.path.join(root, file)
+                try:
+                    if os.path.getsize(file_path) > SIZE_AUTOPUSH:
+                        oversized.append(file_path)
+                        continue
+                except OSError:
+                    # Unstattable file: let it through rather than silently dropping
+                    # it — the push itself will surface any real problem.
+                    pass
                 file_list.append(WriteEntry(data=file_path, path=file_path.replace(file_dir, ".")))
+        if oversized:
+            # Never let a bounded copy-in look complete: the model is told these
+            # paths exist, so a silent drop reads as "the tool is broken".
+            logger.warning(
+                "code interpreter: {} file(s) exceed the E2B auto-push ceiling ({} bytes) and were not "
+                "pushed into the sandbox: {}",
+                len(oversized),
+                SIZE_AUTOPUSH,
+                ", ".join(os.path.basename(p) for p in oversized),
+            )
         code_config["config"]["e2b"]["file_list"] = file_list
 
         bisheng_code_tool.extra = code_config
