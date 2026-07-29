@@ -1597,8 +1597,14 @@ async def test_list_my_uploaded_files_queries_uploader_records_without_read_perm
         user_id=service.login_user.user_id,
         status=KnowledgeFileStatus.PROCESSING.value,
     )
-    source_file.file_encoding = "SGGF-STD-EM-20260600000001"
+    source_file.file_encoding = None
     source_file.file_subcategory_code = "STD"
+    source_file.split_rule = json.dumps(
+        {
+            "file_category_code": "STD",
+            "business_domain_code": "EM",
+        }
+    )
     folders = [
         _make_file(file_id=37, knowledge_id=10, file_type=FileType.DIR.value, file_name="技术文档"),
         _make_file(file_id=38, knowledge_id=10, file_type=FileType.DIR.value, file_name="能源管理"),
@@ -1653,8 +1659,9 @@ async def test_list_my_uploaded_files_queries_uploader_records_without_read_perm
     assert result.data[0].space_level == KnowledgeSpaceLevelEnum.TEAM
     assert result.data[0].folder_path_name == "技术文档/能源管理"
     assert result.data[0].parent_id == 38
-    assert result.data[0].file_encoding == "SGGF-STD-EM-20260600000001"
+    assert result.data[0].file_encoding is None
     assert result.data[0].file_subcategory_code == "STD"
+    assert result.data[0].business_domain_code == "EM"
     assert result.data[0].tags == [
         {"id": 11, "name": "能源", "resource_type": None},
         {"id": 12, "name": "安全", "resource_type": None},
@@ -1721,9 +1728,56 @@ async def test_list_my_uploaded_files_defaults_missing_space_level_to_personal(s
     assert result.data[0].knowledge_name == "个人知识空间"
     assert result.data[0].space_level == KnowledgeSpaceLevelEnum.PERSONAL
     assert result.data[0].file_subcategory_code is None
+    assert result.data[0].business_domain_code is None
 
 
 @pytest.mark.asyncio
+async def test_list_my_uploaded_files_prefers_split_rule_business_domain_over_encoding(service):
+    source_file = _make_file(
+        file_id=501,
+        knowledge_id=10,
+        file_name="业务域文档.pdf",
+        file_level_path="",
+        level=0,
+        user_id=service.login_user.user_id,
+        status=KnowledgeFileStatus.SUCCESS.value,
+    )
+    source_file.file_encoding = "SGGF-STD-PP-20260600000001"
+    source_file.split_rule = json.dumps({"business_domain_code": "EM"})
+    space = _make_space(space_id=10, space_level=KnowledgeSpaceLevelEnum.PERSONAL)
+    space.name = "个人知识空间"
+
+    with (
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.alist_user_uploaded_files",
+            new_callable=AsyncMock,
+            return_value=([source_file], 1),
+            create=True,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_spaces_by_ids",
+            new_callable=AsyncMock,
+            return_value=[space],
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_file_by_ids",
+            new_callable=AsyncMock,
+            return_value=[],
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.TagDao.get_tags_by_resource_batch",
+            return_value={},
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.ReviewTagDao.get_tags_by_resource_batch",
+            return_value={},
+        ),
+    ):
+        result = await service.list_my_uploaded_files(page=1, page_size=20)
+
+    assert result.data[0].business_domain_code == "EM"
+
+
 async def test_update_file_encoding_bumps_serial_when_duplicate_across_all_spaces(service):
     def _normalize_file_category_code(value):
         if not isinstance(value, str):

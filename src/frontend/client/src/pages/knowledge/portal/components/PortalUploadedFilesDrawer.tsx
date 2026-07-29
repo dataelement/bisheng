@@ -385,7 +385,10 @@ export function PortalUploadedFilesDrawer({
             nextDraft.fileCategoryCode ?? currentDraft.fileCategoryCode ?? parsed.fileCategoryCode,
         );
         const businessDomainCode = normalizeEncodingCode(
-            nextDraft.businessDomainCode ?? currentDraft.businessDomainCode ?? parsed.businessDomainCode,
+            nextDraft.businessDomainCode
+            ?? currentDraft.businessDomainCode
+            ?? record.businessDomainCode
+            ?? parsed.businessDomainCode,
         );
         const normalizedSubcategoryCode = fileSubcategoryCode === undefined
             ? currentDraft.fileSubcategoryCode
@@ -514,7 +517,11 @@ export function PortalUploadedFilesDrawer({
                             const parsedEncoding = parseFileEncoding(record.fileEncoding, encodingPrefix);
                             const draft = encodingDrafts[record.id] ?? {};
                             const selectedFileCategoryCode = normalizeEncodingCode(draft.fileCategoryCode ?? parsedEncoding.fileCategoryCode);
-                            const selectedBusinessDomainCode = normalizeEncodingCode(draft.businessDomainCode ?? parsedEncoding.businessDomainCode);
+                            const selectedBusinessDomainCode = normalizeEncodingCode(
+                                draft.businessDomainCode
+                                ?? record.businessDomainCode
+                                ?? parsedEncoding.businessDomainCode,
+                            );
                             const selectedBusinessDomainText = selectedBusinessDomainCode || EMPTY_FIELD_PLACEHOLDER;
                             const recordBusinessDomainOptions = filterBusinessDomainOptionsByCodes(
                                 businessDomainOptions,

@@ -535,6 +535,7 @@ export interface KnowledgeFile {
     approvalReason?: string;
     fileEncoding?: string | null;        // mapped from file_encoding
     fileSubcategoryCode?: string | null; // mapped from file_subcategory_code
+    businessDomainCode?: string | null; // mapped from business_domain_code (file-level selection)
     summary?: string;
     isPendingApproval?: boolean;
     version_no?: number;          // primary version number; absent for folders / legacy files
@@ -1121,6 +1122,7 @@ export function mapChild(raw: any, spaceId: string): KnowledgeFile {
         isPendingApproval: Boolean(raw?.is_pending_approval),
         fileEncoding: raw?.file_encoding ?? null,
         fileSubcategoryCode: raw?.file_subcategory_code ?? null,
+        businessDomainCode: raw?.business_domain_code ?? null,
         summary: raw?.summary ?? raw?.abstract ?? "",
         version_no: raw?.version_no !== undefined && raw?.version_no !== null ? Number(raw.version_no) : undefined,
         is_multi_version: Boolean(raw?.is_multi_version),

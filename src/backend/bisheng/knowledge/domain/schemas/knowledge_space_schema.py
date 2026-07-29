@@ -820,6 +820,11 @@ class ShougangPortalUploadedFileResp(BaseModel):
         max_length=16,
         description="Second-level file category code persisted on the knowledge file",
     )
+    business_domain_code: str | None = Field(
+        default=None,
+        max_length=16,
+        description=("Selected business domain code for this file (from split_rule, else parsed from file_encoding)"),
+    )
     tags: list[dict] = Field(default_factory=list)
     abstract: str = ""
     create_time: str = ""
