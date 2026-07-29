@@ -172,9 +172,7 @@ async def test_share_submit_uses_canonical_business_key_and_download_snapshot(
 
     request = service.approval_gate.request_or_pass.await_args.args[0]
     assert request.scenario_code == FILE_SHARE_SCENARIO
-    assert request.business_key == (
-        "knowledge-file-share:document:900:target:20"
-    )
+    assert request.business_key == ("knowledge-file-share:document:900:target:20")
     assert request.business_resource_id == "900:20"
     assert request.payload_snapshot["canonical_document_id"] == 900
     assert request.payload_snapshot["source_entry_id"] == 100
@@ -191,9 +189,7 @@ async def test_share_submit_uses_canonical_business_key_and_download_snapshot(
 @pytest.mark.asyncio
 async def test_share_submit_rejects_share_entry_before_approval(monkeypatch):
     service = ShougangApprovalService(approval_gate=_approval_gate())
-    source_file = _source_file(
-        entry_type=KnowledgeFileEntryType.SHARE.value
-    )
+    source_file = _source_file(entry_type=KnowledgeFileEntryType.SHARE.value)
     monkeypatch.setattr(
         service,
         "_load_publish_source",
@@ -247,12 +243,10 @@ async def test_share_target_candidates_only_include_other_department_spaces(
 
 
 def test_share_scenario_is_registered_with_fixed_role_sources():
-    preset = ApprovalRegistry.with_default_presets().get_preset(
-        FILE_SHARE_SCENARIO
-    )
+    preset = ApprovalRegistry.with_default_presets().get_preset(FILE_SHARE_SCENARIO)
 
     assert preset is not None
-    assert preset.condition_fields == []
+    assert preset.condition_fields == ["applicant_role"]
     assert preset.approver_source_types == [
         "knowledge_space_owner",
         "knowledge_space_manager",
@@ -273,6 +267,4 @@ async def test_legacy_share_creation_is_permanently_disabled():
     service = object.__new__(KnowledgeSpaceService)
 
     with pytest.raises(KnowledgeShareCreationDisabledError):
-        await service.create_shougang_portal_share_link(
-            SimpleNamespace(space_id=10, file_id=100)
-        )
+        await service.create_shougang_portal_share_link(SimpleNamespace(space_id=10, file_id=100))

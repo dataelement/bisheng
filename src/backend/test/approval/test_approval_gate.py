@@ -1242,6 +1242,69 @@ async def test_match_first_route_file_publish_unsupported_field_does_not_relax_a
 
 
 @pytest.mark.asyncio
+async def test_match_first_route_file_share_applicant_role_and_matches(monkeypatch):
+    import bisheng.approval.domain.services.approval_gate as gm
+
+    monkeypatch.setattr(
+        gm,
+        "_get_user_role_labels",
+        AsyncMock(return_value=frozenset({"tenant_admin", "dept_admin", "regular_user"})),
+    )
+    gate = _make_gate()
+    route = _route(
+        route_type="flow",
+        match_config={
+            "operator": "and",
+            "conditions": [
+                {"field": "applicant_role", "value": "tenant_admin"},
+                {"field": "applicant_role", "value": "dept_admin"},
+            ],
+        },
+    )
+    fallback = _route(route_type="pass", match_config={})
+
+    result = await gate._match_first_route(
+        [route, fallback],
+        _req(scenario_code="knowledge_space_file_share_request"),
+    )
+
+    assert result is route
+
+
+@pytest.mark.asyncio
+async def test_route_save_allows_file_share_applicant_role_and_conditions() -> None:
+    from types import SimpleNamespace
+
+    from bisheng.approval.domain.services.approval_scenario_admin_service import (
+        ApprovalScenarioAdminService,
+    )
+
+    scenario = SimpleNamespace(
+        id=1,
+        tenant_id=1,
+        scenario_code="knowledge_space_file_share_request",
+    )
+    payload = {
+        "route_name": "身份组合",
+        "route_type": "pass",
+        "flow_definition_id": None,
+        "match_config": {
+            "operator": "and",
+            "conditions": [
+                {"field": "applicant_role", "value": "tenant_admin"},
+                {"field": "applicant_role", "value": "dept_admin"},
+            ],
+        },
+    }
+
+    await ApprovalScenarioAdminService._validate_route_payload(
+        tenant_id=1,
+        scenario=scenario,
+        payload=payload,
+    )
+
+
+@pytest.mark.asyncio
 async def test_match_first_route_returns_none_when_no_match(monkeypatch):
     """Returns None when all routes have conditions that don't match."""
     import bisheng.approval.domain.services.approval_gate as gm
