@@ -473,9 +473,10 @@ class KnowledgeRecycleService:
                             item_ids=[int(item.id)],
                         )
                     )
-                if dup > 0 and req.merge_folder:
+                # After merge is confirmed (or no folder-name conflict), check child files vs whole KB.
+                if (dup == 0 or req.merge_folder) and not req.overwrite_files:
                     file_conflicts = await self._find_file_conflicts_for_folder_merge(item, target_kid)
-                    if file_conflicts and not req.overwrite_files:
+                    if file_conflicts:
                         need_overwrite = True
                         warnings.append(
                             RecycleConflict(
@@ -548,44 +549,172 @@ class KnowledgeRecycleService:
 
             batch_file_ids = await self._batch_file_ids(item.recycle_batch_id, item.recycle_root_id)
 
+            merge_into_id: int | None = None
+            if int(item.file_type) == FileType.DIR.value and req.merge_folder:
+                existing = await self._find_active_folder_by_name(target_kid, item.display_name, target_path)
+                if existing:
+                    merge_into_id = int(existing.id)
+
             if req.overwrite_files:
-                await self._overwrite_conflicts(item, target_kid)
+                if int(item.file_type) == FileType.DIR.value:
+                    await self._overwrite_folder_merge_conflicts(item, target_kid)
+                else:
+                    await self._overwrite_conflicts(item, target_kid)
 
-            # Clear soft-delete and reattach path for same-space; for cross-space update knowledge_id too
+            vector_file_ids = batch_file_ids
             async with get_async_db_session() as session:
-                root_rec = await session.get(KnowledgeFile, int(item.file_id))
-                old_root_path = (root_rec.file_level_path if root_rec else item.original_file_level_path) or ""
-                old_prefix = f"{old_root_path}/{item.file_id}" if old_root_path else str(item.file_id)
-                new_prefix = f"{target_path}/{item.file_id}" if target_path else str(item.file_id)
-
-                for fid in batch_file_ids:
-                    rec = await session.get(KnowledgeFile, fid)
-                    if not rec:
-                        continue
-                    rec.deleted_at = None
-                    if cross:
-                        rec.knowledge_id = target_kid
-                    if int(fid) == int(item.file_id):
-                        rec.file_level_path = target_path
-                        rec.level = target_path.count("/") if target_path else 0
-                    else:
-                        cur = rec.file_level_path or ""
-                        if cur == old_prefix or cur.startswith(old_prefix + "/"):
-                            suffix = cur[len(old_prefix) :]
-                            rec.file_level_path = f"{new_prefix}{suffix}"
-                            rec.level = rec.file_level_path.count("/") if rec.file_level_path else 0
-                    session.add(rec)
+                if merge_into_id is not None:
+                    vector_file_ids = await self._restore_folder_merged(
+                        session,
+                        item=item,
+                        target_kid=target_kid,
+                        batch_file_ids=batch_file_ids,
+                        merge_into_id=merge_into_id,
+                        cross=cross,
+                        overwrite_files=bool(req.overwrite_files),
+                    )
+                else:
+                    await self._restore_entries_as_sibling(
+                        session,
+                        item=item,
+                        target_kid=target_kid,
+                        target_path=target_path,
+                        batch_file_ids=batch_file_ids,
+                        cross=cross,
+                    )
                 await session.execute(
                     delete(KnowledgeRecycleItem).where(KnowledgeRecycleItem.recycle_batch_id == item.recycle_batch_id)
                 )
                 await session.commit()
 
             if cross:
-                await self._copy_vectors_cross_space(item.original_knowledge_id, target_kid, batch_file_ids)
+                await self._copy_vectors_cross_space(item.original_knowledge_id, target_kid, vector_file_ids)
 
             restored += 1
 
         return {"restored": restored}
+
+    async def _restore_entries_as_sibling(
+        self,
+        session,
+        *,
+        item: KnowledgeRecycleItem,
+        target_kid: int,
+        target_path: str,
+        batch_file_ids: list[int],
+        cross: bool,
+    ) -> None:
+        """Restore list entry (and batch subtree) as a new sibling under target_path."""
+        root_rec = await session.get(KnowledgeFile, int(item.file_id))
+        old_root_path = (root_rec.file_level_path if root_rec else item.original_file_level_path) or ""
+        old_prefix = self._child_prefix(old_root_path, int(item.file_id))
+        new_prefix = self._child_prefix(target_path, int(item.file_id))
+
+        for fid in batch_file_ids:
+            rec = await session.get(KnowledgeFile, fid)
+            if not rec:
+                continue
+            rec.deleted_at = None
+            if cross:
+                rec.knowledge_id = target_kid
+            if int(fid) == int(item.file_id):
+                rec.file_level_path = target_path
+                rec.level = self._level_from_path(target_path)
+            else:
+                cur = rec.file_level_path or ""
+                remapped = self._remap_prefix(cur, old_prefix, new_prefix)
+                if remapped is not None:
+                    rec.file_level_path = remapped
+                    rec.level = self._level_from_path(remapped)
+            session.add(rec)
+
+    async def _restore_folder_merged(
+        self,
+        session,
+        *,
+        item: KnowledgeRecycleItem,
+        target_kid: int,
+        batch_file_ids: list[int],
+        merge_into_id: int,
+        cross: bool,
+        overwrite_files: bool = False,
+    ) -> list[int]:
+        """Merge recycled folder into an existing same-name folder; return restored file ids."""
+        records: dict[int, KnowledgeFile] = {}
+        for fid in batch_file_ids:
+            rec = await session.get(KnowledgeFile, fid)
+            if rec:
+                records[int(fid)] = rec
+
+        root_id = int(item.file_id)
+        # recycled folder id -> live folder id (identity when the recycled node is kept)
+        folder_map: dict[int, int] = {root_id: merge_into_id}
+
+        folder_ids = sorted(
+            (fid for fid, rec in records.items() if int(rec.file_type) == FileType.DIR.value),
+            key=lambda fid: self._level_from_path(records[fid].file_level_path or ""),
+        )
+
+        absorbed_folder_ids: list[int] = []
+        # path -> {folder_name: live_folder_id} including folders restored earlier in this merge
+        live_folders_at_path: dict[str, dict[str, int]] = {}
+
+        for fid in folder_ids:
+            rec = records[fid]
+            if fid == root_id:
+                absorbed_folder_ids.append(fid)
+                continue
+
+            new_parent_path = self._remap_path_segments(rec.file_level_path or "", folder_map)
+            name = rec.file_name or ""
+            path_index = live_folders_at_path.setdefault(new_parent_path, {})
+            if name not in path_index:
+                dup = await self._find_active_folder_by_name(target_kid, name, new_parent_path, session=session)
+                if dup is not None and int(dup.id) != fid:
+                    path_index[name] = int(dup.id)
+
+            if name in path_index and path_index[name] != fid:
+                folder_map[fid] = path_index[name]
+                absorbed_folder_ids.append(fid)
+                continue
+
+            rec.deleted_at = None
+            if cross:
+                rec.knowledge_id = target_kid
+            rec.file_level_path = new_parent_path
+            rec.level = self._level_from_path(new_parent_path)
+            folder_map[fid] = fid
+            path_index[name] = fid
+            session.add(rec)
+
+        restored_ids: list[int] = [fid for fid in folder_map if fid not in absorbed_folder_ids]
+        allocated_names: dict[str, set[str]] = {}
+
+        for fid, rec in records.items():
+            if int(rec.file_type) == FileType.DIR.value:
+                continue
+            new_parent_path = self._remap_path_segments(rec.file_level_path or "", folder_map)
+            # Confirmed overwrite keeps original names; otherwise rename as last-resort safety.
+            if overwrite_files:
+                file_name = rec.file_name or ""
+            else:
+                taken = await self._active_file_names_at_path(session, target_kid, new_parent_path)
+                taken |= allocated_names.setdefault(new_parent_path, set())
+                file_name = self._next_renamed_filename(rec.file_name or "", taken)
+                allocated_names[new_parent_path].add(file_name)
+            rec.file_name = file_name
+            rec.deleted_at = None
+            if cross:
+                rec.knowledge_id = target_kid
+            rec.file_level_path = new_parent_path
+            rec.level = self._level_from_path(new_parent_path)
+            session.add(rec)
+            restored_ids.append(fid)
+
+        if absorbed_folder_ids:
+            await session.execute(delete(KnowledgeFile).where(col(KnowledgeFile.id).in_(absorbed_folder_ids)))
+
+        return restored_ids
 
     # --- helpers ---
 
@@ -713,24 +842,102 @@ class KnowledgeRecycleService:
         folder = await KnowledgeFileDao.query_by_id(folder_id)
         if not folder:
             return ""
-        return f"{folder.file_level_path}/{folder.id}" if folder.file_level_path else f"/{folder.id}"
+        return self._child_prefix(folder.file_level_path, int(folder.id))
+
+    @staticmethod
+    def _child_prefix(parent_path: str | None, folder_id: int) -> str:
+        """Canonical child path under a folder — matches knowledge_space_service create/move."""
+        return f"{parent_path or ''}/{int(folder_id)}"
+
+    @staticmethod
+    def _level_from_path(path: str | None) -> int:
+        if not path:
+            return 0
+        return len([p for p in path.split("/") if p])
+
+    @staticmethod
+    def _remap_prefix(path: str, old_prefix: str, new_prefix: str) -> str | None:
+        if path == old_prefix:
+            return new_prefix
+        if path.startswith(old_prefix + "/"):
+            return f"{new_prefix}{path[len(old_prefix) :]}"
+        return None
+
+    @staticmethod
+    def _remap_path_segments(path: str, folder_map: dict[int, int]) -> str:
+        """Replace folder-id path segments using folder_map (recycled id → live id)."""
+        if not path:
+            return ""
+        parts = [p for p in path.split("/") if p]
+        remapped: list[str] = []
+        for part in parts:
+            if part.isdigit() and int(part) in folder_map:
+                remapped.append(str(folder_map[int(part)]))
+            else:
+                remapped.append(part)
+        return ("/" + "/".join(remapped)) if remapped else ""
+
+    @staticmethod
+    def _next_renamed_filename(name: str, taken: set[str]) -> str:
+        """Allocate name / name(1).ext / name(2).ext not present in taken."""
+        if name not in taken:
+            return name
+        if "." in name and not name.startswith("."):
+            stem, ext = name.rsplit(".", 1)
+            suffix = f".{ext}"
+        else:
+            stem, suffix = name, ""
+        n = 1
+        while True:
+            candidate = f"{stem}({n}){suffix}"
+            if candidate not in taken:
+                return candidate
+            n += 1
 
     async def _count_active_folder_name(self, knowledge_id: int, name: str, path: str) -> int:
-        async with get_async_db_session() as session:
-            from sqlalchemy import func
+        existing = await self._find_active_folder_by_name(knowledge_id, name, path)
+        return 1 if existing else 0
 
-            return int(
-                await session.scalar(
-                    select(func.count(KnowledgeFile.id)).where(
+    async def _find_active_folder_by_name(
+        self,
+        knowledge_id: int,
+        name: str,
+        path: str,
+        *,
+        session=None,
+    ) -> KnowledgeFile | None:
+        async def _query(sess) -> KnowledgeFile | None:
+            return (
+                await sess.execute(
+                    select(KnowledgeFile)
+                    .where(
                         KnowledgeFile.knowledge_id == knowledge_id,
                         KnowledgeFile.file_type == FileType.DIR.value,
                         KnowledgeFile.file_name == name,
                         KnowledgeFile.file_level_path == path,
                         col(KnowledgeFile.deleted_at).is_(None),
                     )
+                    .limit(1)
                 )
-                or 0
+            ).scalar_one_or_none()
+
+        if session is not None:
+            return await _query(session)
+        async with get_async_db_session() as sess:
+            return await _query(sess)
+
+    async def _active_file_names_at_path(self, session, knowledge_id: int, path: str) -> set[str]:
+        rows = (
+            await session.execute(
+                select(KnowledgeFile.file_name).where(
+                    KnowledgeFile.knowledge_id == knowledge_id,
+                    KnowledgeFile.file_type == FileType.FILE.value,
+                    KnowledgeFile.file_level_path == path,
+                    col(KnowledgeFile.deleted_at).is_(None),
+                )
             )
+        ).all()
+        return {str(r[0]) for r in rows if r and r[0]}
 
     async def _find_file_conflicts(
         self,
@@ -782,8 +989,36 @@ class KnowledgeRecycleService:
     async def _find_file_conflicts_for_folder_merge(
         self, item: KnowledgeRecycleItem, target_kid: int
     ) -> list[dict[str, Any]]:
-        # Conflict check within the whole target knowledge space
-        return await self._find_file_conflicts(target_kid, item.display_name, item.md5)
+        """Find active KB files that conflict (name or md5) with any FILE in the recycle batch."""
+        batch_ids = await self._batch_file_ids(item.recycle_batch_id, item.recycle_root_id)
+        if not batch_ids:
+            return []
+        batch_set = set(batch_ids)
+        records = await KnowledgeFileDao.aget_file_by_ids(batch_ids)
+        conflicts: list[dict[str, Any]] = []
+        seen_targets: set[int] = set()
+        for rec in records:
+            if not rec or int(rec.file_type) != FileType.FILE.value:
+                continue
+            matched = await self._find_file_conflicts(
+                target_kid,
+                rec.file_name or "",
+                getattr(rec, "md5", None),
+                exclude_id=int(rec.id),
+            )
+            for row in matched:
+                tid = int(row["target_file_id"])
+                if tid in batch_set or tid in seen_targets:
+                    continue
+                seen_targets.add(tid)
+                conflicts.append(row)
+        return conflicts
+
+    async def _overwrite_folder_merge_conflicts(self, item: KnowledgeRecycleItem, target_kid: int) -> None:
+        conflicts = await self._find_file_conflicts_for_folder_merge(item, target_kid)
+        if not conflicts:
+            return
+        await self._delete_conflict_targets(target_kid, [int(c["target_file_id"]) for c in conflicts])
 
     async def _overwrite_conflicts(self, item: KnowledgeRecycleItem, target_kid: int) -> None:
         conflicts = await self._find_file_conflicts(
@@ -791,7 +1026,12 @@ class KnowledgeRecycleService:
         )
         if not conflicts:
             return
-        target_ids = [int(c["target_file_id"]) for c in conflicts]
+        await self._delete_conflict_targets(target_kid, [int(c["target_file_id"]) for c in conflicts])
+
+    async def _delete_conflict_targets(self, target_kid: int, target_ids: list[int]) -> None:
+        target_ids = list(dict.fromkeys(target_ids))
+        if not target_ids:
+            return
         files = await KnowledgeFileDao.aget_file_by_ids(target_ids)
         if not files:
             return
