@@ -307,6 +307,7 @@ class QuestionService:
             experts_names=request.experts_names,
             image_url=request.image_url,
             file_url=request.file_url,
+            file_name=request.file_name,
             created_by=user_name,
         )
 
