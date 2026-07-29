@@ -27,19 +27,15 @@ FILE_SHARE_SCENARIO = "knowledge_space_file_share_request"
 FILE_PUBLISH_DOMAIN_MISMATCH_MESSAGE = "您发布的文档与目标库不符"
 logger = logging.getLogger(__name__)
 
-_FILE_PUBLISH_TARGET_LEVELS: dict[KnowledgeSpaceLevelEnum, set[KnowledgeSpaceLevelEnum]] = {
+FILE_PUBLISH_TARGET_LEVELS: dict[KnowledgeSpaceLevelEnum, set[KnowledgeSpaceLevelEnum]] = {
     KnowledgeSpaceLevelEnum.PERSONAL: {
-        KnowledgeSpaceLevelEnum.PUBLIC,
-        KnowledgeSpaceLevelEnum.DEPARTMENT,
         KnowledgeSpaceLevelEnum.TEAM,
         KnowledgeSpaceLevelEnum.TEAM_KS,
     },
     KnowledgeSpaceLevelEnum.TEAM: {
-        KnowledgeSpaceLevelEnum.PUBLIC,
         KnowledgeSpaceLevelEnum.DEPARTMENT,
     },
     KnowledgeSpaceLevelEnum.TEAM_KS: {
-        KnowledgeSpaceLevelEnum.PUBLIC,
         KnowledgeSpaceLevelEnum.DEPARTMENT,
     },
     KnowledgeSpaceLevelEnum.DEPARTMENT: {
@@ -78,7 +74,7 @@ def _file_publish_pair_allowed(source_level, target_level) -> bool:
         if isinstance(target_level, KnowledgeSpaceLevelEnum)
         else KnowledgeSpaceLevelEnum(str(target_level))
     )
-    return target_level in _FILE_PUBLISH_TARGET_LEVELS.get(source_level, set())
+    return target_level in FILE_PUBLISH_TARGET_LEVELS.get(source_level, set())
 
 
 def _normalize_file_publish_business_domain_codes(raw_codes: Any) -> list[str]:
@@ -547,6 +543,10 @@ class KnowledgeSpaceFilePublishApprovalHandler:
 
     async def on_approved(self, instance_id: int, payload_snapshot: dict) -> dict:
         if payload_snapshot.get("canonical_document_id") is not None:
+            source_level = await self._space_level(int(payload_snapshot["source_space_id"]))
+            target_level = await self._space_level(int(payload_snapshot["target_space_id"]))
+            if not _file_publish_pair_allowed(source_level, target_level):
+                raise ValueError("source and target space levels are not allowed for publish")
             return await self._publish_distribution(
                 instance_id,
                 payload_snapshot,
@@ -739,6 +739,8 @@ class KnowledgeSpaceFileShareApprovalHandler:
             "source_file_name": req.payload_snapshot.get("source_file_name"),
             "target_space_id": req.payload_snapshot.get("target_space_id"),
             "target_space_name": req.payload_snapshot.get("target_space_name"),
+            "target_folder_id": req.payload_snapshot.get("target_folder_id"),
+            "target_folder_name": req.payload_snapshot.get("target_folder_name"),
             "allow_download": bool(
                 req.payload_snapshot.get("allow_download")
             ),
@@ -751,10 +753,46 @@ class KnowledgeSpaceFileShareApprovalHandler:
         return {
             "source_file_id": req.payload_snapshot.get("source_file_id"),
             "target_space_id": req.payload_snapshot.get("target_space_id"),
+            "target_folder_id": req.payload_snapshot.get("target_folder_id"),
         }
 
     async def resolve_approvers(self, node_config: dict, req) -> list[int]:
         return await _resolve_file_publish_approvers(node_config, req)
+
+    @staticmethod
+    async def _resolve_target_location(
+        payload_snapshot: dict,
+    ) -> tuple[str, int]:
+        from bisheng.knowledge.domain.services.knowledge_space_service import (
+            KnowledgeSpaceService,
+        )
+
+        target_space_id = int(payload_snapshot["target_space_id"])
+        if not await KnowledgeSpaceService.is_valid_department_space_id(target_space_id):
+            raise ValueError("share target department space is no longer valid")
+        target_space = await KnowledgeDao.aquery_by_id(target_space_id)
+        if (
+            target_space is None
+            or int(target_space.tenant_id) != int(payload_snapshot["tenant_id"])
+        ):
+            raise ValueError("share target department space is no longer valid")
+
+        target_folder_id = payload_snapshot.get("target_folder_id")
+        if target_folder_id is None:
+            return "", 0
+        folder_id = int(target_folder_id)
+        target_folder = await KnowledgeFileDao.query_by_id(folder_id)
+        if (
+            target_folder is None
+            or int(target_folder.knowledge_id) != target_space_id
+            or int(target_folder.file_type) != FileType.DIR.value
+        ):
+            raise ValueError("share target folder is no longer valid")
+        parent_path = str(target_folder.file_level_path or "").rstrip("/")
+        return (
+            f"{parent_path}/{folder_id}" if parent_path else f"/{folder_id}",
+            int(target_folder.level or 0) + 1,
+        )
 
     async def on_approved(
         self,
@@ -779,6 +817,9 @@ class KnowledgeSpaceFileShareApprovalHandler:
             KnowledgeDocumentPermissionActivationService,
         )
 
+        target_file_level_path, target_level = (
+            await self._resolve_target_location(payload_snapshot)
+        )
         async with get_async_db_session() as session:
             file_repository = KnowledgeFileRepositoryImpl(session)
             service = KnowledgeDocumentDistributionService(
@@ -810,6 +851,8 @@ class KnowledgeSpaceFileShareApprovalHandler:
                     allow_download=bool(
                         payload_snapshot.get("allow_download")
                     ),
+                    target_file_level_path=target_file_level_path,
+                    target_level=target_level,
                 )
             )
         try:

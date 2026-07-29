@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type UIEvent } from "react";
 import {
     getShougangFilePublishSimilarCandidatesApi,
+    getShougangFilePublishTargetFoldersApi,
     getShougangFilePublishTargetSpacesApi,
     searchShougangFilePublishDocumentsApi,
     submitShougangFilePublishApprovalApi,
@@ -69,6 +70,11 @@ export function FilePublishDialog({
     const [nextSearchCursor, setNextSearchCursor] = useState<number | null>(null);
     const [versionTarget, setVersionTarget] = useState<VersionTarget | null>(null);
     const debouncedSearchKeyword = useDebounce(searchKeyword, 300);
+    const selectedTargetSpace = targetSpaces.find(
+        (space) => String(space.id) === targetSpaceId,
+    );
+    const canBrowseTargetFiles = selectedTargetSpace?.can_browse_files !== false;
+    const canUseVersionManagement = versionManagementEnabled && canBrowseTargetFiles;
 
     useEffect(() => {
         if (!open) {
@@ -88,7 +94,7 @@ export function FilePublishDialog({
             return;
         }
 
-        if (!activeSpace?.id) {
+        if (!activeSpace?.id || !file?.id) {
             setTargetSpaces([]);
             setTargetSpaceId("");
             setTargetFolderId(null);
@@ -97,7 +103,7 @@ export function FilePublishDialog({
 
         let cancelled = false;
         setLoading(true);
-        getShougangFilePublishTargetSpacesApi(activeSpace.id)
+        getShougangFilePublishTargetSpacesApi(activeSpace.id, file.id)
             .then((res) => {
                 if (cancelled) return;
                 setTargetSpaces(res.data || []);
@@ -117,10 +123,10 @@ export function FilePublishDialog({
         return () => {
             cancelled = true;
         };
-    }, [activeSpace?.id, open, showToast]);
+    }, [activeSpace?.id, file?.id, open, showToast]);
 
     useEffect(() => {
-        if (!open || !file || !targetSpaceId || !versionManagementEnabled) {
+        if (!open || !file || !targetSpaceId || !canUseVersionManagement) {
             setCandidates([]);
             setCandidatesLoading(false);
             setCandidateError(false);
@@ -148,10 +154,10 @@ export function FilePublishDialog({
         return () => {
             cancelled = true;
         };
-    }, [file?.id, open, targetSpaceId, versionManagementEnabled]);
+    }, [canUseVersionManagement, file?.id, open, targetSpaceId]);
 
     useEffect(() => {
-        if (versionManagementEnabled) return;
+        if (canUseVersionManagement) return;
         setVersionTarget(null);
         setCandidates([]);
         setSearchResults([]);
@@ -160,10 +166,10 @@ export function FilePublishDialog({
         setNextSearchCursor(null);
         setCandidatesLoading(false);
         setCandidateError(false);
-    }, [versionManagementEnabled]);
+    }, [canUseVersionManagement]);
 
     const loadSearchPage = useCallback(async (cursor: number, append: boolean) => {
-        if (!file || !targetSpaceId || !versionManagementEnabled) return;
+        if (!file || !targetSpaceId || !canUseVersionManagement) return;
         setSearchLoading(true);
         try {
             const res = await searchShougangFilePublishDocumentsApi(
@@ -180,17 +186,31 @@ export function FilePublishDialog({
         } finally {
             setSearchLoading(false);
         }
-    }, [debouncedSearchKeyword, file, showToast, targetSpaceId, versionManagementEnabled]);
+    }, [canUseVersionManagement, debouncedSearchKeyword, file, showToast, targetSpaceId]);
 
     useEffect(() => {
-        if (!open || !file || !targetSpaceId || !versionManagementEnabled || !debouncedSearchKeyword.trim()) {
+        if (!open || !file || !targetSpaceId || !canUseVersionManagement || !debouncedSearchKeyword.trim()) {
             setSearchResults([]);
             setSearchHasMore(false);
             setNextSearchCursor(null);
             return;
         }
         void loadSearchPage(0, false);
-    }, [debouncedSearchKeyword, file, loadSearchPage, open, targetSpaceId, versionManagementEnabled]);
+    }, [canUseVersionManagement, debouncedSearchKeyword, file, loadSearchPage, open, targetSpaceId]);
+
+    const loadTargetFolders = useCallback(async (
+        spaceId: string | number,
+        parentId: string | number | null,
+    ) => {
+        if (!activeSpace?.id || !file?.id) return [];
+        const response = await getShougangFilePublishTargetFoldersApi(
+            activeSpace.id,
+            file.id,
+            spaceId,
+            parentId,
+        );
+        return response.data || [];
+    }, [activeSpace?.id, file?.id]);
 
     const handleSearchResultsScroll = (event: UIEvent<HTMLDivElement>) => {
         const element = event.currentTarget;
@@ -344,6 +364,7 @@ export function FilePublishDialog({
                                 targetFolderId={targetFolderId}
                                 onSelectRoot={handleSelectTargetRoot}
                                 onSelectFolder={handleSelectTargetFolder}
+                                loadFolders={loadTargetFolders}
                             />
                         </div>
                     </div>
@@ -353,7 +374,7 @@ export function FilePublishDialog({
                             id="file-publish-version-document"
                             className="h-9 w-full rounded-md border border-[#dcdfe6] bg-white px-3 text-sm outline-none focus:border-[#165dff]"
                             value={versionTarget ? `${versionTarget.type}:${versionTarget.id}` : ""}
-                            disabled={!versionManagementEnabled || candidatesLoading}
+                            disabled={!canUseVersionManagement || candidatesLoading}
                             onChange={(event) => {
                                 const value = event.target.value;
                                 if (!value) {
@@ -374,15 +395,20 @@ export function FilePublishDialog({
                             ))}
                         </select>
                     </div>
+                    {!canBrowseTargetFiles && (
+                        <div className="rounded-md bg-[#f7f8fa] px-3 py-2 text-sm text-[#86909c]">
+                            无目标库读取权限，仅可选择发布目录
+                        </div>
+                    )}
                     <div className="flex gap-2">
                         <input
                             className="h-9 min-w-0 flex-1 rounded-md border border-[#dcdfe6] px-3 text-sm outline-none focus:border-[#165dff]"
                             value={searchKeyword}
                             placeholder="搜索目标空间文档..."
-                            disabled={!versionManagementEnabled}
+                            disabled={!canUseVersionManagement}
                             onChange={(event) => setSearchKeyword(event.target.value)}
                         />
-                        <Button variant="outline" type="button" disabled={!versionManagementEnabled || searchLoading}>
+                        <Button variant="outline" type="button" disabled={!canUseVersionManagement || searchLoading}>
                             {searchLoading ? "搜索中..." : "搜索"}
                         </Button>
                     </div>

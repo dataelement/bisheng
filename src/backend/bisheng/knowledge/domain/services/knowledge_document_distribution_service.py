@@ -91,6 +91,8 @@ class ShareKnowledgeDocumentCommand:
     source_entry_id: int
     target_space_id: int
     allow_download: bool = False
+    target_file_level_path: str = ""
+    target_level: int = 0
 
 
 @dataclass(frozen=True)
@@ -1362,8 +1364,8 @@ class KnowledgeDocumentDistributionService:
             alias_name=source_entry.alias_name,
             file_type=FileType.FILE.value,
             file_source=source_entry.file_source,
-            level=0,
-            file_level_path="",
+            level=command.target_level,
+            file_level_path=command.target_file_level_path,
             abstract=source_entry.abstract,
             file_size=0,
             md5=None,

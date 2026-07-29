@@ -24,6 +24,7 @@ def _candidate(file_id: int, *, public: bool = False, eligible: bool = True):
 @pytest.mark.asyncio
 async def test_authorization_is_progressive_in_batches_of_ten_and_keeps_order():
     batches: list[list[int]] = []
+    state = PortalRecommendationAuthorizationState()
 
     async def build_context():
         return object()
@@ -37,10 +38,15 @@ async def test_authorization_is_progressive_in_batches_of_ten_and_keeps_order():
         top_n=5,
         build_permission_context=build_context,
         check_permission_batch=check_batch,
+        state=state,
     )
 
     assert [item.file_id for item in selected] == [21, 22, 23, 24, 25]
     assert [len(batch) for batch in batches] == [10, 10, 10]
+    assert state.checks == 30
+    assert state.allowed_count == 10
+    assert state.denied_count == 20
+    assert state.error_count == 0
 
 
 @pytest.mark.asyncio
@@ -72,6 +78,8 @@ async def test_public_normal_files_use_fast_path_but_ineligible_or_custom_acl_do
 
 @pytest.mark.asyncio
 async def test_permission_context_failure_is_closed_as_an_empty_safe_result():
+    state = PortalRecommendationAuthorizationState()
+
     async def build_context():
         raise PortalRecommendationPermissionContextUnavailable("permission engine unavailable")
 
@@ -80,13 +88,18 @@ async def test_permission_context_failure_is_closed_as_an_empty_safe_result():
         top_n=1,
         build_permission_context=build_context,
         check_permission_batch=lambda *_args: None,
+        state=state,
     )
 
     assert selected == []
+    assert state.unavailable is True
+    assert state.unavailable_reason == "permission_context_unavailable"
 
 
 @pytest.mark.asyncio
 async def test_single_file_permission_exception_is_denied_without_aborting_later_candidates():
+    state = PortalRecommendationAuthorizationState()
+
     async def build_context():
         return object()
 
@@ -101,14 +114,19 @@ async def test_single_file_permission_exception_is_denied_without_aborting_later
         top_n=2,
         build_permission_context=build_context,
         check_permission_batch=check_batch,
+        state=state,
     )
 
     assert [item.file_id for item in selected] == [2]
+    assert state.allowed_count == 1
+    assert state.denied_count == 1
+    assert state.error_count == 1
 
 
 @pytest.mark.asyncio
 async def test_authorization_stops_at_two_hundred_checks_or_seven_hundred_ms():
     checked = 0
+    check_limited_state = PortalRecommendationAuthorizationState()
 
     async def build_context():
         return object()
@@ -123,22 +141,29 @@ async def test_authorization_stops_at_two_hundred_checks_or_seven_hundred_ms():
         top_n=1,
         build_permission_context=build_context,
         check_permission_batch=check_batch,
+        state=check_limited_state,
     )
     assert checked == 200
+    assert check_limited_state.check_limit_reached is True
 
     ticks = iter((0.0, 0.71))
     checked = 0
+    time_limited_state = PortalRecommendationAuthorizationState()
     await PortalRecommendationService(clock=lambda: next(ticks)).select_authorized_top_n(
         [_candidate(file_id) for file_id in range(1, 21)],
         top_n=1,
         build_permission_context=build_context,
         check_permission_batch=check_batch,
+        state=time_limited_state,
     )
     assert checked == 0
+    assert time_limited_state.time_budget_reached is True
 
 
 @pytest.mark.asyncio
 async def test_batch_checker_system_failure_keeps_only_already_confirmed_public_items():
+    state = PortalRecommendationAuthorizationState()
+
     async def build_context():
         return object()
 
@@ -151,9 +176,14 @@ async def test_batch_checker_system_failure_keeps_only_already_confirmed_public_
         top_n=2,
         build_permission_context=build_context,
         check_permission_batch=check_batch,
+        state=state,
     )
 
     assert [item.file_id for item in selected] == [1]
+    assert state.unavailable_reason == "permission_engine_unavailable"
+    assert state.allowed_count == 1
+    assert state.denied_count == 1
+    assert state.error_count == 1
 
 
 @pytest.mark.asyncio

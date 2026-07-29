@@ -5,10 +5,13 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import time
 from collections import defaultdict
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from typing import Any
+
+from loguru import logger
 
 from bisheng.core.context.tenant import DEFAULT_TENANT_ID, get_current_tenant_id
 from bisheng.core.database import get_async_db_session
@@ -337,6 +340,7 @@ async def _rebuild_user_interest_async(
     current_query: str | None,
     searched_at: str | datetime | None,
 ) -> int:
+    started_at = time.monotonic()
     tenant_id = int(get_current_tenant_id() or DEFAULT_TENANT_ID)
     if isinstance(searched_at, str):
         searched_at = datetime.fromisoformat(searched_at)
@@ -349,6 +353,21 @@ async def _rebuild_user_interest_async(
         user_id=int(user_id),
         current_query=current_query,
         searched_at=searched_at,
+    )
+    logger.info(
+        "[diag][portal.recommendation.interest_refresh] {}",
+        json.dumps(
+            {
+                "current_query_present": bool((current_query or "").strip()),
+                "duration_ms": round((time.monotonic() - started_at) * 1000, 2),
+                "interest_count": len(entries),
+                "searched_at_present": searched_at is not None,
+                "status": "success",
+                "tenant_id": tenant_id,
+                "user_id": int(user_id),
+            },
+            sort_keys=True,
+        ),
     )
     return len(entries)
 
@@ -470,9 +489,32 @@ async def _rebuild_shared_pools_async(
     config_version: int,
     fingerprint: str,
 ) -> bool:
+    started_at = time.monotonic()
     tenant_id = int(get_current_tenant_id() or DEFAULT_TENANT_ID)
+
+    def log_result(status: str, reason: str, **details: Any) -> None:
+        logger.info(
+            "[diag][portal.recommendation.pool_refresh] {}",
+            json.dumps(
+                {
+                    "config_version": int(config_version),
+                    "duration_ms": round((time.monotonic() - started_at) * 1000, 2),
+                    "generation": int(generation),
+                    "reason": reason,
+                    "status": status,
+                    "tenant_id": tenant_id,
+                    **details,
+                },
+                sort_keys=True,
+            ),
+        )
+
     config = await ShougangPortalConfigService.get_config(tenant_id=tenant_id)
-    if config is None or int(config.version) != int(config_version):
+    if config is None:
+        log_result("skipped", "config_missing")
+        return False
+    if int(config.version) != int(config_version):
+        log_result("skipped", "config_version_changed", actual_config_version=int(config.version))
         return False
     recommendation = config.portal.recommendation
     current_fingerprint = recommendation_config_fingerprint(
@@ -480,6 +522,7 @@ async def _rebuild_shared_pools_async(
         recommendation.home_entry_source_weight,
     )
     if current_fingerprint != fingerprint:
+        log_result("skipped", "config_fingerprint_changed")
         return False
 
     async with get_async_db_session() as session:
@@ -581,13 +624,34 @@ async def _rebuild_shared_pools_async(
         )
 
     latest = await ShougangPortalConfigService.get_config(tenant_id=tenant_id)
-    if latest is None or int(latest.version) != int(config_version):
+    if latest is None:
+        log_result(
+            "discarded",
+            "config_missing_after_build",
+            domain_count=len(domain_codes),
+            projection_count=len(projections),
+        )
+        return False
+    if int(latest.version) != int(config_version):
+        log_result(
+            "discarded",
+            "config_version_changed_after_build",
+            actual_config_version=int(latest.version),
+            domain_count=len(domain_codes),
+            projection_count=len(projections),
+        )
         return False
     latest_fingerprint = recommendation_config_fingerprint(
         latest.portal.recommendation.hot_half_life_days,
         latest.portal.recommendation.home_entry_source_weight,
     )
     if latest_fingerprint != fingerprint:
+        log_result(
+            "discarded",
+            "config_fingerprint_changed_after_build",
+            domain_count=len(domain_codes),
+            projection_count=len(projections),
+        )
         return False
     if not await _pool_counts_match(
         redis_repository,
@@ -595,6 +659,14 @@ async def _rebuild_shared_pools_async(
         pool_version=pool_version,
         expected_counts=built_counts,
     ):
+        log_result(
+            "discarded",
+            "pool_count_mismatch",
+            built_pool_count=len(built_counts),
+            candidate_count=len(candidates),
+            domain_count=len(domain_codes),
+            projection_count=len(projections),
+        )
         return False
     if projection_samples:
         async with get_async_db_session() as session:
@@ -608,20 +680,48 @@ async def _rebuild_shared_pools_async(
             or int(sample_map[key].tenant_id) != tenant_id
             for key in projection_samples
         ):
+            log_result(
+                "discarded",
+                "projection_sample_invalid",
+                candidate_count=len(candidates),
+                domain_count=len(domain_codes),
+                projection_count=len(projections),
+                sample_count=len(projection_samples),
+            )
             return False
     latest_pool_state = await redis_repository.get_pool_state(tenant_id)
     if (
         int(latest_pool_state.desired_generation) != int(generation)
         or int(latest_pool_state.active_generation) >= int(generation)
     ):
+        log_result(
+            "discarded",
+            "generation_superseded",
+            active_generation=int(latest_pool_state.active_generation),
+            candidate_count=len(candidates),
+            desired_generation=int(latest_pool_state.desired_generation),
+            domain_count=len(domain_codes),
+            projection_count=len(projections),
+        )
         return False
     await redis_repository.mark_pool_version_ready(tenant_id, pool_version)
-    return await redis_repository.activate_pool_if_current(
+    activated = await redis_repository.activate_pool_if_current(
         tenant_id,
         int(generation),
         pool_version,
         fingerprint,
     )
+    log_result(
+        "success" if activated else "discarded",
+        "activated" if activated else "activation_cas_failed",
+        built_pool_count=len(built_counts),
+        candidate_count=len(candidates),
+        domain_count=len(domain_codes),
+        pool_entry_count=sum(built_counts.values()),
+        projection_count=len(projections),
+        recent_view_count=len(views),
+    )
+    return activated
 
 
 @bisheng_celery.task(

@@ -6,6 +6,9 @@ import {
   getApprovalInstanceDetailApi,
   getMyApprovalTaskDetailApi,
   getDepartmentFileViewStatusApi,
+  getShougangFilePublishTargetFoldersApi,
+  getShougangFilePublishTargetSpacesApi,
+  getShougangFileShareTargetFoldersApi,
   listApprovalRequestsApi,
   listMyApprovalRequestsApi,
   listMyApprovalTasksApi,
@@ -220,6 +223,73 @@ describe("approval api", () => {
       menu_key: "knowledge_space",
       menu_name: "知识库",
     });
+  });
+
+  it("loads share target folders through the dedicated metadata endpoint", async () => {
+    mockGet.mockResolvedValue({
+      status_code: 200,
+      data: {
+        data: [{ id: 301, name: "制度目录", level: 1 }],
+        total: 1,
+      },
+    });
+
+    await expect(
+      getShougangFileShareTargetFoldersApi(10, 100, 20, 300),
+    ).resolves.toEqual({
+      data: [{ id: 301, name: "制度目录", level: 1 }],
+      total: 1,
+    });
+    expect(mockGet).toHaveBeenCalledWith(
+      "/api/v1/approval/shougang/file-share/target-folders",
+      {
+        params: {
+          source_space_id: 10,
+          source_file_id: 100,
+          target_space_id: 20,
+          parent_id: 300,
+        },
+      },
+    );
+  });
+
+  it("loads publish targets and folders with source file authorization context", async () => {
+    mockGet
+      .mockResolvedValueOnce({
+        status_code: 200,
+        data: {
+          data: [{ id: 20, name: "部门空间", can_browse_files: false }],
+          total: 1,
+        },
+      })
+      .mockResolvedValueOnce({
+        status_code: 200,
+        data: {
+          data: [{ id: 301, name: "制度目录", level: 1 }],
+          total: 1,
+        },
+      });
+
+    await getShougangFilePublishTargetSpacesApi(10, 100);
+    await getShougangFilePublishTargetFoldersApi(10, 100, 20, null);
+
+    expect(mockGet).toHaveBeenNthCalledWith(
+      1,
+      "/api/v1/approval/shougang/file-publish/target-spaces",
+      { params: { source_space_id: 10, source_file_id: 100 } },
+    );
+    expect(mockGet).toHaveBeenNthCalledWith(
+      2,
+      "/api/v1/approval/shougang/file-publish/target-folders",
+      {
+        params: {
+          source_space_id: 10,
+          source_file_id: 100,
+          target_space_id: 20,
+          parent_id: undefined,
+        },
+      },
+    );
   });
 
   it("审批直通创建时将 raw space 归一化（数字 id → 字符串），供跳转/权限检查使用", async () => {

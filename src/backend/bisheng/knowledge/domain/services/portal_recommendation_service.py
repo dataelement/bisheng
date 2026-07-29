@@ -55,6 +55,14 @@ class PortalRecommendationAuthorizationState:
     permission_context: Any = None
     context_initialized: bool = False
     unavailable: bool = False
+    allowed_count: int = 0
+    denied_count: int = 0
+    error_count: int = 0
+    fast_allowed_count: int = 0
+    ineligible_count: int = 0
+    check_limit_reached: bool = False
+    time_budget_reached: bool = False
+    unavailable_reason: str = ""
 
     def __post_init__(self) -> None:
         if self.decisions is None:
@@ -277,11 +285,13 @@ class PortalRecommendationService:
         if state.started_at is None:
             state.started_at = self._clock()
         confirmed = [item for item in ordered_candidates if state.decisions.get(item.key)][:top_n]
-        if (
-            state.unavailable
-            or state.checks >= max_checks
-            or self._clock() - state.started_at >= budget_seconds
-        ):
+        if state.unavailable:
+            return confirmed
+        if state.checks >= max_checks:
+            state.check_limit_reached = True
+            return confirmed
+        if self._clock() - state.started_at >= budget_seconds:
+            state.time_budget_reached = True
             return confirmed
         if not state.context_initialized:
             try:
@@ -290,12 +300,14 @@ class PortalRecommendationService:
             except Exception:
                 logger.warning("portal recommendation permission context unavailable; returning safe empty result")
                 state.unavailable = True
+                state.unavailable_reason = "permission_context_unavailable"
                 return []
 
         selected: list[PortalRecommendationCandidate] = []
         cursor = 0
         while cursor < len(ordered_candidates) and state.checks < max_checks and len(selected) < top_n:
             if self._clock() - state.started_at >= budget_seconds:
+                state.time_budget_reached = True
                 break
             batch = list(
                 ordered_candidates[
@@ -311,9 +323,11 @@ class PortalRecommendationService:
             fast_allowed = {item.key for item in unseen if item.eligible and item.is_public and item.normal_acl}
             for key in fast_allowed:
                 state.decisions[key] = True
+            state.fast_allowed_count += len(fast_allowed)
             for item in unseen:
                 if not item.eligible:
                     state.decisions[item.key] = False
+                    state.ineligible_count += 1
             needs_check = [
                 item
                 for item in unseen
@@ -331,12 +345,22 @@ class PortalRecommendationService:
                     logger.warning("portal recommendation permission engine unavailable; stopping safe selection")
                     engine_unavailable = True
                     state.unavailable = True
+                    state.unavailable_reason = "permission_engine_unavailable"
                 except Exception:
                     logger.warning("portal recommendation permission batch failed closed")
                     checked_result = {}
 
             for item in needs_check:
-                state.decisions[item.key] = checked_result.get(item.key) is True
+                decision = checked_result.get(item.key)
+                state.decisions[item.key] = decision is True
+                if isinstance(decision, Exception) or decision is None:
+                    state.error_count += 1
+
+            for item in unseen:
+                if state.decisions.get(item.key) is True:
+                    state.allowed_count += 1
+                else:
+                    state.denied_count += 1
 
             for item in batch:
                 if state.decisions.get(item.key) is True:
@@ -345,4 +369,6 @@ class PortalRecommendationService:
                     break
             if engine_unavailable:
                 break
+        if state.checks >= max_checks and len(selected) < top_n and cursor < len(ordered_candidates):
+            state.check_limit_reached = True
         return selected

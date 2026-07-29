@@ -7,6 +7,7 @@ import { NotificationSeverity } from "~/common";
 import PortalKnowledgeWorkbench from "./PortalKnowledgeWorkbench";
 import {
     getShougangFilePublishSimilarCandidatesApi,
+    getShougangFilePublishTargetFoldersApi,
     getShougangFilePublishTargetSpacesApi,
     applyDepartmentFileViewApi,
     getDepartmentFileViewStatusApi,
@@ -353,6 +354,7 @@ jest.mock("~/api/approval", () => ({
     applyDepartmentFileViewApi: jest.fn(),
     getDepartmentFileViewStatusApi: jest.fn(),
     submitShougangKnowledgeSpaceCreateApprovalApi: jest.fn(),
+    getShougangFilePublishTargetFoldersApi: jest.fn(),
     getShougangFilePublishTargetSpacesApi: jest.fn(),
     getShougangFilePublishSimilarCandidatesApi: jest.fn(),
     searchShougangFilePublishDocumentsApi: jest.fn(),
@@ -384,6 +386,7 @@ jest.mock("~/api/knowledge", () => ({
     },
     SpaceSortType: {
         UPDATE_TIME: "update_time",
+        SORT_WEIGHT: "sort_weight",
     },
     SortType: {
         NAME: "file_name",
@@ -735,6 +738,7 @@ describe("PortalKnowledgeWorkbench", () => {
             data: [{ id: "public-target", name: "公共发布库", space_level: SpaceLevel.PUBLIC }],
             total: 1,
         } as any);
+        jest.mocked(getShougangFilePublishTargetFoldersApi).mockResolvedValue({ data: [], total: 0 } as any);
         jest.mocked(getShougangFilePublishSimilarCandidatesApi).mockResolvedValue({ data: [], total: 0 } as any);
         jest.mocked(searchShougangFilePublishDocumentsApi).mockResolvedValue({ data: [], total: 0 } as any);
         jest.mocked(submitShougangFilePublishApprovalApi).mockResolvedValue({
@@ -791,25 +795,17 @@ describe("PortalKnowledgeWorkbench", () => {
 
         fireEvent.click(within(publicGroup).getByRole("button", { name: "展开公共知识库" }));
         await waitFor(() => {
-            expect(getSpacesByLevelApi).toHaveBeenCalledWith(SpaceLevel.PUBLIC, { order_by: SpaceSortType.UPDATE_TIME });
+            expect(getSpacesByLevelApi).toHaveBeenCalledWith(SpaceLevel.PUBLIC, { order_by: SpaceSortType.SORT_WEIGHT });
         });
         await waitFor(() => expect(within(publicGroup).getByText("公共空间01")).toBeInTheDocument());
         expect(screen.getByRole("button", { name: "收起公共知识库" })).toBeInTheDocument();
     });
 
-    test("ordinary users discover department spaces, load the safe file tree, and apply explicitly", async () => {
+    test("ordinary users cannot discover department spaces without existing read permission", async () => {
         const favoriteSpace = makeDefaultFavoriteSpace();
         const departmentSpace = makeSpace("department-1", "炼钢部知识库", {
             role: SpaceRole.MEMBER,
             spaceLevel: SpaceLevel.DEPARTMENT,
-        });
-        const departmentFile = makeFile("department-file-1", "部门制度.md", {
-            spaceId: "department-1",
-            size: undefined,
-            summary: "",
-            contentAccess: "approval_required",
-            canDownload: false,
-            isDepartmentFile: true,
         });
         jest.mocked(getGroupedSpacesApi).mockResolvedValue({
             publicSpaces: [],
@@ -818,50 +814,20 @@ describe("PortalKnowledgeWorkbench", () => {
             personalSpaces: [favoriteSpace],
         } as any);
         jest.mocked(getPortalDiscoverableSpacesApi).mockResolvedValue([departmentSpace] as any);
-        jest.mocked(getPortalSpaceChildrenApi).mockResolvedValue({
-            data: [departmentFile],
-            page_size: 20,
-            has_more: false,
-            next_cursor: null,
-        });
 
         renderWorkbench();
 
         fireEvent.click(await screen.findByRole("button", { name: "展开部门知识库" }));
-        const departmentRow = await screen.findByTestId("space-row-department-1");
-        fireEvent.click(within(departmentRow).getByRole("button", { name: "炼钢部知识库" }));
-
         await waitFor(() => {
-            expect(getPortalSpaceChildrenApi).toHaveBeenCalledWith(expect.objectContaining({
-                space_id: "department-1",
-            }));
-        });
-        expect(getSpaceChildrenApi).not.toHaveBeenCalledWith(expect.objectContaining({
-            space_id: "department-1",
-        }));
-
-        const workspace = await screen.findByTestId("portal-file-workspace");
-        fireEvent.click(within(workspace).getByRole("button", { name: "打开部门制度.md" }));
-
-        const gate = await screen.findByTestId("department-file-access-gate");
-        expect(getDepartmentFileViewStatusApi).toHaveBeenCalledWith(
-            "department-1",
-            "department-file-1",
-        );
-        expect(applyDepartmentFileViewApi).not.toHaveBeenCalled();
-
-        fireEvent.change(within(gate).getByLabelText("申请原因"), {
-            target: { value: "  项目查阅  " },
-        });
-        fireEvent.click(within(gate).getByRole("button", { name: "提交查看申请" }));
-
-        await waitFor(() => {
-            expect(applyDepartmentFileViewApi).toHaveBeenCalledWith(
-                "department-1",
-                "department-file-1",
-                "项目查阅",
+            expect(getSpacesByLevelApi).toHaveBeenCalledWith(
+                SpaceLevel.DEPARTMENT,
+                { order_by: SpaceSortType.SORT_WEIGHT },
             );
         });
+        expect(screen.queryByTestId("space-row-department-1")).not.toBeInTheDocument();
+        expect(getPortalDiscoverableSpacesApi).not.toHaveBeenCalled();
+        expect(getPortalSpaceChildrenApi).not.toHaveBeenCalled();
+        expect(applyDepartmentFileViewApi).not.toHaveBeenCalled();
     });
 
     test("ordinary members see readonly tags and share source after department file access is allowed", async () => {
@@ -875,9 +841,11 @@ describe("PortalKnowledgeWorkbench", () => {
             spaceId: "department-allowed-share",
             contentAccess: "allowed",
             canDownload: false,
-            isDepartmentFile: true,
+            isDepartmentFile: false,
             entryType: "share",
             tags: [{ id: "8", name: "AI标签" }],
+            size: 2048,
+            version_no: 3,
             sourceDepartmentName: "来源部门",
             sourceSpaceId: "source-space",
             sourceSpaceName: "来源知识库",
@@ -885,26 +853,16 @@ describe("PortalKnowledgeWorkbench", () => {
         });
         jest.mocked(getGroupedSpacesApi).mockResolvedValue({
             publicSpaces: [],
-            departmentSpaces: [],
+            departmentSpaces: [departmentSpace],
             teamSpaces: [],
             personalSpaces: [favoriteSpace],
         } as any);
-        jest.mocked(getPortalDiscoverableSpacesApi).mockResolvedValue([departmentSpace] as any);
-        jest.mocked(getPortalSpaceChildrenApi).mockResolvedValue({
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({
             data: [sharedFile],
             page_size: 20,
             has_more: false,
             next_cursor: null,
         });
-        jest.mocked(getDepartmentFileViewStatusApi).mockResolvedValue({
-            spaceId: "department-allowed-share",
-            fileId: "share-allowed-1",
-            status: "allowed",
-            contentAccess: "allowed",
-            canDownload: false,
-            safeMetadata: { file_name: "共享制度.md" },
-        } as any);
-
         renderWorkbench();
 
         fireEvent.click(await screen.findByRole("button", { name: "展开部门知识库" }));
@@ -913,24 +871,144 @@ describe("PortalKnowledgeWorkbench", () => {
 
         const workspace = await screen.findByTestId("portal-file-workspace");
         expect(within(workspace).getAllByText("AI标签").length).toBeGreaterThan(0);
+        const sharedRow = await screen.findByTestId("file-tree-row-share-allowed-1");
+        fireEvent.mouseEnter(sharedRow);
+        await waitFor(() => {
+            expect(within(sharedRow).queryByRole("button", { name: "发布" })).not.toBeInTheDocument();
+            expect(within(sharedRow).queryByRole("button", { name: "分享" })).not.toBeInTheDocument();
+            expect(within(sharedRow).queryByRole("button", { name: "编辑标签" })).not.toBeInTheDocument();
+            expect(within(sharedRow).queryByRole("button", { name: "重命名" })).not.toBeInTheDocument();
+        });
         fireEvent.click(within(workspace).getByRole("button", { name: "打开共享制度.md" }));
         const rail = await screen.findByTestId("portal-tool-rail");
         fireEvent.click(within(rail).getByRole("button", { name: "来源" }));
         const drawer = await screen.findByTestId("portal-info-drawer");
 
-        expect(getPortalSpaceChildrenApi).toHaveBeenCalledWith(expect.objectContaining({
+        expect(getSpaceChildrenApi).toHaveBeenCalledWith(expect.objectContaining({
             space_id: "department-allowed-share",
         }));
-        expect(getSpaceChildrenApi).not.toHaveBeenCalledWith(expect.objectContaining({
+        expect(getPortalSpaceChildrenApi).not.toHaveBeenCalledWith(expect.objectContaining({
             space_id: "department-allowed-share",
         }));
         expect(drawer).toHaveTextContent("分享文件");
         expect(drawer).toHaveTextContent("来源部门");
         expect(drawer).toHaveTextContent("来源知识库");
         expect(drawer).toHaveTextContent("来源知识库>源目录/共享制度.md");
+
+        fireEvent.click(within(rail).getByRole("button", { name: "属性" }));
+        expect(drawer).toHaveTextContent("2.0 KB");
+        expect(drawer).toHaveTextContent("1.3.0");
     });
 
-    test("ordinary department spaces lazy load folder counts from the portal-safe endpoint", async () => {
+    test("department admins cannot edit or redistribute a shared entry without capability snapshot", async () => {
+        const departmentSpace = makeSpace("department-admin-share", "接收知识库", {
+            role: SpaceRole.ADMIN,
+            spaceLevel: SpaceLevel.DEPARTMENT,
+        });
+        const sharedFile = makeFile("share-admin-1", "共享制度.md", {
+            spaceId: departmentSpace.id,
+            entryType: "share",
+            status: FileStatus.SUCCESS,
+        });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [departmentSpace],
+            teamSpaces: [],
+            personalSpaces: [],
+        } as any);
+        jest.mocked(getSpaceInfoApi).mockResolvedValueOnce(departmentSpace as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({
+            data: [sharedFile],
+            page_size: 20,
+            has_more: false,
+            next_cursor: null,
+        });
+
+        renderWorkbench(`/knowledge-portal?spaceId=${departmentSpace.id}`);
+
+        const sharedRow = await screen.findByTestId("file-tree-row-share-admin-1");
+        fireEvent.mouseEnter(sharedRow);
+        await waitFor(() => {
+            expect(within(sharedRow).queryByRole("button", { name: "发布" })).not.toBeInTheDocument();
+            expect(within(sharedRow).queryByRole("button", { name: "分享" })).not.toBeInTheDocument();
+            expect(within(sharedRow).queryByRole("button", { name: "编辑标签" })).not.toBeInTheDocument();
+            expect(within(sharedRow).queryByRole("button", { name: "重命名" })).not.toBeInTheDocument();
+        });
+
+        fireEvent.click(within(sharedRow).getByRole("button", { name: "打开共享制度.md" }));
+        const actions = await screen.findByTestId("portal-document-actions");
+        expect(within(actions).queryByRole("button", { name: "编辑标签" })).not.toBeInTheDocument();
+    });
+
+    test.each([
+        [false, false],
+        [true, true],
+    ])(
+        "share detail download follows preview capability (can_download=%s)",
+        async (canDownload, shouldShowDownload) => {
+            const departmentSpace = makeSpace("department-share-download", "接收知识库", {
+                role: SpaceRole.ADMIN,
+                spaceLevel: SpaceLevel.DEPARTMENT,
+            });
+            const sharedFile = makeFile("share-download-1", "共享制度.pdf", {
+                spaceId: departmentSpace.id,
+                entryType: "share",
+                status: FileStatus.SUCCESS,
+                capabilities: {
+                    canView: true,
+                    canPreview: true,
+                    canDownload,
+                    canMove: true,
+                    canManageMembers: true,
+                    canEditContent: false,
+                    canPublish: false,
+                    canShare: false,
+                    canDelete: true,
+                },
+            });
+            jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+                publicSpaces: [],
+                departmentSpaces: [departmentSpace],
+                teamSpaces: [],
+                personalSpaces: [],
+            } as any);
+            jest.mocked(getSpaceInfoApi).mockResolvedValueOnce(departmentSpace as any);
+            jest.mocked(getSpaceChildrenApi).mockResolvedValue({
+                data: [sharedFile],
+                page_size: 20,
+                has_more: false,
+                next_cursor: null,
+            });
+            jest.mocked(getFilePreviewApi).mockResolvedValue({
+                preview_url: "/shared-preview.pdf",
+                original_url: "/shared-origin.pdf",
+                can_download: canDownload,
+            } as any);
+
+            renderWorkbench(`/knowledge-portal?spaceId=${departmentSpace.id}`);
+
+            const sharedRow = await screen.findByTestId("file-tree-row-share-download-1");
+            if (!canDownload) {
+                fireEvent.mouseEnter(sharedRow);
+                await waitFor(() => {
+                    expect(within(sharedRow).queryByRole("button", { name: "下载" })).not.toBeInTheDocument();
+                });
+            }
+
+            fireEvent.click(within(sharedRow).getByRole("button", { name: "打开共享制度.pdf" }));
+            const actions = await screen.findByTestId("portal-document-actions");
+            await waitFor(() => {
+                const detailDownload = within(actions).queryByRole("button", { name: "下载" });
+                if (shouldShowDownload) {
+                    expect(detailDownload).toBeInTheDocument();
+                } else {
+                    expect(detailDownload).not.toBeInTheDocument();
+                }
+            });
+        },
+    );
+
+    test("ordinary authorized department spaces use generic children and folder stats", async () => {
         const favoriteSpace = makeDefaultFavoriteSpace();
         const departmentSpace = makeSpace("department-1", "炼钢部知识库", {
             role: SpaceRole.MEMBER,
@@ -945,18 +1023,17 @@ describe("PortalKnowledgeWorkbench", () => {
         });
         jest.mocked(getGroupedSpacesApi).mockResolvedValue({
             publicSpaces: [],
-            departmentSpaces: [],
+            departmentSpaces: [departmentSpace],
             teamSpaces: [],
             personalSpaces: [favoriteSpace],
         } as any);
-        jest.mocked(getPortalDiscoverableSpacesApi).mockResolvedValue([departmentSpace] as any);
-        jest.mocked(getPortalSpaceChildrenApi).mockResolvedValue({
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({
             data: [folder],
             page_size: 20,
             has_more: false,
             next_cursor: null,
         });
-        jest.mocked(getPortalSpaceFolderStatsApi).mockResolvedValue([{
+        jest.mocked(getSpaceFolderStatsApi).mockResolvedValue([{
             folderId: "101",
             successFileNum: 5,
             fileNum: 5,
@@ -972,15 +1049,16 @@ describe("PortalKnowledgeWorkbench", () => {
 
         const folderRow = await screen.findByTestId("file-tree-row-101");
         await waitFor(() => {
-            expect(getPortalSpaceFolderStatsApi).toHaveBeenCalledWith({
+            expect(getSpaceFolderStatsApi).toHaveBeenCalledWith({
                 space_id: "department-1",
                 folder_ids: ["101"],
             });
             expect(folderRow).toHaveTextContent(/5\s*\/\s*5/);
         });
-        expect(getSpaceFolderStatsApi).not.toHaveBeenCalledWith(expect.objectContaining({
+        expect(getPortalSpaceFolderStatsApi).not.toHaveBeenCalledWith(expect.objectContaining({
             space_id: "department-1",
         }));
+        expect(getPortalSpaceChildrenApi).not.toHaveBeenCalled();
     });
 
     test("department space managers keep the generic management file tree", async () => {
@@ -1023,7 +1101,7 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(await screen.findByText("解析失败文档.md")).toBeInTheDocument();
     });
 
-    test("approved department files use the portal preview endpoint", async () => {
+    test("authorized department members see all generic file states and use the generic preview endpoint", async () => {
         const favoriteSpace = makeDefaultFavoriteSpace();
         const departmentSpace = makeSpace("department-allowed-1", "已授权部门库", {
             role: SpaceRole.MEMBER,
@@ -1031,31 +1109,38 @@ describe("PortalKnowledgeWorkbench", () => {
         });
         const departmentFile = makeFile("department-file-allowed-1", "已授权制度.md", {
             spaceId: "department-allowed-1",
-            contentAccess: "allowed",
-            canDownload: false,
             isDepartmentFile: true,
         });
+        const stateFiles = [
+            makeFile("department-file-waiting-1", "排队中文档.md", {
+                spaceId: "department-allowed-1",
+                status: FileStatus.WAITING,
+            }),
+            makeFile("department-file-processing-1", "解析中文档.md", {
+                spaceId: "department-allowed-1",
+                status: FileStatus.PROCESSING,
+            }),
+            makeFile("department-file-failed-1", "解析失败文档.md", {
+                spaceId: "department-allowed-1",
+                status: FileStatus.FAILED,
+            }),
+            makeFile("department-file-success-1", "解析成功文档.md", {
+                spaceId: "department-allowed-1",
+                status: FileStatus.SUCCESS,
+            }),
+        ];
         jest.mocked(getGroupedSpacesApi).mockResolvedValue({
             publicSpaces: [],
-            departmentSpaces: [],
+            departmentSpaces: [departmentSpace],
             teamSpaces: [],
             personalSpaces: [favoriteSpace],
         } as any);
-        jest.mocked(getPortalDiscoverableSpacesApi).mockResolvedValue([departmentSpace] as any);
-        jest.mocked(getPortalSpaceChildrenApi).mockResolvedValue({
-            data: [departmentFile],
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({
+            data: [departmentFile, ...stateFiles],
             page_size: 20,
             has_more: false,
             next_cursor: null,
         });
-        jest.mocked(getDepartmentFileViewStatusApi).mockResolvedValue({
-            spaceId: "department-allowed-1",
-            fileId: "department-file-allowed-1",
-            status: "allowed",
-            contentAccess: "allowed",
-            canDownload: false,
-            safeMetadata: { file_name: "已授权制度.md" },
-        } as any);
 
         renderWorkbench();
 
@@ -1063,18 +1148,23 @@ describe("PortalKnowledgeWorkbench", () => {
         const departmentRow = await screen.findByTestId("space-row-department-allowed-1");
         fireEvent.click(within(departmentRow).getByRole("button", { name: "已授权部门库" }));
         const workspace = await screen.findByTestId("portal-file-workspace");
+        expect(within(workspace).getByText("排队中文档.md")).toBeInTheDocument();
+        expect(within(workspace).getByText("解析中文档.md")).toBeInTheDocument();
+        expect(within(workspace).getByText("解析失败文档.md")).toBeInTheDocument();
+        expect(within(workspace).getByText("解析成功文档.md")).toBeInTheDocument();
         fireEvent.click(within(workspace).getByRole("button", { name: "打开已授权制度.md" }));
 
         await waitFor(() => {
-            expect(getPortalFilePreviewApi).toHaveBeenCalledWith(
+            expect(getFilePreviewApi).toHaveBeenCalledWith(
                 "department-allowed-1",
                 "department-file-allowed-1",
             );
         });
-        expect(getFilePreviewApi).not.toHaveBeenCalledWith(
+        expect(getPortalFilePreviewApi).not.toHaveBeenCalledWith(
             "department-allowed-1",
             "department-file-allowed-1",
         );
+        expect(getDepartmentFileViewStatusApi).not.toHaveBeenCalled();
     });
 
     test("opens favorite source file with enriched detail metadata", async () => {
@@ -2544,7 +2634,7 @@ describe("PortalKnowledgeWorkbench", () => {
 
         expect(await screen.findByText("发布文件")).toBeInTheDocument();
         await waitFor(() => {
-            expect(getShougangFilePublishTargetSpacesApi).toHaveBeenCalledWith("team-1");
+            expect(getShougangFilePublishTargetSpacesApi).toHaveBeenCalledWith("team-1", "301");
         });
         await waitFor(() => {
             expect(screen.getByRole("button", { name: "提交申请" })).toBeEnabled();
@@ -2596,7 +2686,7 @@ describe("PortalKnowledgeWorkbench", () => {
 
         expect(await screen.findByText("发布文件")).toBeInTheDocument();
         await waitFor(() => {
-            expect(getShougangFilePublishTargetSpacesApi).toHaveBeenCalledWith("department-1");
+            expect(getShougangFilePublishTargetSpacesApi).toHaveBeenCalledWith("department-1", "302");
         });
     });
 
@@ -2642,6 +2732,162 @@ describe("PortalKnowledgeWorkbench", () => {
         } else {
             expect(within(fileRow).queryByRole("button", { name: "分享" })).not.toBeInTheDocument();
         }
+    });
+
+    test("uses the live delete permission when a share capability snapshot is stale", async () => {
+        const favoriteSpace = makeDefaultFavoriteSpace();
+        const handleDeleteFile = jest.fn();
+        mockUseFileUpload.mockReturnValue(createMockFileUpload({ handleDeleteFile }));
+        const departmentSpace = makeSpace("department-delete-share", "接收知识库", {
+            role: SpaceRole.MEMBER,
+            spaceLevel: SpaceLevel.DEPARTMENT,
+        });
+        const sharedFile = makeFile("310", "共享制度.pdf", {
+            type: FileType.PDF,
+            spaceId: departmentSpace.id,
+            entryType: "share",
+            capabilities: {
+                canDelete: false,
+                canMove: true,
+                canManageMembers: true,
+            },
+        });
+        mockCheckPermission.mockResolvedValue({ allowed: true });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [departmentSpace],
+            teamSpaces: [],
+            personalSpaces: [favoriteSpace],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({
+            data: [sharedFile],
+            page_size: 20,
+            has_more: false,
+            next_cursor: null,
+        });
+
+        renderWorkbench();
+
+        fireEvent.click(await screen.findByRole("button", { name: "展开部门知识库" }));
+        const departmentRow = await screen.findByTestId("space-row-department-delete-share");
+        fireEvent.click(within(departmentRow).getByRole("button", { name: "接收知识库" }));
+        const shareRow = await screen.findByTestId("file-tree-row-310");
+        fireEvent.mouseEnter(shareRow);
+        await waitFor(() => {
+            expect(mockCheckPermission).toHaveBeenCalledWith(
+                "knowledge_file",
+                "310",
+                "can_delete",
+                "delete_file",
+                expect.anything(),
+            );
+        });
+        const shareButtons = within(shareRow).getAllByRole("button");
+        fireEvent.click(shareButtons[shareButtons.length - 1]);
+        fireEvent.click(await screen.findByText(/删除|delete|com_knowledge\.delete/i));
+        expect(handleDeleteFile).toHaveBeenCalledWith("310");
+    });
+
+    test("keeps share deletion hidden when the live delete permission is denied", async () => {
+        const favoriteSpace = makeDefaultFavoriteSpace();
+        const departmentSpace = makeSpace("department-delete-denied", "接收知识库", {
+            role: SpaceRole.MEMBER,
+            spaceLevel: SpaceLevel.DEPARTMENT,
+        });
+        const sharedFile = makeFile("312", "共享制度.pdf", {
+            type: FileType.PDF,
+            spaceId: departmentSpace.id,
+            entryType: "share",
+            capabilities: {
+                canDelete: false,
+                canMove: true,
+                canManageMembers: true,
+            },
+        });
+        mockCheckPermission.mockResolvedValue({ allowed: false });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [departmentSpace],
+            teamSpaces: [],
+            personalSpaces: [favoriteSpace],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({
+            data: [sharedFile],
+            page_size: 20,
+            has_more: false,
+            next_cursor: null,
+        });
+
+        renderWorkbench();
+
+        fireEvent.click(await screen.findByRole("button", { name: "展开部门知识库" }));
+        const departmentRow = await screen.findByTestId("space-row-department-delete-denied");
+        fireEvent.click(within(departmentRow).getByRole("button", { name: "接收知识库" }));
+        const shareRow = await screen.findByTestId("file-tree-row-312");
+        fireEvent.mouseEnter(shareRow);
+        await waitFor(() => {
+            expect(mockCheckPermission).toHaveBeenCalledWith(
+                "knowledge_file",
+                "312",
+                "can_delete",
+                "delete_file",
+                expect.anything(),
+            );
+        });
+        const shareButtons = within(shareRow).getAllByRole("button");
+        fireEvent.click(shareButtons[shareButtons.length - 1]);
+        expect(screen.queryByText(/删除|delete|com_knowledge\.delete/i)).not.toBeInTheDocument();
+    });
+
+    test("does not unlock publish deletion from a live delete permission", async () => {
+        const favoriteSpace = makeDefaultFavoriteSpace();
+        const departmentSpace = makeSpace("department-delete-publish", "接收知识库", {
+            role: SpaceRole.MEMBER,
+            spaceLevel: SpaceLevel.DEPARTMENT,
+        });
+        const publishedFile = makeFile("311", "发布制度.pdf", {
+            type: FileType.PDF,
+            spaceId: departmentSpace.id,
+            entryType: "publish",
+            capabilities: {
+                canDelete: false,
+                canMove: true,
+                canManageMembers: true,
+            },
+        });
+        mockCheckPermission.mockResolvedValue({ allowed: true });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [departmentSpace],
+            teamSpaces: [],
+            personalSpaces: [favoriteSpace],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({
+            data: [publishedFile],
+            page_size: 20,
+            has_more: false,
+            next_cursor: null,
+        });
+
+        renderWorkbench();
+
+        fireEvent.click(await screen.findByRole("button", { name: "展开部门知识库" }));
+        const departmentRow = await screen.findByTestId("space-row-department-delete-publish");
+        fireEvent.click(within(departmentRow).getByRole("button", { name: "接收知识库" }));
+        const publishRow = await screen.findByTestId("file-tree-row-311");
+        fireEvent.mouseEnter(publishRow);
+        await waitFor(() => {
+            expect(mockCheckPermission).toHaveBeenCalledWith(
+                "knowledge_file",
+                "311",
+                "can_delete",
+                "delete_file",
+                expect.anything(),
+            );
+        });
+        const publishButtons = within(publishRow).getAllByRole("button");
+        fireEvent.click(publishButtons[publishButtons.length - 1]);
+        expect(screen.queryByText(/删除|delete|com_knowledge\.delete/i)).not.toBeInTheDocument();
     });
 
     test("hides publish action without knowledge space publish permission", async () => {
