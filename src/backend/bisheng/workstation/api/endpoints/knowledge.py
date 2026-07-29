@@ -1,8 +1,8 @@
 from datetime import datetime
-from urllib.parse import unquote
+from urllib.parse import unquote, urlparse
 from uuid import uuid4
 
-from fastapi import APIRouter, BackgroundTasks, Body, File, Request, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Body, File, Query, Request, UploadFile
 
 from bisheng.api.v1.schemas import resp_200
 from bisheng.common.errcode.http_error import ServerError
@@ -12,13 +12,53 @@ from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.role.domain.services.quota_service import QuotaService
 from bisheng.utils.util import sync_func_to_async
 from bisheng.workstation.domain.services import WorkStationService
+from bisheng.workstation.domain.services.media_cover_service import WorkstationMediaCoverService
 
 from ..dependencies import LoginUserDep
 
 router = APIRouter()
 
 
-@router.post('/knowledgeUpload')
+def _resolve_minio_object_from_filepath(filepath: str, minio_client) -> tuple[str, str]:
+    """Parse a stored workstation attachment path into bucket + object name."""
+    normalized = filepath.strip()
+    if not normalized:
+        raise ValueError("filepath is empty")
+
+    parsed = urlparse(normalized)
+    path = parsed.path if parsed.scheme in ("http", "https") or parsed.path else normalized.split("?", 1)[0]
+    path = path.lstrip("/")
+    bucket_name, _, object_name = path.partition("/")
+    allowed_buckets = {minio_client.bucket, minio_client.tmp_bucket}
+    if bucket_name not in allowed_buckets or not object_name:
+        raise ValueError(f"invalid minio filepath: {filepath}")
+
+    decoded_name = unquote(object_name)
+    while decoded_name != unquote(decoded_name):
+        decoded_name = unquote(decoded_name)
+    return bucket_name, decoded_name
+
+
+@router.get("/files/share-url")
+async def get_file_share_url(
+    filepath: str = Query(..., description="Stored MinIO path, e.g. /tmp-dir/foo.mp4"),
+    login_user=LoginUserDep,
+):
+    del login_user  # auth gate only
+    minio_client = await get_minio_storage()
+    try:
+        bucket_name, object_name = _resolve_minio_object_from_filepath(filepath, minio_client)
+    except ValueError as exc:
+        raise ServerError(msg=str(exc), exception=exc) from exc
+
+    if not await minio_client.object_exists(bucket_name, object_name):
+        raise ServerError(msg="File not found in object storage")
+
+    share_url = await minio_client.get_share_link(object_name, bucket=bucket_name)
+    return resp_200(data={"url": share_url})
+
+
+@router.post("/knowledgeUpload")
 async def knowledge_upload(
     request: Request,
     background_tasks: BackgroundTasks,
@@ -26,7 +66,7 @@ async def knowledge_upload(
     login_user=LoginUserDep,
 ):
     try:
-        file_path = await sync_func_to_async(save_download_file)(file.file, 'bisheng', file.filename)
+        file_path = await sync_func_to_async(save_download_file)(file.file, "bisheng", file.filename)
         upload_limit_bytes = await QuotaService.get_knowledge_space_upload_limit_bytes(login_user)
         res = await WorkStationService.uploadPersonalKnowledge(
             request,
@@ -37,54 +77,70 @@ async def knowledge_upload(
         )
         return resp_200(data=res[0])
     except Exception as exc:
-        raise ServerError(msg=f'Knowledge base upload failed: {str(exc)}', exception=exc)
+        raise ServerError(msg=f"Knowledge base upload failed: {exc!s}", exception=exc)
     finally:
         file.file.close()
 
 
-@router.get('/queryKnowledge')
+@router.get("/queryKnowledge")
 async def query_knowledge_list(request: Request, page: int, size: int, login_user=LoginUserDep):
     res, total = await WorkStationService.queryKnowledgeList(request, login_user, page, size)
-    return resp_200(data={'list': res, 'total': total})
+    return resp_200(data={"list": res, "total": total})
 
 
-@router.delete('/deleteKnowledge')
+@router.delete("/deleteKnowledge")
 def delete_knowledge(request: Request, file_id: int, login_user=LoginUserDep):
     res = KnowledgeService.delete_knowledge_file(request, login_user, [file_id])
     return resp_200(data=res)
 
 
-@router.post('/files')
+@router.post("/files")
 async def upload_file(
     request: Request,
     file: UploadFile = File(...),
-    file_id: str = Body(..., description='Doc.ID'),
+    file_id: str = Body(..., description="Doc.ID"),
     login_user=LoginUserDep,
 ):
+    del request  # reserved for future audit hooks
+    video_temp_path: str | None = None
+    cover_filepath: str | None = None
+    file_name = unquote(file.filename)
     try:
-        file_path = await save_uploaded_file(file, 'bisheng', unquote(file.filename))
+        if WorkstationMediaCoverService.is_video_filename(file_name):
+            raw_content = await file.read()
+            await file.seek(0)
+            video_temp_path = WorkstationMediaCoverService.write_temp_video(raw_content, file_name)
+
+        file_path = await save_uploaded_file(file, "bisheng", file_name)
         # save_uploaded_file returns the full presigned URL prefixed with the
         # internal minio host (http://minio:9000/...). The browser can't reach
         # that hostname directly — strip the prefix so the frontend hits MinIO
         # via the nginx /tmp-dir reverse proxy on the same origin.
         minio_client = await get_minio_storage()
         file_path = minio_client.clear_minio_share_host(file_path)
-        return resp_200(
-            data={
-                'filepath': file_path,
-                'filename': unquote(file.filename),
-                'type': file.content_type,
-                'user': login_user.user_id,
-                '_id': uuid4().hex,
-                'createdAt': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                'updatedAt': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                'temp_file_id': file_id,
-                'file_id': uuid4().hex,
-                'message': 'File uploaded successfully',
-                'context': 'message_attachment',
-            }
-        )
+        if video_temp_path:
+            cover_filepath = await WorkstationMediaCoverService.upload_video_cover(
+                video_temp_path,
+                minio_client,
+            )
+        payload = {
+            "filepath": file_path,
+            "filename": file_name,
+            "type": file.content_type,
+            "user": login_user.user_id,
+            "_id": uuid4().hex,
+            "createdAt": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "updatedAt": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "temp_file_id": file_id,
+            "file_id": uuid4().hex,
+            "message": "File uploaded successfully",
+            "context": "message_attachment",
+        }
+        if cover_filepath:
+            payload["cover_filepath"] = cover_filepath
+        return resp_200(data=payload)
     except Exception as exc:
-        raise ServerError(msg=f'File upload failed: {str(exc)}', exception=exc)
+        raise ServerError(msg=f"File upload failed: {exc!s}", exception=exc)
     finally:
+        WorkstationMediaCoverService.cleanup_temp(video_temp_path)
         await file.close()

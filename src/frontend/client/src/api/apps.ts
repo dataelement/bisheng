@@ -229,6 +229,18 @@ export async function getSourceChunksApi(chatId: string, messageId: number, keys
 }
 
 
+import { normalizeMinioObjectPath } from '~/utils/mediaAttachmentUtils';
+
+/**
+ * Refresh a MinIO presigned URL for a workstation chat attachment.
+ */
+export async function getWorkstationFileShareUrlApi(filepath: string): Promise<string> {
+    const res: { data?: { url?: string } } = await request.get('/api/v1/workstation/files/share-url', {
+        params: { filepath: normalizeMinioObjectPath(filepath) },
+    });
+    return res?.data?.url ?? '';
+}
+
 /**
  * 聊天窗上传文件
  */

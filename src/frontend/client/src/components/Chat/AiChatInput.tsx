@@ -242,7 +242,10 @@ const AiChatInput = memo(
         const [uploadingFiles, setUploadingFiles] = useState<Array<{
             id: string;
             name: string;
+            previewUrl?: string;
             mediaPreviewUrl?: string;
+            mediaCoverUrl?: string;
+            cover_filepath?: string;
             mediaDurationSec?: number;
         }>>([]);
         const inputFilesRef = useRef<any>(null);
@@ -408,7 +411,10 @@ const AiChatInput = memo(
                                     .map((f) => ({
                                         id: String(f.id),
                                         name: String(f.name || ""),
+                                        ...(f.previewUrl ? { previewUrl: f.previewUrl } : {}),
                                         ...(f.mediaPreviewUrl ? { mediaPreviewUrl: f.mediaPreviewUrl } : {}),
+                                        ...(f.mediaCoverUrl ? { mediaCoverUrl: f.mediaCoverUrl } : {}),
+                                        ...(f.cover_filepath ? { cover_filepath: f.cover_filepath } : {}),
                                         ...(f.mediaDurationSec != null ? { mediaDurationSec: f.mediaDurationSec } : {}),
                                     }));
                                 setUploadingFiles(pending);

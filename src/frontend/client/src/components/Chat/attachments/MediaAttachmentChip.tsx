@@ -1,15 +1,22 @@
-import { Loader2, Music2, Play, Video } from 'lucide-react';
+import { Loader2, Play, Video } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { Outlined } from 'bisheng-icons';
 import useLocalize from '~/hooks/useLocalize';
 import {
+    extractMediaFilepath,
     formatMediaDuration,
+    getMediaDisplayBaseName,
+    getMediaFileExtensionLabel,
     getMediaKind,
     isMediaAttachmentFile,
+    resolveMediaCoverUrl,
     resolveMediaPlaybackUrl,
     type MediaParsingState,
 } from '~/utils/mediaAttachmentUtils';
 import { cn } from '~/utils';
+import {
+    UploadAttachmentThumbnailShell,
+    type UploadThumbnailVariant,
+} from './UploadAttachmentThumbnail';
 
 export interface MediaAttachmentFile {
     name?: string;
@@ -20,6 +27,8 @@ export interface MediaAttachmentFile {
     isUploading?: boolean;
     mediaPreviewUrl?: string;
     previewUrl?: string;
+    cover_filepath?: string;
+    mediaCoverUrl?: string;
     mediaDurationSec?: number;
     parsingState?: MediaParsingState;
 }
@@ -29,7 +38,7 @@ interface MediaAttachmentChipProps {
     /** Input bar chips may remove; sent-message chips are read-only. */
     onRemove?: () => void;
     /** Compact row in message bubble vs wider input-bar card. */
-    variant?: 'bar' | 'message';
+    variant?: UploadThumbnailVariant;
     className?: string;
 }
 
@@ -48,79 +57,94 @@ export function MediaAttachmentChip({
     const isUploading = !!file.isUploading;
     const isParsing = file.parsingState === 'parsing';
     const playbackUrl = resolveMediaPlaybackUrl(file);
+    const coverUrl = kind === 'video' ? resolveMediaCoverUrl(file) : undefined;
+    const mediaFilepath = extractMediaFilepath(file);
     const canPlay = !!playbackUrl && !isUploading;
+    const parsingLabel = localize('com_chat.media_parsing');
+    const isSquareCard = variant === 'message' || variant === 'bar';
 
     const handlePlay = () => {
         if (!canPlay || !playbackUrl) return;
         navigate('/c/media-playback', {
             state: {
                 url: playbackUrl,
+                filepath: mediaFilepath,
                 name: fileName,
                 kind,
             },
         });
     };
 
-    const Icon = kind === 'video' ? Video : Music2;
-    const widthClass = variant === 'bar' ? 'w-[148px]' : 'w-full max-w-sm';
-
-    return (
-        <div
-            className={cn(
-                'group relative flex h-[30px] shrink-0 items-center gap-1 rounded-md bg-white px-2 text-xs text-[#212121]',
-                canPlay && 'cursor-pointer',
-                widthClass,
-                className,
-            )}
-            onClick={canPlay ? handlePlay : undefined}
-            title={fileName}
-        >
-            <span className="relative flex size-4 shrink-0 items-center justify-center text-[#999]">
-                {isUploading ? (
-                    <Loader2 className="size-4 animate-spin" />
-                ) : kind === 'video' && playbackUrl ? (
-                    <video
-                        src={playbackUrl}
-                        muted
-                        playsInline
-                        preload="metadata"
-                        className="size-4 rounded-[2px] object-cover"
-                    />
+    if (isSquareCard && kind === 'video') {
+        return (
+            <UploadAttachmentThumbnailShell
+                fileName={fileName}
+                variant={variant}
+                canClick={canPlay}
+                isUploading={isUploading}
+                onClick={handlePlay}
+                onRemove={onRemove}
+                allowRemoveWhileUploading={variant === 'bar'}
+                className={cn('bg-[#f0f0f0]', className)}
+                overlay={
+                    isParsing ? (
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/45 px-2 text-center text-xs text-white">
+                            {parsingLabel}
+                        </div>
+                    ) : undefined
+                }
+            >
+                {coverUrl ? (
+                    <img src={coverUrl} alt="" className="size-full object-cover" />
                 ) : (
-                    <Icon className="size-4" />
+                    <div className="flex size-full items-center justify-center text-[#999]">
+                        <Video className="size-8" />
+                    </div>
                 )}
-                {canPlay && !isUploading && (
-                    <Play className="absolute size-2.5 text-white drop-shadow opacity-0 transition-opacity group-hover:opacity-100" />
+
+                {canPlay && (
+                    <div className="absolute bottom-2 left-2 flex items-center gap-1 rounded-full bg-white px-2 py-0.5 text-xs font-medium leading-none text-[#212121] shadow-sm">
+                        <Play className="size-3 shrink-0" />
+                        {durationLabel && <span>{durationLabel}</span>}
+                    </div>
                 )}
-            </span>
+            </UploadAttachmentThumbnailShell>
+        );
+    }
 
-            <span className="min-w-0 flex-1 truncate text-left">{fileName}</span>
+    if (isSquareCard && kind === 'audio') {
+        const extensionLabel = getMediaFileExtensionLabel(fileName);
+        const displayName = getMediaDisplayBaseName(fileName);
 
-            {durationLabel && !isUploading && (
-                <span className="shrink-0 text-[10px] text-[#999]">{durationLabel}</span>
-            )}
-
-            {isParsing && (
-                <span className="shrink-0 text-[10px] text-primary">
-                    {localize('com_chat.media_parsing')}
+        return (
+            <UploadAttachmentThumbnailShell
+                fileName={fileName}
+                variant={variant}
+                canClick={canPlay}
+                isUploading={isUploading}
+                onClick={handlePlay}
+                onRemove={onRemove}
+                allowRemoveWhileUploading={variant === 'bar'}
+                className={className}
+                overlay={
+                    isParsing ? (
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/45 px-2 text-center text-xs text-white">
+                            {parsingLabel}
+                        </div>
+                    ) : undefined
+                }
+            >
+                <span className="absolute left-3 top-3 text-sm font-medium text-[#666]">
+                    {extensionLabel}
                 </span>
-            )}
+                <span className="absolute bottom-3 left-3 right-3 truncate text-sm text-[#333]">
+                    {displayName}
+                </span>
+            </UploadAttachmentThumbnailShell>
+        );
+    }
 
-            {onRemove && !isUploading && (
-                <button
-                    type="button"
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        onRemove();
-                    }}
-                    className="hidden size-4 shrink-0 items-center justify-center rounded text-slate-400 transition-colors hover:text-slate-600 group-hover:flex coarse-pointer:flex"
-                    aria-label="Remove"
-                >
-                    <Outlined.Close size={12} />
-                </button>
-            )}
-        </div>
-    );
+    return null;
 }
 
 export function isMediaChipFile(file: unknown): file is MediaAttachmentFile {

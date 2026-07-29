@@ -28,6 +28,9 @@ export function AppChatFileChip({ file, variant = 'message', className }: AppCha
                     filename: name,
                     filepath: path,
                     file_path: path,
+                    cover_filepath: file.cover_filepath,
+                    mediaDurationSec: file.mediaDurationSec,
+                    parsingState: file.parsingState,
                 }}
                 variant={variant}
                 className={className}

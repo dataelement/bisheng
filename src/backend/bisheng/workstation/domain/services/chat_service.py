@@ -18,7 +18,10 @@ from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import ServerError
 from bisheng.common.errcode.knowledge import (
     KnowledgeFileNotSupportedError,
+    KnowledgeMediaNoRecognizableAudioError,
+    KnowledgeMediaTranscriptionError,
 )
+from bisheng.common.errcode.server import NoAsrModelConfigError
 from bisheng.common.errcode.workstation import (
     ConversationNotFoundError,
     DepartmentDailyChatConcurrentLimitError,

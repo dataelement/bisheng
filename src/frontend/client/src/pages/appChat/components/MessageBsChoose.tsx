@@ -62,7 +62,7 @@ export default function MessageBsChoose({ type = 'choose', disabled, logo, data,
                 {/* message */}
                 <div><Markdown content={data.message.msg} isLatestMessage={false} webContent={undefined} /></div>
                 {/* files */}
-                <div className="mt-2 flex flex-col gap-2">
+                <div className="mt-2 flex max-w-sm flex-wrap gap-2">
                     {files.map((file, index) => (
                         <AppChatFileChip key={index} file={file} variant="message" />
                     ))}

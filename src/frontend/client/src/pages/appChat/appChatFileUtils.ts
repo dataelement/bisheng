@@ -1,4 +1,3 @@
-/** Normalize workflow chat file payloads from SSE/history into { name, path }. */
 export interface AppChatFileLike {
     name?: string;
     file_name?: string;
@@ -8,6 +7,9 @@ export interface AppChatFileLike {
     filepath?: string;
     file_url?: string;
     url?: string;
+    cover_filepath?: string;
+    mediaDurationSec?: number;
+    parsingState?: 'parsing' | 'done';
 }
 
 export function normalizeAppChatFile(file: AppChatFileLike): { name: string; path: string } {

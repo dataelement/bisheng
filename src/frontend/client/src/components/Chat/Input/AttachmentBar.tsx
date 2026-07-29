@@ -20,53 +20,31 @@ import {
     useRef,
     useState,
 } from "react";
-import { Loader2 } from "lucide-react";
 import { Outlined } from "bisheng-icons";
 import BookOpen from "~/components/ui/icon/BookOpen";
 import BooksIcon from "~/components/ui/icon/Books";
-import type { FileType } from "~/components/ui/icon/File/FileIcon";
 import { OGDialog, OGDialogContent } from "~/components/ui";
 import { cn } from "~/utils";
 import { isMediaChipFile, MediaAttachmentChip } from "~/components/Chat/attachments/MediaAttachmentChip";
+import { FileUploadThumbnail } from "~/components/Chat/attachments/UploadAttachmentThumbnail";
+import { isMediaAttachmentFile } from "~/utils/mediaAttachmentUtils";
+import { resolveKnowledgePreviewUrl } from "~/pages/knowledge/FilePreview/previewUrlUtils";
 
 /** Fixed card geometry from the design (Figma 12841:47405). */
 const CARD_WIDTH = 148;
 
-// File-chip icons: flat bisheng outlined icons so they render in the same
-// single-color (#999) style as the knowledge-space chip icons.
-const CHIP_FILE_ICONS: Record<string, typeof Outlined.File> = {
-    xls: Outlined.FileExcel,
-    xlsx: Outlined.FileExcel,
-    csv: Outlined.FileExcel,
-    pdf: Outlined.FilePdf,
-    ppt: Outlined.FilePdf,
-    pptx: Outlined.FilePdf,
-    txt: Outlined.FileTxt,
-    doc: Outlined.FileWord,
-    docx: Outlined.FileWord,
-    png: Outlined.FileImage,
-    jpg: Outlined.FileImage,
-    jpeg: Outlined.FileImage,
-    bmp: Outlined.FileImage,
-    md: Outlined.FileEditing,
-};
-
-function resolveFileType(input: any): FileType {
-    const nameCandidate =
-        input?.name ||
-        input?.file_name ||
-        input?.filename ||
-        input?.filepath ||
-        input?.file_path ||
-        "";
-    const baseName = String(nameCandidate).split("/").pop()?.split("?")[0] || "";
-    const ext = baseName.includes(".") ? baseName.split(".").pop()?.toLowerCase() : "";
-    const normalized = ext === "htm" ? "html" : ext === "et" ? "xlsx" : ext === "jpeg" ? "jpg" : ext;
-    const allowed: FileType[] = [
-        "pdf", "doc", "docx", "ppt", "pptx", "md", "html", "txt",
-        "jpg", "jpeg", "png", "bmp", "csv", "xls", "xlsx",
-    ];
-    return (allowed as string[]).includes(normalized || "") ? (normalized as FileType) : "txt";
+function resolveFilePreviewUrl(file: {
+    name?: string;
+    previewUrl?: string;
+    filepath?: string;
+    file_path?: string;
+    file_url?: string;
+    url?: string;
+}): string | undefined {
+    if (file.previewUrl) return file.previewUrl;
+    const remote = file.filepath || file.file_path || file.file_url || file.url;
+    if (!remote || remote.startsWith('blob:')) return undefined;
+    return resolveKnowledgePreviewUrl(remote);
 }
 
 /** Shared card shell: fixed width, white surface, optional hover-only remove. */
@@ -124,37 +102,32 @@ const KbCard = ({ kb, onRemove }: { kb: any; onRemove?: () => void }) => (
 );
 
 const FileCard = ({ file, onRemove }: { file: any; onRemove?: () => void }) => {
-    if (isMediaChipFile(file)) {
+    const fileName = file.name || file.file_name || file.filename || 'File';
+
+    if (isMediaChipFile({ ...file, name: fileName })) {
         return (
             <MediaAttachmentChip
-                file={file}
+                file={{ ...file, name: fileName }}
                 onRemove={onRemove}
                 variant="bar"
             />
         );
     }
 
-    const FileTypeIcon = CHIP_FILE_ICONS[resolveFileType(file)] ?? Outlined.File;
-    // Locally-generated preview URL for pasted / uploaded images. When present the
-    // chip shows a thumbnail and opens a full-size preview on click.
-    const previewUrl: string | undefined = file?.previewUrl;
+    const previewUrl = resolveFilePreviewUrl(file);
     const [previewOpen, setPreviewOpen] = useState(false);
+    const isImagePreview = !!previewUrl && /\.(png|jpe?g|bmp|gif|webp)$/i.test(fileName);
 
-    if (previewUrl) {
-        return (
-            <>
-                <CardShell
-                    icon={
-                        <img
-                            src={previewUrl}
-                            alt=""
-                            className="size-4 rounded-[2px] object-cover"
-                        />
-                    }
-                    label={file.name}
-                    onRemove={onRemove}
-                    onClick={() => setPreviewOpen(true)}
-                />
+    return (
+        <>
+            <FileUploadThumbnail
+                fileName={fileName}
+                previewUrl={isImagePreview ? previewUrl : undefined}
+                variant="bar"
+                onRemove={onRemove}
+                onClick={isImagePreview ? () => setPreviewOpen(true) : undefined}
+            />
+            {isImagePreview && (
                 <OGDialog open={previewOpen} onOpenChange={setPreviewOpen}>
                     <OGDialogContent
                         showCloseButton={false}
@@ -163,21 +136,13 @@ const FileCard = ({ file, onRemove }: { file: any; onRemove?: () => void }) => {
                     >
                         <img
                             src={previewUrl}
-                            alt={file.name}
+                            alt={fileName}
                             className="max-h-[85vh] max-w-full rounded-md object-contain"
                         />
                     </OGDialogContent>
                 </OGDialog>
-            </>
-        );
-    }
-
-    return (
-        <CardShell
-            icon={<FileTypeIcon size={16} />}
-            label={file.name}
-            onRemove={onRemove}
-        />
+            )}
+        </>
     );
 };
 
@@ -190,7 +155,7 @@ const SkillCard = ({ skill, onRemove }: { skill: any; onRemove?: () => void }) =
 );
 
 const UploadingCard = ({ name, file }: { name: string; file?: any }) => {
-    if (file && isMediaChipFile({ name: file.name || name, ...file })) {
+    if (file && isMediaAttachmentFile({ name: file.name || name })) {
         return (
             <MediaAttachmentChip
                 file={{ name, isUploading: true, ...file }}
@@ -198,7 +163,14 @@ const UploadingCard = ({ name, file }: { name: string; file?: any }) => {
             />
         );
     }
-    return <CardShell icon={<Loader2 className="size-4 animate-spin" />} label={name} />;
+    return (
+        <FileUploadThumbnail
+            fileName={name}
+            previewUrl={file?.previewUrl}
+            variant="bar"
+            isUploading
+        />
+    );
 };
 
 const ArrowButton = ({
@@ -230,7 +202,10 @@ interface AttachmentBarProps {
     uploadingFiles: Array<{
         id: string;
         name: string;
+        previewUrl?: string;
         mediaPreviewUrl?: string;
+        mediaCoverUrl?: string;
+        cover_filepath?: string;
         mediaDurationSec?: number;
     }>;
     files: any[];

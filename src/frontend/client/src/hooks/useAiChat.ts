@@ -164,9 +164,18 @@ export default function useAiChat(initialConversationId: string = "new", isLings
     // --- Send a message ---
     const finishMediaParsing = useCallback((userMsgId: string) => {
         setIsParsingMedia(false);
-        setMessages((prev) =>
-            prev.map((m) => {
-                if (m.messageId !== userMsgId || !m.files?.length) return m;
+        setMessages((prev) => {
+            let matched = false;
+            const next = prev.map((m) => {
+                if (!m.isCreatedByUser || !m.files?.length) return m;
+                const hasParsingMedia = m.files.some(
+                    (f) => isMediaAttachmentFile(f) && f.parsingState === 'parsing',
+                );
+                if (!hasParsingMedia) return m;
+                const matchesTarget =
+                    m.messageId === userMsgId || String(m.messageId) === String(userMsgId);
+                if (!matchesTarget) return m;
+                matched = true;
                 return {
                     ...m,
                     files: m.files.map((f) =>
@@ -175,8 +184,29 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                             : f,
                     ),
                 };
-            }),
-        );
+            });
+            if (matched) return next;
+
+            for (let i = next.length - 1; i >= 0; i -= 1) {
+                const m = next[i];
+                if (
+                    !m.isCreatedByUser
+                    || !m.files?.some((f) => isMediaAttachmentFile(f) && f.parsingState === 'parsing')
+                ) {
+                    continue;
+                }
+                next[i] = {
+                    ...m,
+                    files: m.files!.map((f) =>
+                        isMediaAttachmentFile(f)
+                            ? { ...f, parsingState: 'done' as MediaParsingState }
+                            : f,
+                    ),
+                };
+                break;
+            }
+            return next;
+        });
     }, []);
 
     const sendMessage = useCallback(
@@ -192,8 +222,10 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                 setIsParsingMedia(true);
             }
 
-            // Strip blob preview URLs before SSE payload; keep them on the user message for chips.
-            const cleanFiles = filesForDisplay.map(({ previewUrl, mediaPreviewUrl, ...rest }) => rest);
+            // Strip blob preview URLs and UI-only parsing flags before SSE payload.
+            const cleanFiles = filesForDisplay.map(
+                ({ previewUrl, mediaPreviewUrl, mediaCoverUrl, parsingState, ...rest }) => rest,
+            );
 
             const parentMsg = messagesRef.current[messagesRef.current.length - 1];
             const parentMessageId = parentMsg?.messageId ?? NO_PARENT;
@@ -506,6 +538,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                     }
                 },
                 onMessage: (text, messageId) => {
+                    finishMediaParsing(realUserMessageId);
                     console.log('[AiChat] message:', { text: text?.slice(0, 50), messageId });
                     setMessages((prev) => {
                         const msgs = [...prev];
@@ -525,9 +558,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                 // as separate sections instead of regex-parsing a `:::thinking:::`
                 // envelope.
                 onAgentUpdate: (patch) => {
-                    if (patch.text) {
-                        finishMediaParsing(realUserMessageId);
-                    }
+                    finishMediaParsing(realUserMessageId);
                     setMessages((prev) => {
                         const msgs = [...prev];
                         const lastMsg = msgs[msgs.length - 1];

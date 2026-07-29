@@ -1,11 +1,9 @@
 
-import { Loader2, X } from "lucide-react";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { uploadChatFile } from "~/api/apps";
 import { MediaAttachmentChip } from "~/components/Chat/attachments/MediaAttachmentChip";
+import { FileUploadThumbnail } from "~/components/Chat/attachments/UploadAttachmentThumbnail";
 import { AttachmentIcon } from "~/components/svg";
-import { getFileTypebyFileName } from "~/components/ui/icon/File/FileIcon";
-import LegacyFileIcon from "~/components/ui/icon/File";
 import useLocalize from "~/hooks/useLocalize";
 import { useToastContext } from "~/Providers";
 import { cn, generateUUID } from "~/utils";
@@ -16,7 +14,7 @@ import {
     type UploadSizeLimits,
 } from "~/pages/knowledge/knowledgeUtils";
 import { MAX_MEDIA_FILES } from "~/pages/appChat/fileAcceptUtils";
-import { readMediaDurationFromFile, isMediaAttachmentFile } from "~/utils/mediaAttachmentUtils";
+import { readMediaDurationFromFile, captureVideoPosterFromFile, getMediaKind, isMediaAttachmentFile } from "~/utils/mediaAttachmentUtils";
 
 const checkFileType = (file, accepts) => {
     if (!accepts || accepts === '*') return true;
@@ -61,6 +59,8 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
         parsing_status: f.parsingStatus || defaultParsingStatus,
         previewUrl: f.previewUrl,
         mediaPreviewUrl: f.mediaPreviewUrl,
+        mediaCoverUrl: f.mediaCoverUrl,
+        cover_filepath: f.cover_filepath,
         mediaDurationSec: f.mediaDurationSec,
     }));
 
@@ -160,6 +160,19 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
                         return updated;
                     });
                 });
+                if (getMediaKind(file.name) === 'video') {
+                    captureVideoPosterFromFile(file).then((mediaCoverUrl) => {
+                        if (!mediaCoverUrl) return;
+                        setFiles((prevFiles) => {
+                            const updated = prevFiles.map((f) =>
+                                f.id === id ? { ...f, mediaCoverUrl } : f,
+                            );
+                            filesRef.current = updated;
+                            onFilesStateChange?.(updated);
+                            return updated;
+                        });
+                    });
+                }
             });
         }
 
@@ -195,10 +208,24 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
                 // for any caller/endpoint that still uses the snake-case form.
                 const filePath = responseData.filepath ?? responseData.file_path;
                 const fileId = responseData.file_id; // Server-returned file_id
+                const coverFilepath = responseData.cover_filepath;
                 const parsingStatus = responseData.parsing_status ?? defaultParsingStatus;
                 filesRef.current = filesRef.current.map(f => {
                     if (f.id === id) {
-                        return { ...f, isUploading: false, filePath, fileId, parsingStatus, progress: 100 }; // Set progress to 100 when uploaded
+                        const next = {
+                            ...f,
+                            isUploading: false,
+                            filePath,
+                            fileId,
+                            parsingStatus,
+                            progress: 100,
+                            ...(coverFilepath ? { cover_filepath: coverFilepath } : {}),
+                        };
+                        if (coverFilepath && f.mediaCoverUrl?.startsWith('blob:')) {
+                            URL.revokeObjectURL(f.mediaCoverUrl);
+                            next.mediaCoverUrl = undefined;
+                        }
+                        return next;
                     }
                     return f;
                 });
@@ -272,6 +299,7 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
             filesRef.current.forEach(f => {
                 if (f.previewUrl) URL.revokeObjectURL(f.previewUrl);
                 if (f.mediaPreviewUrl) URL.revokeObjectURL(f.mediaPreviewUrl);
+                if (f.mediaCoverUrl?.startsWith('blob:')) URL.revokeObjectURL(f.mediaCoverUrl);
             });
             setFiles([]);
             filesRef.current = [];
@@ -286,6 +314,7 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
         filesRef.current.forEach(f => {
             if (f.previewUrl) URL.revokeObjectURL(f.previewUrl);
             if (f.mediaPreviewUrl) URL.revokeObjectURL(f.mediaPreviewUrl);
+            if (f.mediaCoverUrl?.startsWith('blob:')) URL.revokeObjectURL(f.mediaCoverUrl);
         });
     }, []);
 
@@ -293,6 +322,7 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
         const removed = filesRef.current.find(file => file.name === fileName);
         if (removed?.previewUrl) URL.revokeObjectURL(removed.previewUrl);
         if (removed?.mediaPreviewUrl) URL.revokeObjectURL(removed.mediaPreviewUrl);
+        if (removed?.mediaCoverUrl?.startsWith('blob:')) URL.revokeObjectURL(removed.mediaCoverUrl);
         const res = filesRef.current.filter(file => file.name !== fileName);
         filesRef.current = res
         setFiles(res);
@@ -319,8 +349,10 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
                     file={{
                         name: file.name,
                         filepath: file.filePath,
+                        cover_filepath: file.cover_filepath,
                         isUploading: file.isUploading || isParsing,
                         mediaPreviewUrl: file.mediaPreviewUrl,
+                        mediaCoverUrl: file.mediaCoverUrl,
                         mediaDurationSec: file.mediaDurationSec,
                         parsingState: isParsing ? 'parsing' : undefined,
                     }}
@@ -331,27 +363,14 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
         }
 
         return (
-            <div
+            <FileUploadThumbnail
                 key={file.id || index}
-                className="group inline-flex h-6 min-w-0 max-w-[220px] shrink-0 items-center rounded-[4px] bg-white px-2 text-xs text-slate-700 transition-colors duration-200 hover:bg-slate-50"
-            >
-                {file.isUploading || isParsing ? (
-                    <Loader2 className="mr-1 size-4 shrink-0 animate-spin text-[#999]" />
-                ) : (
-                    <LegacyFileIcon className="mr-1 size-4 shrink-0 text-[#999]" type={getFileTypebyFileName(file.name)} />
-                )}
-                <span className="min-w-0 flex-1 truncate text-left" title={file.name}>
-                    {file.name}
-                </span>
-                <button
-                    type="button"
-                    onClick={() => handleFileRemove(file.name)}
-                    className="ml-0.5 inline-flex size-4 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-200"
-                    aria-label="Remove file"
-                >
-                    <X size={12} />
-                </button>
-            </div>
+                fileName={file.name}
+                previewUrl={/\.(png|jpe?g|bmp|gif|webp)$/i.test(file.name) ? file.previewUrl : undefined}
+                variant="bar"
+                isUploading={file.isUploading || isParsing}
+                onRemove={() => handleFileRemove(file.name)}
+            />
         );
     };
 
@@ -359,7 +378,7 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
         <div className="">
             {/* Displaying files */}
             {!hideList && !!files.length && (
-                <div className="flex max-w-full flex-nowrap items-center gap-2 overflow-x-auto overflow-y-hidden p-2">
+                <div className="flex max-w-full gap-2 overflow-x-auto overflow-y-hidden p-2 pb-3">
                     {files.map(renderInlineFileChip)}
                 </div>
             )}

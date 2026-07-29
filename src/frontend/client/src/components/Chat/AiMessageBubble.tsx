@@ -72,21 +72,19 @@ const FILE_TYPE_ICONS: Record<string, typeof Outlined.File> = {
 };
 
 /**
- * Uploaded-file list for a user message: a type icon + filename per row, never a
- * content preview. Stacks vertically and scrolls past 120px. A linear-gradient
- * mask softly fades the top/bottom edge (instead of a hard clip) whenever there
- * is more content to scroll in that direction — same fade trick used elsewhere.
+ * Uploaded-file list for a user message. Video attachments render as square cover
+ * thumbnails; other files stay as icon + filename rows.
  */
 function UploadedFileList({ files }: { files: any[] }) {
     const scrollRef = useRef<HTMLDivElement>(null);
-    const [fade, setFade] = useState({ top: false, bottom: false });
+    const [fade, setFade] = useState({ left: false, right: false });
 
     const updateFade = useCallback(() => {
         const el = scrollRef.current;
         if (!el) return;
-        const top = el.scrollTop > 0;
-        const bottom = el.scrollTop + el.clientHeight < el.scrollHeight - 1;
-        setFade((prev) => (prev.top === top && prev.bottom === bottom ? prev : { top, bottom }));
+        const left = el.scrollLeft > 0;
+        const right = el.scrollLeft + el.clientWidth < el.scrollWidth - 1;
+        setFade((prev) => (prev.left === left && prev.right === right ? prev : { left, right }));
     }, []);
 
     useEffect(() => {
@@ -94,46 +92,55 @@ function UploadedFileList({ files }: { files: any[] }) {
     }, [files, updateFade]);
 
     const maskStyle = useMemo(() => {
-        if (!fade.top && !fade.bottom) return undefined;
-        const topStop = fade.top ? "16px" : "0";
-        const bottomStop = fade.bottom ? "calc(100% - 16px)" : "100%";
-        const value = `linear-gradient(to bottom, transparent, #000 ${topStop}, #000 ${bottomStop}, transparent)`;
+        if (!fade.left && !fade.right) return undefined;
+        const leftStop = fade.left ? "16px" : "0";
+        const rightStop = fade.right ? "calc(100% - 16px)" : "100%";
+        const value = `linear-gradient(to right, transparent, #000 ${leftStop}, #000 ${rightStop}, transparent)`;
         return { maskImage: value, WebkitMaskImage: value };
     }, [fade]);
 
     if (!files || files.length === 0) return null;
 
+    const mediaFiles = files.filter(isMediaChipFile);
+    const otherFiles = files.filter((file) => !isMediaChipFile(file));
+
     return (
-        <div
-            ref={scrollRef}
-            onScroll={updateFade}
-            style={maskStyle}
-            className="scrollbar-os mb-2 mt-1 flex max-h-[120px] max-w-sm flex-col gap-3 overflow-y-auto"
-        >
-            {files.map((file, i) => {
-                const fileName = file.name || file.file_name || "File";
-                if (isMediaChipFile(file)) {
-                    return (
+        <div className="mb-2 mt-1 flex max-w-sm flex-col gap-2">
+            {mediaFiles.length > 0 && (
+                <div
+                    ref={scrollRef}
+                    onScroll={updateFade}
+                    style={maskStyle}
+                    className="scrollbar-os flex gap-2 overflow-x-auto"
+                >
+                    {mediaFiles.map((file, i) => (
                         <MediaAttachmentChip
-                            key={i}
+                            key={`media-${i}`}
                             file={file}
                             variant="message"
                         />
-                    );
-                }
-                const fileType = getFileTypebyFileName(fileName);
-                const FileTypeIcon = FILE_TYPE_ICONS[fileType] ?? Outlined.File;
-                return (
-                    <div key={i} className="flex shrink-0 items-center gap-1 text-[#999999]">
-                        <FileTypeIcon size={12} className="shrink-0 text-[#CCCCCC]" />
-                        <div className="min-w-0 flex-1 overflow-hidden">
-                            <div className="truncate text-xs" title={fileName}>
-                                {fileName}
+                    ))}
+                </div>
+            )}
+            {otherFiles.length > 0 && (
+                <div className="flex flex-col gap-2">
+                    {otherFiles.map((file, i) => {
+                        const fileName = file.name || file.file_name || "File";
+                        const fileType = getFileTypebyFileName(fileName);
+                        const FileTypeIcon = FILE_TYPE_ICONS[fileType] ?? Outlined.File;
+                        return (
+                            <div key={`file-${i}`} className="flex shrink-0 items-center gap-1 text-[#999999]">
+                                <FileTypeIcon size={12} className="shrink-0 text-[#CCCCCC]" />
+                                <div className="min-w-0 flex-1 overflow-hidden">
+                                    <div className="truncate text-xs" title={fileName}>
+                                        {fileName}
+                                    </div>
+                                </div>
                             </div>
-                        </div>
-                    </div>
-                );
-            })}
+                        );
+                    })}
+                </div>
+            )}
         </div>
     );
 }
