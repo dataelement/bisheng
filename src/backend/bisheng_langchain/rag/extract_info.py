@@ -1,12 +1,15 @@
-from bisheng_langchain.chat_models import ChatQWen
 from langchain.chains.llm import LLMChain
 from langchain.prompts.chat import (
     ChatPromptTemplate,
-    SystemMessagePromptTemplate,
     HumanMessagePromptTemplate,
+    SystemMessagePromptTemplate,
 )
 
-system_template = """你是一个可靠标题生成或者提取助手。你会收到一篇文档的主要内容，请根据这些内容生成或者提取这篇文档的标题。"""
+from bisheng_langchain.chat_models import ChatQWen
+
+system_template = (
+    """你是一个可靠标题生成或者提取助手。你会收到一篇文档的主要内容，请根据这些内容生成或者提取这篇文档的标题。"""
+)
 human_template = """
 文档内容如下：
 {context}
@@ -28,8 +31,7 @@ abstract_system_template = """# role
 2. 使用2～3句话概括文档的核心内容和关键结论，强调信息的准确性、完整性与清晰度。
 
 # result example
-【文档类型】：会议纪要
-【摘要】：本文档为公司季度业务会议纪要，会议围绕本季度销售目标的达成情况展开，最终决定下一季度加强市场推广投入，并设立专门团队负责新产品上市工作，以改善销售表现。"""
+本文档为公司季度业务会议纪要，会议围绕本季度销售目标的达成情况展开，最终决定下一季度加强市场推广投入，并设立专门团队负责新产品上市工作，以改善销售表现。"""
 abstract_human_template = """
 文档内容如下：
 {context}
@@ -51,20 +53,16 @@ abstract_extract_prompt = ChatPromptTemplate.from_messages(abstract_messages)
 
 
 def _build_prompt_chain(
-        llm,
-        *,
-        default_prompt: ChatPromptTemplate,
-        system_prompt: str | None = None,
-        human_prompt: str | None = None,
+    llm,
+    *,
+    default_prompt: ChatPromptTemplate,
+    system_prompt: str | None = None,
+    human_prompt: str | None = None,
 ):
     if system_prompt or human_prompt:
         prompt_messages = [
-            SystemMessagePromptTemplate.from_template(
-                system_prompt or default_prompt.messages[0].prompt.template
-            ),
-            HumanMessagePromptTemplate.from_template(
-                human_prompt or default_prompt.messages[1].prompt.template
-            ),
+            SystemMessagePromptTemplate.from_template(system_prompt or default_prompt.messages[0].prompt.template),
+            HumanMessagePromptTemplate.from_template(human_prompt or default_prompt.messages[1].prompt.template),
         ]
         prompt = ChatPromptTemplate.from_messages(prompt_messages)
     else:
