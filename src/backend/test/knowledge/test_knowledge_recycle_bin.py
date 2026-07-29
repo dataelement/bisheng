@@ -53,6 +53,62 @@ def test_conflict_parent_display_path():
     )
 
 
+def test_child_prefix_matches_space_path_convention():
+    assert KnowledgeRecycleService._child_prefix("", 100) == "/100"
+    assert KnowledgeRecycleService._child_prefix(None, 100) == "/100"
+    assert KnowledgeRecycleService._child_prefix("/10", 20) == "/10/20"
+
+
+def test_remap_path_segments_applies_folder_map():
+    assert KnowledgeRecycleService._remap_path_segments("/100/200", {100: 300}) == "/300/200"
+    assert KnowledgeRecycleService._remap_path_segments("/100", {100: 300}) == "/300"
+    assert KnowledgeRecycleService._remap_path_segments("", {100: 300}) == ""
+
+
+def test_next_renamed_filename_avoids_taken():
+    assert KnowledgeRecycleService._next_renamed_filename("a.pdf", set()) == "a.pdf"
+    assert KnowledgeRecycleService._next_renamed_filename("a.pdf", {"a.pdf"}) == "a(1).pdf"
+    assert KnowledgeRecycleService._next_renamed_filename("a.pdf", {"a.pdf", "a(1).pdf"}) == "a(2).pdf"
+    assert KnowledgeRecycleService._next_renamed_filename("README", {"README"}) == "README(1)"
+
+
+def test_remap_prefix_rewrites_subtree():
+    assert KnowledgeRecycleService._remap_prefix("/100/200", "/100", "/300") == "/300/200"
+    assert KnowledgeRecycleService._remap_prefix("/100", "/100", "/300") == "/300"
+    assert KnowledgeRecycleService._remap_prefix("/999", "/100", "/300") is None
+
+
+@pytest.mark.asyncio
+async def test_find_file_conflicts_for_folder_merge_scans_batch_files():
+    user = SimpleNamespace(user_id=1, user_name="admin", tenant_id=1, is_admin=lambda: True)
+    svc = KnowledgeRecycleService(user)  # type: ignore[arg-type]
+    item = SimpleNamespace(recycle_batch_id="b1", recycle_root_id=10)
+    batch_files = [
+        SimpleNamespace(id=11, file_type=FileType.DIR.value, file_name="a", md5=None),
+        SimpleNamespace(id=12, file_type=FileType.FILE.value, file_name="doc.pdf", md5="aaa"),
+        SimpleNamespace(id=13, file_type=FileType.FILE.value, file_name="other.pdf", md5="bbb"),
+    ]
+
+    async def fake_conflicts(kid, name, md5, exclude_id=None):
+        if name == "doc.pdf":
+            return [{"name": "doc.pdf", "target_file_id": 99, "reason": "filename", "path": "/a"}]
+        return []
+
+    with (
+        patch.object(svc, "_batch_file_ids", new=AsyncMock(return_value=[11, 12, 13])),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_recycle_service.KnowledgeFileDao.aget_file_by_ids",
+            new=AsyncMock(return_value=batch_files),
+        ),
+        patch.object(svc, "_find_file_conflicts", new=AsyncMock(side_effect=fake_conflicts)),
+    ):
+        conflicts = await svc._find_file_conflicts_for_folder_merge(item, target_kid=19)  # type: ignore[arg-type]
+
+    assert len(conflicts) == 1
+    assert conflicts[0]["target_file_id"] == 99
+    assert conflicts[0]["name"] == "doc.pdf"
+
+
 def test_build_primary_only_filter_merges_recycled_ids():
     milvus, es = build_primary_only_filter([10, 3, 10])
     assert milvus == "document_id not in [3, 10]"
