@@ -8,6 +8,7 @@ import {
     addWechatSourceApi
 } from "~/api/channels";
 import { useLocalize } from "~/hooks";
+import { useConfirm } from "~/Providers";
 import { extractApiStatusCode } from "../errorUtils";
 import { normalizeUrlForSearch } from "../urlNormalize";
 
@@ -56,8 +57,24 @@ export function useSourceManager(
     const processingWechatRef = useRef("");
     const wechatRequestTokenRef = useRef(0);
     const wechatAbortRef = useRef<AbortController | null>(null);
-    const [wechatAddError, setWechatAddError] = useState(false);
+    // Sticky until the next attempt: after the user dismisses the error dialog,
+    // the processing panel stays up but swaps its copy for "fix the link, then
+    // press Enter" guidance instead of the "adding…" spinner state.
+    const [wechatLinkFailed, setWechatLinkFailed] = useState(false);
     const localize = useLocalize();
+    const confirm = useConfirm();
+
+    // Dead-end notice when a pasted WeChat article URL cannot be read: single
+    // "back to edit" action, no cancel — the user's only move is to fix the link.
+    const showWechatLinkError = () => {
+        setWechatLinkFailed(true);
+        void confirm({
+            title: localize("com_subscription.wechat_link_unrecognized_title"),
+            description: localize("com_subscription.wechat_link_unrecognized_desc"),
+            confirmText: localize("com_subscription.back_to_edit"),
+            hideCancel: true,
+        });
+    };
 
     const abortWechatRequest = () => {
         wechatAbortRef.current?.abort();
@@ -299,6 +316,7 @@ export function useSourceManager(
         const timer = setTimeout(() => {
             (async () => {
                 try {
+                    setWechatLinkFailed(false);
                     // Abort previous in-flight request (if any) and create a new controller for this run
                     abortWechatRequest();
                     const controller = new AbortController();
@@ -309,7 +327,7 @@ export function useSourceManager(
                     const root: any = res as any;
                     const statusCode = root?.status_code ?? root?.code;
                     if (statusCode && statusCode !== 200) {
-                        setWechatAddError(true);
+                        showWechatLinkError();
                         return;
                     }
                     const raw: any = root?.data ?? root ?? {};
@@ -334,7 +352,7 @@ export function useSourceManager(
                     if (wechatRequestTokenRef.current !== token) return;
                     const code = extractApiStatusCode(error);
                     if (code == null) {
-                        setWechatAddError(true);
+                        showWechatLinkError();
                     }
                 } finally {
                     if (wechatRequestTokenRef.current !== token) return;
@@ -369,6 +387,7 @@ export function useSourceManager(
         wechatRequestTokenRef.current++;
         processingWechatRef.current = "";
         abortWechatRequest();
+        setWechatLinkFailed(false);
         setSearchKeyword("");
     };
 
@@ -403,7 +422,6 @@ export function useSourceManager(
         handleClearSearch,
         handleConfirm,
         handleCancel,
-        wechatAddError,
-        setWechatAddError,
+        wechatLinkFailed,
     };
 }

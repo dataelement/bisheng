@@ -2,10 +2,11 @@
 
 删除 / 危险操作时的「确认 / 取消」小弹窗。标准实现是全局服务 `useConfirm()`（`ConfirmContext`，底层 AlertDialog），分 destructive / default 两档，标准**已定稿**、全站已收敛。迁移台账见「文档 → 组件规范 → Modal 弹窗」§二点五。
 
-## 两个变体
+## 变体
 
 - **destructive（危险态）**：红图标 + 红标题 + 暂不 / 确认删除——删除等不可逆操作。
 - **default（普通态）**：橙色警示图标 + 主色确认——可逆但需用户知情的操作。
+- **hideCancel（告知态）**：在 `default` 基础上隐藏取消按钮，只留一个主按钮——用户只有一条出路的失败提示。
 
 ```tsx
 import { RecoilRoot } from 'recoil';
@@ -32,6 +33,16 @@ function Demos() {
         confirm({
           variant: 'default',
           description: '切换频道后未保存的编辑将丢失，是否继续？',
+        }),
+    ],
+    [
+      '告知态 hideCancel — 用户只有一条出路的失败提示',
+      () =>
+        confirm({
+          title: '公众号文章链接未识别',
+          description: '暂时无法读取该链接，请确认链接完整、页面可以正常访问。',
+          confirmText: '返回修改',
+          hideCancel: true,
         }),
     ],
   ] as const;
@@ -70,11 +81,12 @@ export default () => (
 | 遮罩 | `bg-gray-500/90` + `backdrop-blur-md` | 灰底毛玻璃 |
 | 标题 | `text-base font-medium leading-6` | |
 | 确认按钮 | 两档：danger `#f53f3f` / primary 品牌主色 | 语义红不换肤；特例可自定义 |
-| 取消按钮 | 白底描边 `hover:bg-[#f7f8fa]`，`focus-visible` 焦点环 | 默认文案「暂不」 |
+| 取消按钮 | 白底描边 `hover:bg-[#f7f8fa]`，`focus-visible` 焦点环 | 默认文案「暂不」；`hideCancel` 时不渲染 |
 
 ## 使用规则
 
 - 危险操作（删除等）用 `variant: 'destructive'`；可逆但需确认的用 `default`。**不要自拼确认弹窗**。
+- 只有一个出路的「告知型」提示（如链接解析失败，用户只能返回修改）用 `hideCancel: true`：隐藏取消按钮，只留主按钮；此时 `confirm()` 的返回值无意义，调用方 `void` 掉即可。
 - Loading 统一走服务内置的 pending 态，禁止业务页自塞 Spinner。
 - 带表单输入的弹窗不是二次确认——属于普通 Modal（见「Modal 弹窗」）。
 
