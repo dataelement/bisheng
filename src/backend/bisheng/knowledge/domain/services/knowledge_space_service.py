@@ -114,6 +114,7 @@ from bisheng.database.models.tenant import TenantDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.department.domain.services.department_service import DepartmentService
 from bisheng.knowledge.domain.constants import (
+    get_business_domain_code_from_file,
     normalize_business_domain_code,
     parse_shougang_file_encoding_codes,
 )
@@ -12803,6 +12804,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 status=file.status,
                 file_encoding=file.file_encoding,
                 file_subcategory_code=getattr(file, "file_subcategory_code", None),
+                business_domain_code=get_business_domain_code_from_file(file) or None,
                 tags=file_tags.get(int(file.id), []),
                 abstract=file.abstract or "",
                 create_time=self._format_datetime(file.create_time),

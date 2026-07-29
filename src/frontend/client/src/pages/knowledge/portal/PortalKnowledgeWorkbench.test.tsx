@@ -4446,6 +4446,42 @@ describe("PortalKnowledgeWorkbench", () => {
         });
     });
 
+    test("shows selected business domain in upload records before encoding is ready", async () => {
+        const personalSpace = makeSpace("personal-1", "设备部", {
+            role: SpaceRole.ADMIN,
+        });
+        const uploadedRecord = {
+            ...makeFile("501", "解析中文档.pdf", {
+                type: FileType.PDF,
+                status: FileStatus.PROCESSING,
+            }),
+            spaceName: "设备部",
+            spaceLevel: SpaceLevel.PERSONAL,
+            folderPathName: "根目录",
+            fileEncoding: "",
+            fileSubcategoryCode: "STD",
+            businessDomainCode: "EM",
+            tags: [],
+        };
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [],
+            personalSpaces: [personalSpace],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({ data: [], total: 0 } as any);
+        jest.mocked(listMyUploadedFilesApi).mockResolvedValue({ data: [uploadedRecord], total: 1 } as any);
+
+        renderWorkbench();
+
+        openMyUploadsFromPortalShell();
+        const drawer = await screen.findByTestId("portal-uploaded-files-drawer");
+
+        expect(within(drawer).getByText("解析中")).toHaveClass("uploadRecordStatusInfo");
+        expect(getPortalCategoryButton(drawer, "修改解析中文档.pdf文件分类", "标准规范 / 标准规范")).toBeInTheDocument();
+        expect(within(drawer).getByLabelText("修改解析中文档.pdf业务域类型 当前业务域：EM")).toHaveDisplayValue("EM / 能源");
+    });
+
     test("shows double dash placeholders for empty uploaded record fields", async () => {
         const personalSpace = makeSpace("personal-1", "设备部", {
             role: SpaceRole.ADMIN,
