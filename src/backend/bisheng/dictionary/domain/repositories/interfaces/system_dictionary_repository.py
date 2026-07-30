@@ -60,3 +60,8 @@ class SystemDictionaryRepository(BaseRepository[SystemDictionary, int], ABC):
     ) -> list[SystemDictionary]:
         """查询所有字典条目用于导出,支持 type/keyword/sort_by/is_enabled 筛选"""
         pass
+
+    @abstractmethod
+    async def get_max_sort_order_by_type(self, dict_type: str) -> int:
+        """查询指定类型下最大的 sort_order 值,无记录时返回 0"""
+        pass

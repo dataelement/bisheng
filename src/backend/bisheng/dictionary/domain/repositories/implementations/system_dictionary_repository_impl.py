@@ -138,3 +138,11 @@ class SystemDictionaryRepositoryImpl(BaseRepositoryImpl[SystemDictionary, int], 
         )
         result = await self.session.exec(query)
         return list(result.all())
+
+    async def get_max_sort_order_by_type(self, dict_type: str) -> int:
+        """查询指定类型下最大的 sort_order 值,无记录时返回 0"""
+        query = select(func.coalesce(func.max(SystemDictionary.sort_order), 0)).where(
+            SystemDictionary.type == dict_type
+        )
+        result = await self.session.exec(query)
+        return result.one()

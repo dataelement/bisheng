@@ -63,6 +63,16 @@ async def list_dictionaries_by_type(
     return resp_200(data=[item.model_dump() for item in result])
 
 
+@router.get("/next_sort_order", response_model=UnifiedResponseModel[int])
+async def get_next_sort_order(
+    type: str = Query(..., description="字典类型(数据库英文 code)", min_length=1),
+    service: DictionaryService = Depends(get_dictionary_service),
+):
+    """根据类型获取推荐的下一个 sort_order(当前最大 sort_order + 1)"""
+    result = await service.get_next_sort_order(dict_type=type)
+    return resp_200(data=result)
+
+
 @router.get("/type/{dict_type}", response_model=UnifiedResponseModel[list[DictionaryResponse]])
 async def get_dictionary_by_type(
     dict_type: str = Path(..., description="字典类型"),

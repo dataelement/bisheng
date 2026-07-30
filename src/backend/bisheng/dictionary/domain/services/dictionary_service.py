@@ -138,6 +138,11 @@ class DictionaryService:
         """查询所有字典类型"""
         return [DictionaryTypeResponse(name=member.value, type=member.name.lower()) for member in DictionaryTypeEnum]
 
+    async def get_next_sort_order(self, dict_type: str) -> int:
+        """获取指定类型下推荐的下一个 sort_order(最大 sort_order + 1)"""
+        max_order = await self.repository.get_max_sort_order_by_type(dict_type)
+        return max_order + 1
+
     async def list_page(
         self,
         dict_type: str | None = None,
