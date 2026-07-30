@@ -1146,6 +1146,7 @@
     "ai_assistant": "AI アシスタント",
     "ai_input_placeholder": "現在のフォルダーについて質問してください。# を入力すると、回答のタグを指定できます…",
     "ai_input_placeholder_short": "質問を入力してください...",
+    "ai_input_placeholder_selected": "選択したコンテンツのみに基づいて質問してください。# を入力すると、回答のタグを指定できます…",
     "all_files": "すべてのファイル",
     "applied_to_join_space": "ナレッジスペースへの参加を申請しました:",
     "articles_count": "件のコンテンツ",

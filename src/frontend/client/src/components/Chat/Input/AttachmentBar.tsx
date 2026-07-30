@@ -68,6 +68,16 @@ function resolveFileType(input: any): FileType {
     return (allowed as string[]).includes(normalized || "") ? (normalized as FileType) : "txt";
 }
 
+/**
+ * Icon for a file chip, picked from the file name's extension.
+ * Exported so other surfaces that show the same chip (knowledge-space quick Q&A)
+ * render identical icons instead of maintaining a second mapping.
+ */
+export const AttachmentFileIcon = ({ name }: { name: string }) => {
+    const Icon = CHIP_FILE_ICONS[resolveFileType({ name })] ?? Outlined.File;
+    return <Icon size={16} />;
+};
+
 /** Shared card shell: fixed width, white surface, optional hover-only remove. */
 const CardShell = ({
     icon,
@@ -75,17 +85,22 @@ const CardShell = ({
     title,
     onRemove,
     onClick,
+    className,
 }: {
     icon: React.ReactNode;
     label: string;
     title?: string;
     onRemove?: () => void;
     onClick?: () => void;
+    /** Surface override — the chip is white on this bar's grey strip, but reused on
+     *  white surfaces elsewhere, where it needs the inverse. Geometry stays fixed. */
+    className?: string;
 }) => (
     <div
         className={cn(
             "group flex h-[30px] shrink-0 items-center gap-1 rounded-md bg-white px-2 text-xs text-[#212121]",
             onClick && "cursor-pointer",
+            className,
         )}
         style={{ width: CARD_WIDTH }}
         onClick={onClick}
@@ -111,6 +126,9 @@ const CardShell = ({
         )}
     </div>
 );
+
+/** The chat-mode reference chip itself, for surfaces outside this bar. */
+export const AttachmentChip = CardShell;
 
 const KbCard = ({ kb, onRemove }: { kb: any; onRemove?: () => void }) => (
     <CardShell

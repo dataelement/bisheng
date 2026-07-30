@@ -204,6 +204,14 @@ class ChatFolderReq(ChatReq):
     folder_id: int = Field(default=0, description="Folder ID")
     chat_id: str = Field(..., description="Chat ID")
     tags: list[dict] | None = Field(None, description="List of Tag info for filtering")
+    selected_ids: list[int] | None = Field(
+        None,
+        description=(
+            "Content the user ticked in the file list (files and/or folders, mixed). "
+            "When present it replaces folder_id as the answering scope; a selected "
+            "folder contributes its whole subtree. Empty/absent = ask against folder_id."
+        ),
+    )
 
 
 class SubscribeSpaceResp(BaseModel):

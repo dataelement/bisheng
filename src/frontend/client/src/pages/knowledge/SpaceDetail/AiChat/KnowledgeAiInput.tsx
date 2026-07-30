@@ -17,7 +17,9 @@
  */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useRecoilState } from "recoil";
+import { Outlined } from "bisheng-icons";
 import { SendIcon } from "~/components/svg";
+import { AttachmentChip, AttachmentFileIcon } from "~/components/Chat/Input/AttachmentBar";
 import AiModelSelect from "~/components/Chat/AiModelSelect";
 import type { BsConfig } from "~/api/chatApi";
 import { TagPicker } from "./TagPicker";
@@ -27,6 +29,13 @@ import SpeechToTextComponent from "~/components/Voice/SpeechToText";
 import { useGetWorkbenchModelsQuery } from "~/hooks/queries/data-provider";
 import { cn } from "~/utils";
 import store from "~/store";
+
+/** A ticked row shown as a reference chip above the textarea. */
+export interface KnowledgeAiReference {
+    id: string;
+    name: string;
+    isFolder: boolean;
+}
 
 interface KnowledgeAiInputProps {
     availableTags: { id: number; name: string }[];
@@ -41,6 +50,10 @@ interface KnowledgeAiInputProps {
     /** Notifies parent when the textarea gains/loses focus — used by the dock to
      *  drive the mobile keyboard-up grey overlay. */
     onFocusChange?: (focused: boolean) => void;
+    /** Content ticked in the file list, in tick order. Empty = no reference row at all. */
+    selectedContent?: KnowledgeAiReference[];
+    /** Removing a chip unticks that row in the file list. */
+    onUnselectContent?: (id: string) => void;
 }
 
 const TAG_TEXT_GAP_PX = 4;
@@ -59,6 +72,8 @@ export function KnowledgeAiInput({
     onStop,
     variant = "box",
     onFocusChange,
+    selectedContent = [],
+    onUnselectContent,
 }: KnowledgeAiInputProps) {
     const outerScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
     const localize = useLocalize();
@@ -129,10 +144,13 @@ export function KnowledgeAiInput({
         if (inputText.trim()) setTagDeleteHighlight(false);
     }, [inputText]);
 
-    // 已选 tag 时仅用短文案；部分浏览器不会随 React placeholder 属性刷新，需同步到 DOM
+    // 底纹词三档：已选 tag 时仅用短文案（"输入 #" 的提示已无意义）；否则由勾选状态
+    // 决定问答范围的说法。部分浏览器不会随 React placeholder 属性刷新，需同步到 DOM
     const resolvedPlaceholder = selectedTag
         ? localize("com_knowledge.ai_input_placeholder_short")
-        : localize("com_knowledge.ai_input_placeholder");
+        : selectedContent.length > 0
+            ? localize("com_knowledge.ai_input_placeholder_selected")
+            : localize("com_knowledge.ai_input_placeholder");
     useLayoutEffect(() => {
         const el = textareaRef.current;
         if (el) {
@@ -317,11 +335,10 @@ export function KnowledgeAiInput({
     return (
         <div
             className={cn(
-                "relative flex w-full bg-white p-3",
+                "relative flex w-full flex-col bg-white p-3",
                 variant === "box"
                     ? "rounded-[20px] touch-mobile:rounded-2xl border border-[#E5E6EB] shadow-[0_2px_12px_rgba(0,0,0,0.06)]"
                     : "border-t border-[#EBEBEB]",
-                stacked ? "flex-col gap-2" : "items-center gap-2",
             )}
         >
             {/* Tag picker — floats above the input as a popover so single-row height stays compact */}
@@ -338,6 +355,31 @@ export function KnowledgeAiInput({
                 </div>
             )}
 
+            {/* Reference row — the content ticked in the file list, in tick order.
+                Always one line: it scrolls sideways rather than wrapping, so the
+                input never grows taller as more content is picked. Nothing ticked →
+                the row is absent, not empty, so no height is reserved for it. */}
+            {selectedContent.length > 0 && (
+                <div className="mb-2 flex w-full shrink-0 gap-2 overflow-x-auto pb-1 scrollbar-on-scroll">
+                    {selectedContent.map((item) => (
+                        <AttachmentChip
+                            key={item.id}
+                            icon={
+                                item.isFolder ? (
+                                    <Outlined.FolderClose size={16} />
+                                ) : (
+                                    <AttachmentFileIcon name={item.name} />
+                                )
+                            }
+                            label={item.name}
+                            className="bg-fill-2"
+                            onRemove={onUnselectContent ? () => onUnselectContent(item.id) : undefined}
+                        />
+                    ))}
+                </div>
+            )}
+
+            <div className={cn("flex w-full", stacked ? "flex-col gap-2" : "items-center gap-2")}>
             {/* Single-row: model on the left, inline with the textarea. */}
             {!stacked && <div className="shrink-0">{modelSelect}</div>}
 
@@ -397,6 +439,7 @@ export function KnowledgeAiInput({
             <div className={cn("flex items-center", stacked ? "w-full justify-between" : "shrink-0")}>
                 {stacked && <div className="shrink-0">{modelSelect}</div>}
                 {sendControls}
+            </div>
             </div>
         </div>
     );

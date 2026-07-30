@@ -35,7 +35,7 @@ import { NotificationSeverity } from "~/common";
 import { useConfirm, useToastContext } from "~/Providers";
 import { CreateKnowledgeSpaceDrawer, type CreateKnowledgeSpaceFormData } from "./CreateKnowledgeSpaceDrawer";
 import { KnowledgeSpaceSidebar } from "./sidebar/KnowledgeSpaceSidebar";
-import { KnowledgeSpaceContent } from "./SpaceDetail";
+import { KnowledgeSpaceContent, type SelectedContentItem } from "./SpaceDetail";
 import { KnowledgeAiBottomDock } from "./SpaceDetail/AiChat/KnowledgeAiBottomDock";
 import { KnowledgeSpacePreviewDrawer } from "./KnowledgeSpacePreviewDrawer";
 import KnowledgeSquare from "./KnowledgeSquare";
@@ -76,6 +76,9 @@ export default function Knowledge() {
     const [spaceListDrawerOpen, setSpaceListDrawerOpen] = useState(false);
     // Mobile: a batch selection in the file list hides the AI dock and shows the action bar.
     const [fileSelectionActive, setFileSelectionActive] = useState(false);
+    // Content ticked in the file list — the AI dock restricts its answers to it.
+    // Lives here because the dock is a sibling of the list, not a descendant.
+    const [selectedContent, setSelectedContent] = useState<SelectedContentItem[]>([]);
     // Mobile: full-page file search (opened from the file-page top-bar search icon).
     const [knowledgeSearchMode, setKnowledgeSearchMode] = useState(false);
     const mobileHeadIconBtnClassName = "inline-flex size-5 shrink-0 items-center justify-center text-[#212121]";
@@ -888,6 +891,7 @@ export default function Knowledge() {
                             searchMode={knowledgeSearchMode}
                             onCloseSearch={() => setKnowledgeSearchMode(false)}
                             onSelectionActiveChange={setFileSelectionActive}
+                            onSelectedContentChange={setSelectedContent}
                         />
                         {/* Hide the AI dock during a mobile batch selection (the batch action bar
                             takes the bottom slot) and in search mode (the search page has no dock). */}
@@ -897,6 +901,7 @@ export default function Knowledge() {
                                 spaceId={String(activeSpace.id)}
                                 folderId={fileManager.currentFolderId}
                                 contextLabel={contextLabel}
+                                selectedContent={selectedContent}
                             />
                         )}
                     </div>

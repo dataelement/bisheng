@@ -22,8 +22,9 @@
 import { useEffect, useRef, useState } from "react";
 import { Outlined } from "bisheng-icons";
 import { useQuery } from "@tanstack/react-query";
-import { useRecoilValue, useResetRecoilState } from "recoil";
+import { useRecoilState, useRecoilValue, useResetRecoilState } from "recoil";
 import { knowledgeSelectedFilesState } from "../../selectionStore";
+import type { SelectedContentItem } from "../index";
 import {
     Tooltip,
     TooltipContent,
@@ -49,11 +50,14 @@ interface KnowledgeAiBottomDockProps {
     folderId?: string;
     /** Welcome text disambiguates space-wide vs folder-scoped Q&A. */
     contextLabel?: string;
+    /** Content ticked in the file list, in tick order. Empty = ask the whole folder. */
+    selectedContent?: SelectedContentItem[];
 }
 
 export function KnowledgeAiBottomDock({
     spaceId,
     folderId,
+    selectedContent = [],
 }: KnowledgeAiBottomDockProps) {
     const localize = useLocalize();
     const isH5 = usePrefersMobileLayout();
@@ -80,17 +84,26 @@ export function KnowledgeAiBottomDock({
      *  `keyboardVisible` flag so styling can hang off it later without coupling. */
     const [isActive, setIsActive] = useState(false);
 
-    // Clears the file-list selection (shared atom). File selection and AI Q&A are
-    // independent: focusing or sending in the input clears any lingering selection
-    // so the two never read as coupled.
+    // The file-list selection (shared atom) IS the Q&A scope: tick a few rows and the
+    // assistant answers only from them. It therefore survives focus and send — it is
+    // cleared only when the user starts a new conversation, or leaves this folder.
+    const [, setFileSelection] = useRecoilState(knowledgeSelectedFilesState);
     const resetFileSelection = useResetRecoilState(knowledgeSelectedFilesState);
+    const selectedIds = selectedContent.map((item) => item.id);
 
-    /** Input focus/blur. On focus we both mark the dock active and clear the file
-     *  selection; also drives the mobile keyboard-overlay flag. */
+    /** Input focus/blur — marks the dock active and drives the mobile keyboard overlay. */
     const handleInputFocusChange = (focused: boolean) => {
         setIsActive(focused);
         setKeyboardVisible(focused);
-        if (focused) resetFileSelection();
+    };
+
+    /** Removing a reference card unticks the row — the list and the cards are one state. */
+    const handleUnselectContent = (id: string) => {
+        setFileSelection((prev) => {
+            const next = new Set(prev);
+            next.delete(id);
+            return next;
+        });
     };
 
     /** Visual viewport tracking — pins the mobile-expanded panel above the virtual
@@ -163,10 +176,9 @@ export function KnowledgeAiBottomDock({
         : localize("com_knowledge.qa_current_space");
 
     const handleSend = (text: string, files?: any[] | null, tag?: FolderChatTag) => {
-        sendMessage(text, files, tag);
-        // Sending is an AI interaction — clear any file selection made while typing
-        // so selection never appears to feed the Q&A.
-        resetFileSelection();
+        // The selection stays put after sending so the user can keep asking follow-up
+        // questions about the same content without re-ticking it.
+        sendMessage(text, files, tag, selectedIds);
         // First send slides the panel up — the input itself stays put. Clear any
         // latched direct-history state so the conversation (not history) shows.
         if (!open) {
@@ -175,7 +187,9 @@ export function KnowledgeAiBottomDock({
         }
     };
 
+    // A new conversation starts from the folder again — drop the carried-over selection.
     const handleNewChat = async () => {
+        resetFileSelection();
         await createSession();
     };
 
@@ -200,7 +214,10 @@ export function KnowledgeAiBottomDock({
         setOpen(true);
     };
 
+    // Resuming a past conversation answers against the current folder (spec §2.3):
+    // a selection left over from the previous one must not silently narrow it.
     const handleHistorySelect = (chatId: string) => {
+        resetFileSelection();
         switchSession(chatId);
         setShowHistory(false);
         // Direct entry: the dock is still collapsed — expand it to show the conversation.
@@ -213,6 +230,7 @@ export function KnowledgeAiBottomDock({
 
     const handleHistoryNewChat = async () => {
         setShowHistory(false);
+        resetFileSelection();
         await createSession();
     };
 
@@ -329,6 +347,8 @@ export function KnowledgeAiBottomDock({
                         onStop={stopGenerating}
                         variant="box"
                         onFocusChange={handleInputFocusChange}
+                        selectedContent={selectedContent}
+                        onUnselectContent={handleUnselectContent}
                     />
                 </div>
 
@@ -568,6 +588,8 @@ export function KnowledgeAiBottomDock({
                         onStop={stopGenerating}
                         variant={open ? "line" : "box"}
                         onFocusChange={handleInputFocusChange}
+                        selectedContent={selectedContent}
+                        onUnselectContent={handleUnselectContent}
                     />
 
                     {/* Standard-entry history — overlays the expanded card. */}

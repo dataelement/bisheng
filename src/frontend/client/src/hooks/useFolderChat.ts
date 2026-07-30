@@ -271,7 +271,13 @@ export default function useFolderChat(
 
     // --- Send a message ---
     const sendMessage = useCallback(
-        async (text: string, _files?: any[] | null, tag?: FolderChatTag) => {
+        async (
+            text: string,
+            _files?: any[] | null,
+            tag?: FolderChatTag,
+            /** Content ticked in the file list; answers are restricted to it. */
+            selectedIds?: string[],
+        ) => {
             if (!text.trim() || isStreaming || !enabled) return;
 
             // If no active session, create one first
@@ -318,13 +324,16 @@ export default function useFolderChat(
 
             setMessages((prev) => [...prev, userMessage, initialResponse]);
 
-            // Build payload per API spec
+            // Build payload per API spec. `selected_ids`, when present, replaces
+            // folder_id as the answering scope server-side; a tag still only narrows
+            // whichever scope is in force.
             const payload: Record<string, any> = {
                 folder_id: numericFolderId ?? 0,
                 chat_id: chatId,
                 query: text.trim(),
                 tags: tag ? [{ id: tag.id, name: tag.name }] : [],
                 model_id: String(chatModel.id || ""),
+                selected_ids: (selectedIds ?? []).map(Number).filter((id) => !Number.isNaN(id)),
             };
 
             // Lock input immediately — don't wait for SSE open event

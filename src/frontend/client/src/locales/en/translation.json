@@ -1222,6 +1222,7 @@
     "ai_assistant": "AI Assistant",
     "ai_input_placeholder": "Ask about the current folder, type # to specify tags for the answer…",
     "ai_input_placeholder_short": "Please enter your question...",
+    "ai_input_placeholder_selected": "Ask about the selected content only, type # to specify tags for the answer…",
     "all_files": "All files",
     "applied_to_join_space": "Applied to join knowledge space:",
     "articles_count": "articles",

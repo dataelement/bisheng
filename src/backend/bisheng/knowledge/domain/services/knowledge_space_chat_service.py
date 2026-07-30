@@ -36,7 +36,7 @@ from bisheng.database.models.session import MessageSession, MessageSessionDao
 from bisheng.database.models.tag import TagBusinessTypeEnum, TagDao
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
-from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
+from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFileDao
 from bisheng.knowledge.domain.models.knowledge_space_file import SpaceFileDao
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
 from bisheng.knowledge.rag.version_filter import build_primary_only_filter
@@ -691,6 +691,32 @@ class KnowledgeSpaceChatService:
             type="end",
         )
 
+    async def _expand_selected_scope(self, space_id: int, selected_ids: list[int]) -> list[int]:
+        """Resolve the rows the user ticked into the concrete files to answer from.
+
+        A ticked file stands for itself; a ticked folder stands for its whole
+        subtree, however deep. Ids that do not belong to this space are dropped —
+        they arrive straight from the client. The result may legitimately be empty
+        (e.g. only empty folders were ticked), which the caller must keep as an
+        empty scope rather than falling back to "everything".
+        """
+        records = await KnowledgeFileDao.aget_file_by_ids(list(set(selected_ids)))
+        file_ids: set[int] = set()
+        folder_prefixes: list[str] = []
+        for record in records:
+            if record.knowledge_id != space_id:
+                continue
+            if record.file_type == FileType.DIR.value:
+                folder_prefixes.append(f"{record.file_level_path}/{record.id}")
+            else:
+                file_ids.add(record.id)
+
+        for child in await SpaceFileDao.get_children_by_prefixes(space_id, folder_prefixes):
+            if child.file_type != FileType.DIR.value:
+                file_ids.add(child.id)
+
+        return list(file_ids)
+
     async def chat_folder(
         self,
         knowledge_id: int,
@@ -699,8 +725,14 @@ class KnowledgeSpaceChatService:
         query: str,
         model_id: int,
         tags: list[dict] | None = None,
+        selected_ids: list[int] | None = None,
     ) -> AsyncIterator[ChatResponse]:
-        """Folder RAG query"""
+        """Folder RAG query.
+
+        Scope precedence: the content the user ticked in the file list wins over the
+        folder they are standing in; a tag only ever narrows whichever of those is in
+        force, never widens it.
+        """
         flow_id = self.generate_flow_id_for_folder(knowledge_id, folder_id)
         session = await MessageSessionDao.afilter_session(
             chat_ids=[chat_id], flow_ids=[flow_id], user_ids=[self.login_user.user_id], include_delete=False
@@ -716,7 +748,9 @@ class KnowledgeSpaceChatService:
 
         target_file_ids = None
 
-        if folder_id:
+        if selected_ids:
+            target_file_ids = await self._expand_selected_scope(space.id, selected_ids)
+        elif folder_id:
             file_record = await self._require_folder_view_permission(knowledge_id, folder_id)
             if not file_record or file_record.knowledge_id != knowledge_id or file_record.file_type != 0:
                 raise NotFoundError(msg="Invalid folder for chat")

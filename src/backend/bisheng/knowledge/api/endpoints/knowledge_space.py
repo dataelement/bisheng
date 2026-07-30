@@ -721,7 +721,15 @@ async def chat_folder(
 ) -> Any:
     async def event_stream():
         try:
-            async for one in svc.chat_folder(space_id, req.folder_id, req.chat_id, req.query, req.model_id, req.tags):
+            async for one in svc.chat_folder(
+                space_id,
+                req.folder_id,
+                req.chat_id,
+                req.query,
+                req.model_id,
+                req.tags,
+                req.selected_ids,
+            ):
                 yield SSEResponse(data=one).to_string()
         except BaseErrorCode as e:
             yield e.to_sse_event_instance_str()

@@ -123,6 +123,15 @@ interface KnowledgeSpaceContentProps {
     onCloseSearch?: () => void;
     /** Notify the page when a mobile batch selection is active, so it can hide the AI dock. */
     onSelectionActiveChange?: (active: boolean) => void;
+    /** Ticked content, in the order it was ticked — the AI dock answers only from it. */
+    onSelectedContentChange?: (items: SelectedContentItem[]) => void;
+}
+
+/** A ticked row as the AI dock needs it: enough to draw a reference card. */
+export interface SelectedContentItem {
+    id: string;
+    name: string;
+    isFolder: boolean;
 }
 
 function normalizeWebLinkTitle(title: string): string | undefined {
@@ -169,6 +178,7 @@ export function KnowledgeSpaceContent({
     searchMode = false,
     onCloseSearch,
     onSelectionActiveChange,
+    onSelectedContentChange,
 }: KnowledgeSpaceContentProps) {
     const localize = useLocalize();
     const isH5 = usePrefersMobileLayout();
@@ -1035,6 +1045,33 @@ export function KnowledgeSpaceContent({
     useEffect(() => {
         onSelectionActiveChange?.(selectionActive);
     }, [selectionActive, onSelectionActiveChange]);
+
+    // ─── Ticked content → AI dock scope ─────────────────────────────────
+    // Order follows the tick order: `selectedFiles` is a Set, so an item that is
+    // unticked and ticked again lands at the end, which is what the reference row
+    // is meant to show. A file that did not parse cannot be answered from, so it
+    // never becomes a reference card (folders carry no parse state of their own).
+    //
+    // Deliberately no dependency array: `displayFiles` is rebuilt on every render,
+    // so any deps list containing it would re-fire the notify → parent setState →
+    // re-render loop forever. Instead the derived list is compared by value and the
+    // parent is only told when it actually changed.
+    const publishedSelectionRef = useRef("");
+    useEffect(() => {
+        const byId = new Map(displayFiles.map((file) => [file.id, file]));
+        const items: SelectedContentItem[] = [];
+        selectedFiles.forEach((id) => {
+            const file = byId.get(id);
+            if (!file) return;
+            const isFolder = file.type === FileType.FOLDER;
+            if (!isFolder && file.status !== FileStatus.SUCCESS) return;
+            items.push({ id, name: file.name, isFolder });
+        });
+        const signature = items.map((item) => `${item.id} ${item.name} ${item.isFolder}`).join("");
+        if (signature === publishedSelectionRef.current) return;
+        publishedSelectionRef.current = signature;
+        onSelectedContentChange?.(items);
+    });
 
     // Permission management is a single-target action: only with exactly one selected item,
     // and only when the user is allowed to manage its permission (permissionEntryIds is the

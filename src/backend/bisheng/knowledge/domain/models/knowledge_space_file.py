@@ -5,12 +5,12 @@ from sqlmodel import col, select
 
 from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.knowledge.domain.models.knowledge_file import (
+    PORTAL_USER_UPLOAD_FILE_SOURCES,
     FileSource,
     FileType,
     KnowledgeFile,
     KnowledgeFileDao,
     KnowledgeFileStatus,
-    PORTAL_USER_UPLOAD_FILE_SOURCES,
 )
 
 # F027 AD-14: file extension priority for "file_type" sort order.
@@ -115,6 +115,26 @@ class SpaceFileDao(KnowledgeFileDao):
         )
         if file_status is not None:
             statement = statement.where(KnowledgeFile.status == file_status.value)
+        async with get_async_db_session() as session:
+            return (await session.exec(statement)).all()
+
+    @classmethod
+    async def get_children_by_prefixes(cls, knowledge_id: int, prefixes: list[str]) -> list[KnowledgeFile]:
+        """get_children_by_prefix for several folders at once.
+
+        Callers expand a user-made multi-folder selection, which has no size cap —
+        one round trip instead of one per folder.
+        """
+        if not prefixes:
+            return []
+        path_conditions = []
+        for prefix in prefixes:
+            path_conditions.append(col(KnowledgeFile.file_level_path) == prefix)
+            path_conditions.append(col(KnowledgeFile.file_level_path).like(f"{prefix}/%"))
+        statement = select(KnowledgeFile).where(
+            KnowledgeFile.knowledge_id == knowledge_id,
+            or_(*path_conditions),
+        )
         async with get_async_db_session() as session:
             return (await session.exec(statement)).all()
 
