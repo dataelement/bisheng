@@ -22,7 +22,6 @@ import { DashboardConfigPanel } from "./DashboardConfigPanel"
 import { DatasetField, DatasetSelector } from "./DatasetSelector"
 import { DimensionBlock } from "./DimensionBlock"
 import { FilterConditionDialog } from "./FilterConditionDialog"
-import { PivotColumnAliasEditor } from "./PivotColumnAliasEditor"
 import { StyleConfigPanel } from "./StyleConfigPanel"
 import { resolveAppliedComponentTitle } from "./componentConfigDraft"
 import { useChartState } from "./useChartState"
@@ -146,7 +145,6 @@ export function ComponentConfigDrawer() {
     valueDimensions,
     dragOverSection,
     filterGroup,
-    pivotColumnAliases,
     draggingId,
     sortPriorityFields,
     currentChartHasStack,
@@ -161,7 +159,6 @@ export function ComponentConfigDrawer() {
     handleDeleteFilter,
     setDraggingId,
     setFilterGroup,
-    setPivotColumnAliases,
     getDataConfig
   } = chartState
   const STACKED_CHART_TYPES = new Set<ChartType>([
@@ -1083,14 +1080,6 @@ export function ComponentConfigDrawer() {
                                           openEditDialog('stack', dimensionId, originalName, displayName)
                                         }
                                       />
-                                      {isPivotTable && stackDimensions[0] && (
-                                        <PivotColumnAliasEditor
-                                          datasetCode={editingComponent.dataset_code}
-                                          stackDimension={stackDimensions[0]}
-                                          value={pivotColumnAliases}
-                                          onChange={setPivotColumnAliases}
-                                        />
-                                      )}
                                     </>
                                   </CollapsibleBlock>
                                 )}
