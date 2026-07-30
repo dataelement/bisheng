@@ -31,7 +31,6 @@ import {
 import { knowledgeSpaceDropdownSurfaceClassName } from "~/components/SidebarListMoreMenu";
 import { Button } from "~/components/ui/Button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
-import { AiDialogIcon } from "~/components/icons";
 import { CopyShareLinkButton } from "~/components/CopyShareLinkButton";
 import { SingleIconButtonSortGlyph } from "~/components/icons/channels";
 import { useLocalize, useMediaQuery } from "~/hooks";
@@ -574,11 +573,16 @@ export function KnowledgeSpaceHeader({
                     <div className="flex shrink-0 items-center gap-3">
                         <Button
                             variant="ghost"
-                            className="h-8 gap-[3px] rounded-[6px] px-2 text-[15px] font-normal text-[#273142] hover:bg-[#f2f3f5]"
+                            className="h-8 gap-2 rounded-[6px] px-2 text-[15px] font-normal text-[#273142] hover:bg-[#f2f3f5]"
                             disabled={isSearching}
                             onClick={onToggleAiAssistant}
                         >
-                            <AiDialogIcon className="size-4 shrink-0" fill={isSearching ? "#c9cdd4" : "#317EF9"} />
+                            <img
+                                src={`${__APP_ENV__.BASE_URL}/assets/channel/ai-assistant.png`}
+                                alt=""
+                                aria-hidden="true"
+                                className={`size-8 shrink-0 object-contain ${isSearching ? "opacity-40 grayscale" : ""}`}
+                            />
                             <span className={isSearching ? "text-[#c9cdd4]" : "text-[#273142]"}>{localize("com_knowledge.ai_assistant")}</span>
                         </Button>
 

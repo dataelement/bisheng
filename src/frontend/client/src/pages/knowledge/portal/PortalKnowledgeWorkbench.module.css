@@ -1459,6 +1459,19 @@
   background: #eaf2ff;
 }
 
+/* The AI entry renders the 32x32 assistant avatar instead of a 16px line icon. */
+.toolbarButtonAi {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+}
+
+.toolRailAiIcon {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+}
+
 .toolbarButton:disabled {
   color: #b8c2d2;
   cursor: not-allowed;
