@@ -1440,11 +1440,11 @@ async def test_recommend_upload_folders_uses_existing_space_folders(service):
             [UploadFolderRecommendFileReq(client_file_id="local-1", file_name="能源管理标准.pdf")],
         )
 
-    mock_require_permission_id.assert_any_await("knowledge_space", 1, "upload_file")
+    mock_require_permission_id.assert_any_await("knowledge_space", 1, "upload_file_to_space")
     mock_require_permission_id.assert_any_await("folder", 11, "view_folder", space_id=1)
-    mock_require_permission_id.assert_any_await("folder", 11, "upload_file", space_id=1)
+    mock_require_permission_id.assert_any_await("folder", 11, "upload_file_to_folder", space_id=1)
     mock_require_permission_id.assert_any_await("folder", 37, "view_folder", space_id=1)
-    mock_require_permission_id.assert_any_await("folder", 37, "upload_file", space_id=1)
+    mock_require_permission_id.assert_any_await("folder", 37, "upload_file_to_folder", space_id=1)
     assert result.items[0].client_file_id == "local-1"
     assert result.items[0].recommended_folder_id == 37
     assert result.items[0].recommended_folder_name == "能源管理"
@@ -2143,7 +2143,7 @@ async def test_move_file_folder_updates_file_and_document_folder(service):
         result = await service.move_file_folder(10, 501, 37)
 
     mock_require_permission_id.assert_any_await("knowledge_file", 501, "rename_file", space_id=10)
-    mock_require_permission_id.assert_any_await("folder", 37, "upload_file", space_id=10)
+    mock_require_permission_id.assert_any_await("folder", 37, "upload_file_to_folder", space_id=10)
     assert file_record.file_level_path == "/11/37"
     assert file_record.level == 2
     mock_update.assert_awaited_once_with(file_record)
@@ -4460,7 +4460,7 @@ async def test_shougang_portal_personal_spaces_filters_to_writable_personal_spac
             service,
             "_get_effective_permission_ids",
             new_callable=AsyncMock,
-            side_effect=[{"view_space", "upload_file"}, {"view_space"}],
+            side_effect=[{"view_space", "upload_file_to_space"}, {"view_space"}],
         ),
     ):
         result = await service.get_shougang_portal_personal_spaces()
@@ -8482,7 +8482,7 @@ class TestTupleLifecycle:
             result = await service.add_file(1, ["/tmp/doc.txt"])
 
         assert result[0].id == 81
-        mock_require_permission_id.assert_any_await("knowledge_space", 1, "upload_file")
+        mock_require_permission_id.assert_any_await("knowledge_space", 1, "upload_file_to_space")
         parent_tuple = mock_batch_write.await_args.args[0][0]
         assert parent_tuple.user == "knowledge_space:1"
         assert parent_tuple.relation == "parent"
@@ -8889,7 +8889,12 @@ class TestTupleLifecycle:
             with pytest.raises(SpacePermissionDeniedError):
                 await service.add_file(1, ["/tmp/doc.txt"], parent_id=70)
 
-        mock_require_permission_id.assert_awaited_once_with("folder", 70, "upload_file", space_id=1)
+        mock_require_permission_id.assert_awaited_once_with(
+            "folder",
+            70,
+            "upload_file_to_folder",
+            space_id=1,
+        )
         mock_query_space.assert_not_awaited()
 
     @pytest.mark.asyncio
@@ -10754,7 +10759,8 @@ class TestFineGrainedPermissionRuntime:
 
         assert {"view_space", "view_folder", "view_file", "download_folder", "download_file"} <= permission_ids
         assert "edit_space" not in permission_ids
-        assert "upload_file" not in permission_ids
+        assert "upload_file_to_space" not in permission_ids
+        assert "upload_file_to_folder" not in permission_ids
         assert "delete_space" not in permission_ids
         assert "manage_space_relation" not in permission_ids
 
@@ -11204,7 +11210,7 @@ async def test_space_user_can_view_all_statuses_false_for_member(service):
         service,
         "_get_effective_permission_ids",
         new_callable=AsyncMock,
-        return_value={"view_space", "upload_file"},
+        return_value={"view_space", "upload_file_to_space"},
     ):
         assert await service._space_user_can_view_all_statuses(1) is False
 

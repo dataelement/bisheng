@@ -149,6 +149,11 @@ class ResultLimit(BaseModel):
         return 0
 
 
+class PivotColumnAliases(BaseModel):
+    field_id: str = Field(alias="fieldId")
+    aliases: Dict[str, str] = Field(default_factory=dict)
+
+
 class ComponentDataConfig(BaseModel):
     dimensions: List[DimensionField] = Field(default_factory=list, description="list of dimension fields")
     stack_dimension: Optional[DimensionField] = Field(default=None, alias="stackDimension",
@@ -159,6 +164,10 @@ class ComponentDataConfig(BaseModel):
     filters_logic: Optional[str] = Field(default=LogicType.AND, alias='filtersLogic', description="logic for filters")
     time_filter: Optional[TimeFilter] = Field(default=None, alias='timeFilter')
     result_limit: Optional[ResultLimit] = Field(default=None, alias='resultLimit')
+    pivot_column_aliases: Optional[PivotColumnAliases] = Field(
+        default=None,
+        alias="pivotColumnAliases",
+    )
 
 
 class DataQueryResult(BaseModel):

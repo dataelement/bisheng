@@ -22,6 +22,7 @@ import { DashboardConfigPanel } from "./DashboardConfigPanel"
 import { DatasetField, DatasetSelector } from "./DatasetSelector"
 import { DimensionBlock } from "./DimensionBlock"
 import { FilterConditionDialog } from "./FilterConditionDialog"
+import { PivotColumnAliasEditor } from "./PivotColumnAliasEditor"
 import { StyleConfigPanel } from "./StyleConfigPanel"
 import { resolveAppliedComponentTitle } from "./componentConfigDraft"
 import { useChartState } from "./useChartState"
@@ -145,6 +146,7 @@ export function ComponentConfigDrawer() {
     valueDimensions,
     dragOverSection,
     filterGroup,
+    pivotColumnAliases,
     draggingId,
     sortPriorityFields,
     currentChartHasStack,
@@ -159,6 +161,7 @@ export function ComponentConfigDrawer() {
     handleDeleteFilter,
     setDraggingId,
     setFilterGroup,
+    setPivotColumnAliases,
     getDataConfig
   } = chartState
   const STACKED_CHART_TYPES = new Set<ChartType>([
@@ -273,6 +276,7 @@ export function ComponentConfigDrawer() {
         const newDimension = {
           id: `${safeFieldId}-${Date.now()}`,
           fieldId: safeFieldId,
+          name: field.fieldCode,
           displayName: field.displayName || field.fieldName,
           originalName: field.displayName || field.fieldName,
           fieldType: field.role,
@@ -301,6 +305,7 @@ export function ComponentConfigDrawer() {
         const newDimension = {
           id: `${safeFieldId}-${Date.now()}`,
           fieldId: safeFieldId,
+          name: field.fieldCode,
           displayName: field.displayName || field.fieldName,
           originalName: field.displayName || field.fieldName,
           fieldType: field.role,
@@ -1062,21 +1067,31 @@ export function ComponentConfigDrawer() {
                                     collapsed={configCollapsed.stack}
                                     onCollapse={() => toggleCollapse('stack')}
                                   >
-                                    <DimensionBlock
-                                      invalidIds={invalidFieldIds}
-                                      isDimension={true}
-                                      isStack={'stack'}
-                                      dimensions={stackDimensions}
-                                      isDragOver={dragOverSection === 'stack'}
-                                      onDragOver={(e) => handleDragOver(e, 'stack')}
-                                      onDragLeave={handleDragLeave}
-                                      onDrop={(e) => handleDrop(e, 'stack', isMetricCard)}
-                                      onDelete={(dimensionId) => handleDeleteDimension('stack', dimensionId)}
-                                      onSortChange={(dimensionId, sortValue) => handleSortChange('stack', dimensionId, sortValue)}
-                                      onEditDisplayName={(dimensionId, originalName, displayName) =>
-                                        openEditDialog('stack', dimensionId, originalName, displayName)
-                                      }
-                                    />
+                                    <>
+                                      <DimensionBlock
+                                        invalidIds={invalidFieldIds}
+                                        isDimension={true}
+                                        isStack={'stack'}
+                                        dimensions={stackDimensions}
+                                        isDragOver={dragOverSection === 'stack'}
+                                        onDragOver={(e) => handleDragOver(e, 'stack')}
+                                        onDragLeave={handleDragLeave}
+                                        onDrop={(e) => handleDrop(e, 'stack', isMetricCard)}
+                                        onDelete={(dimensionId) => handleDeleteDimension('stack', dimensionId)}
+                                        onSortChange={(dimensionId, sortValue) => handleSortChange('stack', dimensionId, sortValue)}
+                                        onEditDisplayName={(dimensionId, originalName, displayName) =>
+                                          openEditDialog('stack', dimensionId, originalName, displayName)
+                                        }
+                                      />
+                                      {isPivotTable && stackDimensions[0] && (
+                                        <PivotColumnAliasEditor
+                                          datasetCode={editingComponent.dataset_code}
+                                          stackDimension={stackDimensions[0]}
+                                          value={pivotColumnAliases}
+                                          onChange={setPivotColumnAliases}
+                                        />
+                                      )}
+                                    </>
                                   </CollapsibleBlock>
                                 )}
                               </>

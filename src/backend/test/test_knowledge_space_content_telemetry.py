@@ -173,6 +173,11 @@ def _stub_file_dimension_lookups(worker_module, monkeypatch):
         lambda _space_ids: {},
     )
     monkeypatch.setattr(
+        worker_module,
+        "_get_knowledge_space_department_map",
+        lambda space_ids, _scope_map: dict.fromkeys(space_ids),
+    )
+    monkeypatch.setattr(
         worker_module.UserDepartmentDao,
         "get_primary_department_map_by_user_ids",
         lambda _user_ids: {},
@@ -282,6 +287,7 @@ def test_knowledge_space_content_build_file_record_contains_realtime_dimensions(
     )
     space = SimpleNamespace(id=3, tenant_id=7, name="质量制度库")
     uploader = SimpleNamespace(user_name="上传人", departments=[], groups=[], roles=[])
+    space_department = SimpleNamespace(id=31, name="质量管理处")
     primary_department = SimpleNamespace(id=21, name="质量部")
 
     record = module.KnowledgeSpaceContentStat.build_file_record(
@@ -289,6 +295,7 @@ def test_knowledge_space_content_build_file_record_contains_realtime_dimensions(
         space=space,
         uploader=uploader,
         space_level="department",
+        space_department=space_department,
         primary_department=primary_department,
         file_category_labels={"POL": "政策制度"},
         file_subcategory_labels={"POL-01": "管理制度"},
@@ -302,9 +309,63 @@ def test_knowledge_space_content_build_file_record_contains_realtime_dimensions(
     assert record.file_subcategory_code == "POL-01"
     assert record.file_subcategory_name == "管理制度"
     assert record.business_domain_code == "QM"
+    assert record.space_department_id == 31
+    assert record.space_department_name == "质量管理处"
     assert record.primary_department_id == 21
     assert record.primary_department_name == "质量部"
     assert record.projection_updated_at
+
+
+@pytest.mark.parametrize(
+    ("level", "expected"),
+    [
+        ("department", True),
+        ("team_ks", True),
+        ("personal", False),
+        ("team", False),
+        ("public", False),
+    ],
+)
+def test_only_department_and_clinic_spaces_are_department_bound(level, expected):
+    worker_module = _import_worker_mid_table()
+
+    assert (
+        worker_module._is_department_bound_space_scope(
+            SimpleNamespace(level=level)
+        )
+        is expected
+    )
+
+
+def test_unbound_space_content_has_no_owning_department():
+    from bisheng.telemetry.domain.mid_table import knowledge_space_content as module
+
+    record = module.KnowledgeSpaceContentStat.build_file_record(
+        file_record=SimpleNamespace(
+            id=12,
+            tenant_id=7,
+            user_id=9,
+            user_name="上传人",
+            create_time=None,
+            file_name="公共制度.pdf",
+            file_type=1,
+            split_rule=None,
+            file_subcategory_code=None,
+            file_encoding=None,
+        ),
+        space=SimpleNamespace(id=4, tenant_id=7, name="公共知识库"),
+        uploader=SimpleNamespace(
+            user_name="上传人",
+            departments=[],
+            groups=[],
+            roles=[],
+        ),
+        space_level="public",
+        space_department=None,
+    )
+
+    assert record.space_department_id is None
+    assert record.space_department_name is None
 
 
 def test_knowledge_space_content_delete_stale_file_records_uses_sync_run_id(monkeypatch):

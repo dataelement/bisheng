@@ -792,11 +792,14 @@ export default function PortalKnowledgeWorkbench() {
         const parentFolderId = resolveFileParentFolderId(file);
         const objectType = parentFolderId ? "folder" : "knowledge_space";
         const objectId = parentFolderId || activeSpace.id;
+        const uploadPermissionId = parentFolderId
+            ? "upload_file_to_folder"
+            : "upload_file_to_space";
         checkPermission(
             objectType,
             objectId,
             "can_edit",
-            "upload_file",
+            uploadPermissionId,
             { signal: controller.signal },
         ).then((result) => {
             if (!cancelled) {
@@ -1237,7 +1240,9 @@ export default function PortalKnowledgeWorkbench() {
                 containerType === "folder" ? "folder" : "knowledge_space",
                 containerId,
                 "can_edit",
-                "upload_file",
+                containerType === "folder"
+                    ? "upload_file_to_folder"
+                    : "upload_file_to_space",
                 { signal: controller.signal },
             ).catch(() => ({ allowed: false }));
             return [key, Boolean(result?.allowed)] as const;
@@ -1494,11 +1499,14 @@ export default function PortalKnowledgeWorkbench() {
         const targetFolderId = currentFolderId;
         const objectType = targetFolderId ? "folder" : "knowledge_space";
         const objectId = targetFolderId || spaceId;
+        const uploadPermissionId = targetFolderId
+            ? "upload_file_to_folder"
+            : "upload_file_to_space";
         let cancelled = false;
         const controller = new AbortController();
         Promise.allSettled([
             checkPermission(objectType, objectId, "can_edit", "create_folder", { signal: controller.signal }),
-            checkPermission(objectType, objectId, "can_edit", "upload_file", { signal: controller.signal }),
+            checkPermission(objectType, objectId, "can_edit", uploadPermissionId, { signal: controller.signal }),
         ]).then(([createFolderResult, uploadFileResult]) => {
             if (cancelled || activeSpace?.id !== spaceId || currentFolderId !== targetFolderId) return;
             setCanCreateFolder(createFolderResult.status === "fulfilled" && Boolean(createFolderResult.value?.allowed));

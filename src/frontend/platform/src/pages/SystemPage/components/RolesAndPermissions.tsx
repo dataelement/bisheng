@@ -171,7 +171,7 @@ const TEMPLATE_SECTIONS: TemplateSection[] = [
           { id: "view_space", label: "", relation: "can_read" },
           { id: "edit_space", label: "", relation: "can_edit" },
           { id: "create_folder", label: "", relation: "can_edit" },
-          { id: "upload_file", label: "", relation: "can_edit" },
+          { id: "upload_file_to_space", label: "", relation: "can_edit" },
           { id: "publish_file", label: "", relation: "can_edit" },
           { id: "delete_space", label: "", relation: "can_delete" },
           { id: "manage_space_relation", label: "", relation: "can_manage" },
@@ -181,6 +181,7 @@ const TEMPLATE_SECTIONS: TemplateSection[] = [
         title: "文件夹级",
         items: [
           { id: "view_folder", label: "", relation: "can_read" },
+          { id: "upload_file_to_folder", label: "", relation: "can_edit" },
           { id: "rename_folder", label: "", relation: "can_edit" },
           { id: "delete_folder", label: "", relation: "can_delete" },
           { id: "download_folder", label: "", relation: "can_read" },
@@ -286,7 +287,8 @@ const PERMISSION_TEMPLATE_IDS = new Set<string>([
   "move_folder",
   "manage_folder_relation",
   "view_file",
-  "upload_file",
+  "upload_file_to_space",
+  "upload_file_to_folder",
   "publish_file",
   "rename_file",
   "delete_file",
@@ -440,13 +442,14 @@ export default function RolesAndPermissions() {
   }, [applicationTemplate, channelTemplate, knowledgeTemplate, knowledgeLibraryTemplate, toolTemplate])
 
   const defaultPermissionIdsForRelation = (relation: ModelRelation): string[] => {
-    return templateSections.flatMap((section) =>
+    const ids = templateSections.flatMap((section) =>
       section.columns.flatMap((column) =>
         column.items
           .filter((item) => MODEL_LEVEL[relation] >= (RELATION_LEVEL[item.relation] ?? 99))
           .map((item) => item.id),
       ),
     )
+    return Array.from(new Set(ids))
   }
 
   const backendRelations = useMemo(() => {
@@ -479,7 +482,7 @@ export default function RolesAndPermissions() {
           .map((item) => item.id)
       )
     )
-    setSelectedPermissionIds(ids)
+    setSelectedPermissionIds(Array.from(new Set(ids)))
   }, [currentModel, templateSections])
 
   const togglePermission = (permissionId: string, checked: boolean) => {

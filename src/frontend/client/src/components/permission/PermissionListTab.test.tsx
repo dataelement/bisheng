@@ -414,7 +414,7 @@ describe("Client PermissionListTab", () => {
     expect(screen.queryByRole("button", { name: "com_permission.level_owner" })).not.toBeInTheDocument();
   });
 
-  it("shows folder-scoped permission items on modify model help", async () => {
+  it("shows folder and descendant-file permission groups on modify model help", async () => {
     mockedGetGrantableRelationModels.mockResolvedValue([
       {
         id: "viewer",
@@ -468,9 +468,14 @@ describe("Client PermissionListTab", () => {
     const help = screen.getByTestId("permission-model-help-folder-custom_folder_editor");
     expect(help).toHaveAttribute(
       "data-permission-summary",
-      "com_permission.permission_item_rename_folder",
+      "com_permission.permission_scope_folder：com_permission.permission_item_rename_folder；"
+      + "com_permission.permission_scope_file：com_permission.permission_item_view_file",
     );
-    expect(screen.queryByText("File Only")).not.toBeInTheDocument();
+    const fileOnlyHelp = screen.getByTestId("permission-model-help-folder-file_only");
+    expect(fileOnlyHelp).toHaveAttribute(
+      "data-permission-summary",
+      "com_permission.permission_scope_file：com_permission.permission_item_rename_file",
+    );
   });
 
   it("deletes department include-children grants across subtree and exact variants", async () => {

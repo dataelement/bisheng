@@ -2678,6 +2678,29 @@ async def test_new_file_publish_approval_uses_distribution_without_copy(monkeypa
 
 
 @pytest.mark.asyncio
+async def test_file_publish_statistics_refreshes_source_and_target_entries(monkeypatch):
+    from bisheng.approval.domain.services.shougang_approval_handler import (
+        KnowledgeSpaceFilePublishApprovalHandler,
+    )
+    from bisheng.telemetry.domain.mid_table.knowledge_space_content import (
+        KnowledgeSpaceContentStat,
+    )
+
+    enqueue = AsyncMock()
+    monkeypatch.setattr(
+        KnowledgeSpaceContentStat,
+        "enqueue_file_stat_async",
+        enqueue,
+    )
+
+    await KnowledgeSpaceFilePublishApprovalHandler._enqueue_content_statistics(
+        [100, 188]
+    )
+
+    enqueue.assert_awaited_once_with([100, 188])
+
+
+@pytest.mark.asyncio
 async def test_new_file_publish_approval_rejects_inflight_cross_level_request(monkeypatch):
     from bisheng.approval.domain.services.shougang_approval_handler import (
         KnowledgeSpaceFilePublishApprovalHandler,

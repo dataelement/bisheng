@@ -361,6 +361,8 @@
       "share_space": "スペースを共有",
       "unpublish_app": "アプリを非公開",
       "upload_file": "ファイルをアップロード",
+      "upload_file_to_folder": "ファイルをアップロード",
+      "upload_file_to_space": "ファイルをアップロード",
       "use_app": "アプリを利用",
       "use_kb": "ナレッジベースを利用",
       "use_tool": "ツールを利用",

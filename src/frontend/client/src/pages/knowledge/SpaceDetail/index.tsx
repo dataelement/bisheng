@@ -560,6 +560,9 @@ export function KnowledgeSpaceContent({
 
         const objectType = currentFolderId ? "folder" : "knowledge_space";
         const objectId = currentFolderId || space.id;
+        const uploadPermissionId = currentFolderId
+            ? "upload_file_to_folder"
+            : "upload_file_to_space";
 
         Promise.allSettled([
             checkPermission(
@@ -573,7 +576,7 @@ export function KnowledgeSpaceContent({
                 objectType,
                 objectId,
                 "can_edit",
-                "upload_file",
+                uploadPermissionId,
                 { signal: controller.signal },
             ),
         ]).then(([createFolderResult, uploadFileResult]) => {

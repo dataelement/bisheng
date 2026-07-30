@@ -35,6 +35,7 @@ import type { SelectedSubject } from "~/api/permission";
 import { cn, getFullWidthLength, truncateByFullWidth } from "~/utils";
 import { ChannelSuccessIcon } from "~/components/icons/channels";
 import { SubjectSearchDepartment, type DepartmentNode } from "~/components/permission/SubjectSearchDepartment";
+import { TagLibraryHoverPreview } from "./TagLibraryHoverPreview";
 
 const MAX_SPACE_NAME = 20;
 const MAX_SPACE_DESC = 200;
@@ -906,6 +907,7 @@ export function CreateKnowledgeSpaceDrawer({
                                     key={`tag-library-select-${editingSpace?.id ?? "create"}`}
                                     multiple
                                     className="w-full"
+                                    contentClassName="w-[var(--radix-select-trigger-width)]"
                                     scroll
                                     value={autoTagLibraryIds.map(String)}
                                     options={tagLibrarySelectOptions}
@@ -917,6 +919,12 @@ export function CreateKnowledgeSpaceDrawer({
                                     searchPlaceholder={localize("com_knowledge.search_auto_tag_library")}
                                     disabled={tagLibrariesLoading}
                                     onChange={handleAutoTagLibraryIdsChange}
+                                    renderOptionPreview={(option) => (
+                                        <TagLibraryHoverPreview
+                                            libraryId={Number(option.value)}
+                                            libraryName={option.label}
+                                        />
+                                    )}
                                 />
                                 {tagLibraries.length === 0 && !tagLibrariesLoading && (
                                     <p className="text-[12px] text-[#F53F3F]">

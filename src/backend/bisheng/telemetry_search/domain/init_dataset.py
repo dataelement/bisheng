@@ -852,11 +852,19 @@ DASHBOARD_DATASET = [
                     field="business_domain_name"
                 ),
                 DimensionConfig(
-                    name="上传人主部门ID",
+                    name="所属部门ID",
+                    field="space_department_id"
+                ),
+                DimensionConfig(
+                    name="所属部门",
+                    field="space_department_name"
+                ),
+                DimensionConfig(
+                    name="上传人所在部门ID",
                     field="primary_department_id"
                 ),
                 DimensionConfig(
-                    name="上传人主部门",
+                    name="上传人所在部门",
                     field="primary_department_name"
                 ),
                 DimensionConfig(

@@ -65,6 +65,36 @@ def test_realtime_dashboard_seed_contains_three_target_datasets():
         for dimension in qa_dataset.schema_config["dimensions"]
     }
 
+    knowledge_dataset = datasets["mid_knowledge_space_content_stat"]
+    knowledge_dimensions = {
+        dimension["field"]: dimension["name"]
+        for dimension in knowledge_dataset.schema_config["dimensions"]
+    }
+    assert knowledge_dimensions["space_department_name"] == "所属部门"
+    assert knowledge_dimensions["primary_department_name"] == "上传人所在部门"
+
+
+def test_component_data_config_preserves_pivot_column_aliases():
+    from bisheng.telemetry_search.domain.schemas.component import ComponentDataConfig
+
+    config = ComponentDataConfig.model_validate(
+        {
+            "pivotColumnAliases": {
+                "fieldId": "space_department_name",
+                "aliases": {
+                    "首钢股份钢铁板块生产部": "生产部",
+                },
+            },
+        }
+    )
+
+    assert config.model_dump(by_alias=True)["pivotColumnAliases"] == {
+        "fieldId": "space_department_name",
+        "aliases": {
+            "首钢股份钢铁板块生产部": "生产部",
+        },
+    }
+
 
 def test_participation_day_uses_china_local_midnight():
     from bisheng.telemetry.domain.mid_table.daily_participation import (

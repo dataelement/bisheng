@@ -51,6 +51,8 @@ class KnowledgeSpaceContentRecord(BaseRecord):
     file_subcategory_name: str | None = None
     business_domain_code: str | None = None
     business_domain_name: str | None = None
+    space_department_id: int | None = None
+    space_department_name: str | None = None
     primary_department_id: int | None = None
     primary_department_name: str | None = None
     projection_updated_at: int | None = None
@@ -105,6 +107,11 @@ class KnowledgeSpaceContentStat(BaseMidTable):
         },
         "business_domain_code": {"type": "keyword"},
         "business_domain_name": {
+            "type": "keyword",
+            "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}},
+        },
+        "space_department_id": {"type": "keyword"},
+        "space_department_name": {
             "type": "keyword",
             "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}},
         },
@@ -456,6 +463,7 @@ class KnowledgeSpaceContentStat(BaseMidTable):
         space: Knowledge,
         uploader=None,
         space_level: str | None = None,
+        space_department=None,
         primary_department=None,
         file_category_labels: dict[str, str] | None = None,
         file_subcategory_labels: dict[str, str] | None = None,
@@ -538,6 +546,14 @@ class KnowledgeSpaceContentStat(BaseMidTable):
                 business_domain_code,
                 business_domain_code,
             ),
+            space_department_id=(
+                int(
+                    getattr(space_department, "id", None)
+                    or getattr(space_department, "department_id", 0)
+                )
+                or None
+            ),
+            space_department_name=getattr(space_department, "name", None),
             primary_department_id=(
                 int(getattr(primary_department, "id", None) or getattr(primary_department, "department_id", 0))
                 or None

@@ -20,13 +20,18 @@ from bisheng.core.logger import trace_id_var
 from bisheng.core.search.elasticsearch.manager import (
     get_statistics_es_connection_sync,
 )
-from bisheng.database.models.department import UserDepartmentDao
+from bisheng.database.models.department import Department, UserDepartmentDao
 from bisheng.database.models.tenant import Tenant, UserTenant
 from bisheng.database.models.flow import FlowType
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion
+from bisheng.knowledge.domain.models.department_knowledge_space import (
+    DepartmentKnowledgeSpace,
+)
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile, KnowledgeFileStatus, FileType
 from bisheng.knowledge.domain.models.knowledge_space_scope import (
+    KnowledgeSpaceLevelEnum,
+    KnowledgeSpaceOwnerTypeEnum,
     KnowledgeSpaceScopeDao,
 )
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
@@ -458,18 +463,96 @@ def _get_knowledge_space_content_rows_by_file_ids(file_ids: List[int]):
             return session.exec(statement).all()
 
 
+def _is_department_bound_space_scope(scope) -> bool:
+    if scope is None:
+        return False
+    level = str(getattr(scope.level, "value", scope.level))
+    return level in {
+        KnowledgeSpaceLevelEnum.DEPARTMENT.value,
+        KnowledgeSpaceLevelEnum.TEAM_KS.value,
+    }
+
+
+def _get_knowledge_space_department_map(
+    space_ids: list[int],
+    space_scope_map: dict,
+) -> dict[int, Department | None]:
+    """Resolve departments only for department and clinic knowledge spaces."""
+    normalized_space_ids = sorted({int(space_id) for space_id in space_ids if space_id})
+    result: dict[int, Department | None] = dict.fromkeys(normalized_space_ids)
+    if not normalized_space_ids:
+        return result
+    eligible_space_ids = [
+        space_id
+        for space_id in normalized_space_ids
+        if _is_department_bound_space_scope(space_scope_map.get(space_id))
+    ]
+    if not eligible_space_ids:
+        return result
+
+    with bypass_tenant_filter():
+        with get_sync_db_session() as session:
+            binding_rows = session.exec(
+                select(DepartmentKnowledgeSpace.space_id, Department)
+                .join(
+                    Department,
+                    Department.id == DepartmentKnowledgeSpace.department_id,
+                )
+                .where(
+                    DepartmentKnowledgeSpace.space_id.in_(eligible_space_ids),
+                )
+            ).all()
+            for space_id, department in binding_rows:
+                result[int(space_id)] = department
+
+            scope_department_ids = set()
+            for space_id in eligible_space_ids:
+                if result[space_id] is not None:
+                    continue
+                scope = space_scope_map.get(space_id)
+                if (
+                    scope is not None
+                    and str(getattr(scope.level, "value", scope.level))
+                    == KnowledgeSpaceLevelEnum.DEPARTMENT.value
+                    and str(getattr(scope.owner_type, "value", scope.owner_type))
+                    == KnowledgeSpaceOwnerTypeEnum.DEPARTMENT.value
+                ):
+                    scope_department_ids.add(int(scope.owner_id))
+
+            if scope_department_ids:
+                departments = session.exec(
+                    select(Department).where(
+                        Department.id.in_(scope_department_ids),
+                    )
+                ).all()
+                department_map = {
+                    int(department.id): department for department in departments
+                }
+                for space_id in eligible_space_ids:
+                    if result[space_id] is not None:
+                        continue
+                    scope = space_scope_map.get(space_id)
+                    if scope is not None:
+                        result[space_id] = department_map.get(int(scope.owner_id))
+    return result
+
+
 def _build_knowledge_space_content_records(
     rows,
     user_map: dict,
     *,
     sync_run_id: str = None,
     space_scope_map: dict | None = None,
+    space_department_map: dict | None = None,
     primary_department_map: dict | None = None,
     category_label_cache: dict | None = None,
 ):
     if not rows:
         return [], user_map
     space_scope_map = space_scope_map if space_scope_map is not None else {}
+    space_department_map = (
+        space_department_map if space_department_map is not None else {}
+    )
     primary_department_map = (
         primary_department_map if primary_department_map is not None else {}
     )
@@ -487,6 +570,16 @@ def _build_knowledge_space_content_records(
     missing_space_ids = [space_id for space_id in space_ids if space_id not in space_scope_map]
     if missing_space_ids:
         space_scope_map.update(KnowledgeSpaceScopeDao.get_map_by_space_ids(missing_space_ids))
+    missing_space_department_ids = [
+        space_id for space_id in space_ids if space_id not in space_department_map
+    ]
+    if missing_space_department_ids:
+        space_department_map.update(
+            _get_knowledge_space_department_map(
+                missing_space_department_ids,
+                space_scope_map,
+            )
+        )
 
     all_user_ids = sorted(
         {int(file_record.user_id) for file_record, _ in rows if file_record.user_id}
@@ -523,6 +616,7 @@ def _build_knowledge_space_content_records(
                 space=space,
                 uploader=uploader,
                 space_level=getattr(scope, "level", None),
+                space_department=space_department_map.get(int(space.id)),
                 primary_department=primary_department_map.get(
                     int(file_record.user_id or 0)
                 ),
@@ -552,6 +646,7 @@ def sync_mid_knowledge_space_content_stat(start_date: str = None, end_date: str 
     page, page_size = 1, 1000
     user_map = {}
     space_scope_map = {}
+    space_department_map = {}
     primary_department_map = {}
     category_label_cache = {}
     synced_count = 0
@@ -567,6 +662,7 @@ def sync_mid_knowledge_space_content_stat(start_date: str = None, end_date: str 
             user_map,
             sync_run_id=sync_run_id,
             space_scope_map=space_scope_map,
+            space_department_map=space_department_map,
             primary_department_map=primary_department_map,
             category_label_cache=category_label_cache,
         )
@@ -597,6 +693,7 @@ def sync_pending_knowledge_space_content_stat():
         mid_table = KnowledgeSpaceContentStat()
         user_map = {}
         space_scope_map = {}
+        space_department_map = {}
         primary_department_map = {}
         category_label_cache = {}
 
@@ -623,6 +720,7 @@ def sync_pending_knowledge_space_content_stat():
                 visible_rows,
                 user_map,
                 space_scope_map=space_scope_map,
+                space_department_map=space_department_map,
                 primary_department_map=primary_department_map,
                 category_label_cache=category_label_cache,
             )
@@ -676,6 +774,7 @@ def sync_pending_knowledge_space_content_stat():
                     rows,
                     user_map,
                     space_scope_map=space_scope_map,
+                    space_department_map=space_department_map,
                     primary_department_map=primary_department_map,
                     category_label_cache=category_label_cache,
                 )

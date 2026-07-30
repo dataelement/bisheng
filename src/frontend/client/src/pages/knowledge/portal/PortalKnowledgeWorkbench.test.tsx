@@ -2904,7 +2904,7 @@ describe("PortalKnowledgeWorkbench", () => {
             if (objectType === "knowledge_space" && permissionId === "publish_file") {
                 return Promise.resolve({ allowed: false });
             }
-            if (objectType === "knowledge_file" && permissionId === "upload_file") {
+            if (objectType === "knowledge_space" && permissionId === "upload_file_to_space") {
                 return Promise.resolve({ allowed: true });
             }
             return Promise.resolve({ allowed: true });

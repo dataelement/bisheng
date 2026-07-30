@@ -2,6 +2,12 @@ import { Check, X } from "lucide-react";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "~/utils";
 import { Badge } from "./Badge";
+import {
+    HoverCard,
+    HoverCardContent,
+    HoverCardPortal,
+    HoverCardTrigger,
+} from "./HoverCard";
 import { SearchInput } from "./Input";
 import { Select, SelectContent, SelectTrigger } from "./Select";
 
@@ -38,33 +44,59 @@ const MultiItem: React.FC<
         children: React.ReactNode;
         value: string;
         multiple?: boolean;
+        preview?: React.ReactNode;
+        previewWidth?: number;
         onClick: (value: string, label: string) => void;
     }
-> = ({ active, children, value, multiple = false, onClick }) => {
+> = ({ active, children, value, multiple = false, preview, previewWidth, onClick }) => {
+    const item = (
+        <div
+            className={`relative flex w-full cursor-default select-none items-center rounded-sm py-1.5 pl-2 pr-8 mb-1 text-sm outline-none hover:bg-[#EBF0FF] dark:hover:bg-gray-700 hover:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 break-all
+        ${active && 'bg-[#EBF0FF] dark:bg-gray-700'}`}
+            onPointerDown={(event) => {
+                if (multiple) {
+                    event.preventDefault();
+                }
+            }}
+            onClick={(event) => {
+                if (multiple) {
+                    event.stopPropagation();
+                }
+                onClick(value, children as string);
+            }}
+        >
+            <span className="absolute right-2 flex h-3.5 w-3.5 items-center justify-center">
+                {active && <Check className="h-4 w-4"></Check>}
+            </span>
+            {children}
+        </div>
+    );
 
-    return <div
-        key={value}
-        className={`relative flex w-full cursor-default select-none items-center rounded-sm py-1.5 pl-2 pr-8 mb-1 text-sm outline-none hover:bg-[#EBF0FF] dark:hover:bg-gray-700 hover:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 break-all 
-    ${active && 'bg-[#EBF0FF] dark:bg-gray-700'}`}
-        onPointerDown={(event) => {
-            if (multiple) {
-                event.preventDefault();
-            }
-        }}
-        onClick={(event) => {
-            if (multiple) {
-                event.stopPropagation();
-            }
-            onClick(value, children as string);
-        }}
-    >
-        <span className="absolute right-2 flex h-3.5 w-3.5 items-center justify-center">
-            {active && <Check className="h-4 w-4"></Check>}
-        </span>
-        {children}
-    </div>
+    if (!preview) {
+        return item;
+    }
+
+    return (
+        <HoverCard openDelay={150} closeDelay={100}>
+            <HoverCardTrigger asChild>
+                {item}
+            </HoverCardTrigger>
+            <HoverCardPortal>
+                <HoverCardContent
+                    side="left"
+                    align="start"
+                    sideOffset={8}
+                    collisionPadding={8}
+                    className="z-[130] max-h-[min(24rem,var(--radix-hover-card-content-available-height))] w-auto overflow-y-auto border border-[#DEE3EF] bg-white p-3 text-[#1D2129] shadow-lg"
+                    style={previewWidth ? { width: previewWidth } : undefined}
+                >
+                    {preview}
+                </HoverCardContent>
+            </HoverCardPortal>
+        </HoverCard>
+    );
 }
-interface Option {
+export interface MultiSelectOption {
     label: string;
     value: string;
 }
@@ -80,7 +112,7 @@ interface BaseProps<T> {
     disabled?: boolean;
     className?: string;
     contentClassName?: string;
-    options: Option[];
+    options: MultiSelectOption[];
     children?: React.ReactNode;
     placeholder?: string;
     searchPlaceholder?: string;
@@ -92,13 +124,14 @@ interface BaseProps<T> {
     onLoad?: () => void;
     onSearch?: (name: string) => void;
     onChange?: (value: T) => void;
+    renderOptionPreview?: (option: MultiSelectOption) => React.ReactNode;
 }
 
 // onScrollLoad有值表示开启分页、异步检索
-interface ScrollLoadProps extends BaseProps<Option[]> {
+interface ScrollLoadProps extends BaseProps<MultiSelectOption[]> {
     onScrollLoad: (name: string) => void;
-    value?: Option[];
-    defaultValue?: Option[];
+    value?: MultiSelectOption[];
+    defaultValue?: MultiSelectOption[];
 }
 
 interface NonScrollLoadProps extends BaseProps<string[]> {
@@ -130,14 +163,16 @@ const MultiSelect = ({
     onSearch,
     onLoad,
     onScrollLoad,
-    onChange, ...props
+    onChange,
+    renderOptionPreview,
+    ...props
 }: IProps) => {
 
     const [values, setValues] = React.useState(defaultValue)
     const [optionFilter, setOptionFilter] = React.useState(options)
     const [created, creatInput] = useState(false)
     const [open, setOpen] = useState(false)
-    const inputRef = useRef(null)
+    const inputRef = useRef<HTMLInputElement | null>(null)
 
     useEffect(() => {
         setValues(value)
@@ -152,14 +187,15 @@ const MultiSelect = ({
     // delete 
     const handleDelete = (value: string) => {
         const newValues = (values as any[]).filter((item) => {
-            const _value = onScrollLoad ? (item as Option).value : item;
+            const _value = onScrollLoad ? (item as MultiSelectOption).value : item;
             return _value !== value
         })
         setValues(newValues)
         onChange?.(newValues)
     }
     // add
-    const triggerRef = useRef(null)
+    const triggerRef = useRef<HTMLButtonElement | null>(null)
+    const [previewWidth, setPreviewWidth] = useState<number>()
     const handleSwitch = (value: string, label: string) => {
         if (lockedValues.includes(value)) {
             return
@@ -190,9 +226,9 @@ const MultiSelect = ({
         }
 
         if (onScrollLoad) {
-            const newValues = (values as Option[]).some(item => item.value === value)
-                ? (values as Option[]).filter(item => item.value !== value)
-                : [...(values as Option[]), { label, value }];
+            const newValues = (values as MultiSelectOption[]).some(item => item.value === value)
+                ? (values as MultiSelectOption[]).filter(item => item.value !== value)
+                : [...(values as MultiSelectOption[]), { label, value }];
             updateValues(newValues);
         } else {
             const newValues = (values as string[]).includes(value)
@@ -212,10 +248,11 @@ const MultiSelect = ({
     }, 500, false)
 
     // scroll laod
-    const footerRef = useRef(null)
+    const footerRef = useRef<HTMLDivElement | null>(null)
     useEffect(function () {
         if (!created) return
-        if (!footerRef.current) return
+        const footer = footerRef.current
+        if (!footer) return
         if (!onScrollLoad) return // 不绑定滚动事件
 
         const observer = new IntersectionObserver((entries) => {
@@ -232,9 +269,9 @@ const MultiSelect = ({
         });
 
         // 开始观察目标元素
-        observer.observe(footerRef.current);
+        observer.observe(footer);
 
-        return () => observer.unobserve(footerRef.current);
+        return () => observer.unobserve(footer);
     }, [created])
 
     const handleClearClick = () => {
@@ -251,6 +288,7 @@ const MultiSelect = ({
             }
             creatInput(nextOpen);
             if (nextOpen) {
+                setPreviewWidth(triggerRef.current?.getBoundingClientRect().width);
                 onLoad?.();
                 setOptionFilter(options);
             }
@@ -258,7 +296,7 @@ const MultiSelect = ({
     >
         <SelectTrigger className={cn(`group min-h-9 py-1 ${error && 'border-red-500'} ${scroll ? 'h-9 overflow-y-auto items-start pt-1.5' : 'h-auto'}`, className)} ref={triggerRef}>
             {
-                !multiple && (values.length ? <span className="text-foreground">{onScrollLoad ? (values[0] as Option).label : options.find(op => op.value === values[0])?.label}</span> : placeholder)
+                !multiple && (values.length ? <span className="text-foreground">{onScrollLoad ? (values[0] as MultiSelectOption).label : options.find(op => op.value === values[0])?.label}</span> : placeholder)
             }
             {
                 multiple && (values.length ? (
@@ -307,9 +345,12 @@ const MultiSelect = ({
                 {
                     optionFilter.map((item) => (
                         <MultiItem
+                            key={item.value}
                             active={values.some(val => val === item.value || val.value === item.value)}
                             value={item.value}
                             multiple={multiple}
+                            preview={renderOptionPreview?.(item)}
+                            previewWidth={previewWidth}
                             onClick={handleSwitch}
                         >{item.label}</MultiItem>
                     ))

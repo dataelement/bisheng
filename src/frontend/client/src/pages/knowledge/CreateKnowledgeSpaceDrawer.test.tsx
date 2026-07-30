@@ -97,32 +97,40 @@ jest.mock("~/components/ui/Textarea", () => ({
 
 jest.mock("~/components/ui/MultiSelect", () => ({
     __esModule: true,
-    default: ({ value = [], options = [], onChange, multiple }: any) => (
-        <div data-testid="tag-library-multi-select" data-multiple={multiple ? "true" : "false"}>
-            {options.map((option: { label: string; value: string }) => {
-                const selected = value.includes(option.value);
-                return (
-                    <button
-                        key={option.value}
-                        type="button"
-                        aria-pressed={selected}
-                        onClick={() => {
-                            if (!multiple) {
-                                onChange?.([option.value]);
-                                return;
-                            }
-                            const next = selected
-                                ? value.filter((item: string) => item !== option.value)
-                                : [...value, option.value];
-                            onChange?.(next);
-                        }}
-                    >
-                        {option.label}
-                    </button>
-                );
-            })}
-        </div>
-    ),
+    default: ({ value = [], options = [], onChange, multiple, renderOptionPreview }: any) => {
+        const React = require("react") as typeof import("react");
+        const [hoveredValue, setHoveredValue] = React.useState<string | null>(null);
+        return (
+            <div data-testid="tag-library-multi-select" data-multiple={multiple ? "true" : "false"}>
+                {options.map((option: { label: string; value: string }) => {
+                    const selected = value.includes(option.value);
+                    return (
+                        <div key={option.value}>
+                            <button
+                                type="button"
+                                aria-pressed={selected}
+                                onMouseEnter={() => setHoveredValue(option.value)}
+                                onMouseLeave={() => setHoveredValue(null)}
+                                onClick={() => {
+                                    if (!multiple) {
+                                        onChange?.([option.value]);
+                                        return;
+                                    }
+                                    const next = selected
+                                        ? value.filter((item: string) => item !== option.value)
+                                        : [...value, option.value];
+                                    onChange?.(next);
+                                }}
+                            >
+                                {option.label}
+                            </button>
+                            {hoveredValue === option.value ? renderOptionPreview?.(option) : null}
+                        </div>
+                    );
+                })}
+            </div>
+        );
+    },
 }));
 
 jest.mock("~/components/icons/channels", () => ({
@@ -921,6 +929,35 @@ describe("CreateKnowledgeSpaceDrawer", () => {
         await waitFor(() => expect(screen.getByText("知识库创建成功")).toBeInTheDocument());
         expect(screen.getByRole("button", { name: "前往知识库" })).toBeInTheDocument();
         expect(screen.queryByRole("button", { name: "成员管理" })).not.toBeInTheDocument();
+    });
+
+    test("仅在悬浮标签库选项时加载并展示该库全部标签", async () => {
+        jest.mocked(getKnowledgeSpaceTagLibrariesApi).mockResolvedValue({
+            data: [{ id: 8, name: "安全标签库", tag_count: 3, is_builtin: false }],
+            total: 1,
+        });
+        jest.mocked(getKnowledgeSpaceTagLibraryDetailApi).mockResolvedValue({
+            id: 8,
+            name: "安全标签库",
+            tag_count: 3,
+            is_builtin: false,
+            tags: ["安全生产", "设备点检", "隐患排查"],
+        });
+
+        renderDrawer();
+
+        const libraryOption = await screen.findByRole("button", { name: "安全标签库" });
+        expect(getKnowledgeSpaceTagLibraryDetailApi).not.toHaveBeenCalled();
+
+        fireEvent.mouseEnter(libraryOption);
+
+        await waitFor(() => {
+            expect(getKnowledgeSpaceTagLibraryDetailApi).toHaveBeenCalledTimes(1);
+            expect(getKnowledgeSpaceTagLibraryDetailApi).toHaveBeenCalledWith(8);
+        });
+        expect(await screen.findByText("安全生产")).toBeInTheDocument();
+        expect(screen.getByText("设备点检")).toBeInTheDocument();
+        expect(screen.getByText("隐患排查")).toBeInTheDocument();
     });
 
     test("选择空标签库时阻止提交并提示", async () => {

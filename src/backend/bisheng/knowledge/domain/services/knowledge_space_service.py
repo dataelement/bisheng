@@ -403,6 +403,8 @@ _PERMISSION_LEVEL_TO_RELATION = {
 
 _CHILD_PERMISSION_SCAN_BATCH_SIZE = 100
 _CHILD_PERMISSION_CHECK_CONCURRENCY = 8
+_UPLOAD_FILE_TO_SPACE_PERMISSION_ID = "upload_file_to_space"
+_UPLOAD_FILE_TO_FOLDER_PERMISSION_ID = "upload_file_to_folder"
 
 PORTAL_SEARCH_ES_RECALL_LIMIT = 80
 PORTAL_SEARCH_VECTOR_RECALL_LIMIT = 24
@@ -1078,13 +1080,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
         root_values, folder_values = await asyncio.gather(
             PermissionService.list_accessible_ids(
                 int(login_user.user_id),
-                "upload_file",
+                _UPLOAD_FILE_TO_SPACE_PERMISSION_ID,
                 "knowledge_space",
                 login_user=login_user,
             ),
             PermissionService.list_accessible_ids(
                 int(login_user.user_id),
-                "upload_file",
+                _UPLOAD_FILE_TO_FOLDER_PERMISSION_ID,
                 "folder",
                 login_user=login_user,
             ),
@@ -1294,9 +1296,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     raise SpaceFolderNotFoundError()
                 object_type = "folder"
                 object_id = folder_id
+        upload_permission_id = (
+            _UPLOAD_FILE_TO_FOLDER_PERMISSION_ID
+            if object_type == "folder"
+            else _UPLOAD_FILE_TO_SPACE_PERMISSION_ID
+        )
         allowed = await PermissionService.check(
             int(login_user.user_id),
-            "upload_file",
+            upload_permission_id,
             object_type,
             str(object_id),
             login_user=login_user,
@@ -3233,7 +3240,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
     async def require_root_upload_permission(self, space_id: int) -> None:
         """Require upload permission on a knowledge-space root."""
-        await self._require_permission_id("knowledge_space", space_id, "upload_file")
+        await self._require_permission_id(
+            "knowledge_space",
+            space_id,
+            _UPLOAD_FILE_TO_SPACE_PERMISSION_ID,
+        )
 
     async def _list_space_child_resources(self, space_id: int) -> list[tuple[str, int]]:
         async with get_async_db_session() as session:
@@ -3772,7 +3783,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 fav_space_id is not None and int(space.id) == fav_space_id
             )
             permission_ids = await self._get_effective_permission_ids("knowledge_space", int(space.id))
-            if "upload_file" not in permission_ids and not is_fav:
+            if _UPLOAD_FILE_TO_SPACE_PERMISSION_ID not in permission_ids and not is_fav:
                 continue
             items.append(
                 ShougangPortalPersonalSpaceItemResp(
@@ -13351,7 +13362,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 continue
             try:
                 await self._require_permission_id("folder", int(folder_id), "view_folder", space_id=space_id)
-                await self._require_permission_id("folder", int(folder_id), "upload_file", space_id=space_id)
+                await self._require_permission_id(
+                    "folder",
+                    int(folder_id),
+                    _UPLOAD_FILE_TO_FOLDER_PERMISSION_ID,
+                    space_id=space_id,
+                )
             except SpacePermissionDeniedError:
                 continue
             recommendable_folders.append(folder)
@@ -13386,7 +13402,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
         space_id: int,
         files: list[UploadFolderRecommendFileReq],
     ) -> UploadFolderRecommendationResp:
-        await self._require_permission_id("knowledge_space", space_id, "upload_file")
+        await self._require_permission_id(
+            "knowledge_space",
+            space_id,
+            _UPLOAD_FILE_TO_SPACE_PERMISSION_ID,
+        )
         if not files:
             return UploadFolderRecommendationResp(items=[])
 
@@ -13633,7 +13653,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
         )
         old_parent_type, old_parent_id = self._parent_tuple_ref_from_level_path(old_file_level_path, space_id)
         if target_folder_id is None:
-            await self._require_permission_id("knowledge_space", space_id, "upload_file")
+            await self._require_permission_id(
+                "knowledge_space",
+                space_id,
+                _UPLOAD_FILE_TO_SPACE_PERMISSION_ID,
+            )
             next_file_level_path = ""
             next_level = 0
             new_parent_type = "knowledge_space"
@@ -13641,7 +13665,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
         else:
             target_folder = await KnowledgeFileDao.query_by_id(target_folder_id)
             target_folder = self._ensure_space_folder(target_folder, space_id)
-            await self._require_permission_id("folder", target_folder_id, "upload_file", space_id=space_id)
+            await self._require_permission_id(
+                "folder",
+                target_folder_id,
+                _UPLOAD_FILE_TO_FOLDER_PERMISSION_ID,
+                space_id=space_id,
+            )
             next_file_level_path = f"{target_folder.file_level_path or ''}/{target_folder_id}"
             next_level = (target_folder.level or 0) + 1
             new_parent_type = "folder"
@@ -13717,7 +13746,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
         old_parent_type, old_parent_id = self._parent_tuple_ref_from_level_path(old_folder_path, space_id)
 
         if target_folder_id is None:
-            await self._require_permission_id("knowledge_space", space_id, "upload_file")
+            await self._require_permission_id(
+                "knowledge_space",
+                space_id,
+                _UPLOAD_FILE_TO_SPACE_PERMISSION_ID,
+            )
             new_parent_path = ""
             new_level = 0
             new_parent_type = "knowledge_space"
@@ -13727,7 +13760,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 raise SpaceFolderCircularMoveError()
             target = await KnowledgeFileDao.query_by_id(target_folder_id)
             target = self._ensure_space_folder(target, space_id)
-            await self._require_permission_id("folder", target_folder_id, "upload_file", space_id=space_id)
+            await self._require_permission_id(
+                "folder",
+                target_folder_id,
+                _UPLOAD_FILE_TO_FOLDER_PERMISSION_ID,
+                space_id=space_id,
+            )
 
             # Reject moves into the folder's own subtree.
             target_path = target.file_level_path or ""
@@ -13803,9 +13841,18 @@ class KnowledgeSpaceService(KnowledgeUtils):
         )
 
         if parent_id:
-            await self._require_permission_id("folder", parent_id, "upload_file", space_id=knowledge_id)
+            await self._require_permission_id(
+                "folder",
+                parent_id,
+                _UPLOAD_FILE_TO_FOLDER_PERMISSION_ID,
+                space_id=knowledge_id,
+            )
         else:
-            await self._require_permission_id("knowledge_space", knowledge_id, "upload_file")
+            await self._require_permission_id(
+                "knowledge_space",
+                knowledge_id,
+                _UPLOAD_FILE_TO_SPACE_PERMISSION_ID,
+            )
 
         db_knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
         if not db_knowledge:
@@ -14163,9 +14210,18 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if file_source is None:
             file_source = FileSource.SPACE_UPLOAD
         if parent_id:
-            await self._require_permission_id("folder", parent_id, "upload_file", space_id=knowledge_id)
+            await self._require_permission_id(
+                "folder",
+                parent_id,
+                _UPLOAD_FILE_TO_FOLDER_PERMISSION_ID,
+                space_id=knowledge_id,
+            )
         else:
-            await self._require_permission_id("knowledge_space", knowledge_id, "upload_file")
+            await self._require_permission_id(
+                "knowledge_space",
+                knowledge_id,
+                _UPLOAD_FILE_TO_SPACE_PERMISSION_ID,
+            )
 
         db_knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
         if not db_knowledge:
@@ -14619,14 +14675,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
             await self._require_permission_id(
                 "folder",
                 parent_folder_id,
-                "upload_file",
+                _UPLOAD_FILE_TO_FOLDER_PERMISSION_ID,
                 space_id=file_record.knowledge_id,
             )
         else:
             await self._require_permission_id(
                 "knowledge_space",
                 file_record.knowledge_id,
-                "upload_file",
+                _UPLOAD_FILE_TO_SPACE_PERMISSION_ID,
             )
 
         cleaned = encoding.strip()

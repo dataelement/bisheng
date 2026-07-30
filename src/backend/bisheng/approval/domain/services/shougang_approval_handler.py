@@ -449,6 +449,21 @@ class KnowledgeSpaceFilePublishApprovalHandler:
         scope = await KnowledgeSpaceScopeDao.aget_by_space_id(space_id)
         return scope.level if scope else KnowledgeSpaceLevelEnum.PERSONAL
 
+    @staticmethod
+    async def _enqueue_content_statistics(file_ids: list[int]) -> None:
+        try:
+            from bisheng.telemetry.domain.mid_table.knowledge_space_content import (
+                KnowledgeSpaceContentStat,
+            )
+
+            await KnowledgeSpaceContentStat.enqueue_file_stat_async(file_ids)
+        except Exception:
+            logger.warning(
+                "Knowledge space content statistics enqueue failed file_ids=%s",
+                file_ids,
+                exc_info=True,
+            )
+
     async def _publish_distribution(
         self,
         instance_id: int,
@@ -522,6 +537,12 @@ class KnowledgeSpaceFilePublishApprovalHandler:
                 result.document_id,
                 exc_info=True,
             )
+        await self._enqueue_content_statistics(
+            [
+                result.manager_file_id,
+                result.publish_entry_id,
+            ]
+        )
         logger.info(
             "F059 publish applied tenant_id=%s document_id=%s "
             "manager_entry_id=%s publish_entry_id=%s target_space_id=%s "
@@ -604,6 +625,7 @@ class KnowledgeSpaceFilePublishApprovalHandler:
                 file_id=int(existing_file.id),
                 tenant_id=int(payload_snapshot["tenant_id"]),
             )
+            await self._enqueue_content_statistics([int(existing_file.id)])
             return {
                 "file_id": int(existing_file.id),
                 "target_space_id": target_space_id,
@@ -703,6 +725,7 @@ class KnowledgeSpaceFilePublishApprovalHandler:
             file_id=int(copied_file.id),
             tenant_id=int(payload_snapshot["tenant_id"]),
         )
+        await self._enqueue_content_statistics([int(copied_file.id)])
         return {
             "file_id": int(copied_file.id),
             "target_space_id": target_space_id,

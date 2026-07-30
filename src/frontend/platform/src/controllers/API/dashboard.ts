@@ -1,6 +1,7 @@
 // Mock API functions for dashboard operations
 
 import { generateUUID } from "@/components/bs-ui/utils";
+import { resolvePivotColumnLabels } from "@/pages/Dashboard/components/charts/pivotColumnAliases";
 import { ChartType, Dashboard, DashboardComponent, LayoutItem, TimeRangeMode, TimeRangeType } from "@/pages/Dashboard/types/dataConfig";
 import axios from "../request";
 
@@ -254,7 +255,12 @@ function transformPivotData(resData: any, component: DashboardComponent) {
         metricName: config.metrics?.[0]?.displayName
             || config.metrics?.[0]?.fieldName
             || '',
-        columns,
+        columns: resolvePivotColumnLabels({
+            columns,
+            stackDimension: config.stackDimension,
+            aliasConfig: config.pivotColumnAliases,
+        }),
+        originalColumns: columns,
         rows: pivotRows,
         columnTotals,
         grandTotal: columnTotals.reduce((sum, value) => sum + value, 0),

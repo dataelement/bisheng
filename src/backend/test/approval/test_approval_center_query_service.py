@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -30,6 +31,7 @@ from bisheng.common.errcode.approval import (
     ApprovalFlowInUseByRoutesError,
     ApprovalRequestPermissionDeniedError,
 )
+from bisheng.user.domain.models.user import UserDao
 
 
 @dataclass
@@ -161,6 +163,66 @@ async def test_get_instance_detail_blocks_unrelated_user_and_returns_action_logs
     assert detail['instance_id'] == 1
     assert detail['tasks'][0]['task_id'] == 11
     assert detail['action_logs'][0]['action'] == 'approved'
+
+
+@pytest.mark.asyncio
+async def test_flow_nodes_include_approvers_before_future_tasks_are_created(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    instance = _build_instance()
+    instance.flow_version_id = 4
+    current_task = _build_task(11, node_order=1, approver_user_id=9)
+    node_defs = [
+        ApprovalNodeDefinition(
+            id=1,
+            tenant_id=1,
+            flow_version_id=4,
+            node_code='n1',
+            node_name='第1级审批',
+            node_order=1,
+            node_mode='or',
+            approver_config={'approver_user_ids': [9]},
+            extra_config={},
+        ),
+        ApprovalNodeDefinition(
+            id=2,
+            tenant_id=1,
+            flow_version_id=4,
+            node_code='n2',
+            node_name='第2级审批',
+            node_order=2,
+            node_mode='or',
+            approver_config={'approver_user_ids': [10]},
+            extra_config={},
+        ),
+    ]
+    monkeypatch.setattr(
+        ApprovalScenarioRepository,
+        'list_node_definitions',
+        AsyncMock(return_value=node_defs),
+    )
+    monkeypatch.setattr(
+        UserDao,
+        'aget_user_by_ids',
+        AsyncMock(
+            return_value=[
+                SimpleNamespace(user_id=10, user_name='future-reviewer'),
+            ]
+        ),
+    )
+
+    flow_nodes = await ApprovalCenterService._build_flow_nodes_with_approvers(
+        instance=instance,
+        tasks=[current_task],
+        task_user_name_map={9: 'current-reviewer'},
+    )
+
+    assert flow_nodes[0]['approvers'] == [
+        {'user_id': 9, 'user_name': 'current-reviewer'},
+    ]
+    assert flow_nodes[1]['approvers'] == [
+        {'user_id': 10, 'user_name': 'future-reviewer'},
+    ]
 
 
 @pytest.mark.asyncio

@@ -361,6 +361,8 @@
       "share_space": "Share space",
       "unpublish_app": "Unpublish application",
       "upload_file": "Upload file",
+      "upload_file_to_folder": "Upload file",
+      "upload_file_to_space": "Upload file",
       "use_app": "Use application",
       "use_kb": "Use knowledge base",
       "use_tool": "Use tool",
