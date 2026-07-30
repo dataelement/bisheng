@@ -914,6 +914,38 @@ class KnowledgeSpaceService(KnowledgeUtils):
             raise SpacePermissionDeniedError()
         return resolved
 
+    async def _resolve_shougang_portal_content_entry(
+        self,
+        file_record: KnowledgeFile,
+        *,
+        required_capability: str,
+    ):
+        resolved = await self._resolve_document_entry(file_record)
+        if resolved is None or bool(
+            getattr(resolved.capabilities, required_capability, False)
+        ):
+            return resolved
+        if required_capability not in {"can_view", "can_preview"}:
+            raise SpacePermissionDeniedError()
+
+        access_service = self.department_file_view_access_service
+        if access_service is None:
+            raise RuntimeError("DepartmentFileViewAccessService 未注入")
+        decision = await access_service.evaluate_file(
+            login_user=self.login_user,
+            file=file_record,
+        )
+        if not decision.allowed:
+            raise SpacePermissionDeniedError()
+
+        capabilities = resolved.capabilities.model_copy(
+            update={
+                "can_view": True,
+                "can_preview": True,
+            }
+        )
+        return resolved.model_copy(update={"capabilities": capabilities})
+
     async def _require_document_content_manager(
         self,
         file_record: KnowledgeFile,
@@ -6245,7 +6277,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if file is None:
             return {}
         asyncio.create_task(self._log_file_preview_success(file))  # noqa: RUF006
-        resolved = await self._resolve_document_entry(
+        resolved = await self._resolve_shougang_portal_content_entry(
             file,
             required_capability="can_preview",
         )
@@ -6295,7 +6327,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         )
         if file is None or not spaces:
             return {"data": [], "total": 0}
-        resolved = await self._resolve_document_entry(
+        resolved = await self._resolve_shougang_portal_content_entry(
             file,
             required_capability="can_view",
         )

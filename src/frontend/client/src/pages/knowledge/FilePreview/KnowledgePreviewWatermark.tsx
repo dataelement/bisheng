@@ -160,7 +160,7 @@ export function buildKnowledgePreviewWatermarkLines(
     const departmentName = user.departmentName?.trim() || "";
     const identity = departmentName ? `${departmentName}-${name}` : name;
     return [
-        `${identity}--${account}-${formatKnowledgePreviewWatermarkTime(viewedAt)}`,
+        `${identity}-${account}-${formatKnowledgePreviewWatermarkTime(viewedAt)}`,
         "首钢股份内部资料，严禁外传，违者必究",
     ];
 }

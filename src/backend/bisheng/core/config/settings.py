@@ -288,6 +288,14 @@ class CeleryConf(BaseModel):
                 ),
                 "schedule": 60.0,
             }
+        if "reconcile_knowledge_migrations" not in self.beat_schedule:
+            self.beat_schedule["reconcile_knowledge_migrations"] = {
+                "task": (
+                    "bisheng.worker.knowledge.file_migration."
+                    "reconcile"
+                ),
+                "schedule": 60.0,
+            }
         if "dispatch_approval_notifications" not in self.beat_schedule:
             self.beat_schedule["dispatch_approval_notifications"] = {
                 "task": "bisheng.worker.approval.notification_tasks.dispatch_approval_notifications",

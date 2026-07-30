@@ -1754,13 +1754,10 @@ class KnowledgeVersionService:
         old_primary = await self.version_repo.find_primary(target_doc_id)
 
         next_no = await self.version_repo.next_version_no(target_doc_id)
-        new_version = KnowledgeDocumentVersion(
-            document_id=target_doc_id,
-            knowledge_file_id=source_kf.id,
-            version_no=next_no,
-            is_primary=True,
-        )
-        saved = await self.version_repo.save(new_version)
+        source_version.document_id = target_doc_id
+        source_version.version_no = next_no
+        source_version.is_primary = True
+        saved = await self.version_repo.update(source_version)
 
         await self.doc_repo.update_primary_version_id(target_doc_id, saved.id)
 
@@ -1768,9 +1765,7 @@ class KnowledgeVersionService:
             old_primary.is_primary = False
             await self.version_repo.update(old_primary)
 
-        if source_version.id != saved.id:
-            await self.version_repo.delete(source_version.id)
-            await self.doc_repo.delete(source_document_id)
+        await self.doc_repo.delete(source_document_id)
 
         if source_kf.similar_status != 2:
             source_kf.similar_status = 2

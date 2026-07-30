@@ -77,13 +77,13 @@ describe("KnowledgePreviewWatermark", () => {
     test("uses the current Bisheng user and keeps the mount-time Beijing clock", () => {
         expect(formatKnowledgePreviewWatermarkTime(new Date())).toBe("2026/07/21");
         expect(buildKnowledgePreviewWatermarkLines(currentUser, new Date())).toEqual([
-            "设备管理部-张三--SG001-2026/07/21",
+            "设备管理部-张三-SG001-2026/07/21",
             "首钢股份内部资料，严禁外传，违者必究",
         ]);
 
         const { container, rerender } = renderWatermark();
         expect(container.querySelector('[aria-hidden="true"]')).toBeInTheDocument();
-        expect(container.textContent).toContain("设备管理部-张三--SG001-2026/07/21");
+        expect(container.textContent).toContain("设备管理部-张三-SG001-2026/07/21");
         expect(container.textContent).toContain("2026/07/21");
         expect(container.textContent).toContain("首钢股份内部资料，严禁外传，违者必究");
         expect(container.textContent).not.toContain("首钢集团内部资料");
@@ -134,14 +134,14 @@ describe("KnowledgePreviewWatermark", () => {
         );
         expect(enabled.container.querySelector("[data-chat-watermark-surface]")).toBeInTheDocument();
         expect(enabled.container.querySelector('[aria-hidden="true"]')).toBeInTheDocument();
-        expect(enabled.container.textContent).toContain("设备管理部-张三--SG001-2026/07/21");
+        expect(enabled.container.textContent).toContain("设备管理部-张三-SG001-2026/07/21");
     });
 
     test("falls back to username/account and clips overlays to document surfaces", () => {
         expect(buildKnowledgePreviewWatermarkLines(
             { ...currentUser, name: "", username: "lisi", departmentName: "", externalId: "" },
             new Date(),
-        )[0]).toBe("lisi--lisi-2026/07/21");
+        )[0]).toBe("lisi-lisi-2026/07/21");
 
         const compactLayout = calculateKnowledgePreviewWatermarkLayout([100, 90]);
         const normalLayout = calculateKnowledgePreviewWatermarkLayout([240, 220]);

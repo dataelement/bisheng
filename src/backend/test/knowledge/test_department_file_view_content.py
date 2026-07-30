@@ -13,8 +13,13 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     FileType,
     KnowledgeFileStatus,
 )
+from bisheng.knowledge.domain.schemas.knowledge_document_distribution_schema import (
+    KnowledgeDocumentEntryCapabilities,
+    ResolvedKnowledgeDocumentEntry,
+)
 from bisheng.knowledge.domain.services.department_file_view_access_service import (
     DepartmentFileAccessDecision,
+    DepartmentFileAccessSource,
     DepartmentFileAccessStatus,
 )
 from bisheng.knowledge.domain.services.knowledge_space_service import (
@@ -42,6 +47,7 @@ def _file() -> SimpleNamespace:
         status=KnowledgeFileStatus.SUCCESS.value,
         file_name="设备点检标准.pdf",
         parse_type="pdf",
+        reference_document_id=None,
     )
 
 
@@ -134,6 +140,71 @@ async def test_approval_grant_can_preview_but_does_not_add_download_permission()
         "preview_url": "/preview/21.pdf",
         "can_download": False,
     }
+
+
+@pytest.mark.asyncio
+async def test_approval_grant_can_preview_distributed_share_entry():
+    service = _service()
+    share = _file()
+    share.tenant_id = 1
+    share.entry_type = "share"
+    share.entry_status = "active"
+    share.reference_document_id = 90
+    manager = SimpleNamespace(id=22)
+    resolved = ResolvedKnowledgeDocumentEntry(
+        tenant_id=1,
+        requested_space_id=2,
+        entry_file_id=21,
+        entry_type="share",
+        entry_status="active",
+        canonical_document_id=90,
+        canonical_version_id=91,
+        content_file_id=22,
+        manager_file_id=22,
+        manager_space_id=3,
+        capabilities=KnowledgeDocumentEntryCapabilities(),
+    )
+    service._get_authorized_shougang_portal_file = AsyncMock(
+        return_value=(share, [SimpleNamespace(id=2)])
+    )
+    service.document_entry_resolver = SimpleNamespace(
+        resolve=AsyncMock(return_value=resolved)
+    )
+    service.department_file_view_access_service = SimpleNamespace(
+        evaluate_file=AsyncMock(
+            return_value=DepartmentFileAccessDecision(
+                file_id=21,
+                space_id=2,
+                status=DepartmentFileAccessStatus.ALLOWED,
+                source=DepartmentFileAccessSource.APPROVAL_GRANT,
+                can_download=False,
+                department_id=30,
+            )
+        )
+    )
+    service._log_file_preview_success = AsyncMock()
+
+    with (
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service."
+            "KnowledgeFileDao.query_by_id",
+            new=AsyncMock(return_value=manager),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service."
+            "KnowledgeService.get_file_share_detail",
+            return_value={"preview_url": "/preview/22.pdf"},
+        ),
+    ):
+        result = await service.get_shougang_portal_file_preview(
+            space_id=2,
+            file_id=21,
+        )
+
+    assert result["preview_url"] == "/preview/22.pdf"
+    assert result["capabilities"]["can_view"] is True
+    assert result["capabilities"]["can_preview"] is True
+    assert result["can_download"] is False
 
 
 @pytest.mark.asyncio

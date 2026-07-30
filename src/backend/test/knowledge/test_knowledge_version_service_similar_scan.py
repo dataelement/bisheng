@@ -645,6 +645,10 @@ async def test_merge_force_allows_document_without_simhash(enable_switch, async_
     )
 
     svc = _build_svc(async_db_session)
+    monkeypatch.setattr(svc, "_notify_favorite_version_changed", AsyncMock())
+    source_version_before = await svc.version_repo.find_by_knowledge_file_id(200)
+    assert source_version_before is not None
+    source_version_id = source_version_before.id
 
     result = await svc.merge_source_document_into_current(
         current_knowledge_file_id=100,
@@ -657,7 +661,12 @@ async def test_merge_force_allows_document_without_simhash(enable_switch, async_
     assert await svc.doc_repo.find_by_id(source_doc.id) is None
     versions = await svc.version_repo.find_by_document_id(current_doc.id)
     assert len(versions) == 2
-    assert any(version.knowledge_file_id == 200 and version.is_primary for version in versions)
+    migrated_version = await svc.version_repo.find_by_knowledge_file_id(200)
+    assert migrated_version is not None
+    assert migrated_version.id == source_version_id
+    assert migrated_version.document_id == current_doc.id
+    assert migrated_version.version_no == 2
+    assert migrated_version.is_primary is True
 
 
 @pytest.mark.asyncio
