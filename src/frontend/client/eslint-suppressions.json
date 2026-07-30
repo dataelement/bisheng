@@ -373,7 +373,7 @@
   },
   "src/components/Chat/Input/ChatKnowledge.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 15
+      "count": 11
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 6

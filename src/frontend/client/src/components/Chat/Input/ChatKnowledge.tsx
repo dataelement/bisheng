@@ -1,19 +1,12 @@
 import {
   ChevronLeft,
   Glasses,
-  Loader2,
   PaperclipIcon,
-  SearchIcon,
 } from "lucide-react";
 import { Outlined } from "bisheng-icons";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { getDisplayScale, getLogicalViewport } from "~/utils/fontSize";
-import {
-  getMineSpacesApi,
-  getJoinedSpacesApi,
-  getDepartmentSpacesApi,
-} from "~/api/knowledge";
 import { getSelectableSkills } from "~/api/linsight";
 import {
   DropdownMenu,
@@ -23,26 +16,19 @@ import {
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
-  Input
 } from "~/components/ui";
-import { Checkbox } from "~/components/ui/Checkbox";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "~/components/ui/Tooltip2";
 import BookOpen from "~/components/ui/icon/BookOpen";
 import BooksIcon from "~/components/ui/icon/Books";
 import { useGetOrgToolList } from "~/hooks/queries/data-provider";
 import { BsConfig } from "~/types/chat";
-import { useFreezePanelWidth, useLocalize, useMediaQuery, useScrollRevealRef } from "~/hooks";
+import { useCategorizedKnowledgeSpaces, useFreezePanelWidth, useLocalize, useMediaQuery } from "~/hooks";
 import { useToastContext } from "~/Providers";
 import { cn } from "~/utils";
+import { KnowledgeListPanel } from "./KnowledgeListPanel";
+import type { KnowledgeItem, KnowledgeType } from "./knowledgeTypes";
 
-// --- 类型定义 ---
-export type KnowledgeType = 'org' | 'space';
-
-export interface KnowledgeItem {
-  id: string;
-  name: string;
-  type: KnowledgeType;
-}
+export type { KnowledgeItem, KnowledgeType } from "./knowledgeTypes";
 
 // --- Hooks ---
 function useDebounce<T>(value: T, delay: number): T {
@@ -164,151 +150,6 @@ function useSubMenuLayout(menuRef: React.RefObject<HTMLDivElement | null>, trigg
   return { alignOffset, maxH };
 }
 
-// --- 子组件：列表面板 ---
-const KnowledgeListPanel = ({
-  placeholder,
-  keyword,
-  setKeyword,
-  items,
-  selectedItems, // 这里接收的是筛选后的数组
-  onToggle,
-  isFetching,
-  hasMore,
-  onLoadMore,
-  emptyText,
-}: {
-  placeholder: string;
-  keyword: string;
-  setKeyword: (v: string) => void;
-  items: any[];
-  selectedItems: KnowledgeItem[];
-  onToggle: (item: any) => void;
-  isFetching: boolean;
-  hasMore: boolean;
-  onLoadMore: () => void;
-  emptyText: string;
-}) => {
-  const listScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
-  // Direct ref to the scroll container so we can read scroll metrics for the
-  // edge-shadow indicators (useScrollRevealRef is callback-only and only
-  // toggles a `data-scrolling` attribute).
-  const scrollNodeRef = useRef<HTMLDivElement | null>(null);
-  const setScrollRefs = useCallback(
-    (node: HTMLDivElement | null) => {
-      scrollNodeRef.current = node;
-      listScrollRevealRef(node);
-    },
-    [listScrollRevealRef],
-  );
-
-  // Edge shadows: visible only when there is content above / below the current
-  // viewport. Shadows fade out at the top/bottom boundary.
-  const [canScrollUp, setCanScrollUp] = useState(false);
-  const [canScrollDown, setCanScrollDown] = useState(false);
-  const updateScrollIndicators = useCallback(() => {
-    const el = scrollNodeRef.current;
-    if (!el) return;
-    const { scrollTop, scrollHeight, clientHeight } = el;
-    setCanScrollUp(scrollTop > 0);
-    setCanScrollDown(scrollTop + clientHeight < scrollHeight - 1);
-  }, []);
-  useEffect(() => {
-    updateScrollIndicators();
-  }, [items, updateScrollIndicators]);
-
-  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
-    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
-    if (scrollHeight - scrollTop <= clientHeight + 10 && !isFetching && hasMore) {
-      onLoadMore();
-    }
-    updateScrollIndicators();
-  };
-
-  return (
-    <div className="flex flex-col gap-1 min-h-0 flex-1">
-      {/* 搜索框 */}
-      <div className="relative shrink-0">
-        <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-        <Input
-          className="h-[28px] text-sm bg-white border border-[#ECECEC] rounded-[6px] pl-8 focus-visible:ring-1 focus-visible:ring-blue-500/20"
-          // size=1 kills the input's ~180px intrinsic width so it can't floor
-          // the content-fit popup above its min-w; rendered width is still 100%.
-          size={1}
-          placeholder={placeholder}
-          value={keyword}
-          onChange={(e) => setKeyword(e.target.value)}
-          onClick={(e) => e.stopPropagation()}
-          onKeyDown={(e) => e.stopPropagation()}
-        />
-      </div>
-
-      {/* 滚动列表 — wrapped in a relative container so the top/bottom edge
-          shadows can be absolutely positioned over the scroll viewport. */}
-      <div className="relative flex min-h-0 flex-1 flex-col">
-        {/* Top edge fade — solid popup-white fades to transparent so list
-            content visually dissolves into the menu surface. */}
-        <div
-          aria-hidden
-          className={cn(
-            "pointer-events-none absolute left-0 right-0 top-0 h-3 z-10 transition-opacity duration-150",
-            "bg-gradient-to-b from-white to-transparent",
-            canScrollUp ? "opacity-100" : "opacity-0",
-          )}
-        />
-        {/* Bottom edge fade — same idea, mirrored. */}
-        <div
-          aria-hidden
-          className={cn(
-            "pointer-events-none absolute bottom-0 left-0 right-0 h-3 z-10 transition-opacity duration-150",
-            "bg-gradient-to-t from-white to-transparent",
-            canScrollDown ? "opacity-100" : "opacity-0",
-          )}
-        />
-        <div
-          ref={setScrollRefs}
-          className="overflow-y-auto flex flex-col gap-0 scrollbar-on-scroll min-h-0 flex-1 pb-2"
-          onScroll={handleScroll}
-        >
-        {items.map((item) => {
-          // 判断是否选中 — coerce both sides to string: list items arrive from
-          // API as numeric ids, while selected items may be strings (defaults
-          // seeded via `String(k.id)` or restored from localStorage).
-          const isChecked = selectedItems.some((s) => String(s.id) === String(item.id));
-          return (
-            <DropdownMenuItem
-              key={item.id}
-              onSelect={(e) => {
-                e.preventDefault();
-                onToggle(item);
-              }}
-              className="flex items-center gap-2 px-2 py-[5px] cursor-pointer rounded-[6px] data-[highlighted]:bg-[#f2f3f5] focus:bg-[#f2f3f5] outline-none transition-colors"
-            >
-              <Checkbox
-                checked={isChecked}
-                tabIndex={-1}
-                className="pointer-events-none shrink-0 border-[#D9D9D9] data-[state=checked]:border-primary data-[state=indeterminate]:border-primary"
-              />
-              <span className="truncate flex-1 text-[14px] text-slate-700 leading-[22px]">
-                {item.name}
-              </span>
-            </DropdownMenuItem>
-          );
-        })}
-
-        {isFetching && (
-          <div className="flex justify-center py-3">
-            <Loader2 size={16} className="animate-spin text-slate-300" />
-          </div>
-        )}
-        {!isFetching && items.length === 0 && (
-          <div className="text-center text-[12px] text-slate-400 py-10">{emptyText}</div>
-        )}
-        </div>
-      </div>
-    </div>
-  );
-};
-
 // --- main ---
 export const ChatKnowledge = ({
   variant = 'plus',
@@ -375,7 +216,7 @@ export const ChatKnowledge = ({
   const [allOrgKbs, setAllOrgKbs] = useState<any[]>([]);
   const [hasMoreOrg, setHasMoreOrg] = useState(true);
 
-  // --- Knowledge space data (load all at once, no pagination) ---
+  // --- Knowledge space data (load all groups at once, no pagination) ---
   const [spaceKeyword, setSpaceKeyword] = useState("");
   const debouncedSpaceKeyword = useDebounce(spaceKeyword, 300);
 
@@ -388,50 +229,22 @@ export const ChatKnowledge = ({
   // frame — which also keeps the content-fit popup width stable from frame 1.
   const [rootOpen, setRootOpen] = useState(false);
   const [warm, setWarm] = useState(false);
+
+  // Grouped as 部门知识空间 / 我创建的 / 我加入的, matching the 知识空间 page.
+  // Empty groups (including "no search hit in this group") are dropped by the hook.
+  // Only the 'knowledge' pill renders the spaces list; the '+' variant never
+  // shows it, so don't let opening the '+' menu fire these requests.
   const {
-    data: allSpaces = [],
+    groups: spaceGroups,
     isFetching: spaceFetching,
     isFetched: spacesFetched,
     refetch: refetchSpaces,
-  } = useQuery({
-    queryKey: ["chatKnowledgeSpaces"],
-    queryFn: async () => {
-      // Fetch "mine" + "joined" + "department" in parallel and merge into a single list
-      const [mine, joined, department] = await Promise.all([
-        getMineSpacesApi(),
-        getJoinedSpacesApi(),
-        getDepartmentSpacesApi(),
-      ]);
-      // Dedupe by id (a space could in principle appear in more than one list)
-      const seen = new Set<string | number>();
-      const merged: any[] = [];
-      for (const s of [...mine, ...joined, ...department]) {
-        if (seen.has(s.id)) continue;
-        seen.add(s.id);
-        merged.push(s);
-      }
-      // Sort A–Z, English (ASCII-leading) names first, then Chinese names.
-      // Within each bucket, compare with the appropriate locale so that
-      // pinyin order is used for CJK and natural order for ASCII.
-      merged.sort((a, b) => {
-        const an = (a.name || "").trim();
-        const bn = (b.name || "").trim();
-        const aIsEn = an.length > 0 && an.charCodeAt(0) < 128;
-        const bIsEn = bn.length > 0 && bn.charCodeAt(0) < 128;
-        if (aIsEn !== bIsEn) return aIsEn ? -1 : 1;
-        return an.localeCompare(bn, aIsEn ? "en" : "zh-Hans-u-co-pinyin", {
-          sensitivity: "base",
-        });
-      });
-      return merged;
-    },
-    // Only the 'knowledge' pill renders the spaces list; the '+' variant never
-    // shows it, so don't let opening the '+' menu fire these requests.
+  } = useCategorizedKnowledgeSpaces({
     enabled: variant === "knowledge" && (rootOpen || warm),
-    refetchOnWindowFocus: false,
+    keyword: debouncedSpaceKeyword,
   });
 
-  // `warm` keeps the query observer enabled after the first hover, which means
+  // `warm` keeps the query observers enabled after the first hover, which means
   // reopening no longer flips enabled off→on (the trigger that used to refresh
   // the list). Restore the refresh-on-open semantics explicitly — cached data
   // stays on screen while refetching, and the frozen panel width can't jump.
@@ -439,16 +252,9 @@ export const ChatKnowledge = ({
     if (rootOpen && variant === "knowledge" && spacesFetched) refetchSpaces();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- refresh only on open
   }, [rootOpen]);
-
-  // Client-side filter by keyword
-  const filteredSpaces = useMemo(
-    () =>
-      debouncedSpaceKeyword
-        ? allSpaces.filter((s) =>
-          s.name?.toLowerCase().includes(debouncedSpaceKeyword.toLowerCase())
-        )
-        : allSpaces,
-    [allSpaces, debouncedSpaceKeyword]
+  const spaceListGroups = useMemo(
+    () => spaceGroups.map((group) => ({ key: group.key, label: group.label, items: group.spaces })),
+    [spaceGroups],
   );
 
   // Comma-separated ids of admin-configured org KBs. Passed to the backend so
@@ -699,16 +505,19 @@ export const ChatKnowledge = ({
           'flex flex-col gap-0 rounded-[8px] border-0 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]',
           // variant-aware width/padding: the pill (knowledge) shows a list
           // directly, so it needs the wider list layout; the "+" menu stays
-          // compact for its short action items. Width fits content between the
-          // min/max clamps (the Radix popper wrapper is shrink-to-fit); the
-          // knowledge list additionally freezes on first data (spacesFreeze).
+          // compact for its short action items.
+          // Width fits content between the min/max clamps (the Radix popper
+          // wrapper is shrink-to-fit); the knowledge list additionally freezes
+          // on first data (spacesFreeze).
           variant === 'knowledge'
             ? 'min-w-[180px] max-w-[240px] overflow-hidden pt-2 px-2 pb-0'
             : 'min-w-[140px] max-w-[280px] p-2',
-          // Mobile tall panels (knowledge, or the "+" menu drilled into
-          // skill / org lists) follow the same content-fit clamps as desktop
-          // (180–240); the viewport term only guards tiny screens. No fixed
-          // width — mobile popups auto-fit and freeze exactly like desktop.
+          // Mobile width override only applies to the knowledge variant — the
+          // "+" menu shows short action items and matches the desktop 160px
+          // width on phones too. (knowledge needs more room for search + list)
+          // Mobile: any "tall" panel (knowledge, or the "+" menu drilled into
+          // skill / org lists) needs the wider width; 160px is fine only for
+          // the compact root of the "+" menu (short action items).
           isMobile && mobileTallPanel && 'touch-mobile:min-w-[180px] touch-mobile:max-w-[min(calc(var(--bs-vw,100vw)-24px),240px)]',
           // Mobile knowledge popup only: replace `p-2` with `pt-2 px-2 pb-0` so
           // the scroll list's own `pb-2` handles the last-item spacing.
@@ -754,7 +563,7 @@ export const ChatKnowledge = ({
               placeholder={localize('com_chat_knowledge_placeholder_search_space')}
               keyword={spaceKeyword}
               setKeyword={setSpaceKeyword}
-              items={filteredSpaces}
+              groups={spaceListGroups}
               selectedItems={selectedKnowledgeSpaces}
               onToggle={(item) => handleToggle(item, 'space')}
               isFetching={spaceFetching}
@@ -775,7 +584,7 @@ export const ChatKnowledge = ({
               placeholder={localize('com_chat_knowledge_placeholder_search_space')}
               keyword={spaceKeyword}
               setKeyword={setSpaceKeyword}
-              items={filteredSpaces}
+              groups={spaceListGroups}
               selectedItems={selectedKnowledgeSpaces}
               onToggle={(item) => handleToggle(item, 'space')}
               isFetching={spaceFetching}
