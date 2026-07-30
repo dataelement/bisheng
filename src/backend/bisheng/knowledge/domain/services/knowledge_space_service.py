@@ -115,6 +115,7 @@ from bisheng.database.models.user_group import UserGroupDao
 from bisheng.department.domain.services.department_service import DepartmentService
 from bisheng.knowledge.domain.constants import (
     BUSINESS_DOMAIN_OPTIONS,
+    BUSINESS_DOMAIN_CODE_KEY,
     get_business_domain_code_from_file,
     normalize_business_domain_code,
     parse_shougang_file_encoding_codes,
@@ -5222,6 +5223,39 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if len(parts) < 4:
             return ""
         return cls._normalize_shougang_portal_business_domain_code(parts[2])
+
+    def _sync_split_rule_classification_from_encoding(self, split_rule: Any, encoding: str) -> Any:
+        """Write encoding category/domain segments back into split_rule.
+
+        List APIs and FileEncodingTransformer prefer split_rule over encoding segments.
+        Editing only file_encoding would leave the upload-time selection stale.
+        Implemented here (not via KnowledgeUtils helpers) so unit tests that stub
+        KnowledgeUtils still exercise the sync path.
+        """
+        parsed_encoding = self._parse_shougang_file_encoding_parts(encoding)
+        if parsed_encoding is None:
+            return split_rule
+        _, file_category_code, business_domain_code, _, _ = parsed_encoding
+        normalized_category = self.normalize_file_category_code(file_category_code)
+        normalized_domain = self._normalize_shougang_portal_business_domain_code(business_domain_code)
+        if not normalized_category and not normalized_domain:
+            return split_rule
+
+        rule_data: dict[str, Any] = {}
+        if isinstance(split_rule, str) and split_rule.strip():
+            try:
+                parsed_rule = json.loads(split_rule)
+                if isinstance(parsed_rule, dict):
+                    rule_data = parsed_rule
+            except Exception:
+                rule_data = {}
+        elif isinstance(split_rule, dict):
+            rule_data = dict(split_rule)
+        if normalized_category:
+            rule_data["file_category_code"] = normalized_category
+        if normalized_domain:
+            rule_data[BUSINESS_DOMAIN_CODE_KEY] = normalized_domain
+        return json.dumps(rule_data, ensure_ascii=False)
 
     @staticmethod
     def _parse_shougang_file_encoding_parts(
@@ -14580,7 +14614,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
         encoding: str,
         file_subcategory_code: str | None = None,
     ) -> KnowledgeFile:
-        """Update a file's file_encoding and optional second-level category (shougang feature)."""
+        """Update a file's file_encoding and optional second-level category (shougang feature).
+
+        Also syncs ``split_rule.file_category_code`` / ``business_domain_code`` from the
+        encoding segments so list APIs and reparses keep the edited selection.
+        """
         file_record = await self._get_file_for_action(file_id)
         resolved = await self._require_document_content_manager(file_record)
         # Editing file category / business domain follows the upload permission, on the
@@ -14627,6 +14665,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
             cleaned = await self._ensure_unique_file_encoding(cleaned, file_id)
 
         file_record.file_encoding = cleaned
+        # Keep split_rule classification in lockstep with file_encoding. List APIs and
+        # FileEncodingTransformer prefer split_rule over the encoding segments; leaving
+        # the old upload-time selection would make edits appear to stick in the encoding
+        # column while business-domain/category columns (and later reparses) revert.
+        file_record.split_rule = self._sync_split_rule_classification_from_encoding(
+            file_record.split_rule,
+            cleaned,
+        )
         normalized_file_subcategory_code = self.normalize_file_category_code(file_subcategory_code)
         subcategory_changed = (
             file_subcategory_code is not None and old_subcategory_code != normalized_file_subcategory_code
