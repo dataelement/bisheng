@@ -317,22 +317,10 @@ async def test_get_knowledge_lists_from_knowledge_library_object_type():
             return_value=[],
         ),
         patch.object(
-            KnowledgeService.permission_service,
-            "filter_knowledge_ids_by_permission_async",
+            KnowledgeService,
+            "_scan_visible_knowledge",
             new_callable=AsyncMock,
-            return_value=[1],
-        ) as mock_filter_ids,
-        patch.object(
-            service_module.KnowledgeDao,
-            "aget_user_knowledge",
-            new_callable=AsyncMock,
-            return_value=[],
-        ),
-        patch.object(
-            service_module.KnowledgeDao,
-            "acount_user_knowledge",
-            new_callable=AsyncMock,
-            return_value=0,
+            return_value=([], {}, 0, 0),
         ),
         patch.object(
             service_module.KnowledgeService,
@@ -341,20 +329,14 @@ async def test_get_knowledge_lists_from_knowledge_library_object_type():
             return_value=[],
         ),
     ):
-        result, total = await KnowledgeService.get_knowledge(
+        result = await KnowledgeService.get_knowledge(
             request=MagicMock(),
             login_user=login_user,
             knowledge_type=KnowledgeTypeEnum.NORMAL,
         )
 
-    assert result == []
-    assert total == 0
+    assert result.data == []
     login_user.rebac_list_accessible.assert_awaited_once_with("can_read", "knowledge_library")
-    mock_filter_ids.assert_awaited_once_with(
-        login_user,
-        [1],
-        "use_kb",
-    )
 
 
 @pytest.mark.asyncio
@@ -375,23 +357,11 @@ async def test_get_knowledge_merges_creator_owned_ids_into_use_kb_filter_candida
             return_value=[9],
         ),
         patch.object(
-            KnowledgeService.permission_service,
-            "filter_knowledge_ids_by_permission_async",
+            KnowledgeService,
+            "_scan_visible_knowledge",
             new_callable=AsyncMock,
-            return_value=[1, 9],
-        ) as mock_filter_ids,
-        patch.object(
-            service_module.KnowledgeDao,
-            "aget_user_knowledge",
-            new_callable=AsyncMock,
-            return_value=[],
-        ),
-        patch.object(
-            service_module.KnowledgeDao,
-            "acount_user_knowledge",
-            new_callable=AsyncMock,
-            return_value=0,
-        ),
+            return_value=([], {}, 0, 0),
+        ) as scan_mock,
         patch.object(
             service_module.KnowledgeService,
             "aconvert_knowledge_read",
@@ -405,10 +375,10 @@ async def test_get_knowledge_merges_creator_owned_ids_into_use_kb_filter_candida
             knowledge_type=KnowledgeTypeEnum.NORMAL,
         )
 
-    filter_args = mock_filter_ids.await_args.args
-    assert filter_args[0] is login_user
-    assert set(filter_args[1]) == {1, 9}
-    assert filter_args[2] == "use_kb"
+    scan_kwargs = scan_mock.await_args.kwargs
+    assert scan_kwargs["login_user"] is login_user
+    assert set(scan_kwargs["candidate_ids"]) == {1, 9}
+    assert scan_kwargs["permission_id"] == "use_kb"
 
 
 @pytest.mark.asyncio
@@ -429,23 +399,11 @@ async def test_get_knowledge_supports_view_permission_filter_override():
             return_value=[],
         ),
         patch.object(
-            KnowledgeService.permission_service,
-            "filter_knowledge_ids_by_permission_async",
+            KnowledgeService,
+            "_scan_visible_knowledge",
             new_callable=AsyncMock,
-            return_value=[1],
-        ) as mock_filter_ids,
-        patch.object(
-            service_module.KnowledgeDao,
-            "aget_user_knowledge",
-            new_callable=AsyncMock,
-            return_value=[],
-        ),
-        patch.object(
-            service_module.KnowledgeDao,
-            "acount_user_knowledge",
-            new_callable=AsyncMock,
-            return_value=0,
-        ),
+            return_value=([], {}, 0, 0),
+        ) as scan_mock,
         patch.object(
             service_module.KnowledgeService,
             "aconvert_knowledge_read",
@@ -460,10 +418,10 @@ async def test_get_knowledge_supports_view_permission_filter_override():
             permission_id="view_kb",
         )
 
-    filter_args = mock_filter_ids.await_args.args
-    assert filter_args[0] is login_user
-    assert filter_args[1] == [1]
-    assert filter_args[2] == "view_kb"
+    scan_kwargs = scan_mock.await_args.kwargs
+    assert scan_kwargs["login_user"] is login_user
+    assert scan_kwargs["candidate_ids"] == [1]
+    assert scan_kwargs["permission_id"] == "view_kb"
 
 
 @pytest.mark.asyncio
