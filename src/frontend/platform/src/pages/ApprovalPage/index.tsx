@@ -314,6 +314,21 @@ const APPROVER_SOURCE_LABEL_KEYS: Record<string, string> = {
 };
 
 function approverSourceLabelKey(sourceType: string, scenarioCode?: string | null): string {
+  if (scenarioCode === 'department_file_view_request') {
+    const departmentFileSourceLabelKeys: Record<string, string> = {
+      target_knowledge_space_owner:
+        'approvalPage.approverSource.departmentFileKnowledgeSpaceOwner',
+      target_knowledge_space_manager:
+        'approvalPage.approverSource.departmentFileKnowledgeSpaceManager',
+      target_knowledge_space_owner_department_admin:
+        'approvalPage.approverSource.departmentFileKnowledgeSpaceOwnerDepartmentAdmin',
+      target_knowledge_space_manager_department_admin:
+        'approvalPage.approverSource.departmentFileKnowledgeSpaceManagerDepartmentAdmin',
+    };
+    if (departmentFileSourceLabelKeys[sourceType]) {
+      return departmentFileSourceLabelKeys[sourceType];
+    }
+  }
   if (isFilePublishScenario(scenarioCode)) {
     if (sourceType === 'knowledge_space_owner') {
       return 'approvalPage.approverSource.filePublishSourceKnowledgeSpaceOwner';
@@ -1099,6 +1114,10 @@ const APPROVER_SOURCE_OPTIONS = [
   {
     value: "target_knowledge_space_manager_department_admin",
     labelKey: "approvalPage.approverSource.target_knowledge_space_manager_department_admin",
+  },
+  {
+    value: "department_file_approvers",
+    labelKey: "approvalPage.approverSource.department_file_approvers",
   },
   { value: "channel_owner",           labelKey: "approvalPage.approverSource.channel_owner" },
   { value: "channel_manager",         labelKey: "approvalPage.approverSource.channel_manager" },

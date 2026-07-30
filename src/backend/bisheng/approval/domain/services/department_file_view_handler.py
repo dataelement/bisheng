@@ -1,9 +1,13 @@
 from __future__ import annotations
 
-from bisheng.common.errcode.approval import (
-    ApprovalApproverUnavailableError,
-    ApprovalDepartmentFileInvalidBindingError,
+from bisheng.approval.domain.services.approver_resolver import (
+    resolve_approvers_from_sources,
+    resolve_file_publish_department_admins,
 )
+from bisheng.approval.domain.services.knowledge_space_subscribe_scenario_handler import (
+    _resolve_space_roles_via_fga,
+)
+from bisheng.common.errcode.approval import ApprovalDepartmentFileInvalidBindingError
 from bisheng.core.database import get_async_db_session
 from bisheng.knowledge.domain.repositories.implementations.department_file_view_grant_repository_impl import (
     DepartmentFileViewGrantRepositoryImpl,
@@ -21,6 +25,17 @@ from bisheng.knowledge.domain.services.department_file_view_grant_audit_writer i
 
 class DepartmentFileViewApprovalHandler:
     scenario_code = "department_file_view_request"
+    APPROVER_SOURCE_TYPES = frozenset(
+        {
+            "department_file_approvers",
+            "target_knowledge_space_owner_department_admin",
+            "target_knowledge_space_owner",
+            "target_knowledge_space_manager",
+            "target_knowledge_space_manager_department_admin",
+            "direct_user",
+            "role_user",
+        }
+    )
 
     async def validate(self, req, login_user) -> None:
         async with get_async_db_session() as session:
@@ -54,16 +69,95 @@ class DepartmentFileViewApprovalHandler:
 
     async def resolve_approvers(self, node_config: dict, req) -> list[int]:
         sources = node_config.get("sources") or []
-        if sources != [{"type": "department_file_approvers"}]:
+        if any(
+            not isinstance(source, dict) or source.get("type") not in self.APPROVER_SOURCE_TYPES
+            for source in sources
+        ):
             raise ApprovalDepartmentFileInvalidBindingError()
+
         async with get_async_db_session() as session:
             _, resource, access_service = await self._load_live_resource(
                 session=session,
                 req=req,
             )
-            approvers = sorted(await access_service.resolve_department_approvers(int(resource.department_id)))
-        if not approvers:
-            raise ApprovalApproverUnavailableError()
+            source_types = {str(source["type"]) for source in sources}
+            owner_ids: list[int] = []
+            manager_ids: list[int] = []
+            space_role_source_types = {
+                "target_knowledge_space_owner_department_admin",
+                "target_knowledge_space_owner",
+                "target_knowledge_space_manager",
+                "target_knowledge_space_manager_department_admin",
+            }
+            if source_types & space_role_source_types:
+                owner_ids, manager_ids = await _resolve_space_roles_via_fga(
+                    int(resource.file.knowledge_id)
+                )
+
+            role_department_user_ids: list[int] = []
+            if "target_knowledge_space_owner_department_admin" in source_types:
+                role_department_user_ids.extend(int(user_id) for user_id in owner_ids)
+            if "target_knowledge_space_manager_department_admin" in source_types:
+                role_department_user_ids.extend(int(user_id) for user_id in manager_ids)
+
+            role_department_admin_ids: list[int] = []
+            if role_department_user_ids:
+                role_department_admin_ids = await resolve_file_publish_department_admins(
+                    start_department_ids=[],
+                    start_user_ids=role_department_user_ids,
+                    applicant_user_id=getattr(req, "applicant_user_id", None),
+                )
+
+            department_approver_ids: list[int] = []
+            if "department_file_approvers" in source_types:
+                department_approver_ids = sorted(
+                    await access_service.resolve_department_approvers(
+                        int(resource.department_id)
+                    )
+                )
+
+            generic_sources = [
+                source
+                for source in sources
+                if source.get("type") in {"direct_user", "role_user"}
+            ]
+            generic_approver_ids = (
+                await resolve_approvers_from_sources(generic_sources, req)
+                if generic_sources
+                else []
+            )
+
+        resolved_by_source = {
+            "department_file_approvers": department_approver_ids,
+            "target_knowledge_space_owner_department_admin": role_department_admin_ids,
+            "target_knowledge_space_owner": owner_ids,
+            "target_knowledge_space_manager": manager_ids,
+            "target_knowledge_space_manager_department_admin": role_department_admin_ids,
+            "direct_user": generic_approver_ids,
+            "role_user": generic_approver_ids,
+        }
+        approvers: list[int] = []
+        seen: set[int] = set()
+        department_admins_added = False
+        generic_approvers_added = False
+        for source in sources:
+            source_type = str(source["type"])
+            if source_type in {
+                "target_knowledge_space_owner_department_admin",
+                "target_knowledge_space_manager_department_admin",
+            }:
+                if department_admins_added:
+                    continue
+                department_admins_added = True
+            if source_type in {"direct_user", "role_user"}:
+                if generic_approvers_added:
+                    continue
+                generic_approvers_added = True
+            for user_id in resolved_by_source[source_type]:
+                normalized_user_id = int(user_id)
+                if normalized_user_id not in seen:
+                    seen.add(normalized_user_id)
+                    approvers.append(normalized_user_id)
         return approvers
 
     async def on_approved(

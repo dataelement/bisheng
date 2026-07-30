@@ -97,7 +97,15 @@ def test_registry_exposes_fixed_department_file_view_preset() -> None:
 
     assert preset is not None
     assert preset.handler_key == "department_file_view_request"
-    assert preset.approver_source_types == ["department_file_approvers"]
+    assert preset.approver_source_types == [
+        "department_file_approvers",
+        "target_knowledge_space_owner_department_admin",
+        "target_knowledge_space_owner",
+        "target_knowledge_space_manager",
+        "target_knowledge_space_manager_department_admin",
+        "direct_user",
+        "role_user",
+    ]
 
 
 @pytest.mark.asyncio

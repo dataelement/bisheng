@@ -2522,7 +2522,9 @@
       "source_space_level": "元ナレッジスペースタイプ",
       "target_space_level": "対象ナレッジスペースタイプ",
       "target_space_id": "対象ナレッジスペース",
-      "applicant_department_id": "申請者部署"
+      "applicant_department_id": "申請者部署",
+      "file_department_id": "ファイル所属部署",
+      "file_knowledge_space_id": "ファイル所属ナレッジスペース"
     },
     "approverSource": {
       "direct_user": "指定ユーザー",
@@ -2541,7 +2543,11 @@
       "target_knowledge_space_manager": "対象ナレッジスペースマネージャー",
       "target_knowledge_space_owner_department_admin": "対象ナレッジスペースオーナーの部署管理者",
       "target_knowledge_space_manager_department_admin": "対象ナレッジスペースマネージャーの部署管理者",
-      "department_file_approvers": "ファイル所属部署の管理者"
+      "departmentFileKnowledgeSpaceOwner": "ファイル所属ナレッジスペースのオーナー",
+      "departmentFileKnowledgeSpaceManager": "ファイル所属ナレッジスペースのマネージャー",
+      "departmentFileKnowledgeSpaceOwnerDepartmentAdmin": "ファイル所属ナレッジスペースオーナーの部署管理者",
+      "departmentFileKnowledgeSpaceManagerDepartmentAdmin": "ファイル所属ナレッジスペースマネージャーの部署管理者",
+      "department_file_approvers": "ファイル所属ナレッジスペースの部署管理者"
     },
     "roleValue": {
       "admin": "システム管理者",

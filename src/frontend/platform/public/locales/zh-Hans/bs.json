@@ -2522,7 +2522,9 @@
       "source_space_level": "来源知识空间类型",
       "target_space_level": "目标知识空间类型",
       "target_space_id": "目标知识空间",
-      "applicant_department_id": "申请人部门"
+      "applicant_department_id": "申请人部门",
+      "file_department_id": "文件所属部门",
+      "file_knowledge_space_id": "文件所属知识空间"
     },
     "approverSource": {
       "direct_user": "指定用户",
@@ -2541,7 +2543,11 @@
       "target_knowledge_space_manager": "目标知识空间 Manager",
       "target_knowledge_space_owner_department_admin": "目标知识空间 Owner 的部门管理员",
       "target_knowledge_space_manager_department_admin": "目标知识空间 Manager 的部门管理员",
-      "department_file_approvers": "文件所属部门管理员"
+      "departmentFileKnowledgeSpaceOwner": "文件所属知识空间 Owner",
+      "departmentFileKnowledgeSpaceManager": "文件所属知识空间 Manager",
+      "departmentFileKnowledgeSpaceOwnerDepartmentAdmin": "文件所属知识空间 Owner 的部门管理员",
+      "departmentFileKnowledgeSpaceManagerDepartmentAdmin": "文件所属知识空间 Manager 的部门管理员",
+      "department_file_approvers": "文件所属知识空间的部门管理员"
     },
     "roleValue": {
       "admin": "系统管理员",

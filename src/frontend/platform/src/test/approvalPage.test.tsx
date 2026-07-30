@@ -93,6 +93,8 @@ vi.mock("react-i18next", () => ({
         "approvalPage.condition.target_space_level": "目标知识空间类型",
         "approvalPage.condition.target_space_id": "目标知识空间",
         "approvalPage.condition.applicant_department_id": "申请人部门",
+        "approvalPage.condition.file_department_id": "文件所属部门",
+        "approvalPage.condition.file_knowledge_space_id": "文件所属知识空间",
         "approvalPage.roleValue.admin": "系统管理员",
         "approvalPage.roleValue.tenant_admin": "租户管理员",
         "approvalPage.roleValue.dept_admin": "部门管理员",
@@ -118,6 +120,16 @@ vi.mock("react-i18next", () => ({
           "目标知识空间 Owner 的部门管理员",
         "approvalPage.approverSource.target_knowledge_space_manager_department_admin":
           "目标知识空间 Manager 的部门管理员",
+        "approvalPage.approverSource.departmentFileKnowledgeSpaceOwner":
+          "文件所属知识空间 Owner",
+        "approvalPage.approverSource.departmentFileKnowledgeSpaceManager":
+          "文件所属知识空间 Manager",
+        "approvalPage.approverSource.departmentFileKnowledgeSpaceOwnerDepartmentAdmin":
+          "文件所属知识空间 Owner 的部门管理员",
+        "approvalPage.approverSource.departmentFileKnowledgeSpaceManagerDepartmentAdmin":
+          "文件所属知识空间 Manager 的部门管理员",
+        "approvalPage.approverSource.department_file_approvers":
+          "文件所属知识空间的部门管理员",
         "approvalPage.approverSource.channel_owner": "频道 Owner",
       };
       return map[key] ?? opts?.defaultValue ?? key;
@@ -375,7 +387,8 @@ describe("ApprovalPage", () => {
     });
   });
 
-  it("keeps the department-file system identity while allowing structure editing", async () => {
+  it("keeps the department-file system identity and exposes its seven approver sources", async () => {
+    const user = userEvent.setup();
     listApprovalScenarioPresetsApi.mockResolvedValue([
       {
         scenario_code: "department_file_view_request",
@@ -387,7 +400,15 @@ describe("ApprovalPage", () => {
           "file_department_id",
           "file_knowledge_space_id",
         ],
-        approver_source_types: ["department_file_approvers"],
+        approver_source_types: [
+          "department_file_approvers",
+          "target_knowledge_space_owner_department_admin",
+          "target_knowledge_space_owner",
+          "target_knowledge_space_manager",
+          "target_knowledge_space_manager_department_admin",
+          "direct_user",
+          "role_user",
+        ],
       },
     ]);
     listApprovalScenariosApi.mockResolvedValue([
@@ -447,6 +468,27 @@ describe("ApprovalPage", () => {
     expect(
       screen.getByRole("button", { name: /新建流程/ }),
     ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /编辑节点/ }));
+    await user.click(screen.getByRole("button", { name: /新增节点/ }));
+    const sourceSelect = getSelectWithOptionValue("target_knowledge_space_manager");
+    expect(within(sourceSelect).getByRole("option", { name: "文件所属知识空间的部门管理员" })).toHaveValue(
+      "department_file_approvers",
+    );
+    expect(within(sourceSelect).getByRole("option", { name: "文件所属知识空间 Owner 的部门管理员" })).toHaveValue(
+      "target_knowledge_space_owner_department_admin",
+    );
+    expect(within(sourceSelect).getByRole("option", { name: "文件所属知识空间 Owner" })).toHaveValue(
+      "target_knowledge_space_owner",
+    );
+    expect(within(sourceSelect).getByRole("option", { name: "文件所属知识空间 Manager" })).toHaveValue(
+      "target_knowledge_space_manager",
+    );
+    expect(within(sourceSelect).getByRole("option", { name: "文件所属知识空间 Manager 的部门管理员" })).toHaveValue(
+      "target_knowledge_space_manager_department_admin",
+    );
+    expect(within(sourceSelect).getByRole("option", { name: "指定用户" })).toHaveValue("direct_user");
+    expect(within(sourceSelect).getByRole("option", { name: "指定用户角色" })).toHaveValue("role_user");
   });
 
   it("loads department knowledge-space conditions only from approval options", async () => {
@@ -488,8 +530,12 @@ describe("ApprovalPage", () => {
     render(<ApprovalPage />);
     await screen.findAllByText("部门文件查看审批");
     await user.click(screen.getByRole("button", { name: /新增分支/ }));
+    const fieldSelect = screen.getByLabelText("条件 1 字段");
+    expect(within(fieldSelect).getByRole("option", { name: "文件所属知识空间" })).toHaveValue(
+      "file_knowledge_space_id",
+    );
     await user.selectOptions(
-      screen.getByLabelText("条件 1 字段"),
+      fieldSelect,
       "file_knowledge_space_id",
     );
 

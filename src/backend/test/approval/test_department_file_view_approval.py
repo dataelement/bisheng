@@ -3,7 +3,7 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from datetime import datetime
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 import pytest_asyncio
@@ -38,7 +38,11 @@ from bisheng.approval.domain.services.approval_center_service import (
 from bisheng.approval.domain.services.department_file_view_approval_service import (
     DepartmentFileViewApprovalService,
 )
+from bisheng.approval.domain.services.department_file_view_handler import (
+    DepartmentFileViewApprovalHandler,
+)
 from bisheng.common.errcode.approval import (
+    ApprovalDepartmentFileInvalidBindingError,
     ApprovalReasonRequiredError,
     ApprovalRequestAlreadyProcessedError,
 )
@@ -56,6 +60,76 @@ from bisheng.knowledge.domain.services.department_file_view_access_service impor
     DepartmentFileResource,
 )
 from bisheng.user.domain.models.user import UserDao
+
+
+@pytest.mark.asyncio
+async def test_department_file_handler_resolves_configured_approver_sources() -> None:
+    handler = DepartmentFileViewApprovalHandler()
+    access_service = SimpleNamespace(
+        resolve_department_approvers=AsyncMock(return_value={101, 102}),
+    )
+    resource = SimpleNamespace(
+        department_id=12,
+        file=SimpleNamespace(knowledge_id=20),
+    )
+    request = SimpleNamespace(
+        applicant_user_id=9,
+        payload_snapshot={"space_id": 20, "file_id": 30},
+    )
+    sources = [
+        {"type": "department_file_approvers"},
+        {"type": "target_knowledge_space_owner_department_admin"},
+        {"type": "target_knowledge_space_owner"},
+        {"type": "target_knowledge_space_manager"},
+        {"type": "target_knowledge_space_manager_department_admin"},
+        {"type": "direct_user", "user_ids": [601, 102]},
+        {"type": "role_user", "role_ids": [7]},
+    ]
+
+    @asynccontextmanager
+    async def session_factory():
+        yield SimpleNamespace()
+
+    with (
+        patch(
+            "bisheng.approval.domain.services.department_file_view_handler."
+            "get_async_db_session",
+            new=session_factory,
+        ),
+        patch.object(
+            handler,
+            "_load_live_resource",
+            new=AsyncMock(return_value=(SimpleNamespace(), resource, access_service)),
+        ),
+        patch(
+            "bisheng.approval.domain.services.department_file_view_handler."
+            "_resolve_space_roles_via_fga",
+            new=AsyncMock(return_value=([201], [301])),
+        ),
+        patch(
+            "bisheng.approval.domain.services.department_file_view_handler."
+            "resolve_file_publish_department_admins",
+            new=AsyncMock(return_value=[401, 501]),
+        ) as resolve_department_admins,
+        patch(
+            "bisheng.approval.domain.services.department_file_view_handler."
+            "resolve_approvers_from_sources",
+            new=AsyncMock(return_value=[601, 701, 101]),
+        ),
+    ):
+        approvers = await handler.resolve_approvers({"sources": sources}, request)
+
+    assert approvers == [101, 102, 401, 501, 201, 301, 601, 701]
+    resolve_department_admins.assert_awaited_once_with(
+        start_department_ids=[],
+        start_user_ids=[201, 301],
+        applicant_user_id=9,
+    )
+    with pytest.raises(ApprovalDepartmentFileInvalidBindingError):
+        await handler.resolve_approvers(
+            {"sources": [{"type": "tenant_admin"}]},
+            request,
+        )
 
 
 @pytest_asyncio.fixture
