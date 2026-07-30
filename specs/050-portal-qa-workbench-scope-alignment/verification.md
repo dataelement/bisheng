@@ -77,3 +77,41 @@ BiSheng 修改前执行四个最终范围解析回归：
 
 - 无数据库迁移、数据回写、依赖或运行时配置变更。
 - 回滚仅需恢复门户 QA 路由/服务、前端分类范围参数和 BiSheng 门户 QA 范围解析器。
+
+## 2026-07-30 Bug 修复增量：同名个人知识库
+
+### 调查与红测
+
+`get_grouped_spaces()` 修复前会将两个不同 ID、规范化名称同为“gzx001的知识库”的本人个人空间同时追加到
+`personal_spaces`。新增回归测试后首次执行：
+
+| Evidence | Code State | Command / Step | Result | Scope |
+|---|---|---|---|---|
+| E-006-RED | `947a6fa22 + test-only worktree` | `pytest -q test/knowledge/test_knowledge_space_level_team_ks.py::TestKnowledgeSpaceServiceGrouping::test_get_grouped_spaces_deduplicates_current_user_personal_spaces_by_name` | `FAIL (exit 1)`；实际 `[11, 12, 13]`，期望 `[11, 13]` | AC-REQ-006-01, AC-REQ-006-02 |
+
+### 修复后证据
+
+| Evidence | Code State | Command / Step | Result | Scope |
+|---|---|---|---|---|
+| E-006-01 | `947a6fa22 + current worktree` | 同一条新增定向回归 | `PASS (exit 0), 1 passed` | AC-REQ-006-01, AC-REQ-006-02 |
+| E-006-02 | `947a6fa22 + current worktree` | `pytest -q test/knowledge/test_knowledge_space_level_team_ks.py test/test_knowledge_space_service.py -k 'get_grouped_spaces'` | `PASS (exit 0), 4 passed, 215 deselected` | AC-REQ-006-01..03 |
+| E-006-03 | `947a6fa22 + current worktree` | `pytest -q test/knowledge/test_knowledge_space_level_team_ks.py` | `PASS (exit 0), 6 passed` | AC-REQ-006-01..03 |
+| E-006-04 | `947a6fa22 + current worktree` | 变更测试文件 `ruff check`、`ruff format --check`，生产与测试文件 `compileall`，仓库 `git diff --check` | `PASS (exit 0)` | 静态质量与语法 |
+
+### 验收覆盖
+
+| Acceptance | Status | Evidence |
+|---|---|---|
+| AC-REQ-006-01 | PASS | E-006-RED, E-006-01, E-006-02 |
+| AC-REQ-006-02 | PASS | E-006-01, E-006-02 |
+| AC-REQ-006-03 | PASS | E-006-02, E-006-03 |
+
+### 增量验证缺口
+
+1. 组合运行 `test/test_personal_default_space.py` 时，既有
+   `test_ensure_personal_default_creates_when_missing` 未模拟 `_resolve_default_tag_library_id()` 的数据库访问，
+   因测试环境数据库 URL 为 `MagicMock` 而失败；同批其余 `9` 项通过。该失败不经过本次分组名称防重代码。
+2. 对整个 `knowledge_space_service.py` 执行严格 `ruff` 仍报告 6 个既有问题，包括未定义
+   `ReviewTagFeatureDisabledError`、`section`、`KnowledgeSpaceTagLibraryNotBoundError` 和未使用变量等；
+   本次变更测试文件 lint、两文件语法编译及相关行为回归均通过。
+3. 本次不清理数据库里的重复空间，也不建立数据库唯一约束。接口会隐藏同名后续记录，但并发创建的数据库级根因仍需单独迁移方案。

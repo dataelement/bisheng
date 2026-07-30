@@ -90,6 +90,47 @@ class TestKnowledgeSpaceServiceGrouping:
         assert len(result.personal_spaces) == 0
 
     @pytest.mark.asyncio
+    async def test_get_grouped_spaces_deduplicates_current_user_personal_spaces_by_name(self) -> None:
+        service = self._make_service(user_id=7)
+        service._ensure_personal_spaces = AsyncMock()
+        service._list_accessible_spaces = AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    id=11,
+                    name="gzx001的知识库",
+                    space_level=KnowledgeSpaceLevelEnum.PERSONAL,
+                    user_id=7,
+                    is_favorite=False,
+                ),
+                SimpleNamespace(
+                    id=12,
+                    name=" gzx001的知识库 ",
+                    space_level=KnowledgeSpaceLevelEnum.PERSONAL,
+                    user_id=7,
+                    is_favorite=False,
+                ),
+                SimpleNamespace(
+                    id=13,
+                    name="项目资料",
+                    space_level=KnowledgeSpaceLevelEnum.PERSONAL,
+                    user_id=7,
+                    is_favorite=False,
+                ),
+                SimpleNamespace(
+                    id=14,
+                    name="其他用户资料",
+                    space_level=KnowledgeSpaceLevelEnum.PERSONAL,
+                    user_id=99,
+                    is_favorite=False,
+                ),
+            ]
+        )
+
+        result = await service.get_grouped_spaces()
+
+        assert [space.id for space in result.personal_spaces] == [11, 13]
+
+    @pytest.mark.asyncio
     async def test_get_spaces_by_level_team_returns_team_and_team_ks(self) -> None:
         service = self._make_service(user_id=7)
         service._normalize_space_level = Mock(return_value=KnowledgeSpaceLevelEnum.TEAM)

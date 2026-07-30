@@ -236,6 +236,7 @@ from bisheng.knowledge.domain.services.favorite_notify import (
     FAVORITE_SOURCE_RENAMED,
     FAVORITE_SOURCE_SUBCATEGORY_UPDATED,
     FAVORITE_SOURCE_TAGS_UPDATED,
+    can_user_view_favorite_source,
     collect_favorite_recipient_snapshots,
     enqueue_favorite_change_events,
 )
@@ -10686,6 +10687,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         await self._ensure_personal_spaces()
         spaces = await self._list_accessible_spaces(order_by)
         grouped = GroupedKnowledgeSpacesResp()
+        personal_space_names: set[str] = set()
         for space in spaces:
             if space.space_level == KnowledgeSpaceLevelEnum.PUBLIC:
                 grouped.public_spaces.append(space)
@@ -10696,6 +10698,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
             else:
                 # 个人知识库仅本人可见：全局超管虽能访问全部空间，个人分类下也只显示自己的库
                 if int(getattr(space, "user_id", 0) or 0) == int(self.login_user.user_id):
+                    normalized_name = self._normalize_space_name(str(getattr(space, "name", "") or ""))
+                    if normalized_name in personal_space_names:
+                        continue
+                    personal_space_names.add(normalized_name)
                     grouped.personal_spaces.append(space)
         grouped.personal_spaces.sort(key=lambda space: not bool(getattr(space, "is_favorite", False)))
         return grouped
@@ -14825,43 +14831,21 @@ class KnowledgeSpaceService(KnowledgeUtils):
             from bisheng.knowledge.domain.repositories.implementations.knowledge_file_repository_impl import (
                 KnowledgeFileRepositoryImpl,
             )
-            from bisheng.user.domain.models.user import UserDao
-            from bisheng.user.domain.models.user_role import UserRoleDao
-
             async with get_async_db_session() as session:
                 file_repository = KnowledgeFileRepositoryImpl(session)
+                public_space_cache: dict[int, bool] = {}
 
                 async def can_view_file(user_id: int, source_file: KnowledgeFile) -> bool:
-                    user = await UserDao.aget_user(int(user_id))
-                    if user is None or int(getattr(user, "delete", 0) or 0) != 0:
-                        return False
-                    roles = await UserRoleDao.aget_user_roles(int(user_id))
-                    login_user = UserPayload(
+                    return await can_user_view_favorite_source(
                         user_id=int(user_id),
-                        user_name=str(getattr(user, "user_name", "") or ""),
-                        user_role=[int(role.role_id) for role in roles] or [-1],
                         tenant_id=int(self.login_user.tenant_id),
-                    )
-                    access_service = getattr(
-                        self,
-                        "department_file_view_access_service",
-                        None,
-                    )
-                    if access_service is not None:
-                        decision = await access_service.evaluate_file(
-                            login_user=login_user,
-                            file=source_file,
-                        )
-                        if decision.status == DepartmentFileAccessStatus.ALLOWED:
-                            return True
-                        if decision.status != DepartmentFileAccessStatus.NOT_APPLICABLE:
-                            return False
-                    return await PermissionService.check(
-                        user_id=int(user_id),
-                        relation="can_read",
-                        object_type="knowledge_file",
-                        object_id=str(source_file.id),
-                        login_user=login_user,
+                        source_file=source_file,
+                        department_access_service=getattr(
+                            self,
+                            "department_file_view_access_service",
+                            None,
+                        ),
+                        public_space_cache=public_space_cache,
                     )
 
                 snapshots_by_file = await collect_favorite_recipient_snapshots(

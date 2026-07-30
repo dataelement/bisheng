@@ -69,6 +69,25 @@ QA 文件名搜索保留现有跨库分页响应。`discovery_scope="legacy"` �
 - 数据：无迁移、无回写。
 - 回滚：回退 BFF 路由/服务、前端范围参数和 BiSheng 解析器即可，数据库无需处理。
 
+## Bug 修复：同名个人知识库重复展示
+
+### 根因
+
+`get_grouped_spaces()` 会把当前用户拥有的每一条个人级空间追加到 `personal_spaces`。个人空间创建规则虽然会在应用层检查同一用户下的同名空间，但历史数据或并发检查后创建仍可能留下两个不同 ID、同名的记录。分组接口、门户 BFF 和前端选择器均未按名称防重，因此两条记录被完整展示。
+
+### 修复策略
+
+- 仅在 `get_grouped_spaces()` 构建当前用户的个人分组时，使用与创建校验一致的“去除首尾空格后的名称”作为防重键。
+- 沿用 `_list_accessible_spaces(order_by)` 的既有顺序，保留遇到的第一条记录，跳过后续同名个人空间。
+- 不按名称合并不同层级的空间，不改变公共、部门和团队分组。
+- 不删除或修改重复数据，不新增数据库约束；数据库数据治理和并发强唯一属于后续高风险变更。
+
+### 测试策略
+
+- 在知识空间分组服务测试中构造两个不同 ID、规范化名称相同的本人个人空间，以及一个不同名个人空间和一个他人个人空间。
+- 修复前断言因返回两个同名条目而失败；修复后断言只保留排序靠前条目，同时保留不同名空间并过滤他人空间。
+- 运行既有 grouped spaces 相关测试，确认团队、公共和个人可见性行为不回归。
+
 ## 文件范围
 - `shougang-group-knowledge-portal/backend/app/api/routes/knowledge.py`
 - `shougang-group-knowledge-portal/backend/app/services/knowledge_service.py`
@@ -76,6 +95,7 @@ QA 文件名搜索保留现有跨库分页响应。`discovery_scope="legacy"` �
 - `shougang-group-knowledge-portal/frontend/src/pages/HomePage.tsx`
 - `shougang-group-knowledge-portal/frontend/src/pages/QAPage.tsx`
 - `bisheng/src/backend/bisheng/knowledge/domain/services/knowledge_space_service.py`
+- `bisheng/src/backend/test/knowledge/test_knowledge_space_level_team_ks.py`
 - 对应门户、知识和工作站测试
 
 ## 可追踪性 Traceability
@@ -86,3 +106,4 @@ QA 文件名搜索保留现有跨库分页响应。`discovery_scope="legacy"` �
 | REQ-003 | QA tree cursor 响应、前端现有 IntersectionObserver |
 | REQ-004 | ChatProxyService、`resolve_shougang_portal_qa_scope_file_ids` |
 | REQ-005 | 现有 API schema、通用 browse 默认行为 |
+| REQ-006 | `get_grouped_spaces()` 个人分组名称防重、知识空间分组回归测试 |

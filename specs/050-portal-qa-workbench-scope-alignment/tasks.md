@@ -32,3 +32,27 @@
   - _Verification: 门户后端 pytest、BiSheng 知识/工作站 pytest、前端 tests/build、ruff、diff check_
   - _Depends: T002, T003, T004_
   - _Boundary: 相关模块回归，不运行无关全仓测试_
+
+- [x] T006 建立同名个人知识库分组失败回归
+  - Done when: 两个不同 ID、规范化名称相同的本人个人空间会使回归断言在修复前失败。
+  - _Requirements: REQ-006_
+  - _Acceptance: AC-REQ-006-01, AC-REQ-006-02_
+  - _Verification: V-AC-REQ-006-01_
+  - _Depends: none_
+  - _Boundary: `src/backend/test/knowledge/test_knowledge_space_level_team_ks.py`_
+
+- [x] T007 实现个人知识库分组名称防重
+  - Done when: 分组接口只保留既有排序中的第一条同名本人个人空间，其他分组和不同名空间行为不变。
+  - _Requirements: REQ-006_
+  - _Acceptance: AC-REQ-006-01, AC-REQ-006-02, AC-REQ-006-03_
+  - _Verification: V-AC-REQ-006-01, V-AC-REQ-006-02_
+  - _Depends: T006_
+  - _Boundary: `src/backend/bisheng/knowledge/domain/services/knowledge_space_service.py`_
+
+- [x] T008 更新重复个人知识库修复验证证据
+  - Done when: 定向回归、相关分组模块测试和静态检查结果记录到 `verification.md`。
+  - _Requirements: REQ-006_
+  - _Acceptance: AC-REQ-006-01, AC-REQ-006-02, AC-REQ-006-03_
+  - _Verification: V-AC-REQ-006-01, V-AC-REQ-006-02_
+  - _Depends: T007_
+  - _Boundary: verification only_

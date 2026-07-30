@@ -1,17 +1,34 @@
+# ruff: noqa: E402
+import importlib
 import subprocess
 import sys
+from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
+from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
 from bisheng.knowledge.domain.schemas.favorite_notification_schema import (
     FavoriteChangeEvent,
     FavoriteRecipientSnapshot,
+)
+from bisheng.knowledge.domain.services import favorite_notify
+from bisheng.knowledge.domain.services.department_file_view_access_service import (
+    DepartmentFileAccessStatus,
 )
 from bisheng.knowledge.domain.services.favorite_notify import (
     FAVORITE_SOURCE_DELETED,
     FAVORITE_SOURCE_RENAMED,
     FavoriteNotificationService,
 )
+
+_BACKEND = Path(__file__).resolve().parents[2]
+sys.modules["bisheng.worker"].__path__ = [str(_BACKEND / "bisheng/worker")]
+sys.modules["bisheng.worker.knowledge"].__path__ = [
+    str(_BACKEND / "bisheng/worker/knowledge")
+]
+worker_module = importlib.import_module("bisheng.worker.knowledge.favorite_notification")
 
 
 def test_knowledge_space_service_imports_in_fresh_process():
@@ -275,3 +292,108 @@ async def test_consumer_ignores_cross_tenant_source_and_references():
 
     assert await service.consume([_event()]) == 0
     message_service.send_generic_notify.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    (
+        "space_level",
+        "user_deleted",
+        "expected_sent",
+        "expected_permission_calls",
+    ),
+    [
+        (KnowledgeSpaceLevelEnum.PUBLIC, 0, 1, 0),
+        (KnowledgeSpaceLevelEnum.TEAM, 0, 0, 1),
+        (KnowledgeSpaceLevelEnum.PUBLIC, 1, 0, 0),
+    ],
+)
+async def test_worker_permission_matches_public_space_visibility(
+    space_level,
+    user_deleted,
+    expected_sent,
+    expected_permission_calls,
+):
+    source_file = SimpleNamespace(
+        id=20,
+        knowledge_id=10,
+        tenant_id=1,
+        deleted_at=None,
+    )
+    access_service = SimpleNamespace(
+        evaluate_file=AsyncMock(
+            return_value=SimpleNamespace(
+                status=DepartmentFileAccessStatus.NOT_APPLICABLE
+            )
+        )
+    )
+    session_context = MagicMock()
+    session_context.__aenter__ = AsyncMock(return_value=object())
+    session_context.__aexit__ = AsyncMock(return_value=None)
+
+    class CapturingNotificationService:
+        def __init__(self, *, can_view_file, **_kwargs):
+            self.can_view_file = can_view_file
+
+        async def consume(self, _events):
+            return int(await self.can_view_file(11, source_file))
+
+    with (
+        patch.object(
+            worker_module,
+            "get_async_db_session",
+            return_value=session_context,
+        ),
+        patch.object(worker_module, "KnowledgeFileRepositoryImpl"),
+        patch.object(worker_module, "DepartmentFileViewGrantRepositoryImpl"),
+        patch.object(
+            worker_module,
+            "DepartmentFileViewAccessService",
+            return_value=access_service,
+        ),
+        patch(
+            "bisheng.message.api.dependencies.get_message_service",
+            new=AsyncMock(return_value=object()),
+        ),
+        patch.object(
+            worker_module,
+            "FavoriteNotificationService",
+            CapturingNotificationService,
+        ),
+        patch.object(
+            favorite_notify.UserDao,
+            "aget_user",
+            new=AsyncMock(
+                return_value=SimpleNamespace(
+                    user_id=11,
+                    user_name="收藏者",
+                    delete=user_deleted,
+                )
+            ),
+        ),
+        patch.object(
+            favorite_notify.UserRoleDao,
+            "aget_user_roles",
+            new=AsyncMock(return_value=[]),
+        ),
+        patch.object(
+            favorite_notify.PermissionService,
+            "check",
+            new=AsyncMock(return_value=False),
+        ) as permission_check,
+        patch(
+            "bisheng.knowledge.domain.models.knowledge_space_scope."
+            "KnowledgeSpaceScopeDao.aget_by_space_id",
+            new=AsyncMock(
+                return_value=SimpleNamespace(
+                    tenant_id=1,
+                    level=space_level,
+                )
+            ),
+        ),
+    ):
+        sent = await worker_module._consume_async(
+            [_event().model_dump(mode="json")]
+        )
+
+    assert sent == expected_sent
+    assert permission_check.await_count == expected_permission_calls

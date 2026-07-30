@@ -19,12 +19,23 @@ import logging
 from collections import defaultdict
 from collections.abc import Awaitable, Callable, Iterable
 
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
+from bisheng.knowledge.domain.models.knowledge_space_scope import (
+    KnowledgeSpaceLevelEnum,
+    KnowledgeSpaceScopeDao,
+)
 from bisheng.knowledge.domain.schemas.favorite_notification_schema import (
     FavoriteChangeEvent,
     FavoriteRecipientSnapshot,
 )
+from bisheng.knowledge.domain.services.department_file_view_access_service import (
+    DepartmentFileAccessStatus,
+)
 from bisheng.message.domain.services.notification_content import build_notify_content
+from bisheng.permission.domain.services.permission_service import PermissionService
+from bisheng.user.domain.models.user import UserDao
+from bisheng.user.domain.models.user_role import UserRoleDao
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +59,69 @@ MAX_EVENTS_PER_TASK = 100
 MAX_DELETE_RECIPIENTS_PER_EVENT = 100
 
 CanViewFile = Callable[[int, object], Awaitable[bool]]
+
+
+async def can_user_view_favorite_source(
+    *,
+    user_id: int,
+    source_file: object,
+    tenant_id: int,
+    department_access_service=None,
+    public_space_cache: dict[int, bool] | None = None,
+) -> bool:
+    """按 Portal 实际可见性判断收藏者是否仍可查看源文件。"""
+    normalized_tenant_id = int(tenant_id)
+    if int(getattr(source_file, "tenant_id", 0) or 0) != normalized_tenant_id:
+        return False
+
+    user = await UserDao.aget_user(int(user_id))
+    if user is None or int(getattr(user, "delete", 0) or 0) != 0:
+        return False
+
+    space_id = int(getattr(source_file, "knowledge_id", 0) or 0)
+    is_public = (
+        public_space_cache.get(space_id)
+        if public_space_cache is not None and space_id in public_space_cache
+        else None
+    )
+    if is_public is None:
+        scope = await KnowledgeSpaceScopeDao.aget_by_space_id(space_id)
+        is_public = bool(
+            scope
+            and int(getattr(scope, "tenant_id", 0) or 0) == normalized_tenant_id
+            and getattr(getattr(scope, "level", None), "value", getattr(scope, "level", None))
+            == KnowledgeSpaceLevelEnum.PUBLIC.value
+        )
+        if public_space_cache is not None:
+            public_space_cache[space_id] = is_public
+    if is_public:
+        return True
+
+    roles = await UserRoleDao.aget_user_roles(int(user_id))
+    login_user = UserPayload(
+        user_id=int(user_id),
+        user_name=str(getattr(user, "user_name", "") or ""),
+        user_role=[int(role.role_id) for role in roles] or [-1],
+        tenant_id=normalized_tenant_id,
+    )
+
+    if department_access_service is not None:
+        decision = await department_access_service.evaluate_file(
+            login_user=login_user,
+            file=source_file,
+        )
+        if decision.status == DepartmentFileAccessStatus.ALLOWED:
+            return True
+        if decision.status != DepartmentFileAccessStatus.NOT_APPLICABLE:
+            return False
+
+    return await PermissionService.check(
+        user_id=int(user_id),
+        relation="can_read",
+        object_type="knowledge_file",
+        object_id=str(source_file.id),
+        login_user=login_user,
+    )
 
 
 async def collect_favorite_recipient_snapshots(

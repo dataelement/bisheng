@@ -47,6 +47,7 @@ from bisheng.knowledge.domain.services.favorite_notify import (
     FAVORITE_SOURCE_VERSION_ADDED,
     FAVORITE_SOURCE_VERSION_DELETED,
     FAVORITE_SOURCE_VERSION_LINKED,
+    can_user_view_favorite_source,
     collect_favorite_recipient_snapshots,
     enqueue_favorite_change_events,
 )
@@ -239,42 +240,15 @@ class KnowledgeVersionService:
         if file_record is None:
             return []
         try:
-            from bisheng.knowledge.domain.services.department_file_view_access_service import (
-                DepartmentFileAccessStatus,
-            )
-            from bisheng.permission.domain.services.permission_service import (
-                PermissionService,
-            )
-            from bisheng.user.domain.models.user import UserDao
-            from bisheng.user.domain.models.user_role import UserRoleDao
+            public_space_cache: dict[int, bool] = {}
 
             async def can_view_file(user_id: int, source_file: KnowledgeFile) -> bool:
-                user = await UserDao.aget_user(int(user_id))
-                if user is None or int(getattr(user, "delete", 0) or 0) != 0:
-                    return False
-                roles = await UserRoleDao.aget_user_roles(int(user_id))
-                login_user = UserPayload(
+                return await can_user_view_favorite_source(
                     user_id=int(user_id),
-                    user_name=str(getattr(user, "user_name", "") or ""),
-                    user_role=[int(role.role_id) for role in roles] or [-1],
                     tenant_id=int(self.login_user.tenant_id),
-                )
-                access_service = self.department_file_view_access_service
-                if access_service is not None:
-                    decision = await access_service.evaluate_file(
-                        login_user=login_user,
-                        file=source_file,
-                    )
-                    if decision.status == DepartmentFileAccessStatus.ALLOWED:
-                        return True
-                    if decision.status != DepartmentFileAccessStatus.NOT_APPLICABLE:
-                        return False
-                return await PermissionService.check(
-                    user_id=int(user_id),
-                    relation="can_read",
-                    object_type="knowledge_file",
-                    object_id=str(source_file.id),
-                    login_user=login_user,
+                    source_file=source_file,
+                    department_access_service=self.department_file_view_access_service,
+                    public_space_cache=public_space_cache,
                 )
 
             snapshots_by_file = await collect_favorite_recipient_snapshots(
