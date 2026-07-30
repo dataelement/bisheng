@@ -3,6 +3,7 @@
 import pytest
 
 from bisheng.common.errcode.flow import WorkflowMediaFileCountLimitError
+from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.workflow.nodes.input.input import InputNode, ParseModeEnum
 
 EXTRACT = ParseModeEnum.EXTRACT_TEXT.value
@@ -48,20 +49,17 @@ def test_parse_upload_variables_media_only_exposes_content():
     assert "dialog_image_files" not in result
 
 
-def test_count_media_files():
+def test_count_media_files(monkeypatch):
+    monkeypatch.setattr(
+        KnowledgeService,
+        "get_upload_file_original_name",
+        staticmethod(lambda name: name),
+    )
     urls = [
         "http://minio/bucket/abc123_recording.mp3",
         "http://minio/bucket/doc.pdf",
     ]
-    # Without KnowledgeService mock, extension-based count still works on URL tail
-    count = 0
-    for url in urls:
-        name = url.rsplit("/", 1)[-1]
-        from bisheng.knowledge.domain.upload_file_size import is_media_filename
-
-        if is_media_filename(name):
-            count += 1
-    assert count == 1
+    assert InputNode._count_media_files(urls) == 1
 
 
 def test_media_count_limit_raises():

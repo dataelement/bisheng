@@ -369,7 +369,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
     // task workspace). Skills are still resolved separately.
     if (taskMode && canUseTaskMode) {
       const trimmed = text.trim();
-      if (!trimmed && !(files || []).length) return;
+      if (!trimmed) return;
       sendMessage(trimmed, files, { taskMode: true });
       setInputText('');
       return;

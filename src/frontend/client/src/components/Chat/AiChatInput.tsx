@@ -286,9 +286,13 @@ const AiChatInput = memo(
             }
         }, [externalValue, isControlled]);
 
+        const hasAttachedFiles =
+            (chatFiles?.length ?? 0) > 0 || uploadingFiles.length > 0;
+
         const handleSend = useCallback(() => {
             const trimmed = text.trim();
-            if ((!trimmed && !chatFiles?.length) || disabled || sendDisabled || isStreaming || isParsingMedia || fileUploading) return;
+            // Workbench: uploaded files require accompanying text before send.
+            if (!trimmed || disabled || sendDisabled || isStreaming || isParsingMedia || fileUploading) return;
             // Pass files through to parent
             onSend(trimmed, chatFiles);
             setText("");
@@ -613,9 +617,11 @@ const AiChatInput = memo(
                                         />
                                     </svg>
                                 </button>
-                            ) : showVoice && !text?.trim() ? (
+                            ) : showVoice && !text?.trim() && !hasAttachedFiles ? (
                                 // Empty input → voice button (default); typing any
                                 // text flips it to the send button below.
+                                // When files are attached, keep the send button visible
+                                // (disabled until text is entered).
                                 <SpeechToTextComponent
                                     disabled={disabled}
                                     onChange={(e) => {
@@ -628,7 +634,7 @@ const AiChatInput = memo(
                                     type="button"
                                     onClick={handleSend}
                                     disabled={
-                                        (!text?.trim() && !chatFiles?.length) ||
+                                        !text?.trim() ||
                                         disabled ||
                                         sendDisabled ||
                                         isParsingMedia ||

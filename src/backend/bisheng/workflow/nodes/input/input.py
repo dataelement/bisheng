@@ -16,6 +16,7 @@ from bisheng.common.errcode.knowledge import KnowledgeFileNotSupportedError
 from bisheng.core.cache.utils import file_download
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
+from bisheng.knowledge.domain.upload_file_size import is_media_filename
 from bisheng.llm.domain.services import LLMService
 from bisheng.utils import generate_uuid
 from bisheng.workflow.callback.event import GuideQuestionData

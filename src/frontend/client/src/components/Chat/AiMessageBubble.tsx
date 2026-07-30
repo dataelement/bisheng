@@ -33,8 +33,8 @@ import {
 } from "~/components/Chat/MessageSelection";
 import { copyText, cn } from "~/utils";
 import type { AgentEvent, ChatMessage } from "~/api/chatApi";
-import { getFileTypebyFileName } from "~/components/ui/icon/File/FileIcon";
 import { MediaAttachmentChip, isMediaChipFile } from "~/components/Chat/attachments/MediaAttachmentChip";
+import { ChatHistoryFileRow } from "~/components/Chat/attachments/ChatHistoryFileRow";
 
 // Transient/retryable backend error codes surfaced by daily-mode chat — LLM rate
 // limit (12046), generic busy (429/503), thread-pool full (10540), dept concurrency
@@ -42,38 +42,9 @@ import { MediaAttachmentChip, isMediaChipFile } from "~/components/Chat/attachme
 // red error bubble. Mirrors the classifier's RETRYABLE intent on the status-code side.
 const RETRYABLE_ERROR_CODES = new Set([12046, 429, 503, 10540, 12045]);
 
-// Map an uploaded file's extension to a bisheng outlined file-type icon.
-// Anything not listed falls back to the generic Outlined.File icon.
-const FILE_TYPE_ICONS: Record<string, typeof Outlined.File> = {
-    // FileExcel
-    xls: Outlined.FileExcel,
-    xlsx: Outlined.FileExcel,
-    csv: Outlined.FileExcel,
-    et: Outlined.FileExcel,
-    // FilePdf
-    pdf: Outlined.FilePdf,
-    ppt: Outlined.FilePdf,
-    dps: Outlined.FilePdf,
-    // FileTxt
-    txt: Outlined.FileTxt,
-    // FileWord
-    doc: Outlined.FileWord,
-    docx: Outlined.FileWord,
-    wps: Outlined.FileWord,
-    // FileImage
-    png: Outlined.FileImage,
-    jpg: Outlined.FileImage,
-    jpeg: Outlined.FileImage,
-    bmp: Outlined.FileImage,
-    // FileEditing
-    md: Outlined.FileEditing,
-    // File (generic)
-    html: Outlined.File,
-};
-
 /**
- * Uploaded-file list for a user message. Video attachments render as square cover
- * thumbnails; other files stay as icon + filename rows.
+ * Uploaded-file list for a user message. All attachments render as square
+ * thumbnails in a single horizontal row (media + documents/images).
  */
 function UploadedFileList({ files }: { files: any[] }) {
     const scrollRef = useRef<HTMLDivElement>(null);
@@ -101,46 +72,26 @@ function UploadedFileList({ files }: { files: any[] }) {
 
     if (!files || files.length === 0) return null;
 
-    const mediaFiles = files.filter(isMediaChipFile);
-    const otherFiles = files.filter((file) => !isMediaChipFile(file));
-
     return (
         <div className="mb-2 mt-1 flex max-w-sm flex-col gap-2">
-            {mediaFiles.length > 0 && (
-                <div
-                    ref={scrollRef}
-                    onScroll={updateFade}
-                    style={maskStyle}
-                    className="scrollbar-os flex gap-2 overflow-x-auto"
-                >
-                    {mediaFiles.map((file, i) => (
+            <div
+                ref={scrollRef}
+                onScroll={updateFade}
+                style={maskStyle}
+                className="scrollbar-os flex gap-2 overflow-x-auto"
+            >
+                {files.map((file, i) =>
+                    isMediaChipFile(file) ? (
                         <MediaAttachmentChip
                             key={`media-${i}`}
                             file={file}
                             variant="message"
                         />
-                    ))}
-                </div>
-            )}
-            {otherFiles.length > 0 && (
-                <div className="flex flex-col gap-2">
-                    {otherFiles.map((file, i) => {
-                        const fileName = file.name || file.file_name || "File";
-                        const fileType = getFileTypebyFileName(fileName);
-                        const FileTypeIcon = FILE_TYPE_ICONS[fileType] ?? Outlined.File;
-                        return (
-                            <div key={`file-${i}`} className="flex shrink-0 items-center gap-1 text-[#999999]">
-                                <FileTypeIcon size={12} className="shrink-0 text-[#CCCCCC]" />
-                                <div className="min-w-0 flex-1 overflow-hidden">
-                                    <div className="truncate text-xs" title={fileName}>
-                                        {fileName}
-                                    </div>
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
-            )}
+                    ) : (
+                        <ChatHistoryFileRow key={`file-${i}`} file={file} />
+                    ),
+                )}
+            </div>
         </div>
     );
 }

@@ -89,7 +89,7 @@ export function MediaAttachmentChip({
                 onClick={handlePlay}
                 onRemove={onRemove}
                 allowRemoveWhileUploading={variant === 'bar'}
-                showHoverFileName={!!coverUrl && variant === 'bar'}
+                showHoverFileName={false}
                 className={cn('bg-[#f0f0f0]', className)}
                 overlay={
                     isParsing ? (

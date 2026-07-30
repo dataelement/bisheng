@@ -218,6 +218,10 @@ def _build_sync_http_client(timeout_seconds: int, cert_check: bool) -> PoolManag
 
 def _build_async_minio_session(timeout_seconds: int, cert_check: bool) -> RetryClient:
     """aiohttp session for miniopy-async with a configurable sock_read timeout."""
+    from bisheng.utils.async_utils import get_bridge_loop_for_sync_init
+
+    loop = get_bridge_loop_for_sync_init()
+
     if cert_check:
         ssl_context = ssl.create_default_context(
             cafile=os.environ.get("SSL_CERT_FILE") or certifi.where(),
@@ -237,7 +241,7 @@ def _build_async_minio_session(timeout_seconds: int, cert_check: bool) -> RetryC
     )
     return RetryClient(
         ClientSession(
-            connector=TCPConnector(limit=10, ssl=ssl_context),
+            connector=TCPConnector(limit=10, ssl=ssl_context, loop=loop),
             timeout=client_timeout,
         ),
         retry_options=retry_options,

@@ -44,7 +44,6 @@ export function InputPanelFileLabels({
             )}
             <span
                 className={cn('absolute bottom-3 left-3 right-3 z-[1] truncate', bottomClass)}
-                title={displayName}
             >
                 {displayName}
             </span>
@@ -119,7 +118,6 @@ export function UploadAttachmentThumbnailShell({
                         'bg-gradient-to-t from-black/75 via-black/35 to-transparent',
                         'opacity-0 transition-opacity group-hover:opacity-100 coarse-pointer:opacity-0',
                     )}
-                    title={fileName}
                 >
                     {fileName}
                 </div>
@@ -146,10 +144,6 @@ export function UploadAttachmentThumbnailShell({
             )}
         </div>
     );
-
-    if (isInputPanel) {
-        return card;
-    }
 
     return (
         <Tooltip>
