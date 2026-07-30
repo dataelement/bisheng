@@ -440,6 +440,7 @@ class PortalBannerSlide(BaseModel):
 class PortalIntegrationsConfig(BaseModel):
     bisheng_admin_entry_url: str = ""
     bisheng_knowledge_entry_url: str = ""
+    bisheng_platform_admin_url: str = ""
 
 
 class PortalSiteConfig(BaseModel):

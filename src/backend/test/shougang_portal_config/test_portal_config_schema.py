@@ -179,6 +179,25 @@ def test_portal_site_config_round_trips_home_cache_ttl():
     assert reloaded.portal.site.home_cache_ttl_seconds == 900
 
 
+def test_portal_integrations_round_trips_platform_admin_url():
+    raw_config = _minimal_portal_config()
+    platform_admin_url = "https://platform.example.com/admin"
+    raw_config["integrations"] = {
+        "bisheng_platform_admin_url": platform_admin_url,
+    }
+
+    config = ShougangPortalAdminConfig(
+        portal=raw_config,
+        bisheng={"base_url": "http://bisheng.example.com"},
+        unified_auth={},
+    )
+    saved_payload = config.model_dump(mode="json")
+    reloaded = ShougangPortalAdminConfig.model_validate(saved_payload)
+
+    assert saved_payload["portal"]["integrations"]["bisheng_platform_admin_url"] == platform_admin_url
+    assert reloaded.portal.integrations.bisheng_platform_admin_url == platform_admin_url
+
+
 def test_portal_site_config_defaults_and_validates_home_cache_ttl():
     config = ShougangPortalAdminConfig(
         portal=_minimal_portal_config(),
