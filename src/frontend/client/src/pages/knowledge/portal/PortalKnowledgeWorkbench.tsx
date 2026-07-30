@@ -97,6 +97,7 @@ import {
     BUSINESS_DOMAIN_OPTIONS,
     filterBusinessDomainOptionsByCodes,
     normalizeBusinessDomainOptions,
+    parseFileEncoding,
 } from "./uploadMetadata";
 import s from "./PortalKnowledgeWorkbench.module.css";
 
@@ -888,9 +889,12 @@ export default function PortalKnowledgeWorkbench() {
         newEncoding: string,
         fileSubcategoryCode?: string | null,
     ) => {
+        // Domain is the 3rd encoding segment; prefix fallback only matters for short encodings.
+        const parsedBusinessDomainCode = parseFileEncoding(newEncoding).businessDomainCode;
         patchFileById(fileId, (file) => ({
             ...file,
             fileEncoding: newEncoding,
+            ...(parsedBusinessDomainCode ? { businessDomainCode: parsedBusinessDomainCode } : {}),
             ...(fileSubcategoryCode !== undefined ? { fileSubcategoryCode } : {}),
         }));
     }, [patchFileById]);
@@ -2407,9 +2411,11 @@ export default function PortalKnowledgeWorkbench() {
                     newEncoding,
                 );
             }
+            const parsedBusinessDomainCode = parseFileEncoding(newEncoding).businessDomainCode;
             patchFileById(selectedFile.id, (file) => ({
                 ...file,
                 fileEncoding: newEncoding,
+                ...(parsedBusinessDomainCode ? { businessDomainCode: parsedBusinessDomainCode } : {}),
                 ...(fileSubcategoryCode !== undefined ? { fileSubcategoryCode } : {}),
             }));
             showToast({ message: "编码更新成功", severity: NotificationSeverity.SUCCESS });

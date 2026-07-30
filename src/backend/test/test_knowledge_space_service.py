@@ -1835,6 +1835,63 @@ async def test_update_file_encoding_bumps_serial_when_duplicate_across_all_space
 
 
 @pytest.mark.asyncio
+async def test_update_file_encoding_syncs_split_rule_category_and_business_domain(service):
+    """Editing encoding must update split_rule so list/reparse keep the new selection."""
+    service.normalize_file_category_code = lambda value: str(value).strip().upper() if value else None
+    file_record = _make_file(
+        file_id=501,
+        knowledge_id=10,
+        file_name="编码文档.pdf",
+    )
+    file_record.file_encoding = "SGGF-STD-EM-20260600000001"
+    file_record.split_rule = json.dumps(
+        {"file_category_code": "STD", "business_domain_code": "EM"},
+        ensure_ascii=False,
+    )
+
+    with (
+        patch.object(
+            service,
+            "_get_file_for_action",
+            new_callable=AsyncMock,
+            return_value=file_record,
+        ),
+        patch.object(
+            service,
+            "_require_permission_id",
+            new_callable=AsyncMock,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id",
+            new_callable=AsyncMock,
+            return_value=SimpleNamespace(business_domain_codes=["PP", "EM"]),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.acount_by_file_encoding",
+            new_callable=AsyncMock,
+            return_value=0,
+            create=True,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.async_update",
+            new_callable=AsyncMock,
+            side_effect=lambda record: record,
+        ),
+        patch.object(
+            service,
+            "_notify_favorite_source_changed",
+            new_callable=AsyncMock,
+        ),
+    ):
+        updated = await service.update_file_encoding(501, "SGGF-RPT-PP-20260600000001")
+
+    assert updated.file_encoding == "SGGF-RPT-PP-20260600000001"
+    split_rule = json.loads(updated.split_rule)
+    assert split_rule["file_category_code"] == "RPT"
+    assert split_rule["business_domain_code"] == "PP"
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("new_encoding", "new_subcategory_code", "expected_subcategory_code"),
     [

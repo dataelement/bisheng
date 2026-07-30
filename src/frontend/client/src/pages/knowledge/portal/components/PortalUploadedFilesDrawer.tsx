@@ -425,11 +425,14 @@ export function PortalUploadedFilesDrawer({
             }
             // Patch the edited row in place instead of refetching the whole list, which
             // would flicker the whole dialog. The new values are already known locally.
+            // Keep businessDomainCode aligned with encoding so the domain column does not
+            // fall back to the pre-edit upload-time selection after drafts clear.
             setRecords((prev) => prev.map((item) => (
                 item.id === record.id
                     ? {
                         ...item,
                         fileEncoding: newEncoding,
+                        businessDomainCode: businessDomainCode || item.businessDomainCode,
                         fileSubcategoryCode: normalizedSubcategoryCode !== undefined
                             ? normalizedSubcategoryCode
                             : item.fileSubcategoryCode,
