@@ -12,6 +12,7 @@ from typing import Union
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy.engine import Connection
 
 from bisheng.core.database.dialect_helpers import (
     UPDATE_TIME_SERVER_DEFAULT,
@@ -25,6 +26,15 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 _TABLE_NAME = "system_dictionary"
+_TABLE = sa.table(
+    _TABLE_NAME,
+    sa.column("type", sa.String(length=64)),
+    sa.column("dict_key", sa.String(length=255)),
+    sa.column("dict_value", sa.String(length=255)),
+    sa.column("sort_order", sa.Integer()),
+    sa.column("is_enabled", sa.Boolean()),
+    sa.column("tenant_id", sa.Integer()),
+)
 
 _INDEXES = {
     "ix_system_dictionary_type": ["type"],
@@ -180,14 +190,21 @@ def _create_table() -> None:
     )
 
 
-def _seed_data() -> None:
+def _seed_data(connection: Connection) -> None:
+    existing_keys = {
+        (str(row.type), str(row.dict_key))
+        for row in connection.execute(sa.select(_TABLE.c.type, _TABLE.c.dict_key).where(_TABLE.c.tenant_id == 1))
+    }
     rows = []
     for dict_type, values in _INITIAL_VALUES.items():
         for index, value in enumerate(values):
+            dict_key = f"{dict_type}_{index + 1:03d}"
+            if (dict_type, dict_key) in existing_keys:
+                continue
             rows.append(
                 {
                     "type": dict_type,
-                    "dict_key": f"{dict_type}_{index + 1:03d}",
+                    "dict_key": dict_key,
                     "dict_value": value,
                     "sort_order": index,
                     "is_enabled": True,
@@ -195,7 +212,7 @@ def _seed_data() -> None:
                 }
             )
     if rows:
-        op.bulk_insert(_TABLE_NAME, rows)
+        op.bulk_insert(_TABLE, rows)
 
 
 def upgrade() -> None:
@@ -207,7 +224,7 @@ def upgrade() -> None:
         if not index_exists(conn, _TABLE_NAME, index_name):
             op.create_index(index_name, _TABLE_NAME, columns, unique=False)
 
-    _seed_data()
+    _seed_data(conn)
 
 
 def downgrade() -> None:
