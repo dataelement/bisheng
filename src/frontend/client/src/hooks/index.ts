@@ -28,6 +28,8 @@ export { useContainerCompact, TOOLBAR_COMPACT_THRESHOLD } from './useContainerCo
 export { default as usePrefersMobileLayout } from './usePrefersMobileLayout';
 export { default as useScrollToRef } from './useScrollToRef';
 export { useScrollRevealRef } from './useScrollRevealRef';
+export { useCategorizedKnowledgeSpaces } from './useCategorizedKnowledgeSpaces';
+export type { KnowledgeSpaceCategory, KnowledgeSpaceGroup } from './useCategorizedKnowledgeSpaces';
 export { default as useLocalStorage } from './useLocalStorage';
 export { default as useDelayedRender } from './useDelayedRender';
 export { default as useOnClickOutside } from './useOnClickOutside';
