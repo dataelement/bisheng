@@ -89,6 +89,78 @@ def test_department_subtree_userset_is_not_expanded():
     assert assignee.include_children is True
 
 
+def test_legacy_include_children_binding_normalizes_member_to_subtree():
+    binding = LegacyGrantBinding(
+        binding_key="binding-subtree",
+        tenant_id=7,
+        resource_type="workflow",
+        resource_id="wf-1",
+        relation="viewer",
+        model_source_key="custom-viewer",
+        subject_type="department",
+        subject_id="22",
+        include_children=True,
+    )
+
+    result = map_legacy_tuples(
+        (
+            _tuple(
+                user="department:22#member",
+                relation="viewer",
+            ),
+        ),
+        (binding,),
+        model_key_by_source={"custom-viewer": "custom-viewer"},
+    )
+
+    assert result.blockers == ()
+    assignee = result.grants[0].assignees[0]
+    assert assignee.subject_id == "22"
+    assert assignee.userset_relation == "subtree_member"
+    assert assignee.include_children is True
+
+
+def test_legacy_expanded_department_children_are_retired_not_independent_grants():
+    binding = LegacyGrantBinding(
+        binding_key="binding-subtree",
+        tenant_id=7,
+        resource_type="workflow",
+        resource_id="wf-1",
+        relation="viewer",
+        model_source_key="custom-viewer",
+        subject_type="department",
+        subject_id="22",
+        include_children=True,
+    )
+    root = _tuple(
+        user="department:22#member",
+        relation="viewer",
+    )
+    child = _tuple(
+        user="department:23#member",
+        relation="viewer",
+    )
+    parent = LegacyTupleSource(
+        tenant_id=None,
+        user="department:22",
+        relation="parent",
+        object="department:23",
+    )
+
+    result = map_legacy_tuples(
+        (root, child, parent),
+        (binding,),
+        model_key_by_source={"custom-viewer": "custom-viewer"},
+    )
+
+    assert result.blockers == ()
+    assert len(result.grants) == 1
+    assert len(result.grants[0].assignees) == 1
+    assert result.grants[0].assignees[0].subject_id == "22"
+    assert set(result.retired_tuple_keys) == {root.key, child.key}
+    assert result.preserved_tuples == (parent,)
+
+
 def test_multiple_models_and_sources_are_retained_without_highest_model_flattening():
     tuples = (
         _tuple(user="user:11", relation="editor"),
@@ -269,6 +341,30 @@ def test_conflicting_or_missing_binding_model_blocks_without_fallback():
 
     assert result.grants == ()
     assert result.blockers == ("CONFLICTING_BINDINGS",)
+
+
+def test_binding_without_direct_root_tuple_is_an_orphan_blocker():
+    binding = LegacyGrantBinding(
+        binding_key="orphan-binding",
+        tenant_id=7,
+        resource_type="workflow",
+        resource_id="wf-1",
+        relation="viewer",
+        model_source_key="custom-viewer",
+        subject_type="department",
+        subject_id="22",
+        include_children=True,
+    )
+
+    result = map_legacy_tuples(
+        (),
+        (binding,),
+        model_key_by_source={"custom-viewer": "custom-viewer"},
+    )
+
+    assert result.grants == ()
+    assert result.blockers == ("ORPHAN_BINDING",)
+    assert result.differences[0].tuple_key == "binding:orphan-binding"
 
 
 def test_business_creator_becomes_protected_owner_and_divergent_owner_is_retained():

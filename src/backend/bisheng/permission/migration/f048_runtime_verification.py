@@ -378,7 +378,7 @@ class LiveMigrationEvidenceProvider:
                             PermissionGrant.model_key == "owner",
                             PermissionGrantAssignee.subject_type == "user",
                             PermissionGrantAssignee.subject_id == str(owner_id),
-                            PermissionGrantAssignee.protected.is_(True),
+                            PermissionGrantAssignee.protected == 1,
                             PermissionGrantAssignee.state == "ACTIVE",
                         )
                     )
@@ -443,17 +443,14 @@ class LiveMigrationEvidenceProvider:
         catalog: PermissionCatalogRelease | None,
         model_release: AuthorizationModelRelease | None,
     ) -> InstancePinEvidence:
-        expected_checksum = authorization_model_checksum(
-            build_authorization_model_f048()
-        )
+        expected_checksum = authorization_model_checksum(build_authorization_model_f048())
         return InstancePinEvidence(
             role="migration-target",
             ready=bool(
                 catalog
                 and model_release
                 and catalog.status == "CURRENT"
-                and catalog.required_authorization_model_release_id
-                == model_release.id
+                and catalog.required_authorization_model_release_id == model_release.id
                 and model_release.status == "STAGED"
                 and model_release.store_id == run.store_id
                 and model_release.model_id == run.target_model_id
@@ -461,9 +458,7 @@ class LiveMigrationEvidenceProvider:
             ),
             store_id=str(model_release.store_id if model_release else ""),
             model_id=str(model_release.model_id if model_release else ""),
-            catalog_release_id=(
-                int(catalog.id) if catalog and catalog.id else None
-            ),
+            catalog_release_id=(int(catalog.id) if catalog and catalog.id else None),
             dual_model_mode=False,
             legacy_model_id=None,
         )

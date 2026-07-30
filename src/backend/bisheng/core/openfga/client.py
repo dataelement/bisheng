@@ -18,7 +18,8 @@ from .exceptions import FGAClientError, FGAConnectionError, FGAModelError, FGAWr
 logger = logging.getLogger(__name__)
 OPENFGA_WRITE_TUPLE_LIMIT = 100
 BUSINESS_ATOMIC_TUPLE_LIMIT = 90
-OPENFGA_BATCH_CHECK_LIMIT = 100
+OPENFGA_BATCH_CHECK_LIMIT = 50
+BUSINESS_BATCH_CHECK_LIMIT = 100
 httpx_request_loggers = (
     logging.getLogger("httpx"),
     logging.getLogger("httpx._client"),
@@ -107,25 +108,33 @@ class FGAClient:
         """
         if not checks:
             return []
-        if len(checks) > OPENFGA_BATCH_CHECK_LIMIT:
-            raise FGAClientError(
-                f"BatchCheck exceeds {OPENFGA_BATCH_CHECK_LIMIT} checks"
+        if len(checks) > BUSINESS_BATCH_CHECK_LIMIT:
+            raise FGAClientError(f"BatchCheck exceeds {BUSINESS_BATCH_CHECK_LIMIT} checks")
+        resolved: list[bool] = []
+        for offset in range(0, len(checks), OPENFGA_BATCH_CHECK_LIMIT):
+            batch = checks[offset : offset + OPENFGA_BATCH_CHECK_LIMIT]
+            body = {
+                "authorization_model_id": self._model_id,
+                "checks": [
+                    {
+                        "tuple_key": {
+                            "user": check["user"],
+                            "relation": check["relation"],
+                            "object": check["object"],
+                        },
+                        "correlation_id": str(index),
+                    }
+                    for index, check in enumerate(batch)
+                ],
+            }
+            if consistency:
+                body["consistency"] = consistency
+            data = await self._post(
+                f"/stores/{self._store_id}/batch-check",
+                body,
             )
-        body = {
-            "authorization_model_id": self._model_id,
-            "checks": [
-                {
-                    "tuple_key": {"user": c["user"], "relation": c["relation"], "object": c["object"]},
-                    "correlation_id": str(i),
-                }
-                for i, c in enumerate(checks)
-            ],
-        }
-        if consistency:
-            body["consistency"] = consistency
-        data = await self._post(f"/stores/{self._store_id}/batch-check", body)
-        results = data.get("result", {})
-        resolved = [results.get(str(i), {}).get("allowed", False) for i in range(len(checks))]
+            results = data.get("result", {})
+            resolved.extend(results.get(str(index), {}).get("allowed", False) for index in range(len(batch)))
         logger.debug(
             "OpenFGA BatchCheck completed: store_id=%s model_id=%s count=%s",
             self._store_id,
@@ -206,18 +215,12 @@ class FGAClient:
         """Assemble the OpenFGA write request body, or None when nothing to do."""
         operation_count = len(writes or ()) + len(deletes or ())
         if operation_count > OPENFGA_WRITE_TUPLE_LIMIT:
-            raise FGAWriteError(
-                f"OpenFGA Write exceeds {OPENFGA_WRITE_TUPLE_LIMIT} tuple operations"
-            )
+            raise FGAWriteError(f"OpenFGA Write exceeds {OPENFGA_WRITE_TUPLE_LIMIT} tuple operations")
         body: dict[str, Any] = {}
         if writes:
-            body["writes"] = {
-                "tuple_keys": [self._tuple_key(t) for t in writes]
-            }
+            body["writes"] = {"tuple_keys": [self._tuple_key(t) for t in writes]}
         if deletes:
-            body["deletes"] = {
-                "tuple_keys": [self._tuple_key(t) for t in deletes]
-            }
+            body["deletes"] = {"tuple_keys": [self._tuple_key(t) for t in deletes]}
         return body if body else None
 
     @staticmethod
@@ -277,7 +280,9 @@ class FGAClient:
         tuples: list[dict] = []
         continuation_token: str | None = None
         while True:
-            body: dict[str, Any] = {"tuple_key": tuple_key, "page_size": 100}
+            body: dict[str, Any] = {"page_size": 100}
+            if tuple_key:
+                body["tuple_key"] = tuple_key
             if consistency:
                 body["consistency"] = consistency
             if continuation_token:
@@ -322,14 +327,9 @@ class FGAClient:
             if continuation_token:
                 params["continuation_token"] = continuation_token
             query = str(httpx.QueryParams(params))
-            data = await self._get(
-                f"/stores/{self._store_id}/authorization-models?{query}"
-            )
+            data = await self._get(f"/stores/{self._store_id}/authorization-models?{query}")
             models.extend(data.get("authorization_models", ()))
-            continuation_token = (
-                data.get("continuation_token")
-                or data.get("continuationToken")
-            )
+            continuation_token = data.get("continuation_token") or data.get("continuationToken")
             if not continuation_token:
                 return models
 

@@ -123,7 +123,7 @@ class SqlPermissionControlState:
                             )
                             .where(
                                 col(PermissionModelAction.model_id).in_(model_ids),
-                                PermissionAction.active.is_(True),
+                                PermissionAction.active == 1,
                             )
                         )
                     ).all()
@@ -412,7 +412,7 @@ class SqlPermissionControlState:
             .limit(limit)
         )
         if protected_only:
-            statement = statement.where(PermissionGrantAssignee.protected.is_(True))
+            statement = statement.where(PermissionGrantAssignee.protected == 1)
         return [(row, str(model_key)) for row, model_key in (await session.execute(statement)).all()]
 
     async def ensure_mode_row(

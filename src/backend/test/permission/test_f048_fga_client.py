@@ -12,10 +12,12 @@ import pytest
 from bisheng.common.errcode.permission import PermissionMutationTooLargeError
 from bisheng.core.openfga.client import (
     BUSINESS_ATOMIC_TUPLE_LIMIT,
+    BUSINESS_BATCH_CHECK_LIMIT,
+    OPENFGA_BATCH_CHECK_LIMIT,
     OPENFGA_WRITE_TUPLE_LIMIT,
     FGAClient,
 )
-from bisheng.core.openfga.exceptions import FGAWriteError
+from bisheng.core.openfga.exceptions import FGAClientError, FGAWriteError
 
 
 @pytest.fixture
@@ -78,6 +80,57 @@ async def test_check_batch_and_list_are_model_scoped_with_consistency(
 
 
 @pytest.mark.asyncio
+async def test_batch_check_splits_business_batch_at_openfga_limit(
+    client: FGAClient,
+) -> None:
+    checks = [
+        {
+            "user": "user:7",
+            "relation": "can_edit",
+            "object": f"workflow:w{index}",
+        }
+        for index in range(BUSINESS_BATCH_CHECK_LIMIT)
+    ]
+    client._post = AsyncMock(
+        side_effect=[
+            {"result": {str(index): {"allowed": index % 2 == 0} for index in range(OPENFGA_BATCH_CHECK_LIMIT)}},
+            {"result": {str(index): {"allowed": index % 2 == 1} for index in range(OPENFGA_BATCH_CHECK_LIMIT)}},
+        ]
+    )
+
+    result = await client.batch_check(
+        checks,
+        consistency="HIGHER_CONSISTENCY",
+    )
+
+    assert len(result) == BUSINESS_BATCH_CHECK_LIMIT
+    assert result[:OPENFGA_BATCH_CHECK_LIMIT] == [index % 2 == 0 for index in range(OPENFGA_BATCH_CHECK_LIMIT)]
+    assert result[OPENFGA_BATCH_CHECK_LIMIT:] == [index % 2 == 1 for index in range(OPENFGA_BATCH_CHECK_LIMIT)]
+    assert client._post.await_count == 2
+    assert all(len(call.args[1]["checks"]) == OPENFGA_BATCH_CHECK_LIMIT for call in client._post.call_args_list)
+
+
+@pytest.mark.asyncio
+async def test_batch_check_rejects_more_than_business_limit(
+    client: FGAClient,
+) -> None:
+    checks = [
+        {
+            "user": "user:7",
+            "relation": "can_edit",
+            "object": f"workflow:w{index}",
+        }
+        for index in range(BUSINESS_BATCH_CHECK_LIMIT + 1)
+    ]
+
+    with pytest.raises(
+        FGAClientError,
+        match=f"exceeds {BUSINESS_BATCH_CHECK_LIMIT}",
+    ):
+        await client.batch_check(checks)
+
+
+@pytest.mark.asyncio
 async def test_read_is_store_scoped_and_delete_uses_only_tuple_keys(
     client: FGAClient,
 ) -> None:
@@ -119,6 +172,19 @@ async def test_read_is_store_scoped_and_delete_uses_only_tuple_keys(
     assert write_body["authorization_model_id"] == "model-f048"
     assert write_body["deletes"]["tuple_keys"] == rows
     assert all("authorization_model_id" not in row for row in rows)
+
+
+@pytest.mark.asyncio
+async def test_unfiltered_read_omits_empty_tuple_key(
+    client: FGAClient,
+) -> None:
+    client._post = AsyncMock(return_value={"tuples": []})
+
+    assert await client.read_tuples() == []
+
+    read_path, read_body = client._post.call_args.args
+    assert read_path == "/stores/store-1/read"
+    assert read_body == {"page_size": 100}
 
 
 @pytest.mark.asyncio

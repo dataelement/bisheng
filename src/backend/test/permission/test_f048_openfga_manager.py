@@ -91,18 +91,24 @@ async def test_discovery_selects_unique_named_store_and_latest_model() -> None:
         model_checksum=authorization_model_checksum(model),
     )
     assert all(request.startswith("http://openfga:8080/") for request in requests)
+    store_requests = [request for request in requests if "/stores?" in request]
+    assert store_requests == ["http://openfga:8080/stores?name=bisheng&page_size=2"]
 
 
 @pytest.mark.asyncio
-async def test_discovery_fails_closed_for_duplicate_store_name() -> None:
+async def test_discovery_fails_closed_after_two_duplicate_store_matches() -> None:
+    requests: list[str] = []
+
     def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(str(request.url))
         return httpx.Response(
             200,
             json={
                 "stores": [
                     {"id": "store-a", "name": "bisheng"},
                     {"id": "store-b", "name": "bisheng"},
-                ]
+                ],
+                "continuation_token": "more-duplicates-exist",
             },
         )
 
@@ -120,6 +126,45 @@ async def test_discovery_fails_closed_for_duplicate_store_name() -> None:
                 allow_bootstrap=False,
                 http_client=client,
             )
+
+    assert requests == ["http://openfga:8080/stores?name=bisheng&page_size=2"]
+
+
+@pytest.mark.asyncio
+async def test_development_bootstrap_checks_by_name_before_creating_store() -> None:
+    model = build_authorization_model_f048()
+    requests: list[tuple[str, str]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append((request.method, str(request.url)))
+        if request.url.path == "/stores" and request.method == "GET":
+            return httpx.Response(200, json={"stores": []})
+        if request.url.path == "/stores" and request.method == "POST":
+            return httpx.Response(200, json={"id": "store-created"})
+        if request.url.path == "/stores/store-created/authorization-models" and request.method == "GET":
+            return httpx.Response(200, json={"authorization_models": []})
+        if request.url.path == "/stores/store-created/authorization-models" and request.method == "POST":
+            return httpx.Response(200, json={"authorization_model_id": "model-created"})
+        if request.url.path.endswith("/authorization-models/model-created"):
+            return httpx.Response(200, json={"authorization_model": model})
+        return httpx.Response(404)
+
+    async with httpx.AsyncClient(
+        base_url="http://openfga:8080",
+        transport=httpx.MockTransport(handler),
+    ) as client:
+        pin = await discover_openfga_runtime(
+            _config(),
+            expected_model=model,
+            allow_bootstrap=True,
+            http_client=client,
+        )
+
+    assert pin.store_id == "store-created"
+    assert requests[:2] == [
+        ("GET", "http://openfga:8080/stores?name=bisheng&page_size=2"),
+        ("POST", "http://openfga:8080/stores"),
+    ]
 
 
 @pytest.mark.asyncio

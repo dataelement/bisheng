@@ -200,6 +200,11 @@ def map_legacy_models(
     """Map legacy models without guessing missing actions or manage ranges."""
 
     action_release = build_initial_action_release()
+    standard_actions = {
+        model.model_key: model.action_codes
+        for model in derive_permission_models(action_release).models
+        if model.kind == "STANDARD"
+    }
     standard_references: dict[str, str] = {}
     candidates: list[tuple[LegacyPermissionModel, CustomModelSelection, str]] = []
     differences: list[ModelMappingDifference] = []
@@ -242,6 +247,9 @@ def map_legacy_models(
                     message="legacy model has no concrete action after view removal",
                 )
             )
+            continue
+        if model.is_system and relation in STANDARD_RELATION_LEVELS and action_codes == standard_actions[relation]:
+            standard_references[model.source_key] = relation
             continue
 
         derived_level = max(INITIAL_ACTION_LEVELS[code] for code in action_codes)

@@ -58,6 +58,38 @@ def test_edited_system_and_custom_models_keep_stable_keys_and_exact_actions():
     assert mapped_custom.derived_level == 2
 
 
+def test_edited_system_model_equal_to_standard_reuses_fixed_identity():
+    result = map_legacy_models(
+        (
+            LegacyPermissionModel(
+                source_key="owner",
+                name="所有者",
+                relation="owner",
+                permissions=(
+                    "manage_app_viewer",
+                    "rename_file",
+                    "edit_app",
+                    "create_folder",
+                    "upload_file",
+                    "move_file",
+                    "download_file",
+                    "delete_app",
+                    "share_app",
+                    "use_app",
+                    "publish_app",
+                    "unpublish_app",
+                ),
+                is_system=True,
+                permissions_explicit=True,
+            ),
+        )
+    )
+
+    assert result.standard_references == {"owner": "owner"}
+    assert result.custom_models == ()
+    assert result.blockers == ()
+
+
 def test_view_only_and_unknown_actions_are_blockers_not_silent_defaults():
     result = map_legacy_models(
         (

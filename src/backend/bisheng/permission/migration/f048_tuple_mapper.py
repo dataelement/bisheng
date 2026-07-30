@@ -134,8 +134,23 @@ def compile_department_child_mirrors(
     symmetric ``department:<child> child department:<parent>`` tuple as well.
     """
 
-    parent_by_child: dict[str, str] = {}
+    parent_by_child = _department_parent_by_child(tuples)
     mirrors: dict[tuple[str, str, str], dict[str, str]] = {}
+    for child_id, parent_id in sorted(parent_by_child.items()):
+        row = {
+            "user": f"department:{child_id}",
+            "relation": "child",
+            "object": f"department:{parent_id}",
+        }
+        mirrors[(row["user"], row["relation"], row["object"])] = row
+
+    return tuple(mirrors[key] for key in sorted(mirrors))
+
+
+def _department_parent_by_child(
+    tuples: tuple[LegacyTupleSource, ...],
+) -> dict[str, str]:
+    parent_by_child: dict[str, str] = {}
     for source in sorted(tuples, key=lambda row: row.key):
         if source.relation != "parent":
             continue
@@ -156,13 +171,6 @@ def compile_department_child_mirrors(
         existing_parent = parent_by_child.setdefault(child_id, parent_id)
         if existing_parent != parent_id:
             raise ValueError("MULTIPLE_DEPARTMENT_PARENTS")
-        row = {
-            "user": f"department:{child_id}",
-            "relation": "child",
-            "object": f"department:{parent_id}",
-        }
-        mirrors[(row["user"], row["relation"], row["object"])] = row
-
     for child_id in parent_by_child:
         seen: set[str] = set()
         cursor = child_id
@@ -171,7 +179,25 @@ def compile_department_child_mirrors(
                 raise ValueError("DEPARTMENT_PARENT_CYCLE")
             seen.add(cursor)
             cursor = parent_by_child[cursor]
-    return tuple(mirrors[key] for key in sorted(mirrors))
+    return parent_by_child
+
+
+def _is_strict_department_descendant(
+    *,
+    candidate_id: str,
+    root_id: str,
+    parent_by_child: dict[str, str],
+) -> bool:
+    cursor = candidate_id
+    seen: set[str] = set()
+    while cursor in parent_by_child:
+        if cursor in seen:
+            return False
+        seen.add(cursor)
+        cursor = parent_by_child[cursor]
+        if cursor == root_id:
+            return candidate_id != root_id
+    return False
 
 
 def _binding_matches(
@@ -184,6 +210,14 @@ def _binding_matches(
     subject_id: str,
     userset_relation: str | None,
 ) -> bool:
+    userset_matches = binding.userset_relation in {None, userset_relation}
+    if (
+        binding.subject_type == "department"
+        and binding.include_children
+        and binding.userset_relation in {None, "member", "subtree_member"}
+        and userset_relation in {"member", "subtree_member"}
+    ):
+        userset_matches = True
     return (
         binding.tenant_id == source.tenant_id
         and binding.resource_type == resource_type
@@ -191,7 +225,36 @@ def _binding_matches(
         and binding.relation == source.relation
         and binding.subject_type in {None, subject_type}
         and binding.subject_id in {None, subject_id}
-        and binding.userset_relation in {None, userset_relation}
+        and userset_matches
+    )
+
+
+def _binding_matches_department_projection(
+    binding: LegacyGrantBinding,
+    source: LegacyTupleSource,
+    *,
+    resource_type: str,
+    resource_id: str,
+    subject_type: str,
+    subject_id: str,
+    userset_relation: str | None,
+    parent_by_child: dict[str, str],
+) -> bool:
+    return (
+        binding.tenant_id == source.tenant_id
+        and binding.resource_type == resource_type
+        and binding.resource_id == resource_id
+        and binding.relation == source.relation
+        and binding.subject_type == "department"
+        and binding.subject_id is not None
+        and binding.include_children
+        and subject_type == "department"
+        and userset_relation == "member"
+        and _is_strict_department_descendant(
+            candidate_id=subject_id,
+            root_id=binding.subject_id,
+            parent_by_child=parent_by_child,
+        )
     )
 
 
@@ -205,7 +268,20 @@ def _assignee(
 ) -> MappedGrantAssignee:
     include_children = userset_relation == "subtree_member"
     if binding is not None:
-        if binding.include_children != include_children and binding.subject_type == "department":
+        subject_type = binding.subject_type or subject_type
+        subject_id = binding.subject_id or subject_id
+        if subject_type == "department":
+            if binding.userset_relation not in {
+                None,
+                "member",
+                "subtree_member",
+            }:
+                raise ValueError("BINDING_USERSET_MISMATCH")
+            include_children = binding.include_children
+            userset_relation = (
+                "subtree_member" if include_children else (binding.userset_relation or userset_relation or "member")
+            )
+        elif binding.include_children:
             raise ValueError("BINDING_USERSET_MISMATCH")
         source_type = binding.source_type or {
             "user": "DIRECT",
@@ -265,7 +341,26 @@ def map_legacy_tuples(
     retired: list[str] = []
     differences: list[TupleMappingDifference] = []
     seen_tuple_keys: set[str] = set()
+    matched_binding_keys: set[str] = set()
     deduplicated_count = 0
+    try:
+        department_parent_by_child = _department_parent_by_child(tuples)
+    except ValueError as exc:
+        return TupleMappingResult(
+            grants=(),
+            preserved_tuples=(),
+            retired_tuple_keys=(),
+            differences=(
+                TupleMappingDifference(
+                    tuple_key="department-topology",
+                    difference_type=str(exc),
+                    message="invalid department parent topology",
+                ),
+            ),
+            blockers=(str(exc),),
+            deduplicated_count=0,
+            checksum=_checksum({"department_topology_error": str(exc)}),
+        )
 
     for source in sorted(tuples, key=lambda row: row.key):
         if source.key in seen_tuple_keys:
@@ -313,6 +408,7 @@ def map_legacy_tuples(
                 userset_relation=userset_relation,
             )
         )
+        matched_binding_keys.update(binding.binding_key for binding in matches)
         if len(matches) > 1:
             differences.append(
                 TupleMappingDifference(
@@ -323,6 +419,24 @@ def map_legacy_tuples(
             )
             continue
         binding = matches[0] if matches else None
+        if binding is None:
+            projection_matches = tuple(
+                candidate
+                for candidate in bindings
+                if _binding_matches_department_projection(
+                    candidate,
+                    source,
+                    resource_type=resource_type,
+                    resource_id=resource_id,
+                    subject_type=subject_type,
+                    subject_id=subject_id,
+                    userset_relation=userset_relation,
+                    parent_by_child=department_parent_by_child,
+                )
+            )
+            if projection_matches:
+                retired.append(source.key)
+                continue
         if binding is not None:
             model_key = model_key_by_source.get(binding.model_source_key)
             if model_key is None:
@@ -467,6 +581,17 @@ def map_legacy_tuples(
                     severity="INFO",
                 )
             )
+
+    for binding in bindings:
+        if binding.binding_key in matched_binding_keys:
+            continue
+        differences.append(
+            TupleMappingDifference(
+                tuple_key=f"binding:{binding.binding_key}",
+                difference_type="ORPHAN_BINDING",
+                message="legacy binding has no matching direct root tuple",
+            )
+        )
 
     grants: list[MappedGrant] = []
     for grant_key, by_source in sorted(assignees_by_grant.items()):

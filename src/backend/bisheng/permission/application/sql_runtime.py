@@ -130,9 +130,9 @@ class SqlCatalogDecisionState:
                 )
                 .where(
                     PermissionCatalogRelease.status == "CURRENT",
-                    PermissionCatalogRelease.write_fenced.is_(False),
+                    PermissionCatalogRelease.write_fenced == 0,
                     PermissionAction.code == action,
-                    PermissionAction.active.is_(True),
+                    PermissionAction.active == 1,
                     PermissionAction.level.is_not(None),
                     PermissionActionResourceScope.resource_type == resource_type,
                 )

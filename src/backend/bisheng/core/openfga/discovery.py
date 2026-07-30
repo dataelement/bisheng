@@ -37,9 +37,7 @@ def normalize_authorization_model(payload: dict[str, Any]) -> dict[str, Any]:
         model["type_definitions"],
         list,
     ):
-        raise AuthorizationModelMismatchError(
-            msg="OpenFGA authorization model payload is incomplete"
-        )
+        raise AuthorizationModelMismatchError(msg="OpenFGA authorization model payload is incomplete")
     return model
 
 
@@ -71,9 +69,7 @@ async def discover_openfga_runtime(
             allow_bootstrap=allow_bootstrap,
         )
         if required_store_id and required_store_id != store_id:
-            raise AuthorizationModelMismatchError(
-                msg="Discovered OpenFGA Store does not match the migration run"
-            )
+            raise AuthorizationModelMismatchError(msg="Discovered OpenFGA Store does not match the migration run")
 
         model_id = await _resolve_model(
             client,
@@ -90,13 +86,8 @@ async def discover_openfga_runtime(
         )
         model = normalize_authorization_model(payload)
         checksum = authorization_model_checksum(model)
-        if (
-            expected_model is not None
-            and checksum != authorization_model_checksum(expected_model)
-        ):
-            raise AuthorizationModelMismatchError(
-                msg="Discovered OpenFGA authorization model does not match F048"
-            )
+        if expected_model is not None and checksum != authorization_model_checksum(expected_model):
+            raise AuthorizationModelMismatchError(msg="Discovered OpenFGA authorization model does not match F048")
         return OpenFGARuntimePin(
             store_id=store_id,
             model_id=model_id,
@@ -113,17 +104,18 @@ async def _resolve_store(
     config: OpenFGAConf,
     allow_bootstrap: bool,
 ) -> str:
-    stores = await _list_pages(
+    payload = await _get_json(
         client,
         "/stores",
-        result_key="stores",
+        params={
+            "name": config.store_name,
+            # Only 0, 1, or more-than-1 matters for Store discovery.
+            "page_size": 2,
+        },
         error_message="Unable to list OpenFGA Stores",
     )
-    matches = [
-        row
-        for row in stores
-        if isinstance(row, dict) and row.get("name") == config.store_name
-    ]
+    stores = payload.get("stores") or []
+    matches = [row for row in stores if isinstance(row, dict) and row.get("name") == config.store_name]
     if len(matches) > 1:
         raise AuthorizationModelMismatchError(
             msg=f"Multiple OpenFGA Stores use the configured name: {config.store_name}"
@@ -132,13 +124,9 @@ async def _resolve_store(
         store_id = str(matches[0].get("id") or "")
         if store_id:
             return store_id
-        raise AuthorizationModelMismatchError(
-            msg="Discovered OpenFGA Store has no ID"
-        )
+        raise AuthorizationModelMismatchError(msg="Discovered OpenFGA Store has no ID")
     if not allow_bootstrap:
-        raise AuthorizationModelMismatchError(
-            msg=f"OpenFGA Store does not exist: {config.store_name}"
-        )
+        raise AuthorizationModelMismatchError(msg=f"OpenFGA Store does not exist: {config.store_name}")
     payload = await _post_json(
         client,
         "/stores",
@@ -147,9 +135,7 @@ async def _resolve_store(
     )
     store_id = str(payload.get("id") or "")
     if not store_id:
-        raise AuthorizationModelMismatchError(
-            msg="OpenFGA Store creation returned no ID"
-        )
+        raise AuthorizationModelMismatchError(msg="OpenFGA Store creation returned no ID")
     return store_id
 
 
@@ -171,9 +157,7 @@ async def _resolve_model(
     )
     model_ids = sorted(
         {
-            str(row.get("id") or row.get("authorization_model_id") or "")
-            if isinstance(row, dict)
-            else str(row)
+            str(row.get("id") or row.get("authorization_model_id") or "") if isinstance(row, dict) else str(row)
             for row in models
         }
         - {""}
@@ -186,16 +170,12 @@ async def _resolve_model(
         return required_model_id
     if config.force_write_model:
         if not allow_bootstrap:
-            raise ValueError(
-                "OpenFGA production runtime cannot auto-write an authorization model"
-            )
+            raise ValueError("OpenFGA production runtime cannot auto-write an authorization model")
         return await _write_model(client, store_id, expected_model)
     if model_ids:
         return model_ids[-1]
     if not allow_bootstrap:
-        raise AuthorizationModelMismatchError(
-            msg="The discovered OpenFGA Store has no authorization model"
-        )
+        raise AuthorizationModelMismatchError(msg="The discovered OpenFGA Store has no authorization model")
     return await _write_model(client, store_id, expected_model)
 
 
@@ -205,9 +185,7 @@ async def _write_model(
     expected_model: dict[str, Any] | None,
 ) -> str:
     if expected_model is None:
-        raise AuthorizationModelMismatchError(
-            msg="No authorization model is available for OpenFGA bootstrap"
-        )
+        raise AuthorizationModelMismatchError(msg="No authorization model is available for OpenFGA bootstrap")
     payload = await _post_json(
         client,
         f"/stores/{store_id}/authorization-models",
@@ -216,9 +194,7 @@ async def _write_model(
     )
     model_id = str(payload.get("authorization_model_id") or "")
     if not model_id:
-        raise AuthorizationModelMismatchError(
-            msg="OpenFGA authorization model creation returned no ID"
-        )
+        raise AuthorizationModelMismatchError(msg="OpenFGA authorization model creation returned no ID")
     return model_id
 
 
@@ -245,10 +221,7 @@ async def _list_pages(
         rows.extend(payload.get(result_key) or [])
         if extra_result_key:
             rows.extend(payload.get(extra_result_key) or [])
-        continuation_token = (
-            payload.get("continuation_token")
-            or payload.get("continuationToken")
-        )
+        continuation_token = payload.get("continuation_token") or payload.get("continuationToken")
         if not continuation_token:
             return rows
 
