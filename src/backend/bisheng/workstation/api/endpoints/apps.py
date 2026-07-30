@@ -9,8 +9,9 @@ from bisheng.database.models.message import ChatMessageDao
 from bisheng.database.models.session import MessageSessionDao
 from bisheng.database.models.tag import TagDao
 from bisheng.database.models.user_link import UserLinkDao
-from bisheng.permission.domain.services.application_permission_service import ApplicationPermissionService
-from bisheng.permission.domain.workflow_app_permission import batch_user_may_share_app, object_type_for_flow_type
+from bisheng.permission.application.business_authorization import (
+    check_business_action,
+)
 from bisheng.workstation.domain.services.constants import USED_APP_PIN_TYPE
 from bisheng.workstation.domain.services.workstation_service import WorkStationService
 
@@ -37,7 +38,11 @@ async def get_recommended_apps(login_user=LoginUserDep):
     if not login_user.is_admin():
         kwargs["status"] = FlowStatus.ONLINE.value
     data, _ = FlowDao.get_all_apps(**kwargs)
-    data = await WorkFlowService.filter_apps_by_permission_id(login_user, data, "view_app")
+    data = await WorkFlowService.filter_apps_by_action(
+        login_user,
+        data,
+        "visible",
+    )
 
     # Restore admin-configured order; unmatched items sort to the end.
     app_order = {app_id: idx for idx, app_id in enumerate(app_ids)}
@@ -110,7 +115,11 @@ async def get_used_apps(login_user=LoginUserDep, page: int = 1, limit: int = 20)
     pinned_flow_ids = {link.type_detail for link in pinned_links}
 
     apps, _ = await FlowDao.aget_all_apps(id_list=flow_ids, status=FlowStatus.ONLINE.value, page=0, limit=0)
-    apps = await WorkFlowService.filter_apps_by_permission_id(login_user, apps, "view_app")
+    apps = await WorkFlowService.filter_apps_by_action(
+        login_user,
+        apps,
+        "visible",
+    )
 
     def sort_key(app):
         app_id = app["id"]
@@ -137,20 +146,7 @@ async def get_used_apps(login_user=LoginUserDep, page: int = 1, limit: int = 20)
         app["can_share"] = False
         result.append(app)
 
-    share_pairs = []
-    share_idx = []
-    for idx, app in enumerate(result):
-        ot = object_type_for_flow_type(int(app.get("flow_type") or 0))
-        if ot:
-            share_pairs.append((ot, str(app["id"])))
-            share_idx.append(idx)
-    if login_user.is_admin():
-        for app in result:
-            app["can_share"] = True
-    elif share_pairs:
-        flags = await batch_user_may_share_app(login_user, share_pairs)
-        for j, app_i in enumerate(share_idx):
-            result[app_i]["can_share"] = bool(flags[j])
+    await WorkFlowService.aenrich_apps_can_share(login_user, result)
 
     return resp_200(data={"list": result, "total": total})
 
@@ -171,11 +167,11 @@ async def pin_used_app(login_user=LoginUserDep, data: UsedAppPin = Body(..., des
     else:
         raise UsedAppNotFoundError(flow_id=flow_id)
 
-    if not await ApplicationPermissionService.has_any_permission_async(
+    if not await check_business_action(
         login_user,
-        object_type,
-        str(flow_id),
-        ["use_app"],
+        resource_type=object_type,
+        resource_id=flow_id,
+        action="use",
     ):
         return UnAuthorizedError.return_resp()
 

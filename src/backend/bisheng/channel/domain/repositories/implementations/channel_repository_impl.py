@@ -30,6 +30,18 @@ class ChannelRepositoryImpl(BaseRepositoryImpl[Channel, str], ChannelRepository)
         result = await self.session.exec(query)
         return list(result.all())
 
+    async def find_permission_candidates(
+        self,
+        *,
+        after_id: str | None,
+        limit: int,
+    ) -> list[Channel]:
+        query = select(Channel).order_by(Channel.id).limit(limit)
+        if after_id is not None:
+            query = query.where(Channel.id > after_id)
+        result = await self.session.exec(query)
+        return list(result.all())
+
     async def find_square_channels(
         self, user_id: int, keyword: str | None = None, page: int = 1, page_size: int = 20
     ) -> list[tuple[Any, ...]]:
@@ -72,7 +84,10 @@ class ChannelRepositoryImpl(BaseRepositoryImpl[Channel, str], ChannelRepository)
                 & (SpaceChannelMember.user_id == user_id),
             )
             .outerjoin(subscriber_subq, subscriber_subq.c.business_id == Channel.id)
-            .where(Channel.is_released == True, Channel.visibility != ChannelVisibilityEnum.PRIVATE)
+            .where(
+                col(Channel.is_released).is_(True),
+                Channel.visibility != ChannelVisibilityEnum.PRIVATE,
+            )
         )
 
         # Apply keyword filter (fuzzy search on name and description)
@@ -139,7 +154,10 @@ class ChannelRepositoryImpl(BaseRepositoryImpl[Channel, str], ChannelRepository)
                 & (SpaceChannelMember.user_id == user_id),
             )
             .outerjoin(subscriber_subq, subscriber_subq.c.business_id == Channel.id)
-            .where(Channel.is_released == True, Channel.visibility == ChannelVisibilityEnum.PUBLIC)
+            .where(
+                col(Channel.is_released).is_(True),
+                Channel.visibility == ChannelVisibilityEnum.PUBLIC,
+            )
             .order_by(func.coalesce(Channel.update_time, Channel.create_time).desc())
             .limit(candidate_limit)
         )
@@ -152,7 +170,10 @@ class ChannelRepositoryImpl(BaseRepositoryImpl[Channel, str], ChannelRepository)
         query = (
             select(func.count())
             .select_from(Channel)
-            .where(Channel.is_released == True, Channel.visibility != ChannelVisibilityEnum.PRIVATE)
+            .where(
+                col(Channel.is_released).is_(True),
+                Channel.visibility != ChannelVisibilityEnum.PRIVATE,
+            )
         )
 
         if keyword:

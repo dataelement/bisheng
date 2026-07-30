@@ -19,7 +19,7 @@ import {
     subscribeSpaceApi,
     unsubscribeSpaceApi
 } from "~/api/knowledge";
-import { checkPermission } from "~/api/permission";
+import { checkResourceAction } from "~/api/permission";
 import { cn } from "~/utils";
 import { LoadingIcon } from "~/components/ui/icon/Loading";
 import { useLocalize, usePrefersMobileLayout, useScrollRevealRef } from "~/hooks";
@@ -249,7 +249,7 @@ export function KnowledgeSpacePreviewDrawer({
                 setLoadingFiles(false);
             });
         // Include join/subscription signals so file list loads when async info maps to joined without subscription_status.
-        // canViewApprovalContent is resolved asynchronously (checkPermission) for APPROVAL spaces; without it as a
+        // canViewApprovalContent is resolved asynchronously (visible) for APPROVAL spaces; without it as a
         // dependency the effect would have already bailed (canViewFiles=false) and never refetch once access is granted.
     }, [space?.id, space?.role, space?.visibility, space?.subscriptionStatus, space?.isFollowed, currentParentId, status, filesReloadKey, canViewApprovalContent]);
 
@@ -332,11 +332,12 @@ export function KnowledgeSpacePreviewDrawer({
         let cancelled = false;
         const controller = new AbortController();
 
-        checkPermission(
-            "knowledge_space",
-            String(space.id),
-            "can_read",
-            "view_space",
+        checkResourceAction(
+            {
+                resource_type: "knowledge_space",
+                resource_id: String(space.id),
+                action: "visible",
+            },
             { signal: controller.signal },
         )
             .then((res) => {

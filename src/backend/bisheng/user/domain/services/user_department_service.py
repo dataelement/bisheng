@@ -13,12 +13,15 @@ this service (AC-07) — the caller would use ``UserDepartmentDao.aadd_member``
 from __future__ import annotations
 
 import logging
+from types import SimpleNamespace
 from typing import Any
 
 from sqlalchemy import update
+from sqlmodel import select
 
 from bisheng.core.database import get_async_db_session
 from bisheng.database.models.department import (
+    Department,
     UserDepartment,
     UserDepartmentDao,
 )
@@ -41,6 +44,8 @@ class UserDepartmentService:
         cls,
         user_id: int,
         new_dept_id: int,
+        *,
+        operator_id: int | None = None,
     ) -> dict[str, Any]:
         """Swap ``is_primary`` from the old primary to ``new_dept_id``.
 
@@ -75,68 +80,105 @@ class UserDepartmentService:
             # (sync would also be a no-op, but saving the audit/FGA
             # work is meaningful under bulk rekey operations).
             return {
-                'user_id': user_id,
-                'primary_department_id': new_dept_id,
-                'leaf_tenant_id': None,
-                'changed': False,
+                "user_id": user_id,
+                "primary_department_id": new_dept_id,
+                "leaf_tenant_id": None,
+                "changed": False,
             }
 
-        async with get_async_db_session() as session:
-            if current_primary is not None:
-                await session.exec(
-                    update(UserDepartment)
-                    .where(
-                        UserDepartment.user_id == user_id,
-                        UserDepartment.department_id == current_primary.department_id,
-                    )
-                    .values(is_primary=0)
-                )
+        from bisheng.department.domain.services.department_service import (
+            _abandon_department_projection,
+            _bind_department_projection,
+            _execute_department_projection,
+            _prepare_department_projection,
+            _uses_f048_department_projection,
+        )
 
-            # Upsert the new primary row. If the user already belongs to
-            # new_dept_id as a secondary, promote it; otherwise insert.
-            existing_secondary = await session.exec(
-                _select_user_dept(user_id, new_dept_id)
+        projection = None
+        business_committed = False
+        try:
+            async with get_async_db_session() as session:
+                if _uses_f048_department_projection():
+                    department = (await session.exec(select(Department).where(Department.id == new_dept_id))).first()
+                    if department is None:
+                        raise ValueError(f"Department does not exist: {new_dept_id}")
+                    projection = await _prepare_department_projection(
+                        department=department,
+                        login_user=SimpleNamespace(user_id=operator_id or user_id),
+                        operation_type="DEPARTMENT_MEMBERS_ADD",
+                        operation_facts=(user_id,),
+                        plan_builder=lambda handler, context: handler.build_members_added_plan(
+                            context=context,
+                            user_ids=(int(user_id),),
+                        ),
+                    )
+                if current_primary is not None:
+                    await session.exec(
+                        update(UserDepartment)
+                        .where(
+                            UserDepartment.user_id == user_id,
+                            UserDepartment.department_id == current_primary.department_id,
+                        )
+                        .values(is_primary=0)
+                    )
+
+                # Promote an existing secondary row or insert a new member.
+                existing_secondary = await session.exec(_select_user_dept(user_id, new_dept_id))
+                row = existing_secondary.first()
+                if row is None:
+                    session.add(
+                        UserDepartment(
+                            user_id=user_id,
+                            department_id=new_dept_id,
+                            is_primary=1,
+                        )
+                    )
+                else:
+                    await session.exec(
+                        update(UserDepartment)
+                        .where(
+                            UserDepartment.user_id == user_id,
+                            UserDepartment.department_id == new_dept_id,
+                        )
+                        .values(is_primary=1)
+                    )
+                await _bind_department_projection(session, projection)
+                await session.commit()
+                business_committed = True
+        except Exception as exc:
+            if not business_committed:
+                await _abandon_department_projection(projection, exc)
+            raise
+
+        await _execute_department_projection(projection)
+        if projection is None:
+            ops = DepartmentChangeHandler.on_members_added(
+                new_dept_id,
+                [user_id],
             )
-            row = existing_secondary.first()
-            if row is None:
-                session.add(UserDepartment(
-                    user_id=user_id,
-                    department_id=new_dept_id,
-                    is_primary=1,
-                ))
-            else:
-                await session.exec(
-                    update(UserDepartment)
-                    .where(
-                        UserDepartment.user_id == user_id,
-                        UserDepartment.department_id == new_dept_id,
-                    )
-                    .values(is_primary=1)
-                )
-            await session.commit()
-
-        ops = DepartmentChangeHandler.on_members_added(new_dept_id, [user_id])
-        await DepartmentChangeHandler.execute_async(ops)
+            await DepartmentChangeHandler.execute_async(ops)
 
         # Fire the leaf-tenant sync AFTER the DB write is committed so the
         # resolver can see the new primary. sync_user may raise
         # TenantRelocateBlockedError — let it propagate; the caller (API
         # endpoint or org-sync worker) handles the 409 translation.
         leaf = await UserTenantSyncService.sync_user(
-            user_id, trigger=UserTenantSyncTrigger.DEPT_CHANGE,
+            user_id,
+            trigger=UserTenantSyncTrigger.DEPT_CHANGE,
         )
 
         return {
-            'user_id': user_id,
-            'primary_department_id': new_dept_id,
-            'leaf_tenant_id': getattr(leaf, 'id', None),
-            'changed': True,
+            "user_id": user_id,
+            "primary_department_id": new_dept_id,
+            "leaf_tenant_id": getattr(leaf, "id", None),
+            "changed": True,
         }
 
 
 def _select_user_dept(user_id: int, department_id: int):
     """Reusable ``SELECT`` statement for the user+dept composite lookup."""
     from sqlmodel import select
+
     return select(UserDepartment).where(
         UserDepartment.user_id == user_id,
         UserDepartment.department_id == department_id,

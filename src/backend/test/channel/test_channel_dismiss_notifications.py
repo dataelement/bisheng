@@ -9,11 +9,9 @@ from bisheng.channel.domain.services.channel_service import ChannelService
 from bisheng.common.errcode.channel import ChannelPermissionDeniedError
 from bisheng.common.models.space_channel_member import (
     BusinessTypeEnum,
-    ChannelRelationEnum,
     MembershipStatusEnum,
     UserRoleEnum,
 )
-from bisheng.permission.domain.schemas.permission_schema import ResourcePermissionItem
 
 
 class _User:
@@ -51,8 +49,19 @@ def _member(member_id: int, user_id: int, role: UserRoleEnum):
     )
 
 
+def _permission_adapter():
+    record = SimpleNamespace(tenant_id=1)
+    return (
+        SimpleNamespace(
+            load_permission_record=AsyncMock(return_value=record),
+            project_delete=AsyncMock(),
+        ),
+        record,
+    )
+
+
 @pytest.mark.asyncio
-async def test_dismiss_channel_notifies_authorized_users_not_only_member_rows():
+async def test_dismiss_channel_notifies_active_members():
     channel = SimpleNamespace(
         id="channel-1",
         name="test-channel",
@@ -73,23 +82,16 @@ async def test_dismiss_channel_notifies_authorized_users_not_only_member_rows():
         channel_info_source_repository=SimpleNamespace(),
         message_service=message_service,
     )
+    adapter, _ = _permission_adapter()
 
     with (
         patch(
-            "bisheng.channel.domain.services.channel_service.PermissionService.get_resource_permissions",
-            new=AsyncMock(
-                return_value=[
-                    ResourcePermissionItem(subject_type="user", subject_id=740, relation="viewer"),
-                ]
-            ),
-        ),
-        patch(
-            "bisheng.channel.domain.services.channel_service.PermissionService._affected_user_ids_for_subject",
-            new=AsyncMock(return_value={740}),
-        ),
-        patch(
-            "bisheng.channel.domain.services.channel_service.OwnerService.delete_resource_tuples",
+            "bisheng.channel.domain.services.channel_service.require_business_action",
             new=AsyncMock(),
+        ),
+        patch(
+            "bisheng.channel.domain.services.channel_service.get_f048_resource_adapter",
+            return_value=adapter,
         ),
     ):
         await service.dismiss_channel("channel-1", _User())
@@ -97,15 +99,8 @@ async def test_dismiss_channel_notifies_authorized_users_not_only_member_rows():
     message_service.send_generic_notify.assert_awaited_once()
     notify_kwargs = message_service.send_generic_notify.await_args.kwargs
     assert notify_kwargs["action_code"] == "channel_dismissed"
-    assert notify_kwargs["receiver_user_ids"] == [693, 740]
+    assert notify_kwargs["receiver_user_ids"] == [693]
     assert member_repo.deleted_ids == [1]
-
-
-def _authorized_member(member_id: int, user_id: int, role: UserRoleEnum):
-    member = _member(member_id, user_id, role)
-    member.grant_subject_type = "user"
-    member.relation = ChannelRelationEnum.MANAGER
-    return member
 
 
 @pytest.mark.asyncio
@@ -113,7 +108,7 @@ async def test_dismiss_allowed_for_non_creator_with_delete_channel_permission():
     channel = SimpleNamespace(id="channel-1", name="test-channel", source_list=[])
     member_repo = _MemberRepo(
         [
-            _authorized_member(1, 693, UserRoleEnum.ADMIN),
+            _member(1, 693, UserRoleEnum.ADMIN),
         ]
     )
     channel_repository = SimpleNamespace(
@@ -125,22 +120,25 @@ async def test_dismiss_allowed_for_non_creator_with_delete_channel_permission():
         space_channel_member_repository=member_repo,
         channel_info_source_repository=SimpleNamespace(),
     )
+    adapter, record = _permission_adapter()
+    require_action = AsyncMock()
 
     with (
         patch(
-            "bisheng.channel.domain.services.channel_service.FineGrainedPermissionService"
-            ".get_effective_permission_ids_async",
-            new=AsyncMock(return_value={"view_channel", "edit_channel", "delete_channel"}),
+            "bisheng.channel.domain.services.channel_service.require_business_action",
+            new=require_action,
         ),
         patch(
-            "bisheng.channel.domain.services.channel_service.OwnerService.delete_resource_tuples",
-            new=AsyncMock(),
-        ) as mock_delete_tuples,
+            "bisheng.channel.domain.services.channel_service.get_f048_resource_adapter",
+            return_value=adapter,
+        ),
     ):
         await service.dismiss_channel("channel-1", _User())
 
+    require_action.assert_awaited_once()
     channel_repository.delete.assert_awaited_once_with("channel-1")
-    mock_delete_tuples.assert_awaited_once()
+    adapter.project_delete.assert_awaited_once()
+    assert adapter.project_delete.await_args.kwargs["record"] is record
     assert member_repo.deleted_ids == [1]
 
 
@@ -156,7 +154,7 @@ async def test_dismiss_allowed_for_super_admin_without_delete_channel_permission
     channel = SimpleNamespace(id="channel-1", name="test-channel", source_list=[])
     member_repo = _MemberRepo(
         [
-            _authorized_member(1, 693, UserRoleEnum.ADMIN),
+            _member(1, 693, UserRoleEnum.ADMIN),
         ]
     )
     channel_repository = SimpleNamespace(
@@ -168,22 +166,24 @@ async def test_dismiss_allowed_for_super_admin_without_delete_channel_permission
         space_channel_member_repository=member_repo,
         channel_info_source_repository=SimpleNamespace(),
     )
+    adapter, _ = _permission_adapter()
+    require_action = AsyncMock()
 
     with (
         patch(
-            "bisheng.channel.domain.services.channel_service.FineGrainedPermissionService"
-            ".get_effective_permission_ids_async",
-            new=AsyncMock(return_value={"view_channel"}),
+            "bisheng.channel.domain.services.channel_service.require_business_action",
+            new=require_action,
         ),
         patch(
-            "bisheng.channel.domain.services.channel_service.OwnerService.delete_resource_tuples",
-            new=AsyncMock(),
-        ) as mock_delete_tuples,
+            "bisheng.channel.domain.services.channel_service.get_f048_resource_adapter",
+            return_value=adapter,
+        ),
     ):
         await service.dismiss_channel("channel-1", _SuperAdmin())
 
+    require_action.assert_awaited_once()
     channel_repository.delete.assert_awaited_once_with("channel-1")
-    mock_delete_tuples.assert_awaited_once()
+    adapter.project_delete.assert_awaited_once()
     assert member_repo.deleted_ids == [1]
 
 
@@ -192,7 +192,7 @@ async def test_dismiss_denied_for_non_creator_without_delete_channel_permission(
     channel = SimpleNamespace(id="channel-1", name="test-channel", source_list=[])
     member_repo = _MemberRepo(
         [
-            _authorized_member(1, 693, UserRoleEnum.ADMIN),
+            _member(1, 693, UserRoleEnum.ADMIN),
         ]
     )
     channel_repository = SimpleNamespace(
@@ -204,21 +204,22 @@ async def test_dismiss_denied_for_non_creator_without_delete_channel_permission(
         space_channel_member_repository=member_repo,
         channel_info_source_repository=SimpleNamespace(),
     )
+    adapter, _ = _permission_adapter()
 
     with (
         patch(
-            "bisheng.channel.domain.services.channel_service.FineGrainedPermissionService"
-            ".get_effective_permission_ids_async",
-            new=AsyncMock(return_value={"view_channel", "edit_channel"}),
+            "bisheng.channel.domain.services.channel_service.require_business_action",
+            new=AsyncMock(side_effect=ChannelPermissionDeniedError()),
         ),
         patch(
-            "bisheng.channel.domain.services.channel_service.OwnerService.delete_resource_tuples",
-            new=AsyncMock(),
-        ) as mock_delete_tuples,
+            "bisheng.channel.domain.services.channel_service.get_f048_resource_adapter",
+            return_value=adapter,
+        ),
     ):
         with pytest.raises(ChannelPermissionDeniedError):
             await service.dismiss_channel("channel-1", _User())
 
     channel_repository.delete.assert_not_awaited()
-    mock_delete_tuples.assert_not_awaited()
+    adapter.load_permission_record.assert_not_awaited()
+    adapter.project_delete.assert_not_awaited()
     assert member_repo.deleted_ids == []

@@ -1,0 +1,229 @@
+{
+  "contract_version": "f048-bench-01-v1",
+  "authorization_model_checksum": "edf2c67ebabf5cd24bd9d520181e50ee12c9cf667061488c6886db2253042ee4",
+  "dataset": {
+    "name": "f048-bench-synthetic-contract",
+    "source": "synthetic-ci-harness-only",
+    "production_derived": false,
+    "dataset_checksum": "ad302adc12b1807080f85c238b36c7e93a75ef1c39165e6250a3138710f6e54b",
+    "profile": {
+      "catalog_release_id": "bench-catalog-v1",
+      "model_release_id": "bench-model-release-v1",
+      "permission_model_id": "bench-standard-v1",
+      "scenarios": [
+        {
+          "name": "direct",
+          "subject_kind": "direct",
+          "actor_id": 1001,
+          "resource_type": "workflow",
+          "resource_id_prefix": "f048-direct-",
+          "action": "use",
+          "result_count": 10,
+          "expected_object_checksum": "75abb7f47147ba1673c9819045c42d00266c028f8ffe10b038a0517e0552259a"
+        },
+        {
+          "name": "department",
+          "subject_kind": "department",
+          "actor_id": 1002,
+          "resource_type": "workflow",
+          "resource_id_prefix": "f048-department-",
+          "action": "use",
+          "result_count": 10,
+          "expected_object_checksum": "b435f1c1ee6607b56900e829f1592782f031dacc991585727b3b3bebdb4db9dd"
+        },
+        {
+          "name": "group",
+          "subject_kind": "group",
+          "actor_id": 1003,
+          "resource_type": "workflow",
+          "resource_id_prefix": "f048-group-",
+          "action": "use",
+          "result_count": 10,
+          "expected_object_checksum": "68a008fca9dd7f4c0db965e0d8f1e9215b95df85a8dc770a36d1cca88ea859fe"
+        },
+        {
+          "name": "inherit",
+          "subject_kind": "inherit",
+          "actor_id": 1004,
+          "resource_type": "knowledge_file",
+          "resource_id_prefix": "f048-inherit-",
+          "action": "download",
+          "result_count": 10,
+          "expected_object_checksum": "cc27cc709d27c66a1dd15d0fbb815115d8905b594ac9710424006076e9e5c2e7"
+        },
+        {
+          "name": "multi_grant",
+          "subject_kind": "multi_grant",
+          "actor_id": 1005,
+          "resource_type": "workflow",
+          "resource_id_prefix": "f048-multi-grant-",
+          "action": "use",
+          "result_count": 10,
+          "expected_object_checksum": "8160f323d3b98ad435cd69bb400a85fe8e81566aeabd322c7776cb8bab35e65c"
+        },
+        {
+          "name": "result_10",
+          "subject_kind": "direct",
+          "actor_id": 1010,
+          "resource_type": "workflow",
+          "resource_id_prefix": "f048-result-10-",
+          "action": "use",
+          "result_count": 10,
+          "expected_object_checksum": "e2a1f753e092b10af46c9759056b922e3147a90706216b5af34433cdc53781a8"
+        },
+        {
+          "name": "result_100",
+          "subject_kind": "direct",
+          "actor_id": 1100,
+          "resource_type": "workflow",
+          "resource_id_prefix": "f048-result-100-",
+          "action": "use",
+          "result_count": 100,
+          "expected_object_checksum": "1c718ed1c394291b91ed4135831fe66d2cb14200ca4e431b1698b719d0359c90"
+        },
+        {
+          "name": "result_1000",
+          "subject_kind": "direct",
+          "actor_id": 2000,
+          "resource_type": "workflow",
+          "resource_id_prefix": "f048-result-1000-",
+          "action": "use",
+          "result_count": 1000,
+          "expected_object_checksum": "7da7c02aeb5f11c7ce10c70f48959aa718a3f674091a214823c10c0f1bdeb6d6"
+        }
+      ],
+      "business_cursor": {
+        "scenario": "result_100",
+        "candidate_count": 100,
+        "page_size": 20
+      }
+    }
+  },
+  "baseline": {
+    "source": "synthetic-contract-values-not-a-production-baseline",
+    "check_ms": [
+      20.1,
+      20.4,
+      20.8,
+      21.0,
+      21.3,
+      21.7,
+      22.0,
+      22.2,
+      22.4,
+      22.8,
+      23.0,
+      23.3,
+      23.5,
+      23.8,
+      24.0,
+      24.2,
+      24.5,
+      24.8,
+      25.0,
+      25.4
+    ],
+    "batch_check_ms": {
+      "20": [
+        30.0,
+        30.5,
+        31.0,
+        31.5,
+        32.0,
+        32.5,
+        33.0,
+        33.5,
+        34.0,
+        34.5,
+        35.0,
+        35.5,
+        36.0,
+        36.5,
+        37.0,
+        37.5,
+        38.0,
+        38.5,
+        39.0,
+        39.5
+      ],
+      "50": [
+        45.0,
+        45.8,
+        46.6,
+        47.4,
+        48.2,
+        49.0,
+        49.8,
+        50.6,
+        51.4,
+        52.2,
+        53.0,
+        53.8,
+        54.6,
+        55.4,
+        56.2,
+        57.0,
+        57.8,
+        58.6,
+        59.4,
+        60.2
+      ],
+      "100": [
+        70.0,
+        71.0,
+        72.0,
+        73.0,
+        74.0,
+        75.0,
+        76.0,
+        77.0,
+        78.0,
+        79.0,
+        80.0,
+        81.0,
+        82.0,
+        83.0,
+        84.0,
+        85.0,
+        86.0,
+        87.0,
+        88.0,
+        89.0
+      ]
+    },
+    "business_cursor_ms": [
+      80.0,
+      81.0,
+      82.0,
+      83.0,
+      84.0,
+      85.0,
+      86.0,
+      87.0,
+      88.0,
+      89.0,
+      90.0,
+      91.0,
+      92.0,
+      93.0,
+      94.0,
+      95.0,
+      96.0,
+      97.0,
+      98.0,
+      99.0
+    ]
+  },
+  "limits": {
+    "check_p95_multiplier": 1.2,
+    "check_p95_absolute_ms": 5.0,
+    "batch_p95_multiplier": 1.25,
+    "business_cursor_p95_multiplier": 1.2,
+    "max_error_rate": 0.001
+  },
+  "run": {
+    "warmup": 2,
+    "iterations": 30
+  },
+  "contract_checksum": "12654227efbcdb9ebc2effdd1da5c668723cdcd96c4333eb621f0229b190dc14"
+}

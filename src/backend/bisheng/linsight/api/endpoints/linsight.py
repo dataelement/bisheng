@@ -243,13 +243,18 @@ async def start_execute(
 
     await MessageSessionDao.touch_session(session_version_model.session_id)
 
-    from bisheng.linsight.worker import LinsightQueue
+    from bisheng.linsight.worker import LinsightQueue, encode_queue_item
 
     try:
         redis_client = await get_redis_client()
         queue = LinsightQueue("queue", namespace="linsight", redis=redis_client)
 
-        await queue.put(data=linsight_session_version_id)
+        await queue.put(
+            data=encode_queue_item(
+                linsight_session_version_id,
+                tenant_id=session_version_model.tenant_id,
+            )
+        )
 
     except Exception as e:
         logger.error(f"Failed to start the Ideas task: {e!s}")
@@ -320,7 +325,13 @@ async def continue_conversation(
 
         redis_client = await get_redis_client()
         queue = LinsightQueue("queue", namespace="linsight", redis=redis_client)
-        await queue.put(data=encode_queue_item(session_version_id, continue_question=question))
+        await queue.put(
+            data=encode_queue_item(
+                session_version_id,
+                continue_question=question,
+                tenant_id=session_version_model.tenant_id,
+            )
+        )
     except Exception as e:
         logger.error(f"Failed to continue the Ideas conversation: {e!s}")
         # Roll back the status flip so the conversation isn't stuck IN_PROGRESS.
@@ -402,7 +413,14 @@ async def user_input(
 
         redis_client = await get_redis_client()
         queue = LinsightQueue("queue", namespace="linsight", redis=redis_client)
-        await queue.put_head(encode_queue_item(session_version_id, resume=True, user_input=input_content))
+        await queue.put_head(
+            encode_queue_item(
+                session_version_id,
+                resume=True,
+                user_input=input_content,
+                tenant_id=session_version_model.tenant_id,
+            )
+        )
 
     return resp_200(data=True, message="User input submitted")
 

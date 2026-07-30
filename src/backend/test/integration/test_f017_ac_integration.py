@@ -25,13 +25,11 @@ AC coverage map (spec §2):
 
 from __future__ import annotations
 
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from bisheng.tenant.domain.services.resource_share_service import ResourceShareService
-
 
 # ── T28 — AC-01 + AC-05 + AC-12: share toggle (revoke preserves derived data) ──
 
@@ -155,24 +153,78 @@ async def test_ac_13_mount_skip_auto_distribute_writes_no_tuple():
 
 
 @pytest.mark.asyncio
-async def test_ac_03_permission_service_is_shared_to_returns_true_after_distribute():
-    """AC-03: PermissionService._is_shared_to returns True for a Child
-    once ``distribute_to_child`` has written the tuple."""
-    from bisheng.permission.domain.services.permission_service import PermissionService
+async def test_ac_03_shared_system_relation_precedes_exact_id_business_load():
+    """AC-03: a Child sees a Root-shared resource through the F048 boundary.
 
-    fga = MagicMock()
-    # The FGA check query: member of tenant:{target}#shared_to
-    fga.check = AsyncMock(return_value=True)
-    with patch.object(PermissionService, '_get_fga', return_value=fga):
-        result = await PermissionService._is_shared_to(user_id=500, target_tenant_id=1)
-    assert result is True
-    fga.check.assert_awaited_once()
-    args = fga.check.await_args.kwargs
-    assert args == {
-        'user': 'user:500',
-        'relation': 'member',
-        'object': 'tenant:1#shared_to',
-    }
+    The permission side only checks the system relation. The tenant business
+    service then performs the narrowly scoped exact-ID load and validates the
+    Root-to-Child topology before constructing a verified target.
+    """
+    from bisheng.permission.domain.services.permission_action_service import (
+        PermissionActor,
+    )
+    from bisheng.tenant.domain.repositories.resource_share_repository import (
+        SharedResourceRecord,
+        SharedResourceRepository,
+    )
+
+    events: list[str] = []
+
+    class Loader:
+        async def load_by_ids(self, resource_type, resource_ids):
+            events.append("load")
+            assert resource_type == "knowledge_library"
+            assert resource_ids == ("42",)
+            return (
+                SharedResourceRecord(
+                    owner_tenant_id=1,
+                    resource_type=resource_type,
+                    resource_id="42",
+                    status="ACTIVE",
+                    shareable=True,
+                    permission_version=2,
+                    context_version="knowledge_library-42-v2",
+                ),
+            )
+
+    class SystemPermission:
+        async def check_system_action(
+            self,
+            actor,
+            resource_type,
+            resource_id,
+            action,
+        ):
+            events.append("system-check")
+            assert actor == PermissionActor(user_id=500, current_tenant_id=7)
+            assert (resource_type, resource_id, action) == (
+                "knowledge_library",
+                "42",
+                "use",
+            )
+            return True
+
+    class Topology:
+        async def is_root_to_child(self, owner_tenant_id, child_tenant_id):
+            events.append("topology")
+            assert (owner_tenant_id, child_tenant_id) == (1, 7)
+            return True
+
+    service = ResourceShareService(
+        repository=SharedResourceRepository(Loader()),
+        system_permission=SystemPermission(),
+        topology=Topology(),
+    )
+    target = await service.resolve_shared_target(
+        actor=PermissionActor(user_id=500, current_tenant_id=7),
+        resource_type="knowledge_library",
+        resource_id="42",
+        action="use",
+    )
+
+    assert events == ["system-check", "load", "topology"]
+    assert target.tenant_id == 1
+    assert target.resource_id == "42"
 
 
 # AC-04 (Child cannot edit Root shared): covered by FGA DSL enforcement

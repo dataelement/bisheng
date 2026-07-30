@@ -58,7 +58,11 @@ def dao_engine():
                 is_deleted INTEGER NOT NULL DEFAULT 0,
                 last_sync_ts BIGINT NOT NULL DEFAULT 0,
                 default_role_ids JSON,
+                concurrent_session_limit INTEGER NOT NULL DEFAULT 0,
                 create_user INTEGER,
+                permission_projection_version BIGINT NOT NULL DEFAULT 0,
+                permission_projection_state VARCHAR(64) NOT NULL DEFAULT 'CURRENT',
+                permission_projection_operation_id BIGINT,
                 create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
                 update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
                 UNIQUE(source, external_id)

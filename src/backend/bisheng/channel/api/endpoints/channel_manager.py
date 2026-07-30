@@ -2,8 +2,7 @@ import logging
 
 from fastapi import APIRouter, Depends, Query, Request
 
-from bisheng.channel.api.dependencies import get_channel_authorization_service, get_channel_service
-from bisheng.channel.domain.schemas.channel_authorization_schema import ChannelAuthorizeRequest
+from bisheng.channel.api.dependencies import get_channel_service
 from bisheng.channel.domain.schemas.channel_manager_schema import (
     AddArticlesToKnowledgeSpaceRequest,
     AddInformationSourceRequest,
@@ -18,7 +17,6 @@ from bisheng.channel.domain.schemas.channel_manager_schema import (
     UpdateChannelRequest,
     UpdateMemberRoleRequest,
 )
-from bisheng.channel.domain.services.channel_authorization_service import ChannelAuthorizationService
 from bisheng.channel.domain.services.channel_service import ChannelService
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.schemas.api import resp_200
@@ -169,101 +167,6 @@ async def set_channel_pin(
     """Set channel pin status."""
     await channel_service.set_channel_pin(req_param, login_user)
     return resp_200(data=True)
-
-
-@router.get("/{channel_id}/permissions")
-async def list_channel_permissions(
-    channel_id: str,
-    login_user: UserPayload = Depends(UserPayload.get_login_user),
-    authorization_service: ChannelAuthorizationService = Depends(get_channel_authorization_service),
-):
-    result = await authorization_service.list_permissions(channel_id, login_user)
-    return resp_200(data=[item.model_dump() for item in result])
-
-
-@router.post("/{channel_id}/authorize")
-async def authorize_channel(
-    channel_id: str,
-    req_param: ChannelAuthorizeRequest,
-    login_user: UserPayload = Depends(UserPayload.get_login_user),
-    authorization_service: ChannelAuthorizationService = Depends(get_channel_authorization_service),
-):
-    result = await authorization_service.authorize_channel(channel_id, req_param, login_user)
-    return resp_200(data=result.model_dump())
-
-
-@router.get("/{channel_id}/grantable-relation-models")
-async def list_channel_grantable_relation_models(
-    channel_id: str,
-    login_user: UserPayload = Depends(UserPayload.get_login_user),
-    authorization_service: ChannelAuthorizationService = Depends(get_channel_authorization_service),
-):
-    result = await authorization_service.grantable_relation_models(channel_id, login_user)
-    return resp_200(data=[item.model_dump() for item in result])
-
-
-@router.get("/{channel_id}/grant-subjects/users")
-async def list_channel_grant_users(
-    channel_id: str,
-    keyword: str = Query("", description="User keyword"),
-    page: int = Query(1, ge=1, description="Page number"),
-    page_size: int = Query(2000, ge=1, le=5000, description="Page size"),
-    login_user: UserPayload = Depends(UserPayload.get_login_user),
-    authorization_service: ChannelAuthorizationService = Depends(get_channel_authorization_service),
-):
-    result = await authorization_service.list_grant_users(channel_id, login_user, keyword, page, page_size)
-    return resp_200(data=result)
-
-
-# F038/T012: the eager full-tree ``GET /{channel_id}/grant-subjects/departments``
-# was removed — the channel picker uses the lazy children/search/path-tree routes
-# below so a large org tree never loads at once.
-
-
-# F038: lazy channel department picker (browse one layer / search / locate).
-@router.get("/{channel_id}/grant-subjects/departments/children")
-async def list_channel_grant_departments_children(
-    channel_id: str,
-    parent_id: int | None = Query(None, description="None → root layer; else direct children of this internal id"),
-    login_user: UserPayload = Depends(UserPayload.get_login_user),
-    authorization_service: ChannelAuthorizationService = Depends(get_channel_authorization_service),
-):
-    result = await authorization_service.list_grant_departments_children(channel_id, login_user, parent_id)
-    return resp_200(data=result)
-
-
-@router.get("/{channel_id}/grant-subjects/departments/search")
-async def search_channel_grant_departments(
-    channel_id: str,
-    keyword: str = Query("", description="Department name keyword"),
-    limit: int = Query(50, ge=1, le=200, description="Max matches"),
-    login_user: UserPayload = Depends(UserPayload.get_login_user),
-    authorization_service: ChannelAuthorizationService = Depends(get_channel_authorization_service),
-):
-    result = await authorization_service.search_grant_departments(channel_id, login_user, keyword, limit)
-    return resp_200(data=result)
-
-
-@router.get("/{channel_id}/grant-subjects/departments/{dept_id:int}/path-tree")
-async def get_channel_grant_departments_path_tree(
-    channel_id: str,
-    dept_id: int,
-    login_user: UserPayload = Depends(UserPayload.get_login_user),
-    authorization_service: ChannelAuthorizationService = Depends(get_channel_authorization_service),
-):
-    result = await authorization_service.get_grant_departments_path_tree(channel_id, login_user, dept_id)
-    return resp_200(data=result)
-
-
-@router.get("/{channel_id}/grant-subjects/user-groups")
-async def list_channel_grant_user_groups(
-    channel_id: str,
-    keyword: str = Query("", description="User group keyword"),
-    login_user: UserPayload = Depends(UserPayload.get_login_user),
-    authorization_service: ChannelAuthorizationService = Depends(get_channel_authorization_service),
-):
-    result = await authorization_service.list_grant_user_groups(channel_id, login_user, keyword)
-    return resp_200(data=result)
 
 
 @router.get("/members")

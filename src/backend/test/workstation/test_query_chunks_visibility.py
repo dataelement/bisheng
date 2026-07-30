@@ -236,8 +236,8 @@ async def test_query_chunks_org_kb_uses_use_permission_and_bypasses_legacy_auth(
     permission_calls = []
     vector_calls = []
 
-    async def fake_filter_ids(self, login_user, knowledge_ids, permission_id):
-        permission_calls.append((knowledge_ids, permission_id))
+    async def fake_filter_ids(self, login_user, knowledge_ids, action):
+        permission_calls.append((knowledge_ids, action))
         return [100]
 
     async def fake_get_vectorstore(**kwargs):
@@ -263,7 +263,7 @@ async def test_query_chunks_org_kb_uses_use_permission_and_bypasses_legacy_auth(
 
     monkeypatch.setattr(
         "bisheng.workstation.domain.services.workstation_service."
-        "KnowledgePermissionService.filter_knowledge_ids_by_permission_async",
+        "KnowledgePermissionService.filter_knowledge_ids_by_action_async",
         fake_filter_ids,
     )
     monkeypatch.setattr(
@@ -293,7 +293,7 @@ async def test_query_chunks_org_kb_uses_use_permission_and_bypasses_legacy_auth(
     assert failures == []
     assert [doc.page_content for doc in docs] == ["answer chunk"]
     assert "[file content begin]\nanswer chunk\n[file content end]" in formatted[0]
-    assert permission_calls == [([100], "use_kb")]
+    assert permission_calls == [([100], "use")]
     assert vector_calls == [
         {
             "invoke_user_id": 42,
@@ -305,7 +305,7 @@ async def test_query_chunks_org_kb_uses_use_permission_and_bypasses_legacy_auth(
 
 @pytest.mark.asyncio
 async def test_query_chunks_org_kb_init_failure_is_reported(monkeypatch):
-    async def fake_filter_ids(self, login_user, knowledge_ids, permission_id):
+    async def fake_filter_ids(self, login_user, knowledge_ids, action):
         return [100]
 
     async def fake_get_vectorstore(**kwargs):
@@ -313,7 +313,7 @@ async def test_query_chunks_org_kb_init_failure_is_reported(monkeypatch):
 
     monkeypatch.setattr(
         "bisheng.workstation.domain.services.workstation_service."
-        "KnowledgePermissionService.filter_knowledge_ids_by_permission_async",
+        "KnowledgePermissionService.filter_knowledge_ids_by_action_async",
         fake_filter_ids,
     )
     monkeypatch.setattr(

@@ -1,6 +1,6 @@
 """F034 Wave 5 — KnowledgeSpaceService.upload_folder_items unit tests (§5.5 folder upload).
 
-Strategy: mock DAO / PermissionService / QuotaService / add_file (same approach as
+Strategy: mock DAO / F048 action service / QuotaService / add_file (same approach as
 test_knowledge_space_move.py). upload_folder_items is pure orchestration — batch
 pre-checks (count / depth / top-level dup / capacity) + directory-tree build +
 per-directory delegation to the already-tested add_file. See
@@ -29,7 +29,7 @@ def _items(*paths, size=10):
 
 def _svc():
     svc = KnowledgeSpaceService(request=MagicMock(), login_user=MagicMock(user_id=1, user_name="u1", tenant_id=1))
-    svc._require_permission_id = AsyncMock(return_value=None)
+    svc._require_action = AsyncMock(return_value=None)
     svc._initialize_child_resource_permissions = AsyncMock(return_value=None)
     svc._cleanup_resource_tuples = AsyncMock(return_value=None)
     svc._ensure_space_async_task_tenant_consistency = MagicMock(return_value=None)

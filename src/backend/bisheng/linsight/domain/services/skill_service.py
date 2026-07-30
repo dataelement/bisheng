@@ -2,7 +2,7 @@
 
 Validation chain (design §7.4): size gate → unpack/parse → frontmatter +
 name/display_name checks → duplicate checks → disk bundle write → DB metadata
-→ best-effort owner tuple via PermissionService.authorize.
+→ durable F048 protected-owner projection.
 
 built-in skills never pass through here: any name that does not exist in the
 tenant's `linsight_skill` table is answered with 11053 (not-found), so their
@@ -10,6 +10,8 @@ existence is not leaked (design §7.5).
 """
 
 from __future__ import annotations
+
+from typing import Protocol
 
 from loguru import logger
 
@@ -46,12 +48,47 @@ from bisheng.linsight.domain.services.skill_store import (
     unpack_zip_bytes,
     validate_skill_name,
 )
-from bisheng.permission.domain.schemas.permission_schema import AuthorizeGrantItem
-from bisheng.permission.domain.services.permission_service import PermissionService
 
 _ARCHIVE_SUFFIXES = (".zip", ".skill")
 
 SKILL_OBJECT_TYPE = "linsight_skill"
+
+
+class LinsightSkillOwnerProjectionPort(Protocol):
+    """Durable owner projection required before skill creation completes."""
+
+    async def authorize_created(
+        self,
+        *,
+        tenant_id: int,
+        resource_type: str,
+        resource_id: str,
+        owner_user_id: int,
+        resource_version: int,
+        context_version: str,
+        idempotency_key: str,
+    ): ...
+
+
+class _ConfiguredOwnerProjection:
+    async def authorize_created(self, **kwargs):
+        if _owner_projection is None:
+            raise RuntimeError(
+                "F048 Linsight skill owner projection is not configured"
+            )
+        return await _owner_projection.authorize_created(**kwargs)
+
+
+_owner_projection: LinsightSkillOwnerProjectionPort | None = None
+
+
+def configure_linsight_skill_owner_projection(
+    projection: LinsightSkillOwnerProjectionPort,
+) -> None:
+    """Install the process-local durable owner projection adapter."""
+
+    global _owner_projection
+    _owner_projection = projection
 
 
 class SkillService:
@@ -61,8 +98,13 @@ class SkillService:
     isolation on every read/write (no Root→child sharing), so a tenant only
     ever sees and mutates its own skills."""
 
-    def __init__(self, store: SkillStore | None = None):
+    def __init__(
+        self,
+        store: SkillStore | None = None,
+        owner_projection: LinsightSkillOwnerProjectionPort | None = None,
+    ):
         self.store = store or SkillStore()
+        self._owner_projection = owner_projection or _ConfiguredOwnerProjection()
 
     # ------------------------------------------------------------- queries --
     async def get_page(
@@ -266,15 +308,15 @@ class SkillService:
             created_by=user_id,
         )
         skill = await LinsightSkillDao.create(skill)
-        try:
-            # Owner tuple is best-effort: PermissionService compensates failed
-            # writes via failed_tuples; the resource itself is never rolled back
-            # (design §7.4 step 6; FGA model registration tracked by TF-3).
-            await PermissionService.authorize(
-                object_type=SKILL_OBJECT_TYPE,
-                object_id=str(skill.id),
-                grants=[AuthorizeGrantItem(subject_type="user", subject_id=user_id, relation="owner")],
-            )
-        except Exception:
-            logger.exception("skill owner tuple write failed: skill_id={}", skill.id)
+        await self._owner_projection.authorize_created(
+            tenant_id=tenant_id,
+            resource_type=SKILL_OBJECT_TYPE,
+            resource_id=str(skill.id),
+            owner_user_id=user_id,
+            resource_version=0,
+            context_version=f"{SKILL_OBJECT_TYPE}:{skill.id}:v0",
+            idempotency_key=(
+                f"{SKILL_OBJECT_TYPE}:create:{tenant_id}:{skill.id}"
+            ),
+        )
         return await self.get_detail(tenant_id, name)

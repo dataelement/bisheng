@@ -7,7 +7,7 @@
 > OpenFGA DSL、tuple 形状、API、Service、脚本参数、批次和部署命令属于后续
 > [design.md](./design.md) 与 [tasks.md](./tasks.md)，不在本文档重复。
 
-**状态**：Spec 草案，等待用户确认（SDD ★）
+**状态**：✅ Spec、Design ★、Tasks ★ 已确认；功能与迁移脚本开发完成；本地 E2E 经用户确认不执行
 
 **关联 PRD**：[3.0-beta1 ReBAC 逻辑优化](https://dataelem.feishu.cn/wiki/TYmHw4nPzitTQnkUjW8c5NFKnQg)
 
@@ -31,8 +31,8 @@
   `manage_permission`，并采用模型级“是否允许授予同级”策略。
 - PRD 4.3 已明确复制资源保留权限模式，`CUSTOM` 副本复制普通白名单；本 Spec 直接纳入，
   不再作为开放问题。
-- PRD 3 对“知识库无统一权限父级”与“默认继承”的描述互相矛盾，在 OQ-01 关闭前固定
-  `CUSTOM`，避免从不确定父级继承造成扩权。
+- OQ-01 已确认：`knowledge_space` 与 `knowledge_library` 都是无上级资源的顶级容器，
+  固定 `CUSTOM`；二者都可以成为 folder / knowledge_file 的 canonical 直接父级。
 
 ---
 
@@ -47,12 +47,16 @@
 - 让进入资源 ReBAC 的请求以 OpenFGA 对具体动作的结果作为唯一权限结论。
 - 支持用户、部门和既有合法主体类型的多来源授权并集与独立撤销。
 - 支持有直接权限父级的资源在 `INHERIT` 与 `CUSTOM` 间切换。
+- 将 dashboard 的资源授权、成员管理和具体动作入口一并迁入统一 Grant / Action 语义。
 - 权限管理界面展示模式、本级/继承来源、模型、等级和可编辑状态。
 - 完成历史动作、模型、绑定、主体来源、父子关系与资源权限模式的一次性升级。
 - 将 `permission_relation_models_v1` 与 `permission_relation_model_bindings_v1`
   从 Config 大 JSON 迁入规范化 MySQL/DM8 关系表，并退役其运行时读写。
-- 通过显式固定旧、新 Authorization Model ID 完成模型发布、tuple 转换、对比和一次切换。
-- 提供 dry-run、影响报告、幂等恢复、语义校验、切换门禁、整版回滚点和旧路径退役。
+- 在停服维护窗口内沿用现有 OpenFGA Store，发布一个新 Authorization Model ID，原地完成
+  tuple 转换和旧运行数据退役；校验通过后让全部服务只使用新 model 和新业务逻辑。
+- 提供逐项映射、幂等断点续跑、迁移后校验、启服门禁、前向修复和旧路径退役。
+- 数据库结构变更只通过 DDL-only Alembic revision 完成；旧权限数据、Config 与 OpenFGA
+  tuple 的读取、转换、回填、清理和校验由 `src/backend/scripts/` 下的专用数据迁移脚本完成。
 
 ### 本次明确排除
 
@@ -64,7 +68,14 @@
 - 不允许直接编辑标准模型的名称、等级或动作集合。
 - 不在本 Spec 确定物理字段类型、索引细节、缓存、API、OpenFGA DSL、发布批次或脚本命令。
 - 不承诺没有 canonical 权限父级的资源支持继承模式。
-- 不把文件正文、预览、搜索、RAG、下载自动包含在“资源可见”语义中。
+- 不为文件预览新增或复用 PermissionAction；预览维持无动作鉴权，只有原件/打包下载入口
+  校验 `download`。搜索、RAG 和其他业务行为仍按各自明确动作契约处理。
+- 不提供独立 dry-run/迁移预演、旧/新 model 影子裁决、回滚窗口、新→旧数据转换器或旧权限
+  运行时恢复路径；迁移或启服验证失败时保持维护并前向修复。
+- 不创建、复制或切换 OpenFGA Store，也不同时维护旧、新两个运行 model；旧 model ID
+  仅作为 OpenFGA 不可修改/删除的历史版本存在。
+- 不在 Alembic revision、应用启动钩子、API 或 Celery 中执行权限数据迁移；服务不会在
+  启动时自动回填旧数据。
 
 ---
 
@@ -83,6 +94,8 @@
 | `INHERIT` | 普通授权沿直接权限父级计算，当前资源不能维护普通本级成员 |
 | `CUSTOM` | 当前资源形成权限边界，只使用本级普通 Grant；业务结构父级仍保留 |
 | 受保护授权 | 系统创建且不能被普通成员管理接口删除或降级的授权，例如按资源规则确定的所有者 |
+| Schema Migration | Alembic revision，只负责 MySQL/DM8 表、列、索引和约束等 DDL，不读取或转换旧业务数据 |
+| Permission Data Migration Script | `src/backend/scripts/` 下的一次性停服运维脚本；在 schema upgrade 后执行旧数据转换、OpenFGA tuple 更新、checkpoint、验证与退役 |
 
 ### 1.1 规范示例：同一资源上的直接授权与部门授权
 
@@ -126,7 +139,8 @@
 
 ### US-06 升级运维与审计人员
 
-作为升级运维与审计人员，我希望在切换前看见完整盘点和差异报告，在失败时可以安全恢复，并在稳定后确认旧路径已退役。
+作为升级运维与审计人员，我希望停服后直接迁移旧权限数据，在启服前看见完整映射和校验结果，
+失败时保持维护并前向修复，在新逻辑稳定后确认旧路径已退役。
 
 ---
 
@@ -225,7 +239,7 @@
 | `knowledge_space` | 固定 `CUSTOM` |
 | `folder` | 支持 `INHERIT` / `CUSTOM`；新建默认 `INHERIT` |
 | `knowledge_file` | 支持 `INHERIT` / `CUSTOM`；新建默认 `INHERIT` |
-| `knowledge_library` | 在 canonical 权限父级确认前固定 `CUSTOM` |
+| `knowledge_library` | 固定 `CUSTOM`；与 knowledge_space 一样是无上级资源的顶级容器 |
 | workflow / assistant / tool / channel / dashboard | 本期固定顶级自定义语义，不提供模式切换 |
 
 - **AC-45** — THE SYSTEM SHALL 复用业务资源既有的直接父级作为权限继承来源，不建立或展示第二套权限父级。
@@ -255,7 +269,7 @@
 
 ### 3.8 审计、并发与一致性
 
-- **AC-66** — THE SYSTEM SHALL 审计动作等级变化、模型创建/更新/停用、标准模型同级策略变化、Grant 变更、权限模式切换、移动导致的权限来源变化、迁移和回滚。
+- **AC-66** — THE SYSTEM SHALL 审计动作等级变化、模型创建/更新/停用、标准模型同级策略变化、Grant 变更、权限模式切换、移动导致的权限来源变化、迁移、启服和旧数据清理。
 - **AC-67** — THE SYSTEM SHALL 在审计中记录操作者、租户、目标、变更前后状态、影响范围、结果、时间和失败原因。
 - **AC-68** — WHEN 两个管理员基于同一旧版本并发修改模型、Grant 或权限模式, THE SYSTEM SHALL 只接受符合当前版本的更新，并明确拒绝过期覆盖。
 - **AC-69** — WHEN 授权或撤销成功返回, THE SYSTEM SHALL 让随后用于安全决策的读取观察到该新状态，不得因旧缓存继续产生与已确认变更相反的 ALLOW。
@@ -270,6 +284,18 @@
 - **AC-150** — WHEN 新建知识空间, THE SYSTEM SHALL 将其初始化为 `CUSTOM`，并按现有安全规则生成受保护所有者授权。
 - **AC-151** — WHEN 在合法直接父级下新建文件夹或文件, THE SYSTEM SHALL 将其初始化为 `INHERIT`，同时按现有安全规则生成可展示但不破坏普通继承语义的受保护所有者授权。
 - **AC-152** — WHEN 用户请求在 `INHERIT` 与 `CUSTOM` 之间切换, THE SYSTEM SHALL 在变更前展示成员复制或本级授权删除等影响并要求确认；用户取消时模式和权限不得变化。
+- **AC-153** — THE SYSTEM SHALL 将 dashboard 纳入本期统一 PermissionGrant、成员管理和动作迁移；列表/详情/组件数据查询/复制源读取/设为个人默认使用固定资源可见性，分享链接不得绕过该可见性；标题、状态（含发布/取消发布）、布局和组件变更检查 `edit`，删除检查 `delete`，授权成员检查 `manage_permission`，新建 dashboard 继续由既有菜单能力控制。
+- **AC-154** — WHEN 用户预览文件, THE SYSTEM SHALL 不执行 PermissionAction 鉴权；WHEN 用户下载原件或打包文件, THE SYSTEM SHALL 检查 `download`，不得把“预览过”或资源可见性当作下载授权。
+- **AC-155** — THE SYSTEM SHALL 让业务资源 Service 负责资源存在性、所属租户、状态、父级和其他业务规则，并把已验证的资源标识/上下文传给权限服务；权限领域不得查询或裁决这些业务数据，只负责与业务无关的授权计算和权限事实投影。
+- **AC-156** — WHEN 任一动作的等级、生效状态或适用范围变化, THE SYSTEM SHALL 在同一完整 Catalog release 中重新计算四个标准模型的累计动作集合、所有自定义模型的派生等级和所有模型的有效资源动作，不得只更新被直接编辑的模型。
+- **AC-157** — THE SYSTEM SHALL 允许一个资源同时存在多个 owner；创建者对应一个受保护 owner，
+  其他直接 owner 作为独立普通来源保留。WHEN F048 启用新权限逻辑, THE SYSTEM SHALL
+  退役既有 F018 owner 交接 API，且本期不提供受保护 owner 转让能力；普通 owner 的独立
+  增删仍按既有成员管理合同执行，不得删除创建者受保护来源。
+- **AC-158** — THE SYSTEM SHALL 让 Alembic revision 只执行 MySQL/DM8 数据库结构 DDL；
+  旧权限数据、Config 和 OpenFGA tuple 的读取、转换、回填、去重、清理、checkpoint 与验证
+  必须由 `src/backend/scripts/` 下的专用数据迁移脚本在停服窗口执行，不得由 revision、
+  API、Celery 或应用启动钩子自动执行。
 
 ---
 
@@ -280,12 +306,16 @@
 本次升级从 v2.5/v2.6 的四档静态关系、Config 中的 relation model/binding、
 既有 OpenFGA tuple 和资源父子关系迁移到本 Spec。升级必须遵守：
 
-1. 先盘点和 dry-run，再写入新权限数据；
-2. 新旧授权事实在最终切换前不能混合参与单次 ALLOW；
-3. 最终采用一次切换，不保留长期运行时双写或逐请求 fallback；
-4. 未映射、跨租户、孤儿、冲突和语义可能扩权的数据 fail closed；
-5. 迁移可重复执行、可断点恢复、可审计；
-6. 回滚是应用与权限数据的一致整版恢复，不是线上单请求回退到旧裁决器。
+1. 先停止 API、Celery、Linsight 和其他权限读写进程；
+2. 先由 Alembic revision 只执行 MySQL/DM8 schema DDL，再由 `src/backend/scripts/`
+   专用脚本执行唯一一次正式权限数据迁移；两者不得互相 import 或混合职责；
+3. OpenFGA Store ID 保持不变；仍合法的 system/组织/shared/parent tuple 原地复用，新授权
+   tuple 原地写入并在核对后删除已迁移资源的旧四档/废弃 relation tuple；
+4. 数据迁移脚本校验通过才启动新版本，全部权限读写只启用新 model ID，不保留双 model client、
+   运行时双写或 fallback；
+5. 未映射、跨租户、孤儿、冲突和语义可能扩权的数据 fail closed；
+6. 数据迁移脚本可重复执行、可断点续跑、可审计，但不提供独立 dry-run 或生产迁移预演；
+7. 数据迁移或启服验证失败时保持维护并在新 model 上前向修复，不恢复旧应用与旧权限运行时。
 
 ### 4.2 初始动作映射基线
 
@@ -298,6 +328,7 @@
 | `manage_*` | `manage_permission` | 3 | 根据原模型可管理目标范围推导模型级同级策略；不能由新等级规则无损表达的记录进入人工清单，不得自动扩权 |
 | `rename_folder` / `rename_file` | `rename` | 2 | 保留适用资源范围 |
 | `edit_*` | `edit` | 2 | 按目标资源适用范围迁移 |
+| `AccessType.DASHBOARD_WRITE` | `edit` | 2 | dashboard 标题、状态、布局和组件更新；旧删除入口改为独立 `delete` |
 | `create_folder` | `create_folder` | 2 | 作为目标容器动作 |
 | `upload_file` | `upload_file` | 2 | 作为目标容器动作 |
 | `move_folder` / `move_file` | `move` | 2 | 保留源资源与目标容器的业务校验要求 |
@@ -307,15 +338,20 @@
 | `use_app` / `use_kb` / `use_tool` | `use` | 1 | 不等同于编辑 |
 | `publish_app` | `publish` | 3 | 仅适用于应用 |
 | `unpublish_app` | `unpublish` | 3 | 仅适用于应用 |
+| `AccessType.DASHBOARD` | 固定资源可见性 | — | dashboard 列表、详情、数据查询和复制源读取；不新增可配置 `view_dashboard` |
 
-### 4.3 迁移前盘点与 dry-run
+### 4.3 正式迁移的源校验与逐项映射
 
-- **AC-71** — WHEN 运维执行 dry-run, THE SYSTEM SHALL 不修改数据库、OpenFGA、Config 或线上权限结果。
-- **AC-72** — THE SYSTEM SHALL 在 dry-run 中盘点旧动作、四档关系、自定义模型、Config binding、资源授权 tuple、直接/部门/用户组来源、受保护所有者、资源父级和异常记录。
+- **AC-71** — WHEN Alembic schema upgrade 已成功且全部权限读写进程停止, THE SYSTEM SHALL
+  由 `src/backend/scripts/` 专用脚本启动唯一正式 data migration run，先校验 schema、源环境、
+  迁移锁和旧数据完整性，再直接写入规范化关系表与现有 Store；不要求先执行独立 dry-run。
+- **AC-72** — THE SYSTEM SHALL 在数据迁移脚本的源校验阶段盘点旧动作、四档关系、自定义模型、
+  Config binding、资源授权 tuple、直接/部门/用户组来源、受保护所有者、资源父级和异常记录。
 - **AC-73** — THE SYSTEM SHALL 输出旧动作到新动作、旧系统/自定义模型到新模型、旧授权到目标 Grant、资源到目标权限模式的可追溯映射。
-- **AC-74** — THE SYSTEM SHALL 分别统计拟新增、复用、跳过、删除、去重和人工处理的数据量，并按租户、资源类型、模型、主体类型和来源拆分。
+- **AC-74** — THE SYSTEM SHALL 分别统计已创建、复用、跳过、删除、去重和人工处理的数据量，并按租户、资源类型、模型、主体类型和来源拆分。
 - **AC-75** — WHEN 发现跨租户关系、不存在的资源/主体/模型、无效父级、循环父级、非法动作、空自定义模型或不能表达的 `manage_*` 范围, THE SYSTEM SHALL 将其列入阻断或人工处置清单，不得静默放行。
-- **AC-76** — THE SYSTEM SHALL 在正式迁移前产生可验证的数据库与 OpenFGA 恢复点，并证明恢复材料与目标环境、目标版本匹配。
+- **AC-76** — IF 源校验或目标写入存在未关闭阻断项, THEN THE SYSTEM SHALL 停止后续批次并
+  保持服务关闭；修复后只能基于 checkpoint 幂等续跑并重新校验，不得绕过阻断项启服。
 
 ### 4.4 模型、Grant 与主体来源迁移
 
@@ -336,69 +372,95 @@
 - **AC-88** — WHEN 文件夹或文件除受保护授权外没有普通本级授权, THE SYSTEM SHALL 将其迁为 `INHERIT` 并继续跟随直接父级。
 - **AC-89** — WHEN 文件夹或文件存在普通本级授权, THE SYSTEM SHALL 将其迁为 `CUSTOM`，并快照迁移前的有效普通授权集合，避免从旧“父级与本级叠加”语义切换后静默丢权。
 - **AC-90** — WHEN 快照包含同一主体的多个不同来源或不同模型, THE SYSTEM SHALL 分别保留；只有完全相同的授权来源才可去重。
-- **AC-91** — WHEN `knowledge_library` 尚未确认 canonical 权限父级, THE SYSTEM SHALL 将其迁为 `CUSTOM`，不得以不确定来源开启继承。
+- **AC-91** — WHEN 迁移 `knowledge_library`, THE SYSTEM SHALL 将其作为无上级资源的顶级容器固定为 `CUSTOM`，不得创建 parent 或开放 `INHERIT` 切换。
 - **AC-92** — WHEN 资源父级缺失、跨租户或形成循环, THE SYSTEM SHALL 阻止该资源进入 `INHERIT`，并纳入人工修复清单。
 
 ### 4.6 正式迁移、语义校验与切换门禁
 
-- **AC-93** — WHEN 正式迁移被重复执行或从中断点恢复, THE SYSTEM SHALL 得到相同目标结果，不重复授权、不丢失已成功批次。
-- **AC-94** — WHEN 同一环境已有迁移任务运行, THE SYSTEM SHALL 阻止第二个任务并发修改同一迁移范围。
-- **AC-95** — IF 正式迁移发生不可恢复错误, THEN THE SYSTEM SHALL 停止后续切换、保留可诊断状态，并允许在修复后安全续跑或恢复。
-- **AC-96** — THE SYSTEM SHALL 在切换前完成全量来源计数与目标计数核对，并对所有高风险动作、受保护所有者、模式边界及直接/部门并集场景执行语义校验。
+- **AC-93** — WHEN 正式数据迁移脚本被重复执行或从中断点恢复, THE SYSTEM SHALL 得到相同目标结果，不重复授权、不丢失已成功批次。
+- **AC-94** — WHEN 同一环境已有数据迁移脚本运行, THE SYSTEM SHALL 阻止第二个脚本进程并发修改同一迁移范围。
+- **AC-95** — IF 正式迁移发生错误, THEN THE SYSTEM SHALL 停止后续批次、保留可诊断状态，
+  保持服务关闭，并允许在修复后从已验证 checkpoint 安全续跑。
+- **AC-96** — THE SYSTEM SHALL 在启服前完成全量来源计数与目标计数核对，并对所有高风险动作、受保护所有者、模式边界及直接/部门并集场景执行新模型语义校验。
 - **AC-97** — WHEN 新语义有意改变旧结果, THE SYSTEM SHALL 把每类预期扩权或撤权列入经批准的差异清单；清单外差异必须阻断切换。
 - **AC-98** — THE SYSTEM SHALL 在切换门禁中要求：阻断级异常为零、人工项已签署、跨租户关系为零、悬空父级为零、受保护授权完整、关键动作无未批准扩权。
-- **AC-99** — WHEN 最终切换开始, THE SYSTEM SHALL 在受控窗口内阻止旧授权写入产生未捕获增量，并在切换前完成最终增量核对。
-- **AC-100** — WHEN 切换成功, THE SYSTEM SHALL 同时把权限读取与写入切换到新语义，不允许一部分入口继续写旧 binding、另一部分入口按新 Grant 鉴权。
-- **AC-101** — IF 切换后的安全验证失败, THEN THE SYSTEM SHALL 触发整版回滚流程，恢复相互匹配的应用版本、授权事实和控制面数据；不得以逐请求旧系统 fallback 掩盖失败。
+- **AC-99** — WHEN 正式迁移窗口开始, THE SYSTEM SHALL 停止全部旧授权读写进程并阻止任何
+  未经迁移 run 记录的增量，直到新服务通过启服门禁。
+- **AC-100** — WHEN 启服门禁通过, THE SYSTEM SHALL 保持现有 Store ID 不变，同时让 API、
+  后台任务、同步任务和全部应用实例只使用新 Authorization Model 与新 Grant 语义；
+  不得保留旧 binding 写入入口或 dual/legacy model client。
+- **AC-101** — IF 启服后安全验证失败, THEN THE SYSTEM SHALL 重新进入维护、停止权限写入并
+  在新 model 与新控制面上前向修复；不得恢复旧 model、回放旧 Config、逐请求 fallback 或静默放行。
 
-### 4.7 观察期、回滚与旧数据清理
+### 4.7 启服后监控、前向修复与启服前旧路径退役
 
-- **AC-102** — THE SYSTEM SHALL 在切换后观察期持续报告具体动作拒绝/允许异常、Grant/模型异常、权限模式差异、跨租户风险和迁移人工项状态。
-- **AC-103** — WHILE 回滚窗口未关闭, THE SYSTEM SHALL 保留经验证的恢复点和旧系统所需数据，且不得执行不可逆清理。
-- **AC-104** — WHEN 新系统在观察期通过验收并正式关闭回滚窗口, THE SYSTEM SHALL 退役旧动作模板、旧 Config binding 运行时读取、旧授权写入口、兼容 alias 和旧 ALLOW fallback。
-- **AC-105** — WHEN 清理旧数据, THE SYSTEM SHALL 先证明所有有效模型、Grant、主体来源、受保护授权和父级均已迁移且无运行时引用；清理行为本身必须可审计。
-- **AC-106** — THE SYSTEM SHALL 在 MySQL 与 DM8 支持的部署中提供相同迁移结果和切换门禁。
-- **AC-107** — IF 回滚窗口内已经接受新授权、撤权、模型或权限模式写入, THEN THE SYSTEM SHALL 在整版回滚时保留或可追溯地重放这些已确认变更，或者在回滚前进入明确的写入维护窗口；不得静默丢失已向用户报告成功的权限变化。
+- **AC-102** — THE SYSTEM SHALL 在启服后持续报告具体动作拒绝/允许异常、Grant/模型异常、
+  权限模式异常、跨租户风险、迁移人工项和前向修复状态。
+- **AC-103** — THE SYSTEM SHALL 不提供 F048 应用级回滚窗口、新→旧数据转换或旧权限运行时
+  恢复能力；旧 model ID 仅是 OpenFGA 不可删除的历史记录，旧 Config 不得保留为运行时来源。
+- **AC-104** — WHEN D3 已证明对应新关系和规范化控制面完整, THE SYSTEM SHALL 在 D4 启服
+  门禁前退役旧动作模板、旧 Config binding/model 运行数据、旧授权写入口、兼容 alias 和
+  旧 ALLOW fallback；不得留到启服后再清理。
+- **AC-105** — WHEN 正式数据迁移脚本退役旧运行数据, THE SYSTEM SHALL 先证明所有有效
+  模型、Grant、主体来源、受保护授权和父级均已迁移，并把来源快照、目标 checksum 与删除
+  fingerprint 持久化到迁移审计记录；不得依赖保留旧运行数据来核对。
+- **AC-106** — THE SYSTEM SHALL 在 MySQL 与 DM8 支持的部署中提供相同的 Alembic DDL、
+  数据迁移脚本结果和切换门禁。
+- **AC-107** — IF 启服后需要修复授权、撤权、模型或权限模式数据, THEN THE SYSTEM SHALL
+  通过新控制面和 durable projection operation 执行可审计的前向修复；不得重新启用旧 model、
+  恢复旧 Config 或丢失已向用户报告成功的权限变化。
 
 ### 4.8 Authorization Model、旧模型与 Config JSON 专项迁移
 
 本节是第 4.1～4.7 节的专项细化，明确回答三类数据如何迁移：
 
-1. OpenFGA Authorization Model 从旧版本 A 切换到新版本 B；
+1. OpenFGA Authorization Model 在同一 Store 从旧 model ID 单向切换到新 model ID；
 2. 旧 `owner/manager/editor/viewer`、标准模型和自定义模型如何映射；
 3. 两份 Config 大 JSON 如何迁入规范化关系表。
 
-#### 4.8.1 Authorization Model A → B
+#### 4.8.1 旧 Authorization Model → 新 Authorization Model
 
-当前版本 A 为仓库中的 `v2.0.2` 静态模型：资源类型直接使用
+当前旧版本为仓库中的 `v2.0.2` 静态模型：资源类型直接使用
 `owner/manager/editor/viewer`，再计算 `can_manage/can_edit/can_read/can_delete`。
-新版本 B 引入 PermissionModel、PermissionGrant 和具体动作关系，同时继续保留
+新版本引入 PermissionModel、PermissionGrant 和具体动作关系，同时继续保留
 `system`、`tenant`、`department`、`user_group`、必要的 `shared_with` 以及层级资源
 `parent` 等仍有效的系统关系。
 
 OpenFGA Authorization Model 不可原地修改；每次发布都会产生新的 model ID。
-因此本次采用“显式固定 A、离线构建 B、校验后一次切换”的迁移方式：
+因此本次采用“停服、同 Store 原地迁移、校验后只启用新 model”的单向迁移方式：
 
-| 阶段 | 生产权限读写模型 | 迁移行为 |
+| 阶段 | 服务状态 | 迁移行为 |
 |------|-----------------|---------|
-| M0 固定旧版本 | A | 所有生产实例显式固定 A，禁止自动跟随最新模型 |
-| M1 SQL 控制面迁移 | A | 创建规范化关系表，导入动作、标准模型、自定义模型和旧绑定 |
-| M2 发布新模型 | A | 发布 B 并记录新 model ID，但生产流量仍只使用 A |
-| M3 新 tuple 回填 | A | 依据 SQL 映射生成仅由 B 使用的新类型/关系 tuple；复用关系必须证明不会改变 A 的结果 |
-| M4 双版本校验 | A | 用明确的 A/B model ID 做离线或影子语义对比；B 结果不参与生产 ALLOW |
-| M5 最终增量与切换 | A → B | 短暂冻结权限写入或追平变更日志，然后把全部权限读写一次切到 B |
-| M6 观察与清理 | B | 保留 A 和旧 tuple 作为回滚材料；关闭回滚窗口后再清理旧 tuple 与 Config JSON |
+| D0 停服与冻结 | 全部关闭 | 停止 API、Celery、Linsight 和其他权限读写；记录现有 Store、旧 model ID 与源数据 watermark |
+| D1 Schema Migration | 全部关闭 | Alembic revision 只执行 MySQL/DM8 DDL并验证单 head；不创建 data migration run，不读写旧数据或 OpenFGA |
+| D2 Data Migration Script | 全部关闭 | 从 `src/backend/` 运行专用脚本；脚本创建正式 run，在现有 Store 发布新 model，并校验/导入动作、模型、binding、Grant、assignee 和 mode |
+| D3 脚本转换并退役旧数据 | 全部关闭 | 同一脚本原地复用仍合法的组织/共享/parent/system tuple；写入新 Catalog/Grant/mode tuple，逐批核对后删除旧四档/废弃 tuple 和旧 Config 运行数据 |
+| D4 脚本校验 | 全部关闭 | 专用脚本 verify 核对来源/目标计数、checksum、人工项和新模型高风险动作；已迁移类型旧 tuple/Config 计数必须为零 |
+| D5 配置并启服 | 关闭 → 新 model | Store ID 保持不变；全部实例只固定新 model/Catalog，dual/legacy model 关闭；readiness、heartbeat 与 smoke 100% 后开放流量 |
+| D6 前向运行 | 新 model | 异常只做前向修复；旧 model ID 仅作为 OpenFGA 不可删除的历史版本存在 |
 
-- **AC-108** — WHEN 新 Authorization Model B 准备发布, THE SYSTEM SHALL 先证明全部生产 Check、List 和 Write 已显式固定旧 model ID A；任何未配置 model ID 而自动选取最新模型的实例必须阻断发布。
-- **AC-109** — WHEN 发布 B, THE SYSTEM SHALL 记录新的不可变 model ID，不得覆盖、伪装或复用 A 的 ID。
-- **AC-110** — WHILE 模型和 tuple 回填尚未通过切换门禁, THE SYSTEM SHALL 继续只用 A 处理生产授权；B 仅用于迁移写入和语义校验，其结果不得产生生产 ALLOW。
-- **AC-111** — WHEN 向 OpenFGA 写入仅在 B 中合法的新类型或关系 tuple, THE SYSTEM SHALL 显式指定 B 的 model ID 作为写入校验上下文；由于 tuple 本身不携带 model ID，写入前必须证明这些 tuple 在同一 Store 中不会改变 A 的权限结果，否则必须采用隔离 Store 或经过验证的兼容阶段模型。
-- **AC-112** — THE SYSTEM SHALL 通过“旧 tuple 转换为新 tuple”完成迁移，不得把形状相同的一份 tuple 同时写给 A/B 作为迁移方案；现有同 tuple shadow-write 机制不能替代本次模型转换。
-- **AC-113** — WHILE M1～M4 运行, THE SYSTEM SHALL 捕获迁移基线之后发生的模型、绑定、授权、撤权、父级和资源模式变化，或者在最终阶段进入权限写入维护窗口；任何未追平增量必须阻断切换。
-- **AC-114** — WHEN 执行 A/B 语义对比, THE SYSTEM SHALL 使用经过批准的旧动作到新动作映射比较直接授权、继承、多来源并集和具体动作，不得仅比较 tuple 数量。
-- **AC-115** — WHEN M5 切换成功, THE SYSTEM SHALL 让 API、后台任务、同步任务和全部应用实例同时固定 B，并停止产生 A 专属的资源四档 tuple 与 Config binding。
-- **AC-116** — WHILE 回滚窗口未关闭, THE SYSTEM SHALL 保留 A、旧 tuple、旧 Config 快照和切换后变更记录；不得提前删除任何整版回滚需要的数据。
-- **AC-117** — WHEN 回滚窗口关闭, THE SYSTEM SHALL 删除已无运行时引用的旧资源四档 tuple；旧 Authorization Model A 作为 OpenFGA 不可变历史版本保留，不得被当作仍可使用的生产配置。
+- **AC-108** — WHEN 正式数据迁移脚本开始, THE SYSTEM SHALL 证明 Alembic schema upgrade
+  已成功，并证明全部 API、Celery、Linsight 和其他
+  权限读写进程已停止；任一实例仍存活或仍可能自动选取 Store 最新模型时必须阻断迁移。
+- **AC-109** — WHEN 发布新 Authorization Model, THE SYSTEM SHALL 在现有 Store 中记录新的
+  不可变 model ID，不得覆盖、伪装或复用旧 model ID，也不得创建或切换 Store。
+- **AC-110** — WHILE 迁移和启服门禁尚未完成, THE SYSTEM SHALL 不处理生产授权请求；
+  同一 Store 只由专用数据迁移脚本写入、删除和校验，任何应用实例不得因新 model 已发布而提前启动。
+- **AC-111** — WHEN 向现有 Store 写入新类型或关系 tuple, THE SYSTEM SHALL 显式指定新
+  model ID 作为校验上下文；仍合法的基础 tuple 必须原地复用，不得复制到另一 Store。
+- **AC-112** — THE SYSTEM SHALL 通过“旧 tuple 转换为新 tuple”完成迁移，不得把形状相同的一份 tuple 同时写给旧/新 model 作为迁移方案；现有同 tuple shadow-write 机制不能替代本次模型转换。
+- **AC-113** — WHILE D0～D5 运行, THE SYSTEM SHALL 保持旧授权、模型、binding、父级和资源
+  模式写入冻结；任何迁移 watermark 之后的未记录变化必须阻断启服。
+- **AC-114** — WHEN 执行迁移后语义校验, THE SYSTEM SHALL 使用经过批准的旧动作到新动作
+  映射验证直接授权、继承、多来源并集和具体动作，不得仅比较 tuple 数量，也不得运行线上
+  旧/新 model shadow 裁决。
+- **AC-115** — WHEN D5 启服成功, THE SYSTEM SHALL 让 API、后台任务、同步任务和全部应用
+  实例保持同一 Store ID 并只固定新 model ID，同时停止产生旧资源四档 tuple 与 Config binding。
+- **AC-116** — THE SYSTEM SHALL 不提供从新 model 恢复到旧 model 的应用级迁移路径；
+  IF D5 后发现问题, THEN THE SYSTEM SHALL 重新维护并在新 model 上前向修复。
+- **AC-117** — WHEN D4 通过, THE SYSTEM SHALL 证明已迁移资源的旧四档/废弃 relation tuple
+  与旧 Config 运行数据已经删除；旧 model ID 因 OpenFGA 不可变而保留时，也不得出现在
+  runtime 配置、client、heartbeat 或 readiness 中。
 
 #### 4.8.2 旧 OpenFGA 关系迁移
 
@@ -407,7 +469,7 @@ OpenFGA Authorization Model 不可原地修改；每次发布都会产生新的 
 
 | 旧关系事实 | 新方案 |
 |-----------|--------|
-| 业务表确认的受保护创建者 + 直接 `owner` | 进入“资源 + 新所有者标准模型”的 Grant，并把直接用户标为受保护 assignee |
+| 业务表/成员事实确认的受保护创建者 | 进入“资源 + 新所有者标准模型”的 Grant，并标记为受保护 assignee；缺少直接 tuple 但事实唯一时审计修复 |
 | 其他资源直接 `owner` | 有唯一匹配 binding 时使用其迁移后模型，否则进入新所有者标准模型 Grant |
 | 资源直接 `manager` | 进入“资源 + 新管理者标准模型”的 Grant；保留原 userset 主体 |
 | 资源直接 `editor` | 进入“资源 + 新编辑者标准模型”的 Grant；保留原 userset 主体 |
@@ -420,7 +482,7 @@ OpenFGA Authorization Model 不可原地修改；每次发布都会产生新的 
 
 - **AC-118** — WHEN 读取非受保护的旧 `owner/manager/editor/viewer` tuple, THE SYSTEM SHALL 先按资源、主体、relation 和范围查找唯一匹配的旧 binding；有 binding 时使用其 model_id，无 binding 时才映射到对应标准模型。
 - **AC-119** — THE SYSTEM SHALL 只为直接 tuple 创建 Grant assignee，不得把 owner 蕴含 manager/editor/viewer、manager 蕴含 editor/viewer 或 `parent` 继承得到的用户物化为新 assignee。
-- **AC-120** — WHEN 迁移资源创建者或其他受保护 owner, THE SYSTEM SHALL 结合资源业务表和既有成员事实识别它，把合法直接 `owner` 映射到所有者标准模型并标记为受保护；仅凭 relation 名称不能推断所有 owner 都受保护，受保护主体缺少 owner tuple 或存在冲突 binding 时必须阻断迁移。
+- **AC-120** — WHEN 迁移资源创建者或其他受保护 owner, THE SYSTEM SHALL 结合资源业务表和既有成员事实识别它，并映射到所有者标准模型的受保护 assignee；仅凭 relation 名称不能推断所有 owner 都受保护。IF canonical 事实唯一但缺少直接 owner tuple, THEN THE SYSTEM SHALL 补建受保护来源并记录修复；IF 存在多个 CREATOR、主体冲突或冲突 binding, THEN THE SYSTEM SHALL 阻断迁移。knowledge_space/channel 的唯一 CREATOR 与 `user_id` 因既有 F018 不一致时，迁移须保留 CREATOR 为 protected、差异 `user_id` 为 ordinary 并登记差异，不得静默删除任一当前有效 owner 来源。
 - **AC-121** — WHEN 旧主体为 `department:{id}#member`、`user_group:{id}#member` 或 `user_group:{id}#admin`, THE SYSTEM SHALL 原样保留主体类型与 userset 语义，不展开为用户。
 - **AC-122** — WHEN 旧部门 binding 标记 `include_children=true`, THE SYSTEM SHALL 以 binding 中的根部门和范围作为唯一业务授权来源；历史上为子部门展开出的多个 tuple 不得被误迁为多个独立授权。
 - **AC-123** — WHEN 旧 tuple 找不到资源、主体或合法租户，或者一个 tuple 匹配多个互相冲突的 binding, THE SYSTEM SHALL 将其列为阻断项，不得猜测目标模型。
@@ -474,9 +536,9 @@ OpenFGA Authorization Model 不可原地修改；每次发布都会产生新的 
 | `permission_grant` | 租户内“资源 + PermissionModel”的唯一逻辑 Grant | OpenFGA 直接四档 tuple 与 binding |
 | `permission_grant_assignee` | Grant 的主体、userset、include_children、直接/部门等来源、受保护属性 | binding 与匹配的直接 tuple |
 | `resource_permission_mode` | 资源的 `INHERIT` / `CUSTOM` 模式与版本 | 资源父级、普通本级授权和第 4.5 节规则 |
-| `authorization_model_release` | 旧/新 OpenFGA model ID、发布状态、切换与回滚窗口 | OpenFGA A/B 发布过程 |
-| `permission_migration_run` | dry-run、正式迁移、checkpoint、差异、人工项与结果 | 本次迁移过程 |
-| `permission_migration_item` | 每条旧模型、binding、tuple 的来源定位、目标记录、状态和差异 | 本次迁移逐项映射与断点恢复 |
+| `authorization_model_release` | 同一 OpenFGA Store 中的新 model ID、发布状态与启服结果 | OpenFGA 单向迁移过程 |
+| `permission_migration_run` | 专用数据迁移脚本的正式 run、checkpoint、差异、人工项与结果 | 本次 scripts 数据迁移过程；不是 Alembic 状态 |
+| `permission_migration_item` | 每条旧模型、binding、tuple 的来源定位、目标记录、状态和差异 | scripts 数据迁移逐项映射与断点恢复 |
 
 MySQL/DM8 关系表是权限配置、模型定义和绑定关系的控制面真相；OpenFGA 是由这些事实发布出的
 执行面。数据库记录不得在 OpenFGA 拒绝或不可用时充当第二个 ALLOW 裁决器。
@@ -488,8 +550,11 @@ MySQL/DM8 关系表是权限配置、模型定义和绑定关系的控制面真�
 - **AC-141** — WHEN 从不带 tenant_id 的旧 Config binding 迁移, THE SYSTEM SHALL 从 canonical 业务资源解析 tenant_id 并验证主体范围；无法唯一解析、跨租户或资源不存在的 binding 必须阻断。
 - **AC-142** — WHEN `permission_relation_models_v1` 或 `permission_relation_model_bindings_v1` JSON 无法解析、字段缺失、ID 重复、引用不存在模型或 binding relation 与模型 relation 冲突, THE SYSTEM SHALL 报告原始记录定位并阻断相关数据迁移，不得像旧运行时一样静默回退默认值或空数组。
 - **AC-143** — WHEN SQL 控制面变更需要发布到 OpenFGA, THE SYSTEM SHALL 保留可审计的发布状态并确保失败可重试、可对账；SQL 记录存在但 OpenFGA 未生效时不得报告权限已生效。
-- **AC-144** — WHEN 新系统完成切换, THE SYSTEM SHALL 停止读取和写入 `permission_relation_models_v1` 与 `permission_relation_model_bindings_v1`；两份 Config 仅作为回滚快照保留至回滚窗口关闭。
-- **AC-145** — WHEN 回滚窗口关闭且新旧计数、引用和权限语义核对通过, THE SYSTEM SHALL 删除两份 Config 大 JSON 及其专用缓存、解析、全量读改写和第二 PDP 路径。
+- **AC-144** — WHEN 新系统完成启服, THE SYSTEM SHALL 停止读取和写入
+  `permission_relation_models_v1` 与 `permission_relation_model_bindings_v1`；两份 Config
+  若暂时保留，只能作为只读迁移审计来源。
+- **AC-145** — WHEN 源/目标计数、引用和权限语义核对通过且旧数据无运行时引用,
+  THE SYSTEM SHALL 删除两份 Config 大 JSON 及其专用缓存、解析、全量读改写和第二 PDP 路径。
 - **AC-146** — THE SYSTEM SHALL 使上述规范化表、唯一性约束和迁移结果同时兼容 MySQL 与 DM8；不得使用仅 MySQL 可运行的 JSON 查询或方言特性。
 - **AC-147** — THE SYSTEM SHALL 以 `permission_migration_item` 逐条保存旧记录到新记录的映射、处理状态和失败原因，使断点恢复与审计不依赖另一份大 JSON 迁移报告。
 
@@ -513,8 +578,8 @@ MySQL/DM8 关系表是权限配置、模型定义和绑定关系的控制面真�
 | EC-12 | 历史本级授权与继承授权重复 | `CUSTOM` 快照保留可追溯来源并做精确去重，不删除受保护属性 |
 | EC-13 | 历史数据只有资源可见、没有具体动作 | 迁移后只保留可见关系，不推导下载、使用、编辑等动作 |
 | EC-14 | 历史 `manage_*` 目标集合非连续 | 不自动套用新等级边界，进入人工映射且在处理前 fail closed |
-| EC-15 | 清理后要求回退旧版本 | 不支持仅回退应用而复用不兼容权限数据；必须执行经过验证的整版恢复方案 |
-| EC-16 | B 已发布但仍有实例未显式固定 A | 阻断 B 的 tuple 回填与生产切换，先修复全部未固定实例 |
+| EC-15 | 启服后要求回退旧版本 | 不支持；重新进入维护并在新 model 与新控制面前向修复 |
+| EC-16 | 正式迁移时仍有旧 API/Worker 实例存活 | 阻断迁移和启服，先停止全部权限读写实例 |
 | EC-17 | 同一旧四档 tuple 有唯一 custom binding | 只按 binding 指向的迁移后模型创建 Grant，不再额外创建标准模型 Grant |
 | EC-18 | 被编辑的旧系统模型与新标准模型动作不一致 | 创建历史自定义模型快照并迁移其原绑定，不污染新标准模型 |
 | EC-19 | `include_children=true` 曾把一个根部门展开成多个子部门 tuple | 仅保留根部门 assignee 与范围，展开 tuple 只参与核对，不形成独立授权 |
@@ -548,21 +613,23 @@ MySQL/DM8 关系表是权限配置、模型定义和绑定关系的控制面真�
 
 - **NFR-12** — Platform 与 Client 的所有相关入口、频道独立授权入口及后台任务使用同一动作与 Grant 语义。
 - **NFR-13** — 必须能按租户、资源类型、动作、模型、Grant 和来源观察权限判定、批量判定、候选枚举的数量、耗时、错误、拒绝原因及版本。
-- **NFR-14** — 必须能观察模型影响范围、模型停用、Grant 变更、模式切换、迁移进度、差异、人工项和回滚状态。
+- **NFR-14** — 必须能观察模型影响范围、模型停用、Grant 变更、模式切换、迁移进度、差异、人工项、启服和前向修复状态。
 
 ---
 
-## 7. 评审前待确认项
+## 7. 已确认产品决策
 
-下列问题不阻止生成 Spec 草案，但必须在进入 Design 前由用户确认并回写本文档：
+下列 OQ-01～OQ-07 已由用户在 2026-07-29 明确确认并回写；本节不存在剩余开放项：
 
-| ID | 待确认问题 | 本稿采用的安全默认值 |
+| ID | 决策项 | 2026-07-29 确认结果 |
 |----|-----------|---------------------|
-| OQ-01 | `knowledge_library` 的 canonical 权限父级是什么？ | 未确认前固定 `CUSTOM` |
-| OQ-02 | 新建动作等级与模型配置是平台全局还是租户级？ | 现有全局 Config 模型按 `PLATFORM` 范围迁移；未来配置权限仅授予平台级管理员。无论最终范围如何，Grant 和权限解析均不得跨租户 |
-| OQ-03 | 第 4.2 节建议初始等级是否为产品最终映射？ | 仅用于 dry-run，不确认不得生产切换 |
-| OQ-04 | dashboard 是否纳入首批统一动作迁移？ | 保留既有权限且固定顶级自定义语义；没有完整动作映射前不切换 |
-| OQ-05 | 四个标准模型的初始“是否允许授予同级”分别是什么？ | 必须逐模型明确；迁移只可从能无损表达的历史 `manage_*` 范围推导，不能推导的进入人工确认 |
+| OQ-01 | `knowledge_library` 的 canonical 权限父级是什么？ | 与 `knowledge_space` 一样无上级，固定 `CUSTOM`；二者都可作为真实子文件/文件夹的直接父级 |
+| OQ-02 | 新建动作等级与模型配置是平台全局还是租户级？ | `PLATFORM` 全局，仅平台超管配置；Grant/解析继续按 tenant 隔离 |
+| OQ-03 | 第 4.2 节建议初始等级是否为产品最终映射？ | 采用第 4.2 节等级；具体资源 scope 见 Design §4.3 |
+| OQ-04 | dashboard 是否纳入首批统一动作迁移？ | 纳入；覆盖成员管理、visible/edit/delete/manage_permission 和既有调用入口 |
+| OQ-05 | 四个标准模型的初始“是否允许授予同级”分别是什么？ | viewer=false、editor=false、manager=false、owner=true；无 `manage_permission` 时该值不产生能力 |
+| OQ-06 | 文件预览与下载如何鉴权？ | 预览不设置 PermissionAction；只有原件/打包下载检查 `download` |
+| OQ-07 | 既有 F018 owner 交接在 F048 后是否继续开放？ | 选择 A：F048 启服时退役 F018，本期不实现 owner transfer；创建者 protected owner 保持不可转让，其他 owner 仍可并存 |
 
 以下结论已由当前方案确认：
 
@@ -576,22 +643,31 @@ MySQL/DM8 关系表是权限配置、模型定义和绑定关系的控制面真�
 - 对进入资源 ReBAC 的请求，OpenFGA 的具体动作结果是最终权限结论，不再由 Config 自定义模型做第二次裁决。
 - 模型 `active` 是可授权和可生效的总开关，不是业务动作。
 - 现有模型定义、模型动作和资源绑定迁入规范化关系表；Config 大 JSON 在切换后不再参与运行时。
-- Authorization Model 采用显式旧/新 ID 迁移，禁止通过“自动使用最新模型”或同 tuple 双写完成生产切换。
+- Authorization Model 沿用现有 Store；停服后发布新 model、原地迁移并退役旧 tuple，
+  校验后只启用新 model。禁止“自动使用最新模型”、dual/legacy client、同 tuple 双写或线上 shadow。
+- 本期不支持独立迁移预演、回滚窗口或新→旧运行时恢复；失败保持维护并前向修复。
+- Alembic revision 只负责数据库结构 DDL；正式权限数据迁移、OpenFGA tuple 更新与校验
+  由 `src/backend/scripts/` 专用脚本在 schema upgrade 后执行，服务启动不自动迁数据。
+- user-owned 资源必须建立受保护 owner；经 adapter 代码 allowlist 与 canonical business
+  predicate 双重确认的 platform system-owned 资源不得伪造用户 owner，只由既有
+  Constitution C4 system identity 管理。
 
 ---
 
 ## 8. 发布验收门槛
 
-- 第 7 节所有待确认项已关闭并回写。
+- 第 7 节所有产品决策已确认并回写。
 - 本 Spec 通过 `/sdd-review features/v3.0.0-beta1/048-rebac-permission-model-grants spec`，并获得用户 ★ 确认。
-- Design 完成 Authorization Model 升级、控制面、发布一致性、API、缓存、迁移状态机和整版回滚设计，并通过 Constitution Check。
+- Design 完成 Authorization Model 升级、控制面、发布一致性、API、缓存、停服直迁状态机和前向修复设计，并通过 Constitution Check。
 - 动作映射和 `manage_*` 转换规则由产品、后端、安全和测试共同签署。
 - 标准模型、自定义模型、模型停用、同级策略、多来源并集、模式切换和受保护授权均有自动化验收。
 - 直接授权 + 部门授权 + 撤销直接授权的规范示例通过端到端测试。
 - OpenFGA 故障注入证明不存在 Config、creator 或旧关系的 ALLOW fallback，且系统级身份策略不会因故障被临时启用。
-- dry-run 在生产脱敏快照上完成，所有阻断项为零，其他差异均有批准记录。
+- Alembic 单 head、DDL-only 和 MySQL/DM8 schema upgrade 验证通过；revision 不包含 DML、
+  业务 import 或 OpenFGA 调用。
+- `src/backend/scripts/` 专用权限数据迁移脚本在停服窗口完成，所有阻断项为零，其他差异均有批准记录。
 - MySQL、DM8、Platform、Client、频道入口、后台任务及既有高频列表性能回归通过。
-- 最终切换、整版回滚、观察期和旧路径清理均完成演练。
+- 同 Store 新 model 启服、前向故障处置和旧运行数据退役均完成验证。
 
 ---
 
@@ -603,7 +679,7 @@ MySQL/DM8 关系表是权限配置、模型定义和绑定关系的控制面真�
 | PermissionModel / PermissionGrant 数据结构与租户边界 | `design.md` §4 |
 | 模型发布、active、并发和缓存失效协议 | `design.md` §4～§6 |
 | API、错误码、Platform / Client 交互 | `design.md` §6 |
-| 迁移脚本、checkpoint、批次、切换和回滚 runbook | `design.md` §8 |
+| 迁移脚本、checkpoint、批次、启服和前向修复 runbook | `design.md` §8 |
 | 测试矩阵、任务拆解、执行顺序 | `tasks.md` |
 
 ---

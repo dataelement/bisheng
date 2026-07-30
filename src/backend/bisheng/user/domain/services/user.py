@@ -325,21 +325,19 @@ class UserService:
             ).first()
             if exists:
                 return
-            session.add(
-                UserDepartment(
-                    user_id=user_id,
-                    department_id=dept.id,
-                    is_primary=1,
-                    source="local",
-                )
-            )
-            await session.commit()
-            from bisheng.department.domain.services.department_change_handler import (
-                DepartmentChangeHandler,
-            )
+            department_id = int(dept.id)
 
-            ops = DepartmentChangeHandler.on_members_added(dept.id, [user_id])
-            await DepartmentChangeHandler.execute_async(ops)
+        from bisheng.department.domain.services.department_service import (
+            DepartmentMembershipProjectionService,
+        )
+
+        await DepartmentMembershipProjectionService.aadd_member(
+            user_id=user_id,
+            department_id=department_id,
+            is_primary=1,
+            source="local",
+            operator_id=user_id,
+        )
 
     @classmethod
     async def _resolve_registration_tenant_id(cls) -> int:

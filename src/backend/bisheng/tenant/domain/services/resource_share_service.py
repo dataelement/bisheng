@@ -5,7 +5,7 @@ Implements the DSL v2.0.1 tuple scheme (spec §5.1 + release-contract):
 - **Resource-level** ``{resource}#shared_with → tenant:{child_id}`` — one tuple
   per Child; makes the resource visible via the viewer tupleToUserset chain.
 - **Tenant-level**  ``tenant:{child_id}#shared_to → tenant:{root_id}`` — one
-  tuple per Child; feeds ``PermissionService._is_shared_to()`` L3 check.
+  tuple per Child; preserves the explicit F017 tenant-sharing identity fact.
 
 These two tuples together implement the PRD §7.2 intent
 ``{resource}#viewer → tenant:{root}#shared_to#member`` (which OpenFGA protobuf
@@ -17,8 +17,7 @@ Usage scenarios:
 1. ``enable_sharing / disable_sharing`` — toggle share on a single Root
    resource; fan out writes/deletes over all active Children.
 2. ``distribute_to_child / revoke_from_child`` — on Child mount/unmount,
-   write/revoke the Tenant-level ``shared_to`` tuple so the _is_shared_to
-   check short-circuits correctly.
+   write/revoke the Tenant-level ``shared_to`` identity tuple.
 3. ``list_sharing_children`` — introspect which Children a given resource is
    currently shared with (UI / audit / unmount cleanup).
 
@@ -29,12 +28,23 @@ captured by the upstream compensator (``failed_tuples`` table from F013).
 from __future__ import annotations
 
 import logging
-from typing import List, Optional
+from typing import Protocol
 
+from bisheng.common.errcode.permission import (
+    InvalidCatalogActionError,
+    PermissionInvalidResourceError,
+)
 from bisheng.core.openfga.exceptions import FGAClientError
 from bisheng.database.models.audit_log import AuditLogDao
 from bisheng.database.models.tenant import ROOT_TENANT_ID, TenantDao
+from bisheng.permission.domain.schemas import VerifiedPermissionTarget
+from bisheng.permission.domain.services.permission_action_service import (
+    PermissionActor,
+)
 from bisheng.tenant.domain.constants import TenantAuditAction
+from bisheng.tenant.domain.repositories.resource_share_repository import (
+    SharedResourceRepository,
+)
 from bisheng.utils.async_utils import run_async_safe
 
 logger = logging.getLogger(__name__)
@@ -63,9 +73,109 @@ LEGACY_SHAREABLE_TYPES: set[str] = SUPPORTED_SHAREABLE_TYPES | {
     'tool',
 }
 
+F048_SHARED_ACTIONS: dict[str, frozenset[str]] = {
+    'knowledge_space': frozenset({'visible', 'download'}),
+    'knowledge_library': frozenset({'visible', 'use'}),
+    'folder': frozenset({'visible', 'download'}),
+    'knowledge_file': frozenset({'visible', 'download'}),
+    'workflow': frozenset({'visible', 'use'}),
+    'assistant': frozenset({'visible', 'use'}),
+    'tool': frozenset({'visible', 'use'}),
+    'channel': frozenset({'visible'}),
+}
+
+
+class SharedSystemPermissionPort(Protocol):
+    async def check_system_action(
+        self,
+        actor: PermissionActor,
+        resource_type: str,
+        resource_id: str,
+        action: str,
+    ) -> bool: ...
+
+
+class TenantShareTopologyPort(Protocol):
+    async def is_root_to_child(
+        self,
+        owner_tenant_id: int,
+        child_tenant_id: int,
+    ) -> bool: ...
+
 
 class ResourceShareService:
     """FGA tuple wrapper for Root→Child resource sharing (F017)."""
+
+    def __init__(
+        self,
+        *,
+        repository: SharedResourceRepository | None = None,
+        system_permission: SharedSystemPermissionPort | None = None,
+        topology: TenantShareTopologyPort | None = None,
+    ) -> None:
+        self._repository = repository
+        self._system_permission = system_permission
+        self._topology = topology
+
+    async def resolve_shared_target(
+        self,
+        *,
+        actor: PermissionActor,
+        resource_type: str,
+        resource_id: str,
+        action: str,
+    ) -> VerifiedPermissionTarget:
+        """Resolve only a system-authorized Root resource by its exact ID."""
+
+        allowed_actions = F048_SHARED_ACTIONS.get(resource_type)
+        if allowed_actions is None or action not in allowed_actions:
+            raise InvalidCatalogActionError(
+                msg=f"Shared {resource_type} does not support action: {action}"
+            )
+        if (
+            self._repository is None
+            or self._system_permission is None
+            or self._topology is None
+        ):
+            raise RuntimeError("F048 shared resource adapters are not configured")
+
+        allowed = await self._system_permission.check_system_action(
+            actor,
+            resource_type,
+            resource_id,
+            action,
+        )
+        if not allowed:
+            raise PermissionInvalidResourceError()
+
+        rows = await self._repository.get_authorized_by_ids(
+            owner_tenant_id=ROOT_TENANT_ID,
+            resource_type=resource_type,
+            resource_ids=(resource_id,),
+        )
+        if len(rows) != 1:
+            raise PermissionInvalidResourceError()
+        row = rows[0]
+        topology_valid = await self._topology.is_root_to_child(
+            row.owner_tenant_id,
+            actor.current_tenant_id,
+        )
+        if (
+            row.resource_id != resource_id
+            or row.status != 'ACTIVE'
+            or not row.shareable
+            or row.owner_tenant_id == actor.current_tenant_id
+            or not topology_valid
+        ):
+            raise PermissionInvalidResourceError()
+
+        return VerifiedPermissionTarget.from_business_service(
+            tenant_id=row.owner_tenant_id,
+            resource_type=row.resource_type,
+            resource_id=row.resource_id,
+            resource_version=row.permission_version,
+            context_version=row.context_version,
+        )
 
     # ── FGA client acquisition ───────────────────────────────────
 
@@ -97,7 +207,7 @@ class ResourceShareService:
         object_type: str,
         object_id: str,
         root_tenant_id: int = ROOT_TENANT_ID,
-    ) -> List[int]:
+    ) -> list[int]:
         """Write ``{object_type}:{object_id}#shared_with → tenant:{child}`` for
         each active Child. Returns the list of child_ids that received the
         tuple (empty if no active Children).
@@ -151,7 +261,7 @@ class ResourceShareService:
         object_type: str,
         object_id: str,
         root_tenant_id: int = ROOT_TENANT_ID,
-    ) -> List[int]:
+    ) -> list[int]:
         """Delete all ``{object_type}:{object_id}#shared_with → tenant:*`` tuples.
 
         Returns the list of child_ids whose tuples were revoked. Reads existing
@@ -192,7 +302,7 @@ class ResourceShareService:
         cls,
         object_type: str,
         object_id: str,
-    ) -> List[int]:
+    ) -> list[int]:
         """Return the child tenant_ids this resource is currently shared with.
 
         Reads the FGA side (ground truth), not the ``is_shared`` DB column —
@@ -223,10 +333,9 @@ class ResourceShareService:
     ) -> None:
         """Write ``tenant:{child_id}#shared_to → tenant:{root_tenant_id}``.
 
-        Called on Child mount (``TenantMountService._on_child_mounted``) so
-        the Child is included in the ``tenant#shared_to`` set used by
-        ``PermissionService._is_shared_to()``. Idempotent at the FGA side
-        (duplicate writes are no-ops).
+        Called on Child mount (``TenantMountService._on_child_mounted``) to
+        preserve the explicit Root-to-Child identity fact. Idempotent at the
+        FGA side (duplicate writes are no-ops).
         """
         fga = await cls._aget_fga()
         if fga is None:
@@ -296,6 +405,7 @@ class ResourceShareService:
             # AssistantDao exposes sync ``update_assistant``; wrap in a thread
             # so we don't block the event loop when called from async paths.
             import asyncio as _asyncio
+
             from bisheng.database.models.assistant import AssistantDao
             row = await AssistantDao.aget_one_assistant(object_id)
             if row is not None:
@@ -303,9 +413,11 @@ class ResourceShareService:
                 await _asyncio.to_thread(AssistantDao.update_assistant, row)
             return
         if object_type == 'channel':
+            from sqlmodel import select
+
             from bisheng.channel.domain.models.channel import Channel
             from bisheng.core.database import get_async_db_session
-            from sqlmodel import select
+
             async with get_async_db_session() as session:
                 result = await session.exec(
                     select(Channel).where(Channel.id == object_id),
@@ -331,14 +443,14 @@ class ResourceShareService:
         creator_tenant_id: int,
         operator_id: int,
         operator_tenant_id: int,
-        explicit: Optional[bool] = None,
-    ) -> List[int]:
+        explicit: bool | None = None,
+    ) -> list[int]:
         """High-level orchestrator for F017 "share at creation" (D6).
 
-        Called right after ``OwnerService.write_owner_tuple`` in each resource
-        create flow. Applies the Root-only + default-fallback policy, writes
-        shared_with tuples, flips ``{resource}.is_shared=True`` on success,
-        and records audit_log ``RESOURCE_SHARE_ENABLE``.
+        Called after the resource's F048 creation projection. Applies the
+        Root-only + default-fallback policy, writes the independent
+        ``shared_with`` system relation, flips ``{resource}.is_shared=True``
+        on success, and records audit_log ``RESOURCE_SHARE_ENABLE``.
 
         Returns the list of Child tenant_ids the resource was actually shared
         with (empty when creator is Child / explicit=False / default=false /
@@ -410,8 +522,8 @@ class ResourceShareService:
         creator_tenant_id: int,
         operator_id: int,
         operator_tenant_id: int,
-        explicit: Optional[bool] = None,
-    ) -> List[int]:
+        explicit: bool | None = None,
+    ) -> list[int]:
         """Sync wrapper for ``share_on_create`` (FastAPI sync-endpoint path).
 
         Returns empty list + logs a warning on failure; never raises, so the

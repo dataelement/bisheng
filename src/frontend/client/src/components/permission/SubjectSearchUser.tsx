@@ -1,5 +1,5 @@
 import { Checkbox } from "~/components/ui/Checkbox";
-import { getResourceGrantUsers, searchUsers } from "~/api/permission";
+import { searchUsers } from "~/api/permission";
 import type { GrantUser, ResourceType, SelectedSubject } from "~/api/permission";
 import { User as UserIcon, Search } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -11,7 +11,6 @@ interface SubjectSearchUserProps {
   resourceType?: ResourceType;
   resourceId?: string;
   disabledIds?: number[];
-  grantUsersApi?: typeof getResourceGrantUsers;
 }
 
 type UserRow = GrantUser;
@@ -21,10 +20,7 @@ const PAGE_SIZE = 50;
 export function SubjectSearchUser({
   value,
   onChange,
-  resourceType,
-  resourceId,
   disabledIds = [],
-  grantUsersApi,
 }: SubjectSearchUserProps) {
   const localize = useLocalize();
   const [keyword, setKeyword] = useState("");
@@ -53,17 +49,6 @@ export function SubjectSearchUser({
       pageNum: number,
       signal: AbortSignal,
     ): Promise<UserRow[]> => {
-      if (resourceType && resourceId) {
-        const getGrantUsers = grantUsersApi ?? getResourceGrantUsers;
-        const rows = await getGrantUsers(
-          resourceType,
-          resourceId,
-          { keyword: name, page: pageNum, page_size: PAGE_SIZE },
-          { signal },
-        );
-        if (signal.aborted) return [];
-        return Array.isArray(rows) ? rows : [];
-      }
       const res = await searchUsers(
         name,
         { page: pageNum, pageSize: PAGE_SIZE },
@@ -72,7 +57,7 @@ export function SubjectSearchUser({
       if (signal.aborted) return [];
       return res.data || [];
     },
-    [grantUsersApi, resourceId, resourceType],
+    [],
   );
 
   const resetAndLoad = useCallback(

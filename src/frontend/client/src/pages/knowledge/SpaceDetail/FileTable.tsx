@@ -554,8 +554,7 @@ interface FileTableProps {
     onManagePermission?: (id: string) => void;
     /** F034: open the move dialog for a file/folder. Shown when provided. */
     onMove?: (file: KnowledgeFile) => void;
-    /** F034: move permission for files / folders (move_file / move_folder). A
-     *  role may grant one without the other, so they're probed separately. */
+    /** F034: concrete move action for files and folders. */
     canMoveFile?: boolean;
     canMoveFolder?: boolean;
     /** F034 drag-move: drop dragged items into a same-space folder. */

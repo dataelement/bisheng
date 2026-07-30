@@ -1,6 +1,6 @@
 import ApiMainPage from "@/components/bs-comp/apiComponent";
 import { useMessageStore } from "@/components/bs-comp/chatComponent/messageStore";
-import { hasPermissionId, usePermissionIds } from "@/components/bs-comp/permission/usePermissionLevels";
+import { hasResourceAction, useResourceActions } from "@/components/bs-comp/permission/useResourceActions";
 import { Button } from "@/components/bs-ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
@@ -30,8 +30,8 @@ export default function editAssistant() {
     const { startNewRound, insetSystemMsg, insetBsMsg, destory, setShowGuideQuestion } = useMessageStore()
     const [checking, setChecking] = useState(true)
     const assistantId = assisId ? String(assisId) : ''
-    const { permissions } = usePermissionIds('assistant', assistantId ? [assistantId] : [], ['edit_app'])
-    const canEdit = assistantId ? hasPermissionId(permissions, assistantId, 'edit_app') : false
+    const { actions } = useResourceActions('assistant', assistantId ? [assistantId] : [], ['edit'])
+    const canEdit = assistantId ? hasResourceAction(actions, assistantId, 'edit') : false
 
     const flowInit = async () => {
         await checkAppEditPermission(assisId, 5)

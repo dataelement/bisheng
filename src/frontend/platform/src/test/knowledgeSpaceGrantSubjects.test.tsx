@@ -2,13 +2,12 @@ import { SubjectSearchDepartment } from "@/components/bs-comp/permission/Subject
 import { SubjectSearchUserGroup } from "@/components/bs-comp/permission/SubjectSearchUserGroup";
 import {
   getDepartmentChildrenApi,
+  getDepartmentPathTreeApi,
+  searchDepartmentsApi,
 } from "@/controllers/API/department";
 import {
-  getResourceGrantDepartmentChildrenApi,
-  getResourceGrantDepartmentPathTreeApi,
-  getResourceGrantUserGroupsApi,
-  searchResourceGrantDepartmentsApi,
-} from "@/controllers/API/permission";
+  getUserGroupsApi,
+} from "@/controllers/API/user";
 import { render, screen, waitFor, within } from "@/test/test-utils";
 import { fireEvent } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -19,20 +18,14 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
-// F038: the authorization dept picker is now a lazy tree fed by the resource-
-// scoped grant endpoints (children / search / path-tree). The plain org-tree
-// endpoints back the allowOrganizationTree mode.
-vi.mock("@/controllers/API/permission", () => ({
-  getResourceGrantDepartmentChildrenApi: vi.fn(),
-  searchResourceGrantDepartmentsApi: vi.fn(),
-  getResourceGrantDepartmentPathTreeApi: vi.fn(),
-  getResourceGrantUserGroupsApi: vi.fn(),
-}));
-
 vi.mock("@/controllers/API/department", () => ({
   getDepartmentChildrenApi: vi.fn(),
   searchDepartmentsApi: vi.fn(),
   getDepartmentPathTreeApi: vi.fn(),
+}));
+
+vi.mock("@/controllers/API/user", () => ({
+  getUserGroupsApi: vi.fn(),
 }));
 
 vi.mock("@/controllers/request", () => ({
@@ -62,11 +55,10 @@ vi.mock("@/components/bs-ui/checkBox", () => ({
   ),
 }));
 
-const mockedGrantChildren = vi.mocked(getResourceGrantDepartmentChildrenApi);
-const mockedGrantSearch = vi.mocked(searchResourceGrantDepartmentsApi);
-const mockedGrantPathTree = vi.mocked(getResourceGrantDepartmentPathTreeApi);
-const mockedGrantUserGroups = vi.mocked(getResourceGrantUserGroupsApi);
 const mockedDeptChildren = vi.mocked(getDepartmentChildrenApi);
+const mockedDeptSearch = vi.mocked(searchDepartmentsApi);
+const mockedDeptPathTree = vi.mocked(getDepartmentPathTreeApi);
+const mockedUserGroups = vi.mocked(getUserGroupsApi);
 
 const node = (
   id: number,
@@ -94,17 +86,17 @@ const node = (
 const rowOf = (text: string) =>
   (screen.getByText(text).closest("[data-depth]") as HTMLElement);
 
-describe("SubjectSearchDepartment — lazy grant picker (F038 decision 9/10)", () => {
+describe("permission subject discovery business boundary", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockedGrantChildren.mockResolvedValue([] as any);
-    mockedGrantSearch.mockResolvedValue({ roots: [], total_matches: 0, truncated: false } as any);
-    mockedGrantPathTree.mockResolvedValue({ roots: [], total_matches: 0, truncated: false } as any);
     mockedDeptChildren.mockResolvedValue([] as any);
+    mockedDeptSearch.mockResolvedValue({ roots: [], total_matches: 0, truncated: false } as any);
+    mockedDeptPathTree.mockResolvedValue({ roots: [], total_matches: 0, truncated: false } as any);
+    mockedUserGroups.mockResolvedValue([] as any);
   });
 
-  it("lazy-loads the grant root layer via the resource-scoped endpoint (knowledge_space), without member counts", async () => {
-    mockedGrantChildren.mockResolvedValue([node(10, "研发部", null, "/10/", false)] as any);
+  it("loads grant departments from the organization API without member counts", async () => {
+    mockedDeptChildren.mockResolvedValue([node(10, "研发部", null, "/10/", false)] as any);
 
     render(
       <SubjectSearchDepartment
@@ -116,13 +108,13 @@ describe("SubjectSearchDepartment — lazy grant picker (F038 decision 9/10)", (
     );
 
     await screen.findByText("研发部");
-    expect(mockedGrantChildren).toHaveBeenCalledWith("knowledge_space", "88", null);
+    expect(mockedDeptChildren).toHaveBeenCalledWith(null, false);
     // member_count was removed (F038 / reversed F027) — no "(N)" suffix renders.
     expect(screen.queryByText(/\(\d+\)/)).not.toBeInTheDocument();
   });
 
-  it("uses the resource-scoped endpoint for workflow (app) grants", async () => {
-    mockedGrantChildren.mockResolvedValue([node(10, "研发部", null, "/10/", false)] as any);
+  it("uses the same organization API for workflow grants", async () => {
+    mockedDeptChildren.mockResolvedValue([node(10, "研发部", null, "/10/", false)] as any);
 
     render(
       <SubjectSearchDepartment
@@ -134,7 +126,7 @@ describe("SubjectSearchDepartment — lazy grant picker (F038 decision 9/10)", (
     );
 
     await screen.findByText("研发部");
-    expect(mockedGrantChildren).toHaveBeenCalledWith("workflow", "wf-1", null);
+    expect(mockedDeptChildren).toHaveBeenCalledWith(null, false);
   });
 
   it("browses the plain org tree when allowOrganizationTree and no resource is given", async () => {
@@ -144,14 +136,13 @@ describe("SubjectSearchDepartment — lazy grant picker (F038 decision 9/10)", (
 
     await screen.findByText("研发部");
     expect(mockedDeptChildren).toHaveBeenCalledWith(null, false);
-    expect(mockedGrantChildren).not.toHaveBeenCalled();
   });
 
   it("marks descendants checked + disabled (implicit) when an ancestor is selected with include-children — decision 9 (path-based)", async () => {
-    mockedGrantChildren.mockResolvedValue([node(10, "研发部", null, "/10/", true)] as any);
+    mockedDeptChildren.mockResolvedValue([node(10, "研发部", null, "/10/", true)] as any);
     // Search returns the backend's pruned tree (rendered fully expanded), so the
     // descendant 平台组 becomes visible under its selected ancestor 研发部.
-    mockedGrantSearch.mockResolvedValue({
+    mockedDeptSearch.mockResolvedValue({
       roots: [
         { ...node(10, "研发部", null, "/10/", true), children: [node(11, "平台组", 10, "/10/11/", false, true)] },
       ],
@@ -180,7 +171,7 @@ describe("SubjectSearchDepartment — lazy grant picker (F038 decision 9/10)", (
   });
 
   it("summarizes only the explicit picks, never the materialized subtree — decision 10", async () => {
-    mockedGrantChildren.mockResolvedValue([node(10, "研发部", null, "/10/", true)] as any);
+    mockedDeptChildren.mockResolvedValue([node(10, "研发部", null, "/10/", true)] as any);
     const onSelectionSummaryChange = vi.fn();
 
     render(
@@ -202,7 +193,7 @@ describe("SubjectSearchDepartment — lazy grant picker (F038 decision 9/10)", (
   });
 
   it("shows already-granted departments as checked and disabled", async () => {
-    mockedGrantChildren.mockResolvedValue([node(10, "研发部", null, "/10/", false)] as any);
+    mockedDeptChildren.mockResolvedValue([node(10, "研发部", null, "/10/", false)] as any);
 
     render(
       <SubjectSearchDepartment
@@ -221,7 +212,7 @@ describe("SubjectSearchDepartment — lazy grant picker (F038 decision 9/10)", (
   });
 
   it("adds a department carrying the current include-children flag when toggled on", async () => {
-    mockedGrantChildren.mockResolvedValue([node(10, "研发部", null, "/10/", false)] as any);
+    mockedDeptChildren.mockResolvedValue([node(10, "研发部", null, "/10/", false)] as any);
     const onChange = vi.fn();
 
     render(
@@ -242,8 +233,8 @@ describe("SubjectSearchDepartment — lazy grant picker (F038 decision 9/10)", (
     ]);
   });
 
-  it("loads the full user-group list for knowledge-space permission grants", async () => {
-    mockedGrantUserGroups.mockResolvedValue([{ id: 3, group_name: "产品组" }] as any);
+  it("loads user groups from the user-group business API", async () => {
+    mockedUserGroups.mockResolvedValue([{ id: 3, group_name: "产品组" }] as any);
 
     render(
       <SubjectSearchUserGroup
@@ -258,6 +249,6 @@ describe("SubjectSearchDepartment — lazy grant picker (F038 decision 9/10)", (
       expect(screen.getByText("产品组")).toBeInTheDocument();
     });
 
-    expect(mockedGrantUserGroups).toHaveBeenCalledWith("knowledge_space", "88");
+    expect(mockedUserGroups).toHaveBeenCalledWith({});
   });
 });

@@ -1,5 +1,4 @@
 import { Checkbox } from "@/components/bs-ui/checkBox"
-import { getResourceGrantUsersApi } from "@/controllers/API/permission"
 import { getGroupUsersApi, getUserMembershipGroupsApi, getUsersApi } from "@/controllers/API/user"
 import { userContext } from "@/contexts/userContext"
 import { Search, User as UserIcon } from "lucide-react"
@@ -30,8 +29,6 @@ const PAGE_SIZE = 50
 export function SubjectSearchUser({
   value,
   onChange,
-  resourceType,
-  resourceId,
   disabledIds = [],
 }: SubjectSearchUserProps) {
   const { t } = useTranslation('permission')
@@ -134,22 +131,13 @@ export function SubjectSearchUser({
     pageNum: number,
     signal: AbortSignal,
   ): Promise<UserSearchResult[]> => {
-    if (resourceType && resourceId) {
-      const rows = await getResourceGrantUsersApi(resourceType, resourceId, {
-        keyword: name,
-        page: pageNum,
-        page_size: PAGE_SIZE,
-      })
-      if (signal.aborted) return []
-      return Array.isArray(rows) ? rows : []
-    }
     const res = await getUsersApi(
       { name, page: pageNum, pageSize: PAGE_SIZE },
       { signal },
     )
     if (signal.aborted) return []
     return res?.data || []
-  }, [resourceId, resourceType])
+  }, [])
 
   const resetAndLoad = useCallback(async (name: string) => {
     abortRef.current?.abort()
@@ -165,9 +153,7 @@ export function SubjectSearchUser({
     setHasMore(true)
     try {
       const usersTask = fetchUsersPage(name, 1, controller.signal)
-      const peersTask = resourceType && resourceId
-        ? Promise.resolve<UserSearchResult[]>([])
-        : loadAllPeerUsers(controller)
+      const peersTask = loadAllPeerUsers(controller)
       const [users, peers] = await Promise.all([usersTask, peersTask])
       if (controller.signal.aborted || activeKeywordRef.current !== name) return
       const filteredPeers = filterPeerUsers(peers, name)
@@ -186,7 +172,7 @@ export function SubjectSearchUser({
         setLoading(false)
       }
     }
-  }, [fetchUsersPage, filterPeerUsers, loadAllPeerUsers, mergeUserResults, resourceId, resourceType])
+  }, [fetchUsersPage, filterPeerUsers, loadAllPeerUsers, mergeUserResults])
 
   const loadNext = useCallback(async () => {
     // Sync gate: refs flip synchronously so back-to-back observer fires can't
@@ -239,6 +225,7 @@ export function SubjectSearchUser({
     }
     const root = scrollRef.current
     if (!node || !root) return
+    if (typeof IntersectionObserver === 'undefined') return
     observerRef.current = new IntersectionObserver(
       (entries) => {
         if (entries.some((e) => e.isIntersecting)) loadNext()

@@ -986,13 +986,16 @@ class ConversationExportService:
         # the check is byte-identical to what add_file would do later.
         try:
             if req.parent_id is not None:
-                await space_service._require_permission_id(
-                    'folder', req.parent_id, 'upload_file',
-                    space_id=req.knowledge_space_id,
+                await space_service._require_action(
+                    "folder",
+                    req.parent_id,
+                    "upload_file",
                 )
             else:
-                await space_service._require_permission_id(
-                    'knowledge_space', req.knowledge_space_id, 'upload_file',
+                await space_service._require_action(
+                    "knowledge_space",
+                    req.knowledge_space_id,
+                    "upload_file",
                 )
         except SpacePermissionDeniedError:
             raise ConversationImportPermissionDeniedError()

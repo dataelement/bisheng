@@ -1,0 +1,1 @@
+"""Tenant-domain repository adapters."""

@@ -23,7 +23,7 @@ import {
     TableRow
 } from "../../components/bs-ui/table";
 import { deleteQa, generateSimilarQa, getQaDetail, getQaFile, getQaList, updateQa, updateQaStatus } from "../../controllers/API";
-import { checkPermission } from "../../controllers/API/permission";
+import { checkResourceActionApi } from "../../controllers/API/permission";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import { useTable } from "../../util/hook";
 import { ImportQa } from "./components/ImportQa";
@@ -254,8 +254,8 @@ export default function QasPage() {
                 return;
             }
             const [editResult, deleteResult] = await Promise.all([
-                captureAndAlertRequestErrorHoc(checkPermission('knowledge_library', String(id), 'can_edit', 'edit_kb')),
-                captureAndAlertRequestErrorHoc(checkPermission('knowledge_library', String(id), 'can_delete', 'delete_kb')),
+                captureAndAlertRequestErrorHoc(checkResourceActionApi({ resource_type: 'knowledge_library', resource_id: String(id), action: 'edit' })),
+                captureAndAlertRequestErrorHoc(checkResourceActionApi({ resource_type: 'knowledge_library', resource_id: String(id), action: 'delete' })),
             ]);
             if (cancelled) return;
             setCanEditKb(!!editResult?.allowed);

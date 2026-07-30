@@ -1,5 +1,4 @@
 import { Checkbox } from "@/components/bs-ui/checkBox"
-import { getResourceGrantUserGroupsApi } from "@/controllers/API/permission"
 import { getUserGroupsApi } from "@/controllers/API/user"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { Search, Users } from "lucide-react"
@@ -23,8 +22,6 @@ interface SubjectSearchUserGroupProps {
 export function SubjectSearchUserGroup({
   value,
   onChange,
-  resourceType,
-  resourceId,
   disabledIds = [],
 }: SubjectSearchUserGroupProps) {
   const { t } = useTranslation('permission')
@@ -34,14 +31,12 @@ export function SubjectSearchUserGroup({
 
   useEffect(() => {
     setLoading(true)
-    const request = resourceType && resourceId
-      ? getResourceGrantUserGroupsApi(resourceType, resourceId)
-      : getUserGroupsApi({})
+    const request = getUserGroupsApi({})
     captureAndAlertRequestErrorHoc(request).then((res) => {
       if (res) setGroups(Array.isArray(res) ? res : [])
       setLoading(false)
     })
-  }, [resourceId, resourceType])
+  }, [])
 
   const filtered = useMemo(() => {
     if (!keyword) return groups

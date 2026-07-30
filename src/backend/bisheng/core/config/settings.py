@@ -346,9 +346,9 @@ class KnowledgeQAFilterConf(BaseModel):
         ge=1,
         le=64,
         description=(
-            "AD-08 concurrency. Semaphore limit when resolving view_file per file "
-            "via FineGrainedPermissionService; mirrors KnowledgeSpaceService's "
-            "_CHILD_PERMISSION_CHECK_CONCURRENCY default."
+            "Legacy-compatible concurrency cap for bounded per-file checks. "
+            "F048 authorization uses concrete actions through the unified "
+            "permission facade."
         ),
     )
 

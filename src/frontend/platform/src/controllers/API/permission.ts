@@ -1,222 +1,357 @@
-import type { GrantItem, PermissionEntry, RevokeItem } from "@/components/bs-comp/permission/types"
 import axios from "@/controllers/request"
-import type { DepartmentSearchResult, DepartmentTreeNode } from "@/types/api/department"
-
-export type RebacSchemaType = {
-  type: string
-  relations: string[]
-}
 
 export type PermissionSubjectType = "user" | "department" | "user_group"
 
-export type PermissionRelation =
-  | "owner"
-  | "manager"
-  | "editor"
-  | "viewer"
-  | "can_manage"
-  | "can_edit"
-  | "can_read"
-  | "can_delete"
+export type PermissionResourceType =
+  | "knowledge_space"
+  | "knowledge_library"
+  | "folder"
+  | "knowledge_file"
+  | "workflow"
+  | "assistant"
+  | "tool"
+  | "channel"
+  | "dashboard"
+  | "linsight_skill"
 
-export type GrantTier = "owner" | "manager" | "usage"
+export type PermissionActionLevel = 1 | 2 | 3 | 4
+export type PermissionModelKind = "STANDARD" | "CUSTOM"
+export type ResourcePermissionMode = "INHERIT" | "CUSTOM"
+export type GrantMutationOperation = "ADD" | "MOVE" | "REMOVE"
+export type PermissionSubjectKind = "user" | "department" | "user_group"
 
-export type RelationModel = {
-  id: string
+export interface PermissionCatalogAction {
+  code: string
   name: string
-  relation: "owner" | "manager" | "editor" | "viewer"
-  /** 后端未返回时按 relation 推断 */
-  grant_tier?: GrantTier
-  permissions: string[]
-  permissions_explicit?: boolean
-  is_system: boolean
+  level: PermissionActionLevel | null
+  active: boolean
+  sort_order: number
+  resource_types: PermissionResourceType[]
 }
 
-export type PermissionTemplateItem = {
+export interface PermissionCatalogModel {
+  key: string
+  name: string
+  kind: PermissionModelKind
+  config_scope: "PLATFORM"
+  derived_level: PermissionActionLevel | null
+  active: boolean
+  allow_same_level: boolean
+  action_codes: string[]
+  version: number
+}
+
+export interface PermissionModelPreset {
+  key: string
+  name: string
+  action_codes: string[]
+}
+
+export interface PermissionCatalogRelease {
+  id: number
+  release_key: string
+  version: number
+  status: string
+  authorization_model_id: string
+  checksum: string
+  actions: PermissionCatalogAction[]
+  models: PermissionCatalogModel[]
+  presets?: PermissionModelPreset[]
+  published_at?: string | null
+}
+
+export type PermissionCatalogChangeType =
+  | "ASSIGN_ACTION_LEVEL"
+  | "SET_ACTION_ACTIVE"
+  | "CREATE_MODEL"
+  | "UPDATE_MODEL"
+  | "SET_MODEL_ACTIVE"
+  | "DELETE_MODEL"
+  | "SET_ALLOW_SAME_LEVEL"
+
+export interface PermissionCatalogChange {
+  type: PermissionCatalogChangeType
+  action_code?: string
+  level?: PermissionActionLevel | null
+  model_key?: string
+  name?: string
+  action_codes?: string[]
+  active?: boolean
+  allow_same_level?: boolean
+}
+
+export interface CreatePermissionCatalogDraftRequest {
+  idempotency_key: string
+  base_release_id: number
+  change: PermissionCatalogChange
+}
+
+export interface PermissionCatalogImpact {
+  checksum: string
+  resource_count: number
+  grant_count: number
+  assignee_count: number
+  expansion_count: number
+  revocation_count: number
+  blockers: string[]
+  expires_at: string
+}
+
+export interface PermissionCatalogDraft {
+  draft_id: number
+  base_release_id: number
+  impact: PermissionCatalogImpact
+}
+
+export interface PublishPermissionCatalogDraftRequest {
+  expected_current_release_id: number
+  idempotency_key: string
+  confirmed: true
+}
+
+export interface PermissionCatalogPublishResult {
+  release_id: number
+  release_key: string
+  status: string
+  release_checksum: string
+}
+
+export interface GrantablePermissionModel {
+  key: string
+  name: string
+  level: PermissionActionLevel | null
+  active: boolean
+}
+
+export interface ResourcePermissionContext {
+  mode: ResourcePermissionMode
+  parent_type: PermissionResourceType | null
+  parent_id: string | null
+  resource_version: number
+  catalog_release_id: number
+  projection_state: string
+  can_manage_permission: boolean
+}
+
+export interface PermissionGrantSubject {
+  type: PermissionSubjectKind
   id: string
-  label: string
-  relation: PermissionRelation
+  name: string | null
 }
 
-export type PermissionTemplateColumn = {
-  title: string
-  items: PermissionTemplateItem[]
+export interface PermissionGrantSource {
+  type: string
+  include_children: boolean
 }
 
-export type PermissionTemplateSection = {
-  title: string
-  columns: PermissionTemplateColumn[]
+export interface PermissionGrantAssignee {
+  assignee_id: number
+  assignee_version: number
+  subject: PermissionGrantSubject
+  model: GrantablePermissionModel
+  source: PermissionGrantSource
+  scope: "LOCAL" | "INHERITED"
+  inherited_from: string | null
+  protected: boolean
+  editable: boolean
 }
 
-export async function getRebacSchemaApi(): Promise<{
-  schema_version: string
-  model_version: string
-  types: RebacSchemaType[]
-}> {
-  return await axios.get(`/api/v1/permissions/rebac-schema`)
+export interface PermissionGrantCursorPage {
+  data: PermissionGrantAssignee[]
+  page_size: number
+  has_more: boolean
+  next_cursor: string | null
 }
 
-export async function getKnowledgeSpacePermissionTemplateApi(): Promise<PermissionTemplateSection> {
-  return await axios.get(`/api/v1/permissions/permission-templates/knowledge-space`)
+export interface MyResourcePermissions {
+  mode: ResourcePermissionMode
+  actions: string[]
+  sources: PermissionGrantSource[]
+  roster_complete: boolean
 }
 
-export async function getApplicationPermissionTemplateApi(): Promise<PermissionTemplateSection> {
-  return await axios.get(`/api/v1/permissions/permission-templates/application`)
+export interface PermissionGrantSubjectInput {
+  type: PermissionSubjectKind
+  id: string
+  userset_relation?: string | null
+  include_children?: boolean
 }
 
-export async function getKnowledgeLibraryPermissionTemplateApi(): Promise<PermissionTemplateSection> {
-  return await axios.get(`/api/v1/permissions/permission-templates/knowledge-library`)
+export type PermissionGrantMutationChange =
+  | {
+      op: "ADD"
+      model_key: string
+      subject: PermissionGrantSubjectInput
+    }
+  | {
+      op: "MOVE"
+      assignee_id: number
+      expected_assignee_version: number
+      target_model_key: string
+    }
+  | {
+      op: "REMOVE"
+      assignee_id: number
+      expected_assignee_version: number
+    }
+
+export interface MutateResourceGrantsRequest {
+  idempotency_key: string
+  expected_resource_version: number
+  expected_catalog_release_id: number
+  changes: PermissionGrantMutationChange[]
 }
 
-export async function getToolPermissionTemplateApi(): Promise<PermissionTemplateSection> {
-  return await axios.get(`/api/v1/permissions/permission-templates/tool`)
+export interface MutateResourceGrantsResult {
+  resource_version: number
+  items: PermissionGrantAssignee[]
 }
 
-export async function getChannelPermissionTemplateApi(): Promise<PermissionTemplateSection> {
-  return await axios.get(`/api/v1/permissions/permission-templates/channel`)
+export interface CreatePermissionModeDraftRequest {
+  target_mode: ResourcePermissionMode
+  expected_resource_version: number
+  expected_catalog_release_id: number
 }
 
-export async function getResourcePermissions(
-  resourceType: string,
+export interface PermissionModeDraft {
+  draft_id: string
+  target_mode: ResourcePermissionMode
+  impact_checksum: string
+  affected_assignees: number
+  expires_at: string
+}
+
+export interface ApplyPermissionModeDraftRequest {
+  idempotency_key: string
+  expected_resource_version: number
+  expected_catalog_release_id: number
+  confirmed: true
+}
+
+export interface ApplyPermissionModeDraftResult {
+  applied: boolean
+  mode: ResourcePermissionMode
+  resource_version: number
+}
+
+export interface CheckResourceActionRequest {
+  resource_type: PermissionResourceType
+  resource_id: string
+  action: string
+}
+
+function permissionResourcePath(
+  resourceType: PermissionResourceType,
   resourceId: string,
-): Promise<PermissionEntry[]> {
-  return await axios.get(
-    `/api/v1/permissions/resources/${resourceType}/${resourceId}/permissions`,
-  )
+): string {
+  return `/api/v1/permissions/resources/${resourceType}/${resourceId}`
 }
 
-export async function authorizeResource(
-  resourceType: string,
-  resourceId: string,
-  grants: (GrantItem & { model_id?: string })[],
-  revokes: RevokeItem[],
-): Promise<null> {
+export async function getPermissionCatalogApi(): Promise<PermissionCatalogRelease> {
+  return await axios.get(`/api/v1/permissions/catalog`)
+}
+
+export async function createPermissionCatalogDraftApi(
+  payload: CreatePermissionCatalogDraftRequest,
+): Promise<PermissionCatalogDraft> {
+  return await axios.post(`/api/v1/permissions/catalog/drafts`, payload)
+}
+
+export async function getPermissionCatalogDraftApi(
+  draftId: number,
+): Promise<PermissionCatalogDraft> {
+  return await axios.get(`/api/v1/permissions/catalog/drafts/${draftId}`)
+}
+
+export async function publishPermissionCatalogDraftApi(
+  draftId: number,
+  payload: PublishPermissionCatalogDraftRequest,
+): Promise<PermissionCatalogPublishResult> {
   return await axios.post(
-    `/api/v1/permissions/resources/${resourceType}/${resourceId}/authorize`,
-    { grants, revokes },
+    `/api/v1/permissions/catalog/drafts/${draftId}/publish`,
+    payload,
   )
 }
 
-export async function checkPermission(
-  objectType: string,
-  objectId: string,
-  relation: string,
-  permissionId?: string,
+export async function getGrantablePermissionModelsApi(
+  resourceType: PermissionResourceType,
+  resourceId: string,
+): Promise<GrantablePermissionModel[]> {
+  return await axios.get(
+    `${permissionResourcePath(resourceType, resourceId)}/grantable-models`,
+  )
+}
+
+export async function getResourcePermissionContextApi(
+  resourceType: PermissionResourceType,
+  resourceId: string,
+): Promise<ResourcePermissionContext> {
+  return await axios.get(
+    `${permissionResourcePath(resourceType, resourceId)}/context`,
+  )
+}
+
+export async function getResourcePermissionGrantsApi(
+  resourceType: PermissionResourceType,
+  resourceId: string,
+  params: { cursor?: string | null; page_size?: number } = {},
+): Promise<PermissionGrantCursorPage> {
+  return await axios.get(
+    `${permissionResourcePath(resourceType, resourceId)}/grants`,
+    {
+      params: {
+        cursor: params.cursor ?? undefined,
+        page_size: params.page_size ?? 50,
+      },
+    },
+  )
+}
+
+export async function getMyResourcePermissionsApi(
+  resourceType: PermissionResourceType,
+  resourceId: string,
+): Promise<MyResourcePermissions> {
+  return await axios.get(
+    `${permissionResourcePath(resourceType, resourceId)}/my-permissions`,
+  )
+}
+
+export async function mutateResourceGrantsApi(
+  resourceType: PermissionResourceType,
+  resourceId: string,
+  payload: MutateResourceGrantsRequest,
+): Promise<MutateResourceGrantsResult> {
+  return await axios.post(
+    `${permissionResourcePath(resourceType, resourceId)}/grants:mutate`,
+    payload,
+  )
+}
+
+export async function createResourcePermissionModeDraftApi(
+  resourceType: PermissionResourceType,
+  resourceId: string,
+  payload: CreatePermissionModeDraftRequest,
+): Promise<PermissionModeDraft> {
+  return await axios.post(
+    `${permissionResourcePath(resourceType, resourceId)}/mode-drafts`,
+    payload,
+  )
+}
+
+export async function applyResourcePermissionModeDraftApi(
+  resourceType: PermissionResourceType,
+  resourceId: string,
+  draftId: string,
+  payload: ApplyPermissionModeDraftRequest,
+): Promise<ApplyPermissionModeDraftResult> {
+  return await axios.post(
+    `${permissionResourcePath(resourceType, resourceId)}/mode-drafts/${draftId}/apply`,
+    payload,
+  )
+}
+
+export async function checkResourceActionApi(
+  payload: CheckResourceActionRequest,
 ): Promise<{ allowed: boolean }> {
-  return await axios.post(`/api/v1/permissions/check`, {
-    object_type: objectType,
-    object_id: objectId,
-    relation,
-    permission_id: permissionId,
-  })
-}
-
-export async function getRelationModelsApi(): Promise<RelationModel[]> {
-  return await axios.get(`/api/v1/permissions/relation-models`)
-}
-
-export async function getGrantableRelationModelsApi(
-  objectType: string,
-  objectId: string,
-): Promise<RelationModel[]> {
-  return await axios.get(`/api/v1/permissions/relation-models/grantable`, {
-    params: { object_type: objectType, object_id: objectId },
-  })
-}
-
-export async function getResourceGrantUsersApi(
-  resourceType: string,
-  resourceId: string,
-  params?: { keyword?: string; page?: number; page_size?: number },
-): Promise<any[]> {
-  return await axios.get(`/api/v1/permissions/resources/${resourceType}/${resourceId}/grant-subjects/users`, {
-    params: {
-      keyword: params?.keyword ?? "",
-      page: params?.page ?? 1,
-      page_size: params?.page_size ?? 1000,
-    },
-  })
-}
-
-// F038: lazy variants of the grant-subject department tree (browse one layer /
-// server search / locate). Same authorization scope as the full-tree endpoint
-// above (tenant subtree minus child-tenant mounts, optionally F033-narrowed),
-// so a large org tree never loads at once. Used by the authorization pickers.
-
-export async function getResourceGrantDepartmentChildrenApi(
-  resourceType: string,
-  resourceId: string,
-  parentId: number | null,
-): Promise<DepartmentTreeNode[]> {
-  return await axios.get(
-    `/api/v1/permissions/resources/${resourceType}/${resourceId}/grant-subjects/departments/children`,
-    { params: { parent_id: parentId ?? undefined } },
-  )
-}
-
-export async function searchResourceGrantDepartmentsApi(
-  resourceType: string,
-  resourceId: string,
-  keyword: string,
-  limit = 50,
-): Promise<DepartmentSearchResult> {
-  return await axios.get(
-    `/api/v1/permissions/resources/${resourceType}/${resourceId}/grant-subjects/departments/search`,
-    { params: { keyword, limit } },
-  )
-}
-
-export async function getResourceGrantDepartmentPathTreeApi(
-  resourceType: string,
-  resourceId: string,
-  deptInternalId: number,
-): Promise<DepartmentSearchResult> {
-  return await axios.get(
-    `/api/v1/permissions/resources/${resourceType}/${resourceId}/grant-subjects/departments/${deptInternalId}/path-tree`,
-  )
-}
-
-export async function getResourceGrantUserGroupsApi(
-  resourceType: string,
-  resourceId: string,
-  params?: { keyword?: string },
-): Promise<any[]> {
-  return await axios.get(`/api/v1/permissions/resources/${resourceType}/${resourceId}/grant-subjects/user-groups`, {
-    params: {
-      keyword: params?.keyword ?? "",
-    },
-  })
-}
-
-export async function getKnowledgeSpaceGrantUsersApi(
-  resourceId: string,
-  params?: { keyword?: string; page?: number; page_size?: number },
-): Promise<any[]> {
-  return await getResourceGrantUsersApi("knowledge_space", resourceId, params)
-}
-
-export async function getKnowledgeSpaceGrantUserGroupsApi(
-  resourceId: string,
-  params?: { keyword?: string },
-): Promise<any[]> {
-  return await getResourceGrantUserGroupsApi("knowledge_space", resourceId, params)
-}
-
-export async function createRelationModelApi(payload: {
-  name: string
-  relation: "owner" | "manager" | "editor" | "viewer"
-  permissions: string[]
-}): Promise<{ id: string }> {
-  return await axios.post(`/api/v1/permissions/relation-models`, payload)
-}
-
-export async function updateRelationModelApi(
-  modelId: string,
-  payload: { name?: string; permissions?: string[] },
-): Promise<null> {
-  return await axios.put(`/api/v1/permissions/relation-models/${modelId}`, payload)
-}
-
-export async function deleteRelationModelApi(modelId: string): Promise<null> {
-  return await axios.delete(`/api/v1/permissions/relation-models/${modelId}`)
+  return await axios.post(`/api/v1/permissions/check`, payload)
 }

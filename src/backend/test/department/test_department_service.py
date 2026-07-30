@@ -82,7 +82,11 @@ def svc_engine():
                               is_deleted INTEGER NOT NULL DEFAULT 0,
                               last_sync_ts BIGINT NOT NULL DEFAULT 0,
                               default_role_ids JSON,
+                              concurrent_session_limit INTEGER NOT NULL DEFAULT 0,
                               create_user INTEGER,
+                              permission_projection_version BIGINT NOT NULL DEFAULT 0,
+                              permission_projection_state VARCHAR(64) NOT NULL DEFAULT 'CURRENT',
+                              permission_projection_operation_id BIGINT,
                               create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
                               update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
                               UNIQUE
@@ -420,26 +424,8 @@ class TestGetTree:
         _child_b = _create_child(session, root, "BS@tree_b", "Dept B", sort_order=1)
         _grandchild = _create_child(session, child_a, "BS@tree_gc", "Sub A")
 
-        # Add members to child_a
-        uid = _create_user(session, "tree_user")
-        session.add(UserDepartment(user_id=uid, department_id=child_a.id))
-        session.commit()
-
         # Fetch all active departments
         depts = session.exec(select(Department).where(Department.status == "active")).all()
-
-        # Build count map
-        from sqlalchemy import func
-
-        count_result = session.exec(
-            select(
-                UserDepartment.department_id,
-                func.count(UserDepartment.id),
-            )
-            .where(UserDepartment.department_id.in_([d.id for d in depts]))
-            .group_by(UserDepartment.department_id)
-        ).all()
-        count_map = dict(count_result)
 
         # Build tree
         nodes = {}
@@ -453,7 +439,6 @@ class TestGetTree:
                 sort_order=d.sort_order,
                 source=d.source,
                 status=d.status,
-                member_count=count_map.get(d.id, 0),
                 children=[],
             )
         roots = []
@@ -472,7 +457,7 @@ class TestGetTree:
         test_root.children.sort(key=lambda n: n.sort_order)
         assert test_root.children[0].name == "Dept B"  # sort_order=1
         assert test_root.children[1].name == "Dept A"  # sort_order=2
-        assert test_root.children[1].member_count == 1
+        assert not hasattr(test_root.children[1], "member_count")
         assert len(test_root.children[1].children) == 1
 
 
@@ -936,10 +921,8 @@ class TestPermission:
 
         dept_result = MagicMock()
         dept_result.all.return_value = [root, child]
-        count_result = MagicMock()
-        count_result.all.return_value = [(1, 3), (2, 1)]
         db_session = MagicMock()
-        db_session.exec = AsyncMock(side_effect=[dept_result, count_result])
+        db_session.exec = AsyncMock(return_value=dept_result)
 
         @asynccontextmanager
         async def fake_session():
@@ -969,9 +952,9 @@ class TestPermission:
             tree = await DepartmentService.aget_tree(login_user)
 
         assert [node.id for node in tree] == [1]
-        assert tree[0].member_count == 3
+        assert not hasattr(tree[0], "member_count")
         assert [child.id for child in tree[0].children] == [2]
-        assert tree[0].children[0].member_count == 1
+        assert not hasattr(tree[0].children[0], "member_count")
         mock_perm_check.assert_awaited_once_with(
             user_id=login_user.user_id,
             relation="admin",

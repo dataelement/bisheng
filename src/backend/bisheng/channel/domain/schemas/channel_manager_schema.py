@@ -1,5 +1,5 @@
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from bisheng.channel.domain.models.channel import ChannelFilterRules, ChannelVisibilityEnum
 
 
-class SubscriptionStatusEnum(str, Enum):
+class SubscriptionStatusEnum(StrEnum):
     """Subscription Status Enum"""
 
     SUBSCRIBED = "subscribed"
@@ -79,14 +79,14 @@ class CrawlWebsiteRequest(BaseModel):
     url: str = Field(..., description="URL of the website to crawl")
 
 
-class QueryTypeEnum(str, Enum):
+class QueryTypeEnum(StrEnum):
     """Get My Channels Query Type Enum"""
 
     CREATED = "created"
     FOLLOWED = "followed"
 
 
-class SortByEnum(str, Enum):
+class SortByEnum(StrEnum):
     """Get My Channels Sort By Enum"""
 
     LATEST_UPDATE = "latest_update"
@@ -123,7 +123,7 @@ class ChannelItemResponse(BaseModel):
     create_time: datetime | None = Field(None, description="Channel Creation Time")
     user_role: str = Field(..., description="User Role in Channel: creator / admin / member")
     relation: str | None = Field(None, description="Channel relation: owner / manager / editor / viewer")
-    permission_ids: list[str] = Field(default_factory=list, description="Effective channel permission IDs")
+    actions: list[str] = Field(default_factory=list, description="Effective F048 channel actions")
     is_pinned: bool = Field(default=False, description="Whether the channel is pinned by the user")
     subscribed_at: datetime | None = Field(
         None, description="The time when the user subscribed to the channel, null if not subscribed"
@@ -159,10 +159,8 @@ class ChannelDetailResponse(BaseModel):
     # F040: per-sub-channel unread counts moved to GET /channel/manager/{id}/unread-counts
     # (lazy, in-channel only) — the dominant per-user ES cost no longer rides on detail.
     subscription_status: SubscriptionStatusEnum = Field(..., description="Current user subscription status")
-    relation: str | None = Field(
-        None, description="Current user channel relation: owner / manager / editor / viewer"
-    )
-    permission_ids: list[str] = Field(default_factory=list, description="Effective channel permission IDs")
+    relation: str | None = Field(None, description="Current user channel relation: owner / manager / editor / viewer")
+    actions: list[str] = Field(default_factory=list, description="Effective F048 channel actions")
     knowledge_sync: KnowledgeSyncConfig | None = Field(
         None,
         description="Knowledge space sync configuration; only populated for creators",

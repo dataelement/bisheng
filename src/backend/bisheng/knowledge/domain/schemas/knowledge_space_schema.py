@@ -37,8 +37,9 @@ class KnowledgeSpaceInfoResp(KnowledgeBase):
     id: int = Field(..., description="Knowledge Space ID")
     is_pinned: bool = Field(default=False, description="Knowledge Space pinned by current user or not")
     user_name: str = Field(default="", description="Knowledge Space creator name")
-    permission_ids: list[str] | None = Field(
-        default=None, description="Effective permission ids the current identity holds on this space"
+    actions: list[str] | None = Field(
+        default=None,
+        description="Effective F048 actions the current identity holds on this space",
     )
     avatar: str | None = Field(default=None, description="Knowledge Space creator avatar")
     follower_num: int = Field(1, description="Follower Number")

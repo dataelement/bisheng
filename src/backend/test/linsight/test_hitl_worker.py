@@ -371,6 +371,7 @@ def _build_session(user_id=1):
     session = MagicMock()
     session.user_id = user_id
     session.session_id = "sess-1"
+    session.tenant_id = 1
     return session
 
 

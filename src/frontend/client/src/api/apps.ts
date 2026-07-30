@@ -400,12 +400,12 @@ export async function getAppsApi({ page = 1, pageSize = 8, keyword, tag_id = -1,
 }
 
 
-export const getChatOnlineApi = async (page, keyword, tag_id, disableLimit = 8, permissionId = 'view_app') => {
+export const getChatOnlineApi = async (page, keyword, tag_id, disableLimit = 8, action: 'visible' | 'use' = 'visible') => {
     const params = {
         page,
         keyword,
         limit: disableLimit,
-        permission_id: permissionId
+        action
     }
     if (tag_id !== -1 && tag_id != null) {
         params.tag_id = tag_id
