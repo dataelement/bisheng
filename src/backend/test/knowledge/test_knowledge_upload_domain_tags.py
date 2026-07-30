@@ -434,11 +434,11 @@ async def test_space_add_file_persists_upload_metadata(monkeypatch):
             new=fake_session_ctx,
         ),
         patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service.file_worker.parse_knowledge_file_celery",
+            "bisheng.knowledge.domain.services.knowledge_space_service._get_parse_knowledge_file_task",
             new_callable=MagicMock,
         ) as mock_celery,
     ):
-        mock_celery.delay = MagicMock()
+        mock_celery.return_value.delay = MagicMock()
 
         result = await service.add_file(
             7,

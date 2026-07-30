@@ -31,8 +31,9 @@ async def test_migrate_branch_enqueues_and_returns_without_delete():
                new=AsyncMock(return_value=MigrationDecision("migrate", target_space_id=900))), \
          patch(f"{MOD}.KnowledgeDao.async_update_state", new=AsyncMock()) as upd, \
          patch(f"{MOD}.KnowledgeSpaceScopeDao.aget_by_space_id", new=AsyncMock(return_value=None)), \
-         patch(f"{MOD}.space_migrate_celery") as task, \
+         patch(f"{MOD}._get_space_migrate_task") as task_loader, \
          patch(f"{MOD}.KnowledgeService.delete_knowledge_file_in_vector") as del_vec:
+        task = task_loader.return_value
         await svc.delete_space(1)
         task.delay.assert_called_once()
         del_vec.assert_not_called()        # 没有进入真正清理
@@ -50,8 +51,9 @@ async def test_migrate_branch_rolls_back_copying_when_enqueue_fails():
                new=AsyncMock(return_value=MigrationDecision("migrate", target_space_id=900))), \
          patch(f"{MOD}.KnowledgeDao.async_update_state", new=AsyncMock()) as upd, \
          patch(f"{MOD}.KnowledgeSpaceScopeDao.aget_by_space_id", new=AsyncMock(return_value=None)), \
-         patch(f"{MOD}.space_migrate_celery") as task, \
+         patch(f"{MOD}._get_space_migrate_task") as task_loader, \
          patch(f"{MOD}.KnowledgeService.delete_knowledge_file_in_vector") as del_vec:
+        task = task_loader.return_value
         task.delay.side_effect = RuntimeError("broker down")
         with pytest.raises(RuntimeError):
             await svc.delete_space(1)

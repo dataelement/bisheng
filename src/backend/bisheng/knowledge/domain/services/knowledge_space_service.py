@@ -314,8 +314,6 @@ from bisheng.shougang_portal_config.domain.services.portal_config_service import
 from bisheng.telemetry.domain.mid_table.knowledge_space_content import KnowledgeSpaceContentStat
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import get_request_ip
-from bisheng.worker.knowledge import file_worker
-from bisheng.worker.knowledge.space_migrate_worker import space_migrate_celery
 from bisheng.workstation.domain.services.workstation_service import WorkStationService
 
 if TYPE_CHECKING:
@@ -340,6 +338,25 @@ if TYPE_CHECKING:
         KnowledgeDocumentEntryResolver,
     )
     from bisheng.message.domain.services.message_service import MessageService
+
+
+def _get_parse_knowledge_file_task() -> Any:
+    from bisheng.worker.knowledge.file_worker import parse_knowledge_file_celery
+
+    return parse_knowledge_file_celery
+
+
+def _get_retry_knowledge_file_task() -> Any:
+    from bisheng.worker.knowledge.file_worker import retry_knowledge_file_celery
+
+    return retry_knowledge_file_celery
+
+
+def _get_space_migrate_task() -> Any:
+    from bisheng.worker.knowledge.space_migrate_worker import space_migrate_celery
+
+    return space_migrate_celery
+
 
 # Maximum number of spaces a user can subscribe to (not as creator)
 _MAX_SUBSCRIBE_PER_USER = 50
@@ -5613,7 +5630,46 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if not files:
             return self._build_shougang_portal_qa_paged_response([], req.page, req.page_size)
 
-        visible_files = await self._filter_shougang_portal_visible_files(files, spaces=spaces)
+        if req.discovery_scope == "legacy":
+            excluded_file_ids: set[int] = set()
+            if self.version_repo is not None:
+                excluded_file_ids.update(
+                    await self.version_repo.find_non_primary_file_ids_by_knowledge_ids(
+                        space_ids
+                    )
+                    or []
+                )
+            from bisheng.knowledge.domain.services.knowledge_recycle_service import (
+                KnowledgeRecycleService,
+            )
+
+            recycled_groups = await asyncio.gather(
+                *(
+                    KnowledgeRecycleService.list_recycled_file_ids(space_id)
+                    for space_id in space_ids
+                )
+            )
+            for recycled_ids in recycled_groups:
+                excluded_file_ids.update(recycled_ids or [])
+
+            files_by_space: dict[int, list[KnowledgeFile]] = {}
+            for file in files:
+                if int(file.id) in excluded_file_ids:
+                    continue
+                files_by_space.setdefault(int(file.knowledge_id), []).append(file)
+            visible_files = []
+            for space_id, candidate_files in files_by_space.items():
+                visible_files.extend(
+                    await self._filter_visible_child_items(
+                        candidate_files,
+                        space_id=space_id,
+                    )
+                )
+        else:
+            visible_files = await self._filter_shougang_portal_visible_files(
+                files,
+                spaces=spaces,
+            )
         if not visible_files:
             return self._build_shougang_portal_qa_paged_response([], req.page, req.page_size)
 
@@ -5937,8 +5993,69 @@ class KnowledgeSpaceService(KnowledgeUtils):
         file_refs: list,
         max_files: int = 20,
     ) -> dict[int, list[int]]:
-        candidate_files_by_space: dict[int, dict[int, KnowledgeFile]] = {}
-        explicit_file_keys: set[tuple[int, int]] = set()
+        resolved: dict[int, list[int]] = {}
+        seen: set[tuple[int, int]] = set()
+        readable_spaces: dict[int, bool] = {}
+        denied_space_count = 0
+        denied_resource_count = 0
+
+        async def can_read_space(space_id: int) -> bool:
+            nonlocal denied_space_count
+            if space_id in readable_spaces:
+                return readable_spaces[space_id]
+            try:
+                await self._require_read_permission(space_id)
+            except (SpaceNotFoundError, SpacePermissionDeniedError):
+                readable_spaces[space_id] = False
+                denied_space_count += 1
+                return False
+            readable_spaces[space_id] = True
+            return True
+
+        async def current_visible_files(
+            space_id: int,
+            files: list[KnowledgeFile],
+        ) -> list[KnowledgeFile]:
+            candidates = [
+                file
+                for file in files
+                if self._is_qa_scope_file(file, space_id)
+            ]
+            if not candidates:
+                return []
+
+            excluded_ids: set[int] = set()
+            if self.version_repo is not None:
+                excluded_ids.update(
+                    await self.version_repo.find_non_primary_file_ids_by_knowledge_ids(
+                        [space_id]
+                    )
+                    or []
+                )
+            from bisheng.knowledge.domain.services.knowledge_recycle_service import (
+                KnowledgeRecycleService,
+            )
+
+            excluded_ids.update(
+                await KnowledgeRecycleService.list_recycled_file_ids(space_id)
+                or []
+            )
+            current_candidates = [
+                file for file in candidates if int(file.id) not in excluded_ids
+            ]
+            if not current_candidates:
+                return []
+            return await self._filter_visible_child_items(
+                current_candidates,
+                space_id=space_id,
+            )
+
+        def add_file(space_id: int, file_id: int) -> None:
+            key = (space_id, file_id)
+            if key in seen:
+                return
+            seen.add(key)
+            resolved.setdefault(space_id, []).append(file_id)
 
         if mode == "files":
             file_ids = self._dedupe_ids(
@@ -5952,6 +6069,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
             for ref in file_refs or []:
                 space_id = self._scope_ref_int(ref, "knowledge_space_id")
                 file_id = self._scope_ref_int(ref, "file_id")
+                if space_id <= 0 or file_id <= 0 or not await can_read_space(space_id):
+                    continue
                 file = file_map.get(file_id)
                 if self.document_durable_reference_resolver is not None and file_id > 0 and space_id > 0:
                     from bisheng.knowledge.domain.services.knowledge_document_entry_resolver import (
@@ -5963,16 +6082,26 @@ class KnowledgeSpaceService(KnowledgeUtils):
                             tenant_id=int(self.login_user.tenant_id),
                             requested_space_id=space_id,
                             durable_file_id=file_id,
-                            require_view_permission=False,
+                            require_view_permission=True,
                         )
                     except KnowledgeDocumentEntryResolutionError:
+                        denied_resource_count += 1
                         continue
                     file_id = int(durable.entry_file_id)
                     file = await KnowledgeFileDao.query_by_id(file_id)
                 if not self._is_qa_scope_file(file, space_id):
                     continue
-                candidate_files_by_space.setdefault(space_id, {})[file_id] = file
-                explicit_file_keys.add((space_id, file_id))
+                try:
+                    await self._require_permission_id(
+                        "knowledge_file",
+                        file_id,
+                        "view_file",
+                        space_id=space_id,
+                    )
+                except SpacePermissionDeniedError:
+                    denied_resource_count += 1
+                    continue
+                add_file(space_id, file_id)
 
             folder_ids = self._dedupe_ids(
                 [
@@ -5985,8 +6114,20 @@ class KnowledgeSpaceService(KnowledgeUtils):
             for ref in folder_refs or []:
                 space_id = self._scope_ref_int(ref, "knowledge_space_id")
                 folder_id = self._scope_ref_int(ref, "folder_id")
+                if space_id <= 0 or folder_id <= 0 or not await can_read_space(space_id):
+                    continue
                 folder = folder_map.get(folder_id)
                 if not self._is_qa_scope_folder(folder, space_id):
+                    continue
+                try:
+                    await self._require_permission_id(
+                        "folder",
+                        folder_id,
+                        "view_folder",
+                        space_id=space_id,
+                    )
+                except SpacePermissionDeniedError:
+                    denied_resource_count += 1
                     continue
                 prefix = f"{folder.file_level_path or ''}/{folder.id}"
                 descendants = await SpaceFileDao.get_children_by_prefix(
@@ -5994,50 +6135,36 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     prefix,
                     file_status=KnowledgeFileStatus.SUCCESS,
                 )
-                for file in descendants or []:
-                    if self._is_qa_scope_file(file, space_id):
-                        candidate_files_by_space.setdefault(space_id, {})[int(file.id)] = file
+                for file in await current_visible_files(
+                    space_id,
+                    list(descendants or []),
+                ):
+                    add_file(space_id, int(file.id))
         else:
             for space_id in self._dedupe_ids([int(space_id) for space_id in knowledge_space_ids or []]):
+                if not await can_read_space(space_id):
+                    continue
                 files = await KnowledgeFileDao.aget_file_by_filters(
                     space_id,
                     status=[KnowledgeFileStatus.SUCCESS.value],
                     file_type=FileType.FILE.value,
                 )
-                candidate_files_by_space[space_id] = {int(file.id): file for file in files}
+                for file in await current_visible_files(space_id, list(files)):
+                    add_file(space_id, int(file.id))
 
-        resolved: dict[int, list[int]] = {}
-        denied_explicit: list[tuple[int, int]] = []
-        denied_space_count = 0
-        for space_id, file_map in candidate_files_by_space.items():
-            if not file_map:
-                continue
-            try:
-                _, is_department_space = await self._get_shougang_portal_qa_space(
-                    space_id=space_id,
-                    discovery_scope="public_and_department",
-                )
-            except SpacePermissionDeniedError:
-                denied_space_count += 1
-                continue
-            authorized, _ = await self._filter_shougang_portal_qa_authorized_files(
-                files=list(file_map.values()),
-                is_department_space=is_department_space,
-            )
-            authorized_ids = {int(file.id) for file in authorized}
-            denied_explicit.extend(
-                key for key in explicit_file_keys if key[0] == space_id and key[1] not in authorized_ids
-            )
-            if authorized_ids:
-                resolved[space_id] = [file_id for file_id in file_map if file_id in authorized_ids]
-
-        deduped_count = sum(len(file_ids) for file_ids in resolved.values())
+        deduped_count = len(seen)
         if mode == "files" and deduped_count > max_files:
             raise ValueError("一次最多可选择20个文件进行问答。")
-        if denied_explicit:
-            logger.info(f"Portal QA filtered unauthorized explicit files denied_file_count={len(denied_explicit)}")
+        if denied_resource_count:
+            logger.info(
+                "Portal QA filtered resources outside workbench scope "
+                f"denied_resource_count={denied_resource_count}"
+            )
         if denied_space_count:
-            logger.info(f"Portal QA filtered inaccessible spaces denied_space_count={denied_space_count}")
+            logger.info(
+                "Portal QA filtered spaces outside workbench scope "
+                f"denied_space_count={denied_space_count}"
+            )
         if deduped_count == 0:
             logger.info(
                 "Portal QA scope resolved to no authorized files; "
@@ -9942,7 +10069,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                         state=KnowledgeState.COPYING,
                     )
                     try:
-                        space_migrate_celery.delay(
+                        _get_space_migrate_task().delay(
                             {
                                 "source_id": space_id,
                                 "target_id": decision.target_space_id,
@@ -13822,7 +13949,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         KnowledgeService.audit_telemetry_service.telemetry_new_knowledge_file(self.login_user)
         preview_cache_key = self.get_preview_cache_key(knowledge_id, result.final_url, md5_value=result.content_hash)
-        file_worker.parse_knowledge_file_celery.delay(db_file.id, preview_cache_key)
+        _get_parse_knowledge_file_task().delay(db_file.id, preview_cache_key)
         await self.update_folder_update_time(file_level_path)
         await KnowledgeDao.async_update_knowledge_update_time_by_id(knowledge_id)
         return db_file
@@ -13918,7 +14045,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             result.final_url,
             md5_value=result.content_hash,
         )
-        file_worker.retry_knowledge_file_celery.delay(db_file.id, preview_cache_key)
+        _get_retry_knowledge_file_task().delay(db_file.id, preview_cache_key)
         await KnowledgeSpaceContentStat.enqueue_file_stat_async([db_file.id])
         await self.update_folder_update_time(old_file_level_path)
         if file_level_path != old_file_level_path:
@@ -14237,8 +14364,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
     ) -> None:
         if len(process_files) != len(preview_cache_keys):
             raise ValueError("process_files and preview_cache_keys length mismatch")
+        parse_knowledge_file_task = _get_parse_knowledge_file_task()
         for index, knowledge_file in enumerate(process_files):
-            file_worker.parse_knowledge_file_celery.delay(
+            parse_knowledge_file_task.delay(
                 knowledge_file.id,
                 preview_cache_keys[index],
             )

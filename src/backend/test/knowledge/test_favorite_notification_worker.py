@@ -1,3 +1,5 @@
+import subprocess
+import sys
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -10,6 +12,26 @@ from bisheng.knowledge.domain.services.favorite_notify import (
     FAVORITE_SOURCE_RENAMED,
     FavoriteNotificationService,
 )
+
+
+def test_knowledge_space_service_imports_in_fresh_process():
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import sys; "
+                "from bisheng.knowledge.domain.services.knowledge_space_service "
+                "import KnowledgeSpaceService; "
+                "assert 'bisheng.worker' not in sys.modules"
+            ),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
 
 
 def _reference(

@@ -21,7 +21,6 @@ from bisheng.knowledge.domain.services.department_file_view_access_service impor
 from bisheng.knowledge.domain.services.favorite_notify import (
     FavoriteNotificationService,
 )
-from bisheng.message.api.dependencies import get_message_service
 from bisheng.permission.domain.services.permission_service import PermissionService
 from bisheng.user.domain.models.user import UserDao
 from bisheng.user.domain.models.user_role import UserRoleDao
@@ -61,6 +60,8 @@ async def _consume_async(payloads: list[dict]) -> int:
     tenant_id = next(iter(tenant_ids))
     token = set_current_tenant_id(tenant_id)
     try:
+        from bisheng.message.api.dependencies import get_message_service
+
         async with get_async_db_session() as session:
             file_repository = KnowledgeFileRepositoryImpl(session)
             grant_repository = DepartmentFileViewGrantRepositoryImpl(session)
