@@ -34,7 +34,7 @@ class SystemDictionaryRepository(BaseRepository[SystemDictionary, int], ABC):
         page: int = 1,
         page_size: int = 20,
         sort_by: bool | None = None,
-        enabled: bool | None = None,
+        is_enabled: bool | None = None,
     ) -> tuple[list[SystemDictionary], int]:
         """分页查询字典条目,返回 (数据列表, 总数)"""
         pass
@@ -48,4 +48,20 @@ class SystemDictionaryRepository(BaseRepository[SystemDictionary, int], ABC):
         only_enabled: bool = True,
     ) -> list[SystemDictionary]:
         """根据类型查询字典条目列表"""
+        pass
+
+    @abstractmethod
+    async def find_all_for_export(
+        self,
+        dict_type: str | None = None,
+        keyword: str | None = None,
+        sort_by: bool | None = None,
+        is_enabled: bool | None = None,
+    ) -> list[SystemDictionary]:
+        """查询所有字典条目用于导出,支持 type/keyword/sort_by/is_enabled 筛选"""
+        pass
+
+    @abstractmethod
+    async def get_max_sort_order_by_type(self, dict_type: str) -> int:
+        """查询指定类型下最大的 sort_order 值,无记录时返回 0"""
         pass

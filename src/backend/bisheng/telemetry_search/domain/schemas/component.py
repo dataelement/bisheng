@@ -73,6 +73,13 @@ class FilterCondition(BaseModel):
     value: Any = Field(default=None, alias='value')
 
 
+class DimensionQueryFilter(BaseModel):
+    """Runtime multi-select filter supplied by a dashboard filter component."""
+
+    field_id: str = Field(alias="fieldId")
+    values: List[Any] = Field(default_factory=list)
+
+
 class FieldOrder(BaseModel):
     field_id: str = Field(alias='fieldId')
     field_type: str = Field(alias='fieldType',
@@ -86,12 +93,44 @@ class TimeFilter(BaseModel):
     start_date: Optional[int] = Field(default=None, alias='startDate', description="start timestamp(s)")
     end_date: Optional[int] = Field(default=None, alias='endDate', description="end timestamp(s)")
 
-    def get_start_end_date(self) -> (Optional[int], Optional[int]):
+    def get_start_end_date(
+        self,
+        *,
+        include_today: bool = False,
+    ) -> (Optional[int], Optional[int]):
         if self.mode == TimeRangeMode.DYNAMIC:
-            end_date = datetime.now() - timedelta(days=1)
-            end_date = int(datetime(year=end_date.year, month=end_date.month, day=end_date.day, hour=23, minute=59,
-                                    second=59).timestamp() * 1000)
-            start_date = int((datetime.now() - timedelta(days=self.recent_days)).timestamp() * 1000)
+            recent_days = max(int(self.recent_days or 1), 1)
+            now = datetime.now()
+            if include_today:
+                start = datetime(
+                    year=now.year,
+                    month=now.month,
+                    day=now.day,
+                ) - timedelta(days=recent_days - 1)
+                end = datetime(
+                    year=now.year,
+                    month=now.month,
+                    day=now.day,
+                    hour=23,
+                    minute=59,
+                    second=59,
+                )
+                start_date = int(start.timestamp() * 1000)
+                end_date = int(end.timestamp() * 1000)
+            else:
+                end = now - timedelta(days=1)
+                end_date = int(
+                    datetime(
+                        year=end.year,
+                        month=end.month,
+                        day=end.day,
+                        hour=23,
+                        minute=59,
+                        second=59,
+                    ).timestamp()
+                    * 1000
+                )
+                start_date = int((now - timedelta(days=recent_days)).timestamp() * 1000)
         else:
             if not self.start_date or not self.end_date:
                 return None, None

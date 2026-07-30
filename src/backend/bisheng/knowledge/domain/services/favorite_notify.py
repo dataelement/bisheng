@@ -16,9 +16,14 @@ KnowledgeSpaceService 与 KnowledgeVersionService 共用本模块，避免重复
 from __future__ import annotations
 
 import logging
-from typing import Optional
+from collections import defaultdict
+from collections.abc import Awaitable, Callable, Iterable
 
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
+from bisheng.knowledge.domain.schemas.favorite_notification_schema import (
+    FavoriteChangeEvent,
+    FavoriteRecipientSnapshot,
+)
 from bisheng.message.domain.services.notification_content import build_notify_content
 
 logger = logging.getLogger(__name__)
@@ -30,6 +35,300 @@ FAVORITE_SOURCE_MOVED = "favorite_source_moved"
 FAVORITE_SOURCE_TAGS_UPDATED = "favorite_source_tags_updated"
 FAVORITE_SOURCE_CLASSIFICATION_UPDATED = "favorite_source_classification_updated"
 FAVORITE_SOURCE_VERSION_UPDATED = "favorite_source_version_updated"
+FAVORITE_SOURCE_BUSINESS_DOMAIN_UPDATED = "favorite_source_business_domain_updated"
+FAVORITE_SOURCE_SUBCATEGORY_UPDATED = "favorite_source_subcategory_updated"
+FAVORITE_SOURCE_VERSION_ADDED = "favorite_source_version_added"
+FAVORITE_SOURCE_PRIMARY_VERSION_CHANGED = "favorite_source_primary_version_changed"
+FAVORITE_SOURCE_VERSION_DELETED = "favorite_source_version_deleted"
+FAVORITE_SOURCE_VERSION_LINKED = "favorite_source_version_linked"
+FAVORITE_SOURCE_VERSION_UNLINKED = "favorite_source_version_unlinked"
+FAVORITE_SOURCE_DELETED = "favorite_source_deleted"
+
+MAX_EVENTS_PER_TASK = 100
+MAX_DELETE_RECIPIENTS_PER_EVENT = 100
+
+CanViewFile = Callable[[int, object], Awaitable[bool]]
+
+
+async def collect_favorite_recipient_snapshots(
+    *,
+    file_repository,
+    source_files: Iterable[object],
+    actor_user_id: int,
+    can_view_file: CanViewFile,
+) -> dict[int, list[FavoriteRecipientSnapshot]]:
+    """在删除 mutation 前冻结仍可查看源文件的收藏者。"""
+    files_by_id = {
+        int(file.id): file
+        for file in source_files
+        if getattr(file, "id", None) is not None
+    }
+    result: dict[int, list[FavoriteRecipientSnapshot]] = {
+        file_id: [] for file_id in files_by_id
+    }
+    if not files_by_id:
+        return result
+    references = await file_repository.find_favorite_referrers_by_source_file_ids(
+        sorted(files_by_id)
+    )
+    seen: set[tuple[int, int]] = set()
+    for reference in references:
+        source_space_id, source_file_id = FavoriteNotificationService._reference_source(
+            reference
+        )
+        source_file = files_by_id.get(source_file_id)
+        if source_file is None:
+            continue
+        if source_space_id != int(getattr(source_file, "knowledge_id", 0) or 0):
+            continue
+        if int(getattr(reference, "tenant_id", 0) or 0) != int(
+            getattr(source_file, "tenant_id", 0) or 0
+        ):
+            continue
+        user_id = int(getattr(reference, "user_id", 0) or 0)
+        favorite_space_id = int(getattr(reference, "knowledge_id", 0) or 0)
+        if (
+            not user_id
+            or not favorite_space_id
+            or user_id == int(actor_user_id)
+            or (source_file_id, user_id) in seen
+        ):
+            continue
+        try:
+            allowed = await can_view_file(user_id, source_file)
+        except Exception:
+            logger.exception(
+                "favorite delete snapshot permission check failed: file_id=%s user_id=%s",
+                source_file_id,
+                user_id,
+            )
+            continue
+        if not allowed:
+            continue
+        seen.add((source_file_id, user_id))
+        result[source_file_id].append(
+            FavoriteRecipientSnapshot(
+                user_id=user_id,
+                favorite_space_id=favorite_space_id,
+            )
+        )
+    return result
+
+
+def _split_delete_recipient_snapshots(
+    event: FavoriteChangeEvent,
+) -> list[FavoriteChangeEvent]:
+    recipients = list(event.recipient_snapshots or [])
+    if not recipients or len(recipients) <= MAX_DELETE_RECIPIENTS_PER_EVENT:
+        return [event]
+    split_events: list[FavoriteChangeEvent] = []
+    for offset in range(0, len(recipients), MAX_DELETE_RECIPIENTS_PER_EVENT):
+        split_events.append(
+            event.model_copy(
+                update={
+                    "event_id": f"{event.event_id}:{offset // MAX_DELETE_RECIPIENTS_PER_EVENT}",
+                    "recipient_snapshots": recipients[
+                        offset : offset + MAX_DELETE_RECIPIENTS_PER_EVENT
+                    ],
+                }
+            )
+        )
+    return split_events
+
+
+def _get_favorite_notification_task():
+    from bisheng.worker.knowledge.favorite_notification import (
+        send_favorite_change_notifications,
+    )
+
+    return send_favorite_change_notifications
+
+
+def enqueue_favorite_change_events(events: Iterable[FavoriteChangeEvent]) -> None:
+    """尽力投递字段级变化事件，不让 broker 状态影响文档主流程。"""
+    expanded: list[FavoriteChangeEvent] = []
+    for event in events:
+        if event.recipient_snapshots is not None and not event.recipient_snapshots:
+            continue
+        expanded.extend(_split_delete_recipient_snapshots(event))
+    if not expanded:
+        return
+
+    send_favorite_change_notifications = _get_favorite_notification_task()
+
+    by_tenant: dict[int, list[FavoriteChangeEvent]] = defaultdict(list)
+    for event in expanded:
+        by_tenant[int(event.tenant_id)].append(event)
+    for tenant_events in by_tenant.values():
+        for offset in range(0, len(tenant_events), MAX_EVENTS_PER_TASK):
+            batch = tenant_events[offset : offset + MAX_EVENTS_PER_TASK]
+            try:
+                send_favorite_change_notifications.apply_async(
+                    args=[[event.model_dump(mode="json") for event in batch]],
+                    queue="knowledge_celery",
+                )
+            except Exception:
+                # 通知是明确的尽力流程；入队失败不能回滚已完成的文档操作。
+                logger.exception(
+                    "favorite notify enqueue failed: tenant_id=%s event_count=%s",
+                    batch[0].tenant_id,
+                    len(batch),
+                )
+
+
+class FavoriteNotificationService:
+    """批量解析收藏者并写入站内信。"""
+
+    def __init__(
+        self,
+        *,
+        file_repository,
+        message_service,
+        can_view_file: CanViewFile,
+    ):
+        self.file_repository = file_repository
+        self.message_service = message_service
+        self.can_view_file = can_view_file
+
+    @staticmethod
+    def _reference_source(row) -> tuple[int, int]:
+        reference = (getattr(row, "user_metadata", None) or {}).get(
+            "favorite_reference"
+        ) or {}
+        try:
+            return (
+                int(reference.get("source_space_id") or 0),
+                int(reference.get("source_file_id") or 0),
+            )
+        except (TypeError, ValueError):
+            return 0, 0
+
+    async def consume(self, events: list[FavoriteChangeEvent]) -> int:
+        if not events:
+            return 0
+        ordinary_events = [
+            event
+            for event in events
+            if event.recipient_snapshots is None
+        ]
+        references_by_file: dict[int, list[object]] = defaultdict(list)
+        files_by_id: dict[int, object] = {}
+        if ordinary_events:
+            source_file_ids = sorted(
+                {int(event.source_file_id) for event in ordinary_events}
+            )
+            references = (
+                await self.file_repository.find_favorite_referrers_by_source_file_ids(
+                    source_file_ids
+                )
+            )
+            for reference in references:
+                _, source_file_id = self._reference_source(reference)
+                if source_file_id:
+                    references_by_file[source_file_id].append(reference)
+            files = await self.file_repository.find_by_ids(source_file_ids)
+            files_by_id = {
+                int(file.id): file
+                for file in files
+                if getattr(file, "id", None) is not None
+            }
+
+        sent = 0
+        delivered: set[tuple] = set()
+        for event in events:
+            if event.recipient_snapshots is not None:
+                recipients = [
+                    (snapshot.user_id, snapshot.favorite_space_id)
+                    for snapshot in event.recipient_snapshots or []
+                ]
+            else:
+                source_file = files_by_id.get(int(event.source_file_id))
+                if (
+                    source_file is None
+                    or int(getattr(source_file, "tenant_id", 0) or 0)
+                    != int(event.tenant_id)
+                    or int(getattr(source_file, "knowledge_id", 0) or 0)
+                    != int(event.source_space_id)
+                    or getattr(source_file, "deleted_at", None) is not None
+                ):
+                    continue
+                recipients = []
+                for reference in references_by_file.get(int(event.source_file_id), []):
+                    source_space_id, _ = self._reference_source(reference)
+                    if source_space_id != int(event.source_space_id):
+                        continue
+                    if int(getattr(reference, "tenant_id", 0) or 0) != int(
+                        event.tenant_id
+                    ):
+                        continue
+                    user_id = int(getattr(reference, "user_id", 0) or 0)
+                    favorite_space_id = int(
+                        getattr(reference, "knowledge_id", 0) or 0
+                    )
+                    if not user_id or not favorite_space_id:
+                        continue
+                    try:
+                        allowed = await self.can_view_file(user_id, source_file)
+                    except Exception:
+                        logger.exception(
+                            "favorite notify permission check failed: file_id=%s user_id=%s",
+                            event.source_file_id,
+                            user_id,
+                        )
+                        continue
+                    if allowed:
+                        recipients.append((user_id, favorite_space_id))
+
+            for user_id, favorite_space_id in recipients:
+                if int(user_id) == int(event.actor_user_id):
+                    continue
+                dedupe_key = (
+                    int(event.source_file_id),
+                    event.action_code,
+                    int(user_id),
+                    repr(event.before_value),
+                    repr(event.after_value),
+                )
+                if dedupe_key in delivered:
+                    continue
+                delivered.add(dedupe_key)
+                try:
+                    await self.message_service.send_generic_notify(
+                        sender=int(event.actor_user_id),
+                        receiver_user_ids=[int(user_id)],
+                        content_item_list=build_notify_content(
+                            action_code=event.action_code,
+                            target_name=event.file_name,
+                            business_type="knowledge_space_id",
+                            business_id=int(favorite_space_id),
+                            actor_user_id=int(event.actor_user_id),
+                            actor_user_name=event.actor_user_name,
+                            navigable=True,
+                            metadata={
+                                "data": {
+                                    "favorite_change": {
+                                        "source_file_id": str(
+                                            event.source_file_id
+                                        ),
+                                        "action_code": event.action_code,
+                                        "before_value": event.before_value,
+                                        "after_value": event.after_value,
+                                    }
+                                }
+                            },
+                        ),
+                        action_code=event.action_code,
+                    )
+                    sent += 1
+                except Exception:
+                    # 单条消息是尽力发送；失败后继续处理同批次其他接收人。
+                    logger.exception(
+                        "favorite notify send failed: file_id=%s action_code=%s user_id=%s",
+                        event.source_file_id,
+                        event.action_code,
+                        user_id,
+                    )
+        return sent
 
 
 async def notify_favorite_source_changed(
@@ -39,7 +338,7 @@ async def notify_favorite_source_changed(
     file_name: str,
     action_code: str,
     actor_user_id: int,
-    actor_user_name: Optional[str] = None,
+    actor_user_name: str | None = None,
 ) -> None:
     """给收藏了 ``source_file_id`` 的用户逐一发送站内信。
 

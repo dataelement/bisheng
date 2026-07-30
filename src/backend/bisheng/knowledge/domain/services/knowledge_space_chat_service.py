@@ -56,6 +56,9 @@ from bisheng.knowledge.rag.version_filter import build_primary_only_filter
 from bisheng.llm.domain import LLMService
 from bisheng.llm.domain.utils import extract_reasoning_content
 from bisheng.tool.domain.langchain.knowledge import KnowledgeRetrieverTool
+from bisheng.telemetry.domain.mid_table.realtime_qa_question import (
+    RealtimeQaQuestionFact,
+)
 from bisheng.utils import generate_uuid
 
 
@@ -205,7 +208,8 @@ class KnowledgeSpaceChatService:
         )
         es_vector = await KnowledgeRag.init_knowledge_es_vectorstore(knowledge=space)
         es_retriever = es_vector.as_retriever(search_kwargs={"filter": [{"term": {"metadata.document_id": file_id}}]})
-        telemetry_logged = False
+        has_answer = False
+        question_id = generate_uuid()
         async for one in self.space_rag(
             session,
             vector_retriever,
@@ -216,15 +220,28 @@ class KnowledgeSpaceChatService:
             knowledge_id=knowledge_id,
             preauthorized_file_ids={int(file_id)},
         ):
-            if not telemetry_logged and not isinstance(one, StreamRetryEvent):
-                self._log_portal_document_qa_success(knowledge_id=knowledge_id, file_id=file_id)
-                telemetry_logged = True
+            if not isinstance(one, StreamRetryEvent):
+                has_answer = True
             yield one
+        if has_answer:
+            await self._log_portal_document_qa_success(
+                knowledge_id=knowledge_id,
+                file_id=file_id,
+                question_id=question_id,
+                conversation_id=session.chat_id,
+            )
 
     def _is_portal_bff_proxy_request(self) -> bool:
         return is_portal_bff_proxy_source(self.request.headers.get(PORTAL_BFF_TELEMETRY_SOURCE_HEADER))
 
-    def _log_portal_document_qa_success(self, *, knowledge_id: int, file_id: int) -> None:
+    async def _log_portal_document_qa_success(
+        self,
+        *,
+        knowledge_id: int,
+        file_id: int,
+        question_id: str,
+        conversation_id: str,
+    ) -> None:
         if self._is_portal_bff_proxy_request():
             return
         try:
@@ -238,11 +255,28 @@ class KnowledgeSpaceChatService:
                     resource_type="document",
                     space_id=knowledge_id,
                     file_id=file_id,
+                    question_id=question_id,
+                    conversation_id=conversation_id,
                     status="success",
                 ),
             )
-        except (RuntimeError, ValueError, TypeError):
+        except Exception:
             logger.exception("Failed to log portal document QA telemetry.")
+        try:
+            await RealtimeQaQuestionFact.record_success(
+                tenant_id=self.login_user.tenant_id,
+                user_id=self.login_user.user_id,
+                user_name=self.login_user.user_name,
+                question_id=question_id,
+                qa_type="document",
+                scene="my_knowledge_document_qa",
+                source_app="bisheng_my_knowledge",
+                space_id=knowledge_id,
+                file_id=file_id,
+                conversation_id=conversation_id,
+            )
+        except Exception:
+            logger.exception("Failed to project portal document QA telemetry.")
 
     async def space_rag(
         self,

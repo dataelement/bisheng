@@ -1,6 +1,6 @@
 import { create } from "zustand"
 import { generateUUID } from "@/components/bs-ui/utils"
-import { ChartType, createDefaultDataConfig, Dashboard, DashboardComponent, LayoutItem, QueryConfig } from "@/pages/Dashboard/types/dataConfig"
+import { ChartType, createDefaultDataConfig, Dashboard, DashboardComponent, DimensionFilterConfig, LayoutItem, QueryConfig } from "@/pages/Dashboard/types/dataConfig"
 import { DatePickerValue } from "@/pages/Dashboard/components/AdvancedDatePicker";
 import { cloneDeep, isEqual } from "lodash-es";
 import { getDefaultMetricStyle } from "@/pages/Dashboard/colorSchemes";
@@ -23,12 +23,16 @@ interface EditorState {
     isSaving: boolean;
     // Currently edited dashboard
     currentDashboard: Dashboard | null;
+    // Last dashboard state confirmed by the backend
+    savedDashboard: Dashboard | null;
     currentDashboardId: string;
     // Layout configuration
     layouts: LayoutItem[];
+    savedLayouts: LayoutItem[];
     // Chart refresh triggers: each chart has its own trigger counter and query params
     chartRefreshTriggers: Record<string, ChartRefreshInfo>;
-    queryComponentParams: Record<string, DatePickerValue>;
+    queryComponentParams: Record<string, DatePickerValue | undefined>;
+    dimensionFilterParams: Record<string, Record<string, string[]>>;
     // history
     history: HistoryState;
 
@@ -43,6 +47,8 @@ interface EditorState {
     setCurrentDashboard: (dashboard: Dashboard | null) => void;
     setCurrentDashboardId: (id: string) => void;
     updateCurrentDashboard: (dashboard: Dashboard) => void;
+    markDashboardSaved: (dashboard: Dashboard) => void;
+    revertComponentToSaved: (componentId: string) => DashboardComponent | null;
     // Update layout configuration
     setLayouts: (layouts: LayoutItem[]) => void;
     // Add component to layout
@@ -59,25 +65,57 @@ interface EditorState {
     refreshChart: (chartId: string) => void;
     // Refresh charts linked to a query component
     refreshChartsByQuery: (queryComponent: DashboardComponent, filter: DatePickerValue) => void;
+    refreshChartsByDimensionFilter: (
+        filterComponent: DashboardComponent,
+        values: Record<string, string[]>
+    ) => void;
     // Refresh all charts
     // refreshAllCharts: () => void;
     // Initialize auto-refresh on load
     initializeAutoRefresh: () => void;
     // Reset state
     reset: () => void;
-    setQueryComponentParams: (id: string, params: DatePickerValue) => void;
+    setQueryComponentParams: (id: string, params: DatePickerValue | undefined) => void;
 }
 
 let isInternalOperation = false; // Flag to prevent snapshot loops
+
+const dashboardWithLayouts = (
+    dashboard: Dashboard | null,
+    layouts: LayoutItem[]
+): Dashboard | null => {
+    if (!dashboard) return null
+    return {
+        ...dashboard,
+        layout_config: {
+            ...dashboard.layout_config,
+            layouts: cloneDeep(layouts),
+        },
+    }
+}
+
+const dashboardHasChanges = (
+    dashboard: Dashboard | null,
+    layouts: LayoutItem[],
+    savedDashboard: Dashboard | null,
+    savedLayouts: LayoutItem[]
+) => !isEqual(
+    dashboardWithLayouts(dashboard, layouts),
+    dashboardWithLayouts(savedDashboard, savedLayouts)
+)
+
 export const useEditorDashboardStore = create<EditorState>((set, get) => ({
     hasUnsavedChanges: false,
     lastChangeTime: 0,
     isSaving: false,
     currentDashboard: null,
+    savedDashboard: null,
     currentDashboardId: '',
     layouts: [],
+    savedLayouts: [],
     chartRefreshTriggers: {},
     queryComponentParams: {},
+    dimensionFilterParams: {},
     // Initialize history stacks
     history: {
         past: [],
@@ -87,17 +125,31 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
     setHasUnsavedChanges: (value) => set({ hasUnsavedChanges: value }),
     setIsSaving: (value) => set({ isSaving: value }),
     setCurrentDashboard: (dashboard) => {
+        const nextDashboard = dashboard ? cloneDeep(dashboard) : null
+        const nextLayouts = cloneDeep(dashboard?.layout_config?.layouts || [])
         set({
-            currentDashboard: dashboard,
-            layouts: dashboard?.layout_config?.layouts || [],
-            chartRefreshTriggers: {} // Reset triggers when dashboard changes
+            currentDashboard: nextDashboard,
+            savedDashboard: nextDashboard ? cloneDeep(nextDashboard) : null,
+            layouts: nextLayouts,
+            savedLayouts: cloneDeep(nextLayouts),
+            hasUnsavedChanges: false,
+            chartRefreshTriggers: {}, // Reset triggers when dashboard changes
+            queryComponentParams: {},
+            dimensionFilterParams: {},
         })
     },
     setCurrentDashboardId: (id) => set({ currentDashboardId: id }),
     updateCurrentDashboard: (dashboard) => {
-        const { currentDashboard } = get()
+        const { currentDashboard, layouts, savedDashboard, savedLayouts } = get()
         if (!currentDashboard) {
-            set({ currentDashboard: dashboard })
+            const nextDashboard = cloneDeep(dashboard)
+            const nextLayouts = cloneDeep(dashboard.layout_config?.layouts || [])
+            set({
+                currentDashboard: nextDashboard,
+                savedDashboard: cloneDeep(nextDashboard),
+                layouts: nextLayouts,
+                savedLayouts: cloneDeep(nextLayouts),
+            })
             return
         }
         const newDashboard = {
@@ -107,7 +159,69 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
                 : dashboard.components
         }
 
-        set({ currentDashboard: newDashboard })
+        set({
+            currentDashboard: newDashboard,
+            hasUnsavedChanges: dashboardHasChanges(
+                newDashboard,
+                layouts,
+                savedDashboard,
+                savedLayouts
+            ),
+            lastChangeTime: Date.now(),
+        })
+    },
+    markDashboardSaved: (dashboard) => {
+        const savedDashboard = cloneDeep(dashboard)
+        const savedLayouts = cloneDeep(dashboard.layout_config?.layouts || [])
+        set({
+            currentDashboard: cloneDeep(savedDashboard),
+            savedDashboard,
+            layouts: cloneDeep(savedLayouts),
+            savedLayouts,
+            hasUnsavedChanges: false,
+            lastChangeTime: Date.now(),
+        })
+    },
+    revertComponentToSaved: (componentId) => {
+        const {
+            currentDashboard,
+            savedDashboard,
+            layouts,
+            savedLayouts,
+        } = get()
+        if (!currentDashboard || !savedDashboard) return null
+
+        const savedComponent = savedDashboard.components.find(
+            component => component.id === componentId
+        )
+        const nextComponents = savedComponent
+            ? currentDashboard.components.map(component =>
+                component.id === componentId
+                    ? cloneDeep(savedComponent)
+                    : component
+            )
+            : currentDashboard.components.filter(component => component.id !== componentId)
+        const nextLayouts = savedComponent
+            ? layouts
+            : layouts.filter(layout => layout.i !== componentId)
+        const nextDashboard = {
+            ...currentDashboard,
+            components: nextComponents,
+        }
+
+        set({
+            currentDashboard: nextDashboard,
+            layouts: nextLayouts,
+            hasUnsavedChanges: dashboardHasChanges(
+                nextDashboard,
+                nextLayouts,
+                savedDashboard,
+                savedLayouts
+            ),
+            lastChangeTime: Date.now(),
+        })
+
+        return savedComponent ? cloneDeep(savedComponent) : null
     },
     setLayouts: (newLayouts) => {
         const { layouts, saveSnapshot } = get()
@@ -136,10 +250,14 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
             i: componentId,
             x: 0,
             y: maxY,
-            w: ChartType.Metric === component.type ? 4 : 8,
-            h: [ChartType.Query, ChartType.Metric].includes(component.type) ? 3 : 8,
-            minW: ChartType.Query === component.type ? 7 : 3,
-            minH: [ChartType.Query, ChartType.Metric].includes(component.type) ? 2 : 5,
+            w: ChartType.Metric === component.type ? 4 : (
+                ChartType.PivotTable === component.type ? 12 : 8
+            ),
+            h: [ChartType.Query, ChartType.DimensionFilter, ChartType.Metric].includes(component.type) ? 3 : 8,
+            minW: [ChartType.Query, ChartType.DimensionFilter].includes(component.type) ? 7 : (
+                ChartType.PivotTable === component.type ? 6 : 3
+            ),
+            minH: [ChartType.Query, ChartType.DimensionFilter, ChartType.Metric].includes(component.type) ? 2 : 5,
             maxH: 24,
             maxW: 24
         }
@@ -184,11 +302,18 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
     },
     // Update component in the current dashboard
     updateComponent: (componentId: string, data: Partial<DashboardComponent>) => {
-        const { currentDashboard } = get()
+        const {
+            currentDashboard,
+            layouts,
+            savedDashboard,
+            savedLayouts,
+            saveSnapshot,
+        } = get()
         if (!currentDashboard) {
             console.warn('updateComponent: currentDashboard is null')
             return
         }
+        saveSnapshot()
 
         const updatedComponents = currentDashboard.components.map(c => {
             if (c.id === componentId) {
@@ -205,7 +330,15 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
                 ...currentDashboard,
                 components: updatedComponents
             },
-            // hasUnsavedChanges: true,
+            hasUnsavedChanges: dashboardHasChanges(
+                {
+                    ...currentDashboard,
+                    components: updatedComponents,
+                },
+                layouts,
+                savedDashboard,
+                savedLayouts
+            ),
             lastChangeTime: Date.now()
         })
     },
@@ -344,7 +477,25 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
                 ...otherLinkedQueries.map(qc => ({
                     queryComponentId: qc.id,
                     queryComponentParams: queryComponentParams[qc.id]
-                }))
+                })),
+                ...currentDashboard.components
+                    .filter(component => {
+                        if (component.type !== ChartType.DimensionFilter) return false
+                        const config = component.data_config as DimensionFilterConfig
+                        return config.linkedComponentIds?.includes(chartId)
+                    })
+                    .map(component => {
+                        const config = component.data_config as DimensionFilterConfig
+                        const values = get().dimensionFilterParams[component.id] || Object.fromEntries(
+                            config.fields.map(field => [field.fieldId, field.defaultValues || []])
+                        )
+                        return {
+                            dimensionFilterComponentId: component.id,
+                            dimensionFilters: Object.entries(values)
+                                .filter(([, selected]) => selected.length > 0)
+                                .map(([fieldId, selected]) => ({ fieldId, values: selected }))
+                        }
+                    })
             ]
 
             const currentInfo = updatedTriggers[chartId] || { trigger: 0, queryParams: [] }
@@ -355,6 +506,68 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
         })
 
         set({ chartRefreshTriggers: updatedTriggers })
+    },
+
+    refreshChartsByDimensionFilter: (filterComponent, values) => {
+        const {
+            currentDashboard,
+            chartRefreshTriggers,
+            queryComponentParams,
+            dimensionFilterParams,
+        } = get()
+        if (!currentDashboard || filterComponent.type !== ChartType.DimensionFilter) return
+
+        const config = filterComponent.data_config as DimensionFilterConfig
+        const linkedChartIds = config.linkedComponentIds || []
+        const nextDimensionFilterParams = {
+            ...dimensionFilterParams,
+            [filterComponent.id]: values,
+        }
+        const updatedTriggers = { ...chartRefreshTriggers }
+
+        linkedChartIds.forEach(chartId => {
+            const dateParams = currentDashboard.components
+                .filter(component => {
+                    if (component.type !== ChartType.Query) return false
+                    const queryConfig = component.data_config as QueryConfig
+                    return queryConfig.linkedComponentIds?.includes(chartId)
+                })
+                .map(component => ({
+                    queryComponentId: component.id,
+                    queryComponentParams: queryComponentParams[component.id],
+                    queryConditions: (component.data_config as QueryConfig).queryConditions,
+                }))
+
+            const dimensionParams = currentDashboard.components
+                .filter(component => {
+                    if (component.type !== ChartType.DimensionFilter) return false
+                    const filterConfig = component.data_config as DimensionFilterConfig
+                    return filterConfig.linkedComponentIds?.includes(chartId)
+                })
+                .map(component => {
+                    const filterConfig = component.data_config as DimensionFilterConfig
+                    const selectedValues = nextDimensionFilterParams[component.id] || Object.fromEntries(
+                        filterConfig.fields.map(field => [field.fieldId, field.defaultValues || []])
+                    )
+                    return {
+                        dimensionFilterComponentId: component.id,
+                        dimensionFilters: Object.entries(selectedValues)
+                            .filter(([, selected]) => selected.length > 0)
+                            .map(([fieldId, selected]) => ({ fieldId, values: selected })),
+                    }
+                })
+
+            const currentInfo = updatedTriggers[chartId] || { trigger: 0, queryParams: [] }
+            updatedTriggers[chartId] = {
+                trigger: currentInfo.trigger + 1,
+                queryParams: [...dateParams, ...dimensionParams],
+            }
+        })
+
+        set({
+            chartRefreshTriggers: updatedTriggers,
+            dimensionFilterParams: nextDimensionFilterParams,
+        })
     },
 
     // Refresh all chart components (excluding query components)
@@ -421,11 +634,32 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
                     })
                 }
             }
+            if (component.type === ChartType.DimensionFilter) {
+                const filterConfig = component.data_config as DimensionFilterConfig
+                const values = get().dimensionFilterParams[component.id] || Object.fromEntries(
+                    filterConfig.fields.map(field => [field.fieldId, field.defaultValues || []])
+                )
+                const queryParam = {
+                    dimensionFilterComponentId: component.id,
+                    dimensionFilters: Object.entries(values)
+                        .filter(([, selected]) => selected.length > 0)
+                        .map(([fieldId, selected]) => ({ fieldId, values: selected })),
+                }
+                filterConfig.linkedComponentIds?.forEach(chartId => {
+                    if (!chartToQueriesMap[chartId]) {
+                        chartToQueriesMap[chartId] = []
+                    }
+                    chartToQueriesMap[chartId].push(queryParam)
+                })
+            }
         })
 
         // other components
         currentDashboard.components.forEach(component => {
-            if (component.type !== 'query' && !chartToQueriesMap[component.id]) {
+            if (
+                ![ChartType.Query, ChartType.DimensionFilter].includes(component.type)
+                && !chartToQueriesMap[component.id]
+            ) {
                 chartToQueriesMap[component.id] = []
             }
         })
@@ -446,8 +680,12 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
         hasUnsavedChanges: false,
         isSaving: false,
         currentDashboard: null,
+        savedDashboard: null,
         layouts: [],
+        savedLayouts: [],
         chartRefreshTriggers: {},
+        queryComponentParams: {},
+        dimensionFilterParams: {},
         history: { past: [], future: [] }
     }),
 
@@ -539,9 +777,7 @@ interface ComponentEditorState {
     // The "Shadow" state: stores a copy of the component currently being edited
     editingComponent: DashboardComponent | null;
     hasChange: boolean;
-
-    // Internal helper to push changes to the main store
-    _internalSync: () => void;
+    draftVersion: number;
     collapsedSections: {
         color: boolean;
         title: boolean;
@@ -560,23 +796,25 @@ interface ComponentEditorState {
 
     // Public methods
     updateEditingComponent: (data: Partial<DashboardComponent>) => void;
+    applyEditingComponent: (data?: Partial<DashboardComponent>) => void;
+    cancelEditingComponent: () => void;
     saveComponentCollapseState: (componentId: string) => void;
     loadComponentCollapseState: (componentId: string) => void;
     /**
      * Entry Point: Triggered when clicking a chart.
-     * Checks if a previous draft exists, saves it if necessary, 
-     * then clones the new component.
+     * Discards any unapplied form draft, then clones the selected component.
      */
     copyFromDashboard: (componentId: string) => void;
 
     /**
-     * Exit Point: Saves any remaining changes and resets the shadow state.
+     * Exit Point: Discards unapplied form changes and resets the shadow state.
      */
     clear: (force?: boolean) => void;
 }
 export const useComponentEditorStore = create<ComponentEditorState>((set, get) => ({
     editingComponent: null,
     hasChange: false,
+    draftVersion: 0,
 
     collapsedSections: {
         color: false,
@@ -587,14 +825,6 @@ export const useComponentEditorStore = create<ComponentEditorState>((set, get) =
     },
     componentCollapseStates: {},
 
-    _internalSync: () => {
-        const { hasChange, editingComponent } = get();
-        if (hasChange && editingComponent) {
-            const dashboardStore = useEditorDashboardStore.getState();
-            dashboardStore.updateComponent(editingComponent.id, editingComponent);
-        }
-    },
-
     updateEditingComponent: (data) => {
         const { editingComponent } = get();
         if (editingComponent) {
@@ -602,8 +832,50 @@ export const useComponentEditorStore = create<ComponentEditorState>((set, get) =
                 editingComponent: { ...editingComponent, ...data },
                 hasChange: true
             });
-            useEditorDashboardStore.getState().setHasUnsavedChanges(true);
         }
+    },
+
+    applyEditingComponent: (data) => {
+        const { editingComponent } = get()
+        if (!editingComponent) return
+
+        const appliedComponent = {
+            ...editingComponent,
+            ...data,
+        }
+        useEditorDashboardStore.getState().updateComponent(
+            appliedComponent.id,
+            appliedComponent
+        )
+        set({
+            editingComponent: cloneDeep(appliedComponent),
+            hasChange: false,
+        })
+    },
+
+    cancelEditingComponent: () => {
+        const { editingComponent } = get()
+        if (!editingComponent) return
+
+        const dashboardStore = useEditorDashboardStore.getState()
+        const restoredComponent = dashboardStore.revertComponentToSaved(
+            editingComponent.id
+        )
+        if (!restoredComponent) {
+            set(state => ({
+                editingComponent: null,
+                hasChange: false,
+                draftVersion: state.draftVersion + 1,
+            }))
+            return
+        }
+
+        set(state => ({
+            editingComponent: cloneDeep(restoredComponent),
+            hasChange: false,
+            draftVersion: state.draftVersion + 1,
+        }))
+        dashboardStore.refreshChart(restoredComponent.id)
     },
 
     setCollapsedSection: (section, collapsed) => {
@@ -664,12 +936,11 @@ export const useComponentEditorStore = create<ComponentEditorState>((set, get) =
     },
 
     copyFromDashboard: (componentId: string) => {
-        const { editingComponent, _internalSync } = get();
+        const { editingComponent } = get();
         const dashboardStore = useEditorDashboardStore.getState();
 
-        // 1. If there is an existing draft, save it first
+        // Unapplied form changes must never leak into the dashboard draft.
         if (editingComponent) {
-            _internalSync();
             get().saveComponentCollapseState(editingComponent.id);
         }
 
@@ -684,26 +955,24 @@ export const useComponentEditorStore = create<ComponentEditorState>((set, get) =
 
             get().loadComponentCollapseState(componentId);
 
-            set({
+            set(state => ({
                 editingComponent: deepCopy,
-                hasChange: false
-            });
+                hasChange: false,
+                draftVersion: state.draftVersion + 1,
+            }));
         }
     },
 
-    clear: (force) => {
-        const { editingComponent, _internalSync } = get();
+    clear: () => {
+        const { editingComponent } = get();
         if (!editingComponent) return;
 
-        // Save pending changes before closing
-        if (!force && editingComponent) {
-            _internalSync();
-            get().saveComponentCollapseState(editingComponent.id);
-        }
+        get().saveComponentCollapseState(editingComponent.id);
 
-        set({
+        set(state => ({
             editingComponent: null,
             hasChange: false,
+            draftVersion: state.draftVersion + 1,
             collapsedSections: {
                 color: false,
                 title: true,
@@ -711,7 +980,7 @@ export const useComponentEditorStore = create<ComponentEditorState>((set, get) =
                 legend: true,
                 chartOptions: false
             }
-        });
+        }));
     },
 }));
 

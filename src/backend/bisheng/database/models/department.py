@@ -1076,6 +1076,22 @@ class DepartmentDao:
 
 
 class UserDepartmentDao:
+    @staticmethod
+    def _schedule_participation_roster_sync() -> None:
+        from bisheng.telemetry.domain.mid_table.daily_participation import (
+            DailyParticipationFact,
+        )
+
+        DailyParticipationFact.schedule_roster_reconcile_sync()
+
+    @staticmethod
+    async def _aschedule_participation_roster_sync() -> None:
+        from bisheng.telemetry.domain.mid_table.daily_participation import (
+            DailyParticipationFact,
+        )
+
+        await DailyParticipationFact.schedule_roster_reconcile_async()
+
     @classmethod
     def add_member(
         cls,
@@ -1094,6 +1110,7 @@ class UserDepartmentDao:
             session.add(ud)
             session.commit()
             session.refresh(ud)
+            cls._schedule_participation_roster_sync()
             return ud
 
     @classmethod
@@ -1114,6 +1131,7 @@ class UserDepartmentDao:
             session.add(ud)
             await session.commit()
             await session.refresh(ud)
+            await cls._aschedule_participation_roster_sync()
             return ud
 
     @classmethod
@@ -1122,6 +1140,7 @@ class UserDepartmentDao:
             for entry in entries:
                 session.add(UserDepartment(**entry))
             session.commit()
+            cls._schedule_participation_roster_sync()
 
     @classmethod
     async def abatch_add_members(cls, entries: list[dict]) -> None:
@@ -1129,6 +1148,7 @@ class UserDepartmentDao:
             for entry in entries:
                 session.add(UserDepartment(**entry))
             await session.commit()
+            await cls._aschedule_participation_roster_sync()
 
     @classmethod
     def remove_member(cls, user_id: int, department_id: int) -> None:
@@ -1142,6 +1162,7 @@ class UserDepartmentDao:
             if ud:
                 session.delete(ud)
                 session.commit()
+                cls._schedule_participation_roster_sync()
 
     @classmethod
     async def aremove_member(cls, user_id: int, department_id: int) -> None:
@@ -1156,6 +1177,7 @@ class UserDepartmentDao:
             if ud:
                 await session.delete(ud)
                 await session.commit()
+                await cls._aschedule_participation_roster_sync()
 
     @classmethod
     def get_members(
@@ -1328,6 +1350,29 @@ class UserDepartmentDao:
                 )
             ).all()
 
+    @classmethod
+    def get_primary_department_map_by_user_ids(
+        cls,
+        user_ids: list[int],
+    ) -> dict[int, Department]:
+        """Return each user's event-time primary department in one query."""
+        normalized_user_ids = sorted({int(user_id) for user_id in user_ids if user_id})
+        if not normalized_user_ids:
+            return {}
+        with get_sync_db_session() as session:
+            result = session.exec(
+                select(UserDepartment.user_id, Department)
+                .join(Department, Department.id == UserDepartment.department_id)
+                .where(
+                    UserDepartment.user_id.in_(normalized_user_ids),
+                    UserDepartment.is_primary == 1,
+                )
+            )
+            return {
+                int(user_id): department
+                for user_id, department in result.all()
+            }
+
     # -----------------------------------------------------------------------
     # v2.5.1 F014: membership lookups + primary flag management used by
     # ``LoginSyncService`` — kept at the DAO layer so other sync paths
@@ -1414,6 +1459,7 @@ class UserDepartmentDao:
                 .values(is_primary=is_primary)
             )
             await session.commit()
+        await cls._aschedule_participation_roster_sync()
 
     @classmethod
     def check_member_exists(cls, user_id: int, department_id: int) -> bool:

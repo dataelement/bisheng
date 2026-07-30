@@ -1,12 +1,16 @@
 """Dictionary API endpoints - 系统字典接口"""
 
-from fastapi import APIRouter, Depends, Path, Query
+from io import BytesIO
+
+from fastapi import APIRouter, Depends, File, Path, Query, UploadFile
+from fastapi.responses import StreamingResponse
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.schemas.api import PageData, UnifiedResponseModel, resp_200
 from bisheng.dictionary.api.dependencies import get_dictionary_service
 from bisheng.dictionary.domain.schemas.dictionary_schema import (
     DictionaryCreateRequest,
+    DictionaryImportResult,
     DictionaryResponse,
     DictionaryTypeResponse,
     DictionaryUpdateRequest,
@@ -59,6 +63,16 @@ async def list_dictionaries_by_type(
     return resp_200(data=[item.model_dump() for item in result])
 
 
+@router.get("/next_sort_order", response_model=UnifiedResponseModel[int])
+async def get_next_sort_order(
+    type: str = Query(..., description="字典类型(数据库英文 code)", min_length=1),
+    service: DictionaryService = Depends(get_dictionary_service),
+):
+    """根据类型获取推荐的下一个 sort_order(当前最大 sort_order + 1)"""
+    result = await service.get_next_sort_order(dict_type=type)
+    return resp_200(data=result)
+
+
 @router.get("/type/{dict_type}", response_model=UnifiedResponseModel[list[DictionaryResponse]])
 async def get_dictionary_by_type(
     dict_type: str = Path(..., description="字典类型"),
@@ -86,7 +100,7 @@ async def list_dictionaries(
     type: str | None = Query(None, description="字典类型筛选"),
     keyword: str | None = Query(None, description="关键词模糊匹配 type/dict_key/dict_value"),
     sort_by: bool | None = Query(None, description="排序顺序, True 升序, False 降序"),
-    enabled: bool | None = Query(None, description="是否启用筛选"),
+    is_enabled: bool | None = Query(None, description="是否启用筛选"),
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(20, ge=1, le=500, description="每页数量"),
     service: DictionaryService = Depends(get_dictionary_service),
@@ -98,6 +112,42 @@ async def list_dictionaries(
         page=page,
         page_size=page_size,
         sort_by=sort_by,
-        enabled=enabled,
+        is_enabled=is_enabled,
     )
+    return resp_200(data=result.model_dump())
+
+
+@router.get("/export", response_class=StreamingResponse)
+async def export_dictionaries(
+    type: str | None = Query(None, description="字典类型筛选(数据库英文 code)"),
+    keyword: str | None = Query(None, description="关键词模糊匹配 type/dict_key/dict_value"),
+    sort_by: bool | None = Query(None, description="排序顺序, True 升序, False 降序"),
+    is_enabled: bool | None = Query(None, description="是否启用筛选"),
+    user: UserPayload = Depends(UserPayload.get_login_user),
+    service: DictionaryService = Depends(get_dictionary_service),
+):
+    """导出字典数据为 Excel(管理员)"""
+    data = await service.export(
+        user,
+        dict_type=type,
+        keyword=keyword,
+        sort_by=sort_by,
+        is_enabled=is_enabled,
+    )
+    filename = f"dictionary_export_{type or 'all'}.xlsx"
+    return StreamingResponse(
+        BytesIO(data),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+@router.post("/import", response_model=UnifiedResponseModel[DictionaryImportResult])
+async def import_dictionaries(
+    file: UploadFile = File(..., description="Excel 文件(xlsx/xls)"),
+    user: UserPayload = Depends(UserPayload.get_login_user),
+    service: DictionaryService = Depends(get_dictionary_service),
+):
+    """从 Excel 导入字典数据(管理员)"""
+    result = await service.import_excel(user, file)
     return resp_200(data=result.model_dump())

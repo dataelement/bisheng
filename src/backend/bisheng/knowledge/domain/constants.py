@@ -3,6 +3,7 @@ import re
 from typing import Any
 
 BUSINESS_DOMAIN_CODE_KEY = "business_domain_code"
+FILE_CATEGORY_CODE_KEY = "file_category_code"
 
 BUSINESS_DOMAIN_OPTIONS = {
     "PP": "生产",
@@ -44,6 +45,26 @@ def get_business_domain_code_from_split_rule(split_rule: Any) -> str | None:
     return normalize_business_domain_code(split_rule.get(BUSINESS_DOMAIN_CODE_KEY))
 
 
+def normalize_file_category_code(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    code = value.strip().upper()
+    if not code or len(code) > 16:
+        return None
+    return code
+
+
+def get_file_category_code_from_split_rule(split_rule: Any) -> str | None:
+    if isinstance(split_rule, str) and split_rule.strip():
+        try:
+            split_rule = json.loads(split_rule)
+        except Exception:
+            return None
+    if not isinstance(split_rule, dict):
+        return None
+    return normalize_file_category_code(split_rule.get(FILE_CATEGORY_CODE_KEY))
+
+
 def parse_shougang_file_encoding_codes(item: Any) -> tuple[str, str]:
     """Parse the existing Shougang ``category-domain-serial`` tail."""
     if isinstance(item, dict):
@@ -77,3 +98,8 @@ def parse_shougang_file_encoding_codes(item: Any) -> tuple[str, str]:
 def get_business_domain_code_from_file(item: Any) -> str | None:
     split_rule = item.get("split_rule") if isinstance(item, dict) else getattr(item, "split_rule", None)
     return get_business_domain_code_from_split_rule(split_rule) or parse_shougang_file_encoding_codes(item)[1]
+
+
+def get_file_category_code_from_file(item: Any) -> str | None:
+    split_rule = item.get("split_rule") if isinstance(item, dict) else getattr(item, "split_rule", None)
+    return get_file_category_code_from_split_rule(split_rule) or parse_shougang_file_encoding_codes(item)[0] or None

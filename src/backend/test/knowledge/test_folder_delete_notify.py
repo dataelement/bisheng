@@ -155,10 +155,15 @@ async def test_delete_folder_invokes_notify_hook():
             new_callable=AsyncMock,
             return_value=[],
         ),
-        patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.adelete_batch",
-            new_callable=AsyncMock,
-        ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.adelete_batch",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_recycle_service."
+                "KnowledgeRecycleService.soft_delete_file_ids",
+                new_callable=AsyncMock,
+            ),
         patch.object(service, "_cleanup_resource_tuples", new_callable=AsyncMock),
         patch.object(service, "update_folder_update_time", new_callable=AsyncMock),
         patch(

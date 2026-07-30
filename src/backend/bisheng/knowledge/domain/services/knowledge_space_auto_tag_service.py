@@ -326,6 +326,16 @@ class KnowledgeSpaceAutoTagService:
         return parent_labels, subcategory_labels
 
     @classmethod
+    def get_document_type_label_lookup_for_tenant(
+        cls,
+        tenant_id: int | None,
+    ) -> tuple[dict[str, str], dict[str, str]]:
+        """Resolve configured first- and second-level category labels for projections."""
+        return cls._build_document_type_label_lookup(
+            cls._load_document_types_for_tenant(tenant_id)
+        )
+
+    @classmethod
     def _format_file_category_display(cls, db_file: KnowledgeFile) -> str | None:
         parent_labels, subcategory_labels = cls._build_document_type_label_lookup(
             cls._load_document_types_for_tenant(getattr(db_file, "tenant_id", None))

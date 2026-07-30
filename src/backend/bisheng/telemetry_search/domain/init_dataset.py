@@ -9,7 +9,7 @@ from bisheng.telemetry_search.domain.repositories.implementations.dataset_reposi
     DashboardDatasetRepositoryImpl
 from bisheng.telemetry_search.domain.schemas.query_builder import AggregationExpression, AggsTypeEnum, PipelineTypeEnum, \
     FilterExpression, TermOp, \
-    MatchAllOp
+    MatchAllOp, TermsOp
 
 DASHBOARD_DATASET = [
     DashboardDataset(
@@ -728,6 +728,10 @@ DASHBOARD_DATASET = [
                     filter=FilterExpression(bool_operator="must", filters=[
                         TermOp(field="record_type", value="file"),
                         TermOp(field="file_type", value=1),
+                        TermsOp(
+                            field="space_level",
+                            value=["public", "department", "team", "team_ks"],
+                        ),
                     ]),
                     aggregations=[
                         AggregationExpression(
@@ -751,6 +755,10 @@ DASHBOARD_DATASET = [
                     filter=FilterExpression(bool_operator="must", filters=[
                         TermOp(field="record_type", value="file"),
                         TermOp(field="file_type", value=1),
+                        TermsOp(
+                            field="space_level",
+                            value=["public", "department", "team", "team_ks"],
+                        ),
                     ]),
                     aggregations=[
                         AggregationExpression(
@@ -766,6 +774,10 @@ DASHBOARD_DATASET = [
                     is_virtual=True,
                     filter=FilterExpression(bool_operator="must", filters=[
                         TermOp(field="record_type", value="file"),
+                        TermsOp(
+                            field="space_level",
+                            value=["public", "department", "team", "team_ks"],
+                        ),
                     ]),
                     aggregations=[
                         AggregationExpression(
@@ -806,6 +818,46 @@ DASHBOARD_DATASET = [
                 DimensionConfig(
                     name="知识空间名称",
                     field="space_name"
+                ),
+                DimensionConfig(
+                    name="知识库大类编码",
+                    field="space_level"
+                ),
+                DimensionConfig(
+                    name="知识库大类",
+                    field="space_level_name"
+                ),
+                DimensionConfig(
+                    name="知识分类编码",
+                    field="file_category_code"
+                ),
+                DimensionConfig(
+                    name="知识分类",
+                    field="file_category_name"
+                ),
+                DimensionConfig(
+                    name="二级知识分类编码",
+                    field="file_subcategory_code"
+                ),
+                DimensionConfig(
+                    name="二级知识分类",
+                    field="file_subcategory_name"
+                ),
+                DimensionConfig(
+                    name="业务域编码",
+                    field="business_domain_code"
+                ),
+                DimensionConfig(
+                    name="业务域",
+                    field="business_domain_name"
+                ),
+                DimensionConfig(
+                    name="上传人主部门ID",
+                    field="primary_department_id"
+                ),
+                DimensionConfig(
+                    name="上传人主部门",
+                    field="primary_department_name"
                 ),
                 DimensionConfig(
                     name="上传人ID",
@@ -1250,7 +1302,197 @@ DASHBOARD_DATASET = [
                 )
             ]
         ).model_dump()
-    )
+    ),
+    DashboardDataset(
+        dataset_name="实时问答统计",
+        dataset_code="mid_realtime_qa_question_fact",
+        es_index_name="mid_realtime_qa_question_fact",
+        description="专家问答、智能问答和文档内AI对话的成功提问事实表",
+        is_commercial_only=False,
+        schema_config=SchemaConfig(
+            metrics=[
+                MetricConfig(
+                    field="total_qa_count",
+                    name="问答总数",
+                    is_virtual=True,
+                    aggregations=[
+                        AggregationExpression(
+                            name="total_qa_count",
+                            type=AggsTypeEnum.VALUE_COUNT,
+                            field="question_id",
+                        )
+                    ],
+                ),
+                MetricConfig(
+                    field="expert_qa_count",
+                    name="专家问答数",
+                    is_virtual=True,
+                    filter=FilterExpression(
+                        bool_operator="must",
+                        filters=[TermOp(field="qa_type", value="expert")],
+                    ),
+                    aggregations=[
+                        AggregationExpression(
+                            name="expert_qa_count",
+                            type=AggsTypeEnum.VALUE_COUNT,
+                            field="question_id",
+                        )
+                    ],
+                ),
+                MetricConfig(
+                    field="smart_qa_count",
+                    name="智能问答数",
+                    is_virtual=True,
+                    filter=FilterExpression(
+                        bool_operator="must",
+                        filters=[TermOp(field="qa_type", value="smart")],
+                    ),
+                    aggregations=[
+                        AggregationExpression(
+                            name="smart_qa_count",
+                            type=AggsTypeEnum.VALUE_COUNT,
+                            field="question_id",
+                        )
+                    ],
+                ),
+                MetricConfig(
+                    field="document_qa_count",
+                    name="文档内AI对话数",
+                    is_virtual=True,
+                    filter=FilterExpression(
+                        bool_operator="must",
+                        filters=[TermOp(field="qa_type", value="document")],
+                    ),
+                    aggregations=[
+                        AggregationExpression(
+                            name="document_qa_count",
+                            type=AggsTypeEnum.VALUE_COUNT,
+                            field="question_id",
+                        )
+                    ],
+                ),
+                MetricConfig(
+                    field="qa_user_count",
+                    name="提问人数",
+                    is_virtual=True,
+                    aggregations=[
+                        AggregationExpression(
+                            name="qa_user_count",
+                            type=AggsTypeEnum.CARDINALITY,
+                            field="user_id",
+                        )
+                    ],
+                ),
+            ],
+            dimensions=[
+                DimensionConfig(
+                    name="时间",
+                    field="timestamp",
+                    time_granularitys=["year", "month", "week", "day", "hour"],
+                    field_type="date",
+                ),
+                DimensionConfig(name="问答类型编码", field="qa_type"),
+                DimensionConfig(name="问答类型", field="qa_type_name"),
+                DimensionConfig(name="提问人主部门ID", field="primary_department_id"),
+                DimensionConfig(name="提问人主部门", field="primary_department_name"),
+                DimensionConfig(name="部门口径来源", field="department_source"),
+                DimensionConfig(name="提问人ID", field="user_id"),
+                DimensionConfig(name="提问人", field="user_name"),
+                DimensionConfig(name="知识空间ID", field="space_id"),
+                DimensionConfig(name="文件ID", field="file_id"),
+                DimensionConfig(name="业务域编码", field="business_domain_code"),
+                DimensionConfig(name="问答场景", field="scene"),
+                DimensionConfig(name="来源应用", field="source_app"),
+            ],
+        ).model_dump(),
+    ),
+    DashboardDataset(
+        dataset_name="全员每日参与度",
+        dataset_code="mid_user_daily_participation",
+        es_index_name="mid_user_daily_participation_fact",
+        description="按自然日维护的在职员工名册、登录人数与登录次数事实表",
+        is_commercial_only=False,
+        schema_config=SchemaConfig(
+            metrics=[
+                MetricConfig(
+                    field="participation_rate",
+                    name="全员参与占比",
+                    is_virtual=True,
+                    filter=FilterExpression(
+                        bool_operator="must",
+                        filters=[
+                            TermOp(field="logged_in", value=True),
+                            MatchAllOp(field=""),
+                        ],
+                    ),
+                    aggregations=[
+                        AggregationExpression(
+                            name="logged_in_employee_count",
+                            type=AggsTypeEnum.VALUE_COUNT,
+                            field="user_id",
+                        ),
+                        AggregationExpression(
+                            name="active_employee_count",
+                            type=AggsTypeEnum.VALUE_COUNT,
+                            field="user_id",
+                        ),
+                    ],
+                    formula=FormulaEnum.DIVIDE,
+                ),
+                MetricConfig(
+                    field="logged_in_employee_count",
+                    name="实际登录人数",
+                    is_virtual=True,
+                    filter=FilterExpression(
+                        bool_operator="must",
+                        filters=[TermOp(field="logged_in", value=True)],
+                    ),
+                    aggregations=[
+                        AggregationExpression(
+                            name="logged_in_employee_count",
+                            type=AggsTypeEnum.VALUE_COUNT,
+                            field="user_id",
+                        )
+                    ],
+                ),
+                MetricConfig(
+                    field="active_employee_count",
+                    name="全员总数",
+                    is_virtual=True,
+                    filter=FilterExpression(
+                        bool_operator="must",
+                        filters=[TermOp(field="active_employee", value=1)],
+                    ),
+                    aggregations=[
+                        AggregationExpression(
+                            name="active_employee_count",
+                            type=AggsTypeEnum.VALUE_COUNT,
+                            field="user_id",
+                        )
+                    ],
+                ),
+                MetricConfig(
+                    field="login_count",
+                    name="实际登录次数",
+                    is_virtual=False,
+                ),
+            ],
+            dimensions=[
+                DimensionConfig(
+                    name="时间",
+                    field="timestamp",
+                    time_granularitys=["year", "month", "week", "day"],
+                    field_type="date",
+                ),
+                DimensionConfig(name="自然日", field="local_date"),
+                DimensionConfig(name="人员主部门ID", field="primary_department_id"),
+                DimensionConfig(name="人员主部门", field="primary_department_name"),
+                DimensionConfig(name="部门口径来源", field="department_source"),
+                DimensionConfig(name="人员ID", field="user_id"),
+                DimensionConfig(name="人员姓名", field="user_name"),
+            ],
+        ).model_dump(),
+    ),
 ]
 
 preset_oss_dashboard_sql = """
@@ -1335,24 +1577,39 @@ def _clone_dashboard_dataset(dataset: DashboardDataset) -> DashboardDataset:
     return DashboardDataset(**data)
 
 
-async def _upgrade_knowledge_space_content_dataset(
+REALTIME_DASHBOARD_DATASET_CODES = (
+    "mid_knowledge_space_content_stat",
+    "mid_realtime_qa_question_fact",
+    "mid_user_daily_participation",
+)
+
+
+async def _upgrade_realtime_dashboard_datasets(
     dashboard_dataset_repository: DashboardDatasetRepositoryImpl,
 ):
-    dataset_code = "mid_knowledge_space_content_stat"
-    seed_dataset = next(
-        dataset for dataset in DASHBOARD_DATASET if dataset.dataset_code == dataset_code
-    )
-    existing_dataset = await dashboard_dataset_repository.find_one(dataset_code=dataset_code)
-    if not existing_dataset:
-        await dashboard_dataset_repository.save(_clone_dashboard_dataset(seed_dataset))
-        return
+    """Idempotently install or refresh the three real-time dashboard datasets."""
+    seed_by_code = {
+        dataset.dataset_code: dataset
+        for dataset in DASHBOARD_DATASET
+        if dataset.dataset_code in REALTIME_DASHBOARD_DATASET_CODES
+    }
+    for dataset_code in REALTIME_DASHBOARD_DATASET_CODES:
+        seed_dataset = seed_by_code[dataset_code]
+        existing_dataset = await dashboard_dataset_repository.find_one(
+            dataset_code=dataset_code
+        )
+        if not existing_dataset:
+            await dashboard_dataset_repository.save(
+                _clone_dashboard_dataset(seed_dataset)
+            )
+            continue
 
-    existing_dataset.dataset_name = seed_dataset.dataset_name
-    existing_dataset.es_index_name = seed_dataset.es_index_name
-    existing_dataset.description = seed_dataset.description
-    existing_dataset.is_commercial_only = seed_dataset.is_commercial_only
-    existing_dataset.schema_config = seed_dataset.schema_config
-    await dashboard_dataset_repository.update(existing_dataset)
+        existing_dataset.dataset_name = seed_dataset.dataset_name
+        existing_dataset.es_index_name = seed_dataset.es_index_name
+        existing_dataset.description = seed_dataset.description
+        existing_dataset.is_commercial_only = seed_dataset.is_commercial_only
+        existing_dataset.schema_config = seed_dataset.schema_config
+        await dashboard_dataset_repository.update(existing_dataset)
 
 
 async def init_dashboard_datasets():
@@ -1365,7 +1622,7 @@ async def init_dashboard_datasets():
         else:
             # Upgrade path: add department dimensions to existing datasets
             await _upgrade_datasets_add_department_dimensions(dashboard_dataset_repository)
-            await _upgrade_knowledge_space_content_dataset(dashboard_dataset_repository)
+            await _upgrade_realtime_dashboard_datasets(dashboard_dataset_repository)
     preset_dashboard = await DashboardDao.get_dashboards(dashboard_type=[DashboardType.PRESET_OSS])
     if not preset_dashboard:
         await DashboardDao.exec_sql_str(preset_oss_dashboard_sql)

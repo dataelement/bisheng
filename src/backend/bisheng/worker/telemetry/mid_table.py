@@ -1,26 +1,53 @@
-from datetime import datetime, timedelta
-from typing import List
+from datetime import date, datetime, timedelta
+from typing import Any, List
 
+from elasticsearch import helpers
 from loguru import logger
+from sqlalchemy import exists, or_
 from sqlmodel import select
 
 from bisheng.api.services.workflow import WorkFlowService
-from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
+from bisheng.common.constants.enums.telemetry import (
+    ApplicationTypeEnum,
+    BaseTelemetryTypeEnum,
+)
 from bisheng.common.schemas.telemetry.base_telemetry_schema import UserGroupInfo, UserRoleInfo, UserDepartmentInfo
+from bisheng.common.services import telemetry_service
+from bisheng.common.services.config_service import settings
 from bisheng.core.context.tenant import bypass_tenant_filter
 from bisheng.core.database import get_sync_db_session
 from bisheng.core.logger import trace_id_var
+from bisheng.core.search.elasticsearch.manager import (
+    get_statistics_es_connection_sync,
+)
+from bisheng.database.models.department import UserDepartmentDao
+from bisheng.database.models.tenant import Tenant, UserTenant
 from bisheng.database.models.flow import FlowType
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
+from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile, KnowledgeFileStatus, FileType
+from bisheng.knowledge.domain.models.knowledge_space_scope import (
+    KnowledgeSpaceScopeDao,
+)
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
+from bisheng.knowledge.domain.services.file_classification_label_service import (
+    FileClassificationLabelService,
+)
 from bisheng.telemetry.domain.mid_table.app_increment import AppIncrement, AppIncrementRecord
 from bisheng.telemetry.domain.mid_table.base import BaseMidTable
+from bisheng.telemetry.domain.mid_table.daily_participation import (
+    CHINA_STANDARD_TIME,
+    DailyParticipationFact,
+    DailyParticipationRecord,
+    aggregate_historical_login_hits,
+    participation_day,
+)
 from bisheng.telemetry.domain.mid_table.knowledge_increment import KnowledgeIncrement, KnowledgeIncrementRecord
 from bisheng.telemetry.domain.mid_table.knowledge_space_content import KnowledgeSpaceContentStat
 from bisheng.telemetry.domain.mid_table.user_increment import UserIncrement, UserIncrementRecord
 from bisheng.telemetry.domain.mid_table.user_interact import UserInteract, UserInteractRecord
 from bisheng.user.domain.services.user import UserService
+from bisheng.user.domain.models.user import User
 from bisheng.utils import generate_uuid
 from bisheng.worker.main import bisheng_celery
 
@@ -92,12 +119,288 @@ def sync_mid_user_increment(start_date: str = None, end_date: str = None):
     logger.info(f"Successfully synced mid_user_increment from {start_date} to {end_date}")
 
 
+def _get_active_participation_users(
+    offset: int,
+    limit: int,
+) -> list[tuple[User, int]]:
+    """Page the current employee roster across active leaf tenants."""
+    with bypass_tenant_filter():
+        with get_sync_db_session() as session:
+            if settings.multi_tenant.enabled:
+                statement = (
+                    select(User, UserTenant.tenant_id)
+                    .join(UserTenant, UserTenant.user_id == User.user_id)
+                    .join(Tenant, Tenant.id == UserTenant.tenant_id)
+                    .where(
+                        User.delete == 0,
+                        UserTenant.status == "active",
+                        UserTenant.is_active == 1,
+                        Tenant.status == "active",
+                    )
+                    .order_by(
+                        User.user_id.asc(),
+                        UserTenant.tenant_id.asc(),
+                    )
+                    .offset(offset)
+                    .limit(limit)
+                )
+                return [
+                    (user, int(tenant_id))
+                    for user, tenant_id in session.exec(statement).all()
+                ]
+
+            statement = (
+                select(User)
+                .where(User.delete == 0)
+                .order_by(User.user_id.asc())
+                .offset(offset)
+                .limit(limit)
+            )
+            return [(user, 1) for user in session.exec(statement).all()]
+
+
+def _reconcile_participation_roster_for_day(
+    target_date: date,
+    *,
+    department_source: str,
+) -> dict[str, int | str]:
+    local_date, day_timestamp = participation_day(target_date)
+    sync_run_id = generate_uuid()
+    sync_started_at = int(datetime.now().timestamp())
+    mid_table = DailyParticipationFact()
+    offset, page_size = 0, 1000
+    synced_count = 0
+
+    while True:
+        roster_rows = _get_active_participation_users(offset, page_size)
+        if not roster_rows:
+            break
+        offset += len(roster_rows)
+        primary_department_map = (
+            UserDepartmentDao.get_primary_department_map_by_user_ids(
+                [int(user.user_id) for user, _ in roster_rows]
+            )
+        )
+        records = []
+        for user, tenant_id in roster_rows:
+            department = primary_department_map.get(int(user.user_id))
+            records.append(
+                DailyParticipationRecord(
+                    es_id=DailyParticipationFact.build_es_id(
+                        tenant_id, local_date, int(user.user_id)
+                    ),
+                    tenant_id=tenant_id,
+                    timestamp=day_timestamp,
+                    user_id=int(user.user_id),
+                    user_name=user.user_name,
+                    user_group_infos=[],
+                    user_role_infos=[],
+                    user_department_infos=[],
+                    local_date=local_date,
+                    active_employee=1,
+                    primary_department_id=(
+                        int(department.id) if department else None
+                    ),
+                    primary_department_name=(
+                        department.name if department else None
+                    ),
+                    department_source=department_source,
+                    sync_run_id=sync_run_id,
+                    projection_updated_at=sync_started_at,
+                )
+            )
+        mid_table.upsert_roster_records_sync(records)
+        synced_count += len(records)
+
+    deleted_count = mid_table.delete_stale_roster_records_sync(
+        local_date=local_date,
+        sync_run_id=sync_run_id,
+        sync_started_at=sync_started_at,
+    )
+    return {
+        "local_date": local_date,
+        "synced": synced_count,
+        "deleted": deleted_count,
+    }
+
+
+@bisheng_celery.task()
+def sync_mid_user_daily_participation_fact():
+    """Reconcile today's denominator while preserving real-time login counters."""
+    DailyParticipationFact.clear_roster_reconcile_scheduled()
+    trace_id_var.set(
+        f"sync_mid_user_daily_participation_fact_task_{generate_uuid()}"
+    )
+    today = datetime.now(CHINA_STANDARD_TIME).date()
+    result = _reconcile_participation_roster_for_day(
+        today,
+        department_source="current_roster",
+    )
+    logger.info(
+        "Reconciled daily participation roster. date={}, synced={}, deleted={}",
+        result["local_date"],
+        result["synced"],
+        result["deleted"],
+    )
+    return result
+
+
+def _scan_historical_login_events(
+    *,
+    start_timestamp: int,
+    end_timestamp: int,
+) -> dict[tuple[int, str, int], dict[str, Any]] | None:
+    client = get_statistics_es_connection_sync()
+    if not client.indices.exists(index=telemetry_service.index_name):
+        return None
+    hits = helpers.scan(
+        client=client,
+        index=telemetry_service.index_name,
+        query={
+            "_source": [
+                "tenant_id",
+                "timestamp",
+                "user_context.user_id",
+                "user_context.user_name",
+            ],
+            "query": {
+                "bool": {
+                    "filter": [
+                        {
+                            "term": {
+                                "event_type": (
+                                    BaseTelemetryTypeEnum.USER_LOGIN.value
+                                )
+                            }
+                        },
+                        {
+                            "range": {
+                                "timestamp": {
+                                    "gte": start_timestamp,
+                                    "lt": end_timestamp,
+                                    "format": "epoch_second",
+                                }
+                            }
+                        },
+                    ]
+                }
+            },
+        },
+        size=1000,
+    )
+    return aggregate_historical_login_hits(hits)
+
+
+@bisheng_celery.task()
+def backfill_mid_user_daily_participation_fact(
+    lookback_days: int = 30,
+) -> dict[str, int]:
+    """Best-effort history using current roster and durable login telemetry."""
+    trace_id_var.set(
+        f"backfill_mid_user_daily_participation_fact_task_{generate_uuid()}"
+    )
+    normalized_days = max(1, min(int(lookback_days), 365))
+    today = datetime.now(CHINA_STANDARD_TIME).date()
+    start_date = today - timedelta(days=normalized_days)
+    start_timestamp = participation_day(start_date)[1]
+    end_timestamp = participation_day(today)[1]
+    aggregates = _scan_historical_login_events(
+        start_timestamp=start_timestamp,
+        end_timestamp=end_timestamp,
+    )
+    if aggregates is None:
+        logger.info(
+            "Skipped participation history backfill because telemetry index is absent."
+        )
+        return {"days": 0, "roster": 0, "login_facts": 0}
+
+    roster_count = 0
+    for day_offset in range(normalized_days):
+        result = _reconcile_participation_roster_for_day(
+            start_date + timedelta(days=day_offset),
+            department_source="current_roster_backfill",
+        )
+        roster_count += int(result["synced"])
+
+    user_ids = sorted({key[2] for key in aggregates})
+    departments = {}
+    with bypass_tenant_filter():
+        for offset in range(0, len(user_ids), 1000):
+            departments.update(
+                UserDepartmentDao.get_primary_department_map_by_user_ids(
+                    user_ids[offset:offset + 1000]
+                )
+            )
+    projection_updated_at = int(datetime.now().timestamp())
+    records = []
+    for aggregate in aggregates.values():
+        department = departments.get(aggregate["user_id"])
+        records.append(
+            DailyParticipationRecord(
+                es_id=DailyParticipationFact.build_es_id(
+                    aggregate["tenant_id"],
+                    aggregate["local_date"],
+                    aggregate["user_id"],
+                ),
+                tenant_id=aggregate["tenant_id"],
+                timestamp=participation_day(
+                    date.fromisoformat(aggregate["local_date"])
+                )[1],
+                user_id=aggregate["user_id"],
+                user_name=aggregate["user_name"],
+                user_group_infos=[],
+                user_role_infos=[],
+                user_department_infos=[],
+                local_date=aggregate["local_date"],
+                active_employee=1,
+                logged_in=True,
+                login_count=aggregate["login_count"],
+                first_login_at=aggregate["first_login_at"],
+                last_login_at=aggregate["last_login_at"],
+                primary_department_id=(
+                    int(department.id) if department else None
+                ),
+                primary_department_name=(
+                    department.name if department else None
+                ),
+                department_source="current_primary_backfill",
+                projection_updated_at=projection_updated_at,
+            )
+        )
+    fact = DailyParticipationFact()
+    for offset in range(0, len(records), 1000):
+        fact.upsert_login_backfill_records_sync(records[offset:offset + 1000])
+
+    logger.info(
+        "Backfilled participation history. days={}, roster={}, login_facts={}",
+        normalized_days,
+        roster_count,
+        len(records),
+    )
+    return {
+        "days": normalized_days,
+        "roster": roster_count,
+        "login_facts": len(records),
+    }
+
+
 def get_user_from_ids_with_cache(user_ids: List[int], user_map: dict):
     if user_ids:
         with bypass_tenant_filter():
             user_list = UserService.get_user_all_info(user_ids=user_ids, page=0, page_size=0)
         user_map.update({user.user_id: user for user in user_list})
     return user_map
+
+
+def _current_primary_file_predicate():
+    """Include legacy files and current primary versions, never historical versions."""
+    any_version = select(KnowledgeDocumentVersion.id).where(
+        KnowledgeDocumentVersion.knowledge_file_id == KnowledgeFile.id
+    )
+    primary_version = any_version.where(
+        KnowledgeDocumentVersion.is_primary == True  # noqa: E712
+    )
+    return or_(~exists(any_version), exists(primary_version))
 
 
 def _get_success_space_file_rows(page: int, page_size: int):
@@ -108,6 +411,7 @@ def _get_success_space_file_rows(page: int, page_size: int):
             Knowledge.type == KnowledgeTypeEnum.SPACE.value,
             KnowledgeFile.file_type == FileType.FILE.value,
             KnowledgeFile.status == KnowledgeFileStatus.SUCCESS.value,
+            _current_primary_file_predicate(),
         )
         .order_by(KnowledgeFile.id.asc())
         .offset((page - 1) * page_size)
@@ -127,6 +431,7 @@ def _get_success_space_file_rows_by_space_id(space_id: int, page: int, page_size
             Knowledge.type == KnowledgeTypeEnum.SPACE.value,
             KnowledgeFile.file_type == FileType.FILE.value,
             KnowledgeFile.status == KnowledgeFileStatus.SUCCESS.value,
+            _current_primary_file_predicate(),
         )
         .order_by(KnowledgeFile.id.asc())
         .offset((page - 1) * page_size)
@@ -143,30 +448,86 @@ def _get_knowledge_space_content_rows_by_file_ids(file_ids: List[int]):
     statement = (
         select(KnowledgeFile, Knowledge)
         .join(Knowledge, KnowledgeFile.knowledge_id == Knowledge.id)
-        .where(KnowledgeFile.id.in_(file_ids))
+        .where(
+            KnowledgeFile.id.in_(file_ids),
+            _current_primary_file_predicate(),
+        )
     )
     with bypass_tenant_filter():
         with get_sync_db_session() as session:
             return session.exec(statement).all()
 
 
-def _build_knowledge_space_content_records(rows, user_map: dict, *, sync_run_id: str = None):
+def _build_knowledge_space_content_records(
+    rows,
+    user_map: dict,
+    *,
+    sync_run_id: str = None,
+    space_scope_map: dict | None = None,
+    primary_department_map: dict | None = None,
+    category_label_cache: dict | None = None,
+):
     if not rows:
         return [], user_map
+    space_scope_map = space_scope_map if space_scope_map is not None else {}
+    primary_department_map = (
+        primary_department_map if primary_department_map is not None else {}
+    )
+    category_label_cache = (
+        category_label_cache if category_label_cache is not None else {}
+    )
     user_ids = {
         int(file_record.user_id)
         for file_record, _ in rows
         if file_record.user_id and int(file_record.user_id) not in user_map
     }
     user_map = get_user_from_ids_with_cache(list(user_ids), user_map)
+
+    space_ids = sorted({int(space.id) for _, space in rows if getattr(space, "id", None)})
+    missing_space_ids = [space_id for space_id in space_ids if space_id not in space_scope_map]
+    if missing_space_ids:
+        space_scope_map.update(KnowledgeSpaceScopeDao.get_map_by_space_ids(missing_space_ids))
+
+    all_user_ids = sorted(
+        {int(file_record.user_id) for file_record, _ in rows if file_record.user_id}
+    )
+    missing_primary_user_ids = [
+        user_id for user_id in all_user_ids if user_id not in primary_department_map
+    ]
+    if missing_primary_user_ids:
+        primary_department_map.update(
+            UserDepartmentDao.get_primary_department_map_by_user_ids(
+                missing_primary_user_ids
+            )
+        )
+
     records = []
     for file_record, space in rows:
         uploader = user_map.get(int(file_record.user_id or 0))
+        tenant_id = int(
+            getattr(file_record, "tenant_id", None)
+            or getattr(space, "tenant_id", None)
+            or 1
+        )
+        if tenant_id not in category_label_cache:
+            category_label_cache[tenant_id] = (
+                FileClassificationLabelService.get_label_lookup_for_tenant(
+                    tenant_id
+                )
+            )
+        category_labels, subcategory_labels = category_label_cache[tenant_id]
+        scope = space_scope_map.get(int(space.id))
         records.append(
             KnowledgeSpaceContentStat.build_file_record(
                 file_record=file_record,
                 space=space,
                 uploader=uploader,
+                space_level=getattr(scope, "level", None),
+                primary_department=primary_department_map.get(
+                    int(file_record.user_id or 0)
+                ),
+                file_category_labels=category_labels,
+                file_subcategory_labels=subcategory_labels,
                 sync_run_id=sync_run_id,
             )
         )
@@ -190,6 +551,9 @@ def sync_mid_knowledge_space_content_stat(start_date: str = None, end_date: str 
     sync_run_id = generate_uuid()
     page, page_size = 1, 1000
     user_map = {}
+    space_scope_map = {}
+    primary_department_map = {}
+    category_label_cache = {}
     synced_count = 0
 
     while True:
@@ -198,7 +562,14 @@ def sync_mid_knowledge_space_content_stat(start_date: str = None, end_date: str 
         if not rows:
             break
 
-        records, user_map = _build_knowledge_space_content_records(rows, user_map, sync_run_id=sync_run_id)
+        records, user_map = _build_knowledge_space_content_records(
+            rows,
+            user_map,
+            sync_run_id=sync_run_id,
+            space_scope_map=space_scope_map,
+            primary_department_map=primary_department_map,
+            category_label_cache=category_label_cache,
+        )
 
         mid_table.insert_records_sync(records)
         synced_count += len(records)
@@ -225,6 +596,9 @@ def sync_pending_knowledge_space_content_stat():
     try:
         mid_table = KnowledgeSpaceContentStat()
         user_map = {}
+        space_scope_map = {}
+        primary_department_map = {}
+        category_label_cache = {}
 
         file_ids = KnowledgeSpaceContentStat.peek_pending_file_ids_sync(
             KnowledgeSpaceContentStat.FILE_BATCH_SIZE
@@ -245,7 +619,13 @@ def sync_pending_knowledge_space_content_stat():
                 else:
                     stale_file_ids.append(file_id)
 
-            records, user_map = _build_knowledge_space_content_records(visible_rows, user_map)
+            records, user_map = _build_knowledge_space_content_records(
+                visible_rows,
+                user_map,
+                space_scope_map=space_scope_map,
+                primary_department_map=primary_department_map,
+                category_label_cache=category_label_cache,
+            )
             if records:
                 mid_table.insert_records_sync(records)
             if stale_file_ids:
@@ -292,7 +672,13 @@ def sync_pending_knowledge_space_content_stat():
                 page += 1
                 if not rows:
                     break
-                records, user_map = _build_knowledge_space_content_records(rows, user_map)
+                records, user_map = _build_knowledge_space_content_records(
+                    rows,
+                    user_map,
+                    space_scope_map=space_scope_map,
+                    primary_department_map=primary_department_map,
+                    category_label_cache=category_label_cache,
+                )
                 if records:
                     mid_table.insert_records_sync(records)
                     space_synced_count += len(records)

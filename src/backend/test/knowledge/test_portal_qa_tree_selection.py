@@ -11,6 +11,9 @@ from bisheng.knowledge.domain.services.department_file_view_access_service impor
     DepartmentFileAccessDecision,
     DepartmentFileAccessStatus,
 )
+from bisheng.knowledge.domain.services.knowledge_recycle_service import (
+    KnowledgeRecycleService,
+)
 
 
 def _file(
@@ -294,23 +297,13 @@ async def test_portal_qa_unauthorized_explicit_file_returns_empty_scope(
         request=SimpleNamespace(headers={}),
         login_user=SimpleNamespace(user_id=7, user_name="tester"),
     )
+    service.version_repo = None
     denied_file = _file(9301, space_id=7103)
-    service.department_file_view_access_service = SimpleNamespace(
-        evaluate_files=AsyncMock(
-            return_value={
-                9301: DepartmentFileAccessDecision(
-                    file_id=9301,
-                    space_id=7103,
-                    status=DepartmentFileAccessStatus.APPROVAL_REQUIRED,
-                    department_id=33,
-                )
-            }
-        )
-    )
+    monkeypatch.setattr(service, "_require_read_permission", AsyncMock())
     monkeypatch.setattr(
         service,
-        "_get_shougang_portal_qa_space",
-        AsyncMock(return_value=(SimpleNamespace(id=7103), True)),
+        "_require_permission_id",
+        AsyncMock(side_effect=SpacePermissionDeniedError()),
     )
     monkeypatch.setattr(
         svc_mod.KnowledgeFileDao,
@@ -335,6 +328,73 @@ async def test_portal_qa_unauthorized_explicit_file_returns_empty_scope(
 
 
 @pytest.mark.asyncio
+async def test_portal_qa_explicit_durable_file_requires_workbench_view_permission(
+    monkeypatch,
+):
+    service = svc_mod.KnowledgeSpaceService(
+        request=SimpleNamespace(headers={}),
+        login_user=SimpleNamespace(
+            user_id=7,
+            user_name="tester",
+            tenant_id=1,
+        ),
+    )
+    service.version_repo = None
+    durable_file = _file(8301, space_id=7101)
+    entry_file = _file(9301, space_id=7101)
+    durable_resolver = AsyncMock(
+        return_value=SimpleNamespace(entry_file_id=9301),
+    )
+    service.document_durable_reference_resolver = SimpleNamespace(
+        resolve=durable_resolver,
+    )
+    require_permission = AsyncMock()
+    monkeypatch.setattr(service, "_require_read_permission", AsyncMock())
+    monkeypatch.setattr(
+        service,
+        "_require_permission_id",
+        require_permission,
+    )
+    monkeypatch.setattr(
+        svc_mod.KnowledgeFileDao,
+        "aget_file_by_ids",
+        AsyncMock(return_value=[durable_file]),
+    )
+    monkeypatch.setattr(
+        svc_mod.KnowledgeFileDao,
+        "query_by_id",
+        AsyncMock(return_value=entry_file),
+    )
+
+    result = await service.resolve_shougang_portal_qa_scope_file_ids(
+        mode="files",
+        knowledge_space_ids=[7101],
+        folder_refs=[],
+        file_refs=[
+            SimpleNamespace(
+                knowledge_space_id=7101,
+                file_id=8301,
+            )
+        ],
+        max_files=20,
+    )
+
+    assert result == {7101: [9301]}
+    durable_resolver.assert_awaited_once_with(
+        tenant_id=1,
+        requested_space_id=7101,
+        durable_file_id=8301,
+        require_view_permission=True,
+    )
+    require_permission.assert_awaited_once_with(
+        "knowledge_file",
+        9301,
+        "view_file",
+        space_id=7101,
+    )
+
+
+@pytest.mark.asyncio
 async def test_portal_qa_empty_whole_space_returns_empty_scope(
     monkeypatch,
 ):
@@ -342,12 +402,14 @@ async def test_portal_qa_empty_whole_space_returns_empty_scope(
         request=SimpleNamespace(headers={}),
         login_user=SimpleNamespace(user_id=7, user_name="tester"),
     )
+    service.version_repo = None
     load_files = AsyncMock(return_value=[])
-    resolve_space = AsyncMock(return_value=(SimpleNamespace(id=7101), False))
+    require_space = AsyncMock(return_value=SimpleNamespace(id=7101))
+    monkeypatch.setattr(service, "_require_read_permission", require_space)
     monkeypatch.setattr(
         service,
-        "_get_shougang_portal_qa_space",
-        resolve_space,
+        "_filter_visible_child_items",
+        AsyncMock(return_value=[]),
     )
     monkeypatch.setattr(
         svc_mod.KnowledgeFileDao,
@@ -364,11 +426,71 @@ async def test_portal_qa_empty_whole_space_returns_empty_scope(
     )
 
     assert result == {}
-    resolve_space.assert_not_awaited()
+    require_space.assert_awaited_once_with(7101)
     load_files.assert_awaited_once_with(
         7101,
         status=[KnowledgeFileStatus.SUCCESS.value],
         file_type=FileType.FILE.value,
+    )
+
+
+@pytest.mark.asyncio
+async def test_portal_qa_whole_space_keeps_only_visible_current_success_files(
+    monkeypatch,
+):
+    service = svc_mod.KnowledgeSpaceService(
+        request=SimpleNamespace(headers={}),
+        login_user=SimpleNamespace(user_id=7, user_name="tester"),
+    )
+    success_file = _file(9001)
+    non_primary_file = _file(9002)
+    recycled_file = _file(9003)
+    processing_file = _file(
+        9004,
+        status=KnowledgeFileStatus.PROCESSING.value,
+    )
+    service.version_repo = SimpleNamespace(
+        find_non_primary_file_ids_by_knowledge_ids=AsyncMock(
+            return_value=[9002],
+        )
+    )
+    monkeypatch.setattr(service, "_require_read_permission", AsyncMock())
+    visibility_filter = AsyncMock(return_value=[success_file])
+    monkeypatch.setattr(
+        service,
+        "_filter_visible_child_items",
+        visibility_filter,
+    )
+    monkeypatch.setattr(
+        svc_mod.KnowledgeFileDao,
+        "aget_file_by_filters",
+        AsyncMock(
+            return_value=[
+                success_file,
+                non_primary_file,
+                recycled_file,
+                processing_file,
+            ]
+        ),
+    )
+    monkeypatch.setattr(
+        KnowledgeRecycleService,
+        "list_recycled_file_ids",
+        AsyncMock(return_value=[9003]),
+    )
+
+    result = await service.resolve_shougang_portal_qa_scope_file_ids(
+        mode="knowledge_space",
+        knowledge_space_ids=[7101],
+        folder_refs=[],
+        file_refs=[],
+        max_files=20,
+    )
+
+    assert result == {7101: [9001]}
+    visibility_filter.assert_awaited_once_with(
+        [success_file],
+        space_id=7101,
     )
 
 
@@ -383,7 +505,7 @@ async def test_portal_qa_inaccessible_space_returns_empty_scope(
     file = _file(9301, space_id=7103)
     monkeypatch.setattr(
         service,
-        "_get_shougang_portal_qa_space",
+        "_require_read_permission",
         AsyncMock(side_effect=SpacePermissionDeniedError()),
     )
     monkeypatch.setattr(
@@ -411,32 +533,20 @@ async def test_portal_qa_folder_scope_filters_to_authorized_department_files(
         request=SimpleNamespace(headers={}),
         login_user=SimpleNamespace(user_id=7, user_name="tester"),
     )
+    service.version_repo = None
     folder = _file(3001, space_id=7103, folder=True)
     allowed_file = _file(9301, space_id=7103, path="/3001")
     denied_file = _file(9302, space_id=7103, path="/3001")
-    service.department_file_view_access_service = SimpleNamespace(
-        evaluate_files=AsyncMock(
-            return_value={
-                9301: DepartmentFileAccessDecision(
-                    file_id=9301,
-                    space_id=7103,
-                    status=DepartmentFileAccessStatus.ALLOWED,
-                    source="approval_grant",
-                    department_id=33,
-                ),
-                9302: DepartmentFileAccessDecision(
-                    file_id=9302,
-                    space_id=7103,
-                    status=DepartmentFileAccessStatus.APPROVAL_REQUIRED,
-                    department_id=33,
-                ),
-            }
-        )
+    monkeypatch.setattr(service, "_require_read_permission", AsyncMock())
+    monkeypatch.setattr(
+        service,
+        "_require_permission_id",
+        AsyncMock(),
     )
     monkeypatch.setattr(
         service,
-        "_get_shougang_portal_qa_space",
-        AsyncMock(return_value=(SimpleNamespace(id=7103), True)),
+        "_filter_visible_child_items",
+        AsyncMock(return_value=[allowed_file]),
     )
     monkeypatch.setattr(
         svc_mod.KnowledgeFileDao,
@@ -447,6 +557,11 @@ async def test_portal_qa_folder_scope_filters_to_authorized_department_files(
         svc_mod.SpaceFileDao,
         "get_children_by_prefix",
         AsyncMock(return_value=[allowed_file, denied_file]),
+    )
+    monkeypatch.setattr(
+        KnowledgeRecycleService,
+        "list_recycled_file_ids",
+        AsyncMock(return_value=[]),
     )
 
     result = await service.resolve_shougang_portal_qa_scope_file_ids(
@@ -463,6 +578,12 @@ async def test_portal_qa_folder_scope_filters_to_authorized_department_files(
     )
 
     assert result == {7103: [9301]}
+    service._require_permission_id.assert_awaited_once_with(
+        "folder",
+        3001,
+        "view_folder",
+        space_id=7103,
+    )
 
 
 @pytest.mark.asyncio

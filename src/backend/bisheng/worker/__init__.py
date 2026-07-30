@@ -7,6 +7,14 @@ from bisheng.worker.approval.notification_tasks import (
 )
 from bisheng.worker.approval.tasks import execute_approval_outbox, retry_approval_outbox
 from bisheng.worker.information.article import sync_information_article
+from bisheng.worker.knowledge.document_projection import (
+    fanout_document_projection_scan,
+    process_document_projection,
+    scan_tenant_document_projections,
+)
+from bisheng.worker.knowledge.favorite_notification import (
+    send_favorite_change_notifications,
+)
 from bisheng.worker.knowledge.file_title_worker import (
     extract_knowledge_file_title_celery,
 )
@@ -15,11 +23,6 @@ from bisheng.worker.knowledge.file_worker import (
     parse_knowledge_file_celery,
     refresh_file_similarity_candidates_celery,
     retry_knowledge_file_celery,
-)
-from bisheng.worker.knowledge.document_projection import (
-    fanout_document_projection_scan,
-    process_document_projection,
-    scan_tenant_document_projections,
 )
 from bisheng.worker.knowledge.pdf_artifact_worker import (
     generate_knowledge_file_pdf_celery,
@@ -74,12 +77,17 @@ from bisheng.worker.telemetry.derived_mid_table import (
     sync_mid_tool_call_dtl,
 )
 from bisheng.worker.telemetry.mid_table import (
+    backfill_mid_user_daily_participation_fact,
     sync_mid_app_increment,
     sync_mid_knowledge_increment,
     sync_mid_knowledge_space_content_stat,
+    sync_mid_user_daily_participation_fact,
     sync_mid_user_increment,
     sync_mid_user_interact_dtl,
     sync_pending_knowledge_space_content_stat,
+)
+from bisheng.worker.telemetry.realtime_dashboard import (
+    sync_mid_realtime_qa_question_fact,
 )
 from bisheng.worker.tenant_reconcile.tasks import reconcile_user_tenant_assignments
 from bisheng.worker.test.test import add

@@ -1,6 +1,5 @@
 import { useEditorDashboardStore } from "@/store/dashboardStore"
-import { ChartItems } from "./ComponentPicker"
-import { cn } from "@/utils"
+import { ChartItems, PivotTableIcon } from "./ComponentPicker"
 import { ChartType } from "../../types/dataConfig"
 import { useTranslation } from "react-i18next"
 
@@ -31,11 +30,13 @@ export default function Home() {
                         <div
                             key={item.type}
                             onClick={() => handleItemClick(item)}
-                            className={cn('w-[88px] h-[86px] flex flex-col items-center justify-center border rounded-md shadow-sm hover:shadow-lg transition-colors cursor-pointer',
-                                item.type === ChartType.GroupedHorizontalBar && 'mr-10',
-                                item.type === ChartType.Bar && 'ml-10',
-                            )}>
-                            <img src={`${__APP_ENV__.BASE_URL}/assets/dashboard/${item.type}.png`} className="w-8 h-8 mb-2" />
+                            className="w-[88px] h-[86px] flex flex-col items-center justify-center border rounded-md shadow-sm hover:shadow-lg transition-colors cursor-pointer"
+                        >
+                            {item.type === ChartType.PivotTable ? (
+                                <PivotTableIcon />
+                            ) : (
+                                <img src={`${__APP_ENV__.BASE_URL}/assets/dashboard/${item.type}.png`} className="w-8 h-8 mb-2" />
+                            )}
                             <span className="text-[12px] text-gray-600 text-center">{t(`chart.${item.label}`)}</span>
                         </div>
                     ))}

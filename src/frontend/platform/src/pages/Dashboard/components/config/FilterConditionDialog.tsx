@@ -23,6 +23,7 @@ import { Badge } from "@/components/bs-ui/badge"
 import { generateUUID } from "@/components/bs-ui/utils"
 import { getFieldEnums } from "@/controllers/API/dashboard"
 import { toast } from "@/components/bs-ui/toast/use-toast"
+import Tip from "@/components/bs-ui/tooltip/tip"
 import { useTranslation } from "react-i18next"
 
 /* ================== 类型定义 ================== */
@@ -726,18 +727,25 @@ export function FilterConditionDialog({
                         value={c.fieldCode}
                         onValueChange={v => handleFieldChange(c.id, v)}
                       >
-                        <SelectTrigger className="w-[120px] h-8">
+                        <SelectTrigger className="h-8 w-[180px] shrink-0">
                           <SelectValue placeholder={t('filterConditionDialog.placeholders.selectField')} />
                         </SelectTrigger>
-                        <SelectContent className=" overflow-y-auto w-[160px] max-h-[200px]">
+                        <SelectContent className="w-[260px] max-h-[240px] overflow-y-auto">
                           {filteredFields.length > 0 ? (
                             filteredFields.map(f => {
                               const displayText = getFieldDisplayName(f.fieldCode) || "暂无";
                               return (
-                                <SelectItem key={f.fieldCode} value={f.fieldCode} className="truncate">
-                                  <span className="truncate block w-[80px]" title={displayText}>
-                                    {displayText}
-                                  </span>
+                                <SelectItem key={f.fieldCode} value={f.fieldCode} className="w-full">
+                                  <Tip
+                                    content={displayText}
+                                    side="right"
+                                    delayDuration={250}
+                                    styleClasses="!z-[140] max-w-80"
+                                  >
+                                    <span className="block max-w-[210px] truncate">
+                                      {displayText}
+                                    </span>
+                                  </Tip>
                                 </SelectItem>
                               )
                             })

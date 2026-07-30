@@ -255,6 +255,7 @@ class ShougangPortalFavoriteFileItem(BaseModel):
     title: str = ""
     file_name: str = ""
     status: Literal["valid", "invalid"] = "valid"
+    invalid_reason: Literal["source_deleted"] | None = None
     updated_at: str = ""
 
 
@@ -630,6 +631,7 @@ class ShougangPortalTelemetryEventReq(BaseModel):
     source_space_id: int | str | None = None
     source_file_id: int | str | None = None
     conversation_id: str | None = Field(default=None, max_length=128)
+    question_id: str | None = Field(default=None, max_length=128)
     query: str | None = Field(default=None, min_length=1, max_length=500)
     normalized_query: str | None = Field(default=None, min_length=1, max_length=500)
     recommendation_scene: Literal["personalized_v1", "latest_selected"] | None = None

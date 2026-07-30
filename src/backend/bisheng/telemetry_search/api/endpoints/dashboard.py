@@ -8,6 +8,7 @@ from bisheng.common.schemas.api import PageData
 from bisheng.telemetry_search.domain.models.dashboard import DashboardStatus, DashboardComponent
 from bisheng.telemetry_search.domain.schemas.dashboard import DashboardCreate, DashboardRead
 from bisheng.telemetry_search.domain.services.component import TimeFilter
+from bisheng.telemetry_search.domain.schemas.component import DimensionQueryFilter
 from bisheng.telemetry_search.domain.services.dashboard import DashboardService
 
 router = APIRouter(prefix="/dashboard", tags=["TelemetryDashboard"])
@@ -92,14 +93,22 @@ async def query_component_data(request: Request,
                                component_id: str = Body(None, embed=True),
                                component_data: DashboardComponent = Body(None, embed=True),
                                time_filters: List[TimeFilter] = Body(None, embed=True),
+                               dimension_filters: List[DimensionQueryFilter] = Body(None, embed=True),
                                login_user: UserPayload = Depends(UserPayload.get_login_user)):
     dashboard_service = DashboardService(request=request, login_user=login_user)
-    res = await dashboard_service.query_component_data(dashboard_id, component_id, component_data, time_filters)
+    res = await dashboard_service.query_component_data(
+        dashboard_id,
+        component_id,
+        component_data,
+        time_filters,
+        dimension_filters,
+    )
     return resp_200(data=res)
 
 
 @router.get("/dataset/list", summary="Get all available datasets for dashboards")
 async def get_available_datasets(
+        login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     datasets = await DashboardService.get_dataset_options()
 
@@ -109,11 +118,15 @@ async def get_available_datasets(
 # Field Enumeration Acquisition
 @router.get("/dataset/field/enums", summary="Get all available fields for a dataset")
 async def get_dataset_field_enums(
+        request: Request,
         index_name: str = Query(..., description="The index name of the dataset"),
         field: str = Query(..., description="The field name of the dataset"),
+        label_field: str = Query(None, description="Optional display-label dimension"),
+        exact_values: str = Query(None, description="Comma-separated exact values"),
         keyword: str = Query(None, description="The keyword to filter field enums"),
         size: int = Query(default=20, description="The size of the dataset"),
-        page: int = Query(default=1, description="The page number of the dataset")
+        page: int = Query(default=1, description="The page number of the dataset"),
+        login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     """
     Get all available fields for a dataset
@@ -127,5 +140,14 @@ async def get_dataset_field_enums(
     Returns:
     """
 
-    field_enums = await DashboardService.get_dataset_field_enums(index_name, field, keyword, size, page)
+    dashboard_service = DashboardService(request=request, login_user=login_user)
+    field_enums = await dashboard_service.get_dataset_field_enums(
+        dataset_code=index_name,
+        field=field,
+        keyword=keyword,
+        size=size,
+        page=page,
+        label_field=label_field,
+        exact_values=exact_values,
+    )
     return resp_200(data=field_enums)

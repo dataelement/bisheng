@@ -13,6 +13,8 @@ export interface FavoriteRowVM {
     title: string;
     /** 源文件是否已失效（不可打开） */
     invalid: boolean;
+    /** 源文件失效原因 */
+    invalidReason?: "source_deleted";
     /** 源知识库 id */
     sourceSpaceId: string;
     /** 源文件 id */
@@ -28,6 +30,7 @@ export function toFavoriteRow(fav: PortalFavoriteFile): FavoriteRowVM {
         key: fav.favoriteFileId,
         title: fav.title || fav.fileName || "未命名",
         invalid,
+        invalidReason: fav.invalidReason,
         sourceSpaceId: fav.sourceSpaceId,
         sourceFileId: fav.sourceFileId,
         openable: !invalid,

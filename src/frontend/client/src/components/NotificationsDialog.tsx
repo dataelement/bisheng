@@ -131,6 +131,14 @@ const NOTIFICATION_ACTION_TEXT_KEYS: Record<string, string> = {
     favorite_source_tags_updated: "com_notifications_action_favorite_source_tags_updated",
     favorite_source_classification_updated: "com_notifications_action_favorite_source_classification_updated",
     favorite_source_version_updated: "com_notifications_action_favorite_source_version_updated",
+    favorite_source_business_domain_updated: "com_notifications_action_favorite_source_business_domain_updated",
+    favorite_source_subcategory_updated: "com_notifications_action_favorite_source_subcategory_updated",
+    favorite_source_version_added: "com_notifications_action_favorite_source_version_added",
+    favorite_source_primary_version_changed: "com_notifications_action_favorite_source_primary_version_changed",
+    favorite_source_version_deleted: "com_notifications_action_favorite_source_version_deleted",
+    favorite_source_version_linked: "com_notifications_action_favorite_source_version_linked",
+    favorite_source_version_unlinked: "com_notifications_action_favorite_source_version_unlinked",
+    favorite_source_deleted: "com_notifications_action_favorite_source_deleted",
     approved_review_tag: "com_notifications_action_approved_review_tag",
     rejected_review_tag: "com_notifications_action_rejected_review_tag",
 };
@@ -560,13 +568,24 @@ export function NotificationsDialog({
         const actionCode = getSystemTextCode(notification);
         const actionTextKey = NOTIFICATION_ACTION_TEXT_KEYS[actionCode] || (actionCode ? `com_notifications_action_${actionCode}` : "");
         const fallbackText = notification.content?.map((c) => c.content).filter(Boolean).join("") || "";
+        const businessUrlPart = notification.content?.find((c: any) => c?.type === "business_url") as any;
+        const favoriteChange = businessUrlPart?.metadata?.data?.favorite_change;
+        const formatChangeValue = (value: unknown): string => {
+            if (Array.isArray(value)) return value.map(String).filter(Boolean).join("、") || "无";
+            if (value === undefined || value === null || value === "") return "无";
+            return String(value);
+        };
         const safeLocalize = (key: string, vars?: Record<string, string>) => {
             if (!key) return "";
             const translated = localize(key as TranslationKeys, vars as any);
             return translated && translated !== key ? translated : "";
         };
         const text =
-            safeLocalize(actionTextKey, { target: targetName }) ||
+            safeLocalize(actionTextKey, {
+                target: targetName,
+                before: formatChangeValue(favoriteChange?.before_value),
+                after: formatChangeValue(favoriteChange?.after_value),
+            }) ||
             safeLocalize(
                 targetName ? "com_notifications_action_generic_with_target" : "com_notifications_action_generic",
                 targetName ? { target: targetName } : undefined

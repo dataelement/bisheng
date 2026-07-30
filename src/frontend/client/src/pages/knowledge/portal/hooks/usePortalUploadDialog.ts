@@ -102,7 +102,7 @@ export function usePortalUploadDialog({
     const [uploadLocalFolderName, setUploadLocalFolderName] = useState<string | null>(null);
     const [uploadFolderId, setUploadFolderId] = useState<string | null>(null);
     const [uploadFolderName, setUploadFolderName] = useState("根目录");
-    const [uploadFolderSelection, setUploadFolderSelection] = useState<PortalUploadFolderSelection>({ mode: "ai" });
+    const [uploadFolderSelection, setUploadFolderSelection] = useState<PortalUploadFolderSelection>({ mode: "none" });
     const [uploadFolderNodes, setUploadFolderNodes] = useState<PortalUploadFolderNode[]>([]);
     const [uploadFolderLoading, setUploadFolderLoading] = useState(false);
     const [uploadSubmitting, setUploadSubmitting] = useState(false);
@@ -170,7 +170,7 @@ export function usePortalUploadDialog({
         setUploadLocalFolderName(null);
         setUploadFolderId(null);
         setUploadFolderName("根目录");
-        setUploadFolderSelection({ mode: "ai" });
+        setUploadFolderSelection({ mode: "none" });
         setUploadFolderNodes([]);
         setUploadFolderLoading(false);
         uploadSubmittingRef.current = false;
@@ -210,7 +210,7 @@ export function usePortalUploadDialog({
         setSelectedUploadTagValues([]);
         setUploadFolderId(null);
         setUploadFolderName("根目录");
-        setUploadFolderSelection({ mode: "ai" });
+        setUploadFolderSelection({ mode: "none" });
         setUploadDialogOpen(true);
     }, [activeSpace, canUploadInPortal, setActiveSpace, uploadTargetSpace]);
 
@@ -533,7 +533,7 @@ export function usePortalUploadDialog({
             setUploadLocalFolderName(null);
             setUploadFolderId(null);
             setUploadFolderName("根目录");
-            setUploadFolderSelection({ mode: "ai" });
+            setUploadFolderSelection({ mode: "none" });
             setUploadReviewRows([]);
             setFileSubcategoryCode("");
             setBusinessDomainCode("");
@@ -549,7 +549,7 @@ export function usePortalUploadDialog({
         setUploadLocalFolderName(null);
         setUploadFolderId(null);
         setUploadFolderName("根目录");
-        setUploadFolderSelection({ mode: "ai" });
+        setUploadFolderSelection({ mode: "none" });
         setUploadReviewRows([]);
         setFileSubcategoryCode("");
         setBusinessDomainCode("");

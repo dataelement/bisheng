@@ -10,7 +10,10 @@ import pytest
 class _FakeAsyncIndexClient:
     def __init__(self):
         self.index_calls = []
-        self.indices = SimpleNamespace(exists=AsyncMock(return_value=True))
+        self.indices = SimpleNamespace(
+            exists=AsyncMock(return_value=True),
+            put_mapping=AsyncMock(return_value={"acknowledged": True}),
+        )
 
     async def index(self, **kwargs):
         self.index_calls.append(kwargs)
@@ -21,7 +24,16 @@ class _FakeSyncIndexClient:
     def __init__(self):
         self.deleted_queries = []
         self.refreshed_indices = []
-        self.indices = SimpleNamespace(exists=lambda **kwargs: True, refresh=self.refresh_index)
+        self.put_mappings = []
+        self.indices = SimpleNamespace(
+            exists=lambda **kwargs: True,
+            refresh=self.refresh_index,
+            put_mapping=self.put_mapping,
+        )
+
+    def put_mapping(self, **kwargs):
+        self.put_mappings.append(kwargs)
+        return {"acknowledged": True}
 
     def refresh_index(self, **kwargs):
         self.refreshed_indices.append(kwargs)
@@ -125,9 +137,21 @@ def _import_worker_mid_table():
         def task(*_args, **_kwargs):
             return lambda fn: _DummyTask(fn)
 
-    previous_worker_main = sys.modules.get("bisheng.worker.main", _MISSING)
+    stubbed_modules = {
+        "bisheng.worker.main": SimpleNamespace(bisheng_celery=_DummyCelery()),
+        "bisheng.api.services.workflow": SimpleNamespace(
+            WorkFlowService=SimpleNamespace()
+        ),
+        "bisheng.knowledge.domain.services.knowledge_service": SimpleNamespace(
+            KnowledgeService=SimpleNamespace()
+        ),
+    }
+    previous_modules = {
+        name: sys.modules.get(name, _MISSING)
+        for name in stubbed_modules
+    }
     try:
-        sys.modules["bisheng.worker.main"] = SimpleNamespace(bisheng_celery=_DummyCelery())
+        sys.modules.update(stubbed_modules)
         module_path = Path(__file__).parents[1] / "bisheng" / "worker" / "telemetry" / "mid_table.py"
         spec = importlib.util.spec_from_file_location("test_pending_mid_table_under_test", module_path)
         worker_module = importlib.util.module_from_spec(spec)
@@ -135,10 +159,29 @@ def _import_worker_mid_table():
         spec.loader.exec_module(worker_module)
         return worker_module
     finally:
-        if previous_worker_main is _MISSING:
-            sys.modules.pop("bisheng.worker.main", None)
-        else:
-            sys.modules["bisheng.worker.main"] = previous_worker_main
+        for name, previous in previous_modules.items():
+            if previous is _MISSING:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = previous
+
+
+def _stub_file_dimension_lookups(worker_module, monkeypatch):
+    monkeypatch.setattr(
+        worker_module.KnowledgeSpaceScopeDao,
+        "get_map_by_space_ids",
+        lambda _space_ids: {},
+    )
+    monkeypatch.setattr(
+        worker_module.UserDepartmentDao,
+        "get_primary_department_map_by_user_ids",
+        lambda _user_ids: {},
+    )
+    monkeypatch.setattr(
+        worker_module.FileClassificationLabelService,
+        "get_label_lookup_for_tenant",
+        lambda _tenant_id: ({}, {}),
+    )
 
 
 @pytest.mark.asyncio
@@ -222,6 +265,48 @@ async def test_knowledge_space_content_log_preview_success_enqueues_retry_on_es_
     assert [record.es_id for record in retry_records] == ["preview_event-retry"]
 
 
+def test_knowledge_space_content_build_file_record_contains_realtime_dimensions():
+    from bisheng.telemetry.domain.mid_table import knowledge_space_content as module
+
+    file_record = SimpleNamespace(
+        id=11,
+        tenant_id=7,
+        user_id=9,
+        user_name="上传人",
+        create_time=None,
+        file_name="制度.pdf",
+        file_type=1,
+        split_rule='{"file_category_code":"POL","business_domain_code":"QM"}',
+        file_subcategory_code="POL-01",
+        file_encoding=None,
+    )
+    space = SimpleNamespace(id=3, tenant_id=7, name="质量制度库")
+    uploader = SimpleNamespace(user_name="上传人", departments=[], groups=[], roles=[])
+    primary_department = SimpleNamespace(id=21, name="质量部")
+
+    record = module.KnowledgeSpaceContentStat.build_file_record(
+        file_record=file_record,
+        space=space,
+        uploader=uploader,
+        space_level="department",
+        primary_department=primary_department,
+        file_category_labels={"POL": "政策制度"},
+        file_subcategory_labels={"POL-01": "管理制度"},
+    )
+
+    assert record.tenant_id == 7
+    assert record.space_level == "department"
+    assert record.space_level_name == "部门库"
+    assert record.file_category_code == "POL"
+    assert record.file_category_name == "政策制度"
+    assert record.file_subcategory_code == "POL-01"
+    assert record.file_subcategory_name == "管理制度"
+    assert record.business_domain_code == "QM"
+    assert record.primary_department_id == 21
+    assert record.primary_department_name == "质量部"
+    assert record.projection_updated_at
+
+
 def test_knowledge_space_content_delete_stale_file_records_uses_sync_run_id(monkeypatch):
     from bisheng.telemetry.domain.mid_table import knowledge_space_content as module
 
@@ -262,7 +347,7 @@ def test_knowledge_space_content_enqueue_file_stat_sync_dedupes_schedule(monkeyp
     module.KnowledgeSpaceContentStat.enqueue_file_stat_sync([12])
 
     assert fake_redis.sets[module.KnowledgeSpaceContentStat.FILE_PENDING_KEY] == {"11", "12"}
-    assert fake_task.apply_async_calls == [{"countdown": 5}]
+    assert fake_task.apply_async_calls == [{"countdown": 2}]
 
 
 def test_knowledge_space_content_pop_pending_file_ids_caps_batch_size(monkeypatch):
@@ -283,6 +368,7 @@ def test_sync_pending_knowledge_space_content_stat_uses_mysql_current_state(monk
 
     worker_module = _import_worker_mid_table()
     stat_cls = worker_module.KnowledgeSpaceContentStat
+    _stub_file_dimension_lookups(worker_module, monkeypatch)
 
     success_file = SimpleNamespace(
         id=21,
@@ -350,6 +436,7 @@ def test_sync_pending_knowledge_space_content_stat_keeps_file_ids_when_upsert_fa
 
     worker_module = _import_worker_mid_table()
     stat_cls = worker_module.KnowledgeSpaceContentStat
+    _stub_file_dimension_lookups(worker_module, monkeypatch)
 
     success_file = SimpleNamespace(
         id=21,
@@ -450,6 +537,7 @@ def test_sync_pending_knowledge_space_content_stat_processes_preview_payloads(mo
 def test_sync_pending_knowledge_space_content_stat_handles_space_rename_and_delete(monkeypatch):
     worker_module = _import_worker_mid_table()
     stat_cls = worker_module.KnowledgeSpaceContentStat
+    _stub_file_dimension_lookups(worker_module, monkeypatch)
 
     file_record = SimpleNamespace(
         id=31,
@@ -560,11 +648,6 @@ def test_add_embedding_enqueues_file_stat_after_success(monkeypatch):
         staticmethod(lambda **kwargs: kwargs["vector_client"]),
     )
     monkeypatch.setattr(knowledge_imp, "KnowledgeFilePipeline", _FakePipeline)
-    monkeypatch.setattr(
-        knowledge_imp.settings,
-        "get_knowledge",
-        lambda: SimpleNamespace(version_management=None),
-    )
     monkeypatch.setattr(
         workstation_api.WorkStationService,
         "query_knowledge_space_config_with_meta",

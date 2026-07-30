@@ -13,17 +13,23 @@ import { RadioGroup, RadioGroupItem } from "@/components/bs-ui/radio"
 import { useToast } from "@/components/bs-ui/toast/use-toast"
 import { useComponentEditorStore, useEditorDashboardStore } from "@/store/dashboardStore"
 import { useTranslation } from "react-i18next"
-import { ChartType, ComponentStyleConfig, QueryConfig, TimeRangeMode } from "../../types/dataConfig"
+import { ChartType, ComponentStyleConfig, MAX_METRIC_CARD_METRICS, QueryConfig, TimeRangeMode } from "../../types/dataConfig"
 import { AdvancedDatePicker } from "../AdvancedDatePicker"
 import ComponentPicker, { ChartGroupItems } from "../editor/ComponentPicker"
 import ChartSelector from "./ChartSelector"
+import { DimensionFilterConfigurator } from "./DimensionFilterConfigurator"
 import { DashboardConfigPanel } from "./DashboardConfigPanel"
 import { DatasetField, DatasetSelector } from "./DatasetSelector"
 import { DimensionBlock } from "./DimensionBlock"
 import { FilterConditionDialog } from "./FilterConditionDialog"
 import { StyleConfigPanel } from "./StyleConfigPanel"
+import { resolveAppliedComponentTitle } from "./componentConfigDraft"
 import { useChartState } from "./useChartState"
 import { generateUUID } from "@/components/bs-ui/utils"
+
+type ResultDisplayMode = "all" | "limit" | "limitWithOther"
+const DEFAULT_RESULT_LIMIT = "3"
+
 const FULL_DEFAULT_STYLE_CONFIG: ComponentStyleConfig = {
   themeColor: "professional-blue",
   bgColor: "",
@@ -90,7 +96,13 @@ const FULL_DEFAULT_STYLE_CONFIG: ComponentStyleConfig = {
 
 export function ComponentConfigDrawer() {
   const { t } = useTranslation("dashboard")
-  const { editingComponent, updateEditingComponent } = useComponentEditorStore();
+  const {
+    editingComponent,
+    updateEditingComponent,
+    applyEditingComponent,
+    cancelEditingComponent,
+    draftVersion,
+  } = useComponentEditorStore();
   const { refreshChart } = useEditorDashboardStore();
   // 折叠状态
   const [configCollapsed, setConfigCollapsed] = useState({
@@ -106,8 +118,8 @@ export function ComponentConfigDrawer() {
   const [configTab, setConfigTab] = useState<"basic" | "style">("basic")
 
   // 限制结果状态
-  const [limitType, setLimitType] = useState<"all" | "limit">("limit")
-  const [limitValue, setLimitValue] = useState("1000")
+  const [limitType, setLimitType] = useState<ResultDisplayMode>("limit")
+  const [limitValue, setLimitValue] = useState(DEFAULT_RESULT_LIMIT)
 
   // 数据集字段
   const [datasetFields, setDatasetFields] = useState<DatasetField[]>([])
@@ -119,7 +131,7 @@ export function ComponentConfigDrawer() {
 
   const [filter, setFilter] = useState();
   // 使用自定义Hook管理所有图表状态
-  const chartState = useChartState(editingComponent)
+  const chartState = useChartState(editingComponent, draftVersion)
   const [isMetricCard, setIsMetricCard] = useState(true)
 
   // 从Hook中解构状态和方法
@@ -152,11 +164,16 @@ export function ComponentConfigDrawer() {
   const STACKED_CHART_TYPES = new Set<ChartType>([
     ChartType.StackedBar,
     ChartType.StackedHorizontalBar,
-    ChartType.StackedLine
+    ChartType.StackedLine,
+    ChartType.PivotTable,
   ])
   const getMaxMetricCount = (chartType: ChartType) => {
+    if (chartType === ChartType.Metric) return MAX_METRIC_CARD_METRICS
+    if (chartType === ChartType.PivotTable) return 1
     return STACKED_CHART_TYPES.has(chartType) ? 3 : 1
   }
+  const isPivotTable = chartType === ChartType.PivotTable
+  const isCircularChart = chartType === ChartType.Pie || chartType === ChartType.Donut
   const isVirtualMetric = (field: DatasetField) => {
     return field.isVirtual === true
   }
@@ -186,13 +203,17 @@ export function ComponentConfigDrawer() {
       // 从组件配置中获取限制选项
       const limitConfig = editingComponent.data_config?.resultLimit;
       if (limitConfig?.limit) {
-        setLimitType("limit");
-        setLimitValue(limitConfig.limit);
+        setLimitType(
+          limitConfig.limitType === "limited_with_other"
+            ? "limitWithOther"
+            : "limit"
+        );
+        setLimitValue(String(limitConfig.limit));
 
       } else {
         // 默认值
         setLimitType("all");
-        setLimitValue("1000");
+        setLimitValue(DEFAULT_RESULT_LIMIT);
       }
 
       // 重置折叠状态
@@ -207,7 +228,7 @@ export function ComponentConfigDrawer() {
       // 重置配置标签页
       setConfigTab("basic");
     }
-  }, [editingComponent?.id]);
+  }, [editingComponent?.id, draftVersion]);
   const handleFieldClick = useCallback((field: DatasetField) => {
     if (!editingComponent) return
 
@@ -486,6 +507,31 @@ export function ComponentConfigDrawer() {
     setConfigCollapsed(prev => ({ ...prev, [section]: !prev[section] }))
   }, [])
 
+  const handleLimitValueChange = useCallback((value: string) => {
+    if (value === "" || /^\d+$/.test(value)) {
+      const numericValue = Number(value)
+      if (value === "" || (numericValue >= 1 && numericValue <= 1000)) {
+        setLimitValue(value)
+      }
+    }
+  }, [])
+
+  const handleLimitTypeChange = useCallback((value: ResultDisplayMode) => {
+    setLimitType(value)
+    if (value === "limitWithOther" && limitType !== "limitWithOther") {
+      setLimitValue(DEFAULT_RESULT_LIMIT)
+    }
+  }, [limitType])
+
+  const normalizeLimitValue = useCallback((value: string) => {
+    const numericValue = Number(value)
+    if (!value || !Number.isFinite(numericValue)) {
+      setLimitValue("1")
+    } else {
+      setLimitValue(String(Math.min(1000, Math.max(1, Math.floor(numericValue)))))
+    }
+  }, [])
+
   const validateChartConfig = ({
     editingComponent,
     chartType,
@@ -520,9 +566,9 @@ export function ComponentConfigDrawer() {
       return { isValid: false, errorKey: 'datasetRequired' };
     }
 
-    // if (currentChartHasStack && stackDimensions.length === 0) {
-    //   return { isValid: false, errorKey: 'stackRequired' };
-    // }
+    if (chartType === ChartType.PivotTable && stackDimensions.length === 0) {
+      return { isValid: false, errorKey: 'stackRequired' };
+    }
 
     return { isValid: true };
   };
@@ -553,27 +599,38 @@ export function ComponentConfigDrawer() {
       }
     }
 
-    const dataConfig = getDataConfig(limitType, limitValue, editingComponent.data_config?.timeFilter)
+    const dataConfig = getDataConfig(
+      isPivotTable ? "all" : limitType,
+      limitValue,
+      editingComponent.data_config?.timeFilter
+    )
     // dataConfig.isConfigured = e.isTrusted
 
     const finalStyleConfig = styleConfig && Object.keys(styleConfig).length > 0
       ? { ...styleConfig }
       : { ...FULL_DEFAULT_STYLE_CONFIG }
-
-    if (dataConfig?.metrics?.[0]?.fieldName && !isMetricCard) {
-      finalStyleConfig.title = dataConfig.metrics[0].fieldName
-    } else if (chartType !== ChartType.Metric) {
-      finalStyleConfig.title = editingComponent.title
-    } else {
-      finalStyleConfig.title = ''
+    if (
+      isCircularChart
+      && editingComponent.style_config?.showDataLabel === undefined
+    ) {
+      finalStyleConfig.showDataLabel = true
     }
-    updateEditingComponent({
+
+    const appliedTitle = resolveAppliedComponentTitle({
+      styleTitle: finalStyleConfig.title,
+      componentTitle: editingComponent.title,
+      metricFieldName: dataConfig?.metrics?.[0]?.fieldName,
+    })
+    finalStyleConfig.title = appliedTitle
+
+    applyEditingComponent({
       data_config: dataConfig,
       type: chartType,
-      title: finalStyleConfig.title || dataConfig.metrics[0].fieldName,
+      title: appliedTitle,
       style_config: finalStyleConfig,
       dataset_code: editingComponent.dataset_code
     })
+    chartState.setStyleConfig(finalStyleConfig)
 
 
     if (e.isTrusted) {
@@ -589,10 +646,13 @@ export function ComponentConfigDrawer() {
     chartType,
     title,
     styleConfig,
+    isPivotTable,
+    isCircularChart,
     limitType,
     limitValue,
     getDataConfig,
-    updateEditingComponent,
+    applyEditingComponent,
+    chartState.setStyleConfig,
     refreshChart,
     categoryDimensions,
     valueDimensions,
@@ -604,6 +664,13 @@ export function ComponentConfigDrawer() {
     toast,
     t
   ])
+  const handleCancelChartChanges = useCallback(() => {
+    if (!editingComponent) return
+    cancelEditingComponent()
+    toast({
+      description: t("componentConfigDrawer.dialog.chartChangesCancelled"),
+    })
+  }, [cancelEditingComponent, editingComponent, t, toast])
   const isStackedChart = (type: ChartType) =>
     type.startsWith('grouped-');
   // 时间范围改变
@@ -697,6 +764,29 @@ export function ComponentConfigDrawer() {
     )
   }
 
+  if (editingComponent.type === ChartType.DimensionFilter) {
+    return (
+      <div className="flex h-full justify-end bg-background">
+        <DimensionFilterConfigurator
+          key={`${editingComponent.id}-${draftVersion}`}
+          component={editingComponent}
+          onSave={(datasetCode, dataConfig) => {
+            applyEditingComponent({
+              dataset_code: datasetCode,
+              data_config: dataConfig,
+              title: editingComponent.title || "组合筛选",
+            })
+            toast({
+              description: "筛选预览已更新",
+              variant: "success",
+            })
+          }}
+          onCancel={cancelEditingComponent}
+        />
+      </div>
+    )
+  }
+
   return (
     <div className="h-full flex bg-background border-l border-border">
       {editingComponent.type === 'query' ? (
@@ -733,7 +823,7 @@ export function ComponentConfigDrawer() {
             console.log('生成的 QueryConfig:', queryConfig)
 
             // 更新组件配置
-            updateEditingComponent({
+            applyEditingComponent({
               // 保持其他字段不变，只更新 data_config
               data_config: queryConfig
             })
@@ -747,7 +837,7 @@ export function ComponentConfigDrawer() {
             refreshChart(editingComponent.id)
           }}
           onCancel={() => {
-            updateEditingComponent(null)
+            cancelEditingComponent()
           }}
         />
       ) : (
@@ -820,8 +910,18 @@ export function ComponentConfigDrawer() {
                                 // 立即触发图表更新
                                 if (editingComponent) {
                                   // 使用当前实际的限制配置
-                                  const currentLimitType = limitType;
+                                  const isNewCircularChart = data.type === ChartType.Pie || data.type === ChartType.Donut;
+                                  const currentLimitType: ResultDisplayMode = data.type === ChartType.PivotTable
+                                    ? "all"
+                                    : !isNewCircularChart && limitType === "limitWithOther"
+                                      ? "limit"
+                                      : limitType;
                                   const currentLimitValue = limitValue;
+                                  if (data.type === ChartType.PivotTable) {
+                                    setLimitType("all");
+                                  } else if (!isNewCircularChart && limitType === "limitWithOther") {
+                                    setLimitType("limit");
+                                  }
 
                                   // 获取当前数据配置
                                   const dataConfig = getDataConfig(currentLimitType, currentLimitValue, editingComponent.data_config?.timeFilter);
@@ -830,7 +930,8 @@ export function ComponentConfigDrawer() {
                                   const STACKED_CHART_TYPES = new Set<ChartType>([
                                     ChartType.StackedBar,
                                     ChartType.StackedHorizontalBar,
-                                    ChartType.StackedLine
+                                    ChartType.StackedLine,
+                                    ChartType.PivotTable,
                                   ]);
 
                                   const isNewChartStacked = STACKED_CHART_TYPES.has(data.type);
@@ -842,7 +943,7 @@ export function ComponentConfigDrawer() {
                                       ...updatedDataConfig,
                                       stackDimension: undefined,
                                       dimensions: updatedDataConfig.dimensions || [],
-                                      metrics: updatedDataConfig.metrics[0] ? [updatedDataConfig.metrics[0]] : []
+                                      metrics: updatedDataConfig.metrics || []
                                     }
                                   }
                                   // 处理堆叠维度
@@ -864,10 +965,9 @@ export function ComponentConfigDrawer() {
                                     };
                                   }
                                   if (data.type === 'metric') {
-                                    const firstMetric = valueDimensions[0] ? { ...valueDimensions[0] } : null;
 
                                     // 更新 chartState
-                                    chartState.setValueDimensions(firstMetric ? [firstMetric] : []);
+                                    chartState.setValueDimensions(valueDimensions.map(metric => ({ ...metric })));
                                     chartState.setCategoryDimensions([]);
                                     chartState.setStackDimensions([]);
                                     updateEditingComponent({
@@ -886,14 +986,14 @@ export function ComponentConfigDrawer() {
                                       title: newTitle,
                                       style_config: {
                                         ...styleConfig,
+                                        ...(isNewCircularChart && styleConfig.showDataLabel === undefined
+                                          ? { showDataLabel: true }
+                                          : {}),
                                         title: newTitle
                                       },
                                       dataset_code: editingComponent.dataset_code
                                     });
                                   }
-
-                                  // 刷新图表
-                                  refreshChart(editingComponent.id);
 
                                 }
                               }} maxHeight={400}>
@@ -901,11 +1001,20 @@ export function ComponentConfigDrawer() {
                                   <div className="flex h-[28px] w-full items-center justify-between rounded-md border hover:border-muted-foreground/40 px-3 py-2 text-sm transition-colors cursor-pointer">
                                     {/* 文本区域 */}
                                     <div className="flex items-center gap-2 flex-1 min-w-0">
-                                      <img
-                                        src={`${__APP_ENV__.BASE_URL}/assets/dashboard/${chartType}.png`}
-                                        className="w-4 h-4 shrink-0"
-                                        alt={chartType}
-                                      />
+                                      {chartType === ChartType.PivotTable ? (
+                                        <span className="grid size-4 shrink-0 grid-cols-2 overflow-hidden rounded-sm border border-sky-500">
+                                          <i className="bg-sky-500" />
+                                          <i className="bg-sky-500" />
+                                          <i className="bg-sky-100" />
+                                          <i className="bg-emerald-100" />
+                                        </span>
+                                      ) : (
+                                        <img
+                                          src={`${__APP_ENV__.BASE_URL}/assets/dashboard/${chartType}.png`}
+                                          className="w-4 h-4 shrink-0"
+                                          alt={chartType}
+                                        />
+                                      )}
                                       <span className="truncate text-foreground">
                                         {t(
                                           `chart.${ChartGroupItems
@@ -1111,79 +1220,110 @@ export function ComponentConfigDrawer() {
                           })
                         }
                       }}
-                      key={editingComponent.id}
+                      key={`${editingComponent.id}-${draftVersion}`}
                     />
                   )}
                 </div>
                 {/* 底部固定更新按钮（不随滚动） */}
-                {configTab !== "style" && <div className="px-4 py-3 border-t bg-background">
+                <div className="px-4 py-3 border-t bg-background">
                   {/* 结果显示 */}
-                  {(editingComponent.type !== 'metric' && isMetricCard) &&
+                  {(configTab !== "style"
+                    && editingComponent.type !== 'metric'
+                    && isMetricCard
+                    && !isPivotTable) &&
                     <div>
                       <RadioGroup
                         value={limitType}
-                        onValueChange={(value: "all" | "limit") => setLimitType(value)}
-                        className="flex justify-between gap-4"
+                        onValueChange={handleLimitTypeChange}
+                        className="mt-2 space-y-2"
                       >
-                        <div className=" text-sm font-medium mt-1">
-                          {t("componentConfigDrawer.resultsDisplay")}
+                        <div className="text-sm font-medium">
+                          {t("componentConfigDrawer.resultsDisplay", { defaultValue: "显示数据" })}
                         </div>
-                        <div className="flex">
-                          <div className="flex items-center space-x-2 mr-1">
-                            <RadioGroupItem value="all" id="limit-all" />
-                            <Label htmlFor="limit-all" className="text-sm cursor-pointer whitespace-nowrap">
-                              {t("componentConfigDrawer.allResults")}
+                        <div className="grid grid-cols-[18px_minmax(0,1fr)] items-center gap-2">
+                          <RadioGroupItem value="all" id="limit-all" />
+                          <Label htmlFor="limit-all" className="text-sm cursor-pointer whitespace-nowrap">
+                            {t("componentConfigDrawer.allResults", { defaultValue: "全部" })}
+                          </Label>
+                        </div>
+                        <div className="grid grid-cols-[18px_minmax(0,1fr)] items-start gap-2">
+                          <RadioGroupItem value="limit" id="limit-only" />
+                          <div className="grid min-w-0 grid-cols-[auto_56px_auto] items-center gap-2">
+                            <Label htmlFor="limit-only" className="text-sm cursor-pointer whitespace-nowrap">
+                              {t("componentConfigDrawer.topOnlyLabel", { defaultValue: "仅显示前" })}
                             </Label>
+                            <Input
+                              aria-label={t("componentConfigDrawer.topCount", { defaultValue: "仅展示前 X 项的数量" })}
+                              className="w-14 h-7 text-sm appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                              type="number"
+                              value={limitValue}
+                              disabled={limitType !== "limit"}
+                              onChange={(e) => handleLimitValueChange(e.target.value)}
+                              onBlur={(e) => normalizeLimitValue(e.target.value)}
+                              min={1}
+                              max={1000}
+                            />
+                            <span className="text-sm whitespace-nowrap">
+                              {t("componentConfigDrawer.resultsUnit", { defaultValue: "项" })}
+                            </span>
                           </div>
-                          <div className="flex items-center space-x-2">
-                            <RadioGroupItem value="limit" id="limit-limit" />
-                            <div className="flex items-center gap-2">
-                              <Input
-                                className="w-16 h-7 text-sm appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                                type="number"
-                                value={limitValue}
-                                disabled={limitType !== "limit"}
-                                onChange={(e) => {
-                                  const value = e.target.value;
-                                  if (value === '' || /^\d+$/.test(value)) {
-                                    const num = parseInt(value);
-                                    if (value === '' || (num >= 1 && num <= 1000)) {
-                                      setLimitValue(value);
-                                    }
-                                  }
-                                }}
-                                onBlur={(e) => {
-                                  const value = e.target.value;
-                                  const num = parseInt(value);
-                                  if (value === '' || isNaN(num)) {
-                                    setLimitValue('1');
-                                  } else if (num < 1) {
-                                    setLimitValue('1');
-                                  } else if (num > 1000) {
-                                    setLimitValue('1000');
-                                  } else {
-                                    setLimitValue(num.toString());
-                                  }
-                                }}
-                                min={1}
-                                max={1000}
-                                placeholder="1000"
-                              />
+                        </div>
+                        {isCircularChart && (
+                          <div className="grid grid-cols-[18px_minmax(0,1fr)] items-start gap-2">
+                            <RadioGroupItem value="limitWithOther" id="limit-with-other" />
+                            <div className="min-w-0">
+                              <div className="grid min-w-0 grid-cols-[auto_56px_auto] items-center gap-2">
+                                <Label htmlFor="limit-with-other" className="text-sm cursor-pointer whitespace-nowrap">
+                                  {t("componentConfigDrawer.topWithOtherLabel", { defaultValue: "显示前" })}
+                                </Label>
+                                <Input
+                                  aria-label={t("componentConfigDrawer.topCountWithOther", { defaultValue: "前 X 项加其他的数量" })}
+                                  className="w-14 h-7 text-sm appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                  type="number"
+                                  value={limitValue}
+                                  disabled={limitType !== "limitWithOther"}
+                                  onChange={(e) => handleLimitValueChange(e.target.value)}
+                                  onBlur={(e) => normalizeLimitValue(e.target.value)}
+                                  min={1}
+                                  max={1000}
+                                />
+                                <span className="text-sm whitespace-nowrap">
+                                  {t("componentConfigDrawer.resultsUnit", { defaultValue: "项" })}
+                                </span>
+                              </div>
+                              <p className="mt-1 text-xs leading-5 text-foreground">
+                                {t("componentConfigDrawer.otherResultsDescription", {
+                                  defaultValue: "其余数据合并为“其他”"
+                                })}
+                              </p>
+                              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                                {t("componentConfigDrawer.otherResultsHint", {
+                                  defaultValue: "仅当数据超过设置数量时生成“其他”"
+                                })}
+                              </p>
                             </div>
                           </div>
-                        </div>
-
+                        )}
                       </RadioGroup>
                     </div>
                   }
-                  <Button
-                    id="config_save"
-                    className="w-full h-10 mt-[12px]"
-                    onClick={handleUpdateChart}
-                  >
-                    {t("componentConfigDrawer.updateChartData")}
-                  </Button>
-                </div>}
+                  <div className="mt-[12px] flex gap-2">
+                    <Button
+                      variant="outline"
+                      className="h-10 flex-1"
+                      onClick={handleCancelChartChanges}
+                    >
+                      {t("cancel")}
+                    </Button>
+                    <Button
+                      id="config_save"
+                      className="h-10 flex-1"
+                      onClick={handleUpdateChart}
+                    >
+                      {t("componentConfigDrawer.updateChartData")}
+                    </Button>
+                  </div>
+                </div>
 
               </div>
             )}

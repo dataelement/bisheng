@@ -15,11 +15,38 @@ class DictionaryTypeEnum(str, Enum):
     EXPERT_JOB_CATEGORY = "职位类"
 
 
+# 数据库类型 code -> 展示中文(与 DictionaryTypeEnum 展示值保持一致)
+DICTIONARY_TYPE_CODE_TO_LABEL: dict[str, str] = {
+    "expert_major": "岗位",
+    "expert_position": "职务",
+    "expert_job_family": "职位族",
+    "expert_job_category": "职位类",
+}
+DICTIONARY_TYPE_LABEL_TO_CODE: dict[str, str] = {label: code for code, label in DICTIONARY_TYPE_CODE_TO_LABEL.items()}
+
+# 字典键格式:仅允许字母、数字、下划线,且以字母或数字开头
+DICT_KEY_PATTERN: str = r"^[a-zA-Z0-9][a-zA-Z0-9_]*$"
+
+# Excel 导入导出使用的列标题
+DICTIONARY_EXPORT_HEADERS: list[str] = [
+    "类型",
+    "字典键",
+    "字典取值",
+    "排序权重",
+    "是否启用",
+]
+
+
 class DictionaryCreateRequest(BaseModel):
     """创建字典条目请求"""
 
     type: str = Field(..., max_length=64, description="字典类型")
-    dict_key: str = Field(..., max_length=255, description="字典键")
+    dict_key: str = Field(
+        ...,
+        max_length=255,
+        pattern=DICT_KEY_PATTERN,
+        description="字典键,仅允许字母、数字、下划线,且以字母或数字开头",
+    )
     dict_value: str = Field(..., max_length=255, description="字典取值")
     sort_order: int = Field(default=0, ge=0, description="排序权重")
     is_enabled: bool = Field(default=True, description="是否启用")
@@ -28,6 +55,12 @@ class DictionaryCreateRequest(BaseModel):
 class DictionaryUpdateRequest(BaseModel):
     """更新字典条目请求"""
 
+    dict_key: str = Field(
+        ...,
+        max_length=255,
+        pattern=DICT_KEY_PATTERN,
+        description="字典键,仅允许字母、数字、下划线,且以字母或数字开头",
+    )
     dict_value: str | None = Field(None, max_length=255, description="字典取值")
     sort_order: int | None = Field(None, ge=0, description="排序权重")
     is_enabled: bool | None = Field(None, description="是否启用")
@@ -54,3 +87,12 @@ class DictionaryTypeResponse(BaseModel):
 
     type: str = Field(..., description="字典类型值")
     name: str = Field(..., description="字典类型名称")
+
+
+class DictionaryImportResult(BaseModel):
+    """字典导入结果"""
+
+    total: int = Field(..., description="解析到的总行数")
+    success: int = Field(..., description="成功导入条数")
+    failed: int = Field(..., description="失败条数")
+    errors: list[str] = Field(default_factory=list, description="失败原因列表")

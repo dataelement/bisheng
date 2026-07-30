@@ -12,17 +12,45 @@ from .search_engine_service import SearchParameters, SearchEngineService
 from ..models.dashboard_dataset import SchemaConfig, MetricConfig, DimensionConfig, FormulaEnum
 from ..repositories.implementations.dataset_repository_impl import DashboardDatasetRepositoryImpl
 from ..schemas.component import ComponentDataConfig, TimeFilter, DataQueryResult, AggregationType, \
-    DimensionField, LogicType, OperatorType
+    DimensionField, DimensionQueryFilter, LogicType, OperatorType
 from ..schemas.query_builder import AggregationExpression, AggsTypeEnum, FilterExpression, AtomFilter, TermOp, RangeOp, \
     RangeValue, MatchPhraseOp, TermsOp
 
 TIMESTAMP_FIELD = "timestamp"
+REALTIME_TEMPORAL_DATASETS = {
+    "mid_realtime_qa_question_fact",
+    "mid_user_daily_participation",
+}
 
 
 class DataQueryService(BaseModel):
     dataset_code: str = Field(description="dataset code")
     data_config: ComponentDataConfig = Field(description="component data configuration")
     time_filters: List[TimeFilter] | None = Field(default=None, description="time filters")
+    dimension_filters: List[DimensionQueryFilter] = Field(
+        default_factory=list,
+        description="runtime dimension filters from linked filter components",
+    )
+    scope_filters: List[DimensionQueryFilter] = Field(
+        default_factory=list,
+        description="server-enforced tenant and administrative scope filters",
+    )
+
+    def _expand_dimension_filter_values(
+        self,
+        field: str,
+        values: List[Any],
+    ) -> List[Any]:
+        """Apply canonical dashboard groupings while retaining legacy facts."""
+        expanded = list(values)
+        if (
+            self.dataset_code == "mid_knowledge_space_content_stat"
+            and field == "space_level"
+            and any(str(value) == "team" for value in values)
+            and "team_ks" not in expanded
+        ):
+            expanded.append("team_ks")
+        return expanded
 
     async def query_telemetry_data(self) -> DataQueryResult:
         res = DataQueryResult()
@@ -445,6 +473,17 @@ class DataQueryService(BaseModel):
             all_time_filters.append(self.data_config.time_filter)
         if self.time_filters:
             all_time_filters.extend(self.time_filters)
+        if (
+            not all_time_filters
+            and self.dataset_code in REALTIME_TEMPORAL_DATASETS
+        ):
+            all_time_filters.append(
+                TimeFilter(
+                    type="recent_days",
+                    mode="dynamic",
+                    recentDays=1,
+                )
+            )
 
         filters = []
         filter_expressions = []
@@ -467,9 +506,45 @@ class DataQueryService(BaseModel):
         if filters:
             filter_expressions.append(FilterExpression(bool_operator=filter_ope, filters=filters))
 
+        runtime_filters = []
+        for runtime_filter in self.dimension_filters:
+            if not runtime_filter.values:
+                continue
+            dimension_config = dimension_map.get(runtime_filter.field_id)
+            if not dimension_config:
+                raise QueryDimensionNotFoundError()
+            runtime_filters.append(
+                TermsOp(
+                    field=dimension_config.field,
+                    value=self._expand_dimension_filter_values(
+                        dimension_config.field,
+                        runtime_filter.values,
+                    ),
+                )
+            )
+        if runtime_filters:
+            filter_expressions.append(
+                FilterExpression(bool_operator="must", filters=runtime_filters)
+            )
+
+        server_scope_filters = [
+            TermsOp(field=scope_filter.field_id, value=scope_filter.values)
+            for scope_filter in self.scope_filters
+            if scope_filter.values
+        ]
+        if server_scope_filters:
+            filter_expressions.append(
+                FilterExpression(
+                    bool_operator="must",
+                    filters=server_scope_filters,
+                )
+            )
+
         time_range = []
         for one in all_time_filters:
-            start_date, end_date = one.get_start_end_date()
+            start_date, end_date = one.get_start_end_date(
+                include_today=self.dataset_code in REALTIME_TEMPORAL_DATASETS
+            )
             if start_date and end_date:
                 time_range.append([start_date, end_date])
         finally_time_range = self.find_intersection(time_range)

@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, ClassVar
 
 from elasticsearch import AsyncElasticsearch, Elasticsearch, helpers
 from elasticsearch import exceptions as es_exceptions
@@ -71,6 +71,8 @@ class BaseRecord(UserContext):
 class BaseMidTable(BaseModel):
     _index_name: str = ""
     _mappings: dict[str, Any] = {}
+    _update_mappings_on_existing: bool = False
+    _mapping_updates_applied: ClassVar[set[str]] = set()
     _es_client: AsyncElasticsearch = None
     _es_client_sync: Elasticsearch = None
 
@@ -92,6 +94,17 @@ class BaseMidTable(BaseModel):
                 await self._es_client.indices.create(
                     index=self._index_name, body={"settings": common_settings, "mappings": {"properties": mappings}}
                 )
+                if self._update_mappings_on_existing:
+                    self._mapping_updates_applied.add(self._index_name)
+            elif (
+                self._update_mappings_on_existing
+                and self._index_name not in self._mapping_updates_applied
+            ):
+                await self._es_client.indices.put_mapping(
+                    index=self._index_name,
+                    properties=mappings,
+                )
+                self._mapping_updates_applied.add(self._index_name)
         except es_exceptions.RequestError as e:
             # Ignore on concurrency creation "resource_already_exists_exception"
             if "resource_already_exists_exception" not in str(e):
@@ -112,6 +125,17 @@ class BaseMidTable(BaseModel):
                 self._es_client_sync.indices.create(
                     index=self._index_name, body={"settings": common_settings, "mappings": {"properties": mappings}}
                 )
+                if self._update_mappings_on_existing:
+                    self._mapping_updates_applied.add(self._index_name)
+            elif (
+                self._update_mappings_on_existing
+                and self._index_name not in self._mapping_updates_applied
+            ):
+                self._es_client_sync.indices.put_mapping(
+                    index=self._index_name,
+                    properties=mappings,
+                )
+                self._mapping_updates_applied.add(self._index_name)
         except es_exceptions.RequestError as e:
             # Ignore on concurrency creation "resource_already_exists_exception"
             if "resource_already_exists_exception" not in str(e):

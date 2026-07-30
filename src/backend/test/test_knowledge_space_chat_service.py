@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from bisheng.common.stream_errors import StreamRetryEvent
+from bisheng.common.stream_errors import StreamRetryEvent, StreamStageError
 from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum, Knowledge, KnowledgeState, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFile
 
@@ -139,6 +139,7 @@ def _make_login_user(user_id: int = 7, user_name: str = 'tester') -> SimpleNames
     return SimpleNamespace(
         user_id=user_id,
         user_name=user_name,
+        tenant_id=1,
         is_admin=lambda: False,
     )
 
@@ -227,7 +228,7 @@ class TestKnowledgeSpaceChatPermissions:
         mock_require_view.assert_awaited_once_with(1, 11)
 
     @pytest.mark.asyncio
-    async def test_chat_single_file_records_my_knowledge_document_qa_on_first_chunk(self, chat_service):
+    async def test_chat_single_file_records_my_knowledge_document_qa_after_successful_completion(self, chat_service):
         file_record = _make_file(file_id=11, knowledge_id=1)
         space = _make_space(space_id=1)
 
@@ -265,10 +266,16 @@ class TestKnowledgeSpaceChatPermissions:
             patch(
                 "bisheng.knowledge.domain.services.knowledge_space_chat_service.PortalTelemetryEventService.log_event_sync"
             ) as mock_log_event,
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_chat_service.RealtimeQaQuestionFact.record_success",
+                new_callable=AsyncMock,
+            ) as mock_record_success,
         ):
             result = [item async for item in chat_service.chat_single_file(1, 11, "hi", 1001)]
 
         assert result == [{"ok": True}]
+        mock_log_event.assert_called_once()
+        mock_record_success.assert_awaited_once()
         _, kwargs = mock_log_event.call_args
         assert kwargs["user_id"] == chat_service.login_user.user_id
         assert kwargs["event_type"].value == "portal_qa"
@@ -320,6 +327,10 @@ class TestKnowledgeSpaceChatPermissions:
             patch(
                 "bisheng.knowledge.domain.services.knowledge_space_chat_service.PortalTelemetryEventService.log_event_sync"
             ) as mock_log_event,
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_chat_service.RealtimeQaQuestionFact.record_success",
+                new_callable=AsyncMock,
+            ) as mock_record_success,
         ):
             result = [item async for item in chat_service.chat_single_file(1, 11, "hi", 1001)]
 
@@ -328,16 +339,105 @@ class TestKnowledgeSpaceChatPermissions:
             {"ok": True},
         ]
         mock_log_event.assert_called_once()
+        mock_record_success.assert_awaited_once()
 
-    def test_log_portal_document_qa_skips_portal_bff_proxy(self, chat_service):
-        chat_service.request.headers.get.return_value = "shougang_portal_bff"
+    @pytest.mark.asyncio
+    async def test_chat_single_file_does_not_count_partial_output_followed_by_failure(self, chat_service):
+        file_record = _make_file(file_id=11, knowledge_id=1)
+        space = _make_space(space_id=1)
 
-        with patch(
-            "bisheng.knowledge.domain.services.knowledge_space_chat_service.PortalTelemetryEventService.log_event_sync"
-        ) as mock_log_event:
-            chat_service._log_portal_document_qa_success(knowledge_id=1, file_id=11)
+        async def _partial_then_failure(*args, **kwargs):
+            yield {"partial": True}
+            raise StreamStageError(RuntimeError("boom"), stage="model", had_output=True)
+
+        with (
+            patch.object(
+                chat_service,
+                "_require_file_view_permission",
+                new_callable=AsyncMock,
+                return_value=file_record,
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_chat_service.KnowledgeDao.aquery_by_id",
+                new_callable=AsyncMock,
+                return_value=space,
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_chat_service.MessageSessionDao.afilter_session",
+                new_callable=AsyncMock,
+                return_value=[SimpleNamespace(chat_id="chat-1", flow_id="flow-1")],
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_chat_service.KnowledgeRag.init_knowledge_milvus_vectorstore",
+                new_callable=AsyncMock,
+                return_value=SimpleNamespace(as_retriever=lambda **kwargs: object()),
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_chat_service.KnowledgeRag.init_knowledge_es_vectorstore",
+                new_callable=AsyncMock,
+                return_value=SimpleNamespace(as_retriever=lambda **kwargs: object()),
+            ),
+            patch.object(chat_service, "space_rag", _partial_then_failure),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_chat_service.PortalTelemetryEventService.log_event_sync"
+            ) as mock_log_event,
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_chat_service.RealtimeQaQuestionFact.record_success",
+                new_callable=AsyncMock,
+            ) as mock_record_success,
+        ):
+            with pytest.raises(StreamStageError):
+                _ = [item async for item in chat_service.chat_single_file(1, 11, "hi", 1001)]
 
         mock_log_event.assert_not_called()
+        mock_record_success.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_log_portal_document_qa_skips_portal_bff_proxy(self, chat_service):
+        chat_service.request.headers.get.return_value = "shougang_portal_bff"
+
+        with (
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_chat_service.PortalTelemetryEventService.log_event_sync"
+            ) as mock_log_event,
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_chat_service.RealtimeQaQuestionFact.record_success",
+                new_callable=AsyncMock,
+            ) as mock_record_success,
+        ):
+            await chat_service._log_portal_document_qa_success(
+                knowledge_id=1,
+                file_id=11,
+                question_id="q-1",
+                conversation_id="chat-1",
+            )
+
+        mock_log_event.assert_not_called()
+        mock_record_success.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_document_qa_projection_survives_legacy_telemetry_failure(
+        self,
+        chat_service,
+    ):
+        with (
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_chat_service.PortalTelemetryEventService.log_event_sync",
+                side_effect=RuntimeError("telemetry unavailable"),
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_chat_service.RealtimeQaQuestionFact.record_success",
+                new_callable=AsyncMock,
+            ) as mock_record_success,
+        ):
+            await chat_service._log_portal_document_qa_success(
+                knowledge_id=1,
+                file_id=11,
+                question_id="q-1",
+                conversation_id="chat-1",
+            )
+
+        mock_record_success.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_get_chat_folder_session_requires_view_folder_when_folder_selected(self, chat_service):

@@ -20,6 +20,13 @@ class KnowledgeFileRepository(BaseRepository[KnowledgeFile, int], ABC):
         """批量锁定文件行，供删除与归属变更事务复核。"""
         ...
 
+    async def find_favorite_referrers_by_source_file_ids(
+        self,
+        source_file_ids: list[int],
+    ) -> list[KnowledgeFile]:
+        """批量返回引用指定源文件的个人收藏记录。"""
+        ...
+
     async def prepare_delete_by_ids(self, entity_ids: list[int]) -> int:
         """在当前 session 暂存批量删除；只 flush，不提交。"""
         ...

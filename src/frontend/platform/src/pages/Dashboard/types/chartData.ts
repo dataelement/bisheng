@@ -16,6 +16,23 @@ export interface ChartSeries {
   data: number[] | PieDataItem[] // 数据数组，饼图使用 PieDataItem
 }
 
+export interface PivotTableRow {
+  key: string[]
+  values: number[]
+  total: number
+}
+
+export interface PivotTableDataResponse {
+  rowHeaders: string[]
+  columnHeader: string
+  metricName: string
+  columns: string[]
+  rows: PivotTableRow[]
+  columnTotals: number[]
+  grandTotal: number
+  truncated?: boolean
+}
+
 // 饼图数据项
 export interface PieDataItem {
   name: string // 名称
@@ -60,4 +77,4 @@ export interface QueryParams {
 }
 
 // ==================== 统一的查询响应 ====================
-export type QueryDataResponse = ChartDataResponse | MetricDataResponse
+export type QueryDataResponse = ChartDataResponse | MetricDataResponse | PivotTableDataResponse

@@ -70,12 +70,16 @@ export function DatasetSelector({ selectedDatasetCode, isMetricCard, onDatasetCh
     const filteredDatasets = useMemo(() => {
         if (!searchTerm) return allDatasets
         const searchLower = searchTerm.toLowerCase()
-        return allDatasets.filter(d =>
-            d.dataset_name.toLowerCase().includes(searchLower) ||
-            d.dataset_code.toLowerCase().includes(searchLower) ||
-            (d.description && d.description.toLowerCase().includes(searchLower))
-        )
-    }, [allDatasets, searchTerm])
+        return allDatasets.filter(d => {
+            const localizedName = t(d.dataset_code, {
+                defaultValue: d.dataset_name
+            }).toLowerCase()
+            return localizedName.includes(searchLower) ||
+                d.dataset_name.toLowerCase().includes(searchLower) ||
+                d.dataset_code.toLowerCase().includes(searchLower) ||
+                (d.description && d.description.toLowerCase().includes(searchLower))
+        })
+    }, [allDatasets, searchTerm, t])
     // 获取选中的数据集详情
     const selectedDataset = useMemo(() => {
         return allDatasets.find(d => d.dataset_code === selectedDatasetCode)
@@ -111,7 +115,7 @@ export function DatasetSelector({ selectedDatasetCode, isMetricCard, onDatasetCh
         const dimensions = selectedDataset.schema_config.dimensions.map(d => ({
             fieldCode: d.field,
             fieldId: d.field,
-            displayName: d.name,
+            displayName: t(d.field, { defaultValue: d.name }),
             fieldType: d.field_type,
             role: "dimension" as const
         }))
@@ -119,7 +123,7 @@ export function DatasetSelector({ selectedDatasetCode, isMetricCard, onDatasetCh
         const metrics = selectedDataset.schema_config.metrics.map(m => ({
             fieldCode: m.field,
             fieldId: m.field,
-            displayName: m.name,
+            displayName: t(m.field, { defaultValue: m.name }),
             fieldType: m.field_type,
             isVirtual: m.is_virtual,
             isDivide: m.formula,
@@ -127,7 +131,7 @@ export function DatasetSelector({ selectedDatasetCode, isMetricCard, onDatasetCh
         }))
 
         return [...dimensions, ...metrics]
-    }, [selectedDataset])
+    }, [selectedDataset, t])
 
     useEffect(() => {
         if (selectedDataset && onFieldsLoaded) {
@@ -176,7 +180,9 @@ export function DatasetSelector({ selectedDatasetCode, isMetricCard, onDatasetCh
                         ) : (
                             filteredDatasets.map((dataset) => (
                                 <SelectItem key={dataset.dataset_code} value={dataset.dataset_code}>
-                                    {t(dataset.dataset_code)}
+                                    {t(dataset.dataset_code, {
+                                        defaultValue: dataset.dataset_name
+                                    })}
                                 </SelectItem>
                             ))
                         )}
@@ -206,7 +212,9 @@ export function DatasetSelector({ selectedDatasetCode, isMetricCard, onDatasetCh
                                     {selectedDataset.schema_config.dimensions.map((dimension) => {
                                         if (dimension.time_granularitys && dimension.time_granularitys.length > 0) {
                                             return dimension.time_granularitys.map((g) => {
-                                                const displayName = t(`${dimension.field}.${g}`)
+                                                const displayName = t(`${dimension.field}.${g}`, {
+                                                    defaultValue: `${dimension.name}(${getTimeGranularityLabel(g)})`
+                                                })
                                                 const field: DatasetField = {
                                                     fieldCode: dimension.field,
                                                     displayName,
@@ -234,7 +242,9 @@ export function DatasetSelector({ selectedDatasetCode, isMetricCard, onDatasetCh
                                         // 普通非时间字段
                                         const field: DatasetField = {
                                             fieldCode: dimension.field,
-                                            displayName: t(dimension.field),
+                                            displayName: t(dimension.field, {
+                                                defaultValue: dimension.name
+                                            }),
                                             fieldType: dimension.type === "integer" ? "number" : "string",
                                             role: "dimension",
                                         }
@@ -248,7 +258,7 @@ export function DatasetSelector({ selectedDatasetCode, isMetricCard, onDatasetCh
                                                 onClick={(e) => { e.stopPropagation(); onFieldClick?.(field) }}
                                             >
                                                 {getFieldTypeIcon(field.fieldType)}
-                                                <span className="text-sm flex-1">{t(dimension.field)}</span>
+                                                <span className="text-sm flex-1">{field.displayName}</span>
                                             </div>
                                         )
                                     })}
@@ -277,7 +287,9 @@ export function DatasetSelector({ selectedDatasetCode, isMetricCard, onDatasetCh
                                     const isVirtual = isVirtualMetric(metric)
                                     const field: DatasetField = {
                                         fieldCode: metric.field,
-                                        displayName: t(metric.field),
+                                        displayName: t(metric.field, {
+                                            defaultValue: metric.name
+                                        }),
                                         fieldType: "number",
                                         role: "metric" as const,
                                         isVirtual: metric.is_virtual,
@@ -298,7 +310,7 @@ export function DatasetSelector({ selectedDatasetCode, isMetricCard, onDatasetCh
                                                 <Hash className="h-4 w-4" />
                                             </div>
                                             <span className="text-sm flex-1 flex items-center gap-1">
-                                                {t(metric.field)}
+                                                {field.displayName}
                                                 {isVirtual && <span className="text-muted-foreground text-xs">{t("datasetSelector.virtualMetric")}</span>}
                                             </span>
                                         </div>

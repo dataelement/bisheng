@@ -7,6 +7,7 @@ import { Copy, Edit3, GripHorizontalIcon, MoreHorizontal, MoreVerticalIcon, Tras
 import { memo, useEffect, useRef, useState } from "react"
 import { ChartType, Dashboard, DashboardComponent } from "../../types/dataConfig"
 import { ChartContainer } from "../charts/ChartContainer"
+import { DimensionFilter } from "../charts/DimensionFilter"
 import { QueryFilter } from "../charts/QueryFilter"
 import "./index.css"
 import { cn } from "@/utils"
@@ -36,14 +37,18 @@ export const ComponentWrapper = memo(({
     const inputRef = useRef<HTMLInputElement>(null)
     const { toast } = useToast()
     const [title, setTitle] = useState('')
-    const { hasChange, copyFromDashboard, editingComponent, updateEditingComponent } = useComponentEditorStore();
+    const {
+        copyFromDashboard,
+        editingComponent,
+        applyEditingComponent,
+    } = useComponentEditorStore();
     const isSelected = editingComponent?.id === component.id
-    const componentData = isSelected ? editingComponent : component
+    const componentData = component
 
     useEffect(() => {
         console.log('componentData :>> ', componentData);
         setTitle(componentData.title)
-    }, [editingComponent])
+    }, [componentData.title])
 
     useEffect(() => {
         if (isEditing && inputRef.current) {
@@ -84,7 +89,13 @@ export const ComponentWrapper = memo(({
         if (trimmedTitle !== component.title) {
             setTitle(trimmedTitle)
             // onRename(component.id, trimmedTitle)
-            updateEditingComponent({ title: trimmedTitle })
+            applyEditingComponent({
+                title: trimmedTitle,
+                style_config: {
+                    ...component.style_config,
+                    title: trimmedTitle,
+                },
+            })
         }
     }
 
@@ -159,7 +170,7 @@ export const ComponentWrapper = memo(({
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className={isDark && 'dark border-gray-700'}>
-                            {ChartType.Query === component.type ? (
+                            {[ChartType.Query, ChartType.DimensionFilter].includes(component.type) ? (
                                 // Query component: only duplicate and delete
                                 <>
                                     <DropdownMenuItem onClick={(e) => {
@@ -245,7 +256,7 @@ export const ComponentWrapper = memo(({
 
             <div className="w-full h-full p-2">
                 {/* Component title with rename ability - hidden for query type */}
-                {!['query', 'metric'].includes(componentData.type) && (
+                {!['query', 'dimension-filter', 'metric'].includes(componentData.type) && (
                     <div className="group mb-2 relative">
                         {isEditing ? (
                             <Input
@@ -281,9 +292,9 @@ export const ComponentWrapper = memo(({
 
                 {/* Component content */}
                 <div
-                    className={['query', 'metric'].includes(componentData.type) ? '' : ` no-drag cursor-default`}
+                    className={['query', 'dimension-filter', 'metric'].includes(componentData.type) ? '' : ` no-drag cursor-default`}
                     style={{
-                        height: ['query', 'metric'].includes(componentData.type) ? '100%' : `calc(100% - ${(componentData.style_config?.titleFontSize || 0) + 10}px)`
+                        height: ['query', 'dimension-filter', 'metric'].includes(componentData.type) ? '100%' : `calc(100% - ${(componentData.style_config?.titleFontSize || 0) + 10}px)`
                     }}
                 >
                     {componentData.type === 'query' ? (
@@ -291,7 +302,11 @@ export const ComponentWrapper = memo(({
                             isDark={isDark}
                             component={componentData}
                             isPreviewMode={isPreviewMode}
-                            hasChanged={hasChange}
+                        />
+                    ) : componentData.type === ChartType.DimensionFilter ? (
+                        <DimensionFilter
+                            component={componentData}
+                            isDark={isDark}
                         />
                     ) : (
                         <ChartContainer isDark={isDark} component={componentData} isPreviewMode={isPreviewMode} />

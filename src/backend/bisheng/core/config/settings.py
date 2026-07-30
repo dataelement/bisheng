@@ -205,6 +205,31 @@ class CeleryConf(BaseModel):
                 "task": "bisheng.worker.telemetry.mid_table.sync_mid_knowledge_space_content_stat",
                 "schedule": crontab.from_string("30 0 * * *"),  # 00:30 exec every day
             }
+        if "telemetry_sync_mid_user_daily_participation_fact" not in self.beat_schedule:
+            self.beat_schedule["telemetry_sync_mid_user_daily_participation_fact"] = {
+                "task": (
+                    "bisheng.worker.telemetry.mid_table."
+                    "sync_mid_user_daily_participation_fact"
+                ),
+                "schedule": crontab.from_string("*/5 * * * *"),
+            }
+        if "telemetry_backfill_mid_user_daily_participation_fact" not in self.beat_schedule:
+            self.beat_schedule["telemetry_backfill_mid_user_daily_participation_fact"] = {
+                "task": (
+                    "bisheng.worker.telemetry.mid_table."
+                    "backfill_mid_user_daily_participation_fact"
+                ),
+                "schedule": crontab.from_string("40 0 * * *"),
+                "kwargs": {"lookback_days": 2},
+            }
+        if "telemetry_sync_mid_realtime_qa_question_fact" not in self.beat_schedule:
+            self.beat_schedule["telemetry_sync_mid_realtime_qa_question_fact"] = {
+                "task": (
+                    "bisheng.worker.telemetry.realtime_dashboard."
+                    "sync_mid_realtime_qa_question_fact"
+                ),
+                "schedule": crontab.from_string("*/10 * * * *"),
+            }
         if "telemetry_sync_mid_active_user" not in self.beat_schedule:
             self.beat_schedule["telemetry_sync_mid_active_user"] = {
                 "task": "bisheng.worker.telemetry.derived_mid_table.sync_mid_active_user",

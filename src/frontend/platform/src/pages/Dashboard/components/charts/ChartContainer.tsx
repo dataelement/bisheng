@@ -1,14 +1,14 @@
 "use client"
 
 import { queryChartData } from '@/controllers/API/dashboard'
-import { ChartDataResponse, MetricDataResponse } from '@/pages/Dashboard/types/chartData'
-import { ChartType, DashboardComponent } from '@/pages/Dashboard/types/dataConfig'
+import { ChartDataResponse, MetricDataResponse, PivotTableDataResponse } from '@/pages/Dashboard/types/chartData'
+import { ChartType, DashboardComponent, DataConfig } from '@/pages/Dashboard/types/dataConfig'
 import { useEditorDashboardStore } from '@/store/dashboardStore'
-import { useEffect } from 'react'
 import { useQuery } from 'react-query'
 import { BaseChart } from './BaseChart'
 import { MetricCard } from './MetricCard'
 import { useTranslation } from 'react-i18next'
+import { PivotTable } from './PivotTable'
 
 interface ChartContainerProps {
   isDark: boolean;
@@ -24,9 +24,10 @@ export function ChartContainer({ isPreviewMode, isDark, component }: ChartContai
   const refreshInfo = chartRefreshTriggers[component.id]
   const refreshTrigger = refreshInfo?.trigger || 0
   const queryParams = refreshInfo?.queryParams || []
+  const dataConfig = component.data_config as DataConfig
 
   // Query chart data
-  const { data, isLoading, error, refetch } = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey: ['chartData', component.id, refreshTrigger],
     queryFn: () => queryChartData({
       useId: isPreviewMode,
@@ -34,17 +35,9 @@ export function ChartContainer({ isPreviewMode, isDark, component }: ChartContai
       component,
       queryParams
     }),
-    // use refreshTrigger
-    enabled: false // !!component.id && component.data_config.isConfigured
+    enabled: refreshTrigger > 0 && Boolean(dataConfig.isConfigured),
+    keepPreviousData: true,
   });
-
-  // Refetch when refresh trigger changes
-  useEffect(() => {
-    if (refreshTrigger > 0) {
-      console.log('refreshInfo :>> ', component, refreshInfo);
-      refetch()
-    }
-  }, [refreshTrigger, refetch])
 
   // Loading state
   if (isLoading) {
@@ -81,7 +74,14 @@ export function ChartContainer({ isPreviewMode, isDark, component }: ChartContai
 
   // No data
   // if (error || !component.data_config.isConfigured) {
-  if (error || !component.data_config.isConfigured || !data) {
+  if (error || !dataConfig.isConfigured || !data) {
+    if (component.type === ChartType.PivotTable) {
+      return (
+        <div className="flex size-full items-center justify-center rounded-md border border-dashed border-border bg-muted/20 text-sm text-muted-foreground">
+          {t('noDataInChart')}
+        </div>
+      )
+    }
     return (
       <div className={`flex items-center justify-center h-full overflow-hidden relative ${component.type === ChartType.Metric && 'pt-4'}`}>
         {component.type === ChartType.Metric && <h3 className="absolute top-0 left-0 text-sm font-medium truncate dark:text-gray-400">
@@ -102,7 +102,15 @@ export function ChartContainer({ isPreviewMode, isDark, component }: ChartContai
       data={data as MetricDataResponse}
       dataConfig={component.data_config}
       isPreviewMode={isPreviewMode}
-      styleConfig={component.style_config} />;
+      styleConfig={component.style_config} />
+  }
+
+  if (component.type === ChartType.PivotTable) {
+    return <PivotTable
+      data={data as PivotTableDataResponse}
+      dataConfig={dataConfig}
+      isDark={isDark}
+    />
   }
 
   // Render chart
@@ -116,5 +124,5 @@ export function ChartContainer({ isPreviewMode, isDark, component }: ChartContai
         styleConfig={component.style_config}
       />
     </div>
-  );
+  )
 }

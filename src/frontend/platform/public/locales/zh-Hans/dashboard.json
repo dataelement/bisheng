@@ -30,7 +30,7 @@
       "save": "保存"
     },
     "messages": {
-      "saveSuccess": "关联图表配置已保存",
+      "saveSuccess": "关联图表预览已更新",
       "noCharts": "没有可关联的图表",
       "collapse": "关联图表配置"
     }
@@ -56,6 +56,18 @@
     "selectTimeRange": "选择时间范围",
     "resultsDisplay": "显示数据",
     "allResults": "全部",
+    "topOnly": "仅显示前",
+    "topWithOther": "显示前",
+    "topOnlyLabel": "仅显示前",
+    "topWithOtherLabel": "显示前",
+    "topWithOtherSuffix": "项，其余合并为“其他”",
+    "otherResultsDescription": "其余数据合并为“其他”",
+    "topCount": "仅展示前 X 项的数量",
+    "topCountWithOther": "前 X 项加其他的数量",
+    "resultsUnit": "项",
+    "resultsWithOther": "项，其余合并为“其他”",
+    "otherResults": "其他",
+    "otherResultsHint": "仅当数据超过设置数量时生成“其他”",
     "limitResults": "条",
     "updateChartData": "更新图表数据",
     "dataSelection": "数据选择",
@@ -70,7 +82,8 @@
       "invalidMetricFields": "指标包含无效字段，请重新选择"
     },
     "dialog": {
-      "chartUpdated": "图表已更新",
+      "chartUpdated": "图表预览已更新",
+      "chartChangesCancelled": "已还原未保存的图表改动",
       "editDisplayName": "编辑显示名称",
       "displayRequired": "名称不能为空",
       "originalName": "原始名称",
@@ -385,7 +398,8 @@
     "pieChart": "饼图",
     "donutChart": "环形图",
     "others": "其他",
-    "metricCard": "指标卡"
+    "metricCard": "指标卡",
+    "pivotTable": "交叉表"
   },
   "mid_user_increment": "用户规模统计",
   "timestamp": {
@@ -482,5 +496,31 @@
   "mid_user_interact_dtl": "用户反馈统计",
   "like_count": "点赞次数",
   "dislike_count": "点踩次数",
-  "copy_count": "复制次数"
+  "copy_count": "复制次数",
+  "mid_realtime_qa_question_fact": "实时问答统计",
+  "expert_qa_count": "专家问答数",
+  "smart_qa_count": "智能问答数",
+  "document_qa_count": "文档内AI对话数",
+  "qa_user_count": "提问人数",
+  "qa_type": "问答类型编码",
+  "qa_type_name": "问答类型",
+  "primary_department_id": "主部门ID",
+  "primary_department_name": "主部门",
+  "department_source": "部门口径来源",
+  "business_domain_code": "业务域编码",
+  "scene": "问答场景",
+  "source_app": "来源应用",
+  "mid_user_daily_participation": "全员每日参与度",
+  "participation_rate": "全员参与占比",
+  "logged_in_employee_count": "实际登录人数",
+  "active_employee_count": "全员总数",
+  "login_count": "实际登录次数",
+  "local_date": "自然日",
+  "space_level": "知识库大类编码",
+  "space_level_name": "知识库大类",
+  "file_category_code": "知识分类编码",
+  "file_category_name": "知识分类",
+  "file_subcategory_code": "二级知识分类编码",
+  "file_subcategory_name": "二级知识分类",
+  "business_domain_name": "业务域"
 }

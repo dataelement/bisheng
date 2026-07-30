@@ -2953,11 +2953,15 @@ async def test_shougang_portal_tags_filters_by_business_domain_code(service):
 
 @pytest.mark.asyncio
 async def test_shougang_portal_qa_file_search_sorts_object_tags(service):
+    service.version_repo = None
     space = _make_space(space_id=12, user_id=7)
     space.name = "热轧知识库"
     files = [
         _make_file(file_id=1580, knowledge_id=12, file_name="精轧机振动纹治理.pdf"),
+        _make_file(file_id=1581, knowledge_id=12, file_name="精轧机振动纹内部复盘.pdf"),
     ]
+    visible_files = [files[0]]
+    visibility_filter = AsyncMock(return_value=visible_files)
 
     with (
         patch(
@@ -2972,9 +2976,14 @@ async def test_shougang_portal_qa_file_search_sorts_object_tags(service):
         ),
         patch.object(
             service,
-            "_filter_shougang_portal_visible_files",
+            "_filter_visible_child_items",
+            visibility_filter,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_recycle_service."
+            "KnowledgeRecycleService.list_recycled_file_ids",
             new_callable=AsyncMock,
-            return_value=files,
+            return_value=[],
         ),
         patch.object(
             service,
@@ -3005,12 +3014,13 @@ async def test_shougang_portal_qa_file_search_sorts_object_tags(service):
 
     assert result["total"] == 1
     assert result["data"][0]["id"] == 1580
-    assert result["data"][0]["tags"] == ["振动纹"]
     assert result["data"][0]["tag_infos"] == [{"tag_name": "振动纹", "resource_type": ""}]
+    visibility_filter.assert_awaited_once_with(files, space_id=12)
 
 
 @pytest.mark.asyncio
 async def test_shougang_portal_qa_file_search_enables_file_encoding_match(service):
+    service.version_repo = None
     space = _make_space(space_id=12, user_id=7)
     files = [
         _make_file(file_id=1580, knowledge_id=12, file_name="精轧机振动纹治理.pdf"),
@@ -3029,9 +3039,15 @@ async def test_shougang_portal_qa_file_search_enables_file_encoding_match(servic
         ),
         patch.object(
             service,
-            "_filter_shougang_portal_visible_files",
+            "_filter_visible_child_items",
             new_callable=AsyncMock,
             return_value=files,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_recycle_service."
+            "KnowledgeRecycleService.list_recycled_file_ids",
+            new_callable=AsyncMock,
+            return_value=[],
         ),
         patch.object(
             service,
@@ -8533,7 +8549,7 @@ class TestTupleLifecycle:
                 new_callable=AsyncMock,
             ) as mock_delete_files,
             patch(
-                "bisheng.knowledge.domain.services.knowledge_space_service.file_worker.parse_knowledge_file_celery.delay",
+                "bisheng.knowledge.domain.services.knowledge_space_service._get_parse_knowledge_file_task",
             ) as mock_parse,
             patch(
                 "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_knowledge_update_time_by_id",
@@ -8624,7 +8640,7 @@ class TestTupleLifecycle:
                 new_callable=AsyncMock,
             ) as mock_delete_files,
             patch(
-                "bisheng.knowledge.domain.services.knowledge_space_service.file_worker.parse_knowledge_file_celery.delay",
+                "bisheng.knowledge.domain.services.knowledge_space_service._get_parse_knowledge_file_task",
             ) as mock_parse,
             patch(
                 "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_knowledge_update_time_by_id",
@@ -8769,7 +8785,7 @@ class TestTupleLifecycle:
                 new_callable=AsyncMock,
             ) as mock_delete_files,
             patch(
-                "bisheng.knowledge.domain.services.knowledge_space_service.file_worker.parse_knowledge_file_celery.delay",
+                "bisheng.knowledge.domain.services.knowledge_space_service._get_parse_knowledge_file_task",
             ) as mock_parse,
             patch(
                 "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_knowledge_update_time_by_id",
@@ -8841,7 +8857,7 @@ class TestTupleLifecycle:
                 new_callable=AsyncMock,
             ) as mock_delete_files,
             patch(
-                "bisheng.knowledge.domain.services.knowledge_space_service.file_worker.parse_knowledge_file_celery.delay",
+                "bisheng.knowledge.domain.services.knowledge_space_service._get_parse_knowledge_file_task",
             ) as mock_parse,
             patch(
                 "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_knowledge_update_time_by_id",

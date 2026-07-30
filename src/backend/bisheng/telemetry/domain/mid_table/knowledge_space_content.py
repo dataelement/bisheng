@@ -10,6 +10,12 @@ from pydantic import Field
 from bisheng.common.schemas.telemetry.base_telemetry_schema import UserDepartmentInfo, UserGroupInfo, UserRoleInfo
 from bisheng.core.cache.redis_manager import get_redis_client, get_redis_client_sync
 from bisheng.core.database import get_async_db_session
+from bisheng.knowledge.domain.constants import (
+    BUSINESS_DOMAIN_OPTIONS,
+    get_business_domain_code_from_file,
+    get_file_category_code_from_file,
+    normalize_file_category_code,
+)
 from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 from bisheng.telemetry.domain.mid_table.base import BaseMidTable, BaseRecord
@@ -17,15 +23,37 @@ from bisheng.user.domain.repositories.implementations.user_repository_impl impor
 from bisheng.utils import generate_uuid
 
 
+SPACE_LEVEL_LABELS = {
+    "public": "公共库",
+    "department": "部门库",
+    "team": "团队库",
+    "team_ks": "科室库",
+    "personal": "个人库",
+    "unknown": "未分类知识库",
+}
+
+
 class KnowledgeSpaceContentRecord(BaseRecord):
     record_type: str
     sync_run_id: str | None = None
+    tenant_id: int = 1
 
     space_id: int
     space_name: str
+    space_level: str = "unknown"
+    space_level_name: str = SPACE_LEVEL_LABELS["unknown"]
     file_id: int
     file_name: str
     file_type: int
+    file_category_code: str | None = None
+    file_category_name: str | None = None
+    file_subcategory_code: str | None = None
+    file_subcategory_name: str | None = None
+    business_domain_code: str | None = None
+    business_domain_name: str | None = None
+    primary_department_id: int | None = None
+    primary_department_name: str | None = None
+    projection_updated_at: int | None = None
 
     uploader_user_id: int
     uploader_user_name: str
@@ -39,14 +67,15 @@ class KnowledgeSpaceContentRecord(BaseRecord):
 
 class KnowledgeSpaceContentStat(BaseMidTable):
     _index_name: str = "mid_knowledge_space_content_stat"
+    _update_mappings_on_existing: bool = True
     FILE_PENDING_KEY: ClassVar[str] = "telemetry:knowledge_space_content:file_pending"
     PREVIEW_PENDING_KEY: ClassVar[str] = "telemetry:knowledge_space_content:preview_pending"
     SPACE_RENAME_PENDING_KEY: ClassVar[str] = "telemetry:knowledge_space_content:space_rename_pending"
     SPACE_DELETE_PENDING_KEY: ClassVar[str] = "telemetry:knowledge_space_content:space_delete_pending"
     SCHEDULED_KEY: ClassVar[str] = "telemetry:knowledge_space_content:scheduled"
     LOCK_KEY: ClassVar[str] = "telemetry:knowledge_space_content:lock"
-    SCHEDULE_DELAY_SECONDS: ClassVar[int] = 5
-    SCHEDULE_TTL_SECONDS: ClassVar[int] = 10
+    SCHEDULE_DELAY_SECONDS: ClassVar[int] = 2
+    SCHEDULE_TTL_SECONDS: ClassVar[int] = 5
     LOCK_TTL_SECONDS: ClassVar[int] = 60
     FILE_BATCH_SIZE: ClassVar[int] = 500
     PREVIEW_BATCH_SIZE: ClassVar[int] = 500
@@ -55,9 +84,36 @@ class KnowledgeSpaceContentStat(BaseMidTable):
         "sync_run_id": {"type": "keyword"},
         "space_id": {"type": "keyword", "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}}},
         "space_name": {"type": "keyword", "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}}},
+        "tenant_id": {"type": "keyword"},
+        "space_level": {"type": "keyword"},
+        "space_level_name": {
+            "type": "keyword",
+            "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}},
+        },
         "file_id": {"type": "keyword", "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}}},
         "file_name": {"type": "keyword", "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}}},
         "file_type": {"type": "integer"},
+        "file_category_code": {"type": "keyword"},
+        "file_category_name": {
+            "type": "keyword",
+            "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}},
+        },
+        "file_subcategory_code": {"type": "keyword"},
+        "file_subcategory_name": {
+            "type": "keyword",
+            "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}},
+        },
+        "business_domain_code": {"type": "keyword"},
+        "business_domain_name": {
+            "type": "keyword",
+            "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}},
+        },
+        "primary_department_id": {"type": "keyword"},
+        "primary_department_name": {
+            "type": "keyword",
+            "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}},
+        },
+        "projection_updated_at": {"type": "date", "format": "strict_date_optional_time||epoch_second"},
         "uploader_user_id": {
             "type": "keyword",
             "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}},
@@ -399,6 +455,10 @@ class KnowledgeSpaceContentStat(BaseMidTable):
         file_record: KnowledgeFile,
         space: Knowledge,
         uploader=None,
+        space_level: str | None = None,
+        primary_department=None,
+        file_category_labels: dict[str, str] | None = None,
+        file_subcategory_labels: dict[str, str] | None = None,
         sync_run_id: str | None = None,
     ) -> KnowledgeSpaceContentRecord:
         uploader_user_id = int(file_record.user_id or 0)
@@ -411,10 +471,38 @@ class KnowledgeSpaceContentStat(BaseMidTable):
             if uploader
             else []
         )
+        if primary_department is None and uploader:
+            raw_primary_department_id = getattr(uploader, "dept_id", None)
+            try:
+                primary_department_id = int(raw_primary_department_id or 0)
+            except (TypeError, ValueError):
+                primary_department_id = 0
+            primary_department = next(
+                (
+                    department
+                    for department in getattr(uploader, "departments", []) or []
+                    if int(getattr(department, "id", 0) or 0) == primary_department_id
+                ),
+                None,
+            )
+        normalized_space_level = str(getattr(space_level, "value", space_level) or "unknown").strip().lower()
+        if normalized_space_level not in SPACE_LEVEL_LABELS:
+            normalized_space_level = "unknown"
+
+        file_category_code = get_file_category_code_from_file(file_record)
+        file_subcategory_code = normalize_file_category_code(
+            getattr(file_record, "file_subcategory_code", None)
+        )
+        business_domain_code = get_business_domain_code_from_file(file_record)
+        file_category_labels = file_category_labels or {}
+        file_subcategory_labels = file_subcategory_labels or {}
+        projection_updated_at = int(datetime.now().timestamp())
+
         return KnowledgeSpaceContentRecord(
             es_id=f"file_{file_record.id}",
             record_type="file",
             sync_run_id=sync_run_id,
+            tenant_id=int(getattr(file_record, "tenant_id", None) or getattr(space, "tenant_id", None) or 1),
             user_id=uploader_user_id,
             user_name=uploader_user_name,
             user_group_infos=[
@@ -433,9 +521,29 @@ class KnowledgeSpaceContentStat(BaseMidTable):
             timestamp=int((file_record.create_time or datetime.now()).timestamp()),
             space_id=int(space.id),
             space_name=space.name,
+            space_level=normalized_space_level,
+            space_level_name=SPACE_LEVEL_LABELS[normalized_space_level],
             file_id=int(file_record.id),
             file_name=file_record.file_name,
             file_type=int(file_record.file_type),
+            file_category_code=file_category_code,
+            file_category_name=file_category_labels.get(file_category_code, file_category_code),
+            file_subcategory_code=file_subcategory_code,
+            file_subcategory_name=file_subcategory_labels.get(
+                file_subcategory_code,
+                file_subcategory_code,
+            ),
+            business_domain_code=business_domain_code,
+            business_domain_name=BUSINESS_DOMAIN_OPTIONS.get(
+                business_domain_code,
+                business_domain_code,
+            ),
+            primary_department_id=(
+                int(getattr(primary_department, "id", None) or getattr(primary_department, "department_id", 0))
+                or None
+            ),
+            primary_department_name=getattr(primary_department, "name", None),
+            projection_updated_at=projection_updated_at,
             uploader_user_id=uploader_user_id,
             uploader_user_name=uploader_user_name,
             uploader_department_infos=uploader_departments,

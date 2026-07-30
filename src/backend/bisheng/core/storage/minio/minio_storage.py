@@ -105,7 +105,8 @@ class MinioStorage(BaseStorage, ABC):
                 },
                 "Action": ["s3:GetObject"],
                 "Resource": [f"arn:aws:s3:::{self.bucket}/knowledge/images/*",
-                             f"arn:aws:s3:::{self.bucket}/tmp/images/*"]
+                             f"arn:aws:s3:::{self.bucket}/tmp/images/*",
+                             f"arn:aws:s3:::{self.bucket}/portal-assets/*"]
             }]
         }
         try:
@@ -129,6 +130,71 @@ class MinioStorage(BaseStorage, ABC):
 
     async def create_bucket(self, bucket_name: str) -> None:
         return await asyncio.to_thread(self.create_bucket_sync, bucket_name=bucket_name)
+
+    async def ensure_public_read_prefix(
+        self,
+        *,
+        bucket_name: str,
+        object_prefix: str,
+    ) -> None:
+        await asyncio.to_thread(
+            self.ensure_public_read_prefix_sync,
+            bucket_name=bucket_name,
+            object_prefix=object_prefix,
+        )
+
+    def ensure_public_read_prefix_sync(
+        self,
+        *,
+        bucket_name: str,
+        object_prefix: str,
+    ) -> None:
+        normalized_prefix = object_prefix.strip().lstrip("/")
+        if not normalized_prefix or ".." in normalized_prefix.split("/"):
+            raise ValueError("public object prefix is invalid")
+        resource = f"arn:aws:s3:::{bucket_name}/{normalized_prefix}*"
+        try:
+            raw_policy = self.minio_client_sync.get_bucket_policy(bucket_name)
+            policy = json.loads(raw_policy)
+        except Exception as exc:
+            if "NoSuchBucketPolicy" not in str(exc):
+                raise
+            policy = {"Version": "2012-10-17", "Statement": []}
+
+        statements = policy.setdefault("Statement", [])
+        for statement in statements:
+            actions = statement.get("Action") or []
+            if isinstance(actions, str):
+                actions = [actions]
+            resources = statement.get("Resource") or []
+            if isinstance(resources, str):
+                resources = [resources]
+            if (
+                statement.get("Effect") == "Allow"
+                and statement.get("Principal") == {"AWS": ["*"]}
+                and "s3:GetObject" in actions
+            ):
+                if resource in resources:
+                    return
+                statement["Resource"] = [*resources, resource]
+                self.minio_client_sync.set_bucket_policy(
+                    bucket_name,
+                    json.dumps(policy),
+                )
+                return
+
+        statements.append(
+            {
+                "Effect": "Allow",
+                "Principal": {"AWS": ["*"]},
+                "Action": ["s3:GetObject"],
+                "Resource": [resource],
+            }
+        )
+        self.minio_client_sync.set_bucket_policy(
+            bucket_name,
+            json.dumps(policy),
+        )
 
     def create_bucket_sync(self, bucket_name: str) -> None:
         if not self.minio_client_sync.bucket_exists(bucket_name):

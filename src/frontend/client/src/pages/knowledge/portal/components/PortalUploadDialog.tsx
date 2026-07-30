@@ -74,12 +74,14 @@ function UploadFolderNode({
     node,
     depth,
     uploadFolderId,
+    isManualMode,
     onToggleUploadFolder,
     onSelectUploadFolder,
 }: {
     node: PortalUploadFolderNode;
     depth: number;
     uploadFolderId: string | null;
+    isManualMode: boolean;
     onToggleUploadFolder: (node: PortalUploadFolderNode) => void;
     onSelectUploadFolder: (folderId: string | null, folderName: string) => void;
 }): ReactNode {
@@ -96,7 +98,7 @@ function UploadFolderNode({
                 </button>
                 <button
                     type="button"
-                    className={`${s.uploadFolderSelectButton} ${uploadFolderId === node.id ? s.uploadFolderSelectButtonActive : ""}`}
+                    className={`${s.uploadFolderSelectButton} ${isManualMode && uploadFolderId === node.id ? s.uploadFolderSelectButtonActive : ""}`}
                     aria-label={`选择上传目录${node.name}`}
                     onClick={() => onSelectUploadFolder(node.id, node.name)}
                 >
@@ -115,6 +117,7 @@ function UploadFolderNode({
                     node={child}
                     depth={depth + 1}
                     uploadFolderId={uploadFolderId}
+                    isManualMode={isManualMode}
                     onToggleUploadFolder={onToggleUploadFolder}
                     onSelectUploadFolder={onSelectUploadFolder}
                 />
@@ -196,7 +199,7 @@ export function PortalUploadDialog({
         && !uploadSubmitting
         && fileCategoryTouched
         && businessDomainTouched
-        && (uploadFolderSelection.mode === "manual" || uploadFolderSelection.mode === "ai");
+        && uploadFolderSelection.mode !== "none";
 
     return (
         <Dialog
@@ -407,6 +410,7 @@ export function PortalUploadDialog({
                                                         node={node}
                                                         depth={0}
                                                         uploadFolderId={uploadFolderId}
+                                                        isManualMode={uploadFolderSelection.mode === "manual"}
                                                         onToggleUploadFolder={onToggleUploadFolder}
                                                         onSelectUploadFolder={onSelectUploadFolder}
                                                     />

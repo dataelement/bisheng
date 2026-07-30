@@ -31,9 +31,10 @@ describe("isFavoriteSpace", () => {
 
 describe("toFavoriteRow", () => {
     it("maps an invalid favorite to a non-openable row", () => {
-        const row = toFavoriteRow(makeFav({ status: "invalid" }));
+        const row = toFavoriteRow(makeFav({ status: "invalid", invalidReason: "source_deleted" }));
         expect(row.invalid).toBe(true);
         expect(row.openable).toBe(false);
+        expect(row.invalidReason).toBe("source_deleted");
     });
 
     it("maps a valid favorite to an openable row", () => {

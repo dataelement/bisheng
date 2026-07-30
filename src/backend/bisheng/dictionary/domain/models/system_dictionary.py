@@ -13,8 +13,8 @@ from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT
 class DictionaryType(str, Enum):
     """专家职位相关字典类型"""
 
-    EXPERT_POSITION = "expert_position"  # 岗位
-    EXPERT_TITLE = "expert_title"  # 职务
+    EXPERT_MAJOR = "expert_major"  # 岗位
+    EXPERT_POSITION = "expert_position"  # 职务
     EXPERT_JOB_FAMILY = "expert_job_family"  # 职位族
     EXPERT_JOB_CATEGORY = "expert_job_category"  # 职位类
 

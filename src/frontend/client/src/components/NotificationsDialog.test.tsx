@@ -12,7 +12,10 @@ jest.mock("react-i18next", () => ({
 
 jest.mock("~/hooks/useLocalize", () => ({
   __esModule: true,
-  default: () => (key: string) => key,
+  default: () => (key: string, vars?: Record<string, string>) =>
+    vars?.before
+      ? `${key} ${vars.target ?? ""} ${vars.before} ${vars.after}`
+      : key,
 }));
 
 jest.mock("~/Providers", () => ({
@@ -286,6 +289,51 @@ describe("NotificationsDialog approval jump", () => {
 
     expect(openSpy).not.toHaveBeenCalled();
     expect(onOpenChange).not.toHaveBeenCalled();
+    openSpy.mockRestore();
+  });
+
+  it("renders favorite change values and navigates deletion to the favorite space", async () => {
+    const openSpy = jest.spyOn(window, "open").mockImplementation(() => null);
+    jest.mocked(getMessageListApi).mockResolvedValue({
+      total: 1,
+      data: [{
+        id: 701,
+        sender: 7,
+        sender_name: "Editor",
+        message_type: "notify",
+        action_code: "favorite_source_deleted",
+        status: "approved",
+        is_read: true,
+        create_time: "2026-07-30T10:00:00Z",
+        update_time: "2026-07-30T10:00:00Z",
+        content: [
+          { type: "system_text", content: "favorite_source_deleted" },
+          {
+            type: "business_url",
+            content: "制度.pdf",
+            metadata: {
+              business_type: "knowledge_space_id",
+              data: {
+                knowledge_space_id: "101",
+                favorite_change: {
+                  before_value: "旧制度.pdf",
+                  after_value: "新制度.pdf",
+                },
+              },
+            },
+          },
+        ],
+      }],
+    });
+
+    render(<NotificationsDialog open />);
+
+    expect(await screen.findByText(/旧制度\.pdf 新制度\.pdf/)).toBeInTheDocument();
+    fireEvent.click(screen.getByText("制度.pdf"));
+    expect(openSpy).toHaveBeenCalledWith(
+      expect.stringContaining("/knowledge/space/101"),
+      "_blank",
+    );
     openSpy.mockRestore();
   });
 });

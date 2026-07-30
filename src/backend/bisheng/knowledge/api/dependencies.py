@@ -5,11 +5,11 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.common.dependencies.core_deps import get_db_session
 from bisheng.common.dependencies.user_deps import UserPayload
-from bisheng.knowledge.domain.repositories.implementations.department_space_binding_repository_impl import (
-    DepartmentSpaceBindingRepositoryImpl,
-)
 from bisheng.knowledge.domain.repositories.implementations.department_file_view_grant_repository_impl import (
     DepartmentFileViewGrantRepositoryImpl,
+)
+from bisheng.knowledge.domain.repositories.implementations.department_space_binding_repository_impl import (
+    DepartmentSpaceBindingRepositoryImpl,
 )
 from bisheng.knowledge.domain.repositories.implementations.knowledge_document_repository_impl import (
     KnowledgeDocumentRepositoryImpl,
@@ -24,6 +24,9 @@ from bisheng.knowledge.domain.repositories.implementations.knowledge_file_simila
     KnowledgeFileSimilarityCandidateRepositoryImpl,
 )
 from bisheng.knowledge.domain.repositories.implementations.knowledge_repository_impl import KnowledgeRepositoryImpl
+from bisheng.knowledge.domain.repositories.interfaces.department_file_view_grant_repository import (
+    DepartmentFileViewGrantRepository,
+)
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_document_repository import (
     KnowledgeDocumentRepository,
 )
@@ -35,16 +38,13 @@ from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_similarity_
     KnowledgeFileSimilarityCandidateRepository,
 )
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_repository import KnowledgeRepository
-from bisheng.knowledge.domain.repositories.interfaces.department_file_view_grant_repository import (
-    DepartmentFileViewGrantRepository,
-)
-from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import KnowledgeAuditTelemetryService
 from bisheng.knowledge.domain.services.department_file_view_access_service import (
     DepartmentFileViewAccessService,
 )
 from bisheng.knowledge.domain.services.department_file_view_lifecycle_service import (
     DepartmentFileViewLifecycleService,
 )
+from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import KnowledgeAuditTelemetryService
 from bisheng.knowledge.domain.services.knowledge_metadata_service import KnowledgeMetadataService
 from bisheng.knowledge.domain.services.knowledge_permission_service import KnowledgePermissionService
 from bisheng.message.api.dependencies import get_message_service as _get_message_service
@@ -327,6 +327,9 @@ async def get_knowledge_version_service(
     similar_candidate_repo: KnowledgeFileSimilarityCandidateRepository = Depends(
         get_knowledge_file_similarity_candidate_repository
     ),
+    department_file_view_access_service: DepartmentFileViewAccessService = Depends(
+        get_department_file_view_access_service
+    ),
 ) -> "KnowledgeVersionService":
     """Get KnowledgeVersionService instance, bound to the current request and login user."""
     from bisheng.knowledge.domain.services.knowledge_document_distribution_service import (
@@ -353,6 +356,7 @@ async def get_knowledge_version_service(
     )
     # 版本关联变更时给收藏了受影响文件的用户发站内信，需要 message_service。
     service.message_service = await _get_message_service(session)
+    service.department_file_view_access_service = department_file_view_access_service
     authorization_service = KnowledgeSpaceService(
         request=request,
         login_user=login_user,

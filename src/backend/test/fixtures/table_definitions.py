@@ -362,6 +362,7 @@ CREATE TABLE IF NOT EXISTS knowledgefile (
     projection_lease_owner VARCHAR(64),
     projection_lease_until DATETIME,
     projection_last_error TEXT,
+    deleted_at DATETIME,
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
 )"""

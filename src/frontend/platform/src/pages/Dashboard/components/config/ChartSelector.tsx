@@ -40,6 +40,7 @@ interface ChartSelectorProps {
 /* ================== 组件 ================== */
 export default function ChartSelector({
   onSave,
+  onCancel: onCancelChanges,
 }: ChartSelectorProps) {
   const { t } = useTranslation("dashboard")
   const [selectedCharts, setSelectedCharts] = useState<string[]>([])
@@ -62,7 +63,7 @@ export default function ChartSelector({
     if (config && 'linkedComponentIds' in config) {
       setSelectedCharts(config.linkedComponentIds || [])
 
-      if (config.queryConditions) {
+      if ('queryConditions' in config && config.queryConditions) {
         const queryCond = config.queryConditions
 
         if (queryCond.displayType) {
@@ -128,13 +129,15 @@ export default function ChartSelector({
     }
   }, [editingComponent, t])
   const onCancel = () => {
+    onCancelChanges?.()
+
     // 重置到编辑前的状态
     const config = editingComponent?.data_config
 
     if (config && 'linkedComponentIds' in config) {
       setSelectedCharts(config.linkedComponentIds || [])
 
-      if (config.queryConditions) {
+      if ('queryConditions' in config && config.queryConditions) {
         const queryCond = config.queryConditions
 
         if (queryCond.displayType) {
@@ -206,7 +209,7 @@ export default function ChartSelector({
   const charts = currentDashboard
     ? currentDashboard.components
       .filter(component =>
-        component.type !== 'query'
+        !['query', 'dimension-filter'].includes(component.type)
       )
       .map(component => ({
         id: component.id,

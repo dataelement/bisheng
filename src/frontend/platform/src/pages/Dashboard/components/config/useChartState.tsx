@@ -2,14 +2,17 @@
 "use client"
 
 import { useState, useMemo, useEffect, useCallback, useRef } from "react"
-import { ChartType, ComponentStyleConfig, DashboardComponent, DataConfig } from "../../types/dataConfig"
+import { ChartType, ComponentStyleConfig, DashboardComponent, DataConfig, MAX_METRIC_CARD_METRICS } from "../../types/dataConfig"
 import { generateUUID } from "@/components/bs-ui/utils"
 import { useToast } from "@/components/bs-ui/toast/use-toast"
 import { useComponentEditorStore, useEditorDashboardStore } from "@/store/dashboardStore"
 import { useTranslation } from "react-i18next"
 
 
-export function useChartState(initialComponent: DashboardComponent) {
+export function useChartState(
+  initialComponent: DashboardComponent,
+  draftVersion = 0
+) {
   const { t } = useTranslation("dashboard")
   const editingComponentIdRef = useRef<string | null>(null)
 
@@ -36,18 +39,21 @@ export function useChartState(initialComponent: DashboardComponent) {
   }, [initialComponent, updateEditingComponent, refreshChart]);
 
   const isStackedChart = (type: ChartType) =>
-    type.startsWith('stacked-') || type.startsWith('grouped-');
+    type.startsWith('stacked-') || type.startsWith('grouped-') || type === ChartType.PivotTable;
   // 初始化逻辑
   // 在 useEffect 初始化中添加 sortPriorityOrder 的初始化
   useEffect(() => {
     const componentId = initialComponent?.id
+    const componentDraftKey = componentId
+      ? `${componentId}:${draftVersion}`
+      : null
     const currentId = editingComponentIdRef.current
 
-    if (componentId && currentId !== componentId) {
+    if (componentId && currentId !== componentDraftKey) {
       console.log('重新初始化组件配置，因为组件ID变化:', componentId)
       console.log('原始组件数据:', initialComponent)
 
-      editingComponentIdRef.current = componentId
+      editingComponentIdRef.current = componentDraftKey
 
       // 清空之前的维度数据
       setCategoryDimensions([])
@@ -190,7 +196,7 @@ export function useChartState(initialComponent: DashboardComponent) {
     if (!initialComponent) {
       editingComponentIdRef.current = null
     }
-  }, [initialComponent?.id, initialComponent?.type])
+  }, [initialComponent?.id, initialComponent?.type, draftVersion])
 
   // 计算属性
   const sortPriorityFields = useMemo(() => {
@@ -426,8 +432,17 @@ export function useChartState(initialComponent: DashboardComponent) {
         return
       }
 
-      const STACKED_CHART_TYPES = new Set(['stacked-bar', 'stacked-horizontal-bar', 'stacked-line']);
-      const maxMetricCount = STACKED_CHART_TYPES.has(chartType) ? 3 : 1;
+      const STACKED_CHART_TYPES = new Set([
+        'stacked-bar',
+        'stacked-horizontal-bar',
+        'stacked-line',
+        ChartType.PivotTable,
+      ]);
+      const maxMetricCount = chartType === ChartType.PivotTable
+        ? 1
+        : chartType === ChartType.Metric
+          ? MAX_METRIC_CARD_METRICS
+          : STACKED_CHART_TYPES.has(chartType) ? 3 : 1;
 
       //指标维度只能有一个
       if (section === 'value' && valueDimensions.length >= maxMetricCount) {
@@ -584,7 +599,11 @@ export function useChartState(initialComponent: DashboardComponent) {
   }, [])
 
   // 获取数据配置
-  const getDataConfig = useCallback((limitType: "all" | "limit", limitValue: string, timeFilter?: any): DataConfig => {
+  const getDataConfig = useCallback((
+    limitType: "all" | "limit" | "limitWithOther",
+    limitValue: string,
+    timeFilter?: any,
+  ): DataConfig => {
     const dimensions = categoryDimensions.slice(0, 2).map(dim => ({
       fieldId: dim.fieldId,
       fieldName: dim.originalName,
@@ -725,8 +744,12 @@ export function useChartState(initialComponent: DashboardComponent) {
       filters,
       timeFilter,
       resultLimit: {
-        limitType: limitType === "limit" ? "limited" as const : "all" as const,
-        ...(limitType === "limit" && { limit: Number(limitValue) })
+        limitType: limitType === "limit"
+          ? "limited" as const
+          : limitType === "limitWithOther"
+            ? "limited_with_other" as const
+            : "all" as const,
+        ...(limitType !== "all" && { limit: Number(limitValue) })
       },
       filtersLogic: filterGroup?.logic || 'and',
       isConfigured: true,
