@@ -74,11 +74,9 @@ class LiveMigrationEvidenceProvider:
         *,
         source_client: FGAClient,
         target_writer: SqlOpenFGAMigrationTargetWriter,
-        runtime_config: Any,
     ) -> None:
         self._source_client = source_client
         self._target_writer = target_writer
-        self._runtime_config = runtime_config
         self._migration_repository = MigrationRepository()
 
     async def acollect(
@@ -123,7 +121,10 @@ class LiveMigrationEvidenceProvider:
             consistency=consistency,
         )
         difference_types = [row.difference_type for row in items if row.difference_type]
-        catalog, model_release = await self._release_rows(run.target_model_id)
+        catalog, model_release = await self._release_rows(
+            run.store_id,
+            run.target_model_id,
+        )
         preserved_expected = self._preserved_tuple_identities(items)
         return MigrationVerificationEvidence(
             source_checksum=source_checksum,
@@ -173,9 +174,10 @@ class LiveMigrationEvidenceProvider:
             ),
             semantic_results=semantic_results,
             instance_pins=(
-                self._configured_pin(
+                self._migration_target_pin(
                     run=run,
                     catalog=catalog,
+                    model_release=model_release,
                 ),
             ),
         )
@@ -303,6 +305,7 @@ class LiveMigrationEvidenceProvider:
 
     @staticmethod
     async def _release_rows(
+        store_id: str,
         model_id: str,
     ) -> tuple[
         PermissionCatalogRelease | None,
@@ -323,7 +326,10 @@ class LiveMigrationEvidenceProvider:
             model_release = (
                 (
                     await session.execute(
-                        select(AuthorizationModelRelease).where(AuthorizationModelRelease.model_id == model_id)
+                        select(AuthorizationModelRelease).where(
+                            AuthorizationModelRelease.store_id == store_id,
+                            AuthorizationModelRelease.model_id == model_id,
+                        )
                     )
                 )
                 .scalars()
@@ -430,26 +436,34 @@ class LiveMigrationEvidenceProvider:
                 expected.add(_identity(source))
         return expected
 
-    def _configured_pin(
-        self,
+    @staticmethod
+    def _migration_target_pin(
         *,
         run: MigrationRunState,
         catalog: PermissionCatalogRelease | None,
+        model_release: AuthorizationModelRelease | None,
     ) -> InstancePinEvidence:
-        config = self._runtime_config
+        expected_checksum = authorization_model_checksum(
+            build_authorization_model_f048()
+        )
         return InstancePinEvidence(
-            role="configured-runtime",
+            role="migration-target",
             ready=bool(
                 catalog
-                and config.store_id == run.store_id
-                and config.model_id == run.target_model_id
-                and config.model_checksum == authorization_model_checksum(build_authorization_model_f048())
-                and config.current_catalog_release_id == catalog.id
-                and config.current_catalog_checksum == catalog.checksum
+                and model_release
+                and catalog.status == "CURRENT"
+                and catalog.required_authorization_model_release_id
+                == model_release.id
+                and model_release.status == "STAGED"
+                and model_release.store_id == run.store_id
+                and model_release.model_id == run.target_model_id
+                and model_release.model_checksum == expected_checksum
             ),
-            store_id=str(config.store_id or ""),
-            model_id=str(config.model_id or ""),
-            catalog_release_id=(int(config.current_catalog_release_id) if config.current_catalog_release_id else None),
-            dual_model_mode=bool(config.dual_model_mode),
-            legacy_model_id=config.legacy_model_id,
+            store_id=str(model_release.store_id if model_release else ""),
+            model_id=str(model_release.model_id if model_release else ""),
+            catalog_release_id=(
+                int(catalog.id) if catalog and catalog.id else None
+            ),
+            dual_model_mode=False,
+            legacy_model_id=None,
         )

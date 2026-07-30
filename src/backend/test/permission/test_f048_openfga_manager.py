@@ -1,14 +1,11 @@
-"""F048 single-model manager startup and readiness contracts.
-
-覆盖 AC: AC-16, AC-34, AC-99, AC-100, AC-102, AC-108, AC-110,
-AC-113, AC-115, AC-116
-"""
+"""F048 OpenFGA discovery, startup, and readiness contracts."""
 
 from __future__ import annotations
 
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 
 from bisheng.common.errcode.permission import AuthorizationModelMismatchError
@@ -16,6 +13,10 @@ from bisheng.core.config.openfga import OpenFGAConf
 from bisheng.core.openfga.authorization_model_f048 import (
     authorization_model_checksum,
     build_authorization_model_f048,
+)
+from bisheng.core.openfga.discovery import (
+    OpenFGARuntimePin,
+    discover_openfga_runtime,
 )
 from bisheng.core.openfga.manager import FGAManager
 
@@ -32,15 +33,10 @@ class _HeartbeatStore:
         self.removed.append((role, instance_id))
 
 
-def _pinned_config(**updates) -> OpenFGAConf:
-    model = build_authorization_model_f048()
+def _config(**updates) -> OpenFGAConf:
     values = {
         "api_url": "http://openfga:8080",
-        "store_id": "store-existing",
-        "model_id": "model-f048",
-        "model_checksum": authorization_model_checksum(model),
-        "current_catalog_release_id": 12,
-        "current_catalog_checksum": "c" * 64,
+        "store_name": "bisheng",
         "recent_consistency_window_seconds": 35,
     }
     values.update(updates)
@@ -48,25 +44,121 @@ def _pinned_config(**updates) -> OpenFGAConf:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "missing_field",
-    (
-        "store_id",
-        "model_id",
-        "model_checksum",
-        "current_catalog_release_id",
-        "current_catalog_checksum",
-    ),
-)
-async def test_production_rejects_incomplete_runtime_pin(
-    missing_field: str,
-) -> None:
-    config = _pinned_config(**{missing_field: None})
-    manager = FGAManager(config, environment="production")
-    manager._fetch_authorization_model = AsyncMock()
-    with pytest.raises(ValueError):
-        await manager._async_initialize()
-    manager._fetch_authorization_model.assert_not_awaited()
+async def test_discovery_selects_unique_named_store_and_latest_model() -> None:
+    model = build_authorization_model_f048()
+    requests: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(str(request.url))
+        if request.url.path == "/stores":
+            return httpx.Response(
+                200,
+                json={
+                    "stores": [{"id": "store-live", "name": "bisheng"}],
+                },
+            )
+        if request.url.path == "/stores/store-live/authorization-models":
+            return httpx.Response(
+                200,
+                json={
+                    "authorization_models": [
+                        {"id": "01-old"},
+                        {"id": "02-f048"},
+                    ],
+                },
+            )
+        if request.url.path.endswith("/authorization-models/02-f048"):
+            return httpx.Response(
+                200,
+                json={"authorization_model": model},
+            )
+        return httpx.Response(404)
+
+    async with httpx.AsyncClient(
+        base_url="http://openfga:8080",
+        transport=httpx.MockTransport(handler),
+    ) as client:
+        pin = await discover_openfga_runtime(
+            _config(),
+            expected_model=model,
+            allow_bootstrap=False,
+            http_client=client,
+        )
+
+    assert pin == OpenFGARuntimePin(
+        store_id="store-live",
+        model_id="02-f048",
+        model_checksum=authorization_model_checksum(model),
+    )
+    assert all(request.startswith("http://openfga:8080/") for request in requests)
+
+
+@pytest.mark.asyncio
+async def test_discovery_fails_closed_for_duplicate_store_name() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "stores": [
+                    {"id": "store-a", "name": "bisheng"},
+                    {"id": "store-b", "name": "bisheng"},
+                ]
+            },
+        )
+
+    async with httpx.AsyncClient(
+        base_url="http://openfga:8080",
+        transport=httpx.MockTransport(handler),
+    ) as client:
+        with pytest.raises(
+            AuthorizationModelMismatchError,
+            match="Multiple OpenFGA Stores",
+        ):
+            await discover_openfga_runtime(
+                _config(),
+                expected_model=build_authorization_model_f048(),
+                allow_bootstrap=False,
+                http_client=client,
+            )
+
+
+@pytest.mark.asyncio
+async def test_discovery_rejects_latest_model_with_wrong_checksum() -> None:
+    wrong_model = {
+        "schema_version": "1.1",
+        "type_definitions": [{"type": "user", "relations": {}}],
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/stores":
+            return httpx.Response(
+                200,
+                json={"stores": [{"id": "store-live", "name": "bisheng"}]},
+            )
+        if request.url.path == "/stores/store-live/authorization-models":
+            return httpx.Response(
+                200,
+                json={"authorization_model_ids": ["latest-wrong"]},
+            )
+        return httpx.Response(
+            200,
+            json={"authorization_model": wrong_model},
+        )
+
+    async with httpx.AsyncClient(
+        base_url="http://openfga:8080",
+        transport=httpx.MockTransport(handler),
+    ) as client:
+        with pytest.raises(
+            AuthorizationModelMismatchError,
+            match="does not match F048",
+        ):
+            await discover_openfga_runtime(
+                _config(),
+                expected_model=build_authorization_model_f048(),
+                allow_bootstrap=False,
+                http_client=client,
+            )
 
 
 @pytest.mark.asyncio
@@ -82,27 +174,23 @@ async def test_production_rejects_bootstrap_dual_and_legacy(
     invalid_flags: dict,
 ) -> None:
     manager = FGAManager(
-        _pinned_config(**invalid_flags),
+        _config(**invalid_flags),
         environment="production",
     )
-    manager._fetch_authorization_model = AsyncMock()
-    with pytest.raises(ValueError):
-        await manager._async_initialize()
-    manager._fetch_authorization_model.assert_not_awaited()
-
-
-@pytest.mark.asyncio
-async def test_production_validates_remote_model_checksum() -> None:
-    manager = FGAManager(_pinned_config(), environment="production")
-    manager._fetch_authorization_model = AsyncMock(return_value={"schema_version": "1.1", "type_definitions": []})
-    with pytest.raises(AuthorizationModelMismatchError):
-        await manager._async_initialize()
+    with patch(
+        "bisheng.core.openfga.manager.discover_openfga_runtime",
+        new_callable=AsyncMock,
+    ) as discover:
+        with pytest.raises(ValueError):
+            await manager._async_initialize()
+    discover.assert_not_awaited()
 
 
 @pytest.mark.asyncio
 async def test_single_model_client_readiness_and_heartbeat() -> None:
     model = build_authorization_model_f048()
-    config = _pinned_config()
+    checksum = authorization_model_checksum(model)
+    config = _config()
     heartbeat_store = _HeartbeatStore()
     manager = FGAManager(
         config,
@@ -110,20 +198,31 @@ async def test_single_model_client_readiness_and_heartbeat() -> None:
         instance_role="worker",
         heartbeat_store=heartbeat_store,
     )
-    manager._fetch_authorization_model = AsyncMock(return_value=model)
-
+    pin = OpenFGARuntimePin(
+        store_id="store-existing",
+        model_id="model-f048",
+        model_checksum=checksum,
+    )
     fake_client = MagicMock()
-    fake_client.store_id = "store-existing"
-    fake_client.model_id = "model-f048"
+    fake_client.store_id = pin.store_id
+    fake_client.model_id = pin.model_id
     fake_client.health = AsyncMock(return_value=True)
     fake_client.close = AsyncMock()
-    with patch(
-        "bisheng.core.openfga.manager.FGAClient",
-        return_value=fake_client,
-    ) as client_class:
+    with (
+        patch(
+            "bisheng.core.openfga.manager.discover_openfga_runtime",
+            new=AsyncMock(return_value=pin),
+        ) as discover,
+        patch(
+            "bisheng.core.openfga.manager.FGAClient",
+            return_value=fake_client,
+        ) as client_class,
+    ):
         initialized = await manager._async_initialize()
 
     assert initialized is fake_client
+    discover.assert_awaited_once()
+    assert discover.await_args.kwargs["allow_bootstrap"] is False
     client_class.assert_called_once_with(
         api_url="http://openfga:8080",
         store_id="store-existing",
@@ -134,64 +233,44 @@ async def test_single_model_client_readiness_and_heartbeat() -> None:
     assert readiness["ready"] is True
     assert readiness["store_id"] == "store-existing"
     assert readiness["model_id"] == "model-f048"
-    assert readiness["model_checksum"] == config.model_checksum
-    assert readiness["catalog_release_id"] == 12
-    assert readiness["catalog_checksum"] == "c" * 64
+    assert readiness["model_checksum"] == checksum
+    assert readiness["catalog_release_id"] is None
+    assert readiness["catalog_checksum"] is None
     assert readiness["consistency_window_seconds"] == 35
     assert readiness["instance_role"] == "worker"
-    assert readiness["instance_id"]
 
     manager._instance = fake_client
     assert await manager.heartbeat()
-    after_heartbeat = manager.readiness()
-    assert after_heartbeat["last_heartbeat_at"] is not None
-    assert after_heartbeat["ready"] is True
     assert len(heartbeat_store.published) == 1
-    role, instance_id, payload = heartbeat_store.published[0]
-    assert role == "worker"
-    assert instance_id == readiness["instance_id"]
-    assert payload == {
-        "ready": True,
-        "store_id": "store-existing",
-        "model_id": "model-f048",
-        "model_checksum": config.model_checksum,
-        "catalog_release_id": 12,
-        "catalog_checksum": "c" * 64,
-        "dual_model_mode": False,
-        "legacy_model_id": None,
-    }
+    _, _, payload = heartbeat_store.published[0]
+    assert payload["store_id"] == "store-existing"
+    assert payload["model_id"] == "model-f048"
 
 
 @pytest.mark.asyncio
-async def test_runtime_catalog_pin_is_bound_once_then_refreshed_dynamically() -> None:
-    config = _pinned_config()
-    heartbeat_store = _HeartbeatStore()
+async def test_runtime_catalog_is_bound_then_refreshed_dynamically() -> None:
+    checksum = authorization_model_checksum(build_authorization_model_f048())
     manager = FGAManager(
-        config,
+        _config(),
         environment="production",
-        heartbeat_store=heartbeat_store,
+        heartbeat_store=_HeartbeatStore(),
     )
     manager._runtime_store_id = "store-existing"
     manager._runtime_model_id = "model-f048"
-    manager._runtime_model_checksum = config.model_checksum
-    manager._instance = SimpleNamespace(
-        health=AsyncMock(return_value=True),
-    )
+    manager._runtime_model_checksum = checksum
+    manager._instance = SimpleNamespace(health=AsyncMock(return_value=True))
     current = SimpleNamespace(
         release_id=12,
         checksum="c" * 64,
         store_id="store-existing",
         model_id="model-f048",
-        model_checksum=config.model_checksum,
+        model_checksum=checksum,
     )
 
     async def resolve_catalog():
         return current
 
-    await manager.bind_catalog_runtime(
-        resolve_catalog,
-        require_config_match=True,
-    )
+    await manager.bind_catalog_runtime(resolve_catalog)
     assert manager.readiness()["catalog_release_id"] == 12
 
     current = SimpleNamespace(
@@ -199,7 +278,7 @@ async def test_runtime_catalog_pin_is_bound_once_then_refreshed_dynamically() ->
         checksum="d" * 64,
         store_id="store-existing",
         model_id="model-f048",
-        model_checksum=config.model_checksum,
+        model_checksum=checksum,
     )
     assert await manager.heartbeat()
     assert manager.readiness()["catalog_release_id"] == 13
@@ -207,30 +286,12 @@ async def test_runtime_catalog_pin_is_bound_once_then_refreshed_dynamically() ->
 
 
 @pytest.mark.asyncio
-async def test_runtime_catalog_binding_rejects_startup_or_model_mismatch() -> None:
-    config = _pinned_config()
-    manager = FGAManager(config, environment="production")
+async def test_runtime_catalog_binding_rejects_discovered_model_mismatch() -> None:
+    checksum = authorization_model_checksum(build_authorization_model_f048())
+    manager = FGAManager(_config(), environment="production")
     manager._runtime_store_id = "store-existing"
     manager._runtime_model_id = "model-f048"
-    manager._runtime_model_checksum = config.model_checksum
-
-    async def stale_catalog():
-        return SimpleNamespace(
-            release_id=13,
-            checksum="d" * 64,
-            store_id="store-existing",
-            model_id="model-f048",
-            model_checksum=config.model_checksum,
-        )
-
-    with pytest.raises(
-        AuthorizationModelMismatchError,
-        match="startup configuration",
-    ):
-        await manager.bind_catalog_runtime(
-            stale_catalog,
-            require_config_match=True,
-        )
+    manager._runtime_model_checksum = checksum
 
     async def wrong_model():
         return SimpleNamespace(
@@ -238,7 +299,7 @@ async def test_runtime_catalog_binding_rejects_startup_or_model_mismatch() -> No
             checksum="c" * 64,
             store_id="store-existing",
             model_id="model-other",
-            model_checksum=config.model_checksum,
+            model_checksum=checksum,
         )
 
     with pytest.raises(

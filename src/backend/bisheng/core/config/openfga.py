@@ -3,31 +3,15 @@
 
 from pydantic import BaseModel, Field
 
-_SHA256_PATTERN = r'^[0-9a-f]{64}$'
-
 
 class OpenFGAConf(BaseModel):
     """OpenFGA connection and behavior configuration."""
 
     enabled: bool = Field(default=True, description='Whether to enable OpenFGA integration')
     api_url: str = Field(default='http://openfga:8080', description='OpenFGA HTTP API URL')
-    store_name: str = Field(default='bisheng', description='Store name (auto-created if not exists)')
-    store_id: str | None = Field(default=None, description='Existing store ID (skip auto-create)')
-    model_id: str | None = Field(default=None, description='Existing model ID (skip auto-write)')
-    model_checksum: str | None = Field(
-        default=None,
-        pattern=_SHA256_PATTERN,
-        description='Lowercase SHA-256 of the single runtime authorization model',
-    )
-    current_catalog_release_id: int | None = Field(
-        default=None,
-        gt=0,
-        description='SQL identifier of the only current permission Catalog release',
-    )
-    current_catalog_checksum: str | None = Field(
-        default=None,
-        pattern=_SHA256_PATTERN,
-        description='Lowercase SHA-256 of the current permission Catalog release',
+    store_name: str = Field(
+        default='bisheng',
+        description='Stable Store name; development may auto-create it',
     )
     recent_consistency_window_seconds: int = Field(
         default=35,
@@ -53,27 +37,9 @@ class OpenFGAConf(BaseModel):
         description='Retired; F048 requires an empty value',
     )
 
-    def validate_production_runtime_pin(self) -> None:
-        """Reject startup unless the F048 production runtime is fully pinned.
+    def validate_production_runtime(self) -> None:
+        """Reject production-only bootstrap and retired runtime modes."""
 
-        Development and migration commands may still construct a partially
-        configured object. Production startup calls this explicit gate before
-        constructing an OpenFGA client.
-        """
-
-        missing = [
-            field
-            for field, value in (
-                ('store_id', self.store_id),
-                ('model_id', self.model_id),
-                ('model_checksum', self.model_checksum),
-                ('current_catalog_release_id', self.current_catalog_release_id),
-                ('current_catalog_checksum', self.current_catalog_checksum),
-            )
-            if value is None
-        ]
-        if missing:
-            raise ValueError(f"OpenFGA production runtime pin is incomplete: {', '.join(missing)}")
         if self.force_write_model:
             raise ValueError('OpenFGA production runtime cannot auto-write an authorization model')
         if self.dual_model_mode:

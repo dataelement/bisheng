@@ -42,7 +42,7 @@
 | F017 shared resource | T063/T064 只保留精确 ID 跨 tenant 只读业务加载，不把 shared relation 改成普通 Grant |
 | F018 owner transfer | 按 OQ-07 与 INV-25，T049/T050 删除交接 API；其他 owner 仍作为 ordinary source 并存 |
 | F027/F036/F040 列表性能 | T035/T131/T132 保留业务 cursor+BatchCheck 默认路径，ListObjects 只有 BENCH-01 通过的入口可启用 |
-| `core/openfga/client.py` / `manager.py` | T017～T020 是共享运行时变更；llm_server/llm_model 只保留显式 legacy allowlist，其他资源禁止 dual/latest |
+| `core/openfga/client.py` / `discovery.py` / `manager.py` | T017～T020 是共享运行时变更；llm_server/llm_model 只保留显式 legacy allowlist，其他资源禁止 dual；latest 只用于启动发现并必须匹配 SQL CURRENT Catalog |
 | Constitution C4 | T027/T028 将 F048 原子路径切到 durable projection ledger；旧单 tuple 路径的 `failed_tuple` 不被误删 |
 
 ---
@@ -117,10 +117,11 @@
     version CAS 和 checksum 接口；不暴露业务资源 Repository。
   - **依赖**：T002, T003, T004, T005, T006
 
-- [x] **T010：增加显式 OpenFGA runtime pin 配置**
+- [x] **T010：收敛 OpenFGA 连接配置与生产启动门禁**
   - **文件**：`src/backend/bisheng/core/config/openfga.py`
-  - **逻辑**：配置现有 `store_id`、唯一生产 `model_id`、model checksum、current Catalog、
-    recent-consistency window；生产模式拒绝 auto-latest、legacy model 和 dual model。
+  - **逻辑**：配置只保留连接信息、稳定 Store name 和 recent-consistency window；
+    Store/model/Catalog ID 与 checksum 不写配置；生产模式拒绝自动建 Store/写 model、
+    legacy model 和 dual model。
   - **依赖**：无
 
 ---
@@ -189,17 +190,20 @@
   - **验收**：T017 全部通过
   - **依赖**：T017
 
-- [x] **T019：FGAManager pin/readiness 测试**
+- [x] **T019：FGAManager 自动发现/readiness 测试**
   - **文件**：`src/backend/test/permission/test_f048_openfga_manager.py`
-  - **测试**：生产缺 store/model/checksum/current Catalog 时拒绝启动；禁止 latest/bootstrap、
-    dual/legacy；readiness 暴露同一 Store/new model/Catalog/cache window 和 instance heartbeat。
+  - **测试**：生产按 Store name 只接受唯一 Store并选最新 model；拒绝重名、缺失、
+    checksum/CURRENT Catalog 不匹配、bootstrap、dual/legacy；readiness 暴露实际
+    Store/new model/Catalog/cache window 和 instance heartbeat。
   - **覆盖 AC**：AC-16, AC-34, AC-99, AC-100, AC-102, AC-108, AC-110, AC-113, AC-115, AC-116
   - **依赖**：T010, T016, T018
 
 - [x] **T020：实现 FGAManager 单 model runtime**
-  - **文件**：`src/backend/bisheng/core/openfga/manager.py`
-  - **逻辑**：移除生产 auto-latest/create-store/dual model，启动时校验 release checksum，
-    只构造现有 Store+新 model client，并提供 API/Worker/Linsight 可复用 readiness/heartbeat。
+  - **文件**：`src/backend/bisheng/core/openfga/discovery.py`,
+    `src/backend/bisheng/core/openfga/manager.py`
+  - **逻辑**：生产按稳定 Store name 发现唯一 Store/latest model，禁止创建/写入，校验
+    F048 checksum 和 SQL CURRENT Catalog 引用的 ACTIVE release，只构造一个显式 model
+    client，并提供 API/Worker/Linsight 可复用 readiness/heartbeat。
   - **验收**：T019 全部通过
   - **依赖**：T019
 
@@ -1127,3 +1131,7 @@
   DDL 与正式数据迁移/校验脚本开发完成。报告继续明确 E2E 未执行，不能作为生产发布证明。
 - T138 评审后收紧为数据库 schema/checkpoint integration harness；完整数据迁移命令逻辑由
   T121～T127 的单元/契约测试验证，未把未执行的 MySQL/DM8 目标环境测试写成已完成事实。
+- 用户于 2026-07-30 重新确认不配置随迭代变化的 Store/model/Catalog ID；T010/T019/T020、
+  T125～T127 改为按稳定 Store name 自动发现唯一 Store/latest model，运行时再与 F048
+  checksum 和 SQL CURRENT Catalog 严格匹配；迁移 CLI 移除 `--expected-store-id`，
+  resume/verify 只接受 durable run 已记录的 Store/source model。

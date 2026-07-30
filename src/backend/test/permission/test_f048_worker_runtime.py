@@ -64,10 +64,8 @@ class _BindingManager(_Manager):
     async def bind_catalog_runtime(
         self,
         resolver,
-        *,
-        require_config_match=False,
     ):
-        self.bound.append((resolver, require_config_match))
+        self.bound.append(resolver)
 
 
 class _PermissionRuntime:
@@ -124,11 +122,10 @@ async def test_process_binding_registers_dynamic_catalog_before_heartbeat() -> N
     readiness = await bind_f048_process_runtime(
         manager,
         runtime,
-        require_config_match=True,
     )
 
     assert readiness == _ready()
-    assert manager.bound == [(runtime.current_catalog, True)]
+    assert manager.bound == [runtime.current_catalog]
     assert manager.heartbeats == 1
 
 
@@ -140,7 +137,6 @@ async def test_process_binding_fails_closed_when_initial_heartbeat_fails() -> No
         await bind_f048_process_runtime(
             manager,
             _PermissionRuntime(),
-            require_config_match=True,
         )
 
 

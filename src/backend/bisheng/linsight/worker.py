@@ -482,7 +482,6 @@ class ScheduleCenterProcess(Process):
                 bind_f048_process_runtime(
                     fga_manager,
                     f048_components.facade,
-                    require_config_match=True,
                 )
             )
             loop.run_until_complete(ensure_linsight_permission_runtime(fga_manager))

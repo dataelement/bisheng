@@ -25,8 +25,6 @@ class F048ProcessManagerPort(Protocol):
     async def bind_catalog_runtime(
         self,
         resolver,
-        *,
-        require_config_match: bool = False,
     ) -> None: ...
 
     async def heartbeat(self) -> bool: ...
@@ -52,15 +50,10 @@ async def initialize_f048_background_runtime(
 async def bind_f048_process_runtime(
     manager: F048ProcessManagerPort,
     runtime: F048PermissionRuntime,
-    *,
-    require_config_match: bool,
 ) -> dict:
     """Bind SQL CURRENT Catalog evidence before publishing process readiness."""
 
-    await manager.bind_catalog_runtime(
-        runtime.current_catalog,
-        require_config_match=require_config_match,
-    )
+    await manager.bind_catalog_runtime(runtime.current_catalog)
     if not await manager.heartbeat():
         raise RuntimeError("F048 process runtime initial heartbeat failed")
     readiness = manager.readiness()

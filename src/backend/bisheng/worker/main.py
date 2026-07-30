@@ -98,7 +98,6 @@ async def _init_worker_openfga() -> None:
     await bind_f048_process_runtime(
         manager,
         components.facade,
-        require_config_match=True,
     )
     readiness = await ensure_worker_fga_runtime(manager)
     logger.info(

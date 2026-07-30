@@ -476,16 +476,11 @@ class _PreparedDepartmentProjection:
 
 
 def _uses_f048_department_projection() -> bool:
-    """Use the ledger only after deployment is pinned to the F048 Catalog."""
+    """Use the ledger after this process has initialized the F048 runtime."""
 
-    from bisheng.common.services.config_service import settings
+    from bisheng.permission.application.access import has_f048_runtime
 
-    return bool(
-        settings.openfga.enabled
-        and settings.openfga.store_id
-        and settings.openfga.model_id
-        and settings.openfga.current_catalog_release_id
-    )
+    return has_f048_runtime()
 
 
 async def _prepare_department_projection(

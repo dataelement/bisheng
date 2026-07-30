@@ -4,9 +4,9 @@ Run from ``src/backend`` with the same ``config`` environment value as the
 stopped service:
 
     python scripts/migrate_f048_permission_data.py migrate \
-      --expected-store-id <existing-store-id> --apply
+      --apply
     python scripts/migrate_f048_permission_data.py migrate \
-      --expected-store-id <existing-store-id> --run-id <id> --apply
+      --run-id <id> --apply
     python scripts/migrate_f048_permission_data.py verify --run-id <id>
 
 ``--apply`` confirms the formal migration write. There is no preview,
@@ -56,11 +56,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Required confirmation for the formal data migration write",
     )
     migrate.add_argument(
-        "--expected-store-id",
-        required=True,
-        help="Existing OpenFGA Store ID captured during D0",
-    )
-    migrate.add_argument(
         "--lock-token",
         default=None,
         help="Operator/process token used by the durable SQL lease",
@@ -80,12 +75,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def _runtime_factory():
+async def _runtime_factory(*, run_id: int | None = None):
     from scripts.f048_migration_runtime import (
         build_f048_migration_runtime,
     )
 
-    return build_f048_migration_runtime(settings)
+    return await build_f048_migration_runtime(settings, run_id=run_id)
 
 
 def _migration_context_settings(live_settings: Any) -> Any:
@@ -108,7 +103,7 @@ def _migration_context_settings(live_settings: Any) -> Any:
 async def execute(
     args: argparse.Namespace,
     *,
-    runtime_factory: Callable[[], Any] = _runtime_factory,
+    runtime_factory: Callable[..., Any] = _runtime_factory,
     initialize_context: Callable[..., Awaitable[None]] = initialize_app_context,
     close_context: Callable[[], Awaitable[None]] = close_app_context,
     live_settings: Any = settings,
@@ -118,10 +113,12 @@ async def execute(
     runtime = None
     await initialize_context(config=_migration_context_settings(live_settings))
     try:
-        runtime = runtime_factory()
+        runtime = runtime_factory(run_id=args.run_id)
+        if isinstance(runtime, Awaitable):
+            runtime = await runtime
         if args.command == "migrate":
             result = await runtime.coordinator.migrate(
-                expected_store_id=args.expected_store_id,
+                expected_store_id=runtime.source_client.store_id,
                 lock_token=args.lock_token or uuid4().hex,
                 run_id=args.run_id,
             )

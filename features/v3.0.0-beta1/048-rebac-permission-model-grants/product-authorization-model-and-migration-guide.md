@@ -125,8 +125,9 @@ Authorization Model 是 OpenFGA 的全局规则模板，定义：
 它不保存“用户 001 属于模型 900”这种业务实例数据。
 
 OpenFGA 的 Authorization Model 不可原地修改。每次发布都会生成新的
-`authorization_model_id`。生产请求必须固定使用经过确认的 model ID，不能自动使用
-“最新模型”。
+`authorization_model_id`。生产配置不保存这些易变 ID；进程启动时按稳定 Store name
+发现唯一 Store 和最新模型，再与 SQL CURRENT Catalog 引用的 ACTIVE release 校验。
+校验通过后，每个生产 Check/List/Write 仍显式携带本进程发现的 model ID。
 
 ### 3.2 PermissionAction：业务动作目录
 
@@ -746,7 +747,7 @@ include_children = true
 | `permission_grant` | 某资源使用某模型形成的授权集合 |
 | `permission_grant_assignee` | Grant 中的用户、部门、用户组及来源 |
 | `resource_permission_mode` | INHERIT / CUSTOM |
-| `authorization_model_release` | 当前生产固定的 OpenFGA model ID |
+| `authorization_model_release` | 启服时必须与自动发现结果一致的 OpenFGA model release |
 | `permission_projection_operation/tuple` | 一次 Grant、模式或资源权限投影的可恢复意图与 tuple 步骤 |
 | `permission_migration_run` | 唯一一次正式迁移任务、checkpoint 和启服状态 |
 | `permission_migration_item` | 每条旧记录迁到哪里、是否成功、失败原因 |
@@ -767,8 +768,8 @@ include_children = true
 
 ## 16. 旧 Authorization Model → 新 Authorization Model 的同 Store 停服直迁
 
-当前生产 Store 在整个升级过程中保持不变，只把运行时固定的旧 model ID 换成新 model
-ID。迁移期间不接生产权限流量，也不存在两个 Store 或两个运行模型并行。
+当前生产 Store 在整个升级过程中保持不变，只把旧 model 升级为唯一运行的新 model。
+迁移期间不接生产权限流量，也不存在两个 Store 或两个运行模型并行。
 
 ```mermaid
 flowchart LR
@@ -776,7 +777,7 @@ flowchart LR
     D1 --> D2["D2 scripts 数据迁移并发布新 model"]
     D2 --> D3["D3 写入新 tuple 并退役旧 tuple"]
     D3 --> D4["D4 scripts 校验新 model 与遗留数据清零"]
-    D4 --> D5["D5 全实例固定新 model 并启服"]
+    D4 --> D5["D5 全实例发现新 model 并启服"]
     D5 --> D6["D6 只按新逻辑前向运行"]
 ```
 
@@ -785,7 +786,8 @@ flowchart LR
 - 开启维护；
 - 停止 API、Celery、Linsight、Beat 和同步任务；
 - 等待所有实例 heartbeat 归零；
-- 固定现有 Store ID、旧 model ID、Config 和业务源数据 watermark。
+- 固定 Config 和业务源数据 watermark；脚本按稳定 Store name 发现并记录现有 Store ID
+  与旧 model ID，不要求运维把它们写入配置。
 
 只停某一个 API 容器不算停服。任何进程仍可能写 owner、成员、组织、父级或 Config，
 都会阻断正式迁移。
@@ -806,7 +808,7 @@ revision，也不能放到 API/Celery/lifespan 中等服务启动后自动执行
 运维从 `src/backend/` 使用线上相同 `config` 执行
 `scripts/migrate_f048_permission_data.py migrate ... --apply`。脚本：
 
-- 验证 D1 schema fingerprint、停服 heartbeat 和现有 Store ID；
+- 验证 D1 schema fingerprint、停服 heartbeat 和唯一同名现有 Store；
 - 创建唯一正式 permission data migration run；
 - 在现有 Store 发布新的不可变 Authorization Model；
 - 记录同一个 Store ID、旧/新 model ID 和新 model checksum；
@@ -815,8 +817,9 @@ revision，也不能放到 API/Celery/lifespan 中等服务启动后自动执行
   binding→Grant/assignee、权限模式和逐条 migration item。
 
 OpenFGA Authorization Model 不可原地修改，因此发布后会得到一个新的 model ID；旧
-model ID 也不能删除，但它只保留为平台历史记录。应用配置、迁移器和运行客户端都不能
-把旧 model 当成第二套目标。tuple 本身属于 Store，不属于某个 model ID：迁移器按 Store
+model ID 也不能删除，但它只保留为平台历史记录。应用配置和运行客户端都不能
+把旧 model 当成第二套目标；迁移器只在 resume/verify 时按 durable run 读取它作为来源。
+tuple 本身属于 Store，不属于某个 model ID：迁移器按 Store
 读取、按 tuple key 删除旧关系，只在写入新关系和校验新结果时固定新 model ID。
 
 `--apply` 是破坏性写入的显式确认，不代表存在两阶段预演。缺少该参数时脚本直接报参数
@@ -855,18 +858,19 @@ model ID 也不能删除，但它只保留为平台历史记录。应用配置�
 迁移前后的 tuple 数量本来就可能不同。校验依据批准的映射规则和新 model 的期望结果，
 不把旧、新 model 同时接入线上流量。
 
-### D5：全部实例一次启用新 model
+### D5：全部实例自动发现并启用新 model
 
-只有 D4 blocker 为零后才修改启动配置。API、Celery、Linsight 和同步任务必须全部固定：
+只有 D4 blocker 为零后才启动服务。API、Celery、Linsight 和同步任务的配置只保留：
 
 ```text
-原 Store ID + 新 Model ID + 当前 Catalog release
+OpenFGA 连接信息 + 稳定 Store name
 dual_model_mode=false
 legacy_model_id 为空
 ```
 
-readiness、heartbeat 和 smoke 全部通过才解除维护。任一实例仍引用旧 model，启用了双
-model 客户端，或旧 Config/F018 路由仍可达，都不能开放流量。
+各实例必须发现同一个原 Store 及其最新新 model，并与 SQL CURRENT Catalog 引用的
+ACTIVE release 完全一致。readiness、heartbeat 和 smoke 全部通过才解除维护。任一实例
+仍引用旧 model，启用了双 model 客户端，或旧 Config/F018 路由仍可达，都不能开放流量。
 
 ### D6：只按新逻辑前向运行
 
@@ -944,7 +948,8 @@ D4 前退役，迁移来源、checksum 和映射结果保存在 migration run/it
 - Alembic 单 head、DDL-only、MySQL/DM8 schema upgrade 已验证，revision 不含数据读写或 OpenFGA 调用；
 - `src/backend/scripts/migrate_f048_permission_data.py migrate --apply` 已完成，`verify` 对同一 run 通过；
 - Store ID 与迁移前一致，新 model/Catalog checksum 与 migration run 一致；
-- 启服后所有实例只固定新 model，`dual_model_mode=false` 且 `legacy_model_id` 为空；
+- 启服后所有实例自动发现同一新 model 并绑定同一 CURRENT Catalog，
+  `dual_model_mode=false` 且 `legacy_model_id` 为空；
 - 首批已迁移资源类型的旧四档/旧模型 tuple 和旧 Config 运行数据为零，旧 Config/F018 路径不可达；
 - checkpoint 续跑和前向故障处置验证通过；
 - MySQL、DM8、Platform、Client 和后台任务回归通过。

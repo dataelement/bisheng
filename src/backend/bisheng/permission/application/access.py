@@ -30,6 +30,12 @@ def get_f048_runtime() -> F048PermissionRuntime:
     return _runtime
 
 
+def has_f048_runtime() -> bool:
+    """Return whether this process has completed F048 runtime initialization."""
+
+    return _runtime is not None
+
+
 def get_f048_resource_adapter(resource_type: str):
     adapter = _resource_adapters.get(resource_type)
     if adapter is None:

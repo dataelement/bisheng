@@ -78,7 +78,6 @@ async def _initialize_f048_api_process(app: FastAPI) -> None:
     readiness = await bind_f048_process_runtime(
         manager,
         runtime.components.facade,
-        require_config_match=True,
     )
     app.state.f048_manager = manager
     app.state.f048_runtime = runtime

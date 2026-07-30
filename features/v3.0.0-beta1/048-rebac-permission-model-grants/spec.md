@@ -436,12 +436,12 @@ OpenFGA Authorization Model 不可原地修改；每次发布都会产生新的 
 | D2 Data Migration Script | 全部关闭 | 从 `src/backend/` 运行专用脚本；脚本创建正式 run，在现有 Store 发布新 model，并校验/导入动作、模型、binding、Grant、assignee 和 mode |
 | D3 脚本转换并退役旧数据 | 全部关闭 | 同一脚本原地复用仍合法的组织/共享/parent/system tuple；写入新 Catalog/Grant/mode tuple，逐批核对后删除旧四档/废弃 tuple 和旧 Config 运行数据 |
 | D4 脚本校验 | 全部关闭 | 专用脚本 verify 核对来源/目标计数、checksum、人工项和新模型高风险动作；已迁移类型旧 tuple/Config 计数必须为零 |
-| D5 配置并启服 | 关闭 → 新 model | Store ID 保持不变；全部实例只固定新 model/Catalog，dual/legacy model 关闭；readiness、heartbeat 与 smoke 100% 后开放流量 |
+| D5 自动发现并启服 | 关闭 → 新 model | 配置只保留连接信息与稳定 Store name；全部实例发现唯一同名 Store 的最新 model，并要求它与 SQL CURRENT Catalog 引用的 ACTIVE release 一致；dual/legacy model 关闭；readiness、heartbeat 与 smoke 100% 后开放流量 |
 | D6 前向运行 | 新 model | 异常只做前向修复；旧 model ID 仅作为 OpenFGA 不可删除的历史版本存在 |
 
 - **AC-108** — WHEN 正式数据迁移脚本开始, THE SYSTEM SHALL 证明 Alembic schema upgrade
   已成功，并证明全部 API、Celery、Linsight 和其他
-  权限读写进程已停止；任一实例仍存活或仍可能自动选取 Store 最新模型时必须阻断迁移。
+  权限读写进程已停止；任一实例仍存活或仍可能在新 model 发布后提前启动时必须阻断迁移。
 - **AC-109** — WHEN 发布新 Authorization Model, THE SYSTEM SHALL 在现有 Store 中记录新的
   不可变 model ID，不得覆盖、伪装或复用旧 model ID，也不得创建或切换 Store。
 - **AC-110** — WHILE 迁移和启服门禁尚未完成, THE SYSTEM SHALL 不处理生产授权请求；
@@ -455,12 +455,14 @@ OpenFGA Authorization Model 不可原地修改；每次发布都会产生新的 
   映射验证直接授权、继承、多来源并集和具体动作，不得仅比较 tuple 数量，也不得运行线上
   旧/新 model shadow 裁决。
 - **AC-115** — WHEN D5 启服成功, THE SYSTEM SHALL 让 API、后台任务、同步任务和全部应用
-  实例保持同一 Store ID 并只固定新 model ID，同时停止产生旧资源四档 tuple 与 Config binding。
+  实例按稳定 Store name 发现同一 Store 的最新新 model，并要求其 Store/model/checksum 与
+  SQL CURRENT Catalog 引用的唯一 ACTIVE release 一致；每个 Check/List/Write 显式发送该
+  model ID，同时停止产生旧资源四档 tuple 与 Config binding。
 - **AC-116** — THE SYSTEM SHALL 不提供从新 model 恢复到旧 model 的应用级迁移路径；
   IF D5 后发现问题, THEN THE SYSTEM SHALL 重新维护并在新 model 上前向修复。
 - **AC-117** — WHEN D4 通过, THE SYSTEM SHALL 证明已迁移资源的旧四档/废弃 relation tuple
   与旧 Config 运行数据已经删除；旧 model ID 因 OpenFGA 不可变而保留时，也不得出现在
-  runtime 配置、client、heartbeat 或 readiness 中。
+  runtime 配置、client、heartbeat 或 readiness 中；Store/model/Catalog ID 不要求写入配置。
 
 #### 4.8.2 旧 OpenFGA 关系迁移
 
@@ -644,7 +646,9 @@ MySQL/DM8 关系表是权限配置、模型定义和绑定关系的控制面真�
 - 模型 `active` 是可授权和可生效的总开关，不是业务动作。
 - 现有模型定义、模型动作和资源绑定迁入规范化关系表；Config 大 JSON 在切换后不再参与运行时。
 - Authorization Model 沿用现有 Store；停服后发布新 model、原地迁移并退役旧 tuple，
-  校验后只启用新 model。禁止“自动使用最新模型”、dual/legacy client、同 tuple 双写或线上 shadow。
+  校验后只启用新 model。启服时允许按稳定 Store name 自动发现唯一 Store 与最新 model，
+  但必须再与 SQL CURRENT Catalog 的 ACTIVE release 严格匹配；禁止 dual/legacy client、
+  同 tuple 双写或线上 shadow。
 - 本期不支持独立迁移预演、回滚窗口或新→旧运行时恢复；失败保持维护并前向修复。
 - Alembic revision 只负责数据库结构 DDL；正式权限数据迁移、OpenFGA tuple 更新与校验
   由 `src/backend/scripts/` 专用脚本在 schema upgrade 后执行，服务启动不自动迁数据。

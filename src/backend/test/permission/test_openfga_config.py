@@ -20,9 +20,17 @@ def test_existing_defaults_preserved():
     assert conf.enabled is True
     assert conf.api_url == 'http://openfga:8080'
     assert conf.store_name == 'bisheng'
-    assert conf.store_id is None
-    assert conf.model_id is None
     assert conf.timeout == 5
+
+
+def test_runtime_identifiers_are_not_configuration_fields():
+    fields = OpenFGAConf.model_fields
+
+    assert "store_id" not in fields
+    assert "model_id" not in fields
+    assert "model_checksum" not in fields
+    assert "current_catalog_release_id" not in fields
+    assert "current_catalog_checksum" not in fields
 
 
 @pytest.mark.parametrize(
@@ -34,13 +42,6 @@ def test_existing_defaults_preserved():
     ),
 )
 def test_production_runtime_rejects_retired_model_switches(updates, message):
-    conf = OpenFGAConf(
-        store_id="store-1",
-        model_id="model-f048",
-        model_checksum="a" * 64,
-        current_catalog_release_id=1,
-        current_catalog_checksum="b" * 64,
-        **updates,
-    )
+    conf = OpenFGAConf(**updates)
     with pytest.raises(ValueError, match=message):
-        conf.validate_production_runtime_pin()
+        conf.validate_production_runtime()

@@ -83,9 +83,12 @@ await require_business_action(
   `super_admin` → tenant mismatch deny → tenant admin → Catalog/action gate →
   OpenFGA. RBAC menu access remains a separate navigation/API-capability
   concern and is never a fallback ALLOW for resource actions.
-- Production uses one explicitly pinned OpenFGA Store/model/checksum and one
-  CURRENT Catalog checksum. Legacy/dual-model clients, “latest model”
-  selection, and fail-open behavior are forbidden.
+- Production resolves one unique OpenFGA Store by stable name and its latest
+  model at startup, then requires that Store/model/checksum to match the one
+  ACTIVE authorization release referenced by the SQL CURRENT Catalog. Every
+  Check/List/Write still sends that resolved model ID explicitly. Legacy/
+  dual-model clients, runtime model writes, and fail-open behavior are
+  forbidden.
 
 ## C5. Error-Code Convention
 

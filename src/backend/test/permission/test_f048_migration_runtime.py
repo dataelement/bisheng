@@ -6,18 +6,17 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
 
-import pytest
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.pool import StaticPool
 from sqlmodel import SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from bisheng.common.errcode.permission import PermissionMigrationBlockedError
 from bisheng.core.openfga.authorization_model_f048 import (
     authorization_model_checksum,
     build_authorization_model_f048,
 )
+from bisheng.core.openfga.discovery import OpenFGARuntimePin
 from bisheng.permission.domain.models import (
     AuthorizationModelRelease,
     PermissionAction,
@@ -50,6 +49,7 @@ from bisheng.permission.migration.f048_source_inventory import (
     SourceInventorySnapshot,
     build_source_inventory,
 )
+from scripts import f048_migration_runtime
 from scripts.f048_migration_runtime import build_f048_migration_runtime
 
 
@@ -298,22 +298,87 @@ async def test_target_writer_filters_existing_tuples_across_resume(
     assert len(persisted) == 2
 
 
-def test_runtime_builder_requires_explicit_store_and_source_model_pin():
+async def test_runtime_builder_discovers_store_and_source_model(
+    monkeypatch,
+):
     config = SimpleNamespace(
         enabled=True,
-        store_id=None,
-        model_id=None,
+        api_url="http://openfga:8080",
+        store_name="bisheng",
+        timeout=5,
+        force_write_model=False,
     )
     live_settings = SimpleNamespace(
         openfga=config,
         environment="test",
     )
 
-    with pytest.raises(
-        PermissionMigrationBlockedError,
-        match="OPENFGA_STORE_ID_MUST_BE_PINNED",
-    ):
-        build_f048_migration_runtime(live_settings)
+    async def discover(*args, **kwargs):
+        return OpenFGARuntimePin(
+            store_id="store-live",
+            model_id="legacy-model",
+            model_checksum="a" * 64,
+        )
+
+    monkeypatch.setattr(
+        f048_migration_runtime,
+        "discover_openfga_runtime",
+        discover,
+    )
+    runtime = await build_f048_migration_runtime(live_settings)
+    try:
+        assert runtime.source_client.store_id == "store-live"
+        assert runtime.source_client.model_id == "legacy-model"
+    finally:
+        await runtime.aclose()
+
+
+async def test_runtime_builder_resume_uses_durable_source_model(
+    monkeypatch,
+):
+    config = SimpleNamespace(
+        enabled=True,
+        api_url="http://openfga:8080",
+        store_name="bisheng",
+        timeout=5,
+        force_write_model=False,
+    )
+    live_settings = SimpleNamespace(
+        openfga=config,
+        environment="test",
+    )
+    discovered = []
+
+    async def get_run(self, run_id):
+        assert run_id == 9
+        return SimpleNamespace(
+            store_id="store-live",
+            source_model_id="legacy-model",
+        )
+
+    async def discover(*args, **kwargs):
+        discovered.append(kwargs)
+        return OpenFGARuntimePin(
+            store_id="store-live",
+            model_id="legacy-model",
+            model_checksum="a" * 64,
+        )
+
+    monkeypatch.setattr(SqlMigrationRunStore, "aget_run", get_run)
+    monkeypatch.setattr(
+        f048_migration_runtime,
+        "discover_openfga_runtime",
+        discover,
+    )
+    runtime = await build_f048_migration_runtime(
+        live_settings,
+        run_id=9,
+    )
+    try:
+        assert discovered[0]["required_store_id"] == "store-live"
+        assert discovered[0]["required_model_id"] == "legacy-model"
+    finally:
+        await runtime.aclose()
 
 
 _CONTROL_TABLES = (

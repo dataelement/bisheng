@@ -11,7 +11,7 @@ from scripts import migrate_f048_permission_data as cli
 
 def test_migrate_requires_apply_before_runtime_initialization():
     with pytest.raises(SystemExit) as exc_info:
-        cli.parse_args(["migrate", "--expected-store-id", "store-live"])
+        cli.parse_args(["migrate"])
 
     assert exc_info.value.code == 2
 
@@ -28,6 +28,7 @@ def test_unsupported_preview_or_rollback_commands_are_rejected(command):
 class FakeRuntime:
     coordinator: object
     verifier: object
+    source_client: object
     closed: bool = False
 
     async def aclose(self):
@@ -97,7 +98,11 @@ async def test_migrate_initializes_and_closes_full_app_context():
     events = []
     coordinator = FakeCoordinator()
     verifier = FakeVerifier()
-    runtime = FakeRuntime(coordinator, verifier)
+    runtime = FakeRuntime(
+        coordinator,
+        verifier,
+        type("SourceClient", (), {"store_id": "store-live"})(),
+    )
 
     async def initialize_context(*, config):
         events.append(("initialize", config))
@@ -109,15 +114,13 @@ async def test_migrate_initializes_and_closes_full_app_context():
         [
             "migrate",
             "--apply",
-            "--expected-store-id",
-            "store-live",
             "--lock-token",
             "operator-1",
         ]
     )
     exit_code = await cli.execute(
         args,
-        runtime_factory=lambda: runtime,
+        runtime_factory=lambda **_: runtime,
         initialize_context=initialize_context,
         close_context=close_context,
         live_settings="live-settings",
@@ -143,7 +146,11 @@ async def test_verify_only_reads_existing_formal_run_and_always_closes():
     events = []
     coordinator = FakeCoordinator()
     verifier = FakeVerifier()
-    runtime = FakeRuntime(coordinator, verifier)
+    runtime = FakeRuntime(
+        coordinator,
+        verifier,
+        type("SourceClient", (), {"store_id": "store-live"})(),
+    )
 
     async def initialize_context(*, config):
         events.append("initialize")
@@ -154,7 +161,7 @@ async def test_verify_only_reads_existing_formal_run_and_always_closes():
     args = cli.parse_args(["verify", "--run-id", "7"])
     exit_code = await cli.execute(
         args,
-        runtime_factory=lambda: runtime,
+        runtime_factory=lambda **_: runtime,
         initialize_context=initialize_context,
         close_context=close_context,
         live_settings="live-settings",
@@ -181,15 +188,17 @@ async def test_migrate_resume_passes_the_existing_run_id():
         [
             "migrate",
             "--apply",
-            "--expected-store-id",
-            "store-live",
             "--run-id",
             "9",
         ]
     )
     await cli.execute(
         args,
-        runtime_factory=lambda: FakeRuntime(coordinator, verifier),
+        runtime_factory=lambda **_: FakeRuntime(
+            coordinator,
+            verifier,
+            type("SourceClient", (), {"store_id": "store-live"})(),
+        ),
         initialize_context=initialize_context,
         close_context=close_context,
         live_settings="live-settings",

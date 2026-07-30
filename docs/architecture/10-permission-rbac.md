@@ -284,21 +284,22 @@ dashboard 已纳入 F048：
 
 ## 6. OpenFGA 单 Store、单 runtime model
 
-### 6.1 运行时 pin
+### 6.1 运行时自动发现与数据库门禁
 
-生产进程必须同时固定：
+生产配置只保存 OpenFGA 连接信息与稳定的 Store name，不保存随升级变化的
+Store/model/Catalog ID。API、Celery、Beat、Linsight 等每个进程启动时：
 
-- Store ID；
-- authorization model ID；
-- model checksum；
-- CURRENT Catalog release ID；
-- Catalog checksum。
+1. 按 `store_name` 查询且只接受唯一 Store；
+2. 选择该 Store 最新的 authorization model；
+3. 获取 model checksum；
+4. 要求发现的 Store/model/checksum 与 SQL CURRENT Catalog 引用的唯一 ACTIVE
+   `authorization_model_release` 完全一致；
+5. 构造单一 `FGAClient`，后续每个 Check/List/Write 显式携带已发现的 model ID。
 
-API、Celery、Beat、Linsight 等每个进程启动时验证 pin，并通过 Redis
-heartbeat 上报实际 Store/model/Catalog。任一不一致即 readiness
+进程通过 Redis heartbeat 上报实际 Store/model/Catalog。任一不一致即 readiness
 失败。禁止：
 
-- 选择 Store 内“最新 model”；
+- 在生产自动创建 Store 或写 authorization model；
 - `dual_model_mode=true`；
 - legacy model client；
 - 运行时自动写 model；
@@ -487,7 +488,7 @@ src/backend/scripts/migrate_f048_permission_data.py
 3. D2：两次稳定源扫描，冻结 run/item/checksum；
 4. D3：在同一 Store 发布一个 F048 model，分批写 SQL/FGA；
 5. D4：higher-consistency 验证后，仅删除记录到 run 的 legacy tuple/Config；
-6. D5：部署固定新 model/Catalog pin，启动全部进程；
+6. D5：启动全部进程，自动发现新 model 并绑定 SQL CURRENT Catalog；
 7. D6：smoke、全实例 heartbeat 和语义校验。
 
 脚本 DB scan batch=500，FGA write batch≤90，每批写 checkpoint。崩溃后
@@ -574,7 +575,7 @@ OpenFGA 使用 JSON log，并暴露 `:2112/metrics`。RPC histogram 在部署中
 | 能力 | 主要位置 |
 |---|---|
 | OpenFGA model | `bisheng/core/openfga/authorization_model_f048.py` |
-| 单 model 生命周期/pin | `bisheng/core/openfga/manager.py` |
+| 单 model 自动发现与生命周期 | `bisheng/core/openfga/discovery.py`, `bisheng/core/openfga/manager.py` |
 | action decision | `bisheng/permission/domain/services/permission_action_service.py` |
 | Catalog policy | `bisheng/permission/domain/services/catalog_policy.py` |
 | 标准/自定义 model | `bisheng/permission/domain/services/model_policy.py` |

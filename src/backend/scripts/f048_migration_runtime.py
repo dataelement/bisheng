@@ -21,6 +21,7 @@ from bisheng.channel.domain.services.permission_migration_source import (
 from bisheng.common.errcode.permission import PermissionMigrationBlockedError
 from bisheng.common.services.config_service import settings
 from bisheng.core.openfga.client import FGAClient
+from bisheng.core.openfga.discovery import discover_openfga_runtime
 from bisheng.knowledge.domain.services.permission_migration_source import (
     KnowledgePermissionMigrationSource,
     SqlKnowledgeMigrationRepository,
@@ -71,23 +72,34 @@ class F048MigrationRuntime:
         await self.source_client.close()
 
 
-def build_f048_migration_runtime(
+async def build_f048_migration_runtime(
     live_settings: Any = settings,
+    *,
+    run_id: int | None = None,
 ) -> F048MigrationRuntime:
     """Compose live SQL/OpenFGA/business adapters after app-context startup."""
 
     config = live_settings.openfga
     if not config.enabled:
         raise PermissionMigrationBlockedError(msg="OPENFGA_DISABLED")
-    if not config.store_id:
-        raise PermissionMigrationBlockedError(msg="OPENFGA_STORE_ID_MUST_BE_PINNED")
-    if not config.model_id:
-        raise PermissionMigrationBlockedError(msg="OPENFGA_SOURCE_MODEL_ID_MUST_BE_PINNED")
+    run_store = SqlMigrationRunStore()
+    run = await run_store.aget_run(run_id) if run_id is not None else None
+    if run_id is not None and run is None:
+        raise PermissionMigrationBlockedError(
+            msg="VERIFY_REQUIRES_EXISTING_FORMAL_RUN"
+        )
+    pin = await discover_openfga_runtime(
+        config,
+        expected_model=None,
+        allow_bootstrap=False,
+        required_store_id=run.store_id if run else None,
+        required_model_id=run.source_model_id if run else None,
+    )
 
     source_client = FGAClient(
         api_url=config.api_url,
-        store_id=config.store_id,
-        model_id=config.model_id,
+        store_id=pin.store_id,
+        model_id=pin.model_id,
         timeout=config.timeout,
     )
     dashboard_repository = SqlDashboardMigrationRepository()
@@ -100,12 +112,11 @@ def build_f048_migration_runtime(
     )
     source_provider = LiveMigrationSourceProvider(
         source_client=source_client,
-        actual_store_id=config.store_id,
-        source_model_id=config.model_id,
+        actual_store_id=pin.store_id,
+        source_model_id=pin.model_id,
         sources=sources,
         dashboard_repository=dashboard_repository,
     )
-    run_store = SqlMigrationRunStore()
     target_writer = SqlOpenFGAMigrationTargetWriter(source_client=source_client)
     coordinator = F048MigrationCoordinator(
         source_provider=source_provider,
@@ -113,7 +124,7 @@ def build_f048_migration_runtime(
         model_publisher=OpenFGAMigrationModelPublisher(
             source_client=source_client,
             environment=_environment_name(live_settings.environment),
-            predecessor_model_id=config.model_id,
+            predecessor_model_id=pin.model_id,
         ),
         target_writer=target_writer,
     )
@@ -122,7 +133,6 @@ def build_f048_migration_runtime(
         evidence_provider=LiveMigrationEvidenceProvider(
             source_client=source_client,
             target_writer=target_writer,
-            runtime_config=config,
         ),
     )
     return F048MigrationRuntime(

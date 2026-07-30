@@ -61,15 +61,17 @@ MySQL/DM8 中可审计、可版本化的 Action/Model/Grant 控制面，以及�
   - **Permission Data Migration**：`src/backend/scripts/migrate_f048_permission_data.py`
     执行的一次性停服数据升级；负责旧 Config/业务事实/OpenFGA tuple 的读取、转换、写入、
     checkpoint、验证和旧数据退役，不注册为运行时 Service、API、Celery 或启动任务。
-- OpenFGA Authorization Model 不可变；不传 model ID 会使用 Store 的最新模型。
-  因此生产实例必须同时固定 `store_id` 与 `model_id`，不能继续使用当前
-  `FGAManager._latest_authorization_model_id()` 的行为。
+- OpenFGA Authorization Model 不可变；Store/model/Catalog ID 会随首次初始化和功能升级
+  变化，不写入部署配置。生产实例按稳定 `store_name` 查询且只接受唯一 Store，选择其
+  最新 model，获取 checksum，再要求它与 SQL CURRENT Catalog 引用的唯一 ACTIVE
+  authorization release 完全一致；匹配后构造单一 client，每个 Check/List/Write 仍显式
+  发送该 model ID。生产不自动创建 Store 或写 model。
 - Catalog 只能配置已经由应用代码和当前 Authorization Model 注册的 action code。
   新增 action code 不是纯后台配置：必须先发布包含对应 `can_<action>` relation 的后继
   Authorization Model，并在维护窗口完成关系迁移、目标校验和全实例单 model pin 门禁，
   再允许该 action 所属 Catalog 生效。后继 model 必须通过当前 Catalog 全量 model tests；
-  旧 model 只记录 predecessor 审计链，不能构造 compatibility client、使用“最新模型”
-  或靠兼容性猜测跨过这一步。
+  旧 model 只记录 predecessor 审计链，不能构造 compatibility client，不能在 SQL CURRENT
+  Catalog 不匹配时仅凭“它是最新模型”跨过这一步。
 - OpenFGA 单次 Write 的 writes+deletes 上限为 100，且同一请求整体原子成功或失败。
   所有可见状态切换必须把最终 commit 控制在该上限内。
 - OpenFGA 默认读可能命中缓存；安全变更后的读使用 `HIGHER_CONSISTENCY`，
@@ -392,7 +394,7 @@ reader 同时检查三个 marker scope：Catalog publish 用 global；tenant/dep
 | 位置 | 当前事实 | F048 处理 |
 |---|---|---|
 | `core/openfga/authorization_model.py` | `MODEL_VERSION='v2.0.2'`；资源是四档金字塔 | 新增 F048 builder；旧文件仅供单向迁移读取与审计定位，不再作为可恢复运行时 |
-| `core/openfga/manager.py:_async_initialize` | 未配置 model 时自动取最新或写模型 | 生产必须显式配置；bootstrap 独立命令 |
+| `core/openfga/manager.py:_async_initialize` | 未配置 model 时按 Store name 取最新或在缺失时写模型 | 保留查询方式；生产只发现、不创建/写入，并以 F048 checksum + SQL CURRENT Catalog 二次校验 |
 | `core/openfga/client.py:write_tuples` | 可把同一 tuple shadow-write 到 legacy model | F048 runtime 移除；迁移写入只使用显式新 model client，stored tuple 读取/删除使用 Store-scoped API |
 | `PermissionService.check/list_accessible_ids` | FGA 后可 union creator/admin/DB implicit | 已迁移资源只保留进入 ReBAC 前的明确 system identity gate |
 | `FineGrainedPermissionService` | 读 tuple 后用 Config 再裁决；FGA 错误回退 binding | 新模型启服前清除全部已迁移调用方；启服验证后删除 |
@@ -896,7 +898,7 @@ operation 重试；出现混合集或 scope version 已被外部改变时标 FAI
 | `permission/api/endpoints/{catalog,grant,decision}.py` | 参数、认证、响应翻译；资源请求委托业务 ResourceAuthorizationPort | 不 import 业务 ORM/Repository |
 | `core/openfga/authorization_model_f048.py` | 新模型 JSON builder + checksum/version | 不自动发布 |
 | `core/openfga/client.py` | 显式 model-scoped Check/List/Write + consistency | 不 shadow write |
-| `core/openfga/manager.py` | 生产 pin、startup/readiness 校验 | 不自动选 latest/create store |
+| `core/openfga/discovery.py`, `manager.py` | 按稳定 Store name 发现唯一 Store/latest model，校验 F048 checksum 与 SQL CURRENT Catalog，发布 readiness | 生产不创建 Store、不写 model；配置不保存易变 ID |
 | `department_change_handler.py` | 新模型的 parent+child 对称 tuple operation | 不展开部门用户/资源 Grant |
 | `telemetry_search/.../DashboardService` | dashboard 业务加载、preset/status/组件规则、verified target 与 lifecycle projection | 不再调旧 AccessType/DASHBOARD relation |
 | `core/database/alembic/versions/<f048_revision>.py` | 新表、列、索引、约束等 MySQL/DM8 schema DDL | 不读取/转换/回填/清理业务数据，不访问 Config/OpenFGA，不 import 数据迁移脚本 |
@@ -919,7 +921,7 @@ domain 对业务 model/repository 的 import 必须由架构测试禁止。正�
 | # | 事实 | 不知道会怎样 | 处理位置 |
 |---|---|---|---|
 | 1 | tuple 不属于某个 model ID；Read/Delete 是 Store-scoped，只有新 tuple Write/目标查询固定新 model | 误以为切 model 会自动迁数据，或为删除旧 tuple 额外维护旧 client；遗留无效 tuple 虽被新模型忽略，仍可能拖慢读取 | `scripts/migrate_f048_permission_data.py:migrate_and_retire_legacy_tuples` + D4 legacy-count gate |
-| 2 | 当前 manager 未配置 model 会自动选 Store 最新 | 仅发布新 model 就可能让误启动实例提前切换 | `core/openfga/manager.py` startup/readiness |
+| 2 | manager 启动会自动选择 Store 最新 model | 仅发布新 model 就可能让误启动实例尝试提前切换 | 迁移全程停服；`core/openfga/manager.py` 还必须匹配 F048 checksum 与 SQL CURRENT Catalog，不匹配即拒绝 readiness |
 | 3 | OpenFGA Write 最多 100 tuple，才是原子边界 | 大批成员/模式切换被静默拆批后半生效 | `ProjectionService.compile_delta/commit`、`ModeService.apply` |
 | 4 | `user:*` 在 model release 上是能力 marker，不是资源公共授权 | 审计误报“全员可编辑所有资源” | `authorization_model_f048.py` namespace + model tests |
 | 5 | 标准模型累计，自定义模型不累计 | 按 level 给 custom 自动补动作会扩权 | `CatalogService.build_model_release` |
@@ -1302,7 +1304,7 @@ uv run alembic upgrade head
 uv run alembic heads
 uv run pytest test/database/test_alembic_single_head.py -v
 uv run python scripts/migrate_f048_permission_data.py migrate --run-id <run-id> \
-  --expected-store-id <existing-store-id> --apply
+  --apply
 uv run python scripts/migrate_f048_permission_data.py verify --run-id <run-id>
 ```
 
@@ -1412,7 +1414,7 @@ protected owner transfer 不再是开放项：F048 启服构建必须退役 F018
 | D2 Data Migration Script 初始化与控制面转换 | 全部关闭 | 运维从 `src/backend/` 以 live `config` 执行 `scripts/migrate_f048_permission_data.py migrate ... --apply`；脚本验证 D1/schema fingerprint，创建唯一正式 run，在**同一 Store**发布新 model 并跑 model tests，再导入 Action/Catalog/标准及自定义 Model、binding→Grant/assignee、mode 和人工项 |
 | D3 迁移并退役旧数据 | 全部关闭 | 原地复用仍合法的 tenant/department/user_group/system/shared/parent tuple；按 item/checkpoint 写新 Catalog/Grant/mode tuple，逐批核对后删除已迁移资源的旧四档/废弃 relation tuple；全部目标落稳后删除旧 Config 大 JSON 运行数据 |
 | D4 数据脚本 verify | 全部关闭 | 执行同一脚本的 `verify --run-id`；blocker=0；来源/目标计数和 checksum 一致；已迁移类型 legacy tuple/Config 计数为零；新 model 高风险 Check/List、owner、mode、多来源、dashboard、download 语义通过；run 转 `READY_TO_START` |
-| D5 配置并启服 | 关闭→新 model | Store ID 保持原值；配置只允许新 model/current Catalog，`dual_model_mode=false` 且无 `legacy_model_id`；启动全部实例；readiness/heartbeat 100% 且 smoke 通过才解除维护 |
+| D5 自动发现并启服 | 关闭→新 model | 配置只保留 OpenFGA 连接信息、稳定 Store name，`dual_model_mode=false` 且无 `legacy_model_id`；全部实例发现唯一同名 Store/latest model，并要求它与 SQL CURRENT Catalog 的 ACTIVE release 一致；readiness/heartbeat 100% 且 smoke 通过才解除维护 |
 | D6 前向运行 | 新 model | 正常读写只走新 model + projection ledger；问题只做前向修复；旧 model ID 仅作为 OpenFGA 不可删除的历史版本存在 |
 
 Alembic 在 D1 成功退出后即完成职责，不写入以下状态。正式 permission data migration
@@ -1446,8 +1448,8 @@ Schema 命令只有 `alembic upgrade head`，revision 只做 DDL。F048 数据�
 Celery import/调用。`migrate` 必须显式带 `--apply`，否则 argparse 返回非零且不扫描源
 数据；`--apply` 只是破坏性写入确认，不代表存在“先 dry-run、再 apply”两阶段方案。
 
-正式 `migrate --apply` 校验 schema fingerprint、`expected-store-id` 与当前运行 Store，
-创建 durable run，在该 Store 发布新 model，然后在同一个真实 run 内完成 source
+正式 `migrate --apply` 校验 schema fingerprint，按稳定 Store name 自动发现唯一现有
+Store/latest source model 并将二者写入 durable run，在该 Store 发布新 model，然后在同一个真实 run 内完成 source
 validation、规范化 SQL、新 tuple 写入、旧 tuple/Config 退役。resume 必须复用 run 中的
 Store 与 source/target model ID，不接受调用方替换。报告由真实 item 聚合为
 CSV/NDJSON + checksum，artifact 只用于审计，不成为运行时真相。
@@ -1483,7 +1485,8 @@ D5 必须同时满足：
 
 - API、Celery、Linsight、Beat/同步任务及所有权限写入口 heartbeat=0，且 source watermark
   自 D0 起未变化；
-- migration run、启动配置和 OpenFGA 实际 Store ID 三者相同，且与 D0 前 Store ID 完全一致；
+- migration run、SQL CURRENT Catalog 和启动时发现的 OpenFGA 实际 Store ID 三者相同，
+  且与 D0 前 Store ID 完全一致；
 - 新 model ID/checksum 与 release 记录一致；旧 model ID 未出现在任何 runtime 配置、
   client、heartbeat 或 readiness 中，`dual_model_mode=false`、`legacy_model_id` 为空；
 - blocker=0，人工项全部有 approver/time/comment；
@@ -1499,7 +1502,8 @@ D5 必须同时满足：
 - 新 model 的批准映射语义测试无未批准扩权/撤权；不要求运行旧/新 model 影子或线上双版本比较；
 - BENCH-01、MySQL、DM8、Platform、Client、频道、worker、故障注入与新 runtime
   无 legacy call-site 检查全通过；
-- startup 必须显式配置现有 Store ID + 新 model ID + current Catalog；禁止 auto latest。
+- startup 配置不保存 Store/model/Catalog ID；必须按稳定 Store name 发现唯一 Store/latest
+  model，并与 SQL CURRENT Catalog 引用的 ACTIVE release 完全一致。
 
 ### 8.4 失败处置、前向修复与清理
 
@@ -1521,7 +1525,8 @@ D5 必须同时满足：
 D3 已完成全部旧运行数据退役，D6 没有延后的 cleanup 窗口。迁移 run 达到
 `READY_TO_START/COMPLETED` 且目标 Authorization Model release 为 `ACTIVE` 后仍需：
 
-1. 全部实例持续报告原 Store ID + 新 model ID + current Catalog，且 dual/legacy 配置为空；
+1. 全部实例持续报告自动发现的原 Store ID + 新 model ID + current Catalog，且
+   dual/legacy 配置为空；
 2. 迁移人工项关闭，运行期 projection `FAILED_CLOSED` 为零，关键动作 smoke 与计数复核通过；
 3. 静态和运行时探针证明旧 permission template/binding parser、
    `FineGrainedPermissionService`、legacy shadow write、creator fallback 和 F018 route
@@ -1562,6 +1567,7 @@ D3 已完成全部旧运行数据退役，D6 没有延后的 cleanup 窗口。�
 
 | 日期 | 改动 | 触发原因 |
 |---|---|---|
+| 2026-07-30 | 运行时不再配置 Store/model/Catalog ID；沿用按 Store name 查询唯一 Store 与 latest model 的方式，并增加 F048 checksum + SQL CURRENT Catalog 一致性门禁；迁移 CLI 移除 `--expected-store-id` | 用户明确纠正易变 ID 不应写入配置 |
 | 2026-07-30 | 将手工、SSO/F015 与组织 reconcile 的部门 create/move/archive 统一为业务状态与 projection operation 同 SQL 事务绑定；补充归档恢复到同一 parent 仍重建 mirror 的规则 | T066 实现期崩溃窗口审计 |
 | 2026-07-29 | 用户明确确认 Design ★，允许进入 `tasks.md` 编写与评审；尚未授权编码 | 用户回复“确认design” |
 | 2026-07-29 | Alembic/scripts 职责纠正后的 24 项 Design 接手测试与 Constitution Check 复审 LGTM；停在 Design ★ 门禁 | `/sdd-review ... design` |

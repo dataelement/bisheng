@@ -43,13 +43,12 @@ async def test_api_process_binds_runtime_before_starting_heartbeat(
         )
         return api_runtime
 
-    async def bind(bound_manager, runtime, *, require_config_match):
+    async def bind(bound_manager, runtime):
         calls.append(
             (
                 "bind",
                 bound_manager,
                 runtime,
-                require_config_match,
             )
         )
         return {
@@ -90,7 +89,7 @@ async def test_api_process_binds_runtime_before_starting_heartbeat(
 
     assert calls[0][0] == "initialize"
     assert set(calls[0][2]) == {"department"}
-    assert calls[1] == ("bind", manager, facade, True)
+    assert calls[1] == ("bind", manager, facade)
     assert calls[2] == ("heartbeat", manager)
     assert app.state.f048_manager is manager
     assert app.state.f048_runtime is api_runtime

@@ -46,8 +46,10 @@ deployment.
 1. Enter maintenance and stop API, Celery workers, Celery Beat, Linsight, sync
    jobs, and every permission writer. Wait until all runtime heartbeat keys
    have expired.
-2. Record the existing OpenFGA Store ID and source model ID. The Store ID must
-   remain unchanged throughout F048.
+2. Confirm the configured stable OpenFGA Store name. The script discovers the
+   unique matching Store and latest source model, persists both IDs in the
+   durable migration run, and prints them for the change ticket; operators do
+   not query or copy them into configuration.
 3. Upgrade schema and prove the single Alembic head:
 
    ```bash
@@ -63,19 +65,19 @@ deployment.
    exists, or the source watermark changes between scans.
 
 `F048_SERVICES_STOPPED=1` is an operator acknowledgement, not sufficient proof
-by itself; the script also checks schema, Store identity, Redis heartbeats, and
-two identical source scans.
+by itself; the script also checks schema, the unique named Store, Redis
+heartbeats, and two identical source scans.
 
 #### D2/D3 migrate
 
-Keep the OpenFGA config pinned to the source model while running the write:
+Keep the service stopped and use its normal OpenFGA connection/Store-name
+configuration:
 
 ```bash
 export config=config.yaml
 export F048_SERVICES_STOPPED=1
 PYTHONPATH=./ .venv/bin/python scripts/migrate_f048_permission_data.py \
   migrate \
-  --expected-store-id <existing-store-id> \
   --apply
 ```
 
@@ -91,7 +93,6 @@ forward path, and resume the same run:
 ```bash
 PYTHONPATH=./ .venv/bin/python scripts/migrate_f048_permission_data.py \
   migrate \
-  --expected-store-id <existing-store-id> \
   --run-id <run-id> \
   --apply
 ```
@@ -100,33 +101,12 @@ Resume uses the frozen source facts stored in `permission_migration_item`; it
 does not infer a new plan from a partially rewritten Store. Repeating a
 completed batch is idempotent.
 
-#### D4 verify and runtime pins
+#### D4 verify and runtime discovery
 
-After migrate reports `VERIFYING`, retrieve the target pins from the migration
-run and current Catalog:
-
-```sql
-SELECT r.id AS run_id,
-       r.store_id,
-       r.target_model_id,
-       a.model_checksum,
-       c.id AS catalog_release_id,
-       c.checksum AS catalog_checksum
-FROM permission_migration_run r
-JOIN authorization_model_release a
-  ON a.store_id = r.store_id
- AND a.model_id = r.target_model_id
-JOIN permission_catalog_release c
-  ON c.required_authorization_model_release_id = a.id
-WHERE r.id = <run-id>
-  AND c.status = 'CURRENT';
-```
-
-While services remain stopped, update the deployment configuration to those
-exact `store_id`, `model_id`, `model_checksum`,
-`current_catalog_release_id`, and `current_catalog_checksum` values. Set
+After migrate reports `VERIFYING`, keep services stopped. Do not query
+Store/model/Catalog tables for values to copy into configuration. Ensure
 `force_write_model=false`, `dual_model_mode=false`, and leave
-`legacy_model_id` empty. Then run:
+`legacy_model_id` empty, then run:
 
 ```bash
 PYTHONPATH=./ .venv/bin/python scripts/migrate_f048_permission_data.py \
@@ -135,9 +115,17 @@ PYTHONPATH=./ .venv/bin/python scripts/migrate_f048_permission_data.py \
 
 Verification independently rebuilds source and target checksums, requires exact
 target tuple counts, checks high-risk dashboard/download semantics, preserves
-allowed Store facts, and requires legacy Config/tuple and blocker counts to be
-zero. Success moves the run to `READY_TO_START`; only then may D5 start all
-processes on the new single-model pin and perform readiness/smoke checks.
+allowed Store facts, requires the run target release to be the one referenced
+by the SQL CURRENT Catalog, and requires legacy Config/tuple and blocker counts
+to be zero. Success moves the run to `READY_TO_START`; only then may D5 start
+all processes.
+
+At D5 each process resolves the unique Store by stable `store_name`, selects
+its latest model, and requires the discovered Store/model/checksum to equal the
+ACTIVE authorization release referenced by the SQL CURRENT Catalog. Each
+Check/List/Write then sends that resolved model ID explicitly. A duplicate
+Store name, missing Store/model, checksum mismatch, or Catalog mismatch fails
+startup/readiness.
 
 There is no preview, dry-run, cleanup, rollback, Store switch, dual-model
 window, or automatic startup migration. A failure keeps maintenance active and

@@ -10,8 +10,8 @@
 ## 1. 环境与账号
 
 - [ ] API、Platform、Client、Worker、Linsight Worker 使用同一构建版本。
-- [ ] OpenFGA 为 `openfga/openfga:v1.15.1@sha256:<approved-digest>`，Store ID
-  与批准值一致。
+- [ ] OpenFGA 为 `openfga/openfga:v1.15.1@sha256:<approved-digest>`；配置只保留
+  连接信息和稳定 Store name，未写 Store/model/Catalog ID。
 - [ ] API、Worker、Linsight、同步任务的 heartbeat 均报告同一
   `store_id`、`authorization_model_id`、`catalog_release_id` 和 model checksum。
 - [ ] `OPENFGA_RESOLVE_NODE_LIMIT`、ListObjects 上限、RPC histogram 和 JSON
@@ -138,7 +138,7 @@ knowledge_library、folder、knowledge_file 逐类执行：
 - [ ] 另一租户用户对资源 Check 返回 `19003`，列表不出现该资源，Grant 不能跨租户创建。
 - [ ] department/user_group userset 不展开成员；成员变更后权限随集合关系变化。
 - [ ] API、Celery Worker、Linsight Worker 对同一资源/动作给出一致结果。
-- [ ] 重启任一实例后，heartbeat 未匹配批准 pin 时 readiness 失败并拒绝权限流量。
+- [ ] 重启任一实例后，自动发现结果未匹配 SQL CURRENT Catalog 时 readiness 失败并拒绝权限流量。
 
 ## 7. D0～D6 数据迁移和启服
 
@@ -155,9 +155,10 @@ knowledge_library、folder、knowledge_file 逐类执行：
   不静默猜测或扩权。
 - [ ] D4 门禁满足：blocker=0、人工项签署、受保护 owner 完整、跨租户=0、
   悬空 parent=0、关键动作无未批准扩权。
-- [ ] D4 只激活一个 Catalog release 和一个 authorization model pin，
+- [ ] D4 只激活一个 Catalog release 和一个 authorization model release，
   Store ID 不变。
-- [ ] D5 启服后所有进程 heartbeat 匹配；不存在 model A/B 运行时路由。
+- [ ] D5 启服后所有进程自动发现同一 Store/latest model，且 heartbeat 与 SQL CURRENT
+  Catalog 匹配；不存在 model A/B 运行时路由。
 - [ ] D6 在证明目标 tuple/control 完整后才删除已迁移旧 tuple 和旧 Config 数据；
   删除后旧 API、模板、迁移脚本和 relation 不可达。
 - [ ] 不存在预演、应用级回滚、新→旧转换或旧权限运行时恢复入口。
