@@ -21,6 +21,7 @@ from bisheng.knowledge.domain.repositories.interfaces.knowledge_migration_reposi
 from bisheng.knowledge.domain.services.file_migration.executor import (
     MigrationExecutionUnit,
     MigrationOperations,
+    StaleMigrationAttemptError,
     execute_unit,
 )
 from bisheng.knowledge.domain.services.file_migration.state import (
@@ -46,14 +47,57 @@ class DatabaseMigrationCheckpointStore:
     ):
         self.repository_factory = repository_factory
 
-    async def save_checkpoint(self, unit_id: int, checkpoint: str) -> None:
+    @staticmethod
+    def _attempt_identity(
+        unit: MigrationExecutionUnit,
+    ) -> tuple[int, str]:
+        if unit.attempt_id is None or not unit.execution_token:
+            raise StaleMigrationAttemptError("migration execution generation is missing")
+        return unit.attempt_id, unit.execution_token
+
+    async def is_attempt_active(
+        self,
+        unit: MigrationExecutionUnit,
+    ) -> bool:
+        attempt_id, execution_token = self._attempt_identity(unit)
         async with self.repository_factory() as repository:
-            await repository.update_checkpoint(unit_id, checkpoint)
+            return await repository.is_attempt_active(
+                attempt_id=attempt_id,
+                execution_token=execution_token,
+            )
+
+    async def save_checkpoint(
+        self,
+        unit: MigrationExecutionUnit,
+        checkpoint: str,
+    ) -> None:
+        attempt_id, execution_token = self._attempt_identity(unit)
+        async with self.repository_factory() as repository:
+            updated = await repository.update_checkpoint(
+                unit.unit_id,
+                checkpoint,
+                attempt_id=attempt_id,
+                execution_token=execution_token,
+            )
+            if not updated:
+                await repository.rollback()
+                raise StaleMigrationAttemptError("migration checkpoint write was fenced")
             await repository.commit()
 
-    async def reset_after_compensation(self, unit_id: int) -> None:
+    async def reset_after_compensation(
+        self,
+        unit: MigrationExecutionUnit,
+    ) -> None:
+        attempt_id, execution_token = self._attempt_identity(unit)
         async with self.repository_factory() as repository:
-            await repository.reset_after_compensation(unit_id)
+            reset = await repository.reset_after_compensation(
+                unit.unit_id,
+                attempt_id=attempt_id,
+                execution_token=execution_token,
+            )
+            if not reset:
+                await repository.rollback()
+                raise StaleMigrationAttemptError("migration compensation write was fenced")
             await repository.commit()
 
 
@@ -177,6 +221,7 @@ class KnowledgeMigrationExecutionService:
                 "unit_id": int(unit.id),
                 "checkpoint": unit.checkpoint,
                 "attempt_id": int(attempt.id),
+                "execution_token": execution_token,
                 "restart_pre_switch": int(unit.attempt_count) > 1,
             }
 
@@ -184,24 +229,25 @@ class KnowledgeMigrationExecutionService:
         self,
         *,
         attempt_id: int,
+        execution_token: str,
         result,
-    ) -> None:
+    ) -> bool:
+        if result.interrupted:
+            return False
         async with self.repository_factory() as repository:
             if result.succeeded:
-                await repository.finish_attempt(
+                finished = await repository.finish_attempt(
                     attempt_id=attempt_id,
+                    execution_token=execution_token,
                     unit_status=KnowledgeMigrationUnitStatus.SUCCEEDED.value,
                     checkpoint=result.checkpoint,
                     result=KnowledgeMigrationAttemptResult.SUCCEEDED.value,
                 )
             else:
-                reason_code = (
-                    "source_cleanup_pending"
-                    if result.source_cleanup_pending
-                    else "unit_execution_failed"
-                )
-                await repository.finish_attempt(
+                reason_code = "source_cleanup_pending" if result.source_cleanup_pending else "unit_execution_failed"
+                finished = await repository.finish_attempt(
                     attempt_id=attempt_id,
+                    execution_token=execution_token,
                     unit_status=KnowledgeMigrationUnitStatus.FAILED.value,
                     checkpoint=result.checkpoint,
                     result=KnowledgeMigrationAttemptResult.FAILED.value,
@@ -210,7 +256,11 @@ class KnowledgeMigrationExecutionService:
                         result.error_summary
                     ),
                 )
+            if not finished:
+                await repository.rollback()
+                return False
             await repository.commit()
+            return True
 
     async def _finish_batch(
         self,
@@ -292,6 +342,7 @@ class KnowledgeMigrationExecutionService:
         heartbeat_task = asyncio.create_task(heartbeat.run())
         claimed_batch = None
         terminal_status = None
+        ownership_lost = False
         try:
             claimed_batch = await self._claim_oldest_batch(worker_task_id)
             if claimed_batch is None:
@@ -316,24 +367,48 @@ class KnowledgeMigrationExecutionService:
                     MigrationExecutionUnit(
                         unit_id=int(claimed["unit_id"]),
                         checkpoint=str(claimed["checkpoint"]),
-                        restart_pre_switch=bool(
-                            claimed["restart_pre_switch"]
-                        ),
+                        restart_pre_switch=bool(claimed["restart_pre_switch"]),
+                        attempt_id=int(claimed["attempt_id"]),
+                        execution_token=str(claimed["execution_token"]),
+                        cancelled=heartbeat.lost.is_set,
                     ),
                     self.operations,
                     self.checkpoint_store,
                 )
-                await self._finish_unit(
+                finished = await self._finish_unit(
                     attempt_id=int(claimed["attempt_id"]),
+                    execution_token=str(claimed["execution_token"]),
                     result=result,
                 )
+                if not finished:
+                    ownership_lost = True
+                    break
 
-            if not heartbeat.lost.is_set():
-                await self.operations.cleanup_empty_source_folders(batch_id)
+            ownership_lost = ownership_lost or heartbeat.lost.is_set()
+            if ownership_lost:
+                return {
+                    "acquired": True,
+                    "executed": True,
+                    "batch_id": batch_id,
+                    "round_no": round_no,
+                    "status": "lease_lost",
+                    "requested_batch_id": requested_batch_id,
+                }
+            await self.operations.cleanup_empty_source_folders(batch_id)
+            if heartbeat.lost.is_set():
+                ownership_lost = True
+                return {
+                    "acquired": True,
+                    "executed": True,
+                    "batch_id": batch_id,
+                    "round_no": round_no,
+                    "status": "lease_lost",
+                    "requested_batch_id": requested_batch_id,
+                }
             terminal_status = await self._finish_batch(
                 batch_id=batch_id,
                 round_no=round_no,
-                lease_lost=heartbeat.lost.is_set(),
+                lease_lost=False,
             )
             return {
                 "acquired": True,
@@ -347,7 +422,7 @@ class KnowledgeMigrationExecutionService:
             heartbeat.stop()
             await heartbeat_task
             await self.lock_repository.release(execution_token)
-            if claimed_batch is not None:
+            if claimed_batch is not None and not ownership_lost:
                 await self._wake_next_batch()
 
 
@@ -356,15 +431,18 @@ class KnowledgeMigrationReconcileService:
         self,
         *,
         repository_factory: KnowledgeMigrationRepositoryContextFactory,
+        lock_repository: KnowledgeMigrationLockRepository,
         dispatcher: KnowledgeMigrationTaskDispatcher,
         stale_seconds: int = DEFAULT_RECONCILE_STALE_SECONDS,
     ):
         self.repository_factory = repository_factory
+        self.lock_repository = lock_repository
         self.dispatcher = dispatcher
         self.stale_seconds = stale_seconds
 
     async def reconcile(self, *, limit: int = 100) -> int:
         older_than = datetime.now() - timedelta(seconds=self.stale_seconds)
+        has_active_lease = await self.lock_repository.is_locked()
         async with self.repository_factory() as repository:
             batches = await repository.list_reconcile_candidates(
                 {
@@ -388,6 +466,8 @@ class KnowledgeMigrationReconcileService:
                         KnowledgeMigrationBatchStatus.PREFLIGHT_QUEUED.value
                     )
                 elif status == KnowledgeMigrationBatchStatus.RUNNING.value:
+                    if has_active_lease:
+                        continue
                     if not await repository.recover_stale_running_batch(
                         int(batch.id),
                         queued_at=datetime.now(),

@@ -67,6 +67,15 @@ class KnowledgeMigrationSourceRepository(ABC):
     ) -> list[KnowledgeFile]: ...
 
     @abstractmethod
+    async def expand_selection_page(
+        self,
+        selection_snapshot: Sequence[dict],
+        *,
+        after_id: int,
+        limit: int,
+    ) -> list[KnowledgeFile]: ...
+
+    @abstractmethod
     async def find_versions_by_file_ids(
         self,
         file_ids: set[int],
@@ -106,4 +115,25 @@ class KnowledgeMigrationSourceRepository(ABC):
     async def list_target_folders(
         self,
         target_space_id: int,
+    ) -> list[KnowledgeFile]: ...
+
+    @abstractmethod
+    async def list_target_folders_page(
+        self,
+        target_space_id: int,
+        *,
+        parent_path: str,
+        after_id: int,
+        limit: int,
+    ) -> list[KnowledgeFile]: ...
+
+    @abstractmethod
+    async def list_target_conflict_candidates_page(
+        self,
+        target_space_id: int,
+        *,
+        md5_values: set[str],
+        parent_paths: set[str],
+        after_id: int,
+        limit: int,
     ) -> list[KnowledgeFile]: ...

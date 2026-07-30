@@ -8,6 +8,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.knowledge.domain.models.knowledge_migration import (
     KnowledgeMigrationAttempt,
+    KnowledgeMigrationAttemptResult,
     KnowledgeMigrationBatch,
     KnowledgeMigrationFile,
     KnowledgeMigrationUnit,
@@ -105,11 +106,22 @@ async def test_repository_idempotent_create_plan_claim_checkpoint_and_retry(migr
     )
     assert claimed is not None
     claimed_unit, attempt = claimed
-    await repo.update_checkpoint(int(claimed_unit.id), "target_rows_created")
+    await repo.update_checkpoint(
+        int(claimed_unit.id),
+        "target_rows_created",
+        attempt_id=int(attempt.id),
+        execution_token="digest",
+    )
     with pytest.raises(ValueError, match="cannot move backwards"):
-        await repo.update_checkpoint(int(claimed_unit.id), "planned")
+        await repo.update_checkpoint(
+            int(claimed_unit.id),
+            "planned",
+            attempt_id=int(attempt.id),
+            execution_token="digest",
+        )
     await repo.finish_attempt(
         attempt_id=int(attempt.id),
+        execution_token="digest",
         unit_status="failed",
         checkpoint="target_rows_created",
         result="failed",
@@ -137,6 +149,10 @@ class _FakeRedisConnection:
         self.ttl = ex
         return True
 
+    async def get(self, key):
+        assert key == GLOBAL_MIGRATION_LOCK_KEY
+        return self.value
+
     async def eval(self, script, key_count, key, token, *args):
         assert key_count == 1
         assert key == GLOBAL_MIGRATION_LOCK_KEY
@@ -157,6 +173,7 @@ async def test_global_lock_uses_token_cas_for_renew_and_release():
     )
 
     assert await repo.acquire("token-a", ttl_seconds=30) is True
+    assert await repo.is_locked() is True
     assert await repo.acquire("token-b", ttl_seconds=30) is False
     assert await repo.renew("token-b", ttl_seconds=60) is False
     assert await repo.release("token-b") is False
@@ -165,3 +182,109 @@ async def test_global_lock_uses_token_cas_for_renew_and_release():
     assert connection.ttl == 60
     assert await repo.release("token-a") is True
     assert connection.value is None
+    assert await repo.is_locked() is False
+
+
+@pytest.mark.asyncio
+async def test_interrupted_attempt_cannot_overwrite_new_attempt(
+    migration_session,
+):
+    repo = KnowledgeMigrationRepositoryImpl(migration_session)
+    batch, _ = await repo.create_batch_idempotent(_batch("fencing"))
+    unit = KnowledgeMigrationUnit(
+        batch_id=int(batch.id),
+        unit_key="file:20",
+        source_space_id=10,
+        source_space_name="来源库",
+    )
+    file_row = KnowledgeMigrationFile(
+        batch_id=int(batch.id),
+        unit_id=0,
+        source_file_id=20,
+        source_space_id=10,
+        source_space_name="来源库",
+        source_file_name="fenced.pdf",
+        target_space_id=20,
+        target_space_name="目标库",
+        target_file_name="fenced.pdf",
+    )
+    await repo.replace_plan(int(batch.id), [(unit, [file_row])])
+    assert await repo.compare_and_set_batch_status(
+        int(batch.id),
+        {"preflight_queued"},
+        "preflighting",
+    )
+    assert await repo.compare_and_set_batch_status(
+        int(batch.id),
+        {"preflighting"},
+        "queued",
+        queued_at=datetime.now(),
+    )
+    assert await repo.compare_and_set_batch_status(
+        int(batch.id),
+        {"queued"},
+        "running",
+    )
+
+    first_claim = await repo.claim_next_unit(
+        batch_id=int(batch.id),
+        round_no=1,
+        execution_token="token-old",
+        worker_task_id="task-old",
+    )
+    assert first_claim is not None
+    _, old_attempt = first_claim
+    await repo.mark_remaining_unprocessed(
+        int(batch.id),
+        round_no=1,
+        reason_code="worker_interrupted",
+        summary="old worker lost its lease",
+    )
+    second_claim = await repo.claim_next_unit(
+        batch_id=int(batch.id),
+        round_no=1,
+        execution_token="token-new",
+        worker_task_id="task-new",
+    )
+    assert second_claim is not None
+    current_unit, new_attempt = second_claim
+
+    assert (
+        await repo.update_checkpoint(
+            int(current_unit.id),
+            "target_rows_created",
+            attempt_id=int(old_attempt.id),
+            execution_token="token-old",
+        )
+        is False
+    )
+    assert (
+        await repo.finish_attempt(
+            attempt_id=int(old_attempt.id),
+            execution_token="token-old",
+            unit_status="failed",
+            checkpoint="planned",
+            result="failed",
+            reason_code="late_old_worker",
+        )
+        is False
+    )
+
+    refreshed = await repo.find_batch_by_id(int(batch.id))
+    assert refreshed is not None
+    current = await migration_session.get(KnowledgeMigrationUnit, int(current_unit.id))
+    old = await migration_session.get(
+        KnowledgeMigrationAttempt,
+        int(old_attempt.id),
+    )
+    new = await migration_session.get(
+        KnowledgeMigrationAttempt,
+        int(new_attempt.id),
+    )
+    assert current is not None
+    assert current.status == "running"
+    assert current.checkpoint == "planned"
+    assert old is not None
+    assert old.result == KnowledgeMigrationAttemptResult.INTERRUPTED.value
+    assert new is not None
+    assert new.result == KnowledgeMigrationAttemptResult.RUNNING.value

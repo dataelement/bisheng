@@ -69,3 +69,10 @@ class KnowledgeMigrationLockRepositoryImpl(KnowledgeMigrationLockRepository):
             token,
         )
         return bool(result)
+
+    async def is_locked(self) -> bool:
+        redis = await self._redis()
+        return (
+            await redis.async_connection.get(self.key)
+            is not None
+        )

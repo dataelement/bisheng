@@ -122,6 +122,7 @@ def execute_knowledge_migration(
 def reconcile_knowledge_migrations(limit: int = 100):
     service = KnowledgeMigrationReconcileService(
         repository_factory=KnowledgeMigrationRepositoryContextFactoryImpl(),
+        lock_repository=KnowledgeMigrationLockRepositoryImpl(),
         dispatcher=CeleryKnowledgeMigrationTaskDispatcher(),
     )
     return run_async_task(lambda: service.reconcile(limit=int(limit)))

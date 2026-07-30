@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -13,6 +14,9 @@ class MigrationExecutionUnit:
     unit_id: int
     checkpoint: str = KnowledgeMigrationCheckpoint.PLANNED.value
     restart_pre_switch: bool = False
+    attempt_id: int | None = None
+    execution_token: str = ""
+    cancelled: Callable[[], bool] | None = None
 
 
 @dataclass(frozen=True)
@@ -21,6 +25,7 @@ class ExecutionResult:
     checkpoint: str
     source_cleanup_pending: bool
     error_summary: str = ""
+    interrupted: bool = False
 
 
 class MigrationOperations(Protocol):
@@ -36,8 +41,25 @@ class MigrationOperations(Protocol):
 
 
 class CheckpointStore(Protocol):
-    async def save_checkpoint(self, unit_id: int, checkpoint: str) -> None: ...
-    async def reset_after_compensation(self, unit_id: int) -> None: ...
+    async def is_attempt_active(
+        self,
+        unit: MigrationExecutionUnit,
+    ) -> bool: ...
+
+    async def save_checkpoint(
+        self,
+        unit: MigrationExecutionUnit,
+        checkpoint: str,
+    ) -> None: ...
+
+    async def reset_after_compensation(
+        self,
+        unit: MigrationExecutionUnit,
+    ) -> None: ...
+
+
+class StaleMigrationAttemptError(RuntimeError):
+    """当前 worker 已不再拥有该迁移单元的执行代。"""
 
 
 _STEPS = (
@@ -55,6 +77,16 @@ _CHECKPOINT_INDEX = {
     **{checkpoint: index + 1 for index, (_, checkpoint) in enumerate(_STEPS)},
     KnowledgeMigrationCheckpoint.COMPLETED.value: len(_STEPS) + 1,
 }
+
+
+async def _ensure_active(
+    unit: MigrationExecutionUnit,
+    checkpoint_store: CheckpointStore,
+) -> None:
+    if unit.cancelled is not None and unit.cancelled():
+        raise StaleMigrationAttemptError("migration execution lease was lost")
+    if not await checkpoint_store.is_attempt_active(unit):
+        raise StaleMigrationAttemptError("migration execution generation is no longer active")
 
 
 async def execute_unit(
@@ -77,10 +109,20 @@ async def execute_unit(
         ]
     ):
         try:
+            await _ensure_active(unit, checkpoint_store)
             await operations.cleanup_new_target(unit)
-            await checkpoint_store.reset_after_compensation(unit.unit_id)
+            await _ensure_active(unit, checkpoint_store)
+            await checkpoint_store.reset_after_compensation(unit)
             checkpoint = KnowledgeMigrationCheckpoint.PLANNED.value
             completed_steps = 0
+        except StaleMigrationAttemptError as exc:
+            return ExecutionResult(
+                succeeded=False,
+                checkpoint=checkpoint,
+                source_cleanup_pending=False,
+                error_summary=f"{type(exc).__name__}: {exc}",
+                interrupted=True,
+            )
         except Exception as exc:
             return ExecutionResult(
                 succeeded=False,
@@ -93,19 +135,40 @@ async def execute_unit(
         for index, (method_name, next_checkpoint) in enumerate(_STEPS, start=1):
             if index <= completed_steps:
                 continue
+            await _ensure_active(unit, checkpoint_store)
             await getattr(operations, method_name)(unit)
             checkpoint = next_checkpoint
-            await checkpoint_store.save_checkpoint(unit.unit_id, checkpoint)
+            await _ensure_active(unit, checkpoint_store)
+            await checkpoint_store.save_checkpoint(unit, checkpoint)
         checkpoint = KnowledgeMigrationCheckpoint.COMPLETED.value
-        await checkpoint_store.save_checkpoint(unit.unit_id, checkpoint)
+        await _ensure_active(unit, checkpoint_store)
+        await checkpoint_store.save_checkpoint(unit, checkpoint)
         return ExecutionResult(True, checkpoint, False)
+    except StaleMigrationAttemptError as exc:
+        return ExecutionResult(
+            succeeded=False,
+            checkpoint=checkpoint,
+            source_cleanup_pending=False,
+            error_summary=f"{type(exc).__name__}: {exc}",
+            interrupted=True,
+        )
     except Exception as exc:
         switched = _CHECKPOINT_INDEX[checkpoint] >= _CHECKPOINT_INDEX[KnowledgeMigrationCheckpoint.DB_SWITCHED.value]
         if not switched:
             try:
+                await _ensure_active(unit, checkpoint_store)
                 await operations.cleanup_new_target(unit)
-                await checkpoint_store.reset_after_compensation(unit.unit_id)
+                await _ensure_active(unit, checkpoint_store)
+                await checkpoint_store.reset_after_compensation(unit)
                 checkpoint = KnowledgeMigrationCheckpoint.PLANNED.value
+            except StaleMigrationAttemptError as stale_exc:
+                return ExecutionResult(
+                    succeeded=False,
+                    checkpoint=checkpoint,
+                    source_cleanup_pending=False,
+                    error_summary=(f"{type(stale_exc).__name__}: {stale_exc}"),
+                    interrupted=True,
+                )
             except Exception:
                 # 补偿失败由上层 attempt/manifest 记录. 不能覆盖原始失败.
                 pass

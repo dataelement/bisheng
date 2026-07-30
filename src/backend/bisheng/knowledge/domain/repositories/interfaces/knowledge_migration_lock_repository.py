@@ -10,3 +10,6 @@ class KnowledgeMigrationLockRepository(ABC):
 
     @abstractmethod
     async def release(self, token: str) -> bool: ...
+
+    @abstractmethod
+    async def is_locked(self) -> bool: ...

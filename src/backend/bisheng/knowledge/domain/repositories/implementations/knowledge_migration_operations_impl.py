@@ -335,9 +335,15 @@ class KnowledgeMigrationOperationsImpl:
             return await repository.load_context(unit_id)
 
     async def create_target_rows(self, unit: MigrationExecutionUnit) -> None:
+        if unit.attempt_id is None or not unit.execution_token:
+            raise RuntimeError("migration execution generation is missing")
         async with get_async_db_session() as session:
             repository = KnowledgeMigrationRuntimeRepositoryImpl(session)
-            await repository.prepare_target_rows(unit.unit_id)
+            await repository.prepare_target_rows(
+                unit.unit_id,
+                attempt_id=unit.attempt_id,
+                execution_token=unit.execution_token,
+            )
 
     async def copy_target_objects(self, unit: MigrationExecutionUnit) -> None:
         copy_jobs: list[
@@ -556,9 +562,15 @@ class KnowledgeMigrationOperationsImpl:
                 raise RuntimeError("target owner or parent permission is missing")
 
     async def switch_database(self, unit: MigrationExecutionUnit) -> None:
+        if unit.attempt_id is None or not unit.execution_token:
+            raise RuntimeError("migration execution generation is missing")
         async with get_async_db_session() as session:
             repository = KnowledgeMigrationRuntimeRepositoryImpl(session)
-            await repository.activate_switch(unit.unit_id)
+            await repository.activate_switch(
+                unit.unit_id,
+                attempt_id=unit.attempt_id,
+                execution_token=unit.execution_token,
+            )
 
     async def cleanup_source_external(
         self,
@@ -629,6 +641,8 @@ class KnowledgeMigrationOperationsImpl:
         self,
         unit: MigrationExecutionUnit,
     ) -> None:
+        if unit.attempt_id is None or not unit.execution_token:
+            raise RuntimeError("migration execution generation is missing")
         try:
             context = await self._load_context(unit.unit_id)
         except RuntimeError as exc:
@@ -656,7 +670,11 @@ class KnowledgeMigrationOperationsImpl:
             await _replace_permission_tuples(f"folder:{folder.id}", ())
         async with get_async_db_session() as session:
             repository = KnowledgeMigrationRuntimeRepositoryImpl(session)
-            await repository.cleanup_new_target_rows(unit.unit_id)
+            await repository.cleanup_new_target_rows(
+                unit.unit_id,
+                attempt_id=unit.attempt_id,
+                execution_token=unit.execution_token,
+            )
 
     async def cleanup_empty_source_folders(self, batch_id: int) -> None:
         """仅清理由成功单元影响且此刻确实为空的来源目录。"""

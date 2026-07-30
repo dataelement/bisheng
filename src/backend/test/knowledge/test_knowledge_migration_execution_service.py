@@ -8,6 +8,7 @@ from bisheng.knowledge.domain.services.file_migration.state import (
 )
 from bisheng.knowledge.domain.services.knowledge_migration_executor import (
     KnowledgeMigrationExecutionService,
+    KnowledgeMigrationReconcileService,
 )
 
 
@@ -35,6 +36,7 @@ class FakeRepository:
         ]
         self.attempt_by_id = {}
         self.next_attempt_id = 100
+        self.recovered_running = 0
 
     async def find_oldest_queued_batch(self):
         return self.batch if self.batch.status == "queued" else None
@@ -61,7 +63,7 @@ class FakeRepository:
         execution_token,
         worker_task_id,
     ):
-        del round_no, execution_token, worker_task_id
+        del round_no, worker_task_id
         if batch_id != self.batch.id or self.batch.status != "running":
             return None
         unit = next(
@@ -72,36 +74,78 @@ class FakeRepository:
             return None
         unit.status = "running"
         unit.attempt_count += 1
-        attempt = SimpleNamespace(id=self.next_attempt_id, unit_id=unit.id)
+        attempt = SimpleNamespace(
+            id=self.next_attempt_id,
+            unit_id=unit.id,
+            attempt_no=unit.attempt_count,
+            execution_token=execution_token,
+            result="running",
+        )
         self.next_attempt_id += 1
         self.attempt_by_id[attempt.id] = attempt
         return unit, attempt
 
-    async def update_checkpoint(self, unit_id, checkpoint):
-        next(item for item in self.units if item.id == unit_id).checkpoint = (
-            checkpoint
-        )
+    async def is_attempt_active(self, *, attempt_id, execution_token):
+        attempt = self.attempt_by_id.get(attempt_id)
+        if attempt is None or attempt.execution_token != execution_token:
+            return False
+        unit = next(item for item in self.units if item.id == attempt.unit_id)
+        return attempt.result == "running" and unit.status == "running" and unit.attempt_count == attempt.attempt_no
 
-    async def reset_after_compensation(self, unit_id):
-        next(item for item in self.units if item.id == unit_id).checkpoint = (
-            "planned"
-        )
+    async def update_checkpoint(
+        self,
+        unit_id,
+        checkpoint,
+        *,
+        attempt_id,
+        execution_token,
+    ):
+        if not await self.is_attempt_active(
+            attempt_id=attempt_id,
+            execution_token=execution_token,
+        ):
+            return False
+        next(item for item in self.units if item.id == unit_id).checkpoint = checkpoint
+        return True
+
+    async def reset_after_compensation(
+        self,
+        unit_id,
+        *,
+        attempt_id,
+        execution_token,
+    ):
+        if not await self.is_attempt_active(
+            attempt_id=attempt_id,
+            execution_token=execution_token,
+        ):
+            return False
+        next(item for item in self.units if item.id == unit_id).checkpoint = "planned"
+        return True
 
     async def finish_attempt(
         self,
         *,
         attempt_id,
+        execution_token,
         unit_status,
         checkpoint,
         result,
         reason_code=None,
         error_summary=None,
     ):
-        del result, reason_code, error_summary
+        del reason_code, error_summary
         attempt = self.attempt_by_id[attempt_id]
+        if not await self.is_attempt_active(
+            attempt_id=attempt_id,
+            execution_token=execution_token,
+        ):
+            return False
         unit = next(item for item in self.units if item.id == attempt.unit_id)
         unit.status = unit_status
         unit.checkpoint = checkpoint
+        attempt.result = result
+        return True
 
     async def recompute_progress(self, batch_id):
         assert batch_id == self.batch.id
@@ -115,6 +159,28 @@ class FakeRepository:
 
     async def touch_running_batch(self, *args, **kwargs):
         del args, kwargs
+        return True
+
+    async def list_reconcile_candidates(
+        self,
+        statuses,
+        *,
+        older_than,
+        limit,
+    ):
+        del older_than, limit
+        return [self.batch] if self.batch.status in statuses else []
+
+    async def recover_stale_running_batch(
+        self,
+        batch_id,
+        *,
+        queued_at,
+    ):
+        del queued_at
+        assert batch_id == self.batch.id
+        self.recovered_running += 1
+        self.batch.status = "queued"
         return True
 
     async def commit(self):
@@ -155,6 +221,9 @@ class FakeLock:
         self.value = None
         self.released = True
         return True
+
+    async def is_locked(self):
+        return self.value is not None
 
 
 class FakeOperations:
@@ -235,3 +304,23 @@ async def test_execution_uses_oldest_batch_and_continues_after_unit_failure():
     ]
     assert (11, "switch_database") in operations.calls
     assert lock.released is True
+
+
+@pytest.mark.asyncio
+async def test_reconcile_does_not_take_over_while_global_lease_exists():
+    repository = FakeRepository()
+    repository.batch.status = "running"
+    lock = FakeLock()
+    lock.value = "active-token"
+    service = KnowledgeMigrationReconcileService(
+        repository_factory=FakeRepositoryFactory(repository),
+        lock_repository=lock,
+        dispatcher=FakeDispatcher(),
+        stale_seconds=1,
+    )
+
+    recovered = await service.reconcile(limit=10)
+
+    assert recovered == 0
+    assert repository.recovered_running == 0
+    assert repository.batch.status == "running"

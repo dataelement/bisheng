@@ -234,49 +234,72 @@ class KnowledgeMigrationSourceRepositoryImpl(KnowledgeMigrationSourceRepository)
         self,
         selection_snapshot: Sequence[dict],
     ) -> list[KnowledgeFile]:
-        results: dict[int, KnowledgeFile] = {}
+        results: list[KnowledgeFile] = []
+        after_id = 0
+        page_size = 500
+        while True:
+            page = await self.expand_selection_page(
+                selection_snapshot,
+                after_id=after_id,
+                limit=page_size,
+            )
+            results.extend(page)
+            if len(page) < page_size:
+                break
+            after_id = int(page[-1].id)
+        return results
+
+    async def expand_selection_page(
+        self,
+        selection_snapshot: Sequence[dict],
+        *,
+        after_id: int,
+        limit: int,
+    ) -> list[KnowledgeFile]:
+        space_filters = []
         for selection in selection_snapshot:
             space_id = int(selection["space_id"])
-            file_ids = {
-                int(node["node_id"])
-                for node in selection["nodes"]
-                if node["node_type"] == "file"
-            }
-            folder_ids = {
-                int(node["node_id"])
+            file_ids = {int(node["node_id"]) for node in selection["nodes"] if node["node_type"] == "file"}
+            folder_prefixes = {
+                f"{node.get('file_level_path') or ''}/{int(node['node_id'])}"
                 for node in selection["nodes"]
                 if node["node_type"] == "folder"
             }
-            folders = await self.find_nodes(space_id=space_id, node_ids=folder_ids)
-            descendants = []
-            for folder in folders:
-                if folder.file_type != FileType.DIR.value:
-                    continue
-                prefix = f"{folder.file_level_path or ''}/{folder.id}"
-                descendants.append(
+            selection_filters = []
+            if file_ids:
+                selection_filters.append(col(KnowledgeFile.id).in_(file_ids))
+            for prefix in folder_prefixes:
+                selection_filters.append(
                     or_(
                         KnowledgeFile.file_level_path == prefix,
                         KnowledgeFile.file_level_path.like(f"{prefix}/%"),
                     )
                 )
-            selection_filter = []
-            if file_ids:
-                selection_filter.append(col(KnowledgeFile.id).in_(file_ids))
-            selection_filter.extend(descendants)
-            if not selection_filter:
+            if not selection_filters:
                 continue
-            rows = (
+            space_filters.append(
+                and_(
+                    KnowledgeFile.knowledge_id == space_id,
+                    or_(*selection_filters),
+                )
+            )
+        if not space_filters:
+            return []
+        return list(
+            (
                 await self.session.exec(
-                    select(KnowledgeFile).where(
-                        KnowledgeFile.knowledge_id == space_id,
+                    select(KnowledgeFile)
+                    .where(
+                        or_(*space_filters),
+                        KnowledgeFile.id > after_id,
                         KnowledgeFile.file_type == FileType.FILE.value,
                         KnowledgeFile.deleted_at.is_(None),
-                        or_(*selection_filter),
                     )
+                    .order_by(KnowledgeFile.id)
+                    .limit(limit)
                 )
             ).all()
-            results.update({int(row.id): row for row in rows})
-        return sorted(results.values(), key=lambda item: int(item.id))
+        )
 
     async def find_versions_by_file_ids(
         self,
@@ -391,6 +414,70 @@ class KnowledgeMigrationSourceRepositoryImpl(KnowledgeMigrationSourceRepository)
                         KnowledgeFile.file_type == FileType.DIR.value,
                         KnowledgeFile.deleted_at.is_(None),
                     )
+                )
+            ).all()
+        )
+
+    async def list_target_folders_page(
+        self,
+        target_space_id: int,
+        *,
+        parent_path: str,
+        after_id: int,
+        limit: int,
+    ) -> list[KnowledgeFile]:
+        return list(
+            (
+                await self.session.exec(
+                    select(KnowledgeFile)
+                    .where(
+                        KnowledgeFile.knowledge_id == target_space_id,
+                        KnowledgeFile.file_type == FileType.DIR.value,
+                        KnowledgeFile.deleted_at.is_(None),
+                        KnowledgeFile.file_level_path == parent_path,
+                        KnowledgeFile.id > after_id,
+                    )
+                    .order_by(KnowledgeFile.id)
+                    .limit(limit)
+                )
+            ).all()
+        )
+
+    async def list_target_conflict_candidates_page(
+        self,
+        target_space_id: int,
+        *,
+        md5_values: set[str],
+        parent_paths: set[str],
+        after_id: int,
+        limit: int,
+    ) -> list[KnowledgeFile]:
+        conflict_filters = []
+        if md5_values:
+            conflict_filters.append(
+                func.trim(KnowledgeFile.md5).in_(md5_values)
+            )
+        if parent_paths:
+            conflict_filters.append(col(KnowledgeFile.file_level_path).in_(parent_paths))
+        if not conflict_filters:
+            return []
+        return list(
+            (
+                await self.session.exec(
+                    select(KnowledgeFile)
+                    .where(
+                        KnowledgeFile.knowledge_id == target_space_id,
+                        KnowledgeFile.file_type == FileType.FILE.value,
+                        KnowledgeFile.deleted_at.is_(None),
+                        or_(
+                            KnowledgeFile.entry_type.is_(None),
+                            KnowledgeFile.entry_status == KnowledgeFileEntryStatus.ACTIVE.value,
+                        ),
+                        or_(*conflict_filters),
+                        KnowledgeFile.id > after_id,
+                    )
+                    .order_by(KnowledgeFile.id)
+                    .limit(limit)
                 )
             ).all()
         )

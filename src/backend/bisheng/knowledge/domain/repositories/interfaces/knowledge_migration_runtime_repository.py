@@ -33,16 +33,34 @@ class MigrationRuntimeContext:
 
 class KnowledgeMigrationRuntimeRepository(ABC):
     @abstractmethod
-    async def prepare_target_rows(self, unit_id: int) -> MigrationRuntimeContext: ...
+    async def prepare_target_rows(
+        self,
+        unit_id: int,
+        *,
+        attempt_id: int,
+        execution_token: str,
+    ) -> MigrationRuntimeContext: ...
 
     @abstractmethod
     async def load_context(self, unit_id: int) -> MigrationRuntimeContext: ...
 
     @abstractmethod
-    async def activate_switch(self, unit_id: int) -> None: ...
+    async def activate_switch(
+        self,
+        unit_id: int,
+        *,
+        attempt_id: int,
+        execution_token: str,
+    ) -> None: ...
 
     @abstractmethod
     async def cleanup_source_rows(self, unit_id: int) -> None: ...
 
     @abstractmethod
-    async def cleanup_new_target_rows(self, unit_id: int) -> None: ...
+    async def cleanup_new_target_rows(
+        self,
+        unit_id: int,
+        *,
+        attempt_id: int,
+        execution_token: str,
+    ) -> None: ...

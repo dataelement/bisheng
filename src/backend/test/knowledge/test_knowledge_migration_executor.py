@@ -49,12 +49,18 @@ class FakeCheckpointStore:
     def __init__(self):
         self.checkpoints: list[str] = []
         self.compensated: list[int] = []
+        self.active = True
 
-    async def save_checkpoint(self, unit_id: int, checkpoint: str):
+    async def is_attempt_active(self, unit):
+        del unit
+        return self.active
+
+    async def save_checkpoint(self, unit, checkpoint: str):
+        del unit
         self.checkpoints.append(checkpoint)
 
-    async def reset_after_compensation(self, unit_id: int):
-        self.compensated.append(unit_id)
+    async def reset_after_compensation(self, unit):
+        self.compensated.append(unit.unit_id)
 
 
 @pytest.mark.asyncio
@@ -115,3 +121,33 @@ async def test_retry_before_switch_cleans_residue_and_restarts_from_planned():
     assert operations.calls[0] == "cleanup_new_target"
     assert operations.calls.count("create_target_rows") == 1
     assert store.compensated == [1]
+
+
+@pytest.mark.asyncio
+async def test_stale_execution_generation_stops_without_compensating():
+    store = FakeCheckpointStore()
+
+    class LeaseLosingOperations(FakeOperations):
+        async def copy_target_objects(self, unit):
+            await super().copy_target_objects(unit)
+            store.active = False
+
+    operations = LeaseLosingOperations()
+    result = await execute_unit(
+        MigrationExecutionUnit(
+            unit_id=1,
+            attempt_id=10,
+            execution_token="old-token",
+        ),
+        operations,
+        store,
+    )
+
+    assert result.interrupted is True
+    assert result.succeeded is False
+    assert operations.calls == [
+        "create_target_rows",
+        "copy_target_objects",
+    ]
+    assert "cleanup_new_target" not in operations.calls
+    assert store.compensated == []

@@ -143,6 +143,50 @@ async def test_approval_grant_can_preview_but_does_not_add_download_permission()
 
 
 @pytest.mark.asyncio
+async def test_approval_grant_detail_projection_keeps_department_download_decision():
+    service = _service()
+    file = _file()
+    space = SimpleNamespace(id=2)
+    service.department_file_view_access_service = SimpleNamespace(
+        evaluate_file=AsyncMock(
+            return_value=DepartmentFileAccessDecision(
+                file_id=21,
+                space_id=2,
+                status=DepartmentFileAccessStatus.ALLOWED,
+                source=DepartmentFileAccessSource.APPROVAL_GRANT,
+                can_download=False,
+                department_id=30,
+            )
+        )
+    )
+    service._get_shougang_portal_request_spaces = AsyncMock(
+        return_value=[space]
+    )
+
+    with patch(
+        "bisheng.knowledge.domain.services.knowledge_space_service."
+        "KnowledgeFileDao.query_by_id",
+        new=AsyncMock(return_value=file),
+    ):
+        authorized, _ = await service._get_authorized_shougang_portal_file(
+            space_id=2,
+            file_id=21,
+        )
+
+    assert authorized is file
+    item = service._map_shougang_portal_file_item(
+        2,
+        {
+            "id": 21,
+            "file_name": "设备点检标准.pdf",
+        },
+    )
+    assert item.is_department_file is True
+    assert item.access_source == DepartmentFileAccessSource.APPROVAL_GRANT
+    assert item.can_download is False
+
+
+@pytest.mark.asyncio
 async def test_approval_grant_can_preview_distributed_share_entry():
     service = _service()
     share = _file()

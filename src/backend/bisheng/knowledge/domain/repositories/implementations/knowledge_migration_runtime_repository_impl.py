@@ -27,9 +27,14 @@ from bisheng.knowledge.domain.models.knowledge_file_similarity_candidate import 
     KnowledgeFileSimilarityCandidate,
 )
 from bisheng.knowledge.domain.models.knowledge_migration import (
+    KnowledgeMigrationAttempt,
+    KnowledgeMigrationAttemptResult,
     KnowledgeMigrationBatch,
+    KnowledgeMigrationBatchStatus,
+    KnowledgeMigrationCheckpoint,
     KnowledgeMigrationFile,
     KnowledgeMigrationUnit,
+    KnowledgeMigrationUnitStatus,
 )
 from bisheng.knowledge.domain.models.portal_recommendation_file_projection import (
     PortalRecommendationFileProjection,
@@ -63,12 +68,13 @@ class KnowledgeMigrationRuntimeRepositoryImpl(KnowledgeMigrationRuntimeRepositor
         KnowledgeMigrationUnit,
         list[KnowledgeMigrationFile],
     ]:
-        unit_statement = select(KnowledgeMigrationUnit).where(
-            KnowledgeMigrationUnit.id == unit_id
-        )
-        if for_update:
-            unit_statement = unit_statement.with_for_update()
-        unit = (await self.session.exec(unit_statement)).first()
+        unit = (
+            await self.session.exec(
+                select(KnowledgeMigrationUnit).where(
+                    KnowledgeMigrationUnit.id == unit_id
+                )
+            )
+        ).first()
         if unit is None:
             raise LookupError(f"migration unit not found: {unit_id}")
         batch_statement = select(KnowledgeMigrationBatch).where(
@@ -77,19 +83,70 @@ class KnowledgeMigrationRuntimeRepositoryImpl(KnowledgeMigrationRuntimeRepositor
         if for_update:
             batch_statement = batch_statement.with_for_update()
         batch = (await self.session.exec(batch_statement)).one()
-        files = list(
-            (
+        if for_update:
+            unit = (
                 await self.session.exec(
-                    select(KnowledgeMigrationFile)
-                    .where(KnowledgeMigrationFile.unit_id == unit_id)
-                    .order_by(
-                        KnowledgeMigrationFile.source_version_no,
-                        KnowledgeMigrationFile.id,
-                    )
+                    select(KnowledgeMigrationUnit)
+                    .where(KnowledgeMigrationUnit.id == unit_id)
+                    .with_for_update()
                 )
-            ).all()
+            ).one()
+        file_statement = (
+            select(KnowledgeMigrationFile)
+            .where(KnowledgeMigrationFile.unit_id == unit_id)
+            .order_by(
+                KnowledgeMigrationFile.source_version_no,
+                KnowledgeMigrationFile.id,
+            )
         )
+        if for_update:
+            file_statement = file_statement.with_for_update()
+        files = list((await self.session.exec(file_statement)).all())
         return batch, unit, files
+
+    async def _active_control_rows(
+        self,
+        *,
+        unit_id: int,
+        attempt_id: int,
+        execution_token: str,
+    ) -> tuple[
+        KnowledgeMigrationBatch,
+        KnowledgeMigrationUnit,
+        list[KnowledgeMigrationFile],
+    ]:
+        identity = (
+            await self.session.exec(
+                select(KnowledgeMigrationAttempt).where(
+                    KnowledgeMigrationAttempt.id == attempt_id
+                )
+            )
+        ).first()
+        if identity is None or int(identity.unit_id) != unit_id:
+            raise RuntimeError("migration attempt is no longer active")
+        batch, unit, control_files = await self._control_rows(
+            unit_id,
+            for_update=True,
+        )
+        attempt = (
+            await self.session.exec(
+                select(KnowledgeMigrationAttempt)
+                .where(KnowledgeMigrationAttempt.id == attempt_id)
+                .with_for_update()
+            )
+        ).first()
+        if (
+            attempt is None
+            or int(attempt.unit_id) != unit_id
+            or attempt.execution_token != execution_token
+            or attempt.result
+            != KnowledgeMigrationAttemptResult.RUNNING.value
+            or batch.status != KnowledgeMigrationBatchStatus.RUNNING.value
+            or unit.status != KnowledgeMigrationUnitStatus.RUNNING.value
+            or int(unit.attempt_count) != int(attempt.attempt_no)
+        ):
+            raise RuntimeError("migration attempt is no longer active")
+        return batch, unit, control_files
 
     async def _runtime_context(
         self,
@@ -326,9 +383,17 @@ class KnowledgeMigrationRuntimeRepositoryImpl(KnowledgeMigrationRuntimeRepositor
             payload["entry_status"] = KnowledgeFileEntryStatus.PREPARING.value
         return KnowledgeFile(**payload)
 
-    async def prepare_target_rows(self, unit_id: int) -> MigrationRuntimeContext:
-        batch, unit, control_files = await self._control_rows(
-            unit_id, for_update=True
+    async def prepare_target_rows(
+        self,
+        unit_id: int,
+        *,
+        attempt_id: int,
+        execution_token: str,
+    ) -> MigrationRuntimeContext:
+        batch, unit, control_files = await self._active_control_rows(
+            unit_id=unit_id,
+            attempt_id=attempt_id,
+            execution_token=execution_token,
         )
         if control_files and all(row.target_file_id is not None for row in control_files):
             return await self._runtime_context(batch, unit, control_files)
@@ -475,6 +540,44 @@ class KnowledgeMigrationRuntimeRepositoryImpl(KnowledgeMigrationRuntimeRepositor
             )
         }
 
+    @staticmethod
+    def _document_fingerprint(
+        document: KnowledgeDocument | dict[str, Any],
+    ) -> dict[str, Any]:
+        value = document if isinstance(document, dict) else document.model_dump(mode="json")
+        return {
+            key: value.get(key)
+            for key in (
+                "id",
+                "tenant_id",
+                "knowledge_id",
+                "file_level_path",
+                "level",
+                "primary_version_id",
+                "lifecycle_status",
+                "deleted_at",
+                "update_time",
+            )
+        }
+
+    @staticmethod
+    def _version_fingerprint(
+        version: KnowledgeDocumentVersion | dict[str, Any],
+    ) -> dict[str, Any]:
+        value = version if isinstance(version, dict) else version.model_dump(mode="json")
+        return {
+            key: value.get(key)
+            for key in (
+                "id",
+                "document_id",
+                "knowledge_file_id",
+                "version_no",
+                "is_primary",
+                "create_time",
+                "update_time",
+            )
+        }
+
     async def _apply_overwrite_switch(
         self,
         unit: KnowledgeMigrationUnit,
@@ -499,11 +602,55 @@ class KnowledgeMigrationRuntimeRepositoryImpl(KnowledgeMigrationRuntimeRepositor
         actual = {int(row.id): self._fingerprint(row) for row in current_rows}
         if actual != expected:
             raise RuntimeError("overwrite target changed after confirmation")
-        overwrite_document_ids = {
-            int(row.reference_document_id)
-            for row in current_rows
-            if row.reference_document_id is not None
-        }
+        expected_document = snapshot.get("document")
+        expected_versions = snapshot.get("versions") or []
+        if expected_document is not None:
+            document_id = int(expected_document["id"])
+            current_document = (
+                await self.session.exec(
+                    select(KnowledgeDocument).where(KnowledgeDocument.id == document_id).with_for_update()
+                )
+            ).first()
+            current_versions = list(
+                (
+                    await self.session.exec(
+                        select(KnowledgeDocumentVersion)
+                        .where(KnowledgeDocumentVersion.document_id == document_id)
+                        .order_by(
+                            KnowledgeDocumentVersion.version_no,
+                            KnowledgeDocumentVersion.id,
+                        )
+                        .with_for_update()
+                    )
+                ).all()
+            )
+            expected_version_fingerprints = sorted(
+                (self._version_fingerprint(version) for version in expected_versions),
+                key=lambda value: int(value["id"]),
+            )
+            actual_version_fingerprints = sorted(
+                (self._version_fingerprint(version) for version in current_versions),
+                key=lambda value: int(value["id"]),
+            )
+            expected_version_file_ids = {int(version["knowledge_file_id"]) for version in expected_versions}
+            if (
+                current_document is None
+                or self._document_fingerprint(current_document) != self._document_fingerprint(expected_document)
+                or actual_version_fingerprints != expected_version_fingerprints
+                or expected_version_file_ids != set(expected)
+            ):
+                raise RuntimeError("overwrite target document graph changed after confirmation")
+        elif expected_versions:
+            raise RuntimeError("overwrite target document graph changed after confirmation")
+        overwrite_document_ids = (
+            {int(expected_document["id"])}
+            if expected_document is not None
+            else {
+                int(row.reference_document_id)
+                for row in current_rows
+                if row.reference_document_id is not None
+            }
+        )
         if (
             unit.source_document_id is not None
             and int(unit.source_document_id) in overwrite_document_ids
@@ -659,15 +806,19 @@ class KnowledgeMigrationRuntimeRepositoryImpl(KnowledgeMigrationRuntimeRepositor
                 f"{sorted(unexpected)}"
             )
 
-    async def activate_switch(self, unit_id: int) -> None:
-        batch, unit, control_files = await self._control_rows(
-            unit_id, for_update=True
+    async def activate_switch(
+        self,
+        unit_id: int,
+        *,
+        attempt_id: int,
+        execution_token: str,
+    ) -> None:
+        batch, unit, control_files = await self._active_control_rows(
+            unit_id=unit_id,
+            attempt_id=attempt_id,
+            execution_token=execution_token,
         )
-        target_ids = {
-            int(row.target_file_id)
-            for row in control_files
-            if row.target_file_id is not None
-        }
+        target_ids = {int(row.target_file_id) for row in control_files if row.target_file_id is not None}
         if len(target_ids) != len(control_files):
             raise RuntimeError("target rows are incomplete")
         source_ids = {row.source_file_id for row in control_files}
@@ -755,6 +906,11 @@ class KnowledgeMigrationRuntimeRepositoryImpl(KnowledgeMigrationRuntimeRepositor
             source.status = KnowledgeFileStatus.PROCESSING.value
             self.session.add(source)
             self.session.add(target)
+        unit.checkpoint = KnowledgeMigrationCheckpoint.DB_SWITCHED.value
+        self.session.add(unit)
+        for control in control_files:
+            control.checkpoint = KnowledgeMigrationCheckpoint.DB_SWITCHED.value
+            self.session.add(control)
         await self.session.commit()
 
     async def cleanup_source_rows(self, unit_id: int) -> None:
@@ -788,15 +944,19 @@ class KnowledgeMigrationRuntimeRepositoryImpl(KnowledgeMigrationRuntimeRepositor
             self.session.add(space)
         await self.session.commit()
 
-    async def cleanup_new_target_rows(self, unit_id: int) -> None:
-        _, unit, control_files = await self._control_rows(
-            unit_id, for_update=True
+    async def cleanup_new_target_rows(
+        self,
+        unit_id: int,
+        *,
+        attempt_id: int,
+        execution_token: str,
+    ) -> None:
+        _, unit, control_files = await self._active_control_rows(
+            unit_id=unit_id,
+            attempt_id=attempt_id,
+            execution_token=execution_token,
         )
-        target_ids = {
-            int(row.target_file_id)
-            for row in control_files
-            if row.target_file_id is not None
-        }
+        target_ids = {int(row.target_file_id) for row in control_files if row.target_file_id is not None}
         if target_ids:
             await self.session.exec(
                 delete(KnowledgeFilePdfArtifact).where(

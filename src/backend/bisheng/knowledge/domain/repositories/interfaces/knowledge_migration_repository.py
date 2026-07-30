@@ -89,6 +89,16 @@ class KnowledgeMigrationRepository(ABC):
     ) -> None: ...
 
     @abstractmethod
+    async def clear_plan(self, batch_id: int) -> None: ...
+
+    @abstractmethod
+    async def append_plan(
+        self,
+        batch_id: int,
+        units_with_files: Sequence[tuple[KnowledgeMigrationUnit, Sequence[KnowledgeMigrationFile]]],
+    ) -> None: ...
+
+    @abstractmethod
     async def list_units(
         self,
         batch_id: int,
@@ -126,23 +136,40 @@ class KnowledgeMigrationRepository(ABC):
         unit_id: int,
         checkpoint: str,
         *,
+        attempt_id: int,
+        execution_token: str,
         file_ids: Sequence[int] = (),
-    ) -> None: ...
+    ) -> bool: ...
 
     @abstractmethod
-    async def reset_after_compensation(self, unit_id: int) -> None: ...
+    async def is_attempt_active(
+        self,
+        *,
+        attempt_id: int,
+        execution_token: str,
+    ) -> bool: ...
+
+    @abstractmethod
+    async def reset_after_compensation(
+        self,
+        unit_id: int,
+        *,
+        attempt_id: int,
+        execution_token: str,
+    ) -> bool: ...
 
     @abstractmethod
     async def finish_attempt(
         self,
         *,
         attempt_id: int,
+        execution_token: str,
         unit_status: str,
         checkpoint: str,
         result: str,
         reason_code: str | None = None,
         error_summary: str | None = None,
-    ) -> None: ...
+    ) -> bool: ...
 
     @abstractmethod
     async def mark_remaining_unprocessed(

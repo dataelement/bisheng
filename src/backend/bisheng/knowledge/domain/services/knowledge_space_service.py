@@ -6543,6 +6543,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
             raise KnowledgeDepartmentFileUnavailableError()
 
         if decision.status == DepartmentFileAccessStatus.ALLOWED:
+            self._portal_file_access_decision_map[int(file.id)] = decision
+            self._portal_file_download_map[int(file.id)] = bool(
+                decision.can_download
+            )
             spaces = await self._get_shougang_portal_request_spaces(
                 requested_space_ids=[space_id],
                 space_level=None,

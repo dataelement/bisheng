@@ -149,16 +149,20 @@ class KnowledgeMigrationRepositoryImpl(KnowledgeMigrationRepository):
             tuple[KnowledgeMigrationUnit, Sequence[KnowledgeMigrationFile]]
         ],
     ) -> None:
-        await self.session.exec(
-            delete(KnowledgeMigrationFile).where(KnowledgeMigrationFile.batch_id == batch_id)
-        )
-        await self.session.exec(
-            delete(KnowledgeMigrationAttempt).where(KnowledgeMigrationAttempt.batch_id == batch_id)
-        )
-        await self.session.exec(
-            delete(KnowledgeMigrationUnit).where(KnowledgeMigrationUnit.batch_id == batch_id)
-        )
+        await self.clear_plan(batch_id)
+        await self.append_plan(batch_id, units_with_files)
+
+    async def clear_plan(self, batch_id: int) -> None:
+        await self.session.exec(delete(KnowledgeMigrationFile).where(KnowledgeMigrationFile.batch_id == batch_id))
+        await self.session.exec(delete(KnowledgeMigrationAttempt).where(KnowledgeMigrationAttempt.batch_id == batch_id))
+        await self.session.exec(delete(KnowledgeMigrationUnit).where(KnowledgeMigrationUnit.batch_id == batch_id))
         await self.session.flush()
+
+    async def append_plan(
+        self,
+        batch_id: int,
+        units_with_files: Sequence[tuple[KnowledgeMigrationUnit, Sequence[KnowledgeMigrationFile]]],
+    ) -> None:
         for unit, files in units_with_files:
             unit.batch_id = batch_id
             self.session.add(unit)
@@ -295,17 +299,18 @@ class KnowledgeMigrationRepositoryImpl(KnowledgeMigrationRepository):
         unit_id: int,
         checkpoint: str,
         *,
+        attempt_id: int,
+        execution_token: str,
         file_ids: Sequence[int] = (),
-    ) -> None:
-        unit = (
-            await self.session.exec(
-                select(KnowledgeMigrationUnit)
-                .where(KnowledgeMigrationUnit.id == unit_id)
-                .with_for_update()
-            )
-        ).first()
-        if unit is None:
-            raise LookupError(f"migration unit not found: {unit_id}")
+    ) -> bool:
+        active = await self._lock_active_attempt(
+            attempt_id=attempt_id,
+            execution_token=execution_token,
+            expected_unit_id=unit_id,
+        )
+        if active is None:
+            return False
+        _, unit = active
         if _CHECKPOINT_ORDER[checkpoint] < _CHECKPOINT_ORDER[unit.checkpoint]:
             raise ValueError(
                 f"migration checkpoint cannot move backwards: {unit.checkpoint} -> {checkpoint}"
@@ -319,20 +324,102 @@ class KnowledgeMigrationRepositoryImpl(KnowledgeMigrationRepository):
             update(KnowledgeMigrationFile).where(*file_filters).values(checkpoint=checkpoint)
         )
         await self.session.flush()
+        return True
 
-    async def reset_after_compensation(self, unit_id: int) -> None:
-        unit = (
+    async def _lock_active_attempt(
+        self,
+        *,
+        attempt_id: int,
+        execution_token: str,
+        expected_unit_id: int | None = None,
+    ) -> tuple[KnowledgeMigrationAttempt, KnowledgeMigrationUnit] | None:
+        identity = (
             await self.session.exec(
-                select(KnowledgeMigrationUnit)
-                .where(KnowledgeMigrationUnit.id == unit_id)
+                select(KnowledgeMigrationAttempt).where(
+                    KnowledgeMigrationAttempt.id == attempt_id
+                )
+            )
+        ).first()
+        if identity is None:
+            return None
+        batch = (
+            await self.session.exec(
+                select(KnowledgeMigrationBatch)
+                .where(KnowledgeMigrationBatch.id == identity.batch_id)
                 .with_for_update()
             )
         ).first()
-        if unit is None:
-            raise LookupError(f"migration unit not found: {unit_id}")
-        if _CHECKPOINT_ORDER[unit.checkpoint] >= _CHECKPOINT_ORDER[
-            KnowledgeMigrationCheckpoint.DB_SWITCHED.value
-        ]:
+        unit = (
+            await self.session.exec(
+                select(KnowledgeMigrationUnit)
+                .where(KnowledgeMigrationUnit.id == identity.unit_id)
+                .with_for_update()
+            )
+        ).first()
+        if unit is not None:
+            (
+                await self.session.exec(
+                    select(KnowledgeMigrationFile.id)
+                    .where(KnowledgeMigrationFile.unit_id == unit.id)
+                    .with_for_update()
+                )
+            ).all()
+        attempt = (
+            await self.session.exec(
+                select(KnowledgeMigrationAttempt)
+                .where(KnowledgeMigrationAttempt.id == attempt_id)
+                .with_for_update()
+            )
+        ).first()
+        if (
+            attempt is None
+            or batch is None
+            or batch.status
+            != KnowledgeMigrationBatchStatus.RUNNING.value
+            or attempt.execution_token != execution_token
+            or attempt.result != KnowledgeMigrationAttemptResult.RUNNING.value
+            or (expected_unit_id is not None and int(attempt.unit_id) != expected_unit_id)
+        ):
+            return None
+        if (
+            unit is None
+            or int(unit.id) != int(attempt.unit_id)
+            or unit.status != KnowledgeMigrationUnitStatus.RUNNING.value
+            or int(unit.attempt_count) != int(attempt.attempt_no)
+        ):
+            return None
+        return attempt, unit
+
+    async def is_attempt_active(
+        self,
+        *,
+        attempt_id: int,
+        execution_token: str,
+    ) -> bool:
+        return (
+            await self._lock_active_attempt(
+                attempt_id=attempt_id,
+                execution_token=execution_token,
+            )
+            is not None
+        )
+
+    async def reset_after_compensation(
+        self,
+        unit_id: int,
+        *,
+        attempt_id: int,
+        execution_token: str,
+    ) -> bool:
+        active = await self._lock_active_attempt(
+            attempt_id=attempt_id,
+            execution_token=execution_token,
+            expected_unit_id=unit_id,
+        )
+        if active is None:
+            return False
+        _, unit = active
+        if _CHECKPOINT_ORDER[unit.checkpoint] >= _CHECKPOINT_ORDER[KnowledgeMigrationCheckpoint.DB_SWITCHED.value]:
             raise ValueError("cannot compensate a unit after database switch")
         unit.checkpoint = KnowledgeMigrationCheckpoint.PLANNED.value
         self.session.add(unit)
@@ -347,33 +434,26 @@ class KnowledgeMigrationRepositoryImpl(KnowledgeMigrationRepository):
             )
         )
         await self.session.flush()
+        return True
 
     async def finish_attempt(
         self,
         *,
         attempt_id: int,
+        execution_token: str,
         unit_status: str,
         checkpoint: str,
         result: str,
         reason_code: str | None = None,
         error_summary: str | None = None,
-    ) -> None:
-        attempt = (
-            await self.session.exec(
-                select(KnowledgeMigrationAttempt)
-                .where(KnowledgeMigrationAttempt.id == attempt_id)
-                .with_for_update()
-            )
-        ).first()
-        if attempt is None:
-            raise LookupError(f"migration attempt not found: {attempt_id}")
-        unit = (
-            await self.session.exec(
-                select(KnowledgeMigrationUnit)
-                .where(KnowledgeMigrationUnit.id == attempt.unit_id)
-                .with_for_update()
-            )
-        ).one()
+    ) -> bool:
+        active = await self._lock_active_attempt(
+            attempt_id=attempt_id,
+            execution_token=execution_token,
+        )
+        if active is None:
+            return False
+        attempt, unit = active
         unit.status = unit_status
         unit.checkpoint = checkpoint
         unit.reason_code = reason_code
@@ -397,6 +477,7 @@ class KnowledgeMigrationRepositoryImpl(KnowledgeMigrationRepository):
             )
         )
         await self.session.flush()
+        return True
 
     async def mark_remaining_unprocessed(
         self,
