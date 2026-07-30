@@ -30,7 +30,7 @@
       "save": "保存"
     },
     "messages": {
-      "saveSuccess": "関連グラフ設定を保存しました",
+      "saveSuccess": "関連グラフのプレビューを更新しました",
       "noCharts": "関連可能なグラフがありません",
       "collapse": "関連グラフ設定"
     }
@@ -66,6 +66,18 @@
     "selectTimeRange": "時間範囲を選択",
     "resultsDisplay": "結果表示",
     "allResults": "すべて",
+    "topOnly": "上位",
+    "topWithOther": "上位",
+    "topOnlyLabel": "上位",
+    "topWithOtherLabel": "上位",
+    "topWithOtherSuffix": "件、残りを「その他」に統合",
+    "otherResultsDescription": "残りのデータを「その他」に統合",
+    "topCount": "上位件数",
+    "topCountWithOther": "上位件数とその他",
+    "resultsUnit": "件",
+    "resultsWithOther": "件、残りを「その他」に統合",
+    "otherResults": "その他",
+    "otherResultsHint": "設定件数を超える場合のみ「その他」を作成します",
     "limitResults": "件",
     "updateChartData": "グラフデータを更新",
     "dataSelection": "データ選択",
@@ -79,7 +91,8 @@
       "displayMaxLength": "表示名は15文字以内で入力してください",
       "cancel": "キャンセル",
       "confirm": "確認",
-      "chartUpdated": "グラフが更新されました"
+      "chartUpdated": "グラフのプレビューを更新しました",
+      "chartChangesCancelled": "未保存のグラフ変更を元に戻しました"
     },
     "toast": {
       "fieldAlreadyExists": "フィールドは既に{{section}}に存在します",
@@ -385,7 +398,8 @@
     "pieChart": "円グラフ",
     "donutChart": "ドーナツグラフ",
     "others": "その他",
-    "metricCard": "指標カード"
+    "metricCard": "指標カード",
+    "pivotTable": "クロス集計表"
   },
   "mid_user_increment": "ユーザースケール統計",
   "timestamp": {
@@ -482,5 +496,31 @@
   "mid_user_interact_dtl": "ユーザーフィードバック統計",
   "like_count": "いいね回数",
   "dislike_count": "ネガティブ評価回数",
-  "copy_count": "コピー回数"
+  "copy_count": "コピー回数",
+  "mid_realtime_qa_question_fact": "リアルタイムQ&A統計",
+  "expert_qa_count": "専門家Q&A数",
+  "smart_qa_count": "スマートQ&A数",
+  "document_qa_count": "文書内AI会話数",
+  "qa_user_count": "質問ユーザー数",
+  "qa_type": "Q&Aタイプコード",
+  "qa_type_name": "Q&Aタイプ",
+  "primary_department_id": "主所属部門ID",
+  "primary_department_name": "主所属部門",
+  "department_source": "部門集計元",
+  "business_domain_code": "業務ドメインコード",
+  "scene": "Q&Aシナリオ",
+  "source_app": "ソースアプリケーション",
+  "mid_user_daily_participation": "全従業員の日次参加率",
+  "participation_rate": "全従業員参加率",
+  "logged_in_employee_count": "ログイン従業員数",
+  "active_employee_count": "在籍従業員総数",
+  "login_count": "ログイン回数",
+  "local_date": "日付",
+  "space_level": "ナレッジベース大分類コード",
+  "space_level_name": "ナレッジベース大分類",
+  "file_category_code": "ナレッジ分類コード",
+  "file_category_name": "ナレッジ分類",
+  "file_subcategory_code": "二次ナレッジ分類コード",
+  "file_subcategory_name": "二次ナレッジ分類",
+  "business_domain_name": "業務ドメイン"
 }

@@ -617,6 +617,21 @@ class UserService:
         await telemetry_service.log_event(user_id=db_user.user_id, event_type=BaseTelemetryTypeEnum.USER_LOGIN,
                                           trace_id=trace_id_var.get(),
                                           event_data=UserLoginEventData(method="password"))
+        try:
+            from bisheng.telemetry.domain.mid_table.daily_participation import (
+                DailyParticipationFact,
+            )
+
+            await DailyParticipationFact.record_login(
+                tenant_id=tenant_id,
+                user_id=int(db_user.user_id),
+                user_name=db_user.user_name,
+            )
+        except Exception:
+            logger.exception(
+                "Failed to update daily participation after password login. user_id={}",
+                db_user.user_id,
+            )
 
         # Build response with tenant info. is_global_super is already a bool
         # on LoginUser, populated by init_login_user; surface it so the

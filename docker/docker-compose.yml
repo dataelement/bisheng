@@ -86,6 +86,7 @@ services:
       - "7860:7860"
     environment:
       TZ: Asia/Shanghai
+      BISHENG_DASHBOARD_PRO: "true"
       BS_SSO_SYNC__GATEWAY_HMAC_SECRET: "bisheng-local-hmac-20260422"
       BS_MILVUS_CONNECTION_ARGS: '{"host":"milvus","port":"19530","user":"","password":"","secure":false}'
       BS_MILVUS_IS_PARTITION: 'true'

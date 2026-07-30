@@ -182,6 +182,7 @@ class PortalQaEventData(PortalEventData):
     """Data model for Shougang portal QA success events."""
 
     _event_name: BaseTelemetryTypeEnum = BaseTelemetryTypeEnum.PORTAL_QA
+    question_id: str | None = None
 
 
 class PortalDocumentReadEventData(PortalEventData):

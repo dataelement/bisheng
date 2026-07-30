@@ -126,6 +126,21 @@ async def sso(*, request: Request, user: UserCreate, auth_jwt: AuthJwt = Depends
         await telemetry_service.log_event(user_id=login_user.user_id, event_type=BaseTelemetryTypeEnum.USER_LOGIN,
                                           trace_id=trace_id_var.get(),
                                           event_data=UserLoginEventData(method="oss"))
+        try:
+            from bisheng.telemetry.domain.mid_table.daily_participation import (
+                DailyParticipationFact,
+            )
+
+            await DailyParticipationFact.record_login(
+                tenant_id=leaf_tenant_id,
+                user_id=int(login_user.user_id),
+                user_name=login_user.user_name,
+            )
+        except Exception:
+            logger.exception(
+                "Failed to update daily participation after OSS login. user_id={}",
+                login_user.user_id,
+            )
 
         return resp_200({'access_token': access_token, 'refresh_token': access_token})
     else:

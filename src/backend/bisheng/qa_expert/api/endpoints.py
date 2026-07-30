@@ -244,7 +244,12 @@ async def create_question(
         user.tenant_id,
         f"{request.title}\n{question_description_to_plain_text(request.description)}",
     )
-    question = await service.create_question(user.user_id, request, user.user_name)
+    question = await service.create_question(
+        user.user_id,
+        request,
+        user.user_name,
+        tenant_id=user.tenant_id,
+    )
     return resp_200(data=question)
 
 
@@ -335,7 +340,10 @@ async def delete_question(
 ):
     """删除回答"""
     try:
-        success = await service.delete_question(question_id)
+        success = await service.delete_question(
+            question_id,
+            tenant_id=user.tenant_id,
+        )
 
         return resp_200(data={"success": success})
     except Exception as e:

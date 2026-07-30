@@ -4,8 +4,9 @@ import { ChartType, ComponentConfig, ComponentStyleConfig } from '@/pages/Dashbo
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { colorSchemes, convertToEChartsTheme } from '../../colorSchemes'
-import { ChartDataResponse } from '../../types/chartData'
+import { ChartDataResponse, PieDataItem } from '../../types/chartData'
 import { unitConversion } from './MetricCard'
+import { applyPieResultLimit } from './pieChartData'
 
 // Dynamic loading of ECharts.
 const loadECharts = async () => {
@@ -70,7 +71,8 @@ export function BaseChart({ isDark, data, chartType, dataConfig, styleConfig }: 
       chartType,
       dataConfig,
       styleConfig,
-      containerSize
+      containerSize,
+      otherLabel: t("componentConfigDrawer.otherResults", { defaultValue: "其他" }),
     });
 
     chartRef.current.setOption(option);
@@ -168,12 +170,19 @@ export function generateChartOption(props: {
   dataConfig?: ComponentConfig;
   styleConfig: ComponentStyleConfig;
   containerSize?: number[];
+  otherLabel?: string;
 }): any {
   const { chartType } = props;
 
   // 根据图表类型分发到不同的构建器
   if (chartType === 'pie' || chartType === 'donut') {
-    return getPieChartOption(props.data, chartType, props.styleConfig);
+    return getPieChartOption(
+      props.data,
+      chartType,
+      props.styleConfig,
+      props.dataConfig,
+      props.otherLabel,
+    );
   }
 
   return getCartesianChartOption(props.data, chartType, props.styleConfig, props.dataConfig, props.containerSize);
@@ -184,7 +193,9 @@ export function generateChartOption(props: {
 const getPieChartOption = (
   data: ChartDataResponse,
   chartType: ChartType,
-  styleConfig: ComponentStyleConfig
+  styleConfig: ComponentStyleConfig,
+  dataConfig?: ComponentConfig,
+  otherLabel = "其他",
 ) => {
   const { series } = data;
   const isDonut = chartType === 'donut';
@@ -218,10 +229,23 @@ const getPieChartOption = (
         textShadowBlur: 0,
         textShadowColor: 'none',
       },
-      emphasis: {
-        label: { show: true, fontSize: 16, fontWeight: 'bold' },
+      labelLine: {
+        show: styleConfig.showDataLabel ?? true,
+        length: 12,
+        length2: 10,
       },
-      data: s.data
+      labelLayout: {
+        hideOverlap: true,
+        moveOverlap: 'shiftY',
+      },
+      emphasis: {
+        label: {
+          show: styleConfig.showDataLabel ?? true,
+          fontSize: 10,
+          fontWeight: 'normal',
+        },
+      },
+      data: applyPieResultLimit(s.data as PieDataItem[], dataConfig?.resultLimit, otherLabel),
     })),
   };
 };

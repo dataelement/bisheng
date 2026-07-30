@@ -30,7 +30,7 @@
       "save": "Save"
     },
     "messages": {
-      "saveSuccess": "Chart link configuration saved",
+      "saveSuccess": "Chart link preview updated",
       "noCharts": "No charts available for linking",
       "collapse": "Chart Link Config"
     }
@@ -56,6 +56,18 @@
     "selectTimeRange": "Select time range",
     "resultsDisplay": "Results Display",
     "allResults": "All",
+    "topOnly": "Show top",
+    "topWithOther": "Show top",
+    "topOnlyLabel": "Show top",
+    "topWithOtherLabel": "Show top",
+    "topWithOtherSuffix": "items; merge the rest as “Other”",
+    "otherResultsDescription": "Merge the remaining data as “Other”",
+    "topCount": "Number of top results",
+    "topCountWithOther": "Number of top results plus Other",
+    "resultsUnit": "items",
+    "resultsWithOther": "items; merge the rest as “Other”",
+    "otherResults": "Other",
+    "otherResultsHint": "“Other” is created only when the data exceeds the configured count",
     "limitResults": "records",
     "updateChartData": "Update Chart Data",
     "dataSelection": "Data Selection",
@@ -69,7 +81,8 @@
       "displayMaxLength": "Display name cannot exceed 15 characters",
       "cancel": "Cancel",
       "confirm": "Confirm",
-      "chartUpdated": "Chart updated"
+      "chartUpdated": "Chart preview updated",
+      "chartChangesCancelled": "Unsaved chart changes restored"
     },
     "dashboard": {},
     "validation": {
@@ -388,7 +401,8 @@
     "pieChart": "Pie",
     "donutChart": "Donut",
     "others": "Others",
-    "metricCard": "Metric"
+    "metricCard": "Metric",
+    "pivotTable": "Pivot Table"
   },
   "mid_user_increment": "User Scale Statistics",
   "timestamp": {
@@ -485,5 +499,31 @@
   "mid_user_interact_dtl": "User Feedback Statistics",
   "like_count": "Like Count",
   "dislike_count": "Dislike Count",
-  "copy_count": "Copy Count"
+  "copy_count": "Copy Count",
+  "mid_realtime_qa_question_fact": "Real-time Q&A Statistics",
+  "expert_qa_count": "Expert Q&A Count",
+  "smart_qa_count": "Smart Q&A Count",
+  "document_qa_count": "In-document AI Conversation Count",
+  "qa_user_count": "Questioning Users",
+  "qa_type": "Q&A Type Code",
+  "qa_type_name": "Q&A Type",
+  "primary_department_id": "Primary Department ID",
+  "primary_department_name": "Primary Department",
+  "department_source": "Department Attribution Source",
+  "business_domain_code": "Business Domain Code",
+  "scene": "Q&A Scenario",
+  "source_app": "Source Application",
+  "mid_user_daily_participation": "Daily Workforce Participation",
+  "participation_rate": "Workforce Participation Rate",
+  "logged_in_employee_count": "Logged-in Employees",
+  "active_employee_count": "Total Active Employees",
+  "login_count": "Login Count",
+  "local_date": "Calendar Date",
+  "space_level": "Knowledge Library Category Code",
+  "space_level_name": "Knowledge Library Category",
+  "file_category_code": "Knowledge Classification Code",
+  "file_category_name": "Knowledge Classification",
+  "file_subcategory_code": "Secondary Knowledge Classification Code",
+  "file_subcategory_name": "Secondary Knowledge Classification",
+  "business_domain_name": "Business Domain"
 }

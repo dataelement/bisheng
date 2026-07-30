@@ -73,6 +73,10 @@ from bisheng.knowledge.domain.services.knowledge_space_chat_service import (
 from bisheng.knowledge.domain.services.portal_hot_search_admin_service import (
     PortalHotSearchAdminService,
 )
+from bisheng.telemetry.domain.mid_table.realtime_qa_question import (
+    RealtimeQaQuestionFact,
+)
+from bisheng.utils import generate_uuid
 
 router = APIRouter(prefix="/knowledge/shougang-portal", tags=["shougang_portal"])
 
@@ -315,6 +319,22 @@ async def record_shougang_portal_telemetry_event(
         event_type=event_type,
         event_data=event_data,
     )
+    if event_type == BaseTelemetryTypeEnum.PORTAL_QA:
+        try:
+            await RealtimeQaQuestionFact.record_success(
+                tenant_id=login_user.tenant_id,
+                user_id=login_user.user_id,
+                user_name=login_user.user_name,
+                question_id=req.question_id or generate_uuid(),
+                qa_type="smart" if req.scene == "smart_qa" else "document",
+                scene=req.scene,
+                source_app=req.source_app,
+                space_id=req.space_id,
+                file_id=req.file_id,
+                conversation_id=req.conversation_id,
+            )
+        except Exception:
+            logger.exception("Failed to project portal QA success event.")
     await svc.record_shougang_portal_recommendation_behavior(req)
     return resp_200({"accepted": True})
 

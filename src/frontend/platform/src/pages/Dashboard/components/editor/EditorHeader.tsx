@@ -10,7 +10,7 @@ import { Input } from "@/components/bs-ui/input"
 import { Separator } from "@/components/bs-ui/separator"
 import { useToast } from "@/components/bs-ui/toast/use-toast"
 import { updateDashboard } from "@/controllers/API/dashboard"
-import { useComponentEditorStore, useEditorDashboardStore } from "@/store/dashboardStore"
+import { useEditorDashboardStore } from "@/store/dashboardStore"
 import { ArrowLeft } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
@@ -31,9 +31,16 @@ export function EditorHeader({
     dashboardId
 }: EditorHeaderProps) {
     const { t } = useTranslation("dashboard")
-    const { currentDashboard, hasUnsavedChanges, lastChangeTime, isSaving, layouts,
-        reset, setIsSaving, setHasUnsavedChanges, updateCurrentDashboard, addComponentToLayout } = useEditorDashboardStore()
-    const { editingComponent } = useComponentEditorStore()
+    const {
+        currentDashboard,
+        hasUnsavedChanges,
+        isSaving,
+        reset,
+        setIsSaving,
+        updateCurrentDashboard,
+        markDashboardSaved,
+        addComponentToLayout,
+    } = useEditorDashboardStore()
     const [isEditingTitle, setIsEditingTitle] = useState(false)
     const [title, setTitle] = useState(dashboard?.title || "")
     const inputRef = useRef<HTMLInputElement>(null)
@@ -55,18 +62,12 @@ export function EditorHeader({
 
     // Save mutation
     const saveMutation = useMutation({
-        mutationFn: ({ id, dashboard }: any) => updateDashboard(id, {
-            ...dashboard,
-            components: editingComponent ? dashboard.components.map(com =>
-                com.id === editingComponent.id ? editingComponent : com
-            ) : dashboard.components,
-            layout_config: { layouts }
-        }),
+        mutationFn: ({ id, dashboard }: any) => updateDashboard(id, dashboard),
         onMutate: () => {
             setIsSaving(true)
         },
-        onSuccess: (a, { autoSave, dashboard }, c) => {
-            setHasUnsavedChanges(false)
+        onSuccess: (_response, { dashboard }) => {
+            markDashboardSaved(dashboard)
             // refrensh react-query
             queryClient.invalidateQueries({ queryKey: [DashboardQueryKey, Number(dashboardId)] })
             queryClient.setQueryData([DashboardsQueryKey], (old) =>
@@ -76,8 +77,7 @@ export function EditorHeader({
                     status: dashboard.status,
                 } : el));
             // queryClient.invalidateQueries({ queryKey: [DashboardsQueryKey] })
-            // autosave not require toast
-            !autoSave && toast({
+            toast({
                 description: t('saveSuccess'),
                 variant: "success",
             })
@@ -94,15 +94,7 @@ export function EditorHeader({
     })
 
     // Publish mutation
-    const { publish, publishAsync, isPublishing } = usePublishDashboard()
-
-    useDashboardAutoSave({
-        currentDashboard,
-        isSaving,
-        hasUnsavedChanges,
-        lastChangeTime,
-        saveMutation
-    })
+    const { publishAsync, isPublishing } = usePublishDashboard()
 
     const getSaveStatus = () => {
         if (isSaving) return t('saving')
@@ -118,7 +110,7 @@ export function EditorHeader({
             return setTitle(dashboard?.title || "")
         }
 
-        if (trimmedTitle !== dashboard.title) {
+        if (trimmedTitle !== currentDashboard?.title) {
             setTitle(trimmedTitle)
             updateCurrentDashboard({ ...currentDashboard, title: trimmedTitle })
         }
@@ -146,61 +138,47 @@ export function EditorHeader({
         }
     }
     const handleSaveAndClose = async () => {
+        const dashboardDraft = getCurrentDashboardDraft()
+        if (!dashboardDraft) return
         await saveMutation.mutateAsync({
-            id: currentDashboard?.id,
-            dashboard: currentDashboard
+            id: dashboardDraft.id,
+            dashboard: dashboardDraft,
         })
         reset()
         navigator(-1)
     }
 
-    // Handle save
-    const handleSave = async (e?) => {
-        // if (!hasUnsavedChanges) {
-        //     return
-        // }
-        // config -> crrentcompontent
-        const querySave = document.querySelector('#query_save')
-        const configSave = document.querySelector('#config_save')
-        querySave?.click()
-        configSave?.click()
+    const getCurrentDashboardDraft = () => {
+        const state = useEditorDashboardStore.getState()
+        if (!state.currentDashboard) return null
+        return {
+            ...state.currentDashboard,
+            layout_config: {
+                ...state.currentDashboard.layout_config,
+                layouts: state.layouts,
+            },
+        }
+    }
 
-        setTimeout(async () => {
-            // currentDashboard.components.map(el => el.style_config.titleColor = '')
-            await saveMutation.mutate({
-                id: currentDashboard?.id,
-                dashboard: currentDashboard,
-                autoSave: !e
-            })
-        }, 300);
+    // Handle save
+    const handleSave = async () => {
+        const dashboardDraft = getCurrentDashboardDraft()
+        if (!dashboardDraft) return
+        await saveMutation.mutateAsync({
+            id: dashboardDraft.id,
+            dashboard: dashboardDraft,
+        })
     }
 
     // Handle publish
     const handlePublish = async () => {
-        // Trigger config/query component saves via DOM clicks
-        const querySave = document.querySelector('#query_save') as HTMLElement | null
-        const configSave = document.querySelector('#config_save') as HTMLElement | null
-        querySave?.click()
-        configSave?.click()
-
-        // Wait for config sync to propagate to store
-        await new Promise(resolve => setTimeout(resolve, 300))
-
-        // Read the latest state directly from store (not from stale closure)
-        const latestDashboard = useEditorDashboardStore.getState().currentDashboard
-        const latestLayouts = useEditorDashboardStore.getState().layouts
-        const editComp = useComponentEditorStore.getState().editingComponent
+        const dashboardDraft = getCurrentDashboardDraft()
+        if (!dashboardDraft) return
 
         // Save: await completion before proceeding
         await saveMutation.mutateAsync({
-            id: latestDashboard?.id,
-            dashboard: {
-                ...latestDashboard,
-                components: editComp
-                    ? latestDashboard.components.map(c => c.id === editComp.id ? editComp : c)
-                    : latestDashboard.components,
-                layout_config: { layouts: latestLayouts }
-            },
+            id: dashboardDraft.id,
+            dashboard: dashboardDraft,
         })
 
         // Publish: await completion before navigating
@@ -269,6 +247,13 @@ export function EditorHeader({
                     <FilterIcon className="size-4" />
                     {t('addQueryComponent')}
                 </Button>
+                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => addComponentToLayout({
+                    title: t('dimensionFilter.title', '组合筛选'),
+                    type: ChartType.DimensionFilter
+                })}>
+                    <FilterIcon className="size-4" />
+                    {t('dimensionFilter.add', '添加维度筛选')}
+                </Button>
             </div>
 
             {/* Right section */}
@@ -308,44 +293,4 @@ export function EditorHeader({
             </Dialog>
         </header>
     )
-}
-
-
-export function useDashboardAutoSave({
-    currentDashboard,
-    isSaving,
-    hasUnsavedChanges,
-    lastChangeTime,
-    saveMutation
-}) {
-    // --- Save at a fixed frequency of 15 seconds (Guaranteed Plan ) ---
-    useEffect(() => {
-        const idleTimer = setInterval(() => {
-            if (hasUnsavedChanges && !isSaving) {
-                console.log("Auto-saving dashboard...")
-                saveMutation.mutate({
-                    autoSave: true,
-                    id: currentDashboard?.id,
-                    dashboard: currentDashboard
-                })
-            }
-        }, 15000)
-
-        return () => clearInterval(idleTimer)
-    }, [hasUnsavedChanges, isSaving])
-
-    // --- Save after 2 seconds of inactivity (Idle/Debounce ) ---
-    useEffect(() => {
-        if (hasUnsavedChanges && !isSaving) {
-            const idleTimer = setTimeout(() => {
-                console.log("Log: 2s Idle Auto-save triggered.")
-                saveMutation.mutate({
-                    autoSave: true,
-                    id: currentDashboard?.id,
-                    dashboard: currentDashboard
-                })
-            }, 2000)
-            return () => clearTimeout(idleTimer)
-        }
-    }, [hasUnsavedChanges, isSaving, lastChangeTime, saveMutation])
 }

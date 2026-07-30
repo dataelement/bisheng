@@ -150,6 +150,7 @@ export async function getDatasets(): Promise<DashboardDataset[]> {
 import {
     QueryDataResponse
 } from '@/pages/Dashboard/types/chartData';
+import { sumMetricValues } from '@/pages/Dashboard/components/charts/metricCardValue';
 import { cloneDeep } from "lodash-es";
 
 function transformStackedData(resData: any) {
@@ -182,11 +183,83 @@ function transformNormalData(resData: any, component: DashboardComponent) {
     const dimensions = resData.dimensions.map((name: string[]) => name.join('\n'));
     const metrics = component.data_config.metrics || [];
     const series = metrics.map((m, idx) => ({
-        name: m.displayName.length > 24 ? m.displayName.slice(0, 24) + '...' : m.displayName,
+        name: (m.displayName || m.fieldName || '').length > 24
+            ? (m.displayName || m.fieldName).slice(0, 24) + '...'
+            : (m.displayName || m.fieldName || ''),
         data: resData.value.map((val: any[]) => val[idx])
     }));
 
     return { dimensions, series };
+}
+
+const MAX_PIVOT_ROWS = 500;
+const MAX_PIVOT_COLUMNS = 100;
+
+function transformPivotData(resData: any, component: DashboardComponent) {
+    const config = component.data_config;
+    const rowDimensionCount = config.dimensions?.length || 0;
+    const columns: string[] = [];
+    const columnIndex = new Map<string, number>();
+    const rows = new Map<string, { key: string[], values: Map<string, number> }>();
+    let truncated = false;
+
+    resData.dimensions.forEach((dimensionValues: unknown[], index: number) => {
+        const rowValues = dimensionValues
+            .slice(0, rowDimensionCount)
+            .map(value => String(value ?? '未分类'));
+        const columnValue = String(dimensionValues[rowDimensionCount] ?? '未分类');
+        const rowKey = JSON.stringify(rowValues);
+
+        if (!columnIndex.has(columnValue)) {
+            if (columns.length >= MAX_PIVOT_COLUMNS) {
+                truncated = true;
+                return;
+            }
+            columnIndex.set(columnValue, columns.length);
+            columns.push(columnValue);
+        }
+        if (!rows.has(rowKey)) {
+            if (rows.size >= MAX_PIVOT_ROWS) {
+                truncated = true;
+                return;
+            }
+            rows.set(rowKey, { key: rowValues, values: new Map() });
+        }
+        const metricValue = Number(resData.value[index]?.[0] ?? 0);
+        rows.get(rowKey)!.values.set(columnValue, metricValue);
+    });
+
+    const columnTotals = columns.map(() => 0);
+    const pivotRows = Array.from(rows.values()).map(row => {
+        const values = columns.map((column, index) => {
+            const value = row.values.get(column) ?? 0;
+            columnTotals[index] += value;
+            return value;
+        });
+        return {
+            key: row.key,
+            values,
+            total: values.reduce((sum, value) => sum + value, 0),
+        };
+    });
+
+    return {
+        rowHeaders: (config.dimensions || []).map(
+            dimension => dimension.displayName || dimension.fieldName || dimension.fieldId
+        ),
+        columnHeader: config.stackDimension?.displayName
+            || config.stackDimension?.fieldName
+            || config.stackDimension?.fieldId
+            || '',
+        metricName: config.metrics?.[0]?.displayName
+            || config.metrics?.[0]?.fieldName
+            || '',
+        columns,
+        rows: pivotRows,
+        columnTotals,
+        grandTotal: columnTotals.reduce((sum, value) => sum + value, 0),
+        truncated,
+    };
 }
 
 export async function queryChartData(params: {
@@ -195,7 +268,7 @@ export async function queryChartData(params: {
     dashboardId: string
     queryParams?: any
 }): Promise<QueryDataResponse> {
-    const { component, useId, dashboardId, queryParams } = params;
+    const { component, useId, dashboardId, queryParams = [] } = params;
 
     const resData = await axios.post(`/api/v1/telemetry/dashboard/component/query`, {
         dashboard_id: dashboardId,
@@ -215,10 +288,17 @@ export async function queryChartData(params: {
                 } else if (q) {
                     return q.defaultValue
                 }
-            })
+            }),
+        dimension_filters: queryParams.flatMap(
+            param => param.dimensionFilters || []
+        ),
     });
 
     if (!resData?.value?.length) return null
+
+    if (component.type === ChartType.PivotTable) {
+        return transformPivotData(resData, component);
+    }
 
     const isStacked = !!component.data_config.stackDimension?.fieldId;
     const { dimensions, series } = isStacked
@@ -261,7 +341,7 @@ export async function queryChartData(params: {
             }
         case ChartType.Metric:
             return {
-                value: resData.value[0]?.[0] ?? 0,
+                value: sumMetricValues(resData.value[0]),
                 title: series[0]?.name || '',
                 unit: '',
                 trend: { value: 0, direction: 'up', label: '' },
@@ -271,9 +351,11 @@ export async function queryChartData(params: {
 }
 
 // 获取字段枚举列表
-export async function getFieldEnums({ dataset_code, field, page, pageSize = 20, keyword = "" }: {
+export async function getFieldEnums({ dataset_code, field, labelField, exactValues, page, pageSize = 20, keyword = "" }: {
     dataset_code: string
     field: string
+    labelField?: string
+    exactValues?: string[]
     page: number
     pageSize?: number
     keyword?: string
@@ -282,6 +364,8 @@ export async function getFieldEnums({ dataset_code, field, page, pageSize = 20, 
         params: {
             index_name: dataset_code,
             field,
+            label_field: labelField,
+            exact_values: exactValues?.join(','),
             page,
             size: pageSize,
             keyword

@@ -169,6 +169,10 @@ async def test_service_sorts_department_names_before_paginating(monkeypatch) -> 
             ]
         ),
     )
+    monkeypatch.setattr(
+        "bisheng.qa_expert.domain.services.UserDao.aget_user_by_ids",
+        AsyncMock(return_value=[]),
+    )
 
     experts, total = await service.list_experts(
         sort_by="department",
@@ -191,6 +195,9 @@ async def test_service_sorts_department_names_before_paginating(monkeypatch) -> 
         sort_order="asc",
         skip=0,
         limit=None,
+        answer_desc=None,
+        adoption_desc=None,
+        vote_desc=None,
     )
 
 

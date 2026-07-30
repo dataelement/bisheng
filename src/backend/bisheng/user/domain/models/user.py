@@ -183,6 +183,22 @@ class UserUpdate(SQLModelSerializable):
 
 
 class UserDao(UserBase):
+    @staticmethod
+    def _schedule_participation_roster_sync() -> None:
+        from bisheng.telemetry.domain.mid_table.daily_participation import (
+            DailyParticipationFact,
+        )
+
+        DailyParticipationFact.schedule_roster_reconcile_sync()
+
+    @staticmethod
+    async def _aschedule_participation_roster_sync() -> None:
+        from bisheng.telemetry.domain.mid_table.daily_participation import (
+            DailyParticipationFact,
+        )
+
+        await DailyParticipationFact.schedule_roster_reconcile_async()
+
     @classmethod
     def get_user(cls, user_id: int) -> User | None:
         with get_sync_db_session() as session:
@@ -267,6 +283,7 @@ class UserDao(UserBase):
             session.add(user)
             session.commit()
             session.refresh(user)
+            cls._schedule_participation_roster_sync()
             return user
 
     @classmethod
@@ -275,6 +292,7 @@ class UserDao(UserBase):
             session.add(user)
             await session.commit()
             await session.refresh(user)
+            await cls._aschedule_participation_roster_sync()
             return user
 
     @classmethod
@@ -326,6 +344,7 @@ class UserDao(UserBase):
             session.add(db_user)
             session.commit()
             session.refresh(db_user)
+            cls._schedule_participation_roster_sync()
             return db_user
 
     @classmethod
@@ -341,6 +360,7 @@ class UserDao(UserBase):
             session.add(db_user_role)
             await session.commit()
             await session.refresh(user)
+            await cls._aschedule_participation_roster_sync()
             return user
 
     @classmethod
@@ -378,6 +398,7 @@ class UserDao(UserBase):
 
             await session.commit()
             await session.refresh(user)
+            await cls._aschedule_participation_roster_sync()
             return user
 
     @classmethod
@@ -393,6 +414,7 @@ class UserDao(UserBase):
             session.add(db_user_role)
             await session.commit()
             await session.refresh(user)
+            await cls._aschedule_participation_roster_sync()
             return user
 
     @classmethod
@@ -408,6 +430,7 @@ class UserDao(UserBase):
                 session.add(db_user_role)
             session.commit()
             session.refresh(user)
+            cls._schedule_participation_roster_sync()
             return user
 
     @classmethod

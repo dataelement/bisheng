@@ -431,6 +431,11 @@ class DepartmentKnowledgeSpaceService:
         # Clinic spaces are stored with level TEAM_KS so they can be distinguished
         # from plain team spaces while still being grouped with them on display.
         await KnowledgeSpaceScopeDao.aupdate_level(space_id, KnowledgeSpaceLevelEnum.TEAM_KS)
+        from bisheng.telemetry.domain.mid_table.knowledge_space_content import (
+            KnowledgeSpaceContentStat,
+        )
+
+        await KnowledgeSpaceContentStat.enqueue_space_rename_stat_async(space_id)
         return {"space_id": row.space_id, "department_id": row.department_id}
 
     @classmethod

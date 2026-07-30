@@ -41,11 +41,39 @@ export const ChartGroupItems = [
     {
         label: 'others',
         data: [
-            { type: ChartType.Metric, label: 'metricCard' }
+            { type: ChartType.Metric, label: 'metricCard' },
+            { type: ChartType.PivotTable, label: 'pivotTable' }
         ]
     }
 ];
-export const ChartItems = ChartGroupItems.flatMap(item => item.data);
+const pivotTableItem = { type: ChartType.PivotTable, label: 'pivotTable' };
+export const ChartItems = ChartGroupItems
+    .flatMap(item => item.data)
+    .filter(item => item.type !== ChartType.PivotTable)
+    .flatMap(item => item.type === ChartType.GroupedHorizontalBar
+        ? [item, pivotTableItem]
+        : [item]);
+
+export const PivotTableIcon = ({ className = "mb-2 h-8 w-8" }: { className?: string }) => (
+    <svg
+        aria-hidden="true"
+        className={className}
+        viewBox="0 0 32 32"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+    >
+        <rect x="3.5" y="4.5" width="25" height="23" rx="2.5" fill="#EFF6FF" stroke="#3B82F6" />
+        <path d="M3.5 11.5H28.5" stroke="#3B82F6" />
+        <path d="M11.5 4.5V27.5" stroke="#3B82F6" />
+        <path d="M20 11.5V27.5" stroke="#93C5FD" />
+        <path d="M3.5 19.5H28.5" stroke="#93C5FD" />
+        <rect x="4" y="5" width="7" height="6" rx="1.5" fill="#3B82F6" />
+        <path d="M6.5 8H8.5" stroke="white" strokeLinecap="round" />
+        <path d="M14 8H25.5" stroke="#60A5FA" strokeLinecap="round" />
+        <path d="M6.5 15.5H8.5" stroke="#60A5FA" strokeLinecap="round" />
+        <path d="M6.5 23.5H8.5" stroke="#60A5FA" strokeLinecap="round" />
+    </svg>
+);
 
 // 定义数据项结构
 export interface PickerItem {
@@ -78,7 +106,11 @@ const ComponentPicker = ({ children, className, onSelect, maxHeight = 500 }: Com
                     className={`flex flex-col items-center group gap-2 outline-none cursor-pointer ${item.type === ChartType.StackedLine && 'mr-2'}`}
                 >
                     <div className="w-[88px] min-h-[86px] flex flex-col items-center justify-center border rounded-md group-hover:bg-blue-50 transition-colors group-hover:border-primary">
-                        <img src={`${__APP_ENV__.BASE_URL}/assets/dashboard/${item.type}.png`} className="w-8 h-8 mb-2" />
+                        {item.type === ChartType.PivotTable ? (
+                            <PivotTableIcon />
+                        ) : (
+                            <img src={`${__APP_ENV__.BASE_URL}/assets/dashboard/${item.type}.png`} className="w-8 h-8 mb-2" />
+                        )}
                         <span className="text-[12px] text-gray-600 text-center">
                             {t(`chart.${item.label}`)}
                         </span>

@@ -8,7 +8,7 @@ from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String, Uni
 from sqlmodel import Field, select
 
 from bisheng.common.models.base import SQLModelSerializable
-from bisheng.core.database import get_async_db_session
+from bisheng.core.database import get_async_db_session, get_sync_db_session
 
 
 class KnowledgeSpaceLevelEnum(str, Enum):
@@ -159,6 +159,16 @@ class KnowledgeSpaceScopeDao(KnowledgeSpaceScopeBase):
     async def aget_map_by_space_ids(cls, space_ids: List[int]) -> Dict[int, KnowledgeSpaceScope]:
         rows = await cls.aget_by_space_ids(space_ids)
         return {int(row.space_id): row for row in rows}
+
+    @classmethod
+    def get_map_by_space_ids(cls, space_ids: List[int]) -> Dict[int, KnowledgeSpaceScope]:
+        if not space_ids:
+            return {}
+        with get_sync_db_session() as session:
+            result = session.exec(
+                select(KnowledgeSpaceScope).where(KnowledgeSpaceScope.space_id.in_(space_ids))
+            )
+            return {int(row.space_id): row for row in result.all()}
 
     @classmethod
     async def aupdate_level(

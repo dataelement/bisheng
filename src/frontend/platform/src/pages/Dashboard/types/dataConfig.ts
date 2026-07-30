@@ -165,9 +165,17 @@ export enum ChartType {
   Donut = 'donut',
   /** 指标卡 */
   Metric = 'metric',
+  /** 交叉表 */
+  PivotTable = 'pivot-table',
+  /** 可搜索多选维度筛选 */
+  DimensionFilter = 'dimension-filter',
   /** 查询组件 */
   Query = 'query'
 }
+
+export const MAX_METRIC_CARD_METRICS = 10
+
+export type ResultLimitType = 'all' | 'limited' | 'limited_with_other'
 
 // 维度配置
 export interface DimensionField {
@@ -238,8 +246,8 @@ export interface DataConfig {
   filters: FilterCondition[]      // 条件筛选列表
   timeFilter?: TimeFilter         // 时间筛选（可选）
   resultLimit: {                  // 结果展示配置
-    limitType: 'all' | 'limited'  // 限制类型
-    limit?: number                // 具体条数（limitType 为 limited 时有效）
+    limitType: ResultLimitType     // 全部、仅前 X、前 X + 其他
+    limit?: number                // 具体条数（非 all 时有效）
   },
   isConfigured: boolean // 配置完成
 }
@@ -256,8 +264,22 @@ export interface QueryConfig {
   }// 查询条件列表
 }
 
+export interface DimensionFilterField {
+  id: string
+  fieldId: string
+  labelFieldId?: string
+  fieldName: string
+  displayName: string
+  defaultValues?: string[]
+}
+
+export interface DimensionFilterConfig {
+  linkedComponentIds: string[]
+  fields: DimensionFilterField[]
+}
+
 // 组件配置联合类型
-export type ComponentConfig = DataConfig | QueryConfig
+export type ComponentConfig = DataConfig | QueryConfig | DimensionFilterConfig
 export const createDefaultDataConfig = (type: ChartType): ComponentConfig => (
   type === 'query'
     ? {
@@ -271,11 +293,16 @@ export const createDefaultDataConfig = (type: ChartType): ComponentConfig => (
         }
       }
     }
-    : {
+    : type === ChartType.DimensionFilter
+      ? {
+        linkedComponentIds: [],
+        fields: []
+      }
+      : {
       dimensions: [],
       metrics: [],
       fieldOrder: [],
       filters: [],
       resultLimit: { limitType: 'all' },
       isConfigured: false
-    })
+      })

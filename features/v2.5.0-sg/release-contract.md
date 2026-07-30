@@ -140,3 +140,35 @@ approval/share_link ────────────────┘
 | 2026-07-16 | 对齐远端业务域部门绑定实现，删除独立绑定领域对象和表，改用 `domains[].department_ids` 唯一配置源 | F056 |
 | 2026-07-19 | 登记 F057 对既有知识、权限和推荐投影的复用边界，并增加公共数据保护、判重与安全执行不变量 | F057 |
 | 2026-07-27 | 登记 F059 对 `KnowledgeFile` 逻辑入口及 `KnowledgeDocument` 状态驱动投影补偿的扩展边界；不新增领域表，并增加单实体发布、同级分享、权限、检索去重、容量和旧链接兼容不变量 | F059 |
+
+---
+
+## F058 知识运营实时看板补充契约
+
+### 新增或扩展对象归属
+
+| 领域对象 | Owner Feature | 说明 |
+|---|---|---|
+| RealtimeKnowledgeFileProjection（扩展） | F058-realtime-knowledge-dashboard | 复用 `mid_knowledge_space_content_stat`，补充空间类型、知识分类、业务域与主部门维度 |
+| RealtimeQaQuestionFact | F058-realtime-knowledge-dashboard | 专家问答、智能问答和文档 AI 对话的幂等成功问题事实 |
+| UserDailyParticipation | F058-realtime-knowledge-dashboard | 用户自然日登录状态、登录次数和有效员工分母 |
+| DashboardPivotTable | F058-realtime-knowledge-dashboard | 数据看板通用交叉表组件，不包含知识库业务硬编码 |
+| DashboardDimensionFilter | F058-realtime-knowledge-dashboard | 可搜索多选维度筛选及目标图表绑定协议 |
+
+### F058 不变式
+
+- **INV-SG-16**：统计投影和字段选项不得成为授权事实源；所有结果必须在后端按当前租户和当前用户权限重新裁剪。
+- **INV-SG-17**：文件总数只包含当前成功实体主版本文件；文件夹、失败、处理中、个人知识库和历史版本不得计入。
+- **INV-SG-18**：同一成功用户问题只生成一个问答事实；失败、重试和重新生成不得重复计数。
+- **INV-SG-19**：参与人数按 Asia/Shanghai 自然日和 user_id 去重；Token 刷新不得写入登录事实。
+- **INV-SG-20**：维度筛选只影响显式绑定的图表；旧查询组件和旧图表配置必须保持兼容。
+
+### 依赖
+
+- F058 依赖 F002 的主部门与部门树、F004/F008 的统一资源权限，以及 F056 已扩展的门户遥测与文件业务域解析。
+
+### 变更历史
+
+| 日期 | 变更内容 | 影响范围 |
+|---|---|---|
+| 2026-07-27 | 登记 F058 实时文件、问答、参与度投影，以及通用维度筛选和交叉表组件 | F058 |

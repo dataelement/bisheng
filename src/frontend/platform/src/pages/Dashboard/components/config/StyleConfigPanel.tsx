@@ -19,6 +19,7 @@ import { useComponentEditorStore } from "@/store/dashboardStore"
 import { SketchPicker } from 'react-color';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/bs-ui/popover"
 import { cn } from "@/utils"
+import { resolveStyleConfigDefaults } from "./componentConfigDraft"
 
 interface StyleConfigPanelProps {
   config: ComponentStyleConfig
@@ -284,9 +285,14 @@ export function StyleConfigPanel({ config, onChange, type, FULL_DEFAULT_STYLE_CO
 
     // 准备基础配置
     const baseConfig = {
-      ...FULL_DEFAULT_STYLE_CONFIG,
-      ...config,
-      ...componentConfig,
+      ...resolveStyleConfigDefaults({
+        chartType: type,
+        defaultConfig: FULL_DEFAULT_STYLE_CONFIG,
+        componentConfig: {
+          ...config,
+          ...componentConfig,
+        },
+      }),
       themeColor: (() => {
         const id =
           componentConfig.themeColor ??
@@ -318,19 +324,22 @@ export function StyleConfigPanel({ config, onChange, type, FULL_DEFAULT_STYLE_CO
     if (!editingComponent || initialized) return
 
     const styleConfig = editingComponent.style_config ?? {}
+    const resolvedStyleConfig = resolveStyleConfigDefaults({
+      chartType: type,
+      defaultConfig: FULL_DEFAULT_STYLE_CONFIG,
+      componentConfig: styleConfig,
+    })
     if (styleConfig.title === undefined && editingComponent.type === "metric") {
       updateEditingComponent({
         style_config: {
-          ...FULL_DEFAULT_STYLE_CONFIG,
-          ...styleConfig,
+          ...resolvedStyleConfig,
         },
         title: editingComponent.data_config?.metrics?.[0]?.fieldName ?? "",
       })
     } else {
       updateEditingComponent({
         style_config: {
-          ...FULL_DEFAULT_STYLE_CONFIG,
-          ...styleConfig,
+          ...resolvedStyleConfig,
           title:
             editingComponent.title ?? "",
         },

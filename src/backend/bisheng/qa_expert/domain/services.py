@@ -35,6 +35,9 @@ from bisheng.qa_expert.domain.repositories import (
 )
 from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.database.models.department import DepartmentDao
+from bisheng.telemetry.domain.mid_table.realtime_qa_question import (
+    RealtimeQaQuestionFact,
+)
 from bisheng.user.domain.models.user import UserDao
 
 
@@ -294,7 +297,13 @@ class QuestionService:
         self.answer_repo = AnswerRepository()
         self.notification_repo = NotificationRepository()
 
-    async def create_question(self, user_id: int, request: QuestionCreateRequest, user_name: str) -> Question:
+    async def create_question(
+        self,
+        user_id: int,
+        request: QuestionCreateRequest,
+        user_name: str,
+        tenant_id: int | None = None,
+    ) -> Question:
         """创建问题"""
         question = Question(
             user_id=user_id,
@@ -314,6 +323,24 @@ class QuestionService:
         question = await self.repository.create(question)
         # 发送邀请通知
         await self._send_expert_invitation_inbox_notice(question, user_id, user_name)
+
+        try:
+            await RealtimeQaQuestionFact.record_success(
+                tenant_id=tenant_id,
+                user_id=user_id,
+                user_name=user_name,
+                question_id=question.id,
+                qa_type="expert",
+                scene="expert_question",
+                source_app="expert_qa",
+                business_domain_code=request.business_domain,
+                timestamp=int(question.created_at.timestamp()),
+            )
+        except Exception:
+            logger.exception(
+                "Failed to project expert question telemetry question_id={}",
+                question.id,
+            )
 
         logger.info(f"Question created: {question.id} by user {user_id}")
         return question
@@ -484,9 +511,26 @@ class QuestionService:
         """获取每个业务域的回答数"""
         return await self.repository.get_answer_count_by_domain()
 
-    async def delete_question(self, question_id: int) -> bool:
+    async def delete_question(
+        self,
+        question_id: int,
+        tenant_id: int | None = None,
+    ) -> bool:
         """删除问题"""
-        return await self.repository.delete(question_id)
+        deleted = await self.repository.delete(question_id)
+        if deleted:
+            try:
+                await RealtimeQaQuestionFact.delete_question(
+                    tenant_id=tenant_id,
+                    question_id=question_id,
+                    qa_type="expert",
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to remove expert question {} from real-time dashboard",
+                    question_id,
+                )
+        return deleted
 
     async def update_question(self, question_id: int, request: QuestionUpdateRequest) -> Question:
         """更新问题信息"""
