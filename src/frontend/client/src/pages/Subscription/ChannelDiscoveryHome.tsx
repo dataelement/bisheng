@@ -231,7 +231,7 @@ export function ChannelDiscoveryHome({
                             type="button"
                             aria-label={localize("com_nav_open_sidebar")}
                             onClick={onOpenMobileNav}
-                            className="inline-flex size-5 shrink-0 items-center justify-center text-[#212121]"
+                            className="inline-flex size-5 shrink-0 items-center justify-center text-text-1"
                         >
                             <Outlined.SidebarMenu className="size-5" />
                         </button>
@@ -245,7 +245,7 @@ export function ChannelDiscoveryHome({
         // 32px bold serif #212121.
         return (
             <h1
-                className="shrink-0 px-10 pt-5 pb-4 text-[32px] font-bold leading-[40px] text-[#212121]"
+                className="shrink-0 px-10 pt-5 pb-4 text-[32px] font-bold leading-[40px] text-text-1"
                 style={{ fontFamily: SERIF_FONT_STACK }}
             >
                 {localize("com_subscription.subscribe")}
@@ -255,14 +255,14 @@ export function ChannelDiscoveryHome({
 
     const renderBottomActions = () => (
         <div className="flex flex-col items-center gap-5">
-            <p className="text-[14px] leading-6 text-[#999999]">
+            <p className="text-[14px] leading-6 text-text-3">
                 {localize("com_subscription.no_subscription_content_you_can")}
             </p>
             <div className="flex items-center gap-4">
                 <button
                     type="button"
                     onClick={onGoSquare}
-                    className="h-8 rounded-md border border-[#E5E6EB] bg-white px-4 text-[14px] leading-[22px] text-[#4E5969] transition-colors fine-pointer:hover:border-blue-500 fine-pointer:hover:text-blue-500"
+                    className="h-8 rounded-md border border-border-base bg-white px-4 text-[14px] leading-[22px] text-text-2 transition-colors fine-pointer:hover:border-blue-500 fine-pointer:hover:text-blue-500"
                 >
                     {localize("com_subscription.go_to_square")}
                 </button>

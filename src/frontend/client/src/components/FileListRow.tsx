@@ -71,7 +71,7 @@ export function FileListRow({
 
     const getStatusDisplay = () => {
         if (isFolder) {
-            return <span className="text-[#86909c]">7/11</span>;
+            return <span className="text-text-3">7/11</span>;
         }
 
         switch (file.status) {
@@ -91,9 +91,9 @@ export function FileListRow({
     return (
         <div
             className={cn(
-                "flex items-center px-4 py-3 border-b border-[#e5e6eb] hover:bg-[#f7f8fa] transition-colors cursor-pointer",
+                "flex items-center px-4 py-3 border-b border-border-base hover:bg-fill-1 transition-colors cursor-pointer",
                 isSelected && "bg-blue-50",
-                hovered && "bg-[#f7f8fa]"
+                hovered && "bg-fill-1"
             )}
             onMouseEnter={() => setHovered(true)}
             onMouseLeave={() => setHovered(false)}
@@ -116,18 +116,18 @@ export function FileListRow({
                 ) : (
                     <FileText className="size-4 flex-shrink-0" style={{ color: getFileTypeColor(file.type) }} />
                 )}
-                <span className="text-sm text-[#1d2129] truncate" title={file.name}>
+                <span className="text-sm text-text-1 truncate" title={file.name}>
                     {file.name}
                 </span>
             </div>
 
             {/* 文件类型 */}
-            <div className="w-28 text-sm text-[#86909c]">
+            <div className="w-28 text-sm text-text-3">
                 {getFileTypeLabel(file.type)}
             </div>
 
             {/* 文件大小 */}
-            <div className="w-32 text-sm text-[#86909c]">
+            <div className="w-32 text-sm text-text-3">
                 {file.size !== undefined ? formatFileSize(file.size) : "--"}
             </div>
 
@@ -141,16 +141,16 @@ export function FileListRow({
                             </Badge>
                         ))}
                         {file.tags.length > 2 && (
-                            <span className="text-xs text-[#86909c]">+{file.tags.length - 2}</span>
+                            <span className="text-xs text-text-3">+{file.tags.length - 2}</span>
                         )}
                     </>
                 ) : (
-                    <span className="text-sm text-[#86909c]">--</span>
+                    <span className="text-sm text-text-3">--</span>
                 )}
             </div>
 
             {/* 更新时间 */}
-            <div className="w-48 text-sm text-[#86909c]">
+            <div className="w-48 text-sm text-text-3">
                 {formatTime(file.updatedAt)}
             </div>
 
@@ -168,20 +168,20 @@ export function FileListRow({
                                 e.stopPropagation();
                                 onDownload();
                             }}
-                            className="p-1.5 hover:bg-[#e5e6eb] rounded"
+                            className="p-1.5 hover:bg-fill-3 rounded"
                             title="下载"
                         >
-                            <Download className="size-4 text-[#4e5969]" />
+                            <Download className="size-4 text-text-2" />
                         </button>
 
                         {isAdmin && (
                             <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
                                     <button
-                                        className="p-1.5 hover:bg-[#e5e6eb] rounded"
+                                        className="p-1.5 hover:bg-fill-3 rounded"
                                         onClick={(e) => e.stopPropagation()}
                                     >
-                                        <MoreVertical className="size-4 text-[#4e5969]" />
+                                        <MoreVertical className="size-4 text-text-2" />
                                     </button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">

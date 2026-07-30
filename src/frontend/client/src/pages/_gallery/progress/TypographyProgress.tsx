@@ -12,7 +12,7 @@ export function TypographyProgress() {
       eng="Typography Inventory"
       description={
         <>
-          九档 semantic token + 系统字体栈已落地（2026-07-14）。旧 Tailwind
+          十档 semantic token（含 10px caption-sm，2026-07-30 增）+ 系统字体栈已落地（2026-07-14）。旧 Tailwind
           默认档随组件改造逐步替换，<b>不批量改</b>。剩余工作：删死字体文件（Inter / 阿里普惠体 /
           Roboto Mono，待回归后）、清 typography.css、逐步迁移。
         </>

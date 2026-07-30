@@ -200,7 +200,7 @@ export function KnowledgeSpaceShareDialog({
                             </div>
 
                             {grantSubjectType === "department" && (
-                                <label className="flex shrink-0 cursor-pointer items-center gap-2 text-[14px] leading-[22px] text-[#212121]">
+                                <label className="flex shrink-0 cursor-pointer items-center gap-2 text-[14px] leading-[22px] text-text-1">
                                     <Checkbox
                                         className="border-[#D9D9D9] data-[state=checked]:border-primary data-[state=indeterminate]:border-primary"
                                         checked={grantIncludeChildren}

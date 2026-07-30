@@ -19,8 +19,8 @@ export function CreateChannelSuccessContent({
         <div className="flex min-h-full flex-1 flex-col items-center justify-center py-16">
             <div className="flex flex-col items-center">
                 <SuccessIllustration className="h-[120px] w-[120px] mb-4" />
-                <div className="mb-8 text-center text-[18px] font-semibold text-[#1D2129]">{localize("com_subscription.channel_create_success")}</div>
-                <div className="text-[14px] font-normal leading-6 text-[#999999] text-center mb-10 max-w-[400px] whitespace-pre-line">{localize("com_subscription.system_push_schedule")}</div>
+                <div className="mb-8 text-center text-[18px] font-semibold text-text-1">{localize("com_subscription.channel_create_success")}</div>
+                <div className="text-[14px] font-normal leading-6 text-text-3 text-center mb-10 max-w-[400px] whitespace-pre-line">{localize("com_subscription.system_push_schedule")}</div>
                 <div className="flex gap-3">
                     <Button
                         variant="secondary"

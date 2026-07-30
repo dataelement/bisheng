@@ -158,15 +158,15 @@ const BRAND_RAMP = [
 
 /** §2.1 primitive Arco gray ramp — rendered live from --arco-gray-N. */
 const ARCO_GRAYS = [
-  { n: 1, hex: '#F7F8FA', note: 'hover 底 → fill-1' },
-  { n: 2, hex: '#F2F3F5', note: 'filled 控件底 → fill-2' },
-  { n: 3, hex: '#E5E6EB', note: '常规边框 → border-base / fill-3' },
-  { n: 4, hex: '#C9CDD4', note: '禁用/占位 → text-4 / fill-4 / border-deep' },
+  { n: 1, hex: '#F8F8F8', note: 'hover 底 → fill-1' },
+  { n: 2, hex: '#F3F3F4', note: 'filled 控件底 → fill-2' },
+  { n: 3, hex: '#E5E6E9', note: '常规边框 → border-base / fill-3' },
+  { n: 4, hex: '#CACDD4', note: '禁用/占位 → text-4 / fill-4 / border-deep' },
   { n: 5, hex: '#A9AEB8', note: '中间档 · 无 semantic 映射' },
-  { n: 6, hex: '#86909C', note: '辅助文字 → text-3（全站最高频 hex ×263）' },
-  { n: 7, hex: '#6B7785', note: '中间档 · 无 semantic 映射' },
-  { n: 8, hex: '#4E5969', note: '次要文字 → text-2' },
-  { n: 9, hex: '#272E3B', note: '中间档 · 无 semantic 映射' },
+  { n: 6, hex: '#898F9C', note: '辅助文字 → text-3（全站最高频 hex ×263）' },
+  { n: 7, hex: '#6F7683', note: '中间档 · 无 semantic 映射' },
+  { n: 8, hex: '#525865', note: '次要文字 → text-2' },
+  { n: 9, hex: '#292E37', note: '中间档 · 无 semantic 映射' },
   { n: 10, hex: '#1D2129', note: '主文字 → text-1' },
 ];
 
@@ -201,15 +201,15 @@ const ARCO_ROLE: Record<number, string> = {
 /** §2.2 semantic neutral layer — token / class / value / live demo. */
 const NEUTRAL_SEMANTIC: { token: string; cls: string; value: string; usage: string; demo: ReactNode }[] = [
   { token: '--text-1', cls: 'text-text-1', value: 'gray-10 #1D2129', usage: '主文字：标题、正文主体', demo: <span className="text-body text-text-1">标题、正文主体</span> },
-  { token: '--text-2', cls: 'text-text-2', value: 'gray-8 #4E5969', usage: '次文字：次要说明、默认按钮文字', demo: <span className="text-body text-text-2">次要说明文字</span> },
-  { token: '--text-3', cls: 'text-text-3', value: 'gray-6 #86909C', usage: '辅助文字：弱提示、时间戳、占位符', demo: <span className="text-body text-text-3">弱提示 · 10 分钟前</span> },
-  { token: '--text-4', cls: 'text-text-4', value: 'gray-4 #C9CDD4', usage: '禁用文字', demo: <span className="text-body text-text-4">禁用状态文字</span> },
-  { token: '--fill-1', cls: 'bg-fill-1', value: 'gray-1 #F7F8FA', usage: '浅填充：hover 底、页面浅灰背景', demo: <ColorCell className="bg-fill-1" /> },
-  { token: '--fill-2', cls: 'bg-fill-2', value: 'gray-2 #F2F3F5', usage: '填充：active 底、filled 控件底', demo: <ColorCell className="bg-fill-2" /> },
-  { token: '--fill-3', cls: 'bg-fill-3', value: 'gray-3 #E5E6EB', usage: '深填充：filled hover', demo: <ColorCell className="bg-fill-3" /> },
-  { token: '--fill-4', cls: 'bg-fill-4', value: 'gray-4 #C9CDD4', usage: '重填充：filled active', demo: <ColorCell className="bg-fill-4" /> },
-  { token: '--border-base', cls: 'border-border-base', value: 'gray-3 #E5E6EB', usage: '常规边框：输入框、卡片、分割线（规范里的 border）', demo: <span className="inline-block h-8 w-24 rounded-md border border-border-base bg-white" /> },
-  { token: '--border-deep', cls: 'border-border-deep', value: 'gray-4 #C9CDD4', usage: '深边框：强调分割、hover 边框', demo: <span className="inline-block h-8 w-24 rounded-md border border-border-deep bg-white" /> },
+  { token: '--text-2', cls: 'text-text-2', value: 'gray-8 #525865', usage: '次文字：次要说明、默认按钮文字', demo: <span className="text-body text-text-2">次要说明文字</span> },
+  { token: '--text-3', cls: 'text-text-3', value: 'gray-6 #898F9C', usage: '辅助文字：弱提示、时间戳、占位符', demo: <span className="text-body text-text-3">弱提示 · 10 分钟前</span> },
+  { token: '--text-4', cls: 'text-text-4', value: 'gray-4 #CACDD4', usage: '禁用文字', demo: <span className="text-body text-text-4">禁用状态文字</span> },
+  { token: '--fill-1', cls: 'bg-fill-1', value: 'gray-1 #F8F8F8', usage: '浅填充：hover 底、页面浅灰背景', demo: <ColorCell className="bg-fill-1" /> },
+  { token: '--fill-2', cls: 'bg-fill-2', value: 'gray-2 #F3F3F4', usage: '填充：active 底、filled 控件底', demo: <ColorCell className="bg-fill-2" /> },
+  { token: '--fill-3', cls: 'bg-fill-3', value: 'gray-3 #E5E6E9', usage: '深填充：filled hover', demo: <ColorCell className="bg-fill-3" /> },
+  { token: '--fill-4', cls: 'bg-fill-4', value: 'gray-4 #CACDD4', usage: '重填充：filled active', demo: <ColorCell className="bg-fill-4" /> },
+  { token: '--border-base', cls: 'border-border-base', value: 'gray-3 #E5E6E9', usage: '常规边框：输入框、卡片、分割线（规范里的 border）', demo: <span className="inline-block h-8 w-24 rounded-md border border-border-base bg-white" /> },
+  { token: '--border-deep', cls: 'border-border-deep', value: 'gray-4 #CACDD4', usage: '深边框：强调分割、hover 边框', demo: <span className="inline-block h-8 w-24 rounded-md border border-border-deep bg-white" /> },
 ];
 
 /** Functional colors — fixed hex (不换肤); 主色 marked with a darker (active) accent. */

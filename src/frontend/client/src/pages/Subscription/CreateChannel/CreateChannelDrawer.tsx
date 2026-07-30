@@ -53,9 +53,9 @@ const MAX_SUB_CHANNELS = 10;
 
 /** 可见方式 / 权限：主标题（私有、需审核、公开）— 与创建知识空间一致 */
 const PERMISSION_OPTION_TEXT_CLASS =
-    "text-[14px] font-normal leading-[22px] tracking-normal text-[#212121]";
+    "text-[14px] font-normal leading-[22px] tracking-normal text-text-1";
 /** 表单说明/辅助文案：14px / 400 / #999999 */
-const FORM_HINT_TEXT_CLASS = "text-[14px] font-normal text-[#999999]";
+const FORM_HINT_TEXT_CLASS = "text-[14px] font-normal text-text-3";
 const PERMISSION_OPTION_FONT: CSSProperties = {
     fontFamily: '"PingFang SC", "PingFang TC", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif',
 };
@@ -299,9 +299,9 @@ export function CreateChannelDrawer({
                         ref={knowledgePickerHostRef}
                         className="relative flex min-h-0 flex-1 flex-col"
                     >
-                        <SheetHeader className="sticky top-0 z-10 mx-6 border-b border-[#E5E6EB] bg-white px-0 pb-4 pt-6 touch-mobile:mx-0">
+                        <SheetHeader className="sticky top-0 z-10 mx-6 border-b border-border-base bg-white px-0 pb-4 pt-6 touch-mobile:mx-0">
                             <div className="flex items-center justify-between gap-3">
-                                <SheetTitle className="text-[20px] font-medium text-[#1D2129] touch-desktop:text-[16px]">
+                                <SheetTitle className="text-[20px] font-medium text-text-1 touch-desktop:text-[16px]">
                                     {isEditMode ? localize("com_subscription.channel_settings") : localize("com_subscription.create_channel")}
                                 </SheetTitle>
                                 <button
@@ -347,7 +347,7 @@ export function CreateChannelDrawer({
                                     {/* 添加信息源 */}
                                     <div className="space-y-2">
                                         <div className="flex items-center justify-between">
-                                            <Label className="text-[14px] text-[#1D2129]">
+                                            <Label className="text-[14px] text-text-1">
                                                 <span className="text-[#F53F3F] mr-1">*</span>
                                                 {localize("com_subscription.add_information_source")}
                                             </Label>
@@ -388,7 +388,7 @@ export function CreateChannelDrawer({
 
                                     {/* 频道名称 */}
                                     <div className="space-y-2">
-                                        <Label className="text-[14px] text-[#1D2129]">
+                                        <Label className="text-[14px] text-text-1">
                                             <span className="text-[#F53F3F] mr-1">*</span>
                                             {localize("com_subscription.channel_name")}
                                         </Label>
@@ -426,9 +426,9 @@ export function CreateChannelDrawer({
                                                     }
                                                 }}
                                                 placeholder={localize("com_subscription.enter_channel_name")}
-                                                className="flex-1 h-8 text-[14px] border-[#E5E6EB]"
+                                                className="flex-1 h-8 text-[14px] border-border-base"
                                             />
-                                            <span className="absolute right-4 flex-shrink-0 text-[12px] text-[#86909C]">
+                                            <span className="absolute right-4 flex-shrink-0 text-[12px] text-text-3">
                                                 {Math.ceil(getFullWidthLength(form.channelName))}/{MAX_CHANNEL_NAME}
                                             </span>
                                         </div>
@@ -436,7 +436,7 @@ export function CreateChannelDrawer({
 
                                     {/* 频道简介 */}
                                     <div className="space-y-2">
-                                        <Label className="text-[14px] text-[#1D2129]">
+                                        <Label className="text-[14px] text-text-1">
                                             {localize("com_subscription.channel_description")}
                                         </Label>
                                         <div className="relative">
@@ -473,14 +473,14 @@ export function CreateChannelDrawer({
                                                     }
                                                 }}
                                                 placeholder={localize("com_subscription.enter_channel_description")}
-                                                className="min-h-[80px] text-[14px] bg-[#fff] rounded-md border-[#E5E6EB] pr-14 shadow-none"
+                                                className="min-h-[80px] text-[14px] bg-[#fff] rounded-md border-border-base pr-14 shadow-none"
                                             />
                                         </div>
                                     </div>
 
                                     {/* 可见方式 */}
                                     <div className="space-y-3">
-                                        <Label className="text-[14px] text-[#1D2129]">
+                                        <Label className="text-[14px] text-text-1">
                                             <span className="text-[#F53F3F] mr-1">*</span>
                                             {localize("com_subscription.premission_settings")}
                                         </Label>
@@ -524,7 +524,7 @@ export function CreateChannelDrawer({
 
                                                     <RadioGroup.Item
                                                         value={opt.value}
-                                                        className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-[#E5E6EB] bg-white data-[state=checked]:bg-blue-500 data-[state=checked]:border-blue-500"
+                                                        className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-border-base bg-white data-[state=checked]:bg-blue-500 data-[state=checked]:border-blue-500"
                                                     >
                                                         <RadioGroup.Indicator className="h-1.5 w-1.5 rounded-full bg-white" />
                                                     </RadioGroup.Item>
@@ -548,7 +548,7 @@ export function CreateChannelDrawer({
                                     {form.visibility !== "private" && (
                                         <div className="flex items-start justify-between gap-4">
                                             <div className="min-w-0 pr-2">
-                                                <Label className="flex flex-wrap items-baseline gap-x-2 text-[14px] text-[#1D2129]">
+                                                <Label className="flex flex-wrap items-baseline gap-x-2 text-[14px] text-text-1">
                                                     <span>{localize("com_subscription.is_publish_plaza")}</span>
                                                     <span className={FORM_HINT_TEXT_CLASS}>
                                                         {localize("com_subscription.publish_to_square_description")}
@@ -567,7 +567,7 @@ export function CreateChannelDrawer({
                                     <div className="space-y-3">
                                         <div className="flex items-start justify-between gap-4">
                                             <div className="min-w-0 pr-2">
-                                                <Label className="flex flex-wrap items-baseline gap-x-2 text-[14px] text-[#1D2129]">
+                                                <Label className="flex flex-wrap items-baseline gap-x-2 text-[14px] text-text-1">
                                                     <span>{localize("com_subscription.channel_content_filter")}</span>
                                                     <span className={FORM_HINT_TEXT_CLASS}>
                                                         {localize("com_subscription.only_filter_criteria")}
@@ -595,7 +595,7 @@ export function CreateChannelDrawer({
                                     <div className="space-y-3">
                                         <div className="flex items-start justify-between gap-4">
                                             <div className="min-w-0 pr-2">
-                                                <Label className="flex flex-wrap items-baseline gap-x-2 text-[14px] text-[#1D2129]">
+                                                <Label className="flex flex-wrap items-baseline gap-x-2 text-[14px] text-text-1">
                                                     <span>{localize("com_subscription.create_sub_channel")}</span>
                                                     <span className={FORM_HINT_TEXT_CLASS}>
                                                         {localize("com_subscription.subscribe_same_filters")}
@@ -609,7 +609,7 @@ export function CreateChannelDrawer({
                                             />
                                         </div>
                                         {form.createSubChannel && (
-                                            <div className="overflow-hidden rounded-md border border-[#E5E6EB] divide-y divide-[#E5E6EB]">
+                                            <div className="overflow-hidden rounded-md border border-border-base divide-y divide-border-base">
                                                 {form.subChannels.map((sub) => (
                                                     <SubChannelBlock
                                                         key={sub.id}
@@ -671,9 +671,9 @@ export function CreateChannelDrawer({
                                                     <button
                                                         type="button"
                                                         onClick={form.handleAddSubChannel}
-                                                        className="flex h-12 w-full items-center gap-3 rounded-none bg-[#F8F8F8] px-4 text-left text-[14px] leading-none transition-colors hover:bg-[#F2F3F5]"
+                                                        className="flex h-12 w-full items-center gap-3 rounded-none bg-fill-1 px-4 text-left text-[14px] leading-none transition-colors hover:bg-fill-2"
                                                     >
-                                                        <PlusSquare className="size-4 shrink-0 text-[#86909C]" />
+                                                        <PlusSquare className="size-4 shrink-0 text-text-3" />
                                                         <span>{localize("com_subscription.add_sub_channel")}</span>
                                                     </button>
                                                 )}
@@ -709,11 +709,11 @@ export function CreateChannelDrawer({
 
                         {/* 底部操作按钮 */}
                         {(!form.showSuccess || isEditMode) && (
-                            <div className="sticky bottom-0 z-10 mt-auto mx-6 flex justify-end gap-3 border-t border-[#E5E6EB] bg-white px-0 pb-5 pt-10 touch-mobile:mx-0 touch-mobile:gap-2 touch-mobile:px-0 touch-mobile:pt-4">
+                            <div className="sticky bottom-0 z-10 mt-auto mx-6 flex justify-end gap-3 border-t border-border-base bg-white px-0 pb-5 pt-10 touch-mobile:mx-0 touch-mobile:gap-2 touch-mobile:px-0 touch-mobile:pt-4">
                                 <Button
                                     variant="secondary"
                                     onClick={() => handleClose(false)}
-                                    className="inline-flex h-8 items-center justify-center rounded-md border-none bg-[#F2F3F5] px-4 text-[14px] leading-none !font-normal text-[#4E5969] hover:bg-[#E5E6EB] touch-mobile:flex-1"
+                                    className="inline-flex h-8 items-center justify-center rounded-md border-none bg-fill-2 px-4 text-[14px] leading-none !font-normal text-text-2 hover:bg-fill-3 touch-mobile:flex-1"
                                 >
                                     {localize("cancel")}
                                 </Button>

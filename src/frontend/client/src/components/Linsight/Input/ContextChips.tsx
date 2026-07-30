@@ -64,14 +64,14 @@ export function ContextChips({
                 {uploadingFiles.map((file) => (
                     <Chip
                         key={`uploading-${file.id}`}
-                        icon={<Loader2 className="mr-1 size-4 shrink-0 animate-spin text-[#999]" />}
+                        icon={<Loader2 className="mr-1 size-4 shrink-0 animate-spin text-text-3" />}
                         label={file.name}
                     />
                 ))}
                 {files.map((file) => (
                     <Chip
                         key={file.file_id || file.filepath || file.name}
-                        icon={<Paperclip className="mr-1 size-4 shrink-0 text-[#999]" />}
+                        icon={<Paperclip className="mr-1 size-4 shrink-0 text-text-3" />}
                         label={file.filename || file.file_name || file.name || ''}
                         onRemove={() => onRemoveFile(file)}
                     />
@@ -79,7 +79,7 @@ export function ContextChips({
                 {skills.map((skill) => (
                     <Chip
                         key={`skill-${skill.name}`}
-                        icon={<Sparkles className="mr-1 size-4 shrink-0 text-[#999]" />}
+                        icon={<Sparkles className="mr-1 size-4 shrink-0 text-text-3" />}
                         label={skill.display_name}
                         onRemove={() => onRemoveSkill(skill)}
                     />
@@ -89,9 +89,9 @@ export function ContextChips({
                         key={`${item.type}-${item.id}`}
                         icon={
                             item.type === 'space' ? (
-                                <BookOpen className="mr-1 size-4 shrink-0 text-[#999]" />
+                                <BookOpen className="mr-1 size-4 shrink-0 text-text-3" />
                             ) : (
-                                <BooksIcon className="mr-1 size-4 shrink-0 text-[#999]" />
+                                <BooksIcon className="mr-1 size-4 shrink-0 text-text-3" />
                             )
                         }
                         label={item.name}

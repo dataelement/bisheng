@@ -59,7 +59,7 @@ export function WorkspacePanel({
             {/* File-type icon hidden for now; keep for an easy future re-enable. */}
             { }
             {/* <FileIcon type={getFileExtension(file.file_name) as any} className="size-5 min-w-5" /> */}
-            <span className="min-w-0 flex-1 truncate text-sm text-[#212121] group-hover:text-blue-500">
+            <span className="min-w-0 flex-1 truncate text-sm text-text-1 group-hover:text-blue-500">
                 {file.file_name}
             </span>
         </div>
@@ -91,7 +91,7 @@ export function WorkspacePanel({
                             <Outlined.ArrowLeft className="size-4" />
                         </button>
                         <span
-                            className="min-w-0 flex-1 truncate text-sm text-[#212121]"
+                            className="min-w-0 flex-1 truncate text-sm text-text-1"
                             title={previewFile.file_name}
                         >
                             {previewFile.file_name || localize('com_linsight_preview_file')}
@@ -126,7 +126,7 @@ export function WorkspacePanel({
                 <>
                     {/* list header */}
                     <div className="flex h-12 shrink-0 items-center justify-between px-4">
-                        <span className="text-sm font-medium text-[#212121]">{localize('com_linsight_workspace')}</span>
+                        <span className="text-sm font-medium text-text-1">{localize('com_linsight_workspace')}</span>
                         <button type="button" aria-label={localize('com_ui_close')} className={iconBtn} onClick={onClose}>
                             <Outlined.Close className="size-4" />
                         </button>
@@ -138,7 +138,7 @@ export function WorkspacePanel({
                         ) : (
                             <div className="flex h-full flex-col items-center justify-center text-center">
                                 <EmptyStateIllustration className="mb-4 size-[120px]" />
-                                <p className="text-[14px] font-normal text-[#999999]">{localize('com_linsight_workspace_empty')}</p>
+                                <p className="text-[14px] font-normal text-text-3">{localize('com_linsight_workspace_empty')}</p>
                             </div>
                         )}
                     </div>

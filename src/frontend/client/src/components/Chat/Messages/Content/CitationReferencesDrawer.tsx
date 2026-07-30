@@ -117,7 +117,7 @@ function CitationReferenceCard({
   const { name: documentName, extension: documentExtension } = splitDocumentTitle(title, detail, preview);
 
   const nameRowTextClass =
-    'text-[14px] font-normal leading-[22px] text-[#1D2129]';
+    'text-[14px] font-normal leading-[22px] text-text-1';
 
   return (
     <div className="flex min-h-[92px] flex-col gap-2 rounded-md border border-[#ECECEC] bg-white p-2">
@@ -170,20 +170,20 @@ function CitationReferenceCard({
         </div>
       )}
 
-      {(isLoading || hasError) && <div className="min-h-[20px] text-[12px] leading-5 text-[#4E5969]">
+      {(isLoading || hasError) && <div className="min-h-[20px] text-[12px] leading-5 text-text-2">
         {isLoading ? (
-          <span className="inline-flex items-center gap-2 text-[#86909C]">
+          <span className="inline-flex items-center gap-2 text-text-3">
             <Outlined.Loading className="size-3.5 animate-spin" />
             加载溯源详情...
           </span>
         ) : hasError ? (
-          <span className="text-[#86909C]">溯源详情加载失败</span>
+          <span className="text-text-3">溯源详情加载失败</span>
         ) : (
           null
         )}
       </div>}
 
-      <div className="flex min-w-0 items-center gap-1 text-[12px] leading-5 text-[#86909C]">
+      <div className="flex min-w-0 items-center gap-1 text-[12px] leading-5 text-text-3">
         {isWeb ? (
           <>
             <div className="flex size-4 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[#ECECEC] bg-white">
@@ -551,10 +551,10 @@ export default function CitationReferencesDrawer({
         )}
       >
         <div className="flex min-w-0 flex-1 items-center gap-2">
-          <h2 className="truncate text-sm font-medium leading-[22px] text-[#212121]">
+          <h2 className="truncate text-sm font-medium leading-[22px] text-text-1">
             {localize('com_msg_source_reference')}
           </h2>
-          <span className="flex h-[18px] min-w-[16px] shrink-0 items-center justify-center rounded-full bg-gray-100 px-1.5 text-[10px] text-[#666]">
+          <span className="flex h-[18px] min-w-[16px] shrink-0 items-center justify-center rounded-full bg-gray-100 px-1.5 text-caption-sm text-[#666]">
             {references.length}
           </span>
         </div>
@@ -564,7 +564,7 @@ export default function CitationReferencesDrawer({
           className={cn(
             'inline-flex shrink-0 items-center justify-center transition-colors',
             isMobileLikeViewport
-              ? 'size-8 rounded-md hover:bg-[#F2F3F5] hover:text-[#4E5969]'
+              ? 'size-8 rounded-md hover:bg-fill-2 hover:text-text-2'
               : 'h-7 w-7 rounded-lg text-[#8C8C8C] hover:bg-gray-100',
           )}
           aria-label="关闭参考资料"
@@ -596,7 +596,7 @@ export default function CitationReferencesDrawer({
             );
           })
         ) : (
-          <div className="flex h-full items-center justify-center text-sm text-[#86909C]">
+          <div className="flex h-full items-center justify-center text-sm text-text-3">
             暂无参考资料
           </div>
         )}
@@ -623,13 +623,13 @@ export default function CitationReferencesDrawer({
         </button>
         <div className="flex min-w-0 flex-1 items-center">
           <h2
-            className="truncate text-sm font-medium leading-[22px] text-[#212121]"
+            className="truncate text-sm font-medium leading-[22px] text-text-1"
             title={documentPreview ? getCitationDocumentName(documentPreview.detail) : ''}
           >
             {documentHeaderTitle.name}
           </h2>
           {documentHeaderTitle.extension ? (
-            <span className="shrink-0 text-sm font-medium leading-[22px] text-[#212121]">
+            <span className="shrink-0 text-sm font-medium leading-[22px] text-text-1">
               {documentHeaderTitle.extension}
             </span>
           ) : null}

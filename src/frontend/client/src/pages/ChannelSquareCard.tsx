@@ -56,7 +56,7 @@ export function ChannelSquareCard({
   return (
     <Card
       className={cn(
-        "group relative flex-1 min-w-0 gap-0 p-0 cursor-pointer rounded-lg border-[0.5px] border-solid border-[#EBECF0] bg-[linear-gradient(135deg,rgb(var(--brand-500)/0.04)_0%,#FFF_50%,rgb(var(--brand-500)/0.04)_100%)] shadow-none transition-all",
+        "group relative flex-1 min-w-0 gap-0 p-0 cursor-pointer rounded-lg border-[0.5px] border-solid border-border-base bg-[linear-gradient(135deg,rgb(var(--brand-500)/0.04)_0%,#FFF_50%,rgb(var(--brand-500)/0.04)_100%)] shadow-none transition-all",
         "fine-pointer:hover:bg-[linear-gradient(0deg,#FFF_0%,#FFF_100%),linear-gradient(135deg,rgb(var(--brand-500)/0.04)_0%,#FFF_50%,rgb(var(--brand-500)/0.04)_100%)] fine-pointer:hover:shadow-[0_8px_20px_0_rgba(117,145,212,0.12)]",
         "after:pointer-events-none after:absolute after:inset-0 after:rounded-lg after:border after:border-blue-500 after:opacity-0 after:transition-opacity fine-pointer:group-hover:after:opacity-100",
         isHighlighted &&
@@ -69,7 +69,7 @@ export function ChannelSquareCard({
         <div className="flex items-center justify-between gap-2">
           {/* 标题不要 flex-1：短标题时宽度跟内容走，锁才能紧贴文字；长标题靠 shrink+truncate */}
           <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
-            <h3 className="m-0 min-w-0 shrink truncate text-[14px] font-bold leading-[20px] text-[#1D2129]">
+            <h3 className="m-0 min-w-0 shrink truncate text-[14px] font-bold leading-[20px] text-text-1">
               {title}
             </h3>
             {isPrivateOrReview && (
@@ -83,9 +83,9 @@ export function ChannelSquareCard({
             className={cn(
               "h-[28px] min-h-[28px] px-2.5 text-[12px] font-normal rounded-md flex-shrink-0 ml-2 border",
               buttonConfig.variant === "secondary" &&
-              "bg-[#F7F8FA] text-[#86909C] border-[#E5E6EB] fine-pointer:hover:bg-[#F2F3F5]",
+              "bg-fill-1 text-text-3 border-border-base fine-pointer:hover:bg-fill-2",
               buttonConfig.variant === "outline" &&
-              "text-[#4E5969] border-[#E5E6EB] fine-pointer:hover:text-blue-500 fine-pointer:hover:border-blue-500"
+              "text-text-2 border-border-base fine-pointer:hover:text-blue-500 fine-pointer:hover:border-blue-500"
             )}
             onClick={(e) => {
               e.stopPropagation();
@@ -105,7 +105,7 @@ export function ChannelSquareCard({
         </p>
 
         {/* 创建者和统计信息 */}
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] leading-[18px] text-[#86909C] touch-desktop:flex-nowrap touch-desktop:gap-2.5 touch-desktop:text-[14px] touch-desktop:leading-[20px]">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] leading-[18px] text-text-3 touch-desktop:flex-nowrap touch-desktop:gap-2.5 touch-desktop:text-[14px] touch-desktop:leading-[20px]">
           <div className="flex shrink-0 items-center gap-1.5">
             {creatorAvatars && creatorAvatars.length > 0 ? (
               <div className="flex -space-x-1.5">

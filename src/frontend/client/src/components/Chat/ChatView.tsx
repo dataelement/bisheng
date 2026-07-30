@@ -1009,7 +1009,7 @@ const DailyFeaturedApps = ({ t }: { t: (k: string) => string }) => {
             {displayApps.map((appItem) => (
               <Card
                 key={appItem.id}
-                className="group flex flex-col py-0 rounded-lg shadow-[0_2px_4px_rgba(0,0,0,0.02)] border border-[#E5E6EB] overflow-hidden cursor-pointer hover:border-blue-500 hover:shadow-[0_4px_14px_rgb(var(--brand-500)/0.12)] transition-all duration-300 h-[142px] hover:-translate-y-1"
+                className="group flex flex-col py-0 rounded-lg shadow-[0_2px_4px_rgba(0,0,0,0.02)] border border-border-base overflow-hidden cursor-pointer hover:border-blue-500 hover:shadow-[0_4px_14px_rgb(var(--brand-500)/0.12)] transition-all duration-300 h-[142px] hover:-translate-y-1"
                 style={{ background: 'linear-gradient(135deg, rgb(var(--brand-500)/0.04) 0%, #fff 50%, rgb(var(--brand-500)/0.04) 100%)' }}
                 onClick={() => handleCardClick(appItem)}
               >
@@ -1022,16 +1022,16 @@ const DailyFeaturedApps = ({ t }: { t: (k: string) => string }) => {
                       className={`size-[32px] min-w-[32px] !rounded-lg`}
                       iconClassName="w-5 h-5"
                     />
-                    <div className="text-[15px] font-medium text-[#1D2129] line-clamp-1 break-all">{appItem.name}</div>
+                    <div className="text-[15px] font-medium text-text-1 line-clamp-1 break-all">{appItem.name}</div>
                   </div>
-                  <div className="text-[13px] text-[#86909C] line-clamp-2 break-all font-normal leading-[1.5]">{appItem.description}</div>
+                  <div className="text-[13px] text-text-3 line-clamp-2 break-all font-normal leading-[1.5]">{appItem.description}</div>
 
                   <div className="mt-auto pt-2 relative h-[30px] shrink-0 w-full overflow-hidden">
                     <div className="absolute inset-x-0 bottom-0 top-1 flex gap-1.5 flex-wrap overflow-hidden opacity-100 fine-pointer:group-hover:opacity-0 transition-opacity duration-200 pointer-events-none coarse-pointer:opacity-0">
                       {appItem.tags && appItem.tags.map((tag: any) => (
                         <div
                           key={tag.id || tag.name || tag}
-                          className="bg-[#F2F3F5] text-[#4E5969] text-[12px] px-2 py-[2px] rounded-[4px] font-normal whitespace-nowrap"
+                          className="bg-fill-2 text-text-2 text-[12px] px-2 py-[2px] rounded-[4px] font-normal whitespace-nowrap"
                         >
                           {tag.name || tag}
                         </div>

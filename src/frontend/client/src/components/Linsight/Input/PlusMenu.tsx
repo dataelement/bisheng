@@ -49,7 +49,7 @@ export function PlusMenu({
                     type="button"
                     aria-label={localize('com_ui_upload_files')}
                     className={cn(
-                        'flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[#4E5969] outline-none transition-colors hover:bg-black/5',
+                        'flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-text-2 outline-none transition-colors hover:bg-black/5',
                         disabled && 'cursor-not-allowed opacity-50',
                     )}
                 >

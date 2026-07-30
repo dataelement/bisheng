@@ -49,9 +49,9 @@ function parseAutoTagText(text: string): string[] {
 
 /** 权限项文案：PingFang SC / 14px / 22px 行高 / 400 / #212121 */
 const PERMISSION_OPTION_TEXT_CLASS =
-    "text-[14px] font-normal leading-[22px] tracking-normal text-[#212121]";
+    "text-[14px] font-normal leading-[22px] tracking-normal text-text-1";
 /** 权限项说明：14px / 400 / #999999 */
-const FORM_HINT_TEXT_CLASS = "text-[14px] font-normal text-[#999999]";
+const FORM_HINT_TEXT_CLASS = "text-[14px] font-normal text-text-3";
 const PERMISSION_OPTION_FONT: CSSProperties = {
     fontFamily: '"PingFang SC", "PingFang TC", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif',
 };
@@ -356,9 +356,9 @@ export function CreateKnowledgeSpaceDrawer({
                     "flex w-full max-w-[900px] flex-col overflow-hidden bg-white px-20 sm:max-w-[1000px] touch-mobile:px-4"
                 )}
             >
-                <SheetHeader className="sticky top-0 z-10 mx-6 border-b border-[#E5E6EB] bg-white px-0 pb-4 pt-6 touch-mobile:mx-0">
+                <SheetHeader className="sticky top-0 z-10 mx-6 border-b border-border-base bg-white px-0 pb-4 pt-6 touch-mobile:mx-0">
                     <div className="flex items-center justify-between gap-3">
-                        <SheetTitle className="text-[20px] font-medium text-[#1D2129] touch-desktop:text-[16px]">
+                        <SheetTitle className="text-[20px] font-medium text-text-1 touch-desktop:text-[16px]">
                             {mode === "edit" ? localize("com_subscription.edit_knowledge_space") || localize("com_knowledge.edit_space") : localize("com_subscription.create_konwledge_space")}
                         </SheetTitle>
                         <button
@@ -376,7 +376,7 @@ export function CreateKnowledgeSpaceDrawer({
                     <div className="flex flex-1 flex-col items-center justify-center py-16">
                         <div className="flex flex-col items-center">
                             <SuccessIllustration className="h-[120px] w-[120px] mb-4" />
-                            <div className="mb-8 text-center text-[18px] font-semibold text-[#1D2129]">
+                            <div className="mb-8 text-center text-[18px] font-semibold text-text-1">
                                 {localize("com_subscription.create_knowledge_space_success")}
                             </div>
                             <div className="flex gap-3">
@@ -407,7 +407,7 @@ export function CreateKnowledgeSpaceDrawer({
                         <div className="space-y-6 overflow-visible px-6 py-5 touch-mobile:px-0">
                             {/* 知识空间名称 */}
                             <div className="space-y-2">
-                                <Label className="text-[14px] text-[#1D2129]">
+                                <Label className="text-[14px] text-text-1">
                                     <span className="text-[#F53F3F] mr-1">*</span>
                                     {localize("com_subscription.knowledge_space_name")}
                                 </Label>
@@ -445,9 +445,9 @@ export function CreateKnowledgeSpaceDrawer({
                                             }
                                         }}
                                         placeholder={localize("com_subscription.enter_knowledge_space_name")}
-                                        className="h-8 border-[#E5E6EB] text-[14px] pr-16 bg-[#fff]"
+                                        className="h-8 border-border-base text-[14px] pr-16 bg-[#fff]"
                                     />
-                                    <span className="absolute right-4 text-[12px] text-[#86909C]">
+                                    <span className="absolute right-4 text-[12px] text-text-3">
                                         {Math.ceil(getFullWidthLength(name))}/{MAX_SPACE_NAME}
                                     </span>
                                 </div>
@@ -455,7 +455,7 @@ export function CreateKnowledgeSpaceDrawer({
 
                             {/* 简介 */}
                             <div className="space-y-2">
-                                <Label className="text-[14px] text-[#1D2129]">
+                                <Label className="text-[14px] text-text-1">
                                     {localize("com_subscription.description")}
                                 </Label>
                                 <div>
@@ -492,14 +492,14 @@ export function CreateKnowledgeSpaceDrawer({
                                             }
                                         }}
                                         placeholder={localize("com_subscription.enter_knowledge_space_description")}
-                                        className="min-h-[104px] rounded-md border-[#E5E6EB] bg-[#fff] text-[14px]"
+                                        className="min-h-[104px] rounded-md border-border-base bg-[#fff] text-[14px]"
                                     />
                                 </div>
                             </div>
 
                             {/* 权限设置 */}
                             <div className="space-y-3">
-                                <Label className="text-[14px] text-[#1D2129]">
+                                <Label className="text-[14px] text-text-1">
                                     <span className="text-[#F53F3F] mr-1">*</span>
                                     {localize("com_subscription.premission_settings")}
                                 </Label>
@@ -552,7 +552,7 @@ export function CreateKnowledgeSpaceDrawer({
                                         >
                                             <RadioGroup.Item
                                                 value={opt.value}
-                                                className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-[#E5E6EB] bg-white data-[state=checked]:bg-blue-500 data-[state=checked]:border-blue-500"
+                                                className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-border-base bg-white data-[state=checked]:bg-blue-500 data-[state=checked]:border-blue-500"
                                             >
                                                 <RadioGroup.Indicator className="h-1.5 w-1.5 rounded-full bg-white" />
                                             </RadioGroup.Item>
@@ -576,7 +576,7 @@ export function CreateKnowledgeSpaceDrawer({
                             {needPublishOption && (
                                 <div className="flex items-start justify-between gap-4">
                                     <div className="min-w-0 pr-2">
-                                        <Label className="flex flex-wrap items-baseline gap-x-2 text-[14px] text-[#1D2129]">
+                                        <Label className="flex flex-wrap items-baseline gap-x-2 text-[14px] text-text-1">
                                             <span>{localize("com_knowledge.publish_to_square")}</span>
                                             <span className={FORM_HINT_TEXT_CLASS}>
                                                 {localize("com_knowledge.publish_desc")}
@@ -593,7 +593,7 @@ export function CreateKnowledgeSpaceDrawer({
 
                             {autoTagFeatureVisible && (
                                 <div className="space-y-3">
-                                    <Label className="text-[14px] text-[#1D2129]">
+                                    <Label className="text-[14px] text-text-1">
                                         <span className="text-[#F53F3F]">*</span>
                                         {localize("com_knowledge.auto_tag_generation")}
                                         <span className={cn("ml-2", FORM_HINT_TEXT_CLASS)}>
@@ -615,20 +615,20 @@ export function CreateKnowledgeSpaceDrawer({
                                         <label className="flex items-center gap-2 cursor-pointer">
                                             <RadioGroup.Item
                                                 value="yes"
-                                                className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-[#E5E6EB] bg-white data-[state=checked]:bg-blue-500 data-[state=checked]:border-blue-500"
+                                                className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-border-base bg-white data-[state=checked]:bg-blue-500 data-[state=checked]:border-blue-500"
                                             >
                                                 <RadioGroup.Indicator className="h-1.5 w-1.5 rounded-full bg-white" />
                                             </RadioGroup.Item>
-                                            <span className="text-[14px] text-[#1D2129]">{localize("com_knowledge.yes")}</span>
+                                            <span className="text-[14px] text-text-1">{localize("com_knowledge.yes")}</span>
                                         </label>
                                         <label className="flex items-center gap-2 cursor-pointer">
                                             <RadioGroup.Item
                                                 value="no"
-                                                className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-[#E5E6EB] bg-white data-[state=checked]:bg-blue-500 data-[state=checked]:border-blue-500"
+                                                className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-border-base bg-white data-[state=checked]:bg-blue-500 data-[state=checked]:border-blue-500"
                                             >
                                                 <RadioGroup.Indicator className="h-1.5 w-1.5 rounded-full bg-white" />
                                             </RadioGroup.Item>
-                                            <span className="text-[14px] text-[#1D2129]">{localize("com_knowledge.no")}</span>
+                                            <span className="text-[14px] text-text-1">{localize("com_knowledge.no")}</span>
                                         </label>
                                     </RadioGroup.Root>
 
@@ -638,7 +638,7 @@ export function CreateKnowledgeSpaceDrawer({
                                             onValueChange={handleAutoTagModeChange}
                                             className="space-y-3"
                                         >
-                                            <TabsList className="h-8 gap-1 rounded-md border border-[#E5E6EB] bg-white p-1">
+                                            <TabsList className="h-8 gap-1 rounded-md border border-border-base bg-white p-1">
                                                 <TabsTrigger
                                                     value="library"
                                                     className="min-w-0 px-3 py-1 text-[13px] data-[state=active]:bg-blue-50 data-[state=active]:text-blue-500"
@@ -654,7 +654,7 @@ export function CreateKnowledgeSpaceDrawer({
                                             </TabsList>
 
                                             <TabsContent value="library" className="space-y-2">
-                                                <Label className="text-[14px] font-medium text-[#1D2129]">
+                                                <Label className="text-[14px] font-medium text-text-1">
                                                     <span className="mr-1 text-[#F53F3F]">*</span>
                                                     {localize("com_knowledge.auto_tag_library")}
                                                 </Label>
@@ -663,7 +663,7 @@ export function CreateKnowledgeSpaceDrawer({
                                                     onValueChange={(value) => setAutoTagLibraryId(Number(value))}
                                                     disabled={tagLibrariesLoading || tagLibraries.length === 0}
                                                 >
-                                                    <SelectTrigger className="h-8 border-[#E5E6EB] bg-white text-[14px]">
+                                                    <SelectTrigger className="h-8 border-border-base bg-white text-[14px]">
                                                         <SelectValue
                                                             placeholder={
                                                                 tagLibrariesLoading
@@ -687,15 +687,15 @@ export function CreateKnowledgeSpaceDrawer({
                                                 )}
                                                 {autoTagLibraryId && (
                                                     <div className="space-y-1.5 pt-1">
-                                                        <div className="text-[12px] text-[#86909C]">
+                                                        <div className="text-[12px] text-text-3">
                                                             {localize("com_knowledge.auto_tag_library_preview")}
                                                         </div>
                                                         {autoTagLibraryTagsLoading ? (
-                                                            <div className="text-[12px] text-[#86909C]">
+                                                            <div className="text-[12px] text-text-3">
                                                                 {localize("com_knowledge.loading")}
                                                             </div>
                                                         ) : autoTagLibraryTags.length === 0 ? (
-                                                            <div className="text-[12px] text-[#86909C]">
+                                                            <div className="text-[12px] text-text-3">
                                                                 {localize("com_knowledge.auto_tag_library_preview_empty")}
                                                             </div>
                                                         ) : (
@@ -730,11 +730,11 @@ export function CreateKnowledgeSpaceDrawer({
 
                                             <TabsContent value="custom" className="space-y-2">
                                                 <div className="flex items-center justify-between">
-                                                    <Label className="text-[14px] font-medium text-[#1D2129]">
+                                                    <Label className="text-[14px] font-medium text-text-1">
                                                         <span className="mr-1 text-[#F53F3F]">*</span>
                                                         {localize("com_knowledge.auto_tag_mode_custom")}
                                                     </Label>
-                                                    <span className="text-[12px] text-[#86909C]">
+                                                    <span className="text-[12px] text-text-3">
                                                         {customTags.length}/{MAX_AUTO_TAG_CUSTOM_TAGS}
                                                     </span>
                                                 </div>
@@ -743,7 +743,7 @@ export function CreateKnowledgeSpaceDrawer({
                                                         value={autoTagCustomTagsText}
                                                         onChange={(e) => setAutoTagCustomTagsText(e.target.value)}
                                                         placeholder={localize("com_knowledge.auto_tag_custom_tags_placeholder")}
-                                                        className="min-h-[120px] resize-none rounded-md border-[#E5E6EB] bg-white pr-24 text-[14px]"
+                                                        className="min-h-[120px] resize-none rounded-md border-border-base bg-white pr-24 text-[14px]"
                                                     />
                                                     <button
                                                         type="button"
@@ -771,10 +771,10 @@ export function CreateKnowledgeSpaceDrawer({
                 )}
 
                 {!showSuccess && (
-                    <div className="sticky bottom-0 z-10 mt-auto mx-6 flex justify-end gap-3 border-t border-[#E5E6EB] bg-white px-0 pb-5 pt-10 touch-mobile:mx-0 touch-mobile:gap-2 touch-mobile:px-0 touch-mobile:pt-4">
+                    <div className="sticky bottom-0 z-10 mt-auto mx-6 flex justify-end gap-3 border-t border-border-base bg-white px-0 pb-5 pt-10 touch-mobile:mx-0 touch-mobile:gap-2 touch-mobile:px-0 touch-mobile:pt-4">
                         <Button
                             variant="secondary"
-                            className="inline-flex h-8 items-center justify-center rounded-md border-none bg-[#F2F3F5] px-4 text-[14px] leading-none !font-normal text-[#4E5969] hover:bg-[#E5E6EB] touch-mobile:flex-1"
+                            className="inline-flex h-8 items-center justify-center rounded-md border-none bg-fill-2 px-4 text-[14px] leading-none !font-normal text-text-2 hover:bg-fill-3 touch-mobile:flex-1"
                             onClick={() => onOpenChange(false)}
                         >
                             {localize("com_knowledge.cancel")}

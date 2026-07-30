@@ -117,7 +117,7 @@ export function MobileAppHistoryDropdown({
             {/* App card — same UI as the SideNav card */}
             <div className="shrink-0 px-3 pt-3">
                 <div
-                    className="flex flex-col gap-3 rounded-md border-[0.5px] border-[#ebecf0] p-2"
+                    className="flex flex-col gap-3 rounded-md border-[0.5px] border-border-base p-2"
                     style={{
                         backgroundImage:
                             'linear-gradient(128.789deg, rgb(var(--brand-500)/0.04) 0%, rgb(255, 255, 255) 50%, rgb(var(--brand-500)/0.04) 100%)',
@@ -179,7 +179,7 @@ export function MobileAppHistoryDropdown({
             <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-2 pb-[max(12px,env(safe-area-inset-bottom))] pt-3">
                 {groups.length === 0 ? (
                     <div className="flex flex-1 items-center justify-center px-0 py-6">
-                        <p className="text-center text-[14px] leading-[19.5px] text-[#86909c]">
+                        <p className="text-center text-[14px] leading-[19.5px] text-text-3">
                             {localize('com_app_chat_sidebar_empty')}
                         </p>
                     </div>

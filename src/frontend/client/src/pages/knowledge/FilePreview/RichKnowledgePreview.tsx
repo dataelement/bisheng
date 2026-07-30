@@ -122,7 +122,7 @@ function TranscriptCueList({ cues }: { cues: TranscriptCue[] }) {
 
 function MarkdownBody({ content, className }: { content: string; className?: string }) {
     return (
-        <div className={cn("prose prose-sm max-w-none text-[#1d2129]", className)}>
+        <div className={cn("prose prose-sm max-w-none text-text-1", className)}>
             <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
                 rehypePlugins={[[rehypeHighlight, { detect: true, ignoreMissing: true }]]}
@@ -190,14 +190,14 @@ function MarkdownFromUrl({ fileUrl }: { fileUrl: string }) {
 
     if (loading) {
         return (
-            <div className="flex flex-1 items-center justify-center bg-[#fbfbfb] text-sm text-[#86909c]">
+            <div className="flex flex-1 items-center justify-center bg-[#fbfbfb] text-sm text-text-3">
                 {localize("com_knowledge.loading")}
             </div>
         );
     }
     if (error) {
         return (
-            <div className="flex flex-1 items-center justify-center bg-[#fbfbfb] text-sm text-[#86909c]">
+            <div className="flex flex-1 items-center justify-center bg-[#fbfbfb] text-sm text-text-3">
                 {error}
             </div>
         );
@@ -254,13 +254,13 @@ function MediaTranscriptTabs({ fileUrl }: { fileUrl: string }) {
             <div className="flex shrink-0 items-center px-3 pt-4">
                 {/* Segmented control — mirrors the include/exclude tabs in
                     Subscription/CreateChannel/FilterConditionEditor. */}
-                <div className="flex flex-shrink-0 rounded-[6px] bg-[#F8F8F8] p-[3px]">
+                <div className="flex flex-shrink-0 rounded-[6px] bg-fill-1 p-[3px]">
                     <button
                         type="button"
                         onClick={() => setActiveTab("recognized")}
                         className={`whitespace-nowrap rounded-[4px] px-[12px] py-[2px] text-center text-[14px] leading-[22px] transition-colors ${activeTab === "recognized"
                             ? "bg-blue-500/15 font-medium text-blue-500"
-                            : "bg-transparent text-[#818181] hover:bg-[#F2F3F5]"}`}
+                            : "bg-transparent text-[#818181] hover:bg-fill-2"}`}
                     >
                         {localize("com_knowledge.recognized_text")}
                     </button>
@@ -269,18 +269,18 @@ function MediaTranscriptTabs({ fileUrl }: { fileUrl: string }) {
                         onClick={() => setActiveTab("entry")}
                         className={`whitespace-nowrap rounded-[4px] px-[12px] py-[2px] text-center text-[14px] leading-[22px] transition-colors ${activeTab === "entry"
                             ? "bg-blue-500/15 font-medium text-blue-500"
-                            : "bg-transparent text-[#818181] hover:bg-[#F2F3F5]"}`}
+                            : "bg-transparent text-[#818181] hover:bg-fill-2"}`}
                     >
                         {localize("com_knowledge.knowledge_entry_text")}
                     </button>
                 </div>
             </div>
             {loading ? (
-                <div className="flex flex-1 items-center justify-center text-sm text-[#86909c]">
+                <div className="flex flex-1 items-center justify-center text-sm text-text-3">
                     {localize("com_knowledge.loading")}
                 </div>
             ) : error ? (
-                <div className="flex flex-1 items-center justify-center text-sm text-[#86909c]">{error}</div>
+                <div className="flex flex-1 items-center justify-center text-sm text-text-3">{error}</div>
             ) : (
                 // pb clears the AI dock pinned at the bottom of the page.
                 <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-[114px] pt-3">
@@ -339,7 +339,7 @@ export function RichKnowledgePreview({
                     </div>
                     {mediaTextUrl ? (
                         <>
-                            <div className="h-px shrink-0 bg-[#e5e6eb] md:h-auto md:w-px" />
+                            <div className="h-px shrink-0 bg-fill-3 md:h-auto md:w-px" />
                             <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                                 <MediaTranscriptTabs fileUrl={mediaTextUrl} />
                             </div>
@@ -364,7 +364,7 @@ export function RichKnowledgePreview({
                 {webLinkMarkdownUrl ? (
                     <MarkdownFromUrl fileUrl={webLinkMarkdownUrl} />
                 ) : (
-                    <div className="flex h-full items-center justify-center text-sm text-[#86909c]">
+                    <div className="flex h-full items-center justify-center text-sm text-text-3">
                         {localize("com_knowledge.fetch_preview_link_failed")}
                     </div>
                 )}

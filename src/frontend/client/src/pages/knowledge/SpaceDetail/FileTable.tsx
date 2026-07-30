@@ -63,7 +63,7 @@ const renderRowFileIcon = (file: KnowledgeFile) => {
 
 /** 状态列悬停：下载 / 更多 — 白底、细灰边、8px 圆角 */
 const FILE_ROW_ACTION_BTN_CLASS =
-    "size-7 shrink-0 flex items-center justify-center rounded-lg border border-[#ECECEC] bg-white text-[#4e5969] hover:bg-[#f7f7f7] transition-colors";
+    "size-7 shrink-0 flex items-center justify-center rounded-lg border border-[#ECECEC] bg-white text-text-2 hover:bg-[#f7f7f7] transition-colors";
 
 // ============================================================
 // 列定义：key、最小宽度、初始宽度
@@ -345,19 +345,19 @@ const SortableHeader = ({
         <ArrowIcon
             className={cn(
                 "size-4 shrink-0 transition-opacity",
-                isActive ? "text-[#212121] opacity-100" : "text-[#999] opacity-0",
+                isActive ? "text-text-1 opacity-100" : "text-text-3 opacity-0",
                 "group-hover:opacity-100",
             )}
         />
     );
     const title = (
-        <span className={cn("text-sm font-normal", isActive ? "text-[#1d2129]" : "text-[#4e5969]")}>{children}</span>
+        <span className={cn("text-sm font-normal", isActive ? "text-text-1" : "text-text-2")}>{children}</span>
     );
     return (
         <TableHead
             className={cn(
                 "group relative my-2 cursor-pointer select-none overflow-visible bg-[rgb(251,251,251)] p-0 pr-3",
-                "transition-colors hover:bg-[#f2f3f5]",
+                "transition-colors hover:bg-fill-2",
                 isSticky && "sticky z-20"
             )}
             style={{
@@ -434,7 +434,7 @@ function FileTableHeader({
     };
 
     return (
-        <TableHeader className="sticky top-0 z-30 bg-[rgb(251,251,251)] [&_th]:border-b [&_th]:border-[#e5e6eb]">
+        <TableHeader className="sticky top-0 z-30 bg-[rgb(251,251,251)] [&_th]:border-b [&_th]:border-border-base">
             <TableRow className="hover:bg-transparent border-none">
                 {/* 复选框列 — 左侧固定 */}
                 <TableHead
@@ -490,7 +490,7 @@ function FileTableHeader({
 
                 {/* 标签 — 不排序 */}
                 <TableHead
-                    className="relative bg-[rgb(251,251,251)] p-0 font-normal text-[#4e5969]"
+                    className="relative bg-[rgb(251,251,251)] p-0 font-normal text-text-2"
                     style={{ width: columnWidths.tags, minWidth: columnWidths.tags, maxWidth: columnWidths.tags }}
                 >
                     <div className="flex items-center gap-1.5 border-l pl-3">
@@ -501,7 +501,7 @@ function FileTableHeader({
                 {/* 文件编码 — 仅 shougang 模式显示 */}
                 {shougangEnabled && (
                     <TableHead
-                        className="relative bg-[rgb(251,251,251)] p-0 font-normal text-[#4e5969]"
+                        className="relative bg-[rgb(251,251,251)] p-0 font-normal text-text-2"
                         style={{
                             width: columnWidths.fileEncoding,
                             minWidth: columnWidths.fileEncoding,
@@ -874,7 +874,7 @@ function FileRow({
     const rowBg = isFolderDragOver
         ? "bg-blue-100 transition-colors duration-150"
         : isSelected
-            ? "bg-blue-500/[0.07] transition-colors duration-150 group-hover:bg-[#F8F8F8]"
+            ? "bg-blue-500/[0.07] transition-colors duration-150 group-hover:bg-fill-1"
             : "bg-white transition-colors duration-150 group-hover:bg-[#f7f7f7]";
     const {
         isRenaming,
@@ -1046,7 +1046,7 @@ function FileRow({
             className={cn(
                 // border-separate on the table means <tr>.border-b doesn't paint —
                 // push the row separator onto each direct <td> instead.
-                "group [&>td]:border-b [&>td]:border-[#e5e6eb]",
+                "group [&>td]:border-b [&>td]:border-border-base",
                 // 取消 Table 默认 tr:hover 底色，整行颜色只由单元格 rowBg + group-hover 控制
                 "bg-transparent hover:bg-transparent"
             )}
@@ -1086,7 +1086,7 @@ function FileRow({
                 <div className="flex items-center gap-2 min-w-0 text-gray-300 ">
                     <div className={cn(
                         "flex size-4 shrink-0 items-center justify-center",
-                        namePreviewable ? "text-[#212121]" : "text-[#999]",
+                        namePreviewable ? "text-text-1" : "text-text-3",
                         isUploadingFolderPlaceholder && "opacity-50",
                     )}>
                         {isFolder
@@ -1103,7 +1103,7 @@ function FileRow({
                             onBlur={handleRenameSubmit}
                             onKeyDown={handleKeyDown}
                             onClick={(e) => e.stopPropagation()}
-                            className="flex-1 h-7 px-2 text-sm border border-[#DDDDDD] rounded outline-none shadow-[0_0_0_2px_#F1F5F9] bg-white font-normal text-[#1d2129]"
+                            className="flex-1 h-7 px-2 text-sm border border-[#DDDDDD] rounded outline-none shadow-[0_0_0_2px_#F1F5F9] bg-white font-normal text-text-1"
                         />
                     ) : (
                         <>
@@ -1116,8 +1116,8 @@ function FileRow({
                                 className={cn(
                                     "text-sm truncate flex-1",
                                     namePreviewable && !isUploadingFolderPlaceholder
-                                        ? "cursor-pointer text-[#212121] hover:text-blue-400"
-                                        : "cursor-default text-[#999]",
+                                        ? "cursor-pointer text-text-1 hover:text-blue-400"
+                                        : "cursor-default text-text-3",
                                     isUploadingFolderPlaceholder && "opacity-50",
                                 )}
                                 onClick={(e) => {
@@ -1163,7 +1163,7 @@ function FileRow({
 
             {/* 类型 */}
             <TableCell
-                className={cn("py-3 text-sm text-[#86909c]", rowBg)}
+                className={cn("py-3 text-sm text-text-3", rowBg)}
                 style={{ width: columnWidths.fileType, minWidth: columnWidths.fileType, maxWidth: columnWidths.fileType }}
             >
                 <span className={cn("truncate block", isUploadingFolderPlaceholder && "opacity-50")}>
@@ -1173,7 +1173,7 @@ function FileRow({
 
             {/* 大小 — 单元格右对齐，与表头一致 */}
             <TableCell
-                className={cn("py-3 text-right text-sm text-[#86909c]", rowBg)}
+                className={cn("py-3 text-right text-sm text-text-3", rowBg)}
                 style={{ width: columnWidths.size, minWidth: columnWidths.size, maxWidth: columnWidths.size }}
             >
                 <span className={cn("block truncate", isUploadingFolderPlaceholder && "opacity-50")}>
@@ -1200,7 +1200,7 @@ function FileRow({
                                             e.stopPropagation();
                                             onEditTags();
                                         }}
-                                        className="hidden cursor-pointer items-center justify-center text-[#212121] transition-colors hover:text-blue-400 group-hover:flex"
+                                        className="hidden cursor-pointer items-center justify-center text-text-1 transition-colors hover:text-blue-400 group-hover:flex"
                                     >
                                         <Outlined.Edit className="size-3.5" />
                                     </button>
@@ -1228,7 +1228,7 @@ function FileRow({
                             </span>
                         ) : file.fileEncoding ? (
                             <>
-                                <span className="truncate text-sm text-[#86909c]" title={file.fileEncoding}>
+                                <span className="truncate text-sm text-text-3" title={file.fileEncoding}>
                                     {file.fileEncoding}
                                 </span>
                                 {canEditEncoding && (
@@ -1239,7 +1239,7 @@ function FileRow({
                                             e.stopPropagation();
                                             onEditEncoding?.(file);
                                         }}
-                                        className="hidden cursor-pointer items-center justify-center text-[#212121] transition-colors hover:text-blue-400 group-hover:flex"
+                                        className="hidden cursor-pointer items-center justify-center text-text-1 transition-colors hover:text-blue-400 group-hover:flex"
                                     >
                                         <Outlined.Edit className="size-3.5" />
                                     </button>
@@ -1254,7 +1254,7 @@ function FileRow({
 
             {/* 更新时间 — 操作按钮改到行末占位列，避免盖住文字 */}
             <TableCell
-                className={cn("relative overflow-visible py-3 text-sm text-[#86909c]", rowBg)}
+                className={cn("relative overflow-visible py-3 text-sm text-text-3", rowBg)}
                 style={{ width: columnWidths.updateTime, minWidth: columnWidths.updateTime, maxWidth: columnWidths.updateTime }}
             >
                 <span className={cn("block truncate whitespace-nowrap", isUploadingFolderPlaceholder && "opacity-50")}>{formatTime(file.updatedAt)}</span>

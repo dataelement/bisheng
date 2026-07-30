@@ -53,11 +53,11 @@ function MoveUndoToastView({
                 <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-[#00B42A]">
                     <Check className="size-3 text-white" strokeWidth={3} />
                 </span>
-                <span className="whitespace-nowrap text-sm text-[#1d2129]">{message}</span>
+                <span className="whitespace-nowrap text-sm text-text-1">{message}</span>
                 <button
                     type="button"
                     onClick={onAction}
-                    className="shrink-0 text-sm text-[#86909c] transition-colors hover:text-blue-500"
+                    className="shrink-0 text-sm text-text-3 transition-colors hover:text-blue-500"
                 >
                     {actionLabel}
                 </button>

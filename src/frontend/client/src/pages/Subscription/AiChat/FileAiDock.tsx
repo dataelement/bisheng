@@ -115,7 +115,7 @@ function DockInput({
                 type="button"
                 onClick={submit}
                 disabled={!value.trim() || disabled || isStreaming}
-                className="btn-brand-primary flex h-8 w-8 items-center justify-center rounded-full bg-primary transition-all duration-200 disabled:cursor-not-allowed disabled:bg-[#E5E6EB] [&>svg]:text-white disabled:[&>svg]:text-[#4E5969]"
+                className="btn-brand-primary flex h-8 w-8 items-center justify-center rounded-full bg-primary transition-all duration-200 disabled:cursor-not-allowed disabled:bg-fill-3 [&>svg]:text-white disabled:[&>svg]:text-text-2"
                 aria-label="Send message"
             >
                 <SendIcon size={18} />
@@ -128,7 +128,7 @@ function DockInput({
             className={cn(
                 "flex bg-white",
                 variant === "box"
-                    ? "rounded-[20px] border border-[#E5E6EB] p-3 shadow-[0_2px_12px_rgba(0,0,0,0.06)]"
+                    ? "rounded-[20px] border border-border-base p-3 shadow-[0_2px_12px_rgba(0,0,0,0.06)]"
                     : "border-t border-[#EBEBEB] p-3",
                 stacked ? "flex-col gap-2" : "items-center gap-2",
             )}
@@ -153,7 +153,7 @@ function DockInput({
                     placeholder={placeholder}
                     rows={1}
                     className={cn(
-                        "m-0 block w-full resize-none bg-transparent py-1 text-sm leading-6 outline-none placeholder-[#86909c]",
+                        "m-0 block w-full resize-none bg-transparent py-1 text-sm leading-6 outline-none placeholder-text-3",
                         fixedHeight ? "h-full max-h-full overflow-y-auto" : "max-h-[180px]",
                     )}
                 />
@@ -290,7 +290,7 @@ export function FileAiDock({ spaceId, fileId }: FileAiDockProps) {
             // outer pt = safe-area + 8px, inner row is a fixed h-11 (44px) with the px-4 gutter.
             <div className="shrink-0 pt-[calc(env(safe-area-inset-top,0px)+8px)]">
                 <div className="relative flex h-11 w-full min-w-0 items-center px-4">
-                    <h3 className="mx-auto truncate text-base font-medium leading-6 text-[#212121]">
+                    <h3 className="mx-auto truncate text-base font-medium leading-6 text-text-1">
                         {assistantTitle}
                     </h3>
                     <div className="absolute right-4 top-1/2 flex -translate-y-1/2 items-center justify-end gap-3">
@@ -298,7 +298,7 @@ export function FileAiDock({ spaceId, fileId }: FileAiDockProps) {
                             type="button"
                             onClick={handleClear}
                             aria-label={localize("com_subscription.clear_chat")}
-                            className="inline-flex size-4 shrink-0 items-center justify-center text-[#212121] transition-colors hover:text-[#4e5969]"
+                            className="inline-flex size-4 shrink-0 items-center justify-center text-text-1 transition-colors hover:text-text-2"
                         >
                             <Outlined.Delete className="size-4" />
                         </button>
@@ -306,7 +306,7 @@ export function FileAiDock({ spaceId, fileId }: FileAiDockProps) {
                             type="button"
                             onClick={() => setOpen(false)}
                             aria-label={localize("com_ui_collapse")}
-                            className="inline-flex size-4 shrink-0 items-center justify-center text-[#999999] transition-colors hover:text-[#4e5969]"
+                            className="inline-flex size-4 shrink-0 items-center justify-center text-text-3 transition-colors hover:text-text-2"
                         >
                             <Outlined.DoubleDown className="size-4" />
                         </button>
@@ -416,7 +416,7 @@ export function FileAiDock({ spaceId, fileId }: FileAiDockProps) {
                                         type="button"
                                         onClick={() => setOpen(true)}
                                         aria-label={localize("com_ui_expand")}
-                                        className="absolute bottom-full right-0 z-10 mb-2.5 flex size-8 items-center justify-center rounded-[20px] border border-[#EBEBEB] bg-white text-[#86909c] drop-shadow-[0_0_8px_rgba(3,7,117,0.05)] transition-colors hover:text-[#4e5969]"
+                                        className="absolute bottom-full right-0 z-10 mb-2.5 flex size-8 items-center justify-center rounded-[20px] border border-[#EBEBEB] bg-white text-text-3 drop-shadow-[0_0_8px_rgba(3,7,117,0.05)] transition-colors hover:text-text-2"
                                     >
                                         <Outlined.DoubleDown className="size-4 rotate-180" />
                                     </button>
@@ -438,7 +438,7 @@ export function FileAiDock({ spaceId, fileId }: FileAiDockProps) {
                     >
                         <div className="flex h-[clamp(440px,70vh,calc(100vh_-_160px))] flex-col">
                             <div className="relative flex shrink-0 items-center gap-2 px-4 py-3">
-                                <h3 className="pointer-events-none min-w-0 shrink truncate text-left text-sm font-medium leading-[22px] text-[#212121]">
+                                <h3 className="pointer-events-none min-w-0 shrink truncate text-left text-sm font-medium leading-[22px] text-text-1">
                                     {assistantTitle}
                                 </h3>
                                 <div className="min-w-0 flex-1" aria-hidden />
@@ -451,7 +451,7 @@ export function FileAiDock({ spaceId, fileId }: FileAiDockProps) {
                                                     type="button"
                                                     onClick={handleClear}
                                                     aria-label={localize("com_subscription.clear_chat")}
-                                                    className="inline-flex size-4 shrink-0 items-center justify-center text-[#212121] transition-colors hover:text-[#4e5969]"
+                                                    className="inline-flex size-4 shrink-0 items-center justify-center text-text-1 transition-colors hover:text-text-2"
                                                 >
                                                     <Outlined.Delete className="size-4 shrink-0" />
                                                 </button>
@@ -468,7 +468,7 @@ export function FileAiDock({ spaceId, fileId }: FileAiDockProps) {
                                                     type="button"
                                                     onClick={() => setOpen(false)}
                                                     aria-label={localize("com_ui_collapse")}
-                                                    className="inline-flex size-4 shrink-0 items-center justify-center text-[#999999] transition-colors hover:text-[#4e5969]"
+                                                    className="inline-flex size-4 shrink-0 items-center justify-center text-text-3 transition-colors hover:text-text-2"
                                                 >
                                                     <Outlined.DoubleDown className="size-4 shrink-0" />
                                                 </button>

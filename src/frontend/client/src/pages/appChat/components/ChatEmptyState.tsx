@@ -13,7 +13,7 @@ export function ChatEmptyState({ onNewChat }: ChatEmptyStateProps) {
   return (
     <div className="flex h-full min-h-0 w-full flex-col items-center justify-center px-4 text-center">
       <ArticleQAIllustration grey className="mb-4 h-20 w-20" />
-      <p className="max-w-[280px] text-[14px] font-normal leading-[22px] text-[#999999]">
+      <p className="max-w-[280px] text-[14px] font-normal leading-[22px] text-text-3">
         {localize('com_app_chat_empty_line1')}
         <button
           type="button"

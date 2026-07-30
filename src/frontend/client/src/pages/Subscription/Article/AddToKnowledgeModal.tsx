@@ -220,7 +220,7 @@ function TreeNode({
             >
                 {/* Expand toggle */}
                 <span
-                    className="shrink-0 size-4 flex items-center justify-center text-[#86909c]"
+                    className="shrink-0 size-4 flex items-center justify-center text-text-3"
                     onClick={e => { e.stopPropagation(); onToggle(node.id); }}
                 >
                     {node.childrenLoading
@@ -234,7 +234,7 @@ function TreeNode({
                 {node.type === "space"
                     ?
                     <ChannelNotebookOneIcon className="size-[14px] shrink-0 object-contain opacity-90" />
-                    : <FolderClosedIcon className={`shrink-0 size-3.5 ${isSelected ? "text-primary" : "text-[#4e5969]"}`} />
+                    : <FolderClosedIcon className={`shrink-0 size-3.5 ${isSelected ? "text-primary" : "text-text-2"}`} />
                 }
 
                 {/* Name / Inline edit */}
@@ -261,7 +261,7 @@ function TreeNode({
                 {!isEditing && (
                     <button
                         type="button"
-                        className="absolute right-2 top-1/2 z-[1] flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded text-[#86909c] opacity-0 pointer-events-none transition-colors duration-150 fine-pointer:group-hover:pointer-events-auto fine-pointer:group-hover:opacity-100 fine-pointer:hover:text-primary coarse-pointer:pointer-events-auto coarse-pointer:opacity-100"
+                        className="absolute right-2 top-1/2 z-[1] flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded text-text-3 opacity-0 pointer-events-none transition-colors duration-150 fine-pointer:group-hover:pointer-events-auto fine-pointer:group-hover:opacity-100 fine-pointer:hover:text-primary coarse-pointer:pointer-events-auto coarse-pointer:opacity-100"
                         title={localize("com_subscription.new_subfolder")}
                         onClick={e => { e.stopPropagation(); onAddFolder(node.id, node.level, node.spaceId); }}
                     >
@@ -747,24 +747,24 @@ export function AddToKnowledgeModal({
                     <button
                         type="button"
                         onClick={goBackToChannelForm}
-                        className="inline-flex size-9 shrink-0 items-center justify-center rounded-md border border-[#E5E6EB] text-[#4E5969] fine-pointer:hover:bg-[#F7F8FA]"
+                        className="inline-flex size-9 shrink-0 items-center justify-center rounded-md border border-border-base text-text-2 fine-pointer:hover:bg-fill-1"
                         aria-label={localize("com_ui_go_back")}
                     >
                         <ChevronLeft className="size-5" />
                     </button>
-                    <h2 className="min-w-0 flex-1 text-left text-[16px] font-medium leading-7 text-[#212121]">
+                    <h2 className="min-w-0 flex-1 text-left text-[16px] font-medium leading-7 text-text-1">
                         {titleLabel}
                     </h2>
                 </div>
             ) : (
                 <DialogHeader className="flex flex-row items-center justify-between gap-3 space-y-0 px-6 pb-4 pt-4 text-left touch-mobile:px-4">
-                    <DialogTitle className="min-w-0 flex-1 text-[16px] font-medium leading-7 text-[#212121]">
+                    <DialogTitle className="min-w-0 flex-1 text-[16px] font-medium leading-7 text-text-1">
                         {titleLabel}
                     </DialogTitle>
                     <button
                         type="button"
                         onClick={() => handleOpenChange(false)}
-                        className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-[#4E5969] hover:bg-[#F7F8FA]"
+                        className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-text-2 hover:bg-fill-1"
                         aria-label={localize("com_ui_close")}
                     >
                         <X className="size-5" />
@@ -816,18 +816,18 @@ export function AddToKnowledgeModal({
                     }
                 >
                     {spacesLoading ? (
-                        <div className="flex items-center justify-center h-full min-h-[200px] text-[#86909c]">
+                        <div className="flex items-center justify-center h-full min-h-[200px] text-text-3">
                             <Loader2 className="size-5 animate-spin mr-2" />{localize("com_subscription.loading")}
                         </div>
                     ) : isEmpty ? (
                         <div className="flex flex-col items-center justify-center h-full min-h-[200px] text-gray-800">
                             <EmptyStateIllustration className="size-[120px] mb-4" />
-                            <p className="text-[14px] font-normal text-[#999999]">{localize("com_subscription.no_selectable_knowledge_space")}</p>
+                            <p className="text-[14px] font-normal text-text-3">{localize("com_subscription.no_selectable_knowledge_space")}</p>
                         </div>
                     ) : displayTree.length === 0 ? (
                         <div className="flex flex-col items-center justify-center h-full min-h-[200px] text-gray-800">
                             <EmptyStateIllustration className="size-[120px] mb-4" />
-                            <p className="text-[14px] font-normal text-[#999999]">{localize("com_subscription.no_matching_knowledge_space")}</p>
+                            <p className="text-[14px] font-normal text-text-3">{localize("com_subscription.no_matching_knowledge_space")}</p>
                         </div>
                     ) : (
                         <div className="w-full min-w-0 max-w-full py-1">
@@ -879,7 +879,7 @@ export function AddToKnowledgeModal({
                         className={cn(
                             "h-8 min-w-[64px] shrink-0 px-3 text-sm rounded-md font-normal",
                             isChannelSyncMobileFooter &&
-                            "min-h-[32px] h-8 rounded-lg border-[#E5E6EB] text-[14px] text-[#4E5969] hover:bg-[#F7F8FA]",
+                            "min-h-[32px] h-8 rounded-lg border-border-base text-[14px] text-text-2 hover:bg-fill-1",
                             isChannelSyncMobileFooter && "flex-1",
                             embedInChannelSheet && "flex-1",
                             mode === "article" && isH5 && "touch-mobile:flex-1",
@@ -891,7 +891,7 @@ export function AddToKnowledgeModal({
                         className={cn(
                             "h-8 min-h-[32px] min-w-[64px] shrink-0 px-3 text-sm rounded-md font-normal btn-brand-primary",
                             isChannelSyncMobileFooter &&
-                            "rounded-lg text-[14px] enabled:bg-blue-500 enabled:text-white enabled:hover:bg-blue-400 disabled:bg-[#E5E6EB] disabled:text-[#C9CDD4] disabled:hover:bg-[#E5E6EB]",
+                            "rounded-lg text-[14px] enabled:bg-blue-500 enabled:text-white enabled:hover:bg-blue-400 disabled:bg-fill-3 disabled:text-text-4 disabled:hover:bg-fill-3",
                             isChannelSyncMobileFooter && "flex-1",
                             embedInChannelSheet && "flex-1",
                             mode === "article" && isH5 && "touch-mobile:flex-1",
@@ -1007,7 +1007,7 @@ export function AddToKnowledgeModal({
                                         {displayName}
                                     </span>
                                     {file.path && (
-                                        <span className="text-[#86909c] text-xs truncate max-w-[180px]" title={file.path}>
+                                        <span className="text-text-3 text-xs truncate max-w-[180px]" title={file.path}>
                                             ({file.path})
                                         </span>
                                     )}

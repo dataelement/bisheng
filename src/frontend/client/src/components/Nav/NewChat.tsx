@@ -196,7 +196,7 @@ export default function NewChat({
             {/* Create chat button for mobile */}
             <Button
               variant="outline"
-              className="flex h-9 w-full items-center justify-center gap-2 border border-[#EBECF0] bg-white rounded-lg text-[13px] text-[#1A1A1A] hover:bg-[#F5F5F5]"
+              className="flex h-9 w-full items-center justify-center gap-2 border border-border-base bg-white rounded-lg text-[13px] text-[#1A1A1A] hover:bg-[#F5F5F5]"
               aria-label={localize('com_ui_new_chat')}
               onClick={() => {
                 document.getElementById("create-convo-btn")?.click();
@@ -213,7 +213,7 @@ export default function NewChat({
               /* Create task button for mobile */
               <Button
                 variant="outline"
-                className="flex h-9 w-full items-center justify-center gap-2 border border-[#EBECF0] bg-white rounded-lg text-[13px] text-[#1A1A1A] hover:bg-[#F5F5F5]"
+                className="flex h-9 w-full items-center justify-center gap-2 border border-border-base bg-white rounded-lg text-[13px] text-[#1A1A1A] hover:bg-[#F5F5F5]"
                 aria-label={localize('com_nav_start_new_task')}
                 onClick={handleNewTask}
               >

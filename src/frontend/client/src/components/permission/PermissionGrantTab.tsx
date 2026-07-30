@@ -105,7 +105,7 @@ function SelectedSubjectChips({ subjects, fullText }: { subjects: SelectedSubjec
           {subjects.map((subject) => (
             <span
               key={subject.id}
-              className="inline-flex shrink-0 items-center rounded-[4px] bg-[#F2F3F5] px-2 py-0.5 text-[14px] leading-[22px] text-[#4E5969]"
+              className="inline-flex shrink-0 items-center rounded-[4px] bg-fill-2 px-2 py-0.5 text-[14px] leading-[22px] text-text-2"
             >
               {subject.name}
             </span>
@@ -372,7 +372,7 @@ export function PermissionGrantTab({
           </div>
 
           {showDepartmentIncludeChildrenControl && (
-            <label className="flex shrink-0 cursor-pointer items-center gap-2 text-sm text-[#212121]">
+            <label className="flex shrink-0 cursor-pointer items-center gap-2 text-sm text-text-1">
               <Checkbox
                 className="border-[#D9D9D9] data-[state=checked]:border-primary data-[state=indeterminate]:border-primary"
                 checked={includeChildren}
@@ -434,14 +434,14 @@ export function PermissionGrantTab({
         )}
       >
         <div className="min-w-0 flex flex-1 items-center gap-2 overflow-hidden">
-          <span className="shrink-0 text-[14px] font-normal leading-[22px] text-[#999999]">
+          <span className="shrink-0 text-[14px] font-normal leading-[22px] text-text-3">
             {`${localize("com_permission.selected_prefix")}${subjectLabel(subjectType)}:`}
           </span>
           <SelectedSubjectChips subjects={selectedSubjectList} fullText={selectedSummaryText} />
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
-          <span className="shrink-0 text-[14px] font-normal leading-[22px] text-[#999999]">
+          <span className="shrink-0 text-[14px] font-normal leading-[22px] text-text-3">
             {localize("com_permission.uniform_grant")}
           </span>
           <RelationSelect

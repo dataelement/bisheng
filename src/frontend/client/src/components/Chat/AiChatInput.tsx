@@ -426,7 +426,7 @@ const AiChatInput = memo(
                         style={{ height: 52, overflowY: isTextareaScrollable ? "auto" : "hidden" }}
                         className={cn(
                             "m-0 w-full resize-none bg-transparent text-sm mb-2.5 pb-0 pt-0",
-                            "placeholder:text-[#999999]",
+                            "placeholder:text-text-3",
                             "max-h-[240px] scrollbar-gutter-stable",
                             size === 'mini' ? 'min-h-0' : 'min-h-12',
                             removeFocusRings,
@@ -556,7 +556,7 @@ const AiChatInput = memo(
                             {isStreaming || taskRunning ? (
                                 <button
                                     type="button"
-                                    className="btn-brand-primary rounded-full bg-primary p-1 text-text-primary outline-offset-4 transition-all duration-200 disabled:cursor-not-allowed disabled:bg-[#E5E6EB] disabled:text-[#86909C] disabled:opacity-100"
+                                    className="btn-brand-primary rounded-full bg-primary p-1 text-text-primary outline-offset-4 transition-all duration-200 disabled:cursor-not-allowed disabled:bg-fill-3 disabled:text-text-3 disabled:opacity-100"
                                     onClick={onStop}
                                     aria-label="Stop generating"
                                 >
@@ -598,7 +598,7 @@ const AiChatInput = memo(
                                         sendDisabled ||
                                         fileUploading
                                     }
-                                    className="btn-brand-primary flex h-8 w-8 items-center justify-center rounded-full bg-primary text-text-primary outline-offset-4 transition-all duration-200 disabled:cursor-not-allowed disabled:bg-[#E5E6EB] disabled:text-[#86909C] disabled:opacity-100 [&>svg]:text-white disabled:[&>svg]:text-[#4E5969]"
+                                    className="btn-brand-primary flex h-8 w-8 items-center justify-center rounded-full bg-primary text-text-primary outline-offset-4 transition-all duration-200 disabled:cursor-not-allowed disabled:bg-fill-3 disabled:text-text-3 disabled:opacity-100 [&>svg]:text-white disabled:[&>svg]:text-text-2"
                                     aria-label="Send message"
                                     data-testid="send-button"
                                 >

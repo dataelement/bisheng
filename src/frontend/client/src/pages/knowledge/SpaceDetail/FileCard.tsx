@@ -187,8 +187,8 @@ export function FileCard({
     // formatTime is now imported from ../knowledgeUtils
 
     const nameToneClass = isKnowledgeItemPreviewable(file)
-        ? "text-[#212121]"
-        : "text-[#999]";
+        ? "text-text-1"
+        : "text-text-3";
 
     /**
      * Status pill overlaid on the bottom-left of the preview area (Figma 11671:34497).
@@ -552,7 +552,7 @@ export function FileCard({
                         : "bg-white",
                 isSelected
                     ? "border-[#ECECEC] shadow-[0_4px_20px_0_rgba(0,17,147,0.05)]"
-                    : "border-[#ECECEC] hover:border-[#c9cdd4]",
+                    : "border-[#ECECEC] hover:border-border-deep",
                 hovered && "shadow-[0_4px_20px_0_rgba(0,17,147,0.05)]",
                 // F034: highlight a folder card as the drop target — card border only
                 isFolderDragOver && "border-primary"
@@ -673,7 +673,7 @@ export function FileCard({
                                     onClick={(e) => { e.stopPropagation(); onDownload(); }}
                                     title={localize("com_knowledge.download")}
                                 >
-                                    <Download className="size-3.5 text-[#4e5969] group-hover:text-[#1d2129]" />
+                                    <Download className="size-3.5 text-text-2 group-hover:text-text-1" />
                                 </Button>
                             )}
                             {showMoreMenu && (
@@ -685,7 +685,7 @@ export function FileCard({
                                             className="w-5 h-5 rounded-md shrink-0"
                                             onClick={(e) => e.stopPropagation()}
                                         >
-                                            <MoreVertical className="size-4 text-[#4e5969] group-hover:text-[#1d2129]" />
+                                            <MoreVertical className="size-4 text-text-2 group-hover:text-text-1" />
                                         </Button>
                                     </DropdownMenuTrigger>
 
@@ -718,7 +718,7 @@ export function FileCard({
                                 <TagGroup tags={file.tags} variant="text" highlightedTagIds={highlightedTagIds} />
                             )}
                         </div>
-                        <span className="shrink-0 text-[10px] leading-5 text-[#999] tabular-nums">{formatTimeCard(file.updatedAt)}</span>
+                        <span className="shrink-0 text-caption-sm leading-5 text-text-3 tabular-nums">{formatTimeCard(file.updatedAt)}</span>
                     </div>
                 </div>
 
@@ -741,7 +741,7 @@ export function FileCard({
                             onClick={(e) => { e.stopPropagation(); onDownload(); }}
                             title={localize("com_knowledge.download")}
                         >
-                            <Download className="size-3.5 text-[#4e5969]" />
+                            <Download className="size-3.5 text-text-2" />
                         </Button>
                     )}
                     {showMoreMenu && (
@@ -753,7 +753,7 @@ export function FileCard({
                                     className="h-5 w-5 shrink-0 rounded-md"
                                     onClick={(e) => e.stopPropagation()}
                                 >
-                                    <MoreVertical className="size-4 text-[#4e5969]" />
+                                    <MoreVertical className="size-4 text-text-2" />
                                 </Button>
                             </DropdownMenuTrigger>
                             <ActionMenuContent

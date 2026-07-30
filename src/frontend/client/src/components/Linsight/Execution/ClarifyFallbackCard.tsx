@@ -52,7 +52,7 @@ export function ClarifyFallbackCard({ data, disabled = false, onSubmit }: Clarif
         >
             {/* Intro / question text — printed verbatim so prose questions (with their
                 own numbering / line breaks) render all at once. */}
-            <p className="whitespace-pre-wrap break-words text-[15px] leading-6 text-[#212121]">
+            <p className="whitespace-pre-wrap break-words text-[15px] leading-6 text-text-1">
                 {request.callReason || localize('com_linsight_clarify_title')}
             </p>
 
@@ -84,7 +84,7 @@ export function ClarifyFallbackCard({ data, disabled = false, onSubmit }: Clarif
                     type="button"
                     disabled={disabled || submitted}
                     onClick={handleSkip}
-                    className="h-10 flex-1 rounded-xl bg-[#F5F7FA] text-sm font-medium text-[#212121] hover:bg-[#EEF0F4] disabled:opacity-50 transition-colors"
+                    className="h-10 flex-1 rounded-xl bg-[#F5F7FA] text-sm font-medium text-text-1 hover:bg-[#EEF0F4] disabled:opacity-50 transition-colors"
                 >
                     {localize('com_linsight_clarify_skip_start')}
                 </button>

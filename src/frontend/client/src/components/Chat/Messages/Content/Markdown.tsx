@@ -263,7 +263,7 @@ function CitationPreviewCard({
 }) {
   if (isLoading) {
     return (
-      <div className="flex min-h-[120px] w-[320px] max-w-[calc(100vw-32px)] items-center justify-center rounded-lg bg-white text-sm text-[#86909C] shadow-[0_4px_19px_rgba(34,34,34,0.07)]">
+      <div className="flex min-h-[120px] w-[320px] max-w-[calc(100vw-32px)] items-center justify-center rounded-lg bg-white text-sm text-text-3 shadow-[0_4px_19px_rgba(34,34,34,0.07)]">
         <Outlined.Loading className="mr-2 size-4 animate-spin" />
         加载溯源详情...
       </div>
@@ -274,7 +274,7 @@ function CitationPreviewCard({
   // longer exists). Product decision: show "no permission", not "no source detail".
   if (notPermitted) {
     return (
-      <div className="w-[320px] max-w-[calc(100vw-32px)] rounded-lg bg-white p-4 text-sm text-[#86909C] shadow-[0_4px_19px_rgba(34,34,34,0.07)]">
+      <div className="w-[320px] max-w-[calc(100vw-32px)] rounded-lg bg-white p-4 text-sm text-text-3 shadow-[0_4px_19px_rgba(34,34,34,0.07)]">
         暂无权限
       </div>
     );
@@ -282,20 +282,20 @@ function CitationPreviewCard({
 
   if (error || !preview) {
     return (
-      <div className="w-[320px] max-w-[calc(100vw-32px)] rounded-lg bg-white p-4 text-sm text-[#86909C] shadow-[0_4px_19px_rgba(34,34,34,0.07)]">
+      <div className="w-[320px] max-w-[calc(100vw-32px)] rounded-lg bg-white p-4 text-sm text-text-3 shadow-[0_4px_19px_rgba(34,34,34,0.07)]">
         暂无溯源详情
       </div>
     );
   }
 
   const isWeb = preview.type === 'web';
-  const cardClassName = 'group relative cursor-pointer w-[320px] max-w-[calc(100vw-32px)] overflow-hidden rounded-lg bg-white text-[#1D2129] shadow-[0_4px_19px_rgba(34,34,34,0.07)]';
-  const titleClassName = 'min-w-0 flex-1 truncate text-[14px] font-medium leading-5 text-[#1D2129]';
+  const cardClassName = 'group relative cursor-pointer w-[320px] max-w-[calc(100vw-32px)] overflow-hidden rounded-lg bg-white text-text-1 shadow-[0_4px_19px_rgba(34,34,34,0.07)]';
+  const titleClassName = 'min-w-0 flex-1 truncate text-[14px] font-medium leading-5 text-text-1';
   const titleContainerClassName = 'bg-white p-3';
   // Web link titles hover to a fixed blue (matches the web hover arrow #1B61E6),
   // not the blue⇄green brand theme — they're generic external links, not a brand action.
   const interactiveTitleClassName = `${titleClassName} transition-colors duration-200 group-hover:text-[#1B61E6]`;
-  const ragTitleClassName = 'min-w-0 truncate text-[14px] font-medium leading-[22px] text-[#1D2129]';
+  const ragTitleClassName = 'min-w-0 truncate text-[14px] font-medium leading-[22px] text-text-1';
   const formatSourceMeta = (value?: string) => {
     if (!value) {
       return '';
@@ -387,7 +387,7 @@ function CitationPreviewCard({
           {ragTitleParts.name || preview.title}
         </span>
         {ragTitleParts.extension && (
-          <span className={`${onOpenDocumentPreview ? 'shrink-0 text-[14px] font-medium leading-[22px] text-[#1D2129] transition-colors duration-200 group-hover:text-blue-600' : 'shrink-0 text-[14px] font-medium leading-[22px] text-[#1D2129]'}`}>
+          <span className={`${onOpenDocumentPreview ? 'shrink-0 text-[14px] font-medium leading-[22px] text-text-1 transition-colors duration-200 group-hover:text-blue-600' : 'shrink-0 text-[14px] font-medium leading-[22px] text-text-1'}`}>
             {ragTitleParts.extension}
           </span>
         )}
@@ -401,12 +401,12 @@ function CitationPreviewCard({
         {renderWebTitle()}
       </div>
       <div className="px-4 pb-0">
-        <div className="border-l-2 border-[#E5E6EB] pl-3 text-[12px] leading-6 text-[#4E5969]">
+        <div className="border-l-2 border-border-base pl-3 text-[12px] leading-6 text-text-2">
           <div className="line-clamp-4 whitespace-pre-wrap break-words">
             {preview.snippet || '暂无内容摘要'}
           </div>
         </div>
-        <div className="mt-3 min-h-6 text-[#999999]">
+        <div className="mt-3 min-h-6 text-text-3">
           <div className="flex min-w-0 items-center gap-2 pb-0">
             <CitationSourceIcon detail={detail} preview={preview} type={preview.type} ragIconVariant="knowledge" />
             <span className="w-[90px] min-w-0 truncate text-[12px] font-medium leading-5">{preview.sourceName}</span>
@@ -421,12 +421,12 @@ function CitationPreviewCard({
     <>
       {renderRagTitle()}
       <div className="px-4 pb-0">
-        <div className="border-l-2 border-[#E5E6EB] pl-3 text-[12px] leading-6 text-[#4E5969]">
+        <div className="border-l-2 border-border-base pl-3 text-[12px] leading-6 text-text-2">
           <div className="line-clamp-4 whitespace-pre-wrap break-words">
             {ragSnippetText || '暂无内容摘要'}
           </div>
         </div>
-        <div className="mt-3 min-h-6 text-[#999999]">
+        <div className="mt-3 min-h-6 text-text-3">
           <div className="flex min-w-0 items-center gap-2 pb-0">
             <CitationSourceIcon detail={detail} preview={preview} type={preview.type} ragIconVariant="knowledge" clipAsCircle={false} />
             <span className="w-[90px] min-w-0 truncate text-[12px] font-medium leading-5">{preview.sourceName}</span>

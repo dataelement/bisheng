@@ -26,7 +26,7 @@ export default function ShareChat({
     versionId,
     labeled,
     iconClassName = "size-4 text-gray-800 shrink-0",
-    buttonClassName = "h-[28px] w-[28px] p-0 text-[#212121] hover:bg-gray-100",
+    buttonClassName = "h-[28px] w-[28px] p-0 text-text-1 hover:bg-gray-100",
 }: ShareDialogProps) {
     /** 灵思会话顶部需与「任务描述」同款描边按钮；未传 labeled 时由 type 决定 */
     const showLabeledToolbar = labeled ?? type === "linsight_session"

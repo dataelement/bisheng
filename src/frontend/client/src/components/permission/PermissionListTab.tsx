@@ -520,13 +520,13 @@ export function PermissionListTab({
 
       <div className={cn("flex min-h-0 flex-1 flex-col gap-3", !fixedSubjectType && "mt-4")}>
         <div className="relative shrink-0">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#999999]" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-text-3" />
           <input
             type="text"
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
             placeholder={getSearchPlaceholder(listTab)}
-            className="h-8 w-full rounded-md border border-[#EBECF0] bg-white pl-9 pr-3 text-[14px] text-[#212121] outline-none transition-colors placeholder:text-[#999999] focus:border-[#C9CDD4]"
+            className="h-8 w-full rounded-md border border-border-base bg-white pl-9 pr-3 text-[14px] text-text-1 outline-none transition-colors placeholder:text-text-3 focus:border-border-deep"
           />
         </div>
 
@@ -571,7 +571,7 @@ export function PermissionListTab({
                 return (
                   <div
                     key={`${entry.subject_type}-${entry.subject_id}-${index}`}
-                    className="flex items-center gap-4 border-b border-[#F2F3F5] py-3 last:border-b-0"
+                    className="flex items-center gap-4 border-b border-fill-2 py-3 last:border-b-0"
                   >
                     <div className="flex w-[200px] min-w-0 shrink items-center gap-2">
                       {entry.subject_type === "user" ? (
@@ -586,12 +586,12 @@ export function PermissionListTab({
                           <Icon className="h-4 w-4" />
                         </span>
                       )}
-                      <TruncatedTooltip content={displayName} className="truncate text-[14px] leading-[22px] text-[#212121]">
+                      <TruncatedTooltip content={displayName} className="truncate text-[14px] leading-[22px] text-text-1">
                         {displayName}
                       </TruncatedTooltip>
                     </div>
 
-                    <TruncatedTooltip content={entryCaption} as="p" className="min-w-0 flex-1 truncate text-[12px] leading-5 text-[#999999]">
+                    <TruncatedTooltip content={entryCaption} as="p" className="min-w-0 flex-1 truncate text-[12px] leading-5 text-text-3">
                       {entryCaption}
                     </TruncatedTooltip>
 
@@ -601,10 +601,10 @@ export function PermissionListTab({
                           <DropdownMenuTrigger asChild>
                             <button
                               type="button"
-                              className="inline-flex h-8 w-[96px] items-center justify-end gap-1 rounded-md px-2 text-[14px] leading-[22px] text-[#999999] transition-colors hover:bg-[#F7F7F7]"
+                              className="inline-flex h-8 w-[96px] items-center justify-end gap-1 rounded-md px-2 text-[14px] leading-[22px] text-text-3 transition-colors hover:bg-[#F7F7F7]"
                             >
                               <span className="truncate">{getPermissionLabel(entry)}</span>
-                              <ChevronDown className="size-3.5 shrink-0 text-[#999999]" />
+                              <ChevronDown className="size-3.5 shrink-0 text-text-3" />
                             </button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent
@@ -620,7 +620,7 @@ export function PermissionListTab({
                                     "rounded-md px-2 py-[5px] text-[14px] leading-[22px]",
                                     active
                                       ? "bg-blue-500/[0.07] text-blue-500 data-[highlighted]:bg-blue-500/[0.07] data-[highlighted]:text-blue-500"
-                                      : "text-[#212121] data-[highlighted]:bg-[#F7F7F7] data-[highlighted]:text-[#212121]",
+                                      : "text-text-1 data-[highlighted]:bg-[#F7F7F7] data-[highlighted]:text-text-1",
                                   )}
                                   onSelect={() => {
                                     void handleModify(entry, model.id);
@@ -631,7 +631,7 @@ export function PermissionListTab({
                               );
                             })}
                             {canModifyEntry && (!isOwner || canManageOwnerEntry) && canDeleteEntrySubject && (
-                              <DropdownMenuSeparator className="my-1 bg-[#EBECF0]" />
+                              <DropdownMenuSeparator className="my-1 bg-fill-3" />
                             )}
                             {canDeleteEntrySubject && (
                               <DropdownMenuItem
@@ -647,7 +647,7 @@ export function PermissionListTab({
                           </DropdownMenuContent>
                         </DropdownMenu>
                       ) : (
-                        <span className="inline-flex h-8 w-[96px] shrink-0 items-center justify-end whitespace-nowrap px-2 text-[14px] leading-[22px] text-[#999999]">
+                        <span className="inline-flex h-8 w-[96px] shrink-0 items-center justify-end whitespace-nowrap px-2 text-[14px] leading-[22px] text-text-3">
                           {getPermissionLabel(entry)}
                         </span>
                       )}

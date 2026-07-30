@@ -44,7 +44,7 @@ export function CrawlFeedbackDialog({ open, onOpenChange }: CrawlFeedbackDialogP
                     <AlertDialogTitle>
                         {localize("com_subscription.submit_manual_crawl_request")}
                     </AlertDialogTitle>
-                    <AlertDialogDescription className="whitespace-pre-line text-[14px] leading-6 text-[#4E5969]">
+                    <AlertDialogDescription className="whitespace-pre-line text-[14px] leading-6 text-text-2">
                         {tips}
                     </AlertDialogDescription>
                 </AlertDialogHeader>

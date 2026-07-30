@@ -265,7 +265,7 @@ function ChannelSquare({
                 type="button"
                 aria-label={localize("com_nav_open_sidebar")}
                 onClick={onOpenMobileNav}
-                className="inline-flex size-5 shrink-0 items-center justify-center text-[#212121]"
+                className="inline-flex size-5 shrink-0 items-center justify-center text-text-1"
               >
                 <Outlined.SidebarMenu className="size-5" />
               </button>
@@ -304,7 +304,7 @@ function ChannelSquare({
           <h1 className="mb-1 text-[26px] font-semibold text-blue-500">
             {tTitle}
           </h1>
-          <p className="text-[13px] text-[#86909C]">
+          <p className="text-[13px] text-text-3">
             {tSubtitle}
           </p>
         </div>
@@ -328,20 +328,20 @@ function ChannelSquare({
                   // 回车触发，当前为实时搜索，保留该交互语义
                 }
               }}
-              className="pl-9 h-8 text-[12px] rounded-md bg-white border-[#E5E6EB] focus:border-[#DDDDDD] focus:ring-2 focus:ring-[#F1F5F9]"
+              className="pl-9 h-8 text-[12px] rounded-md bg-white border-border-base focus:border-[#DDDDDD] focus:ring-2 focus:ring-[#F1F5F9]"
             />
           </div>
         </div>
         <div className="flex-1 flex flex-col w-full max-w-[1032px] mx-auto px-4 pb-4 pt-0">
 
           {initialLoading ? (
-            <div className="flex-1 flex flex-col items-center justify-center text-[#86909c]">
+            <div className="flex-1 flex flex-col items-center justify-center text-text-3">
               <LoadingIcon className="size-20 text-primary" />
             </div>
           ) : visibleChannels.length === 0 ? (
-            <div className="flex-1 flex flex-col items-center justify-center text-[#86909c]">
+            <div className="flex-1 flex flex-col items-center justify-center text-text-3">
               <EmptyStateIllustration className="size-[120px] mb-4" />
-              <p className="text-[14px] font-normal text-[#999999]">{tEmptyText}</p>
+              <p className="text-[14px] font-normal text-text-3">{tEmptyText}</p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -366,7 +366,7 @@ function ChannelSquare({
                     />
                 ))}
               </div>
-              <div className="h-10 flex items-center justify-center text-[12px] text-[#C9CDD4]">
+              <div className="h-10 flex items-center justify-center text-[12px] text-text-4">
                 {loadingMore
                   ? "加载中..."
                   : !hasMorePage

@@ -170,8 +170,8 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
                 isFocused
                     ? "border-[#ddd] shadow-[0_0_0_2px_#f1f5f9]"
                     : collapsed
-                        ? "border-[#e5e6eb] hover:bg-[#f7f8fa]"
-                        : "border-[#e5e6eb] hover:border-[#ddd]"
+                        ? "border-border-base hover:bg-fill-1"
+                        : "border-border-base hover:border-[#ddd]"
             )}
             onClick={() => {
                 inputRef.current?.focus();
@@ -187,7 +187,7 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
                         <DropdownMenuTrigger asChild>
                             <button
                                 type="button"
-                                className="flex items-center gap-1 h-6 max-w-[min(120px,40vw)] shrink-0 rounded px-2 text-sm outline-none transition-colors bg-[#F7F7F7] text-[#212121] hover:bg-[#F1F1F1]"
+                                className="flex items-center gap-1 h-6 max-w-[min(120px,40vw)] shrink-0 rounded px-2 text-sm outline-none transition-colors bg-[#F7F7F7] text-text-1 hover:bg-[#F1F1F1]"
                                 onClick={(e) => e.stopPropagation()}
                             >
                                 <span className="truncate">{scopeLabel}</span>
@@ -220,7 +220,7 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
                     maxLength={100}
                     placeholder={collapsed ? "" : localize("com_knowledge.search_in_current_space")}
                     className={cn(
-                        "min-w-0 bg-transparent outline-none text-[13px] text-[#1d2129] placeholder:text-[#86909c] h-[22px]",
+                        "min-w-0 bg-transparent outline-none text-[13px] text-text-1 placeholder:text-text-3 h-[22px]",
                         collapsed ? "w-0 flex-none p-0" : "flex-1 min-w-[50px]"
                     )}
                     onFocus={() => { if (!isFocused) refreshTags(); setIsFocused(true); }}
@@ -229,7 +229,7 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
             {/* Clear button */}
             {isSearching && (
                 <button
-                    className="ml-auto w-4 h-4 rounded-full bg-[#f2f3f5] flex items-center justify-center hover:bg-[#e5e6eb] shrink-0 transition-colors"
+                    className="ml-auto w-4 h-4 rounded-full bg-fill-2 flex items-center justify-center hover:bg-fill-3 shrink-0 transition-colors"
                     onMouseDown={(e) => {
                         // Keep input focused to avoid focus-within width flicker.
                         e.preventDefault();
@@ -240,7 +240,7 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
                     }}
                     type="button"
                 >
-                    <X className="size-3 text-[#86909c]" />
+                    <X className="size-3 text-text-3" />
                 </button>
             )}
         </div>
@@ -255,7 +255,7 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
             <div className="text-sm font-medium text-gray-800 mb-2">{localize("com_knowledge.existing_tags")}</div>
             <div className="flex flex-wrap gap-2">
                 {spaceTags.length === 0 && (
-                    <span className="text-sm text-[#86909c]">{localize("com_knowledge.no_tags")}</span>
+                    <span className="text-sm text-text-3">{localize("com_knowledge.no_tags")}</span>
                 )}
                 {spaceTags.map((tag) => {
                     const isSelected = selectedTags.some((t) => t.id === tag.id);
@@ -270,8 +270,8 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
                                 // in-between state. On touch we only show default vs selected.
                                 isSelected
                                     ? "bg-primary/10 text-primary border-transparent fine-pointer:hover:bg-primary/15"
-                                    : "bg-[#f2f3f5] text-[#4e5969] border-[#f2f3f5] fine-pointer:hover:bg-[#e5e6eb]",
-                                atLimit && "opacity-50 cursor-not-allowed fine-pointer:hover:bg-[#f2f3f5]"
+                                    : "bg-fill-2 text-text-2 border-fill-2 fine-pointer:hover:bg-fill-3",
+                                atLimit && "opacity-50 cursor-not-allowed fine-pointer:hover:bg-fill-2"
                             )}
                             onMouseDown={(e) => {
                                 // Keep focus on input to avoid focus-within width flicker.

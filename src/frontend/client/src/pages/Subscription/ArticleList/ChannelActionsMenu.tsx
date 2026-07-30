@@ -95,8 +95,8 @@ export function ChannelActionsMenu({
     // who is also a subscriber may see both).
     const canDissolve = canDeleteChannel(liveChannel.role, liveChannel.permissionIds);
     const canUnsubscribe = type === "subscribed";
-    const itemCls = "flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-[5px] text-sm leading-[22px] text-[#212121]";
-    const iconCls = "size-4 text-[#4E5969]";
+    const itemCls = "flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-[5px] text-sm leading-[22px] text-text-1";
+    const iconCls = "size-4 text-text-2";
 
     return (
         <DropdownMenu>
@@ -106,8 +106,8 @@ export function ChannelActionsMenu({
                     disabled={disabled}
                     className={cn(
                         isMobile
-                            ? "inline-flex size-5 shrink-0 items-center justify-center text-[#212121]"
-                            : "inline-flex size-8 items-center justify-center rounded-md border border-[#EBECF0] bg-white text-[#4e5969] outline-none transition-colors fine-pointer:hover:bg-[#F7F8FA]",
+                            ? "inline-flex size-5 shrink-0 items-center justify-center text-text-1"
+                            : "inline-flex size-8 items-center justify-center rounded-md border border-border-base bg-white text-text-2 outline-none transition-colors fine-pointer:hover:bg-fill-1",
                         disabled && "pointer-events-none opacity-20",
                         triggerClassName,
                     )}

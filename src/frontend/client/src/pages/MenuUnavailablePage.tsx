@@ -100,11 +100,11 @@ export default function MenuUnavailablePage() {
     <div className="flex min-h-[320px] w-full flex-1 flex-col items-center justify-center gap-4 bg-white px-8 text-center">
       <WorkbenchEmptyIllustration />
       <div className="flex flex-col items-center gap-1">
-        <p className="text-base font-medium leading-6 text-[#1D2129]" role="status">
+        <p className="text-base font-medium leading-6 text-text-1" role="status">
           {localize('com_menu_unavailable_no_permission')}
         </p>
         {canApply && (
-          <p className="text-sm leading-[22px] text-[#999999]">
+          <p className="text-sm leading-[22px] text-text-3">
             {localize('com_menu_unavailable_apply_hint', { menu: menuName || pluginId } as any)}
           </p>
         )}

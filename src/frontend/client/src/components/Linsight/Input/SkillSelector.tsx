@@ -127,7 +127,7 @@ export function SkillSelector({ selected, onChange }: SkillSelectorProps) {
                                     e.preventDefault();
                                     handleToggle(skill);
                                 }}
-                                className="flex cursor-pointer items-start gap-2 rounded-md px-2 py-[5px] outline-none transition-colors data-[highlighted]:bg-[#f2f3f5] focus:bg-[#f2f3f5]"
+                                className="flex cursor-pointer items-start gap-2 rounded-md px-2 py-[5px] outline-none transition-colors data-[highlighted]:bg-fill-2 focus:bg-fill-2"
                             >
                                 <div
                                     className={cn(
@@ -140,7 +140,7 @@ export function SkillSelector({ selected, onChange }: SkillSelectorProps) {
                                 <div className="min-w-0 flex-1">
                                     <p className="truncate text-[14px] leading-5 text-slate-700">{skill.display_name}</p>
                                     {skill.description && (
-                                        <p className="line-clamp-2 text-[12px] leading-4 text-[#999]">{skill.description}</p>
+                                        <p className="line-clamp-2 text-[12px] leading-4 text-text-3">{skill.description}</p>
                                     )}
                                 </div>
                             </DropdownMenuItem>

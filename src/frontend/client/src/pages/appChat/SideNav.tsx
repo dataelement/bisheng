@@ -107,10 +107,10 @@ export function SideNav() {
     return (
         <div
             className={cn(
-                "relative h-full w-full overflow-hidden bg-white text-[#212121] flex flex-col",
+                "relative h-full w-full overflow-hidden bg-white text-text-1 flex flex-col",
                 isTabletOrMobile
                     ? "border-r-0 px-0 pb-0 pt-0 gap-0"
-                    : "border-r border-[#e5e6eb] px-3 pb-2 pt-3 gap-4",
+                    : "border-r border-border-base px-3 pb-2 pt-3 gap-4",
             )}
         >
             <div className="hidden touch-mobile:block">
@@ -128,13 +128,13 @@ export function SideNav() {
                 <button
                     type="button"
                     onClick={handleGoBack}
-                    className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-white text-[#212121] transition-colors fine-pointer:hover:bg-[#f7f8fa]"
+                    className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-white text-text-1 transition-colors fine-pointer:hover:bg-fill-1"
                     aria-label={localize('com_ui_go_back')}
                 >
                     <ChevronLeft size={16} className="shrink-0" />
                 </button>
-                <span aria-hidden="true" className="h-4 w-px shrink-0 bg-[#ebecf0]" />
-                <span className="min-w-0 truncate text-[14px] font-medium leading-[22px] text-[#212121]">
+                <span aria-hidden="true" className="h-4 w-px shrink-0 bg-fill-3" />
+                <span className="min-w-0 truncate text-[14px] font-medium leading-[22px] text-text-1">
                     {localize('com_app_chat_sidebar_title')}
                 </span>
             </div>
@@ -142,7 +142,7 @@ export function SideNav() {
             {/* App card — 应用内对话侧栏固定展示 */}
             <div className="shrink-0 touch-mobile:px-2 touch-mobile:pt-4 touch-mobile:pb-6">
                 <div
-                    className="border-[#ebecf0] border-[0.5px] rounded-md p-[8px] flex flex-col gap-[12px]"
+                    className="border-border-base border-[0.5px] rounded-md p-[8px] flex flex-col gap-[12px]"
                     style={{ backgroundImage: "linear-gradient(128.789deg, rgb(var(--brand-500)/0.04) 0%, rgb(255, 255, 255) 50%, rgb(var(--brand-500)/0.04) 100%)" }}
                 >
                     <div className="flex items-center gap-[8px]">
@@ -200,7 +200,7 @@ export function SideNav() {
             >
                 {groups.length === 0 ? (
                     <div className="flex flex-1 items-center justify-center min-h-[120px] px-0 py-6">
-                        <p className="text-center text-[14px] leading-[19.5px] text-[#86909c]">
+                        <p className="text-center text-[14px] leading-[19.5px] text-text-3">
                             {localize('com_app_chat_sidebar_empty')}
                         </p>
                     </div>

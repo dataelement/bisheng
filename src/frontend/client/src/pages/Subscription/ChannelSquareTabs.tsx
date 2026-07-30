@@ -107,7 +107,7 @@ export function ChannelSquareTabs({
                             <span
                                 className={cn(
                                     "text-base leading-6 whitespace-nowrap transition-colors duration-200",
-                                    isActive ? "font-medium text-[#212121]" : "font-normal text-[#C9CDD4]",
+                                    isActive ? "font-medium text-text-1" : "font-normal text-text-4",
                                 )}
                             >
                                 {seg.label}
@@ -156,8 +156,8 @@ export function ChannelSquareTabs({
                         className={cn(
                             "relative z-[1] flex h-[30px] w-full items-center justify-center rounded-md px-3 text-sm leading-[22px] whitespace-nowrap transition-colors",
                             isActive
-                                ? "font-medium text-[#212121]"
-                                : "font-normal text-[#999999] fine-pointer:hover:text-[#212121]",
+                                ? "font-medium text-text-1"
+                                : "font-normal text-text-3 fine-pointer:hover:text-text-1",
                         )}
                     >
                         {seg.label}

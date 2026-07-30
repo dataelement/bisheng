@@ -22,6 +22,8 @@ interface TypeStep {
 
 /** Ordered small → large, matching the spec's §2 semantic table. */
 const SCALE: TypeStep[] = [
+  // eslint-disable-next-line no-restricted-syntax -- DEV-only gallery copy, not user-facing (file's legacy Chinese is baseline-frozen)
+  { cls: 'text-caption-sm', desktop: '10 / 18', mobile: '10 / 18', weight: 400, usage: '角标、徽标数字、极小标注（仅纯展示，禁用于可点击文字）' },
   { cls: 'text-caption', desktop: '12 / 20', mobile: '12 / 20', weight: 400, usage: '时间戳、标签、水印' },
   { cls: 'text-body-sm', desktop: '13 / 21', mobile: '14 / 22', weight: 400, usage: '密集表格、侧栏次要项' },
   { cls: 'text-body', desktop: '14 / 22', mobile: '16 / 24', weight: 400, usage: '正文基准，表单、表格默认' },
@@ -72,7 +74,7 @@ export function TypographySection() {
     <ComponentPage
       title="字体 Typography"
       eng="Typography"
-      description="九档 semantic 字号（自带字重）+ 两档字重，纯系统字体栈。窗口缩到 ≤768px 可看移动端重映射。"
+      description="十档 semantic 字号（自带字重，含 10px 例外档）+ 两档字重，纯系统字体栈。窗口缩到 ≤768px 可看移动端重映射。"
       whenToUse={[
         <>组件与业务代码只用 semantic 类（<code>text-body</code> / <code>text-h1</code>…），不写裸 <code>text-sm</code> 或数值。</>,
         <>字重只用 <code>font-normal</code>(400) / <code>font-medium</code>(500) 两档，禁用 600/700。</>,

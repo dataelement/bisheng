@@ -132,7 +132,7 @@ export function KnowledgeSpaceHeader({
         <Button
             variant="outline"
             onClick={() => setViewMode(viewMode === "list" ? "card" : "list")}
-            className="inline-flex h-8 w-8 min-h-8 min-w-8 shrink-0 items-center justify-center gap-0 rounded-md border border-[#e5e6eb] bg-white p-0 font-normal text-[#818181] hover:bg-[#f7f8fa]"
+            className="inline-flex h-8 w-8 min-h-8 min-w-8 shrink-0 items-center justify-center gap-0 rounded-md border border-border-base bg-white p-0 font-normal text-[#818181] hover:bg-fill-1"
         >
             {viewMode === "list"
                 ? <Outlined.ViewGridCard className="size-4 shrink-0" />
@@ -148,17 +148,17 @@ export function KnowledgeSpaceHeader({
                         <Button
                             variant="outline"
                             className={cn(
-                                "inline-flex h-8 w-8 min-h-8 min-w-8 shrink-0 items-center justify-center gap-0 rounded-md p-0 font-normal border-[#e5e6eb]",
+                                "inline-flex h-8 w-8 min-h-8 min-w-8 shrink-0 items-center justify-center gap-0 rounded-md p-0 font-normal border-border-base",
                                 statusFilter.length > 0
                                     ? "border-blue-600 bg-blue-500/[0.07] text-blue-600 hover:bg-blue-500/[0.07]"
-                                    : "bg-white text-[#818181] hover:bg-[#f7f8fa]"
+                                    : "bg-white text-[#818181] hover:bg-fill-1"
                             )}
                         >
                             <Outlined.Filter className={cn("size-4", statusFilter.length > 0 ? "text-blue-600" : "text-[#818181]")} />
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="start" className={knowledgeSpaceDropdownSurfaceClassName}>
-                        <div className="px-2 py-1.5 text-xs font-medium text-[#86909c]">{localize("com_knowledge.status")}</div>
+                        <div className="px-2 py-1.5 text-xs font-medium text-text-3">{localize("com_knowledge.status")}</div>
                         <DropdownMenuCheckboxItem
                             checked={statusFilter.includes(FileStatus.UPLOADING)}
                             onCheckedChange={(checked) => onFilterStatus(FileStatus.UPLOADING, checked)}
@@ -224,13 +224,13 @@ export function KnowledgeSpaceHeader({
                     <DropdownMenuTrigger asChild>
                         <Button
                             variant="outline"
-                            className="inline-flex h-8 w-8 min-h-8 min-w-8 shrink-0 items-center justify-center gap-0 rounded-md border border-[#e5e6eb] bg-white p-0 font-normal text-[#818181] hover:bg-[#f7f8fa]"
+                            className="inline-flex h-8 w-8 min-h-8 min-w-8 shrink-0 items-center justify-center gap-0 rounded-md border border-border-base bg-white p-0 font-normal text-[#818181] hover:bg-fill-1"
                         >
                             <Outlined.Sort className="size-4 shrink-0" aria-hidden />
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="start" className={knowledgeSpaceDropdownSurfaceClassName}>
-                        <div className="px-2 py-1.5 text-xs font-medium text-[#86909c]">{localize("com_knowledge.sort_field")}</div>
+                        <div className="px-2 py-1.5 text-xs font-medium text-text-3">{localize("com_knowledge.sort_field")}</div>
                         <DropdownMenuItem onClick={() => onSort(SortType.NAME)}>
                             {localize("com_knowledge.sort_by_name_label")}
                             {sortBy === SortType.NAME && (sortDirection === SortDirection.ASC ? "↑" : "↓")}
@@ -255,7 +255,7 @@ export function KnowledgeSpaceHeader({
             {selectedCount > selectedThreshold && (
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                        <Button size="sm" variant="outline" className="h-8 gap-0.5 rounded-md border-[#e5e6eb] font-normal text-[#4e5969]">
+                        <Button size="sm" variant="outline" className="h-8 gap-0.5 rounded-md border-border-base font-normal text-text-2">
                             {localize("com_knowledge.batch_operation")}
                             <Outlined.Down className="size-4" />
                         </Button>
@@ -314,7 +314,7 @@ export function KnowledgeSpaceHeader({
                         <button
                             type="button"
                             disabled={isSearching}
-                            className="inline-flex h-8 shrink-0 items-center justify-center gap-1 rounded-md border border-[#ebebeb] bg-white px-4 text-sm text-[#212121] transition-colors hover:bg-[#f7f8fa] disabled:cursor-not-allowed disabled:text-[#c9cdd4] disabled:hover:bg-transparent"
+                            className="inline-flex h-8 shrink-0 items-center justify-center gap-1 rounded-md border border-[#ebebeb] bg-white px-4 text-sm text-text-1 transition-colors hover:bg-fill-1 disabled:cursor-not-allowed disabled:text-text-4 disabled:hover:bg-transparent"
                         >
                             {localize("com_knowledge.add_new")}
                             <Outlined.Down className="size-4" />
@@ -351,7 +351,7 @@ export function KnowledgeSpaceHeader({
                                             <TooltipContent
                                                 noArrow
                                                 side="left"
-                                                className="z-[999] max-w-md bg-white px-3 py-2 text-sm text-[#4e5969] shadow-md"
+                                                className="z-[999] max-w-md bg-white px-3 py-2 text-sm text-text-2 shadow-md"
                                             >
                                                 {localize(
                                                     knowledgeUploadCapabilities.media
@@ -397,24 +397,24 @@ export function KnowledgeSpaceHeader({
                                         onNavigateFolder(parent?.id);
                                     }}
                                     aria-label={localize("com_ui_go_back")}
-                                    className="inline-flex size-8 shrink-0 items-center justify-center rounded-md p-2 text-[#4e5969] transition-colors hover:bg-[#f7f8fa]"
+                                    className="inline-flex size-8 shrink-0 items-center justify-center rounded-md p-2 text-text-2 transition-colors hover:bg-fill-1"
                                 >
                                     <Outlined.ArrowLeft className="size-4" />
                                 </button>
-                                <div className="mx-1 h-4 w-px shrink-0 bg-[#e5e6eb]" aria-hidden />
+                                <div className="mx-1 h-4 w-px shrink-0 bg-fill-3" aria-hidden />
                                 */}
-                                <h1 className="min-w-0 truncate text-base font-medium text-[#1d2129] max-[767px]:text-[16px] max-[767px]:leading-6">
+                                <h1 className="min-w-0 truncate text-base font-medium text-text-1 max-[767px]:text-[16px] max-[767px]:leading-6">
                                     {currentPath[currentPath.length - 1]?.name || space.name}
                                 </h1>
                             </>
                         ) : (
                             <div className="flex min-w-0 flex-1 items-center gap-1">
-                                <h1 className="min-w-0 truncate text-base text-[#1d2129] max-[767px]:text-[16px] max-[767px]:leading-6">
+                                <h1 className="min-w-0 truncate text-base text-text-1 max-[767px]:text-[16px] max-[767px]:leading-6">
                                     {space.name}
                                 </h1>
                                 <Tooltip>
                                     <TooltipTrigger className="shrink-0 cursor-pointer">
-                                        <Outlined.Info className="size-4 text-[#86909c] outline-none hover:text-blue-500" />
+                                        <Outlined.Info className="size-4 text-text-3 outline-none hover:text-blue-500" />
                                     </TooltipTrigger>
                                     <TooltipContent noArrow className="bg-white shadow-md px-3 py-2 max-w-md w-64 z-[999] relative">
                                         <div className="space-y-1.5 text-gray-800 text-sm">
@@ -440,7 +440,7 @@ export function KnowledgeSpaceHeader({
                                         successMessage={localize("com_knowledge.share_link_copied")}
                                         errorMessage={localize("com_knowledge.copy_failed_retry")}
                                         className="ml-1 size-7 border-0"
-                                        icon={<Outlined.Share className="size-4 text-[#4e5969]" />}
+                                        icon={<Outlined.Share className="size-4 text-text-2" />}
                                         aria-label={localize("com_knowledge.share")}
                                     />
                                 )}

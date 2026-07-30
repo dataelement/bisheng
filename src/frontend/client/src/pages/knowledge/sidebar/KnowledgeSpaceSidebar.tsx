@@ -353,7 +353,7 @@ export function KnowledgeSpaceSidebar({
         <div className={cn("relative h-full min-h-0 shrink-0", fullWidthMode && "w-full")}>
             <div
                 className={[
-                    `h-full ${mobilePageMode || compactMode ? "bg-white" : "bg-[#FBFBFB]"} flex flex-col overflow-hidden ${collapsed || fullWidthMode ? "" : "border-r-[0.5px] border-[#e5e6eb]"}`,
+                    `h-full ${mobilePageMode || compactMode ? "bg-white" : "bg-[#FBFBFB]"} flex flex-col overflow-hidden ${collapsed || fullWidthMode ? "" : "border-r-[0.5px] border-border-base"}`,
                     fullWidthMode ? "w-full" : collapsed ? "w-0" : "",
                 ].join(" ")}
                 style={fullWidthMode ? undefined : {
@@ -384,7 +384,7 @@ export function KnowledgeSpaceSidebar({
                             <Button
                                 variant="secondary"
                                 onClick={onCreateSpace}
-                                className="h-9 w-full gap-1 border border-[#EBECF0] bg-white text-[13px] text-[#666666] hover:bg-[#F7F8FA]"
+                                className="h-9 w-full gap-1 border border-border-base bg-white text-[13px] text-[#666666] hover:bg-fill-1"
                             >
                                 <Plus className="size-4" />
                                 {localize("com_knowledge.create")}
@@ -466,7 +466,7 @@ export function KnowledgeSpaceSidebar({
                                             <div className="space-y-1 px-3">
                                                 {filteredCreatedSpaces.map(s => renderCompactItem(s, "created"))}
                                                 {!filteredCreatedSpaces.length && (
-                                                    <div className="py-6 text-center text-sm text-[#999999]">{localize("com_knowledge.no_data")}</div>
+                                                    <div className="py-6 text-center text-sm text-text-3">{localize("com_knowledge.no_data")}</div>
                                                 )}
                                             </div>
                                         )}
@@ -488,7 +488,7 @@ export function KnowledgeSpaceSidebar({
                                             <div className="space-y-1 px-3">
                                                 {filteredJoinedSpaces.map(s => renderCompactItem(s, "joined"))}
                                                 {!filteredJoinedSpaces.length && (
-                                                    <div className="py-6 text-center text-sm text-[#999999]">{localize("com_knowledge.no_data")}</div>
+                                                    <div className="py-6 text-center text-sm text-text-3">{localize("com_knowledge.no_data")}</div>
                                                 )}
                                             </div>
                                         )}
@@ -536,7 +536,7 @@ export function KnowledgeSpaceSidebar({
                                         {filteredCreatedSpaces.map(s => renderSpaceItem(s, "created"))}
                                         {createdEmpty && (
                                             <div className={cn(
-                                                "py-6 text-center text-sm text-[#999999]",
+                                                "py-6 text-center text-sm text-text-3",
                                                 stretchEmptySections && "flex flex-1 items-center justify-center",
                                             )}>{localize("com_knowledge.no_data")}</div>
                                         )}
@@ -561,7 +561,7 @@ export function KnowledgeSpaceSidebar({
                                         {filteredJoinedSpaces.map(s => renderSpaceItem(s, "joined"))}
                                         {joinedEmpty && (
                                             <div className={cn(
-                                                "py-6 text-center text-sm text-[#999999]",
+                                                "py-6 text-center text-sm text-text-3",
                                                 stretchEmptySections && "flex flex-1 items-center justify-center",
                                             )}>{localize("com_knowledge.no_data")}</div>
                                         )}

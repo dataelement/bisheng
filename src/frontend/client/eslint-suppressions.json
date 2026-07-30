@@ -2735,7 +2735,7 @@
   },
   "src/pages/_gallery/progress/ColorProgress.tsx": {
     "no-restricted-syntax": {
-      "count": 35
+      "count": 25
     }
   },
   "src/pages/_gallery/progress/ConfirmProgress.tsx": {
@@ -3239,9 +3239,6 @@
     }
   },
   "src/pages/knowledge/FilePreview/index.tsx": {
-    "@typescript-eslint/ban-ts-comment": {
-      "count": 1
-    },
     "react-hooks/exhaustive-deps": {
       "count": 1
     }

@@ -146,7 +146,7 @@ export function ChannelSwitcher({
             <button
                 type="button"
                 onClick={() => setGroup((g) => (g === "created" ? "subscribed" : "created"))}
-                className="flex items-center gap-1 rounded-md p-1 text-[12px] font-medium leading-5 text-[#999] transition-colors fine-pointer:hover:bg-[#F7F7F7]"
+                className="flex items-center gap-1 rounded-md p-1 text-[12px] font-medium leading-5 text-text-3 transition-colors fine-pointer:hover:bg-[#F7F7F7]"
             >
                 <span>
                     {group === "created"
@@ -163,7 +163,7 @@ export function ChannelSwitcher({
                         onClick={() => { onCreateChannel(); setOpen(false); }}
                         aria-label={localize("com_subscription.create")}
                         title={localize("com_subscription.create")}
-                        className="flex size-5 shrink-0 items-center justify-center text-[#86909C] transition-colors fine-pointer:hover:text-[#212121]"
+                        className="flex size-5 shrink-0 items-center justify-center text-text-3 transition-colors fine-pointer:hover:text-text-1"
                     >
                         <Outlined.Plus className="size-4" />
                     </button>
@@ -173,7 +173,7 @@ export function ChannelSwitcher({
                     onClick={toggleSort}
                     aria-label={getSortText(currentSort)}
                     title={getSortText(currentSort)}
-                    className="flex size-5 shrink-0 items-center justify-center text-[#86909C] transition-colors fine-pointer:hover:text-[#212121]"
+                    className="flex size-5 shrink-0 items-center justify-center text-text-3 transition-colors fine-pointer:hover:text-text-1"
                 >
                     <Outlined.Sort className="size-4" />
                 </button>
@@ -188,9 +188,9 @@ export function ChannelSwitcher({
             <button
                 type="button"
                 onClick={() => { onCreateChannel(); setOpen(false); }}
-                className="flex w-full shrink-0 items-center justify-center gap-1 rounded-lg border border-[#E3E3E3] bg-white px-3 py-[5px] text-[14px] leading-[22px] text-[#212121] transition-colors fine-pointer:hover:bg-[#F7F8FA]"
+                className="flex w-full shrink-0 items-center justify-center gap-1 rounded-lg border border-[#E3E3E3] bg-white px-3 py-[5px] text-[14px] leading-[22px] text-text-1 transition-colors fine-pointer:hover:bg-fill-1"
             >
-                <Outlined.Plus className="size-4 text-[#86909C]" />
+                <Outlined.Plus className="size-4 text-text-3" />
                 {localize("com_subscription.create_channel")}
             </button>
         ) : null;
@@ -218,7 +218,7 @@ export function ChannelSwitcher({
                                 className="flex h-10 min-w-0 flex-1 items-center px-1 text-left outline-none"
                             >
                                 <span className={cn(
-                                    "max-w-full truncate py-1 text-[14px] leading-[22px] text-[#212121] [font-family:-apple-system,system-ui,'PingFang_SC','Microsoft_YaHei','Noto_Sans_CJK_SC',sans-serif]",
+                                    "max-w-full truncate py-1 text-[14px] leading-[22px] text-text-1 [font-family:-apple-system,system-ui,'PingFang_SC','Microsoft_YaHei','Noto_Sans_CJK_SC',sans-serif]",
                                     isActive ? "border-b border-[#212121] font-semibold" : "font-normal",
                                 )}>
                                     {c.name}
@@ -232,7 +232,7 @@ export function ChannelSwitcher({
                                 onClick={() => handlePinChannel(c.id, !c.isPinned, group)}
                                 className="flex size-6 shrink-0 items-center justify-center rounded outline-none transition-colors fine-pointer:hover:bg-[#ececec]"
                             >
-                                <Outlined.ToTop className={cn("size-3 transition-colors", c.isPinned ? "text-[#4E5969]" : "text-[#C9CDD4]")} />
+                                <Outlined.ToTop className={cn("size-3 transition-colors", c.isPinned ? "text-text-2" : "text-text-4")} />
                             </button>
                         </div>
                     );
@@ -253,11 +253,11 @@ export function ChannelSwitcher({
                         mobileTriggerClassName ?? "flex-1 justify-center",
                     )}
                 >
-                    <span className="truncate text-[16px] font-medium leading-6 text-[#212121]">
+                    <span className="truncate text-[16px] font-medium leading-6 text-text-1">
                         {channelName}
                     </span>
                     <Outlined.Down className={cn(
-                        "size-5 shrink-0 text-[#86909C] transition-transform",
+                        "size-5 shrink-0 text-text-3 transition-transform",
                         open && "rotate-180",
                     )} />
                 </button>
@@ -287,17 +287,17 @@ export function ChannelSwitcher({
     return (
         <div
             ref={titleRef}
-            className="flex min-w-0 items-center gap-2 text-[32px] leading-[40px] text-[#212121] font-bold"
+            className="flex min-w-0 items-center gap-2 text-[32px] leading-[40px] text-text-1 font-bold"
             style={{ fontFamily: SERIF_FONT_STACK }}
         >
             <span className="shrink-0">{localize("com_subscription.subscribe")}</span>
-            <span className="shrink-0 text-[#C9CDD4]">·</span>
+            <span className="shrink-0 text-text-4">·</span>
             {/* Info popover is scoped to the channel name. The name is not clickable — only the
                 arrow opens the switcher menu. */}
             <Tooltip open={Boolean(infoContent) && infoOpen && !open} onOpenChange={setInfoOpen}>
                 <TooltipTrigger asChild>
                     <span
-                        className={cn("truncate text-[#212121] transition-colors", !open && "fine-pointer:hover:text-[#878787]")}
+                        className={cn("truncate text-text-1 transition-colors", !open && "fine-pointer:hover:text-[#878787]")}
                         onMouseEnter={() => setInfoOpen(true)}
                         onMouseLeave={() => setInfoOpen(false)}
                     >
@@ -316,9 +316,9 @@ export function ChannelSwitcher({
                         type="button"
                         aria-haspopup="menu"
                         aria-expanded={open}
-                        className={cn("flex size-8 shrink-0 items-center justify-center rounded-md outline-none transition-colors", !open && "fine-pointer:hover:bg-[#F7F8FA]")}
+                        className={cn("flex size-8 shrink-0 items-center justify-center rounded-md outline-none transition-colors", !open && "fine-pointer:hover:bg-fill-1")}
                     >
-                        <Outlined.Down className={cn("size-6 text-[#86909C] transition-transform", open && "rotate-180")} />
+                        <Outlined.Down className={cn("size-6 text-text-3 transition-transform", open && "rotate-180")} />
                     </button>
                 </PopoverTrigger>
                 <PopoverContent

@@ -34,7 +34,7 @@ export function ProgressOverview() {
             '字体 Typography',
             '🟨 进行中',
             'Tailwind 默认档',
-            '九档 semantic token + 系统字体栈已落地；剩：删死字体 / typography.css / 逐步迁移',
+            '十档 semantic token + 系统字体栈已落地；剩：删死字体 / typography.css / 逐步迁移',
           ],
           [
             '色彩 Colors',
@@ -85,7 +85,7 @@ export function ProgressOverview() {
         <CompareTable
           head={['规范页', '内容', '成熟度', '源文档（docs-ui-refactor/）']}
           rows={[
-            ['字体 Typography', '系统字体栈 + 九档 semantic 字号 + 双字重', '✅ 已定稿落地', '基础-字体规范.md'],
+            ['字体 Typography', '系统字体栈 + 十档 semantic 字号 + 双字重', '✅ 已定稿落地', '基础-字体规范.md'],
             ['色彩 Colors', '两层 token：Arco primitive → semantic（文字/填充/边框/语义色）', '✅ v1 已定稿落地', '基础-色彩规范.md'],
             ['多端适配 Responsive', '双判定口径 + 四条核心原则 + 窄屏布局惯例', '✅ v1 已建', '基础-多端适配原则.md'],
             ['滚动条（并入总览 · 设计原则 ⑦）', '显隐跟随系统设置，默认不自定义 + 三个减显 utility', '✅ 已定稿落地', '基础-滚动条规范.md'],
