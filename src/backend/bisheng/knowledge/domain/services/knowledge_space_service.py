@@ -114,6 +114,7 @@ from bisheng.database.models.tenant import TenantDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.department.domain.services.department_service import DepartmentService
 from bisheng.knowledge.domain.constants import (
+    BUSINESS_DOMAIN_OPTIONS,
     BUSINESS_DOMAIN_CODE_KEY,
     get_business_domain_code_from_file,
     normalize_business_domain_code,
