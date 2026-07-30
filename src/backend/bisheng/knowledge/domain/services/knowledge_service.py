@@ -92,6 +92,7 @@ _KNOWLEDGE_LIST_PERMISSION_IDS = [
     "manage_kb_manager",
     "manage_kb_viewer",
 ]
+_KNOWLEDGE_PERMISSION_SCAN_BATCH_SIZE = 50
 
 
 class KnowledgeService(KnowledgeUtils):
@@ -227,6 +228,90 @@ class KnowledgeService(KnowledgeUtils):
         )
 
     @classmethod
+    async def _scan_visible_knowledge(
+        cls,
+        *,
+        login_user: UserPayload,
+        candidate_ids: list[int],
+        knowledge_type: KnowledgeTypeEnum,
+        name: str | None,
+        sort_by: str,
+        page_num: int | None,
+        cursor: list | None,
+        page_size: int,
+        permission_id: str,
+        preferred_ids: list[int] | None,
+    ) -> tuple[list[Knowledge], dict[int, set[str]], int, int]:
+        """Scan bounded DB batches and refill rows removed by exact permission checks."""
+        visible: list[Knowledge] = []
+        permission_map: dict[int, set[str]] = {}
+        scanned_rows = 0
+        batch_count = 0
+
+        # Name sorting exposes an offset-style pseudo cursor. To preserve pages
+        # after permission filtering, scan from the start and skip preceding
+        # visible rows. Pinned first pages also require offset batches because
+        # their rank is not represented by the timestamp cursor.
+        offset_scan = sort_by == "name" or (cursor is None and bool(preferred_ids))
+        visible_start = ((page_num or 1) - 1) * page_size if sort_by == "name" else 0
+        target_visible_count = visible_start + page_size + 1
+        batch_page = 1
+        batch_cursor = list(cursor) if cursor else None
+        requested_permission_ids = list(dict.fromkeys([permission_id, *_KNOWLEDGE_LIST_PERMISSION_IDS]))
+
+        while len(visible) < target_visible_count:
+            batch = await KnowledgeDao.aget_user_knowledge(
+                login_user.user_id,
+                candidate_ids,
+                knowledge_type,
+                name,
+                sort_by,
+                page=batch_page if offset_scan else 0,
+                limit=_KNOWLEDGE_PERMISSION_SCAN_BATCH_SIZE,
+                preferred_ids=preferred_ids,
+                cursor=None if offset_scan else batch_cursor,
+            )
+            batch_count += 1
+            scanned_rows += len(batch)
+            if not batch:
+                break
+
+            batch_permission_map = await cls.permission_service.get_knowledge_permission_map_async(
+                login_user,
+                [int(one.id) for one in batch],
+                requested_permission_ids,
+            )
+            permission_map.update(batch_permission_map)
+            visible.extend(one for one in batch if permission_id in batch_permission_map.get(int(one.id), set()))
+
+            if len(batch) < _KNOWLEDGE_PERMISSION_SCAN_BATCH_SIZE:
+                break
+            if offset_scan:
+                batch_page += 1
+                continue
+
+            last_db_row = batch[-1]
+            next_batch_cursor = [
+                last_db_row.create_time if sort_by == "create_time" else last_db_row.update_time,
+                last_db_row.id,
+            ]
+            if next_batch_cursor == batch_cursor:
+                logger.warning(
+                    "knowledge permission scan cursor did not advance: sort_by={} cursor={}",
+                    sort_by,
+                    batch_cursor,
+                )
+                break
+            batch_cursor = next_batch_cursor
+
+        return (
+            visible[visible_start : visible_start + page_size + 1],
+            permission_map,
+            scanned_rows,
+            batch_count,
+        )
+
+    @classmethod
     async def get_knowledge(
         cls,
         request: Request,
@@ -289,35 +374,30 @@ class KnowledgeService(KnowledgeUtils):
                 login_user.user_id,
                 knowledge_type,
             )
-            merged = set(int(k) for k in accessible_ids) | set(creator_ids)
-            permission_map = await cls.permission_service.get_knowledge_permission_map_async(
-                login_user,
-                list(merged),
-                _KNOWLEDGE_LIST_PERMISSION_IDS,
-            )
-            knowledge_id_extra = [
-                knowledge_id for knowledge_id in merged if permission_id in permission_map.get(int(knowledge_id), set())
-            ]
-            res = await KnowledgeDao.aget_user_knowledge(
-                login_user.user_id,
-                knowledge_id_extra,
-                knowledge_type,
-                name,
-                sort_by,
-                page=(page_num if is_name_sort else 0),
-                limit=fetch_limit,
-                preferred_ids=preferred_ids,
+            merged = {int(k) for k in accessible_ids} | set(creator_ids)
+            res, permission_map, scanned_rows, batch_count = await cls._scan_visible_knowledge(
+                login_user=login_user,
+                candidate_ids=list(merged),
+                knowledge_type=knowledge_type,
+                name=name,
+                sort_by=sort_by,
+                page_num=page_num,
                 cursor=keyset_cursor,
+                page_size=page_size,
+                permission_id=permission_id,
+                preferred_ids=preferred_ids,
             )
             logger.info(
                 "[perf][knowledge.list.filter] user_id={} permission_id={} type={} accessible_ids={} creator_ids={} "
-                "filtered_ids={} sort_by={} page_size={} rows={} took_ms={:.2f}",
+                "candidate_ids={} scanned_rows={} batches={} sort_by={} page_size={} rows={} took_ms={:.2f}",
                 login_user.user_id,
                 permission_id,
                 knowledge_type.value,
                 len(accessible_ids),
                 len(creator_ids),
-                len(knowledge_id_extra),
+                len(merged),
+                scanned_rows,
+                batch_count,
                 sort_by,
                 page_size,
                 len(res),
@@ -370,7 +450,7 @@ class KnowledgeService(KnowledgeUtils):
         )
 
         # ---- 5. Compute next_cursor (None if has_more is False) ----
-        next_cursor: Optional[str] = None
+        next_cursor: str | None = None
         if has_more and result_data:
             last = result_data[-1]
             if is_name_sort:

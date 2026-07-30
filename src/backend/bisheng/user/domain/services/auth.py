@@ -131,18 +131,10 @@ def _effective_web_menu_strip_orphans(web_menu: list[str]) -> list[str]:
 
 # ── AccessType → ReBAC mapping (F008, AD-02) ────────────────
 # Maps old RBAC AccessType to one-or-more (relation, object_type) pairs for
-# ReBAC delegation. Knowledge libraries are migrating from the historical
-# knowledge_space object type to the dedicated knowledge_library type, so the
-# adapter must temporarily accept both.
+# ReBAC delegation.
 _ACCESS_TYPE_TO_REBAC: dict[int, tuple[tuple[str, str], ...]] = {
-    AccessType.KNOWLEDGE: (
-        ("can_read", "knowledge_library"),
-        ("can_read", "knowledge_space"),
-    ),
-    AccessType.KNOWLEDGE_WRITE: (
-        ("can_edit", "knowledge_library"),
-        ("can_edit", "knowledge_space"),
-    ),
+    AccessType.KNOWLEDGE: (("can_read", "knowledge_library"),),
+    AccessType.KNOWLEDGE_WRITE: (("can_edit", "knowledge_library"),),
     AccessType.WORKFLOW: (("can_read", "workflow"),),
     AccessType.WORKFLOW_WRITE: (("can_edit", "workflow"),),
     AccessType.ASSISTANT_READ: (("can_read", "assistant"),),
