@@ -36,15 +36,15 @@
 
   /* ---------- Neutral colors (基础-色彩规范.md, Arco ramp) ---------- */
   /* Primitive — Arco gray 1-10 (RGB channel triplets for `/<alpha>` support) */
-  --arco-gray-1: 247 248 250;   /* #F7F8FA */
-  --arco-gray-2: 242 243 245;   /* #F2F3F5 */
-  --arco-gray-3: 229 230 235;   /* #E5E6EB */
-  --arco-gray-4: 201 205 212;   /* #C9CDD4 */
+  --arco-gray-1: 248 248 248;   /* #F8F8F8 — neutral, not Arco's blue-tinted #F7F8FA */
+  --arco-gray-2: 243 243 244;   /* #F3F3F4 */
+  --arco-gray-3: 229 230 233;   /* #E5E6E9 */
+  --arco-gray-4: 202 205 212;   /* #CACDD4 */
   --arco-gray-5: 169 174 184;   /* #A9AEB8 */
-  --arco-gray-6: 134 144 156;   /* #86909C */
-  --arco-gray-7: 107 119 133;   /* #6B7785 */
-  --arco-gray-8: 78 89 105;     /* #4E5969 */
-  --arco-gray-9: 39 46 59;      /* #272E3B */
+  --arco-gray-6: 137 143 156;   /* #898F9C */
+  --arco-gray-7: 111 118 131;   /* #6F7683 */
+  --arco-gray-8: 82 88 101;     /* #525865 */
+  --arco-gray-9: 41 46 55;      /* #292E37 */
   --arco-gray-10: 29 33 41;     /* #1D2129 */
 
   /* Semantic — neutral text / fill / border (components use ONLY these) */
@@ -89,13 +89,13 @@
   --brand-muted: 87 115 180; /* #5773B4 — muted/low-sat brand accent */
 
   /* ---------- Button semantic tokens (组件-Button按钮.md §5.1) ---------- */
-  --btn-gray-text: 78 89 105;      /* #4E5969 — default-color button text */
-  --btn-gray-solid-bg: 78 89 105;  /* #4E5969 — default SOLID fill (+white text) */
-  --btn-gray-border: 229 230 235;  /* #E5E6EB — default-color button border */
-  --btn-fill-1: 247 248 250;       /* #F7F8FA — neutral fill ramp: hover bg */
-  --btn-fill-2: 242 243 245;       /* #F2F3F5 — active bg / filled base */
-  --btn-fill-3: 229 230 235;       /* #E5E6EB — filled hover */
-  --btn-fill-4: 201 205 212;       /* #C9CDD4 — filled active */
+  --btn-gray-text: 82 88 101;      /* #525865 — default-color button text */
+  --btn-gray-solid-bg: 82 88 101;  /* #525865 — default SOLID fill (+white text) */
+  --btn-gray-border: 229 230 233;  /* #E5E6E9 — default-color button border */
+  --btn-fill-1: 248 248 248;       /* #F8F8F8 — neutral fill ramp: hover bg (= fill-1) */
+  --btn-fill-2: 243 243 244;       /* #F3F3F4 — active bg / filled base */
+  --btn-fill-3: 229 230 233;       /* #E5E6E9 — filled hover */
+  --btn-fill-4: 202 205 212;       /* #CACDD4 — filled active */
   --btn-danger: 245 63 63;         /* #F53F3F */
   --btn-danger-hover: 214 55 58;   /* #D6373A */
   --btn-danger-active: 208 47 51;  /* #D02F33 */

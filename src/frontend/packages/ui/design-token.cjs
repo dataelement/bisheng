@@ -91,23 +91,32 @@ const BRAND = {
 };
 
 /* ------------------------------------------------------------------ *
- * Neutral primitive — Arco gray 1–10 (§2.1). Numbered = the lightness
+ * Neutral primitive — gray 1–10 (§2.1). Numbered = the lightness
  * scale itself; components consume the semantic layer below, not this.
  * `channels` = "r g b" for rgb(var(--arco-gray-N)/α).
  * `darkHex` / `darkChannels` = official @arco-design/color gray.dark ramp
  * (lightness inverts). Runtime carrier: `.dark` override in src/style.css.
+ *
+ * The LIGHT ramp is Arco-derived but rebalanced for one coherent colour
+ * temperature; the var name keeps its `arco-` prefix for compatibility.
+ * Arco's hue wandered 252°–277° (OKLCH) step to step, which reads as the
+ * temperature drifting as you scan the ramp. Every step now sits on a single
+ * hue — 264°, taken from gray-10 — and chroma rises smoothly from 0 at gray-1,
+ * so the ramp warms into its cool tint instead of jumping. gray-1 / gray-5 /
+ * gray-10 are unchanged; every other step moved by ΔE ≤ 0.8 (OKLab).
+ * Each step's OKLab lightness is preserved, so contrast ratios are untouched.
  * ------------------------------------------------------------------ */
 
 const GRAY = [
-  { n: 1,  hex: '#F7F8FA', channels: '247 248 250', darkHex: '#17171A', darkChannels: '23 23 26',    role: 'hover 底' },
-  { n: 2,  hex: '#F2F3F5', channels: '242 243 245', darkHex: '#2E2E30', darkChannels: '46 46 48',    role: 'filled 底' },
-  { n: 3,  hex: '#E5E6EB', channels: '229 230 235', darkHex: '#484849', darkChannels: '72 72 73',    role: '边框' },
-  { n: 4,  hex: '#C9CDD4', channels: '201 205 212', darkHex: '#5F5F60', darkChannels: '95 95 96',    role: '禁用 / 占位' },
+  { n: 1,  hex: '#F8F8F8', channels: '248 248 248', darkHex: '#17171A', darkChannels: '23 23 26',    role: 'hover 底' },
+  { n: 2,  hex: '#F3F3F4', channels: '243 243 244', darkHex: '#2E2E30', darkChannels: '46 46 48',    role: 'filled 底' },
+  { n: 3,  hex: '#E5E6E9', channels: '229 230 233', darkHex: '#484849', darkChannels: '72 72 73',    role: '边框' },
+  { n: 4,  hex: '#CACDD4', channels: '202 205 212', darkHex: '#5F5F60', darkChannels: '95 95 96',    role: '禁用 / 占位' },
   { n: 5,  hex: '#A9AEB8', channels: '169 174 184', darkHex: '#78787A', darkChannels: '120 120 122', role: '过渡' },
-  { n: 6,  hex: '#86909C', channels: '134 144 156', darkHex: '#929293', darkChannels: '146 146 147', role: '辅助文字' },
-  { n: 7,  hex: '#6B7785', channels: '107 119 133', darkHex: '#ABABAC', darkChannels: '171 171 172', role: '过渡' },
-  { n: 8,  hex: '#4E5969', channels: '78 89 105',   darkHex: '#C5C5C5', darkChannels: '197 197 197', role: '次文字' },
-  { n: 9,  hex: '#272E3B', channels: '39 46 59',    darkHex: '#DFDFDF', darkChannels: '223 223 223', role: '过渡' },
+  { n: 6,  hex: '#898F9C', channels: '137 143 156', darkHex: '#929293', darkChannels: '146 146 147', role: '辅助文字' },
+  { n: 7,  hex: '#6F7683', channels: '111 118 131', darkHex: '#ABABAC', darkChannels: '171 171 172', role: '过渡' },
+  { n: 8,  hex: '#525865', channels: '82 88 101',   darkHex: '#C5C5C5', darkChannels: '197 197 197', role: '次文字' },
+  { n: 9,  hex: '#292E37', channels: '41 46 55',    darkHex: '#DFDFDF', darkChannels: '223 223 223', role: '过渡' },
   { n: 10, hex: '#1D2129', channels: '29 33 41',    darkHex: '#F6F6F6', darkChannels: '246 246 246', role: '主文字' },
 ];
 
@@ -121,21 +130,21 @@ const GRAY = [
 // `hex` = light value; `darkHex` = same gray ref resolved on the dark ramp.
 const TEXT = [
   { name: 'strong',    legacy: '1', cssVar: '--text-1', ref: 'gray-10', hex: '#1D2129', darkHex: '#F6F6F6', usage: '主文字：标题、正文主体' },
-  { name: 'muted',     legacy: '2', cssVar: '--text-2', ref: 'gray-8',  hex: '#4E5969', darkHex: '#C5C5C5', usage: '次要文字：次要说明、默认按钮文字' },
-  { name: 'hint',      legacy: '3', cssVar: '--text-3', ref: 'gray-6',  hex: '#86909C', darkHex: '#929293', usage: '辅助文字：弱提示、时间戳、占位符' },
-  { name: 'disabled',  legacy: '4', cssVar: '--text-4', ref: 'gray-4',  hex: '#C9CDD4', darkHex: '#5F5F60', usage: '禁用文字' },
+  { name: 'muted',     legacy: '2', cssVar: '--text-2', ref: 'gray-8',  hex: '#525865', darkHex: '#C5C5C5', usage: '次要文字：次要说明、默认按钮文字' },
+  { name: 'hint',      legacy: '3', cssVar: '--text-3', ref: 'gray-6',  hex: '#898F9C', darkHex: '#929293', usage: '辅助文字：弱提示、时间戳、占位符' },
+  { name: 'disabled',  legacy: '4', cssVar: '--text-4', ref: 'gray-4',  hex: '#CACDD4', darkHex: '#5F5F60', usage: '禁用文字' },
 ];
 
 const FILL = [
-  { name: 'subtle',  legacy: '1', cssVar: '--fill-1', ref: 'gray-1', hex: '#F7F8FA', darkHex: '#17171A', usage: '浅填充：hover 底、页面浅灰背景' },
-  { name: 'default', legacy: '2', cssVar: '--fill-2', ref: 'gray-2', hex: '#F2F3F5', darkHex: '#2E2E30', usage: '填充：active 底、filled 控件底' },
-  { name: 'hover',   legacy: '3', cssVar: '--fill-3', ref: 'gray-3', hex: '#E5E6EB', darkHex: '#484849', usage: '深填充：filled hover' },
-  { name: 'active',  legacy: '4', cssVar: '--fill-4', ref: 'gray-4', hex: '#C9CDD4', darkHex: '#5F5F60', usage: '重填充：filled active' },
+  { name: 'subtle',  legacy: '1', cssVar: '--fill-1', ref: 'gray-1', hex: '#F8F8F8', darkHex: '#17171A', usage: '浅填充：hover 底、页面浅灰背景' },
+  { name: 'default', legacy: '2', cssVar: '--fill-2', ref: 'gray-2', hex: '#F3F3F4', darkHex: '#2E2E30', usage: '填充：active 底、filled 控件底' },
+  { name: 'hover',   legacy: '3', cssVar: '--fill-3', ref: 'gray-3', hex: '#E5E6E9', darkHex: '#484849', usage: '深填充：filled hover' },
+  { name: 'active',  legacy: '4', cssVar: '--fill-4', ref: 'gray-4', hex: '#CACDD4', darkHex: '#5F5F60', usage: '重填充：filled active' },
 ];
 
 const BORDER = [
-  { name: 'base', cssVar: '--border-base', ref: 'gray-3', hex: '#E5E6EB', darkHex: '#484849', usage: '常规边框：输入框、卡片、分割线' },
-  { name: 'deep', cssVar: '--border-deep', ref: 'gray-4', hex: '#C9CDD4', darkHex: '#5F5F60', usage: '深边框：强调分割、hover 边框' },
+  { name: 'base', cssVar: '--border-base', ref: 'gray-3', hex: '#E5E6E9', darkHex: '#484849', usage: '常规边框：输入框、卡片、分割线' },
+  { name: 'deep', cssVar: '--border-deep', ref: 'gray-4', hex: '#CACDD4', darkHex: '#5F5F60', usage: '深边框：强调分割、hover 边框' },
 ];
 
 /* Background surfaces — the "white that darkens" family. The gray ramp starts

@@ -117,7 +117,7 @@ pages/standaloneChat/components/GuestConvoItem
    - ✅ 第一批（设置弹窗-数据页）：ClearChats（清空聊天）、DeleteCache（删缓存）、RevokeKeysButton（撤销密钥，含 SetKeyDialog 内嵌用法）。迁移模式：`const ok = await confirm({ variant: 'destructive', title, description, confirmText }); if (!ok) return; mutate(...)`——标题/正文/确认文案沿用原 i18n key，取消文案用 C 套默认「暂不」。DeleteCache 顺带清了未挂载的 confirmClear/contentRef 死代码，并在清完后重查缓存刷新按钮禁用态。
 4. **⬜（Modal 期）** 约 5 处「表单弹窗借 selection 当提交按钮」（SetKeyDialog、SaveAsPresetDialog、ApiKeyDialog、DashGroupItem 重命名、ActionsPanel）随 Modal 统一处理，届时 OGDialogTemplate 退役。
 
-已定的样式决策：危险红 = `#f53f3f`（语义色不换肤）；普通确认 = 品牌主色（跟蓝⇄绿主题，绿色保存按钮一并折叠进来）；取消按钮 = C 套白底描边样式（hover `#f7f8fa`）；Loading 统一走 `selection.isLoading`（4 处自塞 Spinner 的随第三步迁移清理）。
+已定的样式决策：危险红 = `#f53f3f`（语义色不换肤）；普通确认 = 品牌主色（跟蓝⇄绿主题，绿色保存按钮一并折叠进来）；取消按钮 = C 套白底描边样式（hover `fill-1` = `#f8f8f8`）；Loading 统一走 `selection.isLoading`（4 处自塞 Spinner 的随第三步迁移清理）。
 
 <!-- site-hide -->
 ## 二点六、Modal 期用量重盘（2026-07-09，本窗口开工扫描）
@@ -178,6 +178,7 @@ pages/standaloneChat/components/GuestConvoItem
 | 2026-07-09 | **Modal 期开工**：全站弹窗重盘（5 体系 64 文件，见 §二点六；新发现 A 套原语直拼 22 处为最大人群）；画廊 Modal 版块整体重做——用量总览表、壳解剖表（源码真实值）、同一内容装进 5 个壳的并排 demo + C 套参照、待决策清单 §④。未改组件源码，等设计师定标准 | `_gallery/sections/ModalSection.tsx`（重写） | 待 committer 窗口提交 |
 | 2026-07-10 | **反馈弹窗抽成共享组件 `ui/CommentDialog`**（标题+textarea+取消/提交；容器零 padding、header/body/footer 各 `px-5`、移动端 `calc(100%-48px)` 宽 + 标题居中 + 按钮等宽、每次打开重置草稿、可选 `submitting`/`submittingText` 支持异步提交）。MessageFeedbackButtons 改为消费方（视觉/点踩延迟落库逻辑不变）；MenuUnavailablePage 手写申请权限弹窗迁入共享壳——手拼弹窗 -1，行为新增 ESC/遮罩/焦点圈定，桌面端标题改左对齐。画廊「点赞点踩反馈」demo 即真实组件，已实测桌面+移动端 | `ui/CommentDialog.tsx`（新）、`ui/index.ts`、`Chat/MessageFeedbackButtons.tsx`、`pages/MenuUnavailablePage.tsx` | 待提交 |
 | 2026-07-03 | **第三步第二批迁移**：删会话确认 B→C。新建共享 hook `useDeleteConversationConfirm`（confirm → 删除 → 若删的是当前会话则跳走），三个消费方接线：会话侧栏菜单 ConvoOptions、归档会话表格 ArchivedChatsTable（复用同一组件被迫同批）、应用会话 AppSidebarConvoItem。**删除 `ConvoOptions/DeleteButton.tsx`**，barrel 出口同步更新。正文为纯文本 `确认删除 "标题"`（C 套 description 为字符串）。⚠️ 业务文件，尽快单独提交（batch 2）| `ConvoOptions/{useDeleteConversationConfirm.ts 新,ConvoOptions.tsx,index.ts,DeleteButton.tsx 删}`、`ArchivedChatsTable.tsx`、`AppSidebarConvoItem.tsx` | 待 committer 窗口提交 |
+| 2026-07-30 | 取消按钮 hover 底跟随 token 调整：`fill-1` 由 `#f7f8fa` 改为 `#f8f8f8`（纯中性灰）。仅 token 值变化，ConfirmContext 的裸 hex 仍待迁到 `bg-fill-1`。 | design-token.cjs、tokens.css、client/style.css、本文件三、confirm.mdx | 待 committer 窗口提交（token 一笔） |
 
 ---
 
