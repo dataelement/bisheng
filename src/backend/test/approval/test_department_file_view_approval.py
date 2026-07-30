@@ -258,6 +258,49 @@ async def test_apply_service_rejects_blank_reason_before_any_side_effect() -> No
 
 
 @pytest.mark.asyncio
+async def test_safe_metadata_resolves_folder_ids_to_display_names() -> None:
+    file_repository = SimpleNamespace(
+        find_by_ids=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    id=1347,
+                    knowledge_id=10,
+                    file_name="财务制度",
+                ),
+                SimpleNamespace(
+                    id=1348,
+                    knowledge_id=10,
+                    file_name="资金管理",
+                ),
+            ]
+        )
+    )
+    service = DepartmentFileViewApprovalService(
+        session=AsyncMock(),
+        file_repository=file_repository,
+        access_service=AsyncMock(),
+    )
+    metadata = await service._project_safe_metadata(
+        file_record=SimpleNamespace(
+            id=11,
+            knowledge_id=10,
+            file_name="资金使用计划_08.docx",
+            file_level_path="/1347/1348",
+        ),
+        space_name="计财部知识库",
+        decision=DepartmentFileAccessDecision(
+            file_id=11,
+            space_id=10,
+            status=DepartmentFileAccessStatus.APPROVAL_REQUIRED,
+            department_id=12,
+        ),
+    )
+
+    assert metadata["folder_path"] == "财务制度/资金管理"
+    file_repository.find_by_ids.assert_awaited_once_with([1347, 1348])
+
+
+@pytest.mark.asyncio
 async def test_apply_persists_datetime_metadata_as_json_safe_string(
     approval_engine,
 ) -> None:

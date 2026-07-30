@@ -442,6 +442,7 @@ class DepartmentFileViewAccessService:
         space_name: str,
         decision: Any,
         tags: list[str] | None = None,
+        folder_path: str | None = None,
     ) -> dict[str, Any]:
         file_name = str(getattr(file_record, "file_name", "") or "")
         suffix = PurePosixPath(file_name).suffix.lower().lstrip(".")
@@ -457,7 +458,11 @@ class DepartmentFileViewAccessService:
             "space_id": int(file_record.knowledge_id),
             "file_name": file_name,
             "space_name": space_name,
-            "folder_path": str(getattr(file_record, "file_level_path", "") or ""),
+            "folder_path": (
+                folder_path
+                if folder_path is not None
+                else str(getattr(file_record, "file_level_path", "") or "")
+            ),
             "file_source": getattr(file_record, "file_source", None),
             "file_ext": suffix,
             "file_subcategory_code": getattr(

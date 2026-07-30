@@ -181,7 +181,7 @@ class DepartmentFileViewApprovalService:
                     "can_download": bool(decision.can_download),
                 }
 
-            safe_metadata = DepartmentFileViewAccessService.project_safe_metadata(
+            safe_metadata = await self._project_safe_metadata(
                 file_record=file,
                 space_name=str(getattr(resource.space, "name", "") or ""),
                 decision=decision,
@@ -322,7 +322,7 @@ class DepartmentFileViewApprovalService:
         if decision.status == DepartmentFileAccessStatus.NOT_APPLICABLE:
             # 公共库等非部门空间不进入本审批场景。门户详情仍会继续执行原有
             # 内容端点鉴权。这里只表示“不需要部门文件审批”。
-            safe_metadata = DepartmentFileViewAccessService.project_safe_metadata(
+            safe_metadata = await self._project_safe_metadata(
                 file_record=file,
                 space_name=str(getattr(resource.space, "name", "") or ""),
                 decision=decision,
@@ -349,7 +349,7 @@ class DepartmentFileViewApprovalService:
                 can_download=decision.can_download,
             )
 
-        safe_metadata = DepartmentFileViewAccessService.project_safe_metadata(
+        safe_metadata = await self._project_safe_metadata(
             file_record=file,
             space_name=str(getattr(resource.space, "name", "") or ""),
             decision=decision,
@@ -423,6 +423,51 @@ class DepartmentFileViewApprovalService:
             status=terminal_status,
             safe_metadata=safe_metadata,
             instance=latest,
+        )
+
+    async def _project_safe_metadata(
+        self,
+        *,
+        file_record,
+        space_name: str,
+        decision,
+    ) -> dict:
+        return DepartmentFileViewAccessService.project_safe_metadata(
+            file_record=file_record,
+            space_name=space_name,
+            decision=decision,
+            folder_path=await self._resolve_folder_display_path(file_record),
+        )
+
+    async def _resolve_folder_display_path(self, file_record) -> str:
+        folder_ids = [
+            int(part)
+            for part in str(
+                getattr(file_record, "file_level_path", "") or ""
+            ).split("/")
+            if part.isdigit()
+        ]
+        if not folder_ids:
+            return "根目录"
+
+        find_by_ids = getattr(self.file_repository, "find_by_ids", None)
+        if not callable(find_by_ids):
+            return "/".join("目录已删除" for _ in folder_ids)
+
+        folders = await find_by_ids(folder_ids)
+        if not isinstance(folders, (list, tuple)):
+            return "/".join("目录已删除" for _ in folder_ids)
+
+        knowledge_id = int(getattr(file_record, "knowledge_id", 0) or 0)
+        folder_names = {
+            int(folder.id): str(getattr(folder, "file_name", "") or "").strip()
+            for folder in folders
+            if getattr(folder, "id", None) is not None
+            and int(getattr(folder, "knowledge_id", 0) or 0) == knowledge_id
+        }
+        return "/".join(
+            folder_names.get(folder_id) or "目录已删除"
+            for folder_id in folder_ids
         )
 
     async def _apply_with_gate(
