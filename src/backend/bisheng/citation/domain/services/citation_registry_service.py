@@ -7,7 +7,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 from langchain_classic.docstore.document import Document
 
-from bisheng.citation.domain.models.message_citation import MessageCitation
+from bisheng.citation.domain.models.message_citation import MessageCitation, MessageCitationRelation
 from bisheng.citation.domain.repositories.interfaces.message_citation_repository import MessageCitationRepository
 from bisheng.citation.domain.schemas.citation_schema import (
     CitationRegistryItemSchema,
@@ -496,33 +496,30 @@ class CitationRegistryService:
         if not items:
             return []
 
-        existing_entities = await self.repository.find_by_message_id(message_id)
-        existing_by_citation_id = {entity.citation_id: entity for entity in existing_entities}
-
         grouped_items = self._group_registry_items(items)
         unique_items: OrderedDict[str, CitationRegistryItemSchema] = OrderedDict()
         for item in grouped_items:
             unique_items[item.citationId] = item
 
-        entities = [
-            MessageCitation(
-                citation_id=item.citationId,
-                message_id=message_id,
-                chat_id=chat_id,
-                flow_id=flow_id,
-                citation_type=item.type.value,
-                access_scope=item.accessScope,
-                source_payload=self._dump_source_payload(item.sourcePayload),
-            )
-            for item in unique_items.values()
-            if item.citationId not in existing_by_citation_id
-        ]
-
-        if entities:
-            created_entities = await self.repository.bulk_create(entities)
-            existing_entities.extend(created_entities)
-
-        return sorted(existing_entities, key=lambda item: item.id or 0)
+        citation_ids = list(unique_items)
+        await self.repository.ensure_citations(
+            [
+                MessageCitation(
+                    citation_id=item.citationId,
+                    message_id=message_id,
+                    chat_id=chat_id,
+                    flow_id=flow_id,
+                    citation_type=item.type.value,
+                    access_scope=item.accessScope,
+                    source_payload=self._dump_source_payload(item.sourcePayload),
+                )
+                for item in unique_items.values()
+            ]
+        )
+        await self.repository.ensure_relations(
+            [MessageCitationRelation(message_id=message_id, citation_id=citation_id) for citation_id in citation_ids]
+        )
+        return await self.repository.find_by_message_id(message_id)
 
     def save_citations_sync(
         self,
@@ -536,35 +533,33 @@ class CitationRegistryService:
             return []
 
         find_by_message_id_sync = self.repository.find_by_message_id_sync
-        bulk_create_sync = self.repository.bulk_create_sync
-
-        existing_entities = find_by_message_id_sync(message_id)
-        existing_by_citation_id = {entity.citation_id: entity for entity in existing_entities}
+        ensure_citations_sync = self.repository.ensure_citations_sync
+        ensure_relations_sync = self.repository.ensure_relations_sync
 
         grouped_items = self._group_registry_items(items)
         unique_items: OrderedDict[str, CitationRegistryItemSchema] = OrderedDict()
         for item in grouped_items:
             unique_items[item.citationId] = item
 
-        entities = [
-            MessageCitation(
-                citation_id=item.citationId,
-                message_id=message_id,
-                chat_id=chat_id,
-                flow_id=flow_id,
-                citation_type=item.type.value,
-                access_scope=item.accessScope,
-                source_payload=self.dump_source_payload(item.sourcePayload),
-            )
-            for item in unique_items.values()
-            if item.citationId not in existing_by_citation_id
-        ]
-
-        if entities:
-            created_entities = bulk_create_sync(entities)
-            existing_entities.extend(created_entities)
-
-        return sorted(existing_entities, key=lambda item: item.id or 0)
+        citation_ids = list(unique_items)
+        ensure_citations_sync(
+            [
+                MessageCitation(
+                    citation_id=item.citationId,
+                    message_id=message_id,
+                    chat_id=chat_id,
+                    flow_id=flow_id,
+                    citation_type=item.type.value,
+                    access_scope=item.accessScope,
+                    source_payload=self.dump_source_payload(item.sourcePayload),
+                )
+                for item in unique_items.values()
+            ]
+        )
+        ensure_relations_sync(
+            [MessageCitationRelation(message_id=message_id, citation_id=citation_id) for citation_id in citation_ids]
+        )
+        return find_by_message_id_sync(message_id)
 
     def to_registry_item(self, citation: MessageCitation) -> CitationRegistryItemSchema:
         """Convert a persisted citation entity to schema."""
