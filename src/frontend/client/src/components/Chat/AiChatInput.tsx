@@ -363,7 +363,7 @@ const AiChatInput = memo(
                         // Figma 12669:66966 — white surface, 16px radius, hairline
                         // border (replaces the legacy gray fill). z-[1] keeps it
                         // painted above the attachment strip it overlaps.
-                        "relative z-[1] flex w-full flex-col items-start gap-0 overflow-hidden rounded-2xl border border-[#ECECEC] bg-white p-3",
+                        "relative z-[1] flex w-full flex-col items-start gap-0 overflow-hidden rounded-2xl border border-border-base bg-white p-3",
                         // Soft drop shadow on the landing page (always) and on the
                         // in-conversation input only while it has a mounted knowledge
                         // space / file; otherwise in-conversation inputs stay flat

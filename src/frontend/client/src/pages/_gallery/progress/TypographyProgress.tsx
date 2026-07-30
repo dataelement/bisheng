@@ -1,7 +1,7 @@
 /**
  * Typography migration ledger — DEV-ONLY.
  * The spec itself lives in the 「设计规范 → 字体」 page; this page tracks the
- * old-classname → semantic-token replacement work (docs-ui-refactor/基础-字体规范.md §8).
+ * old-classname → semantic-token replacement work (packages/ui/docs/基础-字体规范.mdx §8).
  */
 import { ComponentPage, ExampleGroup, CompareTable } from '../components/kit';
 

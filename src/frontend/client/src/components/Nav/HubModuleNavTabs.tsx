@@ -38,7 +38,7 @@ const hubNavItemClassName = (
   );
 
 const hubIconClassName = (on: boolean) =>
-  cn('size-5 shrink-0', on ? 'text-blue-500' : 'text-[#818181]');
+  cn('size-5 shrink-0', on ? 'text-blue-500' : 'text-text-3');
 
 export function useHubModuleLinks(): HubModuleLink[] {
   const { pathname } = useLocation();

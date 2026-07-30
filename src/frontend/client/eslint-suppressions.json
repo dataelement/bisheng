@@ -2750,7 +2750,7 @@
   },
   "src/pages/_gallery/progress/ProgressOverview.tsx": {
     "no-restricted-syntax": {
-      "count": 100
+      "count": 99
     }
   },
   "src/pages/_gallery/progress/TypographyProgress.tsx": {

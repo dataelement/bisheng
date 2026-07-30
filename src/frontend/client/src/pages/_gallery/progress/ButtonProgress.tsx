@@ -1,7 +1,7 @@
 /**
  * Button migration ledger — DEV-ONLY.
  * The dual-axis spec lives in the 「设计规范 → Button」 page; this page keeps the
- * legacy-API mapping table (docs-ui-refactor/组件-Button按钮.md §6.3) — every button
+ * legacy-API mapping table (packages/ui/docs/组件-Button按钮.md §6.3) — every button
  * below renders THROUGH the old API to verify the automatic mapping.
  */
 import { Outlined } from 'bisheng-icons';

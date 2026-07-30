@@ -2,7 +2,7 @@
  * Illustration section — all themed inline-SVG illustrations from
  * src/components/illustrations/, rendered side by side in the three color
  * modes (blue theme / green theme / grey draft) so the designer can audit the
- * whole set at a glance. Spec source: docs-ui-refactor/基础-色彩规范.md §5 +
+ * whole set at a glance. Spec source: packages/ui/docs/基础-色彩规范.mdx §5 +
  * BRAND-THEME-HANDOFF.md §3.1.
  *
  * DEV-ONLY internal tooling, never shipped (route gated by import.meta.env.DEV).

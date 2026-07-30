@@ -595,7 +595,7 @@ export function KnowledgeSpaceSidebar({
                     </div>
                 )}
                 {mobileDrawerMode && !compactMode ? (
-                    <div className="shrink-0 border-t border-[#ececec] px-2 pb-2 pt-1">
+                    <div className="shrink-0 border-t border-border-base px-2 pb-2 pt-1">
                         <UserPopMenu variant="drawer" />
                     </div>
                 ) : null}

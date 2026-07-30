@@ -47,7 +47,7 @@ const ROLE_SELECT_WIDTH_CLASS = "h-8 w-24";
 const ROLE_SELECT_TRIGGER_CLASS = cn(
     ROLE_SELECT_WIDTH_CLASS,
     "box-border shrink-0 appearance-none rounded-md border-border-base bg-white shadow-none",
-    "inline-flex items-center justify-end gap-1 px-2 text-[14px] text-[#818181]",
+    "inline-flex items-center justify-end gap-1 px-2 text-[14px] text-text-3",
     "hover:border-[#CED4E0] hover:text-blue-500",
 );
 
@@ -222,7 +222,7 @@ export function ChannelMemberDialog({
                 <span
                     className={cn(
                         ROLE_SELECT_WIDTH_CLASS,
-                        "inline-flex items-center justify-end rounded-md px-2 text-[14px] text-[#818181]"
+                        "inline-flex items-center justify-end rounded-md px-2 text-[14px] text-text-3"
                     )}
                 >
                     {getRoleLabel(m.role, localize)}
@@ -237,7 +237,7 @@ export function ChannelMemberDialog({
                     <span
                         className={cn(
                             ROLE_SELECT_WIDTH_CLASS,
-                            "inline-flex items-center justify-end rounded-md px-2 text-[14px] text-[#818181]"
+                            "inline-flex items-center justify-end rounded-md px-2 text-[14px] text-text-3"
                         )}
                     >
                         {getRoleLabel(m.role, localize)}
@@ -339,7 +339,7 @@ export function ChannelMemberDialog({
                     onOpenAutoFocus={(event) => event.preventDefault()}
                     close={false}
                 >
-                    <DialogHeader className="flex h-[48px] shrink-0 flex-row items-center justify-between gap-3 space-y-0 border-b border-[#ECECEC] px-6 py-0 max-[768px]:h-auto max-[768px]:min-h-[56px] max-[768px]:px-4 sm:text-left">
+                    <DialogHeader className="flex h-[48px] shrink-0 flex-row items-center justify-between gap-3 space-y-0 border-b border-border-base px-6 py-0 max-[768px]:h-auto max-[768px]:min-h-[56px] max-[768px]:px-4 sm:text-left">
                         <DialogTitle className="m-0 inline-flex items-center text-[16px] font-semibold leading-[24px] text-text-1 max-[768px]:text-[20px] max-[768px]:font-medium max-[768px]:leading-7 max-[768px]:text-text-1">
                             {localize("com_subscription.management_member")}
                         </DialogTitle>
@@ -356,7 +356,7 @@ export function ChannelMemberDialog({
                                 value={keyword}
                                 onChange={(e) => setKeyword(e.target.value)}
                                 placeholder={localize("com_subscription.search_user_placeholder") || "请输入用户名进行搜索"}
-                                className="h-8 w-full rounded-md border border-border-base pl-9 pr-3 text-[14px] text-text-1 placeholder:text-[#818181] focus:border-[#DDDDDD] focus:outline-none focus:ring-2 focus:ring-[#F1F5F9]"
+                                className="h-8 w-full rounded-md border border-border-base pl-9 pr-3 text-[14px] text-text-1 placeholder:text-text-3 focus:border-[#DDDDDD] focus:outline-none focus:ring-2 focus:ring-[#F1F5F9]"
                             />
                         </div>
 
@@ -376,7 +376,7 @@ export function ChannelMemberDialog({
                                 members.map((m) => (
                                     <div
                                         key={m.user_id}
-                                        className="flex min-h-12 items-center gap-4 border-b border-[#ECECEC] px-0 py-3 last:border-b-0"
+                                        className="flex min-h-12 items-center gap-4 border-b border-border-base px-0 py-3 last:border-b-0"
                                     >
                                         <div className="flex min-w-0 flex-1 items-center gap-4">
                                             <div className="flex w-[132px] min-w-[132px] items-center gap-2">
@@ -391,7 +391,7 @@ export function ChannelMemberDialog({
                                                 </div>
                                             </div>
                                             <div
-                                                className="min-w-0 flex-1 truncate text-[12px] text-[#818181]"
+                                                className="min-w-0 flex-1 truncate text-[12px] text-text-3"
                                                 title={(m.groups || []).join("、")}
                                             >
                                                 {truncateText((m.groups || []).join("、"), MAX_GROUP_LEN)}
@@ -406,7 +406,7 @@ export function ChannelMemberDialog({
                         </div>
                     </div>
 
-                    <div className="flex h-auto shrink-0 items-center justify-end border-t border-[#ECECEC] px-6 py-5 text-[14px] max-[768px]:px-4 max-[768px]:py-4">
+                    <div className="flex h-auto shrink-0 items-center justify-end border-t border-border-base px-6 py-5 text-[14px] max-[768px]:px-4 max-[768px]:py-4">
                         <div className="flex items-center gap-2">
                             <span className="shrink-0 leading-none text-[14px]">
                                 <span className="text-text-2">{localize("com_subscription.member_pagination_1")}</span>

@@ -61,7 +61,8 @@ const ThinkingContent: FC<ThinkingContentProps> = memo(({ reasoning, showConnect
                     style={{ gridTemplateRows: isExpanded ? "1fr" : "0fr" }}
                 >
                     <div className="min-h-0 overflow-hidden">
-                        <p className="whitespace-pre-wrap text-xs leading-5 text-[#818181]">{reasoning}</p>
+                        {/* text-2, not text-3: long-form body copy needs AA contrast (7.1 vs 3.24). */}
+                        <p className="whitespace-pre-wrap text-xs leading-5 text-text-2">{reasoning}</p>
                     </div>
                 </div>
             </div>

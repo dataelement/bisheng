@@ -146,7 +146,7 @@ function ActionButton({ label, onClick, disabled, className, children }: ActionB
                     disabled={disabled}
                     onClick={onClick}
                     className={cn(
-                        "inline-flex size-7 items-center justify-center rounded-[4px] border border-[#ECECEC] bg-white text-text-2",
+                        "inline-flex size-7 items-center justify-center rounded-[4px] border border-border-base bg-white text-text-2",
                         "transition-colors hover:bg-[#f7f7f7] disabled:cursor-not-allowed disabled:opacity-40",
                         className,
                     )}

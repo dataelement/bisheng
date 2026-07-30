@@ -108,9 +108,9 @@ export function StepRow({ icon, title, children, running = false, defaultOpen, r
                         on the button only when collapsible, so static rows don't get
                         a false clickable affordance. min-w-0 (not flex-1) keeps the
                         chevron right after the title; long titles truncate. */}
-                    <span className={cn('min-w-0 truncate text-[#8C8C8C] transition-colors group-hover:text-text-1', titleClassName)}>{renderedTitle}</span>
+                    <span className={cn('min-w-0 truncate text-text-3 transition-colors group-hover:text-text-1', titleClassName)}>{renderedTitle}</span>
                     {collapsible && (
-                        <span className="shrink-0 text-[#8C8C8C] transition-colors group-hover:text-text-1">
+                        <span className="shrink-0 text-text-3 transition-colors group-hover:text-text-1">
                             {/* single chevron rotates right→down, matching the daily
                                 "深度思考" toggle instead of swapping two glyphs */}
                             <Outlined.Down

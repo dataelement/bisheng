@@ -368,7 +368,7 @@ export function CrawlPreviewPanel({ url, onBack, onAddSource }: CrawlPreviewPane
     return (
         <>
             <div className="flex h-full min-h-0 flex-1 flex-col bg-white text-[14px]">
-                <div className="flex shrink-0 flex-row items-center gap-2 border-b border-[#ECECEC] px-4 pb-4 pt-4 sm:px-6">
+                <div className="flex shrink-0 flex-row items-center gap-2 border-b border-border-base px-4 pb-4 pt-4 sm:px-6">
                     <button
                         type="button"
                         onClick={handleCancel}

@@ -43,7 +43,7 @@ export function TaskPanel({
     const showRunningInline = !open && !allDone && !!runningName;
 
     return (
-        <div className="w-full rounded-2xl border border-[#ECECEC] bg-white">
+        <div className="w-full rounded-2xl border border-border-base bg-white">
             {/* header */}
             <button
                 type="button"

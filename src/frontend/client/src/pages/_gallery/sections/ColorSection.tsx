@@ -1,5 +1,5 @@
 /**
- * Color section — visualizes the color spec from docs-ui-refactor/基础-色彩规范.md
+ * Color section — visualizes the color spec from packages/ui/docs/基础-色彩规范.mdx
  * (brand dual-theme ramp / Arco neutral grays / functional colors / tag pairs)
  * so the designer can verify the tokens landed in src/style.css + tailwind.config.cjs.
  *
@@ -163,7 +163,7 @@ const ARCO_GRAYS = [
   { n: 3, hex: '#E5E6E9', note: '常规边框 → border-base / fill-3' },
   { n: 4, hex: '#CACDD4', note: '禁用/占位 → text-4 / fill-4 / border-deep' },
   { n: 5, hex: '#A9AEB8', note: '中间档 · 无 semantic 映射' },
-  { n: 6, hex: '#898F9C', note: '辅助文字 → text-3（全站最高频 hex ×263）' },
+  { n: 6, hex: '#898F9C', note: '辅助文字 → text-3' },
   { n: 7, hex: '#6F7683', note: '中间档 · 无 semantic 映射' },
   { n: 8, hex: '#525865', note: '次要文字 → text-2' },
   { n: 9, hex: '#292E37', note: '中间档 · 无 semantic 映射' },

@@ -32,7 +32,7 @@ interface WorkspacePanelProps {
 }
 
 const iconBtn =
-    'flex h-7 w-7 items-center justify-center rounded-lg text-[#8C8C8C] transition-colors hover:bg-gray-100';
+    'flex h-7 w-7 items-center justify-center rounded-lg text-text-3 transition-colors hover:bg-gray-100';
 
 export function WorkspacePanel({
     files,
@@ -80,7 +80,7 @@ export function WorkspacePanel({
                 'flex h-full min-h-0 w-full flex-col overflow-hidden bg-[#FBFBFB]',
                 // Fullscreen overlays the whole route viewport flush to the edges;
                 // the card chrome (radius/border) only applies to the docked panel.
-                !fullscreen && 'rounded-lg border border-[#ECECEC]',
+                !fullscreen && 'rounded-lg border border-border-base',
             )}
         >
             {previewFile ? (

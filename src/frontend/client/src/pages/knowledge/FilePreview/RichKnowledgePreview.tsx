@@ -260,7 +260,7 @@ function MediaTranscriptTabs({ fileUrl }: { fileUrl: string }) {
                         onClick={() => setActiveTab("recognized")}
                         className={`whitespace-nowrap rounded-[4px] px-[12px] py-[2px] text-center text-[14px] leading-[22px] transition-colors ${activeTab === "recognized"
                             ? "bg-blue-500/15 font-medium text-blue-500"
-                            : "bg-transparent text-[#818181] hover:bg-fill-2"}`}
+                            : "bg-transparent text-text-3 hover:bg-fill-2"}`}
                     >
                         {localize("com_knowledge.recognized_text")}
                     </button>
@@ -269,7 +269,7 @@ function MediaTranscriptTabs({ fileUrl }: { fileUrl: string }) {
                         onClick={() => setActiveTab("entry")}
                         className={`whitespace-nowrap rounded-[4px] px-[12px] py-[2px] text-center text-[14px] leading-[22px] transition-colors ${activeTab === "entry"
                             ? "bg-blue-500/15 font-medium text-blue-500"
-                            : "bg-transparent text-[#818181] hover:bg-fill-2"}`}
+                            : "bg-transparent text-text-3 hover:bg-fill-2"}`}
                     >
                         {localize("com_knowledge.knowledge_entry_text")}
                     </button>

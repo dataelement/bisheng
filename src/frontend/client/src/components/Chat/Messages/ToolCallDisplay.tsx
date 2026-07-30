@@ -118,7 +118,7 @@ const WebResultChip: FC<{ item: any; chip: string }> = ({ item, chip }) => {
             title={chip}
         >
             {showFavicon ? (
-                <span className="flex size-4 shrink-0 items-center justify-center overflow-hidden rounded-full border-[0.5px] border-[#ECECEC] bg-white">
+                <span className="flex size-4 shrink-0 items-center justify-center overflow-hidden rounded-full border-[0.5px] border-border-base bg-white">
                     <img
                         src={`https://${host}/favicon.ico`}
                         alt=""

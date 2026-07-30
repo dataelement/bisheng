@@ -98,7 +98,7 @@ export function TopBar({
     );
 
     return (
-        <div className="border-b border-[#ececec] bg-white shrink-0 select-none z-50">
+        <div className="border-b border-border-base bg-white shrink-0 select-none z-50">
             {/* ===== PC-narrow top row: filename only (PC <768px; hidden on mobile devices) ===== */}
             {!isMobileDevice && (
                 <div className="flex md:hidden items-center justify-center px-4 py-3 pb-0">
@@ -157,7 +157,7 @@ export function TopBar({
                                 <ZoomOutIcon className="text-[#64698b]" />
                             </Button>
 
-                            <div className="bg-white border hover:border-blue-500 cursor-pointer transition-colors border-[#ececec] border-solid content-stretch flex items-center justify-between overflow-clip px-[8px] py-[3px] relative rounded-md shrink-0 w-[88px] h-[32px]">
+                            <div className="bg-white border hover:border-blue-500 cursor-pointer transition-colors border-border-base border-solid content-stretch flex items-center justify-between overflow-clip px-[8px] py-[3px] relative rounded-md shrink-0 w-[88px] h-[32px]">
                                 <div className="content-stretch flex gap-[4px] items-center relative shrink-0">
                                     <p className="font-['PingFang_SC:Regular',sans-serif] leading-[22px] not-italic relative shrink-0 text-text-1 text-[14px] whitespace-nowrap">
                                         {zoomLevel}%

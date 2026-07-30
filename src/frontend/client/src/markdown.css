@@ -417,7 +417,7 @@
     font-weight: 600;
     vertical-align: bottom;
     white-space: nowrap;
-    background-color: #ECECEC;
+    background-color: rgb(var(--fill-3));
     padding-top: 0.5714286em;
     padding-right: 0.5714286em;
     padding-bottom: 0.5714286em;

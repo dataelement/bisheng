@@ -1,5 +1,5 @@
 /**
- * Confirm dialog spec page — DEV-ONLY. See docs-ui-refactor/组件-Modal弹窗.md.
+ * Confirm dialog spec page — DEV-ONLY. See packages/ui/docs/组件-Modal弹窗.md.
  *
  * Standard usage of the finalized confirm dialog: the app-wide useConfirm()
  * service (ConfirmContext, AlertDialog-based) with its two variants, plus the

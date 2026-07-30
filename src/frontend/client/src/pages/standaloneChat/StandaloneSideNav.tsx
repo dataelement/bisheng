@@ -41,7 +41,7 @@ export function StandaloneSideNav({ sidebar, onCloseSidebar }: StandaloneSideNav
   const flowData = chatState?.flow ?? currentApp;
 
   return (
-    <div className="relative w-[240px] h-full bg-white border-r border-[#ececec] flex flex-col gap-4 overflow-hidden py-5 px-3 text-text-1">
+    <div className="relative w-[240px] h-full bg-white border-r border-border-base flex flex-col gap-4 overflow-hidden py-5 px-3 text-text-1">
       <div className="hidden shrink-0 items-center justify-between max-[768px]:flex">
         {bsConfig?.sidebarIcon?.image ? (
           <img
@@ -99,7 +99,7 @@ export function StandaloneSideNav({ sidebar, onCloseSidebar }: StandaloneSideNav
                         createNewChat();
                       }}
                       type="button"
-                      className="flex-1 min-w-0 h-[28px] flex items-center justify-center gap-1 bg-white border border-[#ececec] rounded-md text-[14px] leading-[22px] hover:bg-gray-50 transition-colors"
+                      className="flex-1 min-w-0 h-[28px] flex items-center justify-center gap-1 bg-white border border-border-base rounded-md text-[14px] leading-[22px] hover:bg-gray-50 transition-colors"
                     >
                       {localize('com_knowledge_start_new_chat')}
                     </button>
@@ -194,7 +194,7 @@ export function StandaloneSideNav({ sidebar, onCloseSidebar }: StandaloneSideNav
                   createNewChat();
                 }}
                 type="button"
-                className="flex-1 min-w-0 h-[28px] flex items-center justify-center gap-1 bg-white border border-[#ececec] rounded-md text-[14px] leading-[22px] hover:bg-gray-50 transition-colors"
+                className="flex-1 min-w-0 h-[28px] flex items-center justify-center gap-1 bg-white border border-border-base rounded-md text-[14px] leading-[22px] hover:bg-gray-50 transition-colors"
               >
                 {localize('com_knowledge_start_new_chat')}
               </button>

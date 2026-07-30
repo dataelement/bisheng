@@ -203,14 +203,14 @@ export function ChannelSwitcher({
             )}
         >
             {channels.length === 0 ? (
-                <div className="py-6 text-center text-sm text-[#818181]">{localize("com_subscription.no_data")}</div>
+                <div className="py-6 text-center text-sm text-text-3">{localize("com_subscription.no_data")}</div>
             ) : (
                 channels.map((c) => {
                     const isActive = c.id === activeChannelId;
                     return (
                         <div
                             key={c.id}
-                            className="group flex w-full shrink-0 items-center gap-1 border-b border-dashed border-[#ececec] py-1 transition-colors last:border-b-0 fine-pointer:hover:bg-[#F7F7F7]"
+                            className="group flex w-full shrink-0 items-center gap-1 border-b border-dashed border-border-base py-1 transition-colors last:border-b-0 fine-pointer:hover:bg-[#F7F7F7]"
                         >
                             <button
                                 type="button"
@@ -230,7 +230,7 @@ export function ChannelSwitcher({
                                 aria-label={c.isPinned ? localize("com_subscription.unpin") : localize("com_subscription.pin_channel")}
                                 aria-pressed={c.isPinned}
                                 onClick={() => handlePinChannel(c.id, !c.isPinned, group)}
-                                className="flex size-6 shrink-0 items-center justify-center rounded outline-none transition-colors fine-pointer:hover:bg-[#ececec]"
+                                className="flex size-6 shrink-0 items-center justify-center rounded outline-none transition-colors fine-pointer:hover:bg-fill-3"
                             >
                                 <Outlined.ToTop className={cn("size-3 transition-colors", c.isPinned ? "text-text-2" : "text-text-4")} />
                             </button>

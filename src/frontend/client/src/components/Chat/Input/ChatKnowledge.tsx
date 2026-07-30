@@ -227,7 +227,7 @@ const KnowledgeListPanel = ({
       <div className="relative shrink-0">
         <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
         <Input
-          className="h-[28px] text-sm bg-white border border-[#ECECEC] rounded-md pl-8 focus-visible:ring-1 focus-visible:ring-blue-500/20"
+          className="h-[28px] text-sm bg-white border border-border-base rounded-md pl-8 focus-visible:ring-1 focus-visible:ring-blue-500/20"
           placeholder={placeholder}
           value={keyword}
           onChange={(e) => setKeyword(e.target.value)}

@@ -352,9 +352,9 @@ export function MoveToDialog({
                     <DialogTitle>{localize("com_knowledge.move_to")}</DialogTitle>
                 </DialogHeader>
 
-                <div className="flex h-[420px] overflow-hidden rounded-lg border border-[#ececec] max-[768px]:h-auto max-[768px]:min-h-0 max-[768px]:flex-1 max-[768px]:rounded-none max-[768px]:border-0">
+                <div className="flex h-[420px] overflow-hidden rounded-lg border border-border-base max-[768px]:h-auto max-[768px]:min-h-0 max-[768px]:flex-1 max-[768px]:rounded-none max-[768px]:border-0">
                     {/* Left: categorized space + folder tree */}
-                    <div className="flex w-72 shrink-0 flex-col border-r border-[#ececec] max-[768px]:w-full max-[768px]:border-r-0">
+                    <div className="flex w-72 shrink-0 flex-col border-r border-border-base max-[768px]:w-full max-[768px]:border-r-0">
                         <div className="p-3 max-[768px]:px-0 max-[768px]:pt-0">
                             <ExpandableSearchField
                                 alwaysExpanded
@@ -373,7 +373,7 @@ export function MoveToDialog({
                             always-on) is respected. */}
                         <div
                             ref={treeScrollRef}
-                            className="scrollbar-os flex-1 overflow-auto px-2 pb-2 max-[768px]:rounded-md max-[768px]:border max-[768px]:border-[#ECECEC] max-[768px]:p-2"
+                            className="scrollbar-os flex-1 overflow-auto px-2 pb-2 max-[768px]:rounded-md max-[768px]:border max-[768px]:border-border-base max-[768px]:p-2"
                         >
                             {categories.length === 0 ? (
                                 <div className="flex h-full items-center justify-center px-3 text-center text-[12px] text-text-3">

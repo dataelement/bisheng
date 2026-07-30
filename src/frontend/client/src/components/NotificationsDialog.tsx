@@ -1157,7 +1157,7 @@ export function NotificationsDialog({
                                             <div className="flex items-center justify-center h-full text-text-3">{localize("com_notifications_empty")}</div>
                                         ) : (
                                             <>
-                                                <div className="divide-y divide-[#ECECEC]">
+                                                <div className="divide-y divide-border-base">
                                                     {filteredNotifications.map(renderNotificationItem)}
                                                 </div>
                                                 {loadingMore && (
@@ -1187,7 +1187,7 @@ export function NotificationsDialog({
                                                 {requestGroups.pending.length > 0 && (
                                                     <div className="mb-3">
                                                         <div className="text-[14px] leading-[22px] text-text-3 font-normal mb-2">{localize("com_notifications_section_pending")}</div>
-                                                        <div className="divide-y divide-[#ECECEC]">
+                                                        <div className="divide-y divide-border-base">
                                                             {requestGroups.pending.map(renderNotificationItem)}
                                                         </div>
                                                     </div>
@@ -1196,7 +1196,7 @@ export function NotificationsDialog({
                                                 {requestGroups.approved.length > 0 && (
                                                     <div className="mt-2">
                                                         <div className="text-[14px] leading-[22px] text-text-3 font-normal mb-2">{localize("com_notifications_section_reviewed")}</div>
-                                                        <div className="divide-y divide-[#ECECEC]">
+                                                        <div className="divide-y divide-border-base">
                                                             {requestGroups.approved.map(renderNotificationItem)}
                                                         </div>
                                                     </div>

@@ -175,7 +175,7 @@ export function SideNav() {
                             <button
                                 onClick={shareApp}
                                 type="button"
-                                className="flex h-[28px] min-w-0 flex-1 items-center justify-center gap-1 rounded-md border border-[#ececec] bg-white text-[14px] leading-[22px] transition-colors fine-pointer:hover:bg-gray-50 touch-mobile:px-2"
+                                className="flex h-[28px] min-w-0 flex-1 items-center justify-center gap-1 rounded-md border border-border-base bg-white text-[14px] leading-[22px] transition-colors fine-pointer:hover:bg-gray-50 touch-mobile:px-2"
                             >
                                 {localize('com_app_share_app')}
                             </button>
@@ -183,7 +183,7 @@ export function SideNav() {
                         <button
                             onClick={createNewChat}
                             type="button"
-                            className={`min-w-0 h-[28px] flex items-center justify-center gap-1 bg-white border border-[#ececec] rounded-md text-[14px] leading-[22px] transition-colors fine-pointer:hover:bg-gray-50 max-[576px]:px-2 ${showShareApp ? 'flex-1' : 'w-full'}`}
+                            className={`min-w-0 h-[28px] flex items-center justify-center gap-1 bg-white border border-border-base rounded-md text-[14px] leading-[22px] transition-colors fine-pointer:hover:bg-gray-50 max-[576px]:px-2 ${showShareApp ? 'flex-1' : 'w-full'}`}
                         >
                             {localize('com_knowledge_start_new_chat')}
                         </button>
@@ -253,7 +253,7 @@ export function SideNav() {
             </div>
 
             {/* Footer user panel: mobile only (<768px) */}
-            <div className="shrink-0 border-t border-[#ececec] px-2 pb-2 pt-1 hidden max-[768px]:block">
+            <div className="shrink-0 border-t border-border-base px-2 pb-2 pt-1 hidden max-[768px]:block">
                 <UserPopMenu variant="drawer" />
             </div>
         </div>

@@ -245,7 +245,7 @@ export function ChannelSidebar({
                                             onChannelSettings={onChannelSettings}
                                         />
                                     ))}
-                                    {!createdChannels.length && <div className="py-6 text-center text-sm text-[#818181]">{localize("com_subscription.no_data")}</div>}
+                                    {!createdChannels.length && <div className="py-6 text-center text-sm text-text-3">{localize("com_subscription.no_data")}</div>}
                                 </div>
                             )}
                         </div>
@@ -276,14 +276,14 @@ export function ChannelSidebar({
                                             onChannelSettings={onChannelSettings}
                                         />
                                     ))}
-                                    {!subscribedChannels.length && <div className="py-6 text-center text-sm text-[#818181]">{localize("com_subscription.no_data")}</div>}
+                                    {!subscribedChannels.length && <div className="py-6 text-center text-sm text-text-3">{localize("com_subscription.no_data")}</div>}
                                 </div>
                             )}
                         </div>
                     </div>
                 </div>
                 {mobileDrawerMode ? (
-                    <div className="shrink-0 border-t border-[#ececec] px-2 pb-2 pt-1">
+                    <div className="shrink-0 border-t border-border-base px-2 pb-2 pt-1">
                         <UserPopMenu variant="drawer" />
                     </div>
                 ) : null}

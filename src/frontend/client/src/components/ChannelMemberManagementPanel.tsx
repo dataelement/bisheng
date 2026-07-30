@@ -38,7 +38,7 @@ const ROLE_SELECT_WIDTH_CLASS = "h-8 w-24";
 const ROLE_SELECT_TRIGGER_CLASS = cn(
     ROLE_SELECT_WIDTH_CLASS,
     "box-border shrink-0 appearance-none rounded-md border-border-base bg-white shadow-none",
-    "inline-flex items-center justify-end gap-1 px-2 text-[14px] text-[#818181]",
+    "inline-flex items-center justify-end gap-1 px-2 text-[14px] text-text-3",
     "hover:border-[#CED4E0] hover:text-blue-500",
 );
 
@@ -209,7 +209,7 @@ export function ChannelMemberManagementPanel({
                 <span
                     className={cn(
                         ROLE_SELECT_WIDTH_CLASS,
-                        "inline-flex items-center justify-end rounded-md px-2 text-[14px] text-[#818181]",
+                        "inline-flex items-center justify-end rounded-md px-2 text-[14px] text-text-3",
                     )}
                 >
                     {getRoleLabel(member.role, localize)}
@@ -223,7 +223,7 @@ export function ChannelMemberManagementPanel({
                     <span
                         className={cn(
                             ROLE_SELECT_WIDTH_CLASS,
-                            "inline-flex items-center justify-end rounded-md px-2 text-[14px] text-[#818181]",
+                            "inline-flex items-center justify-end rounded-md px-2 text-[14px] text-text-3",
                         )}
                     >
                         {getRoleLabel(member.role, localize)}
@@ -317,7 +317,7 @@ export function ChannelMemberManagementPanel({
                         value={keyword}
                         onChange={(e) => setKeyword(e.target.value)}
                         placeholder={localize("com_subscription.search_user_placeholder") || "请输入用户名进行搜索"}
-                        className="h-8 w-full rounded-md border border-border-base pl-9 pr-3 text-[14px] text-text-1 placeholder:text-[#818181] focus:border-[#DDDDDD] focus:outline-none focus:ring-2 focus:ring-[#F1F5F9]"
+                        className="h-8 w-full rounded-md border border-border-base pl-9 pr-3 text-[14px] text-text-1 placeholder:text-text-3 focus:border-[#DDDDDD] focus:outline-none focus:ring-2 focus:ring-[#F1F5F9]"
                     />
                 </div>
 
@@ -337,7 +337,7 @@ export function ChannelMemberManagementPanel({
                         members.map((member) => (
                             <div
                                 key={member.user_id}
-                                className="flex min-h-12 items-center gap-4 border-b border-[#ECECEC] px-0 py-3 last:border-b-0"
+                                className="flex min-h-12 items-center gap-4 border-b border-border-base px-0 py-3 last:border-b-0"
                             >
                                 <div className="flex min-w-0 flex-1 items-center gap-4">
                                     <div className="flex w-[132px] min-w-[132px] items-center gap-2">
@@ -352,7 +352,7 @@ export function ChannelMemberManagementPanel({
                                         </div>
                                     </div>
                                     <div
-                                        className="min-w-0 flex-1 truncate text-[12px] text-[#818181]"
+                                        className="min-w-0 flex-1 truncate text-[12px] text-text-3"
                                         title={(member.groups || []).join("、")}
                                     >
                                         {truncateText((member.groups || []).join("、"), MAX_GROUP_LEN)}
@@ -367,7 +367,7 @@ export function ChannelMemberManagementPanel({
                 </div>
             </div>
 
-            <div className="flex items-center justify-end border-t border-[#ECECEC] px-0 py-4 text-[14px]">
+            <div className="flex items-center justify-end border-t border-border-base px-0 py-4 text-[14px]">
                 <div className="flex items-center gap-2">
                     <span className="shrink-0 leading-none text-[14px]">
                         <span className="text-text-2">{localize("com_subscription.member_pagination_1")}</span>

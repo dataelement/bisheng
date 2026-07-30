@@ -779,7 +779,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                       // higher z so it clears the chrome (mirrors the citation panel).
                       if (!isH5) {
                         return createPortal(
-                          <div className="fixed inset-y-0 right-0 z-[150] flex min-h-0 flex-col overflow-hidden rounded-tl-xl border-l border-[#ECECEC] bg-[#FBFBFB] shadow-[-8px_0_28px_rgba(0,0,0,0.1)] animate-in slide-in-from-right duration-300 w-[min(480px,100vw)]">
+                          <div className="fixed inset-y-0 right-0 z-[150] flex min-h-0 flex-col overflow-hidden rounded-tl-xl border-l border-border-base bg-[#FBFBFB] shadow-[-8px_0_28px_rgba(0,0,0,0.1)] animate-in slide-in-from-right duration-300 w-[min(480px,100vw)]">
                             {mobilePanel}
                           </div>,
                           document.body,
@@ -789,7 +789,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                       // 577–767: right drawer docked to the viewport edge (z above
                       // MobileNav z-60), full height, slide-in from the right.
                       return (
-                        <div className="fixed inset-y-0 right-0 z-[130] flex min-h-0 flex-col overflow-hidden rounded-tl-xl border-l border-[#ECECEC] bg-[#FBFBFB] shadow-[-8px_0_28px_rgba(0,0,0,0.08)] animate-in slide-in-from-right duration-300 min-w-[260px] w-[min(520px,42vw)] max-[580px]:min-w-[240px] max-[580px]:w-[min(360px,calc(100vw-40px))]">
+                        <div className="fixed inset-y-0 right-0 z-[130] flex min-h-0 flex-col overflow-hidden rounded-tl-xl border-l border-border-base bg-[#FBFBFB] shadow-[-8px_0_28px_rgba(0,0,0,0.08)] animate-in slide-in-from-right duration-300 min-w-[260px] w-[min(520px,42vw)] max-[580px]:min-w-[240px] max-[580px]:w-[min(360px,calc(100vw-40px))]">
                           {mobilePanel}
                         </div>
                       );
@@ -897,7 +897,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
               and resizing desktop→mobile tears any open overlay down cleanly. */}
           {latestTaskVersionId && !isTouchLayout && fsMounted && fsBox && createPortal(
             <div
-              className="fixed z-[100] overflow-hidden border border-[#ECECEC] bg-[#FBFBFB] transition-[top,left,right,bottom,padding,border-radius] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]"
+              className="fixed z-[100] overflow-hidden border border-border-base bg-[#FBFBFB] transition-[top,left,right,bottom,padding,border-radius] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]"
               style={{ ...(fsExpanded ? fsBox.expanded : fsBox.collapsed), padding: fsExpanded ? 4 : 0, borderRadius: fsExpanded ? 12 : 8 }}
               onTransitionEnd={(e) => {
                 // Unmount only after the collapse finishes (ignore the expand end

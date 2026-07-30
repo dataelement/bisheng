@@ -74,7 +74,7 @@ export function ClarifyFallbackCard({ data, disabled = false, onSubmit }: Clarif
                             handleSupplement();
                         }
                     }}
-                    className="mt-3 resize-none text-sm rounded-xl border-none shadow-none bg-[#F5F7FA] placeholder:text-[#8C8C8C] focus-visible:ring-0 focus-visible:outline-none"
+                    className="mt-3 resize-none text-sm rounded-xl border-none shadow-none bg-[#F5F7FA] placeholder:text-text-3 focus-visible:ring-0 focus-visible:outline-none"
                 />
             )}
 

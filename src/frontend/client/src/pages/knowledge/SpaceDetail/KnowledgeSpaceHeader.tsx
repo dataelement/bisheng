@@ -132,7 +132,7 @@ export function KnowledgeSpaceHeader({
         <Button
             variant="outline"
             onClick={() => setViewMode(viewMode === "list" ? "card" : "list")}
-            className="inline-flex h-8 w-8 min-h-8 min-w-8 shrink-0 items-center justify-center gap-0 rounded-md border border-border-base bg-white p-0 font-normal text-[#818181] hover:bg-fill-1"
+            className="inline-flex h-8 w-8 min-h-8 min-w-8 shrink-0 items-center justify-center gap-0 rounded-md border border-border-base bg-white p-0 font-normal text-text-3 hover:bg-fill-1"
         >
             {viewMode === "list"
                 ? <Outlined.ViewGridCard className="size-4 shrink-0" />
@@ -151,10 +151,10 @@ export function KnowledgeSpaceHeader({
                                 "inline-flex h-8 w-8 min-h-8 min-w-8 shrink-0 items-center justify-center gap-0 rounded-md p-0 font-normal border-border-base",
                                 statusFilter.length > 0
                                     ? "border-blue-600 bg-blue-500/[0.07] text-blue-600 hover:bg-blue-500/[0.07]"
-                                    : "bg-white text-[#818181] hover:bg-fill-1"
+                                    : "bg-white text-text-3 hover:bg-fill-1"
                             )}
                         >
-                            <Outlined.Filter className={cn("size-4", statusFilter.length > 0 ? "text-blue-600" : "text-[#818181]")} />
+                            <Outlined.Filter className={cn("size-4", statusFilter.length > 0 ? "text-blue-600" : "text-text-3")} />
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="start" className={knowledgeSpaceDropdownSurfaceClassName}>
@@ -224,7 +224,7 @@ export function KnowledgeSpaceHeader({
                     <DropdownMenuTrigger asChild>
                         <Button
                             variant="outline"
-                            className="inline-flex h-8 w-8 min-h-8 min-w-8 shrink-0 items-center justify-center gap-0 rounded-md border border-border-base bg-white p-0 font-normal text-[#818181] hover:bg-fill-1"
+                            className="inline-flex h-8 w-8 min-h-8 min-w-8 shrink-0 items-center justify-center gap-0 rounded-md border border-border-base bg-white p-0 font-normal text-text-3 hover:bg-fill-1"
                         >
                             <Outlined.Sort className="size-4 shrink-0" aria-hidden />
                         </Button>

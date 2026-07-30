@@ -69,7 +69,7 @@ export default function KnowledgeSquareCard({
                             {space.name}
                         </h3>
                         {isPrivateOrLocked && (
-                            <Lock className="size-3.5 shrink-0 text-[#818181]" aria-hidden />
+                            <Lock className="size-3.5 shrink-0 text-text-3" aria-hidden />
                         )}
                     </div>
                     <Button

@@ -61,7 +61,7 @@ export function IntentRow({ data }: { data: ExecStepEventData }) {
                 <Outlined.Down
                     size={16}
                     className={cn(
-                        'shrink-0 transform-gpu text-[#8C8C8C] transition duration-200 group-hover:text-text-1',
+                        'shrink-0 transform-gpu text-text-3 transition duration-200 group-hover:text-text-1',
                         !open && '-rotate-90',
                     )}
                 />

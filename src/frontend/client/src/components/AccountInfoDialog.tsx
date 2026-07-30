@@ -313,14 +313,14 @@ export function AccountInfoDialog({
     };
 
     const inputClassName =
-        "h-9 rounded-md border border-[#ECECEC] bg-white pr-10 text-[14px] text-text-1 placeholder:text-text-4 focus-visible:border-[#DDDDDD] focus-visible:ring-2 focus-visible:ring-[#F1F5F9]";
+        "h-9 rounded-md border border-border-base bg-white pr-10 text-[14px] text-text-1 placeholder:text-text-4 focus-visible:border-[#DDDDDD] focus-visible:ring-2 focus-visible:ring-[#F1F5F9]";
 
     return (
         <Dialog open={open} onOpenChange={handleOpenChange}>
             <DialogContent
                 close={false}
                 className={cn(
-                    "flex h-[600px] max-h-[calc(100vh-32px)] w-[600px] max-w-[calc(100vw-32px)] flex-col gap-0 overflow-hidden rounded-xl sm:rounded-xl border border-[#ECECEC] bg-white p-0 shadow-[0_8px_24px_rgba(15,23,42,0.12)]",
+                    "flex h-[600px] max-h-[calc(100vh-32px)] w-[600px] max-w-[calc(100vw-32px)] flex-col gap-0 overflow-hidden rounded-xl sm:rounded-xl border border-border-base bg-white p-0 shadow-[0_8px_24px_rgba(15,23,42,0.12)]",
                     // H5：全屏页面（与 tailwind touch-mobile = max-width 1023px 一致）
                     "touch-mobile:inset-x-0 touch-mobile:bottom-0 touch-mobile:left-0 touch-mobile:right-0 touch-mobile:top-0 touch-mobile:h-[100dvh] touch-mobile:max-h-[100dvh] touch-mobile:w-full touch-mobile:max-w-none touch-mobile:translate-x-0 touch-mobile:translate-y-0 touch-mobile:rounded-none touch-mobile:border-0 touch-mobile:shadow-none",
                 )}
@@ -508,7 +508,7 @@ export function AccountInfoDialog({
                 </div>
                 {isEditing ? (
                     <div
-                        className="flex w-full shrink-0 items-stretch gap-3 border-t border-[#ececec] bg-white px-4 py-3 touch-mobile:pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] touch-desktop:hidden"
+                        className="flex w-full shrink-0 items-stretch gap-3 border-t border-border-base bg-white px-4 py-3 touch-mobile:pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] touch-desktop:hidden"
                     >
                         <Button
                             variant="outline"

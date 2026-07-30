@@ -14,7 +14,7 @@ export function ColorProgress() {
     <ComponentPage
       title="色彩 · 现状"
       eng="Color Inventory"
-      description="两层 token + Tailwind 接线已落地（2026-07-15）。2026-07-30 灰阶统一色温（单一色相 264°，对比度零变化）并完成批量迁移：两轮 codemod 共 1400 处裸 hex 折叠进语义类（168 个文件）——第一轮 979 处精确同值折叠，第二轮 421 处近似值折叠（设计师拍板：#212121 → text-1、#999/#999999 → text-3、#EBECF0 → gray-3）。codemod 白名单式，仅「前缀 × 色值」精确命中才改写，变体链原样保留。剩余待处理见「待迁移」表；其余近似值（#ECECEC ×73、#818181 ×70、#FBFBFB ×40…）仍属设计决策，逐处目检。"
+      description="两层 token + Tailwind 接线已落地（2026-07-15）。2026-07-30 灰阶统一色温（单一色相 264°，对比度零变化）并完成批量迁移：四轮 codemod 共 1548 处裸 hex 折叠进语义类——① 979 处精确同值折叠（139 文件）；② 421 处近似值折叠（拍板：#212121 → text-1、#999/#999999 → text-3、#EBECF0 → gray-3，124 文件）；③ 73 处 #ECECEC（拍板：border 角色 → border-base，bg 角色 → fill-3，42 文件）；④ 75 处 #818181/#8C8C8C → text-3（拍板：均为辅助文字/图标默认灰角色；ThinkingContent 思考正文 1 处按可读性升 text-2，34 文件）。codemod 白名单式，仅「前缀 × 色值」精确命中才改写，变体链原样保留。剩余待处理见「待迁移」表；其余近似值（#FBFBFB ×40、#F7F7F7 ×28、#1A1A1A ×22…）仍属设计决策，逐处目检。"
       whenToUse={[
         'platform 暂缓：98 处中性裸 hex 等 @bisheng/ui tokens.css 接入后同法迁移（platform 尚无语义层）。',
         '近似值折叠需设计师拍板或逐处目检，不做机械替换。',
@@ -35,6 +35,7 @@ export function ColorProgress() {
             [<code key="o">text-[#4E5969]</code>, <code key="n">text-text-2</code>, '190'],
             [<code key="o">text-[#86909C]</code>, <code key="n">text-text-3</code>, '263 (+3 placeholder-)'],
             [<code key="o">text-[#999999] / text-[#999] *</code>, <code key="n">text-text-3</code>, '145 (+1 placeholder-)'],
+            [<code key="o">text-[#818181] / text-[#8C8C8C] *</code>, <code key="n">text-text-3</code>, '75 (1 → text-2)'],
             [<code key="o">text-[#C9CDD4]</code>, <code key="n">text-text-4</code>, '44'],
             [<code key="o">bg-[#F7F8FA] / bg-[#F8F8F8]</code>, <code key="n">bg-fill-1</code>, '78 + 17'],
             [<code key="o">bg-[#F2F3F5]</code>, <code key="n">bg-fill-2</code>, '72'],
@@ -43,6 +44,8 @@ export function ColorProgress() {
             [<code key="o">bg-[#C9CDD4]</code>, <code key="n">bg-fill-4</code>, '7'],
             [<code key="o">border-[#E5E6EB]</code>, <code key="n">border-border-base</code>, '116 (+1 divide-)'],
             [<code key="o">border-[#EBECF0] *</code>, <code key="n">border-border-base</code>, '76'],
+            [<code key="o">border/divide-[#ECECEC] *</code>, <code key="n">border-border-base</code>, '67'],
+            [<code key="o">bg-[#ECECEC] *</code>, <code key="n">bg-fill-3</code>, '4 (+2 css/comment)'],
             [<code key="o">border-[#C9CDD4]</code>, <code key="n">border-border-deep</code>, '9'],
             [<code key="o">border-[#F2F3F5]</code>, <code key="n">border-fill-2</code>, '20 (+1 ring-)'],
           ]}
@@ -61,9 +64,9 @@ export function ColorProgress() {
             [<code key="o">text/bg-[#6B7785]</code>, 'gray-7 无语义映射：目检后归 text-text-2 或 text-text-3', '8'],
             [<code key="o">bg-[#999999] / bg-[#999] / border-[#212121]</code>, '文字值用作底/边，越轨用法，逐处目检', '10'],
             [<code key="o">bg-[#86909C] / text-[#E5E6EB]</code>, '越轨用法，逐处目检', '2'],
-            [<code key="o">stroke="#4E5969" / "#999999"</code>, 'SVG 图标（channels / TxtIcon）：迁 currentColor + 外层 text 类', '19'],
+            [<code key="o">stroke="#4E5969" / "#999999" / "#818181"</code>, 'SVG 图标（channels / TxtIcon）：迁 currentColor + 外层 text 类', '34'],
             [<code key="o">INK / NARRATION_COLOR …</code>, 'JS 常量引 token 需运行时取值，单独处理', '≈5'],
-            [<code key="o">#ECECEC / #818181 / #FBFBFB …</code>, '近似值折叠，属设计决策，逐处目检', '≈300'],
+            [<code key="o">#FBFBFB / #F7F7F7 / #1A1A1A …</code>, '近似值折叠，属设计决策，逐处目检', '≈160'],
           ]}
         />
       </ExampleGroup>

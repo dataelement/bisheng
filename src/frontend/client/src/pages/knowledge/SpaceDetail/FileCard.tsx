@@ -506,7 +506,7 @@ export function FileCard({
 
                     {/* Date + tags on a single line */}
                     <div className="mt-1 flex min-w-0 items-center gap-1.5 overflow-hidden">
-                        <span className="shrink-0 text-xs leading-5 text-[#818181] tabular-nums">
+                        <span className="shrink-0 text-xs leading-5 text-text-3 tabular-nums">
                             {formatTimeCard(file.updatedAt)}
                         </span>
                         {!isFolder && file.tags && file.tags.length > 0 && (
@@ -551,8 +551,8 @@ export function FileCard({
                         ? "bg-[#fbfbfb]"
                         : "bg-white",
                 isSelected
-                    ? "border-[#ECECEC] shadow-[0_4px_20px_0_rgba(0,17,147,0.05)]"
-                    : "border-[#ECECEC] hover:border-border-deep",
+                    ? "border-border-base shadow-[0_4px_20px_0_rgba(0,17,147,0.05)]"
+                    : "border-border-base hover:border-border-deep",
                 hovered && "shadow-[0_4px_20px_0_rgba(0,17,147,0.05)]",
                 // F034: highlight a folder card as the drop target — card border only
                 isFolderDragOver && "border-primary"

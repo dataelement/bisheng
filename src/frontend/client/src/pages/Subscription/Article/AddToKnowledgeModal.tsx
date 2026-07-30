@@ -774,12 +774,12 @@ export function AddToKnowledgeModal({
 
             <div className={embedInChannelSheet ? "shrink-0 px-4 pt-4 sm:px-6" : "px-6 pt-4 touch-mobile:px-4"}>
                 <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[#818181] pointer-events-none" />
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-text-3 pointer-events-none" />
                     <Input
                         value={search}
                         onChange={e => setSearch(e.target.value)}
                         placeholder={localize("com_subscription.search_knowledge_space_placeholder")}
-                        className="w-full h-8 pl-8 pr-8 text-[14px] rounded-md border border-[#ECECEC] focus:outline-none"
+                        className="w-full h-8 pl-8 pr-8 text-[14px] rounded-md border border-border-base focus:outline-none"
                     />
                     {search && (
                         <button
@@ -787,7 +787,7 @@ export function AddToKnowledgeModal({
                             className="absolute right-2.5 top-1/2 -translate-y-1/2"
                             onClick={() => setSearch("")}
                         >
-                            <X className="size-3.5 text-[#818181]" />
+                            <X className="size-3.5 text-text-3" />
                         </button>
                     )}
                 </div>
@@ -808,9 +808,9 @@ export function AddToKnowledgeModal({
                     ref={treeScrollRevealRef}
                     className={
                         useFlexTree
-                            ? "scrollbar-gutter-stable flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden rounded-md border border-[#ECECEC] p-3 scrollbar-on-scroll"
+                            ? "scrollbar-gutter-stable flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden rounded-md border border-border-base p-3 scrollbar-on-scroll"
                             : cn(
-                                "scrollbar-gutter-stable h-[340px] max-h-full w-full overflow-y-auto overflow-x-hidden rounded-md border border-[#ECECEC] p-3 scrollbar-on-scroll",
+                                "scrollbar-gutter-stable h-[340px] max-h-full w-full overflow-y-auto overflow-x-hidden rounded-md border border-border-base p-3 scrollbar-on-scroll",
                                 mode === "article" && isH5 && "touch-mobile:h-[calc(100dvh-260px)]",
                             )
                     }

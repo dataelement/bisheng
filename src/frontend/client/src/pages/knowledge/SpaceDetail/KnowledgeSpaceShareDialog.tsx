@@ -113,12 +113,12 @@ export function KnowledgeSpaceShareDialog({
             className="flex min-h-0 flex-1 flex-col"
         >
             <div className="flex items-center justify-between gap-3">
-                <TabsList className="w-fit shrink-0 rounded-md border border-[#ECECEC] bg-white p-[3px] shadow-none">
+                <TabsList className="w-fit shrink-0 rounded-md border border-border-base bg-white p-[3px] shadow-none">
                     {SUBJECT_TABS.map((tab) => (
                         <TabsTrigger
                             key={tab.value}
                             value={tab.value}
-                            className="min-w-0 rounded-[4px] px-3 py-0.5 text-[14px] font-normal leading-[22px] text-[#818181] shadow-none data-[state=active]:bg-[rgb(var(--brand-500)/0.15)] data-[state=active]:font-medium data-[state=active]:text-blue-500 data-[state=active]:shadow-none"
+                            className="min-w-0 rounded-[4px] px-3 py-0.5 text-[14px] font-normal leading-[22px] text-text-3 shadow-none data-[state=active]:bg-[rgb(var(--brand-500)/0.15)] data-[state=active]:font-medium data-[state=active]:text-blue-500 data-[state=active]:shadow-none"
                         >
                             {localize(tab.labelKey)}
                         </TabsTrigger>
@@ -181,7 +181,7 @@ export function KnowledgeSpaceShareDialog({
 
                     <div className="user-manger mt-4 flex min-h-0 flex-1 flex-col overflow-hidden">
                         <div className="flex items-center gap-3">
-                            <div className="inline-flex w-fit shrink-0 items-center justify-center rounded-md border border-[#ECECEC] bg-white p-[3px]">
+                            <div className="inline-flex w-fit shrink-0 items-center justify-center rounded-md border border-border-base bg-white p-[3px]">
                                 {SUBJECT_TABS.map((tab) => (
                                     <button
                                         key={tab.value}
@@ -190,7 +190,7 @@ export function KnowledgeSpaceShareDialog({
                                             "min-w-0 rounded-[4px] px-3 py-0.5 text-[14px] leading-[22px] transition-colors",
                                             grantSubjectType === tab.value
                                                 ? "bg-[rgb(var(--brand-500)/0.15)] font-medium text-blue-500"
-                                                : "font-normal text-[#818181]",
+                                                : "font-normal text-text-3",
                                         ].join(" ")}
                                         onClick={() => setGrantSubjectType(tab.value)}
                                     >

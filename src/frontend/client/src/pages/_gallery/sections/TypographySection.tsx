@@ -1,6 +1,6 @@
 /**
  * Typography section — showcases the semantic type scale from
- * docs-ui-refactor/基础-字体规范.md so the designer can visually verify it.
+ * packages/ui/docs/基础-字体规范.mdx so the designer can visually verify it.
  *
  * DEV-ONLY internal tooling, never shipped (route gated by import.meta.env.DEV).
  * The classes shown here (text-caption ... text-metric) are real Tailwind

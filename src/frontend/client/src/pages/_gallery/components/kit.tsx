@@ -4,7 +4,7 @@
  * DEV-ONLY internal tooling — this whole `_gallery` folder is never shipped to
  * production (the route is gated behind `import.meta.env.DEV`, see routes/index.tsx).
  * It exists so the UI designer can eyeball every component's states/variants in the
- * real app theme while unifying them. See docs-ui-refactor/00-总纲.md.
+ * real app theme while unifying them. See packages/ui/docs/00-总纲.md.
  *
  * Structure mirrors ant.design/components/*: each component is ONE page —
  *   ComponentPage(title + description + 何时使用/规则)

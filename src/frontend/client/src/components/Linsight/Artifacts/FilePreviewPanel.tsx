@@ -58,7 +58,7 @@ export function FilePreviewPanel({ open, onOpenChange, file, versionId, fileList
                     <button
                         type="button"
                         aria-label={localize('com_ui_close')}
-                        className="rounded-md p-1 text-[#8C8C8C] transition-colors hover:text-blue-500"
+                        className="rounded-md p-1 text-text-3 transition-colors hover:text-blue-500"
                         onClick={() => onOpenChange(false)}
                     >
                         <Outlined.Close className="size-[18px]" />

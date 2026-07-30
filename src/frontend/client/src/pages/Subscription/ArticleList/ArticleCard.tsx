@@ -245,7 +245,7 @@ export function ArticleCard({
                                     {hasKnowledge && (
                                         <button
                                             onClick={(e) => { e.stopPropagation(); setShowKnowledgeModal(true); }}
-                                            className="flex size-8 cursor-pointer items-center justify-center rounded-full text-text-3 transition-colors group-hover:text-text-1 hover:bg-[#f7f7f7] max-[767px]:size-5 max-[767px]:rounded-none max-[767px]:text-[#818181] max-[767px]:hover:bg-transparent"
+                                            className="flex size-8 cursor-pointer items-center justify-center rounded-full text-text-3 transition-colors group-hover:text-text-1 hover:bg-[#f7f7f7] max-[767px]:size-5 max-[767px]:rounded-none max-[767px]:text-text-3 max-[767px]:hover:bg-transparent"
                                             title={localize("com_subscription.add_to_knowledge_space")}
                                         >
                                             <Outlined.AddToKnowledgeBase className="size-3.5" />
@@ -260,7 +260,7 @@ export function ArticleCard({
                                                 .then(() => showToast({ message: localize("com_subscription.share_link_copied"), severity: NotificationSeverity.SUCCESS }))
                                                 .catch(() => showToast({ message: localize("com_subscription.copy_failed_retry"), severity: NotificationSeverity.ERROR }));
                                         }}
-                                        className="flex size-8 cursor-pointer items-center justify-center rounded-full text-text-3 transition-colors group-hover:text-text-1 hover:bg-[#f7f7f7] max-[767px]:size-5 max-[767px]:rounded-none max-[767px]:text-[#818181] max-[767px]:hover:bg-transparent"
+                                        className="flex size-8 cursor-pointer items-center justify-center rounded-full text-text-3 transition-colors group-hover:text-text-1 hover:bg-[#f7f7f7] max-[767px]:size-5 max-[767px]:rounded-none max-[767px]:text-text-3 max-[767px]:hover:bg-transparent"
                                         title={localize("com_subscription.share")}
                                     >
                                         <Outlined.Share className="size-3.5" />

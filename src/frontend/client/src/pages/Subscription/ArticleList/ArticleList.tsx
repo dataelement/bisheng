@@ -755,12 +755,12 @@ export function ArticleList({
                                     "shrink-0 rounded-md border px-4 py-[5px] text-sm transition-colors whitespace-nowrap",
                                     onlyUnread
                                         ? "border-transparent bg-primary/20 text-primary"
-                                        : "border-[#ECECEC] bg-white text-gray-800 fine-pointer:hover:bg-gray-50",
+                                        : "border-border-base bg-white text-gray-800 fine-pointer:hover:bg-gray-50",
                                 )}
                             >{localize("com_subscription.show_unread_only")}</button>
 
                             {/* Divider separating the article filters from the channel-level actions */}
-                            <div className="h-5 w-px shrink-0 bg-[#ECECEC]" aria-hidden />
+                            <div className="h-5 w-px shrink-0 bg-fill-3" aria-hidden />
 
                             {canOpenChannelShare ? (
                                 <CopyShareLinkButton
@@ -769,7 +769,7 @@ export function ArticleList({
                                     successMessage={localize("com_subscription.share_link_copied")}
                                     errorMessage={localize("com_subscription.copy_failed_retry")}
                                     iconOnly
-                                    className="border-[#ECECEC]"
+                                    className="border-border-base"
                                     aria-label={localize("com_subscription.share")}
                                     icon={<Outlined.Share className="size-4 shrink-0 text-text-2" />}
                                 />
@@ -780,7 +780,7 @@ export function ArticleList({
                                     onChannelSelect={onChannelSelect}
                                     onManageMembers={onManageMembers}
                                     onChannelSettings={onChannelSettings}
-                                    triggerClassName="border-[#ECECEC]"
+                                    triggerClassName="border-border-base"
                                 />
                             ) : null}
                         </div>

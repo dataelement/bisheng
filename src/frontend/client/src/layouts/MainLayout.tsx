@@ -51,7 +51,7 @@ function SidebarItem({ icon, activeIcon, to, active, label, showLabel = false, o
       )}
     >
       {React.cloneElement((active && activeIcon ? activeIcon : icon) as React.ReactElement, {
-        className: cn(showLabel ? 'size-4' : 'size-5', active ? 'text-blue-500' : 'text-[#818181]'),
+        className: cn(showLabel ? 'size-4' : 'size-5', active ? 'text-blue-500' : 'text-text-3'),
       })}
       {showLabel ? (
         <span className={cn('text-[14px] leading-[20px]', active ? 'text-blue-500' : 'text-text-1')}>
@@ -61,7 +61,7 @@ function SidebarItem({ icon, activeIcon, to, active, label, showLabel = false, o
         <span
           className={cn(
             'max-w-full break-words text-center text-caption-sm',
-            active ? 'font-medium text-blue-500' : 'text-[#818181]',
+            active ? 'font-medium text-blue-500' : 'text-text-3',
           )}
         >
           {label}
@@ -279,11 +279,11 @@ function Sidebar({
                 title={localize('com_nav_admin_panel')}
                 className="rounded-lg p-3 transition-colors hover:bg-fill-2"
               >
-                <Outlined.DeviceDesktopExchange className="size-5 text-[#818181]" />
+                <Outlined.DeviceDesktopExchange className="size-5 text-text-3" />
               </div>
             </a>
             {/* Divider only makes sense alongside the admin-panel entry; hide both together. */}
-            <div className="mb-4 w-full h-px bg-[#ececec]" />
+            <div className="mb-4 w-full h-px bg-fill-3" />
           </>
         )}
 

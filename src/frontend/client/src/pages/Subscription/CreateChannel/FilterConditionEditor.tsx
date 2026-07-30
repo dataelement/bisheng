@@ -290,7 +290,7 @@ export function FilterConditionEditor({
                                         "whitespace-nowrap rounded-[4px] px-[12px] py-[2px] text-center text-[14px] leading-[22px] transition-colors",
                                         cond.include
                                             ? "bg-blue-500/15 text-blue-500 font-medium"
-                                            : "bg-transparent text-[#818181] hover:bg-fill-2"
+                                            : "bg-transparent text-text-3 hover:bg-fill-2"
                                     )}
                                 >
                                     {localize("com_subscription.includes")}
@@ -302,7 +302,7 @@ export function FilterConditionEditor({
                                         "whitespace-nowrap rounded-[4px] px-[12px] py-[2px] text-center text-[14px] leading-[22px] transition-colors",
                                         !cond.include
                                             ? "bg-blue-500/15 text-blue-500 font-medium"
-                                            : "bg-transparent text-[#818181] hover:bg-fill-2"
+                                            : "bg-transparent text-text-3 hover:bg-fill-2"
                                     )}
                                 >
                                     {localize("com_subscription.excludes")}

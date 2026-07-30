@@ -319,7 +319,7 @@ export function EditTagsModal({
                     </div>
                 </div>
 
-                <DialogFooter className="flex h-14 shrink-0 items-center justify-end gap-3 border-none px-5 py-3 max-md:!mt-auto max-md:!h-auto max-md:!flex-row max-md:!justify-stretch max-md:border-t max-md:border-[#ECECEC] max-md:px-4 max-md:py-3 sm:space-x-0">
+                <DialogFooter className="flex h-14 shrink-0 items-center justify-end gap-3 border-none px-5 py-3 max-md:!mt-auto max-md:!h-auto max-md:!flex-row max-md:!justify-stretch max-md:border-t max-md:border-border-base max-md:px-4 max-md:py-3 sm:space-x-0">
                     <Button
                         variant="outline"
                         className="h-8 min-w-[60px] rounded-md border-border-base bg-white/50 px-4 font-normal text-[#070038] backdrop-blur-[8px] hover:bg-white/70 max-md:flex-1"

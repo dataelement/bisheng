@@ -7,7 +7,7 @@ import { TextToSpeechButton } from "~/components/Voice/TextToSpeechButton";
 import { chatIdState, chatsState } from "../store/atoms";
 
 // Shared action-icon button — matches ExportSelectionButton (size-6 hit area,
-// 14px bisheng-icons Outlined glyph, #818181 idle / brand-500 active) so the
+// 14px bisheng-icons Outlined glyph, text-3 idle / brand-500 active) so the
 // whole workflow action row reads as one consistent set.
 const ACTION_BTN =
     "flex size-6 items-center justify-center rounded-md transition-colors hover:bg-[#F7F7F7]";
@@ -60,7 +60,7 @@ export default function MessageButtons({ id, text, onCopy, data, children = null
         >
             {copied
                 ? <Outlined.Copied size={14} className="text-blue-500" />
-                : <Outlined.Copy size={14} className="text-[#818181]" />}
+                : <Outlined.Copy size={14} className="text-text-3" />}
         </button>
         <MessageFeedbackButtons
             liked={data}

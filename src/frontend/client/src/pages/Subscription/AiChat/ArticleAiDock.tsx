@@ -438,7 +438,7 @@ export function ArticleAiDock({ articleDocId }: ArticleAiDockProps) {
                 className={cn(
                     "relative mx-auto flex w-full max-w-[800px] flex-col",
                     open &&
-                        "overflow-hidden rounded-[20px] border border-[#ECECEC] bg-white shadow-[0_4px_20px_0_rgba(3,7,117,0.05)]",
+                        "overflow-hidden rounded-[20px] border border-border-base bg-white shadow-[0_4px_20px_0_rgba(3,7,117,0.05)]",
                 )}
             >
                 {/* Floating expand button: only once a conversation exists and the panel is

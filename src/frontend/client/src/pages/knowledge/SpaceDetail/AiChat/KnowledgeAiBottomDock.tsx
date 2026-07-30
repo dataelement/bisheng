@@ -356,7 +356,7 @@ export function KnowledgeAiBottomDock({
                         // backdrop is pointer-events-none so the file list behind stays clickable).
                         "pointer-events-auto relative mx-auto flex w-full max-w-[800px] flex-col",
                         open &&
-                            "overflow-hidden rounded-[20px] border border-[#ECECEC] bg-white shadow-[0_4px_20px_0_rgba(3,7,117,0.05)]",
+                            "overflow-hidden rounded-[20px] border border-border-base bg-white shadow-[0_4px_20px_0_rgba(3,7,117,0.05)]",
                     )}
                 >
                     {/* Floating expand button — shown whenever any conversation exists.

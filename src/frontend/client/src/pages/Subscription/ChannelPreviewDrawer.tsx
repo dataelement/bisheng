@@ -263,7 +263,7 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onSubscrip
                 ) : channelDetail ? (
                     <>
                         {/* Channel Info Header */}
-                        <SheetHeader className="gap-4 border-b border-[#ECECEC] pb-6 text-left">
+                        <SheetHeader className="gap-4 border-b border-border-base pb-6 text-left">
                             <div className="flex items-center justify-between">
                                 <SheetTitle className="text-[20px] font-medium leading-7 text-text-1">
                                     {channelDetail.name}
@@ -298,12 +298,12 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onSubscrip
                                     {/* Backend currently doesn't provide creator_avatar, use AvatarName fallback directly for now */}
                                     <AvatarName name={channelDetail.creator_name} className="text-xs" />
                                 </Avatar>
-                                <span className="text-[14px] leading-[22px] text-[#818181]">{channelDetail.creator_name}</span>
+                                <span className="text-[14px] leading-[22px] text-text-3">{channelDetail.creator_name}</span>
                             </div>
 
                             {/* Data Overview Row & Button */}
                             <div className="flex items-center justify-between gap-3">
-                                <div className="flex min-w-0 flex-wrap items-center gap-2 text-[14px] leading-[22px] text-[#818181]">
+                                <div className="flex min-w-0 flex-wrap items-center gap-2 text-[14px] leading-[22px] text-text-3">
                                     {channelDetail.source_infos && channelDetail.source_infos.length > 0 && (
                                         <div className="flex items-center">
                                             <div className="flex -space-x-1.5">

@@ -179,7 +179,7 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
                 setIsFocused(true);
             }}
         >
-                <Outlined.Search className="size-4 text-[#818181] shrink-0" />
+                <Outlined.Search className="size-4 text-text-3 shrink-0" />
 
                 {/* 范围选择：仅在输入框聚焦（或菜单已打开）时显示，高亮表示已选范围；仅文案随 current / all 切换 */}
                 {!isRoot && isExpanded && (
