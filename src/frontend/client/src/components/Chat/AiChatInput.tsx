@@ -347,44 +347,30 @@ const AiChatInput = memo(
                     </div>
                 </div>}
 
-                {/* Mounted knowledge spaces / files — a gray strip stacked ABOVE the
-                    input box (Figma 12841:47449). The strip overlaps the box by 16px
-                    (= the box's corner radius) via -mb-4, so the white box's rounded
-                    top corner reaches the edge exactly at the strip's bottom → the
-                    left/right edges read as one continuous line ("连下来"), with the
-                    white box appearing to emerge from the gray strip. The strip's
-                    visible height (62 − 16 = 46px) matches the hidden subtitle's
-                    footprint, so the title / input box stay put. */}
-                {hasSelectionTags && (
-                    <AttachmentBar
-                        uploadingFiles={uploadingFiles}
-                        files={chatFiles || []}
-                        kbs={selectedOrgKbs}
-                        skills={taskMode ? dailySkills : []}
-                        onRemoveFile={(file) => {
-                            inputFilesRef.current?.removeByName?.(file.name);
-                            setChatFiles((prev) => (prev || []).filter((i) => i.name !== file.name));
-                        }}
-                        onRemoveKb={onSelectedOrgKbsChange ? (kb) => {
-                            onSelectedOrgKbsChange(selectedOrgKbs.filter((i) => i.id !== kb.id));
-                        } : undefined}
-                        onRemoveSkill={(skill) => setDailySkills(dailySkills.filter((s) => s.name !== skill.name))}
-                    />
-                )}
-
                 <div
                     className={cn(
-                        // Figma 12669:66966 — white surface, 16px radius, hairline
-                        // border (replaces the legacy gray fill). z-[1] keeps it
-                        // painted above the attachment strip it overlaps.
-                        "relative z-[1] flex w-full flex-col items-start gap-0 overflow-hidden rounded-2xl border border-[#ECECEC] bg-white p-3",
-                        // Soft drop shadow on the landing page (always) and on the
-                        // in-conversation input only while it has a mounted knowledge
-                        // space / file; otherwise in-conversation inputs stay flat
-                        // against the message list.
+                        // Figma 12669:66966 — white surface, 16px radius, hairline border.
+                        "relative flex w-full flex-col items-start gap-0 overflow-hidden rounded-2xl border border-[#ECECEC] bg-white p-3",
                         (elevated || hasSelectionTags) && "shadow-[0_0_8px_rgba(3,7,117,0.05)]",
                     )}
                 >
+                    {hasSelectionTags && (
+                        <AttachmentBar
+                            uploadingFiles={uploadingFiles}
+                            files={chatFiles || []}
+                            kbs={selectedOrgKbs}
+                            skills={taskMode ? dailySkills : []}
+                            onRemoveFile={(file) => {
+                                inputFilesRef.current?.removeByName?.(file.name);
+                                setChatFiles((prev) => (prev || []).filter((i) => i.name !== file.name));
+                            }}
+                            onRemoveKb={onSelectedOrgKbsChange ? (kb) => {
+                                onSelectedOrgKbsChange(selectedOrgKbs.filter((i) => i.id !== kb.id));
+                            } : undefined}
+                            onRemoveSkill={(skill) => setDailySkills(dailySkills.filter((s) => s.name !== skill.name))}
+                        />
+                    )}
+
                     {/* File upload area: file list only. Upload entry lives in the
                         "+" menu; keep the picker trigger hidden here. */}
                     {showUpload && (() => {
@@ -418,10 +404,35 @@ const AiChatInput = memo(
                                         ...(f.mediaDurationSec != null ? { mediaDurationSec: f.mediaDurationSec } : {}),
                                     }));
                                 setUploadingFiles(pending);
+
+                                const completed = currentFiles
+                                    .filter((f) => !f?.isUploading && f?.filePath)
+                                    .map((f) => ({
+                                        file_id: f.fileId || f.id,
+                                        filepath: f.filePath,
+                                        type: f.type,
+                                        name: f.name,
+                                        filename: f.name,
+                                        file_name: f.name,
+                                        parsing_status: f.parsingStatus || 'completed',
+                                        previewUrl: f.previewUrl,
+                                        mediaPreviewUrl: f.mediaPreviewUrl,
+                                        mediaCoverUrl: f.mediaCoverUrl,
+                                        cover_filepath: f.cover_filepath,
+                                        mediaDurationSec: f.mediaDurationSec,
+                                    }));
+                                if (completed.length) {
+                                    setFileUploading(pending.length > 0);
+                                    setChatFiles(completed);
+                                }
                             }}
                             onChange={(files: any) => {
-                                setFileUploading(!files);
-                                setChatFiles(files);
+                                if (files === null) {
+                                    setFileUploading(true);
+                                    return;
+                                }
+                                setFileUploading(false);
+                                setChatFiles(files?.length ? files : []);
                                 // Legacy mutex: adding files clears kb + tools.
                                 // Agent mode keeps them independent so the model can use everything.
                                 if (files && files.length > 0 && !agentMode) {

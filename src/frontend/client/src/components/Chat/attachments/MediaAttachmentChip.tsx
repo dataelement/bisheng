@@ -14,6 +14,7 @@ import {
 } from '~/utils/mediaAttachmentUtils';
 import { cn } from '~/utils';
 import {
+    InputPanelFileLabels,
     UploadAttachmentThumbnailShell,
     type UploadThumbnailVariant,
 } from './UploadAttachmentThumbnail';
@@ -76,6 +77,9 @@ export function MediaAttachmentChip({
     };
 
     if (isSquareCard && kind === 'video') {
+        const extensionLabel = getMediaFileExtensionLabel(fileName);
+        const displayName = getMediaDisplayBaseName(fileName);
+
         return (
             <UploadAttachmentThumbnailShell
                 fileName={fileName}
@@ -85,6 +89,7 @@ export function MediaAttachmentChip({
                 onClick={handlePlay}
                 onRemove={onRemove}
                 allowRemoveWhileUploading={variant === 'bar'}
+                showHoverFileName={!!coverUrl && variant === 'bar'}
                 className={cn('bg-[#f0f0f0]', className)}
                 overlay={
                     isParsing ? (
@@ -97,13 +102,35 @@ export function MediaAttachmentChip({
                 {coverUrl ? (
                     <img src={coverUrl} alt="" className="size-full object-cover" />
                 ) : (
-                    <div className="flex size-full items-center justify-center text-[#999]">
-                        <Video className="size-8" />
-                    </div>
+                    <>
+                        <div className="flex size-full items-center justify-center text-[#999]">
+                            <Video className="size-8" />
+                        </div>
+                        <InputPanelFileLabels
+                            extensionLabel={extensionLabel}
+                            displayName={displayName}
+                            variant={variant}
+                        />
+                        {variant === 'message' && (
+                            <>
+                                <span className="absolute left-3 top-3 text-sm font-medium text-[#666]">
+                                    {extensionLabel}
+                                </span>
+                                <span className="absolute bottom-3 left-3 right-3 truncate text-sm text-[#333]">
+                                    {displayName}
+                                </span>
+                            </>
+                        )}
+                    </>
                 )}
 
-                {canPlay && (
-                    <div className="absolute bottom-2 left-2 flex items-center gap-1 rounded-full bg-white px-2 py-0.5 text-xs font-medium leading-none text-[#212121] shadow-sm">
+                {canPlay && coverUrl && (
+                    <div
+                        className={cn(
+                            'absolute bottom-2 left-2 z-[1] flex items-center gap-1 rounded-full bg-white px-2 py-0.5 text-xs font-medium leading-none text-[#212121] shadow-sm transition-opacity',
+                            variant === 'bar' && 'group-hover:opacity-0',
+                        )}
+                    >
                         <Play className="size-3 shrink-0" />
                         {durationLabel && <span>{durationLabel}</span>}
                     </div>
@@ -125,6 +152,7 @@ export function MediaAttachmentChip({
                 onClick={handlePlay}
                 onRemove={onRemove}
                 allowRemoveWhileUploading={variant === 'bar'}
+                showHoverFileName={false}
                 className={className}
                 overlay={
                     isParsing ? (
@@ -134,12 +162,21 @@ export function MediaAttachmentChip({
                     ) : undefined
                 }
             >
-                <span className="absolute left-3 top-3 text-sm font-medium text-[#666]">
-                    {extensionLabel}
-                </span>
-                <span className="absolute bottom-3 left-3 right-3 truncate text-sm text-[#333]">
-                    {displayName}
-                </span>
+                <InputPanelFileLabels
+                    extensionLabel={extensionLabel}
+                    displayName={displayName}
+                    variant={variant}
+                />
+                {variant === 'message' && (
+                    <>
+                        <span className="absolute left-3 top-3 text-sm font-medium text-[#666]">
+                            {extensionLabel}
+                        </span>
+                        <span className="absolute bottom-3 left-3 right-3 truncate text-sm text-[#333]">
+                            {displayName}
+                        </span>
+                    </>
+                )}
             </UploadAttachmentThumbnailShell>
         );
     }

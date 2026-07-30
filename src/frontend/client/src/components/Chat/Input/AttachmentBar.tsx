@@ -5,7 +5,7 @@
  * Layout: a full-bleed light-gray strip with rounded top corners, sitting above
  * the textarea inside the input box. Cards are a single non-wrapping row that
  * scrolls horizontally:
- *  - newest item appears leftmost (unified across files / knowledge spaces);
+ *  - items appear in insertion order (oldest left, newest right);
  *  - mouse wheel scrolls the row horizontally;
  *  - left / right chevron buttons page-scroll (one viewport per click) and only
  *    occupy width while their direction has more content — at an edge the arrow
@@ -154,11 +154,20 @@ const SkillCard = ({ skill, onRemove }: { skill: any; onRemove?: () => void }) =
     />
 );
 
-const UploadingCard = ({ name, file }: { name: string; file?: any }) => {
+const UploadingCard = ({
+    name,
+    file,
+    onRemove,
+}: {
+    name: string;
+    file?: any;
+    onRemove?: () => void;
+}) => {
     if (file && isMediaAttachmentFile({ name: file.name || name })) {
         return (
             <MediaAttachmentChip
                 file={{ name, isUploading: true, ...file }}
+                onRemove={onRemove}
                 variant="bar"
             />
         );
@@ -169,6 +178,7 @@ const UploadingCard = ({ name, file }: { name: string; file?: any }) => {
             previewUrl={file?.previewUrl}
             variant="bar"
             isUploading
+            onRemove={onRemove}
         />
     );
 };
@@ -232,15 +242,20 @@ export const AttachmentBar = ({
     onRemoveSkill,
 }: AttachmentBarProps) => {
     const scrollRef = useRef<HTMLDivElement>(null);
-    // Insertion sequence per item key so the row can show newest-first across
-    // all types (files + knowledge spaces) without timestamps on the data.
+    // Insertion sequence per item key — oldest first, newest appended to the right.
     const seqRef = useRef<{ map: Map<string, number>; n: number }>({ map: new Map(), n: 0 });
     const [canLeft, setCanLeft] = useState(false);
     const [canRight, setCanRight] = useState(false);
 
     const entries = useMemo<Entry[]>(() => {
+        const completedNames = new Set(
+            files
+                .map((f) => f.name || f.file_name || f.filename)
+                .filter(Boolean),
+        );
+        const activeUploads = uploadingFiles.filter((f) => !completedNames.has(f.name));
         const all: Entry[] = [
-            ...uploadingFiles.map((f) => ({ kind: "uploading" as const, key: `up-${f.id}`, data: f })),
+            ...activeUploads.map((f) => ({ kind: "uploading" as const, key: `up-${f.id}`, data: f })),
             ...files.map((f) => ({ kind: "file" as const, key: `file-${f.file_id || f.filepath || f.name}`, data: f })),
             ...kbs.map((k) => ({ kind: "kb" as const, key: `kb-${k.id}`, data: k })),
             ...skills.map((s) => ({ kind: "skill" as const, key: `skill-${s.name}`, data: s })),
@@ -249,8 +264,8 @@ export const AttachmentBar = ({
         for (const it of all) {
             if (!map.has(it.key)) map.set(it.key, seqRef.current.n++);
         }
-        // Newest (highest sequence) first → leftmost.
-        return all.sort((a, b) => (map.get(b.key) ?? 0) - (map.get(a.key) ?? 0));
+        // Oldest (lowest sequence) first → leftmost; newest appended on the right.
+        return all.sort((a, b) => (map.get(a.key) ?? 0) - (map.get(b.key) ?? 0));
     }, [uploadingFiles, files, kbs, skills]);
 
     const updateEdges = useCallback(() => {
@@ -271,11 +286,13 @@ export const AttachmentBar = ({
         return () => ro.disconnect();
     }, [updateEdges, entries.length]);
 
-    // Keep the newest (leftmost) item in view whenever a new front item arrives.
-    const frontKey = entries[0]?.key;
+    // Scroll to the newest (rightmost) item when a new attachment arrives.
+    const backKey = entries[entries.length - 1]?.key;
     useEffect(() => {
-        scrollRef.current?.scrollTo({ left: 0 });
-    }, [frontKey]);
+        const el = scrollRef.current;
+        if (!el) return;
+        el.scrollTo({ left: el.scrollWidth, behavior: 'smooth' });
+    }, [backKey]);
 
     // Native non-passive wheel listener so preventDefault actually works
     // (React's synthetic onWheel is passive and can't block page scroll).
@@ -302,7 +319,7 @@ export const AttachmentBar = ({
     }, []);
 
     return (
-        <div className="relative -mb-4 w-full overflow-hidden rounded-t-2xl bg-[rgba(244,244,244,0.55)] px-2 pb-6 pt-2">
+        <div className="w-full pb-2 mb-1">
             <div className="flex items-center">
                 {canLeft && <ArrowButton direction="left" onClick={() => pageScroll("left")} />}
                 <div className="relative min-w-0 flex-1">
@@ -320,6 +337,11 @@ export const AttachmentBar = ({
                                             key={entry.key}
                                             name={entry.data.name}
                                             file={entry.data}
+                                            onRemove={
+                                                onRemoveFile
+                                                    ? () => onRemoveFile({ name: entry.data.name })
+                                                    : undefined
+                                            }
                                         />
                                     );
                                 case "file":
@@ -354,14 +376,14 @@ export const AttachmentBar = ({
                     {/* Left-edge fade hinting at content scrolled off to the left. */}
                     <div
                         className={cn(
-                            "pointer-events-none absolute left-0 top-0 h-full w-6 bg-gradient-to-r from-[#f9f9f9] from-[49%] to-transparent transition-opacity",
+                            "pointer-events-none absolute left-0 top-0 h-full w-6 bg-gradient-to-r from-white from-[49%] to-transparent transition-opacity",
                             canLeft ? "opacity-100" : "opacity-0",
                         )}
                     />
                     {/* Right-edge fade hinting at hidden overflow (Figma gradient). */}
                     <div
                         className={cn(
-                            "pointer-events-none absolute right-0 top-0 h-full w-6 bg-gradient-to-l from-[#f9f9f9] from-[49%] to-transparent transition-opacity",
+                            "pointer-events-none absolute right-0 top-0 h-full w-6 bg-gradient-to-l from-white from-[49%] to-transparent transition-opacity",
                             canRight ? "opacity-100" : "opacity-0",
                         )}
                     />

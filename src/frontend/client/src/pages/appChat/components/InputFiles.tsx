@@ -16,6 +16,27 @@ import {
 import { MAX_MEDIA_FILES } from "~/pages/appChat/fileAcceptUtils";
 import { readMediaDurationFromFile, captureVideoPosterFromFile, getMediaKind, isMediaAttachmentFile } from "~/utils/mediaAttachmentUtils";
 
+/** Unwrap BiSheng API envelope `{ status_code, data }` to the upload payload. */
+const unwrapUploadPayload = (response: any) => {
+    if (response?.status_code != null && response?.data != null) {
+        return response.data;
+    }
+    if (response?.data?.filepath != null || response?.data?.file_path != null) {
+        return response.data;
+    }
+    return response ?? {};
+};
+
+const notifyUploadedFiles = (getUploadedFileIds: () => any[], onChange: (files: any) => void) => {
+    const uploaded = getUploadedFileIds();
+    onChange(uploaded.length ? uploaded : []);
+};
+
+const logUploadStage = (fileName: string, stage: string, startedAt: number, extra?: Record<string, unknown>) => {
+    const elapsedMs = Math.round(performance.now() - startedAt);
+    console.info(`[client.media_upload] STAGE ${stage} elapsed_ms=${elapsedMs} file=${fileName}`, extra ?? '');
+};
+
 const checkFileType = (file, accepts) => {
     if (!accepts || accepts === '*') return true;
     const fileName = file.name.toLowerCase();
@@ -49,7 +70,9 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
             && file?.parsingStatus
             && !['completed', 'failed'].includes(file.parsingStatus);
     };
-    const getUploadedFileIds = () => filesRef.current.filter(f => f.id).map(f => ({
+    const getUploadedFileIds = () => filesRef.current
+        .filter((f) => f.id && !f.isUploading && f.filePath)
+        .map((f) => ({
         file_id: f.fileId || f.id,
         filepath: f.filePath,
         type: f.type,
@@ -183,13 +206,22 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
             return res;
         });
 
-        // Keep track of the number of remaining uploads
-        remainingUploadsRef.current = validFiles.length;
+        // Keep track of the number of remaining uploads across concurrent batches.
+        remainingUploadsRef.current += validFiles.length;
 
         // Create an array of promises to handle multiple file uploads concurrently
         const uploadPromises = validFiles.map(({ file, id }) => {
+            const uploadStartedAt = performance.now();
+            logUploadStage(file.name, 'queue', uploadStartedAt, { size: file.size, type: file.type });
+            let lastLoggedProgress = -1;
             return uploadChatFile(v, file, (progress) => {
-                console.log('progress :>> ', progress);
+                if (progress >= 100 && lastLoggedProgress < 100) {
+                    logUploadStage(file.name, 'xhr_upload_complete', uploadStartedAt, { progress });
+                    lastLoggedProgress = 100;
+                } else if (progress - lastLoggedProgress >= 25) {
+                    logUploadStage(file.name, 'xhr_progress', uploadStartedAt, { progress });
+                    lastLoggedProgress = progress;
+                }
                 // Update progress for each file individually
                 setFiles((prevFiles) => {
                     const updatedFiles = prevFiles.map(f => {
@@ -203,10 +235,23 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
                     return updatedFiles;
                 });
             }, uploadMode).then(response => {
-                const responseData = response?.data ?? response;
+                logUploadStage(file.name, 'api_response', uploadStartedAt, {
+                    status_code: response?.status_code,
+                });
+                if (response?.status_code != null && response.status_code !== 200) {
+                    throw new Error(response.status_message || 'upload failed');
+                }
+                const responseData = unwrapUploadPayload(response);
                 // Upload API returns `filepath` (no underscore). Keep `file_path` fallback
                 // for any caller/endpoint that still uses the snake-case form.
                 const filePath = responseData.filepath ?? responseData.file_path;
+                if (!filePath) {
+                    throw new Error('upload response missing filepath');
+                }
+                logUploadStage(file.name, 'parsed_filepath', uploadStartedAt, {
+                    filepath: filePath,
+                    cover_filepath: responseData.cover_filepath,
+                });
                 const fileId = responseData.file_id; // Server-returned file_id
                 const coverFilepath = responseData.cover_filepath;
                 const parsingStatus = responseData.parsing_status ?? defaultParsingStatus;
@@ -233,29 +278,21 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
                 onFilesStateChange?.(filesRef.current);
 
                 remainingUploadsRef.current -= 1; // Decrease the remaining uploads count
-                if (remainingUploadsRef.current === 0) {
-                    // Once all files are uploaded, trigger onChange with the file IDs
-                    const uploadedFileIds = getUploadedFileIds();
-                    onChange(uploadedFileIds); // Pass the file IDs to onChange
-                }
+                notifyUploadedFiles(getUploadedFileIds, onChange);
+                logUploadStage(file.name, 'state_committed', uploadStartedAt);
             }).catch((e) => {
+                logUploadStage(file.name, 'failed', uploadStartedAt, { error: String(e) });
                 console.log('e :>> ', e);
                 showToast({ message: t('com_inputfiles_upload_failed', { 0: file.name }), status: 'error' })
                 handleFileRemove(file.name);
                 remainingUploadsRef.current -= 1; // Decrease the remaining uploads count
-                if (remainingUploadsRef.current === 0) {
-                    // If no files remain, trigger onChange immediately
-                    const uploadedFileIds = getUploadedFileIds();
-                    onChange(uploadedFileIds);
-                }
+                notifyUploadedFiles(getUploadedFileIds, onChange);
             });
         });
 
         // Wait for all files to finish uploading
         Promise.all(uploadPromises).then(() => {
-            // Once all files are uploaded, trigger onChange with the file IDs
-            const uploadedFileIds = getUploadedFileIds();
-            onChange(uploadedFileIds); // Pass the file IDs to onChange
+            notifyUploadedFiles(getUploadedFileIds, onChange);
         });
     };
 

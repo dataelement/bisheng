@@ -307,7 +307,11 @@ export function TaskModeInput({ conversationId = 'new', disabled = false, onFoll
                         );
                     }}
                     onChange={(files: any) => {
-                        setFileUploading(!files);
+                        if (files === null) {
+                            setFileUploading(true);
+                            return;
+                        }
+                        setFileUploading(false);
                         setContext((prev) => ({ ...prev, files: files || [] }));
                     }}
                 />

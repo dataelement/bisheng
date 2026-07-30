@@ -3,6 +3,7 @@ import functools
 import json
 import os
 import re
+import ssl
 import time
 from abc import ABC
 from contextlib import contextmanager
@@ -11,13 +12,18 @@ from io import BytesIO
 from pathlib import Path
 from typing import BinaryIO, Union
 
+import certifi
 import minio
 import miniopy_async
+from aiohttp import ClientSession, ClientTimeout, TCPConnector
+from aiohttp_retry import ExponentialRetry, RetryClient
 from loguru import logger
 from minio.commonconfig import Filter
 from minio.error import S3Error
 from minio.lifecycleconfig import Expiration, LifecycleConfig, Rule
-from urllib3 import BaseHTTPResponse
+from urllib3 import BaseHTTPResponse, PoolManager
+from urllib3.util import Timeout
+from urllib3.util.retry import Retry
 
 from bisheng.common.services.config_service import settings as _bisheng_settings
 from bisheng.common.services.metric_log import emit_metric
@@ -195,6 +201,49 @@ def _should_fallback_to_root() -> bool:
     return tid is not None and tid != 1
 
 
+def _build_sync_http_client(timeout_seconds: int, cert_check: bool) -> PoolManager:
+    """urllib3 client for minio-py with a configurable read/connect timeout."""
+    return PoolManager(
+        timeout=Timeout(connect=timeout_seconds, read=timeout_seconds),
+        maxsize=10,
+        cert_reqs="CERT_REQUIRED" if cert_check else "CERT_NONE",
+        ca_certs=os.environ.get("SSL_CERT_FILE") or certifi.where(),
+        retries=Retry(
+            total=5,
+            backoff_factor=0.2,
+            status_forcelist=[500, 502, 503, 504],
+        ),
+    )
+
+
+def _build_async_minio_session(timeout_seconds: int, cert_check: bool) -> RetryClient:
+    """aiohttp session for miniopy-async with a configurable sock_read timeout."""
+    if cert_check:
+        ssl_context = ssl.create_default_context(
+            cafile=os.environ.get("SSL_CERT_FILE") or certifi.where(),
+        )
+    else:
+        ssl_context = ssl.create_default_context(
+            cafile=os.environ.get("SSL_CERT_FILE") or certifi.where(),
+        )
+        ssl_context.check_hostname = False
+        ssl_context.verify_mode = ssl.CERT_NONE
+
+    client_timeout = ClientTimeout(connect=timeout_seconds, sock_read=timeout_seconds)
+    retry_options = ExponentialRetry(
+        attempts=5,
+        factor=0.2,
+        statuses={500, 502, 503, 504},
+    )
+    return RetryClient(
+        ClientSession(
+            connector=TCPConnector(limit=10, ssl=ssl_context),
+            timeout=client_timeout,
+        ),
+        retry_options=retry_options,
+    )
+
+
 class MinioStorage(BaseStorage, ABC):
     """MinIO storage backend implementation."""
 
@@ -202,6 +251,11 @@ class MinioStorage(BaseStorage, ABC):
         self.minio_config = minio_config
         self.bucket = minio_config.public_bucket
         self.tmp_bucket = minio_config.tmp_bucket
+        upload_timeout = minio_config.upload_timeout_seconds
+
+        sync_http = _build_sync_http_client(upload_timeout, minio_config.cert_check)
+        share_http = _build_sync_http_client(upload_timeout, minio_config.share_cert_check)
+        async_session = _build_async_minio_session(upload_timeout, minio_config.cert_check)
 
         self.minio_client_sync = minio.Minio(
             endpoint=minio_config.endpoint,
@@ -209,6 +263,7 @@ class MinioStorage(BaseStorage, ABC):
             secret_key=minio_config.secret_key,
             secure=minio_config.secure,
             cert_check=minio_config.cert_check,
+            http_client=sync_http,
         )
         self.share_minio_client = minio.Minio(
             endpoint=minio_config.sharepoint,
@@ -216,6 +271,7 @@ class MinioStorage(BaseStorage, ABC):
             secret_key=minio_config.secret_key,
             secure=minio_config.share_schema,
             cert_check=minio_config.share_cert_check,
+            http_client=share_http,
         )
 
         self.minio_client = miniopy_async.Minio(
@@ -223,6 +279,8 @@ class MinioStorage(BaseStorage, ABC):
             access_key=minio_config.access_key,
             secret_key=minio_config.secret_key,
             secure=minio_config.secure,
+            cert_check=minio_config.cert_check,
+            session=async_session,
         )
         self._init_bucket_conf()
 
