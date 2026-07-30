@@ -430,25 +430,29 @@ export function KnowledgeSpaceSidebar({
                                    ordered 部门 → 我创建的 → 我加入的. Per-row "..." menus stay hidden
                                    via renderCompactItem so the dropdown only navigates. */
                                 <>
-                                    {departmentSpaces.length > 0 && (
-                                        <div className="pb-4">
-                                            <SectionHeader
-                                                title={localize("com_knowledge.department_spaces")}
-                                                collapsed={departmentCollapsed}
-                                                onToggle={() => setDepartmentCollapsed(!departmentCollapsed)}
-                                                sortValue={departmentSortBy}
-                                                sortOptions={sortOptions}
-                                                sortFieldLabel={localize("com_knowledge.sort_field")}
-                                                onSortChange={(v) => setSort("department", v as SpaceSortType)}
-                                                compact
-                                            />
-                                            {!departmentCollapsed && (
-                                                <div className="space-y-1 px-3">
-                                                    {departmentSpaces.map(s => renderCompactItem(s, "department"))}
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
+                                    {/* Shown even with nothing in it, like the two sections below —
+                                        the category is part of how the page is organised, not a
+                                        result that appears once you happen to have a space. */}
+                                    <div className="pb-4">
+                                        <SectionHeader
+                                            title={localize("com_knowledge.department_spaces")}
+                                            collapsed={departmentCollapsed}
+                                            onToggle={() => setDepartmentCollapsed(!departmentCollapsed)}
+                                            sortValue={departmentSortBy}
+                                            sortOptions={sortOptions}
+                                            sortFieldLabel={localize("com_knowledge.sort_field")}
+                                            onSortChange={(v) => setSort("department", v as SpaceSortType)}
+                                            compact
+                                        />
+                                        {!departmentCollapsed && (
+                                            <div className="space-y-1 px-3">
+                                                {departmentSpaces.map(s => renderCompactItem(s, "department"))}
+                                                {!departmentSpaces.length && (
+                                                    <div className="py-6 text-center text-sm text-[#999999]">{localize("com_knowledge.no_data")}</div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
                                     <div className="pb-4">
                                         <SectionHeader
                                             title={localize("com_knowledge.created_by_me")}
@@ -496,26 +500,31 @@ export function KnowledgeSpaceSidebar({
                                 </>
                             ) : (
                             <>
-                            {/* Department spaces — always on top per PRD */}
-                            {departmentSpaces.length > 0 && (
-                                <div className="pt-0 pb-4">
-                                    <SectionHeader
-                                        title={localize("com_knowledge.department_spaces")}
-                                        collapsed={departmentCollapsed}
-                                        onToggle={() => setDepartmentCollapsed(!departmentCollapsed)}
-                                        sortValue={departmentSortBy}
-                                        sortOptions={sortOptions}
-                                        sortFieldLabel={localize("com_knowledge.sort_field")}
-                                        onSortChange={(v) => setSort("department", v as SpaceSortType)}
-                                        mobile={mobilePageMode}
-                                    />
-                                    {!departmentCollapsed && (
-                                        <div className={listRowClassName}>
-                                            {departmentSpaces.map(s => renderSpaceItem(s, "department"))}
-                                        </div>
-                                    )}
-                                </div>
-                            )}
+                            {/* Department spaces — always on top per PRD, and always present:
+                                the category is part of how the page is organised, so it shows
+                                its empty state like 我创建的 / 我加入的 rather than disappearing. */}
+                            <div className="pt-0 pb-4">
+                                <SectionHeader
+                                    title={localize("com_knowledge.department_spaces")}
+                                    collapsed={departmentCollapsed}
+                                    onToggle={() => setDepartmentCollapsed(!departmentCollapsed)}
+                                    sortValue={departmentSortBy}
+                                    sortOptions={sortOptions}
+                                    sortFieldLabel={localize("com_knowledge.sort_field")}
+                                    onSortChange={(v) => setSort("department", v as SpaceSortType)}
+                                    mobile={mobilePageMode}
+                                />
+                                {!departmentCollapsed && (
+                                    <div className={listRowClassName}>
+                                        {departmentSpaces.map(s => renderSpaceItem(s, "department"))}
+                                        {!departmentSpaces.length && (
+                                            <div className="py-6 text-center text-sm text-[#999999]">
+                                                {localize("com_knowledge.no_data")}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
 
                             {/* My created */}
                             <div className={cn("pb-4", stretchEmptySections && createdEmpty && !createdCollapsed && "flex min-h-0 flex-1 flex-col")}>
