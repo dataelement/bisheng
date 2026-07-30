@@ -79,6 +79,7 @@ export interface PortalUploadFolderNode {
 }
 
 export type PortalUploadFolderSelection =
+    | { mode: "none" }
     | { mode: "ai" }
     | { mode: "manual"; folderId: string | null; folderName: string };
 
