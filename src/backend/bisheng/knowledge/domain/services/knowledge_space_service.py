@@ -3605,8 +3605,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         # department binding. Portal discovery and department-file approval
         # intentionally fail closed when scope and binding disagree.
         should_create_department_binding = department_id is not None and (
-            level == KnowledgeSpaceLevelEnum.DEPARTMENT
-            or (is_clinic and KnowledgeSpaceLevelEnum.is_team_level(level))
+            level == KnowledgeSpaceLevelEnum.DEPARTMENT or (is_clinic and KnowledgeSpaceLevelEnum.is_team_level(level))
         )
         if should_create_department_binding:
             try:
@@ -5771,8 +5770,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 await self._enrich_with_version_info(authorized_files)
             except Exception:
                 logger.exception(
-                    "Failed to enrich authorized portal QA files with version metadata "
-                    "space_id=%s file_count=%s",
+                    "Failed to enrich authorized portal QA files with version metadata space_id=%s file_count=%s",
                     space_id,
                     len(authorized_files),
                 )
@@ -5783,14 +5781,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     enrich_files=True,
                 )
                 authorized_metadata_by_id = {
-                    int(item.get("id") or 0): item
-                    for item in authorized_metadata
-                    if int(item.get("id") or 0) > 0
+                    int(item.get("id") or 0): item for item in authorized_metadata if int(item.get("id") or 0) > 0
                 }
             except Exception:
                 logger.exception(
-                    "Failed to enrich authorized portal QA files with readonly metadata "
-                    "space_id=%s file_count=%s",
+                    "Failed to enrich authorized portal QA files with readonly metadata space_id=%s file_count=%s",
                     space_id,
                     len(authorized_files),
                 )
@@ -7065,9 +7060,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 empty_reason = "permission_check_limit_reached"
             elif ordered_candidate_count == 0 and not cached_candidates:
                 empty_reason = (
-                    "generic_pool_empty"
-                    if not user_domains and not interest_candidates
-                    else "no_eligible_candidate"
+                    "generic_pool_empty" if not user_domains and not interest_candidates else "no_eligible_candidate"
                 )
             elif authorization_state.error_count > 0 and authorization_state.allowed_count == 0:
                 empty_reason = "permission_check_failed_closed"
@@ -9566,9 +9559,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             list(space_ids),
             spaces=spaces,
         )
-        department_space_ids = await self._get_valid_department_space_ids(
-            space_ids - public_space_ids
-        )
+        department_space_ids = await self._get_valid_department_space_ids(space_ids - public_space_ids)
 
         public_files: list[KnowledgeFile] = []
         department_files: list[KnowledgeFile] = []
@@ -9584,10 +9575,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         accepted_ids: set[int] = set()
         if public_files:
-            accepted_ids.update(
-                int(file.id)
-                for file in self._accept_shougang_portal_public_files(public_files)
-            )
+            accepted_ids.update(int(file.id) for file in self._accept_shougang_portal_public_files(public_files))
         for file in department_files:
             file_id = int(file.id)
             self._portal_unchecked_department_file_ids.add(file_id)
@@ -11659,12 +11647,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if shared_source_by_item:
                 space_metadata = await KnowledgeDao.async_get_space_source_metadata_by_ids(list(source_space_ids))
                 space_name_map = {
-                    int(space_id): str(metadata[0] or space_id)
-                    for space_id, metadata in space_metadata.items()
+                    int(space_id): str(metadata[0] or space_id) for space_id, metadata in space_metadata.items()
                 }
                 source_department_name_map = {
-                    int(space_id): str(metadata[1] or "")
-                    for space_id, metadata in space_metadata.items()
+                    int(space_id): str(metadata[1] or "") for space_id, metadata in space_metadata.items()
                 }
             else:
                 source_spaces = await KnowledgeDao.async_get_spaces_by_ids(list(source_space_ids))
@@ -12125,17 +12111,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         )
         version_map = {int(version.id): version for version in primary_versions}
         primary_file_ids = sorted(
-            {
-                int(version.knowledge_file_id)
-                for version in primary_versions
-                if version.knowledge_file_id is not None
-            }
+            {int(version.knowledge_file_id) for version in primary_versions if version.knowledge_file_id is not None}
         )
-        primary_files = (
-            await KnowledgeFileDao.aget_file_by_ids(primary_file_ids)
-            if primary_file_ids
-            else []
-        )
+        primary_files = await KnowledgeFileDao.aget_file_by_ids(primary_file_ids) if primary_file_ids else []
         primary_file_map = {int(file.id): file for file in primary_files}
 
         info: dict[int, dict] = {}
@@ -12165,9 +12143,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 else None
             )
             primary_file = (
-                primary_file_map.get(int(primary_version.knowledge_file_id))
-                if primary_version is not None
-                else None
+                primary_file_map.get(int(primary_version.knowledge_file_id)) if primary_version is not None else None
             )
             canonical_document_id = (
                 int(document.id) if document is not None else getattr(item, "_canonical_document_id", None)
@@ -12289,6 +12265,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
                         [],
                     )
                     item["summary"] = one.abstract or ""
+                    # Expose upload-time business domain before file_encoding is generated.
+                    item["business_domain_code"] = get_business_domain_code_from_file(one) or None
                     # Version enrichment fields set by _enrich_with_version_info (if version_repo is set).
                     item["version_no"] = getattr(one, "_version_no", None)
                     item["is_multi_version"] = getattr(one, "_is_multi_version", False)

@@ -107,6 +107,22 @@ export function filterBusinessDomainOptionsByCodes(
     return options.filter((option) => allowedCodes.has(option.code));
 }
 
+/** Resolve business domain for display/edit: draft → API field → parsed file_encoding. */
+export function resolveFileBusinessDomainCode(
+    source: {
+        businessDomainCode?: string | null;
+        fileEncoding?: string | null;
+    } | null | undefined,
+    draft?: EncodingDraft,
+    fallbackPrefix = DEFAULT_ENCODING_PREFIX,
+): string {
+    return normalizeEncodingCode(
+        draft?.businessDomainCode
+        ?? source?.businessDomainCode
+        ?? parseFileEncoding(source?.fileEncoding, fallbackPrefix).businessDomainCode,
+    );
+}
+
 export function parseFileEncoding(
     encoding?: string | null,
     fallbackPrefix = DEFAULT_ENCODING_PREFIX,
