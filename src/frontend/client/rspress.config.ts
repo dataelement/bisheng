@@ -80,6 +80,13 @@ export default defineConfig({
           ],
         },
         {
+          text: '数据展示 Data Display',
+          items: [
+            { text: '文字提示 Tooltip', link: '/components/tooltip' },
+            { text: '气泡卡片 Popover', link: '/components/popover' },
+          ],
+        },
+        {
           text: '反馈 Feedback',
           items: [
             { text: '弹窗 Modal', link: '/components/modal' },
@@ -113,6 +120,8 @@ export default defineConfig({
           text: '组件规范',
           items: [
             { text: '按钮 Button', link: '/组件-Button按钮' },
+            { text: '文字提示 Tooltip', link: '/组件-Tooltip文字提示' },
+            { text: '气泡卡片 Popover', link: '/组件-Popover气泡卡片' },
             { text: '弹窗 Modal', link: '/组件-Modal弹窗' },
           ],
         },
