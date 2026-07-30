@@ -188,6 +188,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     ShougangPortalAdvancedFileSearchReq,
     ShougangPortalDomainBindableSpaceResp,
     ShougangPortalDomainFileCountItem,
+    ShougangPortalCategoryFileCountItem,
     ShougangPortalFavoriteCreateReq,
     ShougangPortalFavoriteCreateResp,
     ShougangPortalFavoriteFileItem,
@@ -4814,6 +4815,18 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 int(space.id) for space in spaces if space.id is not None
             )
         return await KnowledgeFileDao.async_count_files_by_domain_scopes(visible_scopes)
+
+    async def count_shougang_portal_category_files(
+        self,
+        categories: list[ShougangPortalCategoryFileCountItem],
+    ) -> dict[str, int]:
+        visible_scopes: dict[str, set[int]] = {}
+        for category in categories:
+            spaces = await self._get_shougang_portal_visible_search_spaces(category.space_ids, None)
+            visible_scopes.setdefault(category.code, set()).update(
+                int(space.id) for space in spaces if space.id is not None
+            )
+        return await KnowledgeFileDao.async_count_files_by_category_scopes(visible_scopes)
 
     async def get_shougang_portal_home(self, req: ShougangPortalHomeReq) -> dict:
         result = await self._get_shougang_portal_home_sections(req)

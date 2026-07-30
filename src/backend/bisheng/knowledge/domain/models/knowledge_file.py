@@ -12,6 +12,7 @@ from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT, JsonType
 from bisheng.database.base import async_get_count, get_count
+from bisheng.knowledge.domain.constants import parse_shougang_file_encoding_codes
 
 
 class KnowledgeFileStatus(int, Enum):
@@ -582,6 +583,53 @@ class KnowledgeFileDao(KnowledgeFileBase):
             code = parts[-2].strip().upper()
             if knowledge_id in normalized_scopes.get(code, set()):
                 canonical_ids_by_code[code].add(int(document_id or file_id))
+        return {code: len(canonical_ids_by_code[code]) for code in counts}
+
+    @classmethod
+    async def async_count_files_by_category_scopes(cls, category_space_ids: dict[str, set[int]]) -> dict[str, int]:
+        """Count successful files for each document-type and knowledge-space scope.
+
+        Document type comes from ``parse_shougang_file_encoding_codes`` (category segment),
+        matching portal/search filtering. LIKE prefilters may over-fetch; Python exact match
+        rejects rows whose category segment is not the requested code.
+        """
+        normalized_scopes = {
+            code.strip().upper(): {int(space_id) for space_id in space_ids if int(space_id) > 0}
+            for code, space_ids in category_space_ids.items()
+            if code and code.strip()
+        }
+        counts = dict.fromkeys(normalized_scopes, 0)
+        conditions = [
+            and_(
+                KnowledgeFile.knowledge_id.in_(space_ids),
+                col(KnowledgeFile.file_encoding).like(f"%-{code}-%"),
+            )
+            for code, space_ids in normalized_scopes.items()
+            if space_ids
+        ]
+        if not conditions:
+            return counts
+        statement = select(
+            KnowledgeFile.id,
+            KnowledgeFile.reference_document_id,
+            KnowledgeFile.knowledge_id,
+            KnowledgeFile.file_encoding,
+        ).where(
+            KnowledgeFile.file_type == FileType.FILE.value,
+            KnowledgeFile.status == KnowledgeFileStatus.SUCCESS.value,
+            col(KnowledgeFile.file_encoding).is_not(None),
+            or_(*conditions),
+            cls.active_inventory_predicate(),
+        )
+        async with get_async_db_session() as session:
+            rows = (await session.exec(statement)).all()
+        canonical_ids_by_code = {code: set() for code in normalized_scopes}
+        for file_id, document_id, knowledge_id, encoding in rows:
+            document_type, _ = parse_shougang_file_encoding_codes({"file_encoding": encoding})
+            if not document_type:
+                continue
+            if knowledge_id in normalized_scopes.get(document_type, set()):
+                canonical_ids_by_code[document_type].add(int(document_id or file_id))
         return {code: len(canonical_ids_by_code[code]) for code in counts}
 
     @classmethod

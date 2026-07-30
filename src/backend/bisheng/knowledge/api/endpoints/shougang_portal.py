@@ -30,6 +30,8 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     ShougangPortalDomainBindableSpacesResp,
     ShougangPortalDomainFileCountReq,
     ShougangPortalDomainFileCountResp,
+    ShougangPortalCategoryFileCountReq,
+    ShougangPortalCategoryFileCountResp,
     ShougangPortalFavoriteCreateReq,
     ShougangPortalFavoriteCreateResp,
     ShougangPortalFavoriteFilesResp,
@@ -279,6 +281,15 @@ async def count_shougang_portal_domain_files(
 ) -> Any:
     counts = await svc.count_shougang_portal_domain_files(req.domains)
     return resp_200(ShougangPortalDomainFileCountResp(counts=counts).model_dump(mode="json"))
+
+
+@router.post("/category-file-counts")
+async def count_shougang_portal_category_files(
+    req: ShougangPortalCategoryFileCountReq,
+    svc: Any = Depends(get_knowledge_space_service),
+) -> Any:
+    counts = await svc.count_shougang_portal_category_files(req.categories)
+    return resp_200(ShougangPortalCategoryFileCountResp(counts=counts).model_dump(mode="json"))
 
 
 @router.post("/home")

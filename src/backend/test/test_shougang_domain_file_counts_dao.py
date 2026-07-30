@@ -139,3 +139,60 @@ async def test_count_files_by_domain_scopes_only_counts_matching_visible_spaces(
 
     # 11 不在 PP 可见空间；最后一条的业务域是 QM，但 10 不在 QM 可见空间。
     assert result == {'PP': 1, 'QM': 1}
+
+
+@pytest.mark.asyncio
+async def test_count_files_by_category_scopes_only_counts_matching_visible_spaces():
+    class FakeResult:
+        def all(self):
+            return [
+                (1, None, 10, 'GF-STD-PP-001'),
+                (2, None, 11, 'GF-STD-PP-002'),
+                (3, None, 20, 'GF-RPT-QM-003'),
+                # LIKE %-STD-% matches, but category segment is RPT (before QM).
+                (4, None, 10, 'GF-EXTRA-STD-RPT-QM-005'),
+            ]
+
+    class FakeSession:
+        async def exec(self, statement):
+            self.statement = statement
+            return FakeResult()
+
+    session = FakeSession()
+    with _patch_session_factory(session):
+        result = await KnowledgeFileDao.async_count_files_by_category_scopes(
+            {'STD': {10}, 'RPT': {20}},
+        )
+
+    # space 11 not in STD scope; GF-EXTRA-STD-RPT-QM-005 is RPT but space 10 not in RPT scope
+    assert result == {'STD': 1, 'RPT': 1}
+
+
+@pytest.mark.asyncio
+async def test_count_files_by_category_scopes_rejects_like_overfetch():
+    class FakeResult:
+        def all(self):
+            return [
+                # LIKE %-STD-% matches because STD sits in a non-category segment;
+                # parse yields document type RPT, domain QM.
+                (1, None, 10, 'GF-STD-EXTRA-RPT-QM-001'),
+                (2, None, 10, 'GF-STD-PP-002'),
+            ]
+
+    class FakeSession:
+        async def exec(self, statement):
+            return FakeResult()
+
+    session = FakeSession()
+    with _patch_session_factory(session):
+        result = await KnowledgeFileDao.async_count_files_by_category_scopes(
+            {'STD': {10}},
+        )
+
+    assert result == {'STD': 1}
+
+
+@pytest.mark.asyncio
+async def test_count_files_by_category_scopes_empty_space_returns_zero():
+    result = await KnowledgeFileDao.async_count_files_by_category_scopes({'STD': set()})
+    assert result == {'STD': 0}
