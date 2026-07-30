@@ -115,7 +115,7 @@ export const ConfirmProvider = ({ children }: { children: React.ReactNode }) => 
                     equal buttons. PC: left-aligned title + right-aligned hug buttons. */}
                 <AlertDialogContent
                     onOpenAutoFocus={(e) => e.preventDefault()}
-                    className="inset-0 m-auto flex h-fit max-h-[calc(100dvh-2rem)] max-w-[calc(100%-2rem)] flex-col items-center gap-4 rounded-2xl border border-[#ebebeb] p-5 shadow-[0_0_16px_0_rgba(3,7,117,0.05)] sm:max-w-[400px] sm:rounded-2xl"
+                    className="inset-0 m-auto flex h-fit max-h-[calc(var(--bs-dvh,100dvh)-2rem)] max-w-[calc(100%-2rem)] flex-col items-center gap-4 rounded-2xl border border-[#ebebeb] p-5 shadow-[0_0_16px_0_rgba(3,7,117,0.05)] sm:max-w-[400px] sm:rounded-2xl"
                 >
                     <AlertDialogHeader className="w-full flex-row items-center justify-center gap-2 space-y-0 text-center sm:justify-start sm:text-left">
                         {accentIcon}

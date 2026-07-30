@@ -219,7 +219,7 @@ export function EditTagsModal({
             <DialogContent
                 onPointerDownOutside={(e) => e.preventDefault()}
                 onInteractOutside={(e) => e.preventDefault()}
-                className="flex w-[600px] max-w-[600px] flex-col items-stretch gap-0 border-none bg-white p-0 shadow-[0px_5px_22px_0px_rgba(61,68,110,0.2)] [outline:none] rounded-none sm:rounded-none md:rounded-xl max-md:inset-0 max-md:left-0 max-md:top-0 max-md:h-dvh max-md:w-screen max-md:max-w-none max-md:translate-x-0 max-md:translate-y-0 [&>button]:hidden"
+                className="flex w-[600px] max-w-[600px] flex-col items-stretch gap-0 border-none bg-white p-0 shadow-[0px_5px_22px_0px_rgba(61,68,110,0.2)] [outline:none] rounded-none sm:rounded-none md:rounded-xl max-md:inset-0 max-md:left-0 max-md:top-0 max-md:h-dvh max-md:w-[var(--bs-vw,100vw)] max-md:max-w-none max-md:translate-x-0 max-md:translate-y-0 [&>button]:hidden"
             >
                 <DialogHeader className="relative h-12 shrink-0 justify-center space-y-0 px-5 py-3 text-left max-md:h-auto max-md:px-4 max-md:pt-6 max-md:pb-4">
                     <DialogTitle className="text-[16px] leading-6 font-medium text-[#212121]">

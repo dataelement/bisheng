@@ -387,9 +387,9 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
         close={false}
         className={cn(
           // Compact mode (<768px): full-screen overlay — no rounding, no border, fills the viewport.
-          "h-screen max-h-none w-screen max-w-none rounded-none border-0 p-0 sm:rounded-none",
+          "h-[var(--bs-vh,100vh)] max-h-none w-[var(--bs-vw,100vw)] max-w-none rounded-none border-0 p-0 sm:rounded-none",
           // Default mode (>=768px): centered dialog, 80vh (cap 800px) tall, 40px safe margin each side (cap 800px wide).
-          "md:h-[80vh] md:max-h-[800px] md:w-[calc(100vw-80px)] md:max-w-[800px] md:rounded-xl md:border",
+          "md:h-[80vh] md:max-h-[800px] md:w-[calc(var(--bs-vw,100vw)-80px)] md:max-w-[800px] md:rounded-xl md:border",
         )}
       >
         <div className="flex h-full flex-col overflow-hidden rounded-none bg-white md:rounded-xl">

@@ -370,7 +370,7 @@ export default function DataTableKnowledge<TData, TValue>({
         </div>
       </div>
 
-      <div className="relative grid h-full max-h-[calc(100vh-20rem)] w-full flex-1 overflow-hidden overflow-x-auto overflow-y-auto rounded-md border border-black/10 dark:border-white/10">
+      <div className="relative grid h-full max-h-[calc(var(--bs-vh,100vh)-20rem)] w-full flex-1 overflow-hidden overflow-x-auto overflow-y-auto rounded-md border border-black/10 dark:border-white/10">
         <Table className="w-full min-w-[300px] border-separate border-spacing-0">
           <TableHeader className="sticky top-0 z-50">
             {table.getHeaderGroups().map((headerGroup) => (

@@ -297,7 +297,7 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
     return (
         <header className="flex justify-between items-center p-4 py-2 bisheng-bg border-b">
             {
-                loading && <div className=" fixed left-0 top-0 w-full h-screen bg-background/60 z-50 flex items-center justify-center">
+                loading && <div className=" fixed left-0 top-0 w-full h-[var(--bs-vh,100vh)] bg-background/60 z-50 flex items-center justify-center">
                     <LoadIcon className="mr-2 text-gray-600" />
                     <span>{t('switchToVersion', { versionName: version.name })}</span>
                 </div>

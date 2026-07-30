@@ -135,7 +135,7 @@ export function useCitationReferencePanel({ hasMessages }: UseCitationReferenceP
 
       if (isPhoneViewport) {
         return (
-          <div className="fixed inset-0 z-[120] flex h-[100dvh] min-h-0 flex-col overflow-hidden overscroll-contain bg-white">
+          <div className="fixed inset-0 z-[120] flex h-[var(--bs-dvh,100dvh)] min-h-0 flex-col overflow-hidden overscroll-contain bg-white">
             {citationPanelContent}
           </div>
         );
@@ -148,7 +148,7 @@ export function useCitationReferencePanel({ hasMessages }: UseCitationReferenceP
           className={cn(
             'fixed inset-y-0 right-0 z-[130] flex min-h-0 flex-col overflow-hidden border-l border-[#ECECEC] bg-white shadow-[-8px_0_28px_rgba(0,0,0,0.08)] animate-in slide-in-from-right duration-300',
             'rounded-tl-lg',
-            'min-w-[260px] w-[min(520px,42vw)] max-[580px]:min-w-[240px] max-[580px]:w-[min(360px,calc(100vw-40px))]',
+            'min-w-[260px] w-[min(520px,42vw)] max-[580px]:min-w-[240px] max-[580px]:w-[min(360px,calc(var(--bs-vw,100vw)-40px))]',
           )}
           onClick={(event) => event.stopPropagation()}
           onPointerDown={(event) => event.stopPropagation()}
@@ -169,7 +169,7 @@ export function useCitationReferencePanel({ hasMessages }: UseCitationReferenceP
           className={cn(
             'fixed inset-y-0 right-0 z-[150] flex min-h-0 flex-col overflow-hidden border-l border-[#ECECEC] bg-white shadow-[-8px_0_28px_rgba(0,0,0,0.1)] animate-in slide-in-from-right duration-300',
             'rounded-tl-lg',
-            useExpandedCitationPanel ? 'w-[min(480px,100vw)]' : 'w-[min(360px,100vw)]',
+            useExpandedCitationPanel ? 'w-[min(480px,var(--bs-vw,100vw))]' : 'w-[min(360px,var(--bs-vw,100vw))]',
           )}
           onClick={(event) => event.stopPropagation()}
           onPointerDown={(event) => event.stopPropagation()}
@@ -185,8 +185,8 @@ export function useCitationReferencePanel({ hasMessages }: UseCitationReferenceP
         <div
           data-citation-popover-surface
           className={cn(
-            'relative z-10 flex min-h-0 min-w-0 flex-col bg-white pointer-events-auto shadow-[0_8px_24px_rgba(0,0,0,0.12)] animate-in slide-in-from-right duration-300 [height:100dvh]',
-            'w-[min(520px,calc(100vw-24px))]',
+            'relative z-10 flex min-h-0 min-w-0 flex-col bg-white pointer-events-auto shadow-[0_8px_24px_rgba(0,0,0,0.12)] animate-in slide-in-from-right duration-300 [height:var(--bs-dvh,100dvh)]',
+            'w-[min(520px,calc(var(--bs-vw,100vw)-24px))]',
           )}
           onClick={(event) => event.stopPropagation()}
           onPointerDown={(event) => event.stopPropagation()}

@@ -213,7 +213,7 @@ export default function Sidebar({ dropdown = false, disabledNodes = [], onInitSt
                     </TooltipProvider>
                 </TabsContent>
                 {/* tool */}
-                <TabsContent value="tool" className="nowheel overflow-y-auto h-[calc(100vh-10rem)] max-w-44 relative">
+                <TabsContent value="tool" className="nowheel overflow-y-auto h-[calc(var(--bs-vh,100vh)-10rem)] max-w-44 relative">
                     <Accordion type="multiple" className="w-full">
                         <TooltipProvider delayDuration={100}>
                             {toolTemps.map((temp, index) =>

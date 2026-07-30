@@ -218,3 +218,52 @@
 
   }
 }
+/* COFCO font-size levels (data-bs-font-size on <html>, set by utils/fontSize).
+
+   Whole-page scale is CSS zoom on <body>. Viewport units are NOT rescaled by
+   zoom, so the body is sized to the reverse-compensated viewport
+   (--bs-vw / --bs-dvh = 100vw|100dvh / zoom); size x zoom lands back exactly on
+   the physical window, leaving no bottom/right gap at 90% and no overflow at
+   110%. Everything inside must therefore avoid raw viewport units and read
+   var(--bs-vh, 100vh) & friends instead. */
+html[data-bs-font-size] {
+  overflow: hidden;
+}
+
+/* !important: index.html sets width/height inline on both body and #root. */
+html[data-bs-font-size] body {
+  width: var(--bs-vw) !important;
+  height: var(--bs-dvh) !important;
+  zoom: var(--bs-fs-zoom);
+  overflow: hidden;
+}
+
+html[data-bs-font-size] #root {
+  width: 100% !important;
+  height: 100% !important;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* Floating UI measures the trigger in physical client coordinates and writes
+   the result as a translate() on this fixed wrapper — which, sitting inside the
+   zoomed body, would scale those coordinates a second time and throw the popup
+   off by the zoom factor. Cancel the zoom on the wrapper so the translate lands
+   on physical pixels, then restore it on the content so the popup itself still
+   scales with the page. */
+html[data-bs-font-size] [data-radix-popper-content-wrapper] {
+  zoom: calc(1 / var(--bs-fs-zoom));
+}
+
+html[data-bs-font-size] [data-radix-popper-content-wrapper] > * {
+  zoom: var(--bs-fs-zoom);
+}
+
+/* Hosts a flyout that is absolutely positioned outside the menu box. Tailwind
+   runs with important:true here, so an `!overflow-visible` utility cannot beat
+   PopoverContent's `overflow-y-auto` (same specificity, and overflow-y-* is
+   emitted later). This hand-written rule sits after the utility layer, so it
+   wins deterministically. */
+.bs-submenu-host {
+  overflow: visible !important;
+}

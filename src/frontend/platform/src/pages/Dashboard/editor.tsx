@@ -41,12 +41,12 @@ export default function EditorPage() {
     if (!dashboard) return null
 
     return (
-        <div className="h-screen flex flex-col">
+        <div className="h-[var(--bs-vh,100vh)] flex flex-col">
             <EditorHeader
                 dashboard={currentDashboard}
                 dashboardId={dashboardId}
             />
-            <div className="h-[calc(100vh-64px-var(--license-banner-h,0px))]">
+            <div className="h-[calc(var(--bs-vh,100vh)-64px-var(--license-banner-h,0px))]">
                 <EditorCanvas isLoading={isLoading} />
             </div>
         </div>

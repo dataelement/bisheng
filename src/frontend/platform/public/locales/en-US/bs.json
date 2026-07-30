@@ -207,6 +207,11 @@
     "forBestExperience": "For the best experience, please access this website on a PC",
     "onlineDocumentation": "Online Documentation",
     "changePwd": "Password",
+    "fontSize": "Font size",
+    "fontSizeSmall": "Small",
+    "fontSizeStandard": "Standard",
+    "fontSizeLarge": "Large",
+    "fontSizeSaveFailed": "Failed to save the font size setting. Please try again.",
     "noAdminConsoleAccess": "You do not have access to the admin console."
   },
   "system": {

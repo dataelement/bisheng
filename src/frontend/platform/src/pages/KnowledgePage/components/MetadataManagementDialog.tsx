@@ -5,6 +5,7 @@ import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
 import { Button } from "@/components/bs-ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogPortal } from "@/components/bs-ui/dialog"
 import { Input } from "@/components/bs-ui/input"
+import { getLogicalViewport } from "@/utils/fontSize"
 import { AlertCircle, CircleQuestionMark, Clock3, Edit2, Hash, Plus, SquarePen, Trash2, Type, X } from "lucide-react"
 import React, { useCallback, useState, useRef, useEffect, memo, useMemo } from "react"
 import * as DialogPrimitive from "@radix-ui/react-dialog"
@@ -114,7 +115,7 @@ export function MetadataManagementDialog({
     const [newName, setNewName] = useState("")
     const [newType, setNewType] = useState<MetadataType>("String")
     const [error, setError] = useState("")
-    const [screenWidth, setScreenWidth] = useState(window.innerWidth)
+    const [screenWidth, setScreenWidth] = useState(getLogicalViewport().width)
     const isSmallScreen = screenWidth < 1366;
     const sideDialogWidth = isSmallScreen ? 240 : 300;
     const isSideDialogAtRisk = isSmallScreen && sideDialog.open;
@@ -151,8 +152,9 @@ export function MetadataManagementDialog({
 
     useEffect(() => {
         const handleResize = () => {
-            const newWidth = window.innerWidth;
-            setScreenWidth(newWidth);
+            // Logical px: this width positions the side dialog, which is laid
+            // out inside the (possibly zoomed) page.
+            setScreenWidth(getLogicalViewport().width);
         };
         window.addEventListener("resize", handleResize);
         return () => window.removeEventListener("resize", handleResize);

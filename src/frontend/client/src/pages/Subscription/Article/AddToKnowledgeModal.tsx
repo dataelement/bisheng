@@ -811,7 +811,7 @@ export function AddToKnowledgeModal({
                             ? "scrollbar-gutter-stable flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden rounded-md border border-[#ECECEC] p-3 scrollbar-on-scroll"
                             : cn(
                                 "scrollbar-gutter-stable h-[340px] max-h-full w-full overflow-y-auto overflow-x-hidden rounded-md border border-[#ECECEC] p-3 scrollbar-on-scroll",
-                                mode === "article" && isH5 && "touch-mobile:h-[calc(100dvh-260px)]",
+                                mode === "article" && isH5 && "touch-mobile:h-[calc(var(--bs-dvh,100dvh)-260px)]",
                             )
                     }
                 >
@@ -920,7 +920,7 @@ export function AddToKnowledgeModal({
                         <Dialog open={open} onOpenChange={handleOpenChange}>
                             <DialogContent
                                 close={false}
-                                className="!fixed !inset-0 !left-0 !top-0 !z-[100] !flex !h-[100dvh] !w-screen !max-w-none !min-h-0 !translate-x-0 !translate-y-0 !flex-col !gap-0 !overflow-hidden !rounded-none !border-0 !p-0 !shadow-none"
+                                className="!fixed !inset-0 !left-0 !top-0 !z-[100] !flex !h-[var(--bs-dvh,100dvh)] !w-[var(--bs-vw,100vw)] !max-w-none !min-h-0 !translate-x-0 !translate-y-0 !flex-col !gap-0 !overflow-hidden !rounded-none !border-0 !p-0 !shadow-none"
                             >
                                 {pickerBody}
                             </DialogContent>
@@ -930,14 +930,14 @@ export function AddToKnowledgeModal({
                 <Dialog open={open} onOpenChange={handleOpenChange}>
                     <DialogContent
                         close={false}
-                        className="!fixed !inset-0 !left-0 !top-0 !z-[100] !flex !h-[100dvh] !w-screen !max-w-none !min-h-0 !translate-x-0 !translate-y-0 !flex-col !gap-0 !overflow-hidden !rounded-none !p-0 !animate-none"
+                        className="!fixed !inset-0 !left-0 !top-0 !z-[100] !flex !h-[var(--bs-dvh,100dvh)] !w-[var(--bs-vw,100vw)] !max-w-none !min-h-0 !translate-x-0 !translate-y-0 !flex-col !gap-0 !overflow-hidden !rounded-none !p-0 !animate-none"
                         style={{
                             position: "fixed",
                             inset: 0,
                             left: 0,
                             top: 0,
-                            width: "100vw",
-                            height: "100dvh",
+                            width: "var(--bs-vw,100vw)",
+                            height: "var(--bs-dvh,100dvh)",
                             maxWidth: "none",
                             transform: "none",
                             borderRadius: 0,
@@ -963,7 +963,7 @@ export function AddToKnowledgeModal({
                     <DialogContent
                         close={false}
                         ref={articleDialogContentRef}
-                        className="flex h-[80vh] max-h-[600px] w-[576px] max-w-[92vw] min-h-0 flex-col gap-0 overflow-hidden rounded-xl p-0 max-[768px]:inset-0 max-[768px]:left-0 max-[768px]:top-0 max-[768px]:h-[100dvh] max-[768px]:w-screen max-[768px]:max-w-none max-[768px]:translate-x-0 max-[768px]:translate-y-0 max-[768px]:rounded-none max-[768px]:animate-none"
+                        className="flex h-[80vh] max-h-[600px] w-[576px] max-w-[92vw] min-h-0 flex-col gap-0 overflow-hidden rounded-xl p-0 max-[768px]:inset-0 max-[768px]:left-0 max-[768px]:top-0 max-[768px]:h-[var(--bs-dvh,100dvh)] max-[768px]:w-[var(--bs-vw,100vw)] max-[768px]:max-w-none max-[768px]:translate-x-0 max-[768px]:translate-y-0 max-[768px]:rounded-none max-[768px]:animate-none"
                         style={
                             (isModalMobile768 || forceMobile768)
                                 ? {
@@ -971,8 +971,8 @@ export function AddToKnowledgeModal({
                                     inset: 0,
                                     left: 0,
                                     top: 0,
-                                    width: "100vw",
-                                    height: "100dvh",
+                                    width: "var(--bs-vw,100vw)",
+                                    height: "var(--bs-dvh,100dvh)",
                                     maxWidth: "none",
                                     maxHeight: "none",
                                     transform: "none",

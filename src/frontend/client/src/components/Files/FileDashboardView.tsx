@@ -22,7 +22,7 @@ const FileDashboardView = () => {
           </Button>
         )}
       </div>
-      <div className="flex h-screen max-w-full flex-row divide-x bg-[#f9f9f9]">
+      <div className="flex h-[var(--bs-vh,100vh)] max-w-full flex-row divide-x bg-[#f9f9f9]">
         <div className={`w-full lg:w-1/3 ${params.vectorStoreId ? 'hidden lg:block' : ''}`}>
           <VectorStoreSidePanel />
         </div>

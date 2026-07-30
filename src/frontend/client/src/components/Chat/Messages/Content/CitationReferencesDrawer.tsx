@@ -729,7 +729,7 @@ export default function CitationReferencesDrawer({
         createPortal(
           isFullBleedMobile ? (
             <aside
-              className="fixed inset-0 z-[130] flex min-h-0 flex-col overflow-hidden overscroll-contain bg-white [height:100dvh]"
+              className="fixed inset-0 z-[130] flex min-h-0 flex-col overflow-hidden overscroll-contain bg-white [height:var(--bs-dvh,100dvh)]"
               aria-label="参考资料"
             >
               {panelContent}
@@ -737,7 +737,7 @@ export default function CitationReferencesDrawer({
           ) : (
             <aside
               className={cn(
-                'fixed inset-y-0 right-0 z-[130] flex min-h-0 w-[min(520px,calc(100vw-24px))] min-w-0 flex-col overflow-hidden bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)] animate-in slide-in-from-right duration-300',
+                'fixed inset-y-0 right-0 z-[130] flex min-h-0 w-[min(520px,calc(var(--bs-vw,100vw)-24px))] min-w-0 flex-col overflow-hidden bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)] animate-in slide-in-from-right duration-300',
                 'rounded-tl-lg',
               )}
               aria-label="参考资料"

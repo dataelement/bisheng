@@ -272,7 +272,7 @@ export function KnowledgeAiBottomDock({
             <div
                 className="fixed inset-x-0 top-0 z-50 flex flex-col bg-white"
                 style={{
-                    height: viewportHeight ? `${viewportHeight}px` : "100dvh",
+                    height: viewportHeight ? `${viewportHeight}px` : "var(--bs-dvh,100dvh)",
                     transform: `translateY(${viewportOffsetTop}px)`,
                 }}
                 role="dialog"
@@ -441,7 +441,7 @@ export function KnowledgeAiBottomDock({
                         className={cn(
                             "overflow-hidden rounded-[20px] bg-white transition-[max-height] duration-300 ease-out",
                             !open && showHistory && historyDirect
-                                ? "mb-2 max-h-[clamp(440px,70vh,calc(100vh_-_160px))] border border-[#ECECEC] shadow-[0_4px_20px_0_rgba(3,7,117,0.05)]"
+                                ? "mb-2 max-h-[clamp(440px,70vh,calc(var(--bs-vh,100vh)_-_160px))] border border-[#ECECEC] shadow-[0_4px_20px_0_rgba(3,7,117,0.05)]"
                                 : "max-h-0",
                         )}
                     >
@@ -463,10 +463,10 @@ export function KnowledgeAiBottomDock({
                     <div
                         className={cn(
                             "overflow-hidden transition-[max-height] duration-300 ease-out",
-                            open ? "max-h-[clamp(440px,70vh,calc(100vh_-_160px))]" : "max-h-0",
+                            open ? "max-h-[clamp(440px,70vh,calc(var(--bs-vh,100vh)_-_160px))]" : "max-h-0",
                         )}
                     >
-                        <div className="flex h-[clamp(440px,70vh,calc(100vh_-_160px))] flex-col">
+                        <div className="flex h-[clamp(440px,70vh,calc(var(--bs-vh,100vh)_-_160px))] flex-col">
                             {/* Header */}
                             <div className="relative flex shrink-0 items-center gap-2 px-4 py-3">
                                 <h3 className="pointer-events-none min-w-0 shrink truncate text-left text-sm font-medium leading-[22px] text-[#212121]">

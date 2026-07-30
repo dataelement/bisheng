@@ -34,7 +34,7 @@ export default function TenantSelect() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background">
+    <div className="min-h-[var(--bs-vh,100vh)] flex items-center justify-center bg-background">
       <div className="w-full max-w-md px-6">
         <h1 className="text-2xl font-bold text-center mb-8">
           {t("tenant.selectionDeprecatedTitle", { defaultValue: "租户选择已下线" })}

@@ -2,6 +2,7 @@ import ReactDOM from "react-dom/client";
 import App from "./App";
 import ContextWrapper from "./contexts";
 import reportWebVitals from "./reportWebVitals";
+import { initFontSize } from "./utils/fontSize";
 import './i18n';
 // @ts-ignore
 import "./style/index.css";
@@ -40,6 +41,9 @@ import { QueryClient, QueryClientProvider } from "react-query";
     localStorage.removeItem('THIRD_PARTY_LOGOUT_URL')
   }
 }
+
+// Apply the COFCO font-size (page zoom) preference before first paint.
+initFontSize();
 
 const root = ReactDOM.createRoot(
   document.getElementById("root") as HTMLElement

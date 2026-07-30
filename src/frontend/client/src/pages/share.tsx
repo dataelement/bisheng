@@ -84,7 +84,7 @@ export default function Share() {
     // then drive their own scroll areas (chat messages and the citation panel
     // scroll independently instead of together).
     return (
-        <div className="flex h-[100dvh] w-full flex-col items-start gap-[10px] self-stretch overflow-hidden p-2">
+        <div className="flex h-[var(--bs-dvh,100dvh)] w-full flex-col items-start gap-[10px] self-stretch overflow-hidden p-2">
             {content}
         </div>
     );

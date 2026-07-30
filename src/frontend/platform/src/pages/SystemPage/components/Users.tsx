@@ -191,7 +191,7 @@ export default function Users(params) {
     }
 
     return <div className="relative">
-        <div className="h-[calc(100vh-128px-var(--license-banner-h,0px))] overflow-y-auto pb-10">
+        <div className="h-[calc(var(--bs-vh,100vh)-128px-var(--license-banner-h,0px))] overflow-y-auto pb-10">
             <div className="flex justify-end gap-6">
                 <div className="w-[180px] relative">
                     <SearchInput placeholder={t('system.username')} onChange={(e) => search(e.target.value)}></SearchInput>

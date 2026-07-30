@@ -144,7 +144,7 @@ const MermaidDiagram: React.FC<MermaidDiagramProps> = ({ content }) => {
   };
 
   return (
-    <div className="relative h-screen w-screen cursor-move bg-[#282C34] p-5">
+    <div className="relative h-[var(--bs-vh,100vh)] w-[var(--bs-vw,100vw)] cursor-move bg-[#282C34] p-5">
       <TransformWrapper
         ref={transformRef}
         initialScale={1}

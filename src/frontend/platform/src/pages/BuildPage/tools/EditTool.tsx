@@ -356,7 +356,7 @@ const EditTool = forwardRef((props: any, ref) => {
                 <SheetHeader>
                     <SheetTitle>{delShow ? t('edit') : t('create')}{t('tools.createCustomTool')}</SheetTitle>
                 </SheetHeader>
-                <div className="mt-4 overflow-y-auto h-screen pb-40">
+                <div className="mt-4 overflow-y-auto h-[var(--bs-vh,100vh)] pb-40">
                     {/* name */}
                     <label htmlFor="open" className="px-6">{t('tools.name')}</label>
                     <div className="px-6 mb-4" >

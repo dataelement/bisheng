@@ -345,7 +345,7 @@ export function MoveToDialog({
             {/* Mobile (≤768px): full-screen sheet, single-column tree (right panel
                 hidden), full-width footer — mirrors the member-management dialog. */}
             <DialogContent
-                className="flex max-w-3xl flex-col max-[768px]:fixed max-[768px]:inset-0 max-[768px]:h-[100dvh] max-[768px]:max-h-[100dvh] max-[768px]:w-full max-[768px]:max-w-none max-[768px]:translate-x-0 max-[768px]:translate-y-0 max-[768px]:gap-3 max-[768px]:rounded-none max-[768px]:p-4"
+                className="flex max-w-3xl flex-col max-[768px]:fixed max-[768px]:inset-0 max-[768px]:h-[var(--bs-dvh,100dvh)] max-[768px]:max-h-[var(--bs-dvh,100dvh)] max-[768px]:w-full max-[768px]:max-w-none max-[768px]:translate-x-0 max-[768px]:translate-y-0 max-[768px]:gap-3 max-[768px]:rounded-none max-[768px]:p-4"
                 onOpenAutoFocus={(e) => e.preventDefault()}
             >
                 <DialogHeader className="text-left">

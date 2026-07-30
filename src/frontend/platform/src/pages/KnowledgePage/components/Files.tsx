@@ -452,7 +452,7 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
             )}
 
             {/* Top action bar combined */}
-            <div className="absolute right-0 top-[-62px] flex flex-wrap md:flex-nowrap justify-end gap-2 md:gap-4 items-center z-10 max-w-[calc(100vw-40px)] bg-background md:bg-transparent p-1 md:p-0 rounded-lg">
+            <div className="absolute right-0 top-[-62px] flex flex-wrap md:flex-nowrap justify-end gap-2 md:gap-4 items-center z-10 max-w-[calc(var(--bs-vw,100vw)-40px)] bg-background md:bg-transparent p-1 md:p-0 rounded-lg">
 
                 {/* Batch Actions */}
                 {selectedFileObjs.length > 0 && (
@@ -547,7 +547,7 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
                 </div>
             </div>
 
-            <div className="h-[calc(100vh-180px-var(--license-banner-h,0px))] overflow-y-auto pb-20">
+            <div className="h-[calc(var(--bs-vh,100vh)-180px-var(--license-banner-h,0px))] overflow-y-auto pb-20">
                 <Table>
                     <TableHeader>
                         <TableRow>

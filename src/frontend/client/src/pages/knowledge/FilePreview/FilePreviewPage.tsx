@@ -273,7 +273,7 @@ export default function FilePreviewPage() {
     // Loading state while fetching preview URL
     if (loading) {
         return (
-            <div className="h-screen flex items-center justify-center bg-white">
+            <div className="h-[var(--bs-vh,100vh)] flex items-center justify-center bg-white">
                 <div className="text-[#86909c]">{localize("com_knowledge.loading")}</div>
             </div>
         );
@@ -282,7 +282,7 @@ export default function FilePreviewPage() {
     // No URL available (skip this guard for pptx conversion failure — handled by FilePreview)
     if (!fileUrl && !conversionFailed && !isRichPreviewData(previewData)) {
         return (
-            <div className="h-screen flex items-center justify-center bg-white">
+            <div className="h-[var(--bs-vh,100vh)] flex items-center justify-center bg-white">
                 <div className="text-[#86909c]">{localize("com_knowledge.fetch_preview_link_failed")}</div>
             </div>
         );
@@ -293,7 +293,7 @@ export default function FilePreviewPage() {
     // the screen, controls float, and the file-chat dock pins to the bottom.
     if (isMobile) {
         return (
-            <div className="relative h-screen w-screen overflow-hidden bg-white">
+            <div className="relative h-[var(--bs-vh,100vh)] w-[var(--bs-vw,100vw)] overflow-hidden bg-white">
                 {fileId && (
                     <PermissionDialog
                         open={permissionDialogOpen}
@@ -329,7 +329,7 @@ export default function FilePreviewPage() {
 
     // ─── Desktop layout: TopBar + viewer with a bottom-anchored AI dock overlay.
     return (
-        <div className="relative h-screen flex flex-col bg-white overflow-hidden">
+        <div className="relative h-[var(--bs-vh,100vh)] flex flex-col bg-white overflow-hidden">
             {fileId && (
                 <PermissionDialog
                     open={permissionDialogOpen}

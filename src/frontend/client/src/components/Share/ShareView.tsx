@@ -32,7 +32,7 @@ function SharedView() {
   let content: JSX.Element;
   if (isLoading) {
     content = (
-      <div className="flex h-screen items-center justify-center">
+      <div className="flex h-[var(--bs-vh,100vh)] items-center justify-center">
         <Spinner className="" />
       </div>
     );
@@ -74,7 +74,7 @@ function SharedView() {
     );
   } else {
     content = (
-      <div className="flex h-screen items-center justify-center ">
+      <div className="flex h-[var(--bs-vh,100vh)] items-center justify-center ">
         {localize('com_ui_shared_link_not_found')}
       </div>
     );

@@ -195,7 +195,7 @@ export function TreeDepartmentSelect({
         align="start"
         sideOffset={4}
         className={cn(
-          "max-h-[min(70vh,420px)] w-[min(100vw-2rem,420px)] max-w-[min(100vw-2rem,420px)] p-2",
+          "max-h-[min(70vh,420px)] w-[min(var(--bs-vw,100vw)-2rem,420px)] max-w-[min(var(--bs-vw,100vw)-2rem,420px)] p-2",
           contentClassName
         )}
         onOpenAutoFocus={(e) => e.preventDefault()}

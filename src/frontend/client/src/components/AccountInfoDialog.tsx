@@ -320,9 +320,9 @@ export function AccountInfoDialog({
             <DialogContent
                 close={false}
                 className={cn(
-                    "flex h-[600px] max-h-[calc(100vh-32px)] w-[600px] max-w-[calc(100vw-32px)] flex-col gap-0 overflow-hidden rounded-xl sm:rounded-xl border border-[#ECECEC] bg-white p-0 shadow-[0_8px_24px_rgba(15,23,42,0.12)]",
+                    "flex h-[600px] max-h-[calc(var(--bs-vh,100vh)-32px)] w-[600px] max-w-[calc(var(--bs-vw,100vw)-32px)] flex-col gap-0 overflow-hidden rounded-xl sm:rounded-xl border border-[#ECECEC] bg-white p-0 shadow-[0_8px_24px_rgba(15,23,42,0.12)]",
                     // H5：全屏页面（与 tailwind touch-mobile = max-width 1023px 一致）
-                    "touch-mobile:inset-x-0 touch-mobile:bottom-0 touch-mobile:left-0 touch-mobile:right-0 touch-mobile:top-0 touch-mobile:h-[100dvh] touch-mobile:max-h-[100dvh] touch-mobile:w-full touch-mobile:max-w-none touch-mobile:translate-x-0 touch-mobile:translate-y-0 touch-mobile:rounded-none touch-mobile:border-0 touch-mobile:shadow-none",
+                    "touch-mobile:inset-x-0 touch-mobile:bottom-0 touch-mobile:left-0 touch-mobile:right-0 touch-mobile:top-0 touch-mobile:h-[var(--bs-dvh,100dvh)] touch-mobile:max-h-[var(--bs-dvh,100dvh)] touch-mobile:w-full touch-mobile:max-w-none touch-mobile:translate-x-0 touch-mobile:translate-y-0 touch-mobile:rounded-none touch-mobile:border-0 touch-mobile:shadow-none",
                 )}
             >
                 {/* 标题栏 */}

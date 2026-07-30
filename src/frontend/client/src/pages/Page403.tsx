@@ -2,7 +2,7 @@
 
 export default function Page403() {
     return (
-        <div className="min-h-screen flex items-center justify-center px-4 bg-background">
+        <div className="min-h-[var(--bs-vh,100vh)] flex items-center justify-center px-4 bg-background">
             <div className="max-w-2xl w-full text-center space-y-8">
                 <div className="space-y-4">
                     <h1 className="text-[clamp(6rem,20vw,12rem)] font-bold leading-none tracking-tighter text-foreground/10">

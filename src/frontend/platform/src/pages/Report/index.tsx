@@ -37,7 +37,7 @@ export default function Report() {
             <span className="absolute left-10 flex items-center gap-1 cursor-pointer" onClick={() => navigate(-1)}><ChevronLeft size={20} />{t('back')}</span>
             <span className="text-sm">docx</span>
         </div>
-        <div className="gap-4 flex h-screen p-10">
+        <div className="gap-4 flex h-[var(--bs-vh,100vh)] p-10">
             <div ref={iframeRef} className="flex-1 border flex justify-center items-center bg-accent">
                 {
                     docx.path

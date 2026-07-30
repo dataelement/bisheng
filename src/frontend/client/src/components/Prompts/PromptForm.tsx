@@ -226,7 +226,7 @@ const PromptForm = () => {
   const RightPanel = () => (
     <div
       className="h-full w-full overflow-y-auto bg-surface-primary px-4"
-      style={{ maxHeight: 'calc(100vh - 100px)' }}
+      style={{ maxHeight: 'calc(var(--bs-vh,100vh) - 100px)' }}
     >
       <div className="mb-2 flex flex-col lg:flex-row lg:items-center lg:justify-center lg:gap-x-2 xl:flex-row xl:space-y-0">
         <CategorySelector

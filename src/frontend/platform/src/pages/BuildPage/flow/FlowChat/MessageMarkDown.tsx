@@ -66,7 +66,7 @@ function CitationPreviewCard({
 }) {
     if (isLoading) {
         return (
-            <div className="flex min-h-[120px] w-[320px] max-w-[calc(100vw-32px)] items-center justify-center rounded-lg border border-[#ECECEC] bg-white text-sm text-[#86909C] shadow-[0_4px_19px_rgba(34,34,34,0.07)]">
+            <div className="flex min-h-[120px] w-[320px] max-w-[calc(var(--bs-vw,100vw)-32px)] items-center justify-center rounded-lg border border-[#ECECEC] bg-white text-sm text-[#86909C] shadow-[0_4px_19px_rgba(34,34,34,0.07)]">
                 <Loader2 className="mr-2 size-4 animate-spin" />
                 加载溯源详情...
             </div>
@@ -75,14 +75,14 @@ function CitationPreviewCard({
 
     if (error || !preview) {
         return (
-            <div className="w-[320px] max-w-[calc(100vw-32px)] rounded-lg border border-[#ECECEC] bg-white p-4 text-sm text-[#86909C] shadow-[0_4px_19px_rgba(34,34,34,0.07)]">
+            <div className="w-[320px] max-w-[calc(var(--bs-vw,100vw)-32px)] rounded-lg border border-[#ECECEC] bg-white p-4 text-sm text-[#86909C] shadow-[0_4px_19px_rgba(34,34,34,0.07)]">
                 暂无溯源详情
             </div>
         );
     }
 
     const isWeb = preview.type === "web";
-    const cardClassName = "group relative cursor-pointer w-[320px] max-w-[calc(100vw-32px)] overflow-hidden rounded-lg border border-[#ECECEC] bg-white text-[#1D2129] shadow-[0_4px_19px_rgba(34,34,34,0.07)]";
+    const cardClassName = "group relative cursor-pointer w-[320px] max-w-[calc(var(--bs-vw,100vw)-32px)] overflow-hidden rounded-lg border border-[#ECECEC] bg-white text-[#1D2129] shadow-[0_4px_19px_rgba(34,34,34,0.07)]";
     const titleClassName = "min-w-0 flex-1 truncate text-[14px] font-medium leading-5 text-[#1D2129]";
     const titleContainerClassName = "border-b border-[#F2F3F5] bg-[#F7F7F7] px-4 py-3";
     const interactiveTitleClassName = `${titleClassName} transition-colors duration-200 group-hover:text-[#024DE3]`;

@@ -113,7 +113,7 @@ export function StandaloneSideNav({ sidebar, onCloseSidebar }: StandaloneSideNav
                 sideOffset={isGuest ? 8 : 0}
                 className={cn(
                   isGuest
-                    ? 'max-w-[min(100vw-2rem,320px)] !rounded-[20px] !border !border-[#E5E6EB] !bg-white !p-5 !text-sm !font-normal !leading-normal !text-[#1D2129] !shadow-[0_8px_32px_rgba(0,0,0,0.12)]'
+                    ? 'max-w-[min(var(--bs-vw,100vw)-2rem,320px)] !rounded-[20px] !border !border-[#E5E6EB] !bg-white !p-5 !text-sm !font-normal !leading-normal !text-[#1D2129] !shadow-[0_8px_32px_rgba(0,0,0,0.12)]'
                     : 'max-w-[320px] p-3',
                 )}
               >

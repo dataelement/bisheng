@@ -39,7 +39,7 @@ export default function SharePage() {
     }
 
     return (
-        <div className="h-screen flex flex-col">
+        <div className="h-[var(--bs-vh,100vh)] flex flex-col">
             <div className="h-full">
                 <EditorCanvas isPreviewMode isLoading={isLoading} />
             </div>

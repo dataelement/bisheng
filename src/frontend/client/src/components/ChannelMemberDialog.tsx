@@ -335,7 +335,7 @@ export function ChannelMemberDialog({
             <Dialog open={open} onOpenChange={onOpenChange}>
                 <DialogContent
                     overlayClassName="z-[100]"
-                    className="z-[100] flex h-[600px] w-[700px] max-h-[600px] max-w-[700px] flex-col gap-0 overflow-hidden rounded-[10px] p-0 max-[768px]:fixed max-[768px]:inset-0 max-[768px]:h-[100dvh] max-[768px]:max-h-[100dvh] max-[768px]:w-full max-[768px]:max-w-none max-[768px]:translate-x-0 max-[768px]:translate-y-0 max-[768px]:rounded-none"
+                    className="z-[100] flex h-[600px] w-[700px] max-h-[600px] max-w-[700px] flex-col gap-0 overflow-hidden rounded-[10px] p-0 max-[768px]:fixed max-[768px]:inset-0 max-[768px]:h-[var(--bs-dvh,100dvh)] max-[768px]:max-h-[var(--bs-dvh,100dvh)] max-[768px]:w-full max-[768px]:max-w-none max-[768px]:translate-x-0 max-[768px]:translate-y-0 max-[768px]:rounded-none"
                     onOpenAutoFocus={(event) => event.preventDefault()}
                     close={false}
                 >

@@ -17,12 +17,21 @@ import { DatasetIcon } from "@/components/bs-icons/menu/dataset";
 import { DashboardIcon } from "@/components/bs-icons/menu/system";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { SelectHover, SelectHoverItem } from "@/components/bs-ui/select/hover";
+import { toast } from "@/components/bs-ui/toast/use-toast";
 import { locationContext } from "@/contexts/locationContext";
+import {
+    FONT_SIZE_LEVELS,
+    getFontSizeLevel,
+    isFontSizeAvailable,
+    saveFontSizeLevel,
+    subscribeFontSizeAvailability,
+    type FontSizeLevel,
+} from "@/utils/fontSize";
 import i18next from "i18next";
-import { Check, ChevronDown, GanttChartIcon, Lock, MoonStar, Sun } from "lucide-react";
+import { ALargeSmall, Check, ChevronDown, GanttChartIcon, Lock, MoonStar, Sun } from "lucide-react";
 import { ApprovalMenuIcon } from "@/components/bs-icons/menu/approval";
 import { TenantMenuIcon } from "@/components/bs-icons/menu/tenant";
-import { Suspense, useContext, useEffect, useMemo, useState } from "react";
+import { Suspense, useContext, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { Separator } from "../components/bs-ui/separator";
@@ -61,6 +70,26 @@ export default function MainLayout() {
                 next()
             }
         })
+    }
+
+    // COFCO desktop-only page zoom preference (small / standard / large).
+    const fontSizeAvailable = useSyncExternalStore(
+        subscribeFontSizeAvailability,
+        isFontSizeAvailable,
+        () => false,
+    )
+    const [fontSizeLevel, setFontSizeLevel] = useState<FontSizeLevel>(() => getFontSizeLevel())
+    const fontSizeLabelKeys: Record<FontSizeLevel, string> = {
+        small: 'menu.fontSizeSmall',
+        standard: 'menu.fontSizeStandard',
+        large: 'menu.fontSizeLarge',
+    }
+    const changeFontSize = (level: FontSizeLevel) => {
+        if (saveFontSizeLevel(level)) {
+            setFontSizeLevel(level)
+        } else {
+            toast({ variant: 'error', description: t('menu.fontSizeSaveFailed') })
+        }
     }
 
     // 重置密码
@@ -111,7 +140,7 @@ export default function MainLayout() {
         isMenu(menu) || (menuApprovalMode && hasAdminEntry && APPROVAL_MENUS.has(menu))
 
     return <div className="flex">
-        <div className="bg-background-main w-full h-screen flex flex-col">
+        <div className="bg-background-main w-full h-[var(--bs-vh,100vh)] flex flex-col">
             {isSuperAdmin && <LicenseBanner />}
             <div className="flex justify-between h-[64px] shrink-0 bg-background-main relative z-[21]">
                 <div className="flex h-9 my-[14px]">
@@ -161,7 +190,10 @@ export default function MainLayout() {
                     <div className="flex items-center h-7 my-4">
                         {/* @ts-ignore */}
                         <img className="h-7 w-7 rounded-2xl mr-4" src={__APP_ENV__.BASE_URL + (user.avatar || '/assets/user.png')} alt="" />
+                        {/* bs-submenu-host lets the font-size flyout escape the menu's
+                            overflow-y-auto box — see the rule in style/index.css. */}
                         <SelectHover
+                            className="bs-submenu-host overflow-visible"
                             triagger={
                                 <span className="leading-8 text-[14px] mr-8 max-w-40 cursor-pointer text-ellipsis overflow-hidden whitespace-nowrap">
                                     {user.user_name} <ChevronDown className="inline-block mt-[-2px]" />
@@ -169,6 +201,25 @@ export default function MainLayout() {
                             }>
                             {hasWorkbenchEntry && <SelectHoverItem onClick={() => window.open('/workspace/')}><GanttChartIcon className="w-4 h-4 mr-1" /><span>{t('menu.workspace')}</span></SelectHoverItem>}
                             <SelectHoverItem onClick={JumpResetPage}><Lock className="w-4 h-4 mr-1" /><span>{t('menu.changePwd')}</span></SelectHoverItem>
+                            {/* COFCO only: whole-page display size; flyout opens to the left on
+                                hover. Desktop only, same breakpoint that gates the zoom itself. */}
+                            {fontSizeAvailable && <div className="relative group/fontsize">
+                                <SelectHoverItem>
+                                    <ALargeSmall className="w-4 h-4 mr-1" /><span>{t('menu.fontSize')}</span>
+                                    <ChevronDown className="w-4 h-4 absolute top-1/2 right-1 -translate-y-1/2 -rotate-90" />
+                                </SelectHoverItem>
+                                {/* pr-1 keeps a hover bridge between the row and the panel */}
+                                <div className="absolute right-full top-0 z-10 hidden pr-1 group-hover/fontsize:block">
+                                    <div className="min-w-[104px] rounded-md border bg-popover p-2 shadow-md dark:bg-[#2A2B2E]">
+                                        {FONT_SIZE_LEVELS.map((level) => (
+                                            <SelectHoverItem key={level} onClick={() => changeFontSize(level)}>
+                                                <span>{t(fontSizeLabelKeys[level])}</span>
+                                                {fontSizeLevel === level && <Check className="w-4 h-4 absolute top-1/2 right-1 -translate-y-1/2" />}
+                                            </SelectHoverItem>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>}
                             <SelectHoverItem onClick={handleLogout} className="text-[#f53f3f] hover:bg-red-50 dark:hover:bg-red-950/30 dark:text-[#f53f3f]"><QuitIcon className="w-4 h-4 mr-1" /><span>{t('menu.logout')}</span></SelectHoverItem>
                         </SelectHover>
                     </div>
@@ -176,7 +227,7 @@ export default function MainLayout() {
             </div>
             <div className="flex flex-1 min-h-0">
                 <div className="relative z-10 bg-background-main h-full w-[184px] min-w-[184px] px-3  shadow-x1 flex justify-between text-center ">
-                    <nav className="overflow-y-auto overflow-x-hidden" style={{ maxHeight: "calc(100vh - 64px - 90px - var(--license-banner-h, 0px))" }}>
+                    <nav className="overflow-y-auto overflow-x-hidden" style={{ maxHeight: "calc(var(--bs-vh,100vh) - 64px - 90px - var(--license-banner-h, 0px))" }}>
                         {/* <NavLink to='/' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
                             <ApplicationIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.app')}</span>
                         </NavLink> */}
@@ -279,7 +330,7 @@ export default function MainLayout() {
                         </div>
                     </div>}
                 </div>
-                <div className="flex-1 bg-background-main-content rounded-lg w-[calc(100vw-184px)]">
+                <div className="flex-1 bg-background-main-content rounded-lg w-[calc(var(--bs-vw,100vw)-184px)]">
                     <Suspense fallback={<div className="flex items-center justify-center h-full"><LoadingIcon /></div>}>
                         <Outlet />
                     </Suspense>

@@ -127,10 +127,10 @@ export default function MarkLabel({ open, home, onClose }: MarkLabelProps) {
                 className={cn(
                     'flex flex-col gap-0 overflow-hidden p-0',
                     // H5（≤768px）：全屏覆盖，同设计稿竖屏布局
-                    'max-[768px]:fixed max-[768px]:inset-0 max-[768px]:z-[100] max-[768px]:h-[100dvh] max-[768px]:max-h-none max-[768px]:w-full max-[768px]:max-w-none max-[768px]:translate-x-0 max-[768px]:translate-y-0 max-[768px]:rounded-none',
+                    'max-[768px]:fixed max-[768px]:inset-0 max-[768px]:z-[100] max-[768px]:h-[var(--bs-dvh,100dvh)] max-[768px]:max-h-none max-[768px]:w-full max-[768px]:max-w-none max-[768px]:translate-x-0 max-[768px]:translate-y-0 max-[768px]:rounded-none',
                     'max-[768px]:pt-[env(safe-area-inset-top)]',
                     // PC（≥769px）：居中、左右各 40px 边距、限高限宽、双栏
-                    'min-[769px]:left-1/2 min-[769px]:top-1/2 min-[769px]:h-[80vh] min-[769px]:max-h-[800px] min-[769px]:w-[calc(100vw-80px)] min-[769px]:max-w-[800px] min-[769px]:-translate-x-1/2 min-[769px]:-translate-y-1/2 min-[769px]:rounded-xl',
+                    'min-[769px]:left-1/2 min-[769px]:top-1/2 min-[769px]:h-[80vh] min-[769px]:max-h-[800px] min-[769px]:w-[calc(var(--bs-vw,100vw)-80px)] min-[769px]:max-w-[800px] min-[769px]:-translate-x-1/2 min-[769px]:-translate-y-1/2 min-[769px]:rounded-xl',
                 )}
             >
                 <button

@@ -9,6 +9,7 @@ import { sanitizeHtml } from "~/utils/sanitizeHtml";
 import { LoadingIcon } from "~/components/ui/icon/Loading";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "~/components/ui/Tooltip2";
 import { downloadFile } from "~/utils";
+import { getLogicalViewport } from "~/utils/fontSize";
 
 // 顶部答案区
 const Anwser = ({ id, msg, onInit, onAdd, fullScreen = false }) => {
@@ -64,8 +65,8 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children, fullScreen
     // 移动端
     const [collapse, setCollapse] = useState(true)
     const [isMobile, setIsMobile] = useState(true)
-    const [width, setWidth] = useState(window.innerWidth);
-    const [height, setHeight] = useState(window.innerHeight);
+    const [width, setWidth] = useState(getLogicalViewport().width);
+    const [height, setHeight] = useState(getLogicalViewport().height);
     const checkIsMobile = () => {
         if (width < 640) {
             setIsMobile(true)
@@ -75,8 +76,10 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children, fullScreen
     }
     useEffect(() => {
         const handleResize = () => {
-            setWidth(window.innerWidth);
-            setHeight(window.innerHeight);
+            // Logical px: the mobile breakpoint below compares against the
+            // layout width the page actually gets at the current page zoom.
+            setWidth(getLogicalViewport().width);
+            setHeight(getLogicalViewport().height);
         };
         window.addEventListener("resize", handleResize);
         checkIsMobile()
@@ -119,7 +122,7 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children, fullScreen
         setTimeout(() => document.getElementById('taginput')?.focus(), 0);
     }
 
-    return <div className="flex gap-4 relative" style={{ height: fullScreen ? '100vh' : !isMobile ? 'calc(100vh - 10rem)' : 'calc(100vh - 4rem)' }}>
+    return <div className="flex gap-4 relative" style={{ height: fullScreen ? 'var(--bs-vh,100vh)' : !isMobile ? 'calc(var(--bs-vh,100vh) - 10rem)' : 'calc(var(--bs-vh,100vh) - 4rem)' }}>
         {
             isMobile && <div className="absolute top-0 left-4 z-50 bg-gray-100 dark:bg-gray-950 py-1 px-2 pb-2 rounded-md">
                 {!collapse && <span onClick={() => { setCollapse(true) }} className="">{t('com_source_modal_collapse')}</span>}

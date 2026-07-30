@@ -48,6 +48,10 @@ import App from './App';
 import './style.css';
 import './mobile.css';
 import { ApiErrorBoundaryProvider } from './hooks/ApiErrorBoundaryContext';
+import { initFontSize } from './utils/fontSize';
+
+// Apply the COFCO font-size (page zoom) preference before first paint.
+initFontSize();
 
 if (__VCONSOLE_ENABLED__) {
   import('vconsole').then(({ default: VConsole }) => {

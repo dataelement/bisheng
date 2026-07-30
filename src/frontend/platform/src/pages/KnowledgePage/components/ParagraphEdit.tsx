@@ -5,6 +5,7 @@ import { Button } from "@/components/bs-ui/button";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { getFileBboxApi, getFilePathApi, getKnowledgeChunkApi, updateChunkApi, updatePreviewChunkApi } from "@/controllers/API";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { getDisplayScale, getLogicalViewport } from "@/utils/fontSize";
 import { Crosshair, Info, X } from "lucide-react";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from "react-i18next";
@@ -299,9 +300,9 @@ const ParagraphEdit = ({
                     {/* file view */}
                     <div className="bg-gray-100 relative">
                         {showPos && value && Object.keys(labels).length !== 0 && <Button className="absolute top-2 right-2 z-10 bg-background" variant="outline" onClick={() => setRandom(Math.random() / 10000)}><Crosshair className="mr-1" size={16} />{t('backToPosition')}</Button>}
-                        <div className="h-[calc(100vh-104px-var(--license-banner-h,0px))] overflow-auto"
+                        <div className="h-[calc(var(--bs-vh,100vh)-104px-var(--license-banner-h,0px))] overflow-auto"
                             style={{
-                                width: 'calc(100vh - 104px)',
+                                width: 'calc(var(--bs-vh,100vh) - 104px)',
                                 minWidth: '100%',
                             }}>
                             {
@@ -317,7 +318,7 @@ const ParagraphEdit = ({
 };
 
 const useDragSize = (full) => {
-    const [leftPanelWidth, setLeftPanelWidth] = useState(full ? '100%' : window.innerWidth * 0.4);
+    const [leftPanelWidth, setLeftPanelWidth] = useState(full ? '100%' : getLogicalViewport().width * 0.4);
     const [isDragging, setIsDragging] = useState(false);
 
     const handleMouseDown = useCallback(() => {
@@ -331,8 +332,9 @@ const useDragSize = (full) => {
     const handleMouseMove = useCallback(
         (e) => {
             if (isDragging) {
-                const newWidth = e.clientX - 24;
-                if (newWidth >= 320 && newWidth <= window.innerWidth * 0.7) {
+                // clientX is physical px; the panel width is laid out at page zoom.
+                const newWidth = e.clientX / getDisplayScale() - 24;
+                if (newWidth >= 320 && newWidth <= getLogicalViewport().width * 0.7) {
                     setLeftPanelWidth(newWidth);
                 }
             }

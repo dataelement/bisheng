@@ -2,6 +2,7 @@
 import { Button } from "@/components/bs-ui/button";
 import { generateUUID } from "@/components/bs-ui/utils";
 import { locationContext } from "@/contexts/locationContext";
+import { getDisplayScale, getLogicalViewport } from "@/utils/fontSize";
 import { GripVertical, Maximize2, Minus, X } from "lucide-react";
 import { forwardRef, useContext, useImperativeHandle, useState, useRef, useEffect } from "react";
 import { useTranslation } from "react-i18next";
@@ -16,7 +17,7 @@ export const ChatTest = forwardRef((props, ref) => {
     const [small, setSmall] = useState(false);
     const { appConfig } = useContext(locationContext);
     const { t } = useTranslation('flow');
-    const [width, setWidth] = useState(window.innerWidth / 2.5);
+    const [width, setWidth] = useState(getLogicalViewport().width / 2.5);
     const resizableRef = useRef(null);
 
     // Expose a `run` method through the `ref` to control the sheet's state
@@ -55,8 +56,11 @@ export const ChatTest = forwardRef((props, ref) => {
     };
 
     const handleMouseMove = (e) => {
-        const newWidth = window.innerWidth - e.clientX;
-        if (newWidth > 600 && newWidth < window.innerWidth) {
+        // innerWidth and clientX are physical px; the width we set is laid out
+        // at page zoom, so convert the distance to logical px.
+        const viewportWidth = getLogicalViewport().width;
+        const newWidth = viewportWidth - e.clientX / getDisplayScale();
+        if (newWidth > 600 && newWidth < viewportWidth) {
             setWidth(newWidth);
         }
     };
@@ -99,7 +103,7 @@ export const ChatTest = forwardRef((props, ref) => {
                     ><X /></Button>
                 </div>
             </div>
-            <div className={`h-[calc(100vh-28px-var(--license-banner-h,0px))] relative overflow-y-auto ${small ? 'hidden' : ''}`} onKeyDown={(e) => e.stopPropagation()}>
+            <div className={`h-[calc(var(--bs-vh,100vh)-28px-var(--license-banner-h,0px))] relative overflow-y-auto ${small ? 'hidden' : ''}`} onKeyDown={(e) => e.stopPropagation()}>
                 <ChatPane autoRun chatId={chatId} flow={flow} wsUrl={`${host}${__APP_ENV__.BASE_URL}/api/v1/workflow/chat/${flow?.id}`} />
             </div>
             {!small && <div

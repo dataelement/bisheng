@@ -447,7 +447,7 @@ export function KnowledgeSpacePreviewDrawer({
                 side="right"
                 className={cn(
                     "flex h-full min-h-0 flex-col overflow-hidden p-0 px-12 w-[1000px] sm:max-w-[1000px]",
-                    "touch-mobile:inset-0 touch-mobile:left-0 touch-mobile:top-0 touch-mobile:h-dvh touch-mobile:w-screen touch-mobile:max-w-none touch-mobile:translate-x-0 touch-mobile:translate-y-0 touch-mobile:px-4"
+                    "touch-mobile:inset-0 touch-mobile:left-0 touch-mobile:top-0 touch-mobile:h-dvh touch-mobile:w-[var(--bs-vw,100vw)] touch-mobile:max-w-none touch-mobile:translate-x-0 touch-mobile:translate-y-0 touch-mobile:px-4"
                 )}
                 hideClose
             >

@@ -54,7 +54,7 @@ export default function OptionsPopover({
   return (
     <Portal>
       <Content sideOffset={8} align="start" ref={popoverRef} asChild>
-        <div className="z-[70] flex w-screen flex-col items-center touch-desktop:w-full touch-desktop:px-4">
+        <div className="z-[70] flex w-[var(--bs-vw,100vw)] flex-col items-center touch-desktop:w-full touch-desktop:px-4">
           <div
             className={cn(
               cardStyle,

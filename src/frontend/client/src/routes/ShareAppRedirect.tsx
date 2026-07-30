@@ -48,7 +48,7 @@ export default function ShareAppRedirect() {
 
   // Show loading spinner during redirect
   return (
-    <div className="flex h-screen items-center justify-center">
+    <div className="flex h-[var(--bs-vh,100vh)] items-center justify-center">
       <Spinner className="text-blue-500" />
     </div>
   );

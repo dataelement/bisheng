@@ -47,7 +47,7 @@ export default function index({ id = '', vid = '', shareToken = '' }) {
                 /* F035 Track H: fresh-task landing — unified with the daily
                    landing. Same slogan (Landing) + the daily AiChatInput in
                    task mode (extra "添加技能" entry), no blue gradient. */
-                <div className='w-full h-[calc(100vh-68px)] overflow-y-auto'>
+                <div className='w-full h-[calc(var(--bs-vh,100vh)-68px)] overflow-y-auto'>
                     <div className='flex flex-col min-h-full pt-[20vh] pb-12'>
                         <div className='shrink-0'>
                             <Landing isNew />
@@ -60,7 +60,7 @@ export default function index({ id = '', vid = '', shareToken = '' }) {
             ) : (
                 /* F035 Track H (P3): new conversational execution view — replaced
                    the legacy SOPEditor/TaskFlow split panes (removed in P5). */
-                <div className='w-full h-[calc(100vh-68px)]'>
+                <div className='w-full h-[calc(var(--bs-vh,100vh)-68px)]'>
                     <ExecutionFlow
                         versionId={versionId}
                         conversationId={conversationId}

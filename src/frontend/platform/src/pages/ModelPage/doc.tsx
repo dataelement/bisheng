@@ -32,7 +32,7 @@ export default function Doc() {
         // }
     }, [])
 
-    return <div style={{ width: "100%", height: "100vh" }}>
+    return <div style={{ width: "100%", height: "var(--bs-vh,100vh)" }}>
         {/* <iframe id="iframe" style={{ width: "100%", height: "100%" }} src="" ></iframe> */}
         {/* <h1>正在加载文件</h1> */}
         {/* {loading && <Loading color="secondary" size="xs" />} */}

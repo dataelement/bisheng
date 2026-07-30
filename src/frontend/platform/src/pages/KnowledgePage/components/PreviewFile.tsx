@@ -369,7 +369,7 @@ export default function PreviewFile({
       // Upload step 3 lives in a bounded flex card — fill it instead of guessing
       // the viewport offset (the fixed calc left dead space under the preview).
       ? 'flex-1 min-h-0'
-      : edit ? 'h-[calc(100vh-206px-var(--license-banner-h,0px))]' : 'h-[calc(100vh-284px-var(--license-banner-h,0px))]'}`}>
+      : edit ? 'h-[calc(var(--bs-vh,100vh)-206px-var(--license-banner-h,0px))]' : 'h-[calc(var(--bs-vh,100vh)-284px-var(--license-banner-h,0px))]'}`}>
       {render(file.suffix)}
     </div>
   </div>

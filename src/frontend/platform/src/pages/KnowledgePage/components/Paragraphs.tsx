@@ -9,6 +9,7 @@ import { toast } from "@/components/bs-ui/toast/use-toast";
 import ShadTooltip from "@/components/ShadTooltipComponent";
 import { addMetadata, delChunkApi, getFileBboxApi, getFilePathApi, getKnowledgeChunkApi, getKnowledgeDetailApi, getMetaFile, readFileByLibDatabase, saveUserMetadataApi, updateChunkApi } from '@/controllers/API';
 import { captureAndAlertRequestErrorHoc } from '@/controllers/request';
+import { getLogicalViewport } from '@/utils/fontSize';
 import { useTable } from '@/util/hook';
 import { ArrowLeft, ClipboardPenLine, FileText } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -85,7 +86,7 @@ export default function Paragraphs({ fileId, onBack, canEditKb = false, canDelet
     // Right sidebar dialog related states and refs
     const mainMetadataDialogRef = useRef(null);
     const [sideDialogPosition, setSideDialogPosition] = useState({ top: 0, left: 0 });
-    const [screenWidth, setScreenWidth] = useState(window.innerWidth);
+    const [screenWidth, setScreenWidth] = useState(getLogicalViewport().width);
     const isSmallScreen = screenWidth < 1366;
     const sideDialogWidth = isSmallScreen ? 240 : 300;
     const [isSideDialogPositioned, setIsSideDialogPositioned] = useState(false);
@@ -740,8 +741,9 @@ export default function Paragraphs({ fileId, onBack, canEditKb = false, canDelet
 
     useEffect(() => {
         const handleResize = () => {
-            const newWidth = window.innerWidth;
-            setScreenWidth(newWidth);
+            // Logical px: this width positions the side dialog, which is laid
+            // out inside the (possibly zoomed) page.
+            setScreenWidth(getLogicalViewport().width);
         };
 
         window.addEventListener("resize", handleResize);
@@ -812,7 +814,7 @@ export default function Paragraphs({ fileId, onBack, canEditKb = false, canDelet
     }, [canEditKb, mainMetadataList, selectedFileId, t]);
 
     return (
-        <div className="relative flex flex-col h-[calc(100vh-64px-var(--license-banner-h,0px))]">
+        <div className="relative flex flex-col h-[calc(var(--bs-vh,100vh)-64px-var(--license-banner-h,0px))]">
             {load && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,1)] dark:bg-blur-shared">
                 <LoadingIcon />
             </div>}
@@ -901,7 +903,7 @@ export default function Paragraphs({ fileId, onBack, canEditKb = false, canDelet
                                 edit={canEditKb}
                                 canDelete={canDeleteKb}
                                 page={page}
-                                className="h-[calc(100vh-206px-var(--license-banner-h,0px))] pb-6"
+                                className="h-[calc(var(--bs-vh,100vh)-206px-var(--license-banner-h,0px))] pb-6"
                                 fileSuffix={currentFile?.suffix || ''}
                                 loading={loading}
                                 chunks={chunks}

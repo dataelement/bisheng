@@ -263,7 +263,7 @@ function CitationPreviewCard({
 }) {
   if (isLoading) {
     return (
-      <div className="flex min-h-[120px] w-[320px] max-w-[calc(100vw-32px)] items-center justify-center rounded-lg bg-white text-sm text-[#86909C] shadow-[0_4px_19px_rgba(34,34,34,0.07)]">
+      <div className="flex min-h-[120px] w-[320px] max-w-[calc(var(--bs-vw,100vw)-32px)] items-center justify-center rounded-lg bg-white text-sm text-[#86909C] shadow-[0_4px_19px_rgba(34,34,34,0.07)]">
         <Outlined.Loading className="mr-2 size-4 animate-spin" />
         加载溯源详情...
       </div>
@@ -274,7 +274,7 @@ function CitationPreviewCard({
   // longer exists). Product decision: show "no permission", not "no source detail".
   if (notPermitted) {
     return (
-      <div className="w-[320px] max-w-[calc(100vw-32px)] rounded-lg bg-white p-4 text-sm text-[#86909C] shadow-[0_4px_19px_rgba(34,34,34,0.07)]">
+      <div className="w-[320px] max-w-[calc(var(--bs-vw,100vw)-32px)] rounded-lg bg-white p-4 text-sm text-[#86909C] shadow-[0_4px_19px_rgba(34,34,34,0.07)]">
         暂无权限
       </div>
     );
@@ -282,14 +282,14 @@ function CitationPreviewCard({
 
   if (error || !preview) {
     return (
-      <div className="w-[320px] max-w-[calc(100vw-32px)] rounded-lg bg-white p-4 text-sm text-[#86909C] shadow-[0_4px_19px_rgba(34,34,34,0.07)]">
+      <div className="w-[320px] max-w-[calc(var(--bs-vw,100vw)-32px)] rounded-lg bg-white p-4 text-sm text-[#86909C] shadow-[0_4px_19px_rgba(34,34,34,0.07)]">
         暂无溯源详情
       </div>
     );
   }
 
   const isWeb = preview.type === 'web';
-  const cardClassName = 'group relative cursor-pointer w-[320px] max-w-[calc(100vw-32px)] overflow-hidden rounded-lg bg-white text-[#1D2129] shadow-[0_4px_19px_rgba(34,34,34,0.07)]';
+  const cardClassName = 'group relative cursor-pointer w-[320px] max-w-[calc(var(--bs-vw,100vw)-32px)] overflow-hidden rounded-lg bg-white text-[#1D2129] shadow-[0_4px_19px_rgba(34,34,34,0.07)]';
   const titleClassName = 'min-w-0 flex-1 truncate text-[14px] font-medium leading-5 text-[#1D2129]';
   const titleContainerClassName = 'bg-white p-3';
   // Web link titles hover to a fixed blue (matches the web hover arrow #1B61E6),

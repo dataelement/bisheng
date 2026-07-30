@@ -157,7 +157,7 @@ export function ConversationHistory({
                 // max-height wrapper, so no animate-in here. Overlay mode fills the card:
                 // standard entry slides in like a drawer; direct entry just fades in.
                 fitContent
-                    ? "relative min-h-[160px] max-h-[clamp(440px,70vh,calc(100vh_-_160px))]"
+                    ? "relative min-h-[160px] max-h-[clamp(440px,70vh,calc(var(--bs-vh,100vh)_-_160px))]"
                     : cn(
                           "absolute inset-0 animate-in",
                           variant === "direct"

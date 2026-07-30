@@ -2,6 +2,7 @@
 // components/ToolSelector.tsx
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { AlignJustify, Check, CpuIcon, Minus, Plus, Star, User, X } from 'lucide-react';
+import { getLogicalViewport } from '@/utils/fontSize';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { DragDropContext, Draggable, Droppable } from 'react-beautiful-dnd';
 import { useTranslation } from 'react-i18next';
@@ -46,7 +47,8 @@ const ToolSelector = ({
   const syncPanelHeights = useCallback(() => {
     if (leftPanelRef.current && rightContentRef.current) {
       const leftHeight = Math.max(leftPanelRef.current.scrollHeight, MIN_HEIGHT);
-      const maxAllowedHeight = window.innerHeight * 0.8;
+      // Logical viewport: the px we write back are interpreted at page zoom.
+      const maxAllowedHeight = getLogicalViewport().height * 0.8;
       const calculatedHeight = Math.min(leftHeight, maxAllowedHeight);
 
       // 应用高度到右侧容器

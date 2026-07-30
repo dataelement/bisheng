@@ -167,7 +167,7 @@ const ImagePreview = ({
           <img
             src={imageUrl}
             alt={alt}
-            className="max-w-screen h-full max-h-screen w-full object-contain"
+            className="max-w-[var(--bs-vw,100vw)] h-full max-h-[var(--bs-vh,100vh)] w-full object-contain"
           />
         </OGDialogContent>
       </OGDialog>

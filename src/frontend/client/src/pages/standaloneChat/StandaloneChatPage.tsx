@@ -108,7 +108,7 @@ function StandaloneChatInner({ mode, flowType }: StandaloneChatPageProps) {
     <StandaloneChatContext.Provider value={contextValue}>
       <div
         className={cn('flex', isGuestMode ? 'bg-[#DCDDDF]' : 'bg-[#F9F9F9]')}
-        style={{ height: '100dvh' }}
+        style={{ height: 'var(--bs-dvh,100dvh)' }}
       >
         <div
           className={cn(

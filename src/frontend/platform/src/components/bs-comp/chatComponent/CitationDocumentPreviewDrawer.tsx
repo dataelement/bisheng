@@ -325,7 +325,7 @@ export default function CitationDocumentPreviewDrawer({
       className={cname(
         "fixed flex flex-col bg-white",
         isFullBleedMobile && "inset-0 z-[120] overflow-hidden overscroll-contain touch-pan-y",
-        !isFullBleedMobile && "inset-y-0 right-0 z-[121] w-[min(520px,calc(100vw-24px))] border-l border-[#E5E6EB] shadow-[0_8px_28px_rgba(0,0,0,0.16)]",
+        !isFullBleedMobile && "inset-y-0 right-0 z-[121] w-[min(520px,calc(var(--bs-vw,100vw)-24px))] border-l border-[#E5E6EB] shadow-[0_8px_28px_rgba(0,0,0,0.16)]",
       )}
       aria-label="文档预览"
       onClick={(event) => event.stopPropagation()}

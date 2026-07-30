@@ -193,7 +193,7 @@ export default function KnowledgeTagSelect({
             <DialogTrigger asChild>{children}</DialogTrigger>
             <DialogContent
                 close={false}
-                className="w-[600px] max-w-[calc(100vw-32px)] gap-0 rounded-xl border-none p-0"
+                className="w-[600px] max-w-[calc(var(--bs-vw,100vw)-32px)] gap-0 rounded-xl border-none p-0"
                 onClick={(event) => event.stopPropagation()}
             >
                 <DialogHeader className="px-6 py-4">

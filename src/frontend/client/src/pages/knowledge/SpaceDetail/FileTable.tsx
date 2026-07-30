@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/Table";
 import { Outlined } from "bisheng-icons";
 import { GitBranch, History, FileSearch } from "lucide-react";
+import { getDisplayScale, getLogicalViewport } from "~/utils/fontSize";
 import {
     Checkbox,
     DropdownMenu,
@@ -126,10 +127,10 @@ function useResizableColumns() {
         const onMouseMove = (ev: MouseEvent) => {
             const d = dragging.current;
             if (!d) return;
-            const delta = ev.clientX - d.startX;
+            const delta = (ev.clientX - d.startX) / getDisplayScale();
             const minW = COLUMN_CONFIG[d.key].minWidth;
             // 单列过宽时横向滚动浏览，避免把整页撑出视口
-            const cap = typeof window !== "undefined" ? Math.max(400, window.innerWidth - 80) : 2000;
+            const cap = typeof window !== "undefined" ? Math.max(400, getLogicalViewport().width - 80) : 2000;
             const newWidth = Math.min(cap, Math.max(minW, d.startWidth + delta));
             const key = d.key;
             // 必须在 updater 外捕获 key：mouseup 会先清空 dragging，批处理时再读 current 会为 null

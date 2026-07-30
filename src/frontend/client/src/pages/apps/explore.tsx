@@ -163,7 +163,7 @@ export default function ExplorePlaza() {
                 // scroll. Pin the page to one viewport tall on mobile so <main>'s
                 // overflow-y-auto becomes the scroller (also gives empty/loading states a
                 // real height to center against).
-                'max-[767px]:h-[100dvh]',
+                'max-[767px]:h-[var(--bs-dvh,100dvh)]',
             )}
         >
             {/* 顶部横幅：与知识广场一致 — 跟随主题的品牌色渐变底（brand-50 → white） */}

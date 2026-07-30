@@ -1,4 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { getDisplayScale, getLogicalViewport } from '~/utils/fontSize';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useUnactivate } from 'react-activation';
@@ -52,6 +53,14 @@ import {
   AddToKnowledgeModal,
   type AddToKnowledgeSelection,
 } from '~/pages/Subscription/Article/AddToKnowledgeModal';
+
+/** Physical client rect -> the logical px the zoomed page lays out in. */
+const scaleRect = (r: DOMRect, scale: number) => ({
+  top: r.top / scale,
+  left: r.left / scale,
+  right: r.right / scale,
+  bottom: r.bottom / scale,
+});
 
 const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?: number, shareToken?: string }) => {
   const t = useLocalize();
@@ -463,10 +472,13 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
         main = p;
       }
       if (card && main) {
-        const W = window.innerWidth;
-        const H = window.innerHeight;
-        const c = card.getBoundingClientRect();
-        const m = main.getBoundingClientRect();
+        // getBoundingClientRect and innerWidth/innerHeight are physical px,
+        // while the insets below are laid out at page zoom — normalise both
+        // sides to logical px so the fullscreen animation lands on the edges.
+        const scale = getDisplayScale();
+        const { width: W, height: H } = getLogicalViewport();
+        const c = scaleRect(card.getBoundingClientRect(), scale);
+        const m = scaleRect(main.getBoundingClientRect(), scale);
         // Collapsed = the docked panel's measured box (it keeps its 4px p-1 margin),
         // overlay padding 0. Expanded grows the BOX outward by 4px on top/right/
         // bottom (border reaches the card edge) and left to the card's left
@@ -628,7 +640,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
               )}>
                 {/* Content area: Split into Chat Main and Citation Sidebar */}
                 {isLoading && conversationId !== 'new' ? (
-                  <div className="flex h-screen items-center justify-center">
+                  <div className="flex h-[var(--bs-vh,100vh)] items-center justify-center">
                     <Spinner className="opacity-0" />
                   </div>
                 ) : (hasMessages || !isNew) ? (
@@ -800,7 +812,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                       // ≤576: full-screen overlay flush to the viewport edges.
                       if (isPhoneViewport) {
                         return (
-                          <div className="fixed inset-0 z-[120] flex h-[100dvh] min-h-0 flex-col overflow-hidden overscroll-contain bg-[#FBFBFB]">
+                          <div className="fixed inset-0 z-[120] flex h-[var(--bs-dvh,100dvh)] min-h-0 flex-col overflow-hidden overscroll-contain bg-[#FBFBFB]">
                             {mobilePanel}
                           </div>
                         );
@@ -811,7 +823,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                       // higher z so it clears the chrome (mirrors the citation panel).
                       if (!isH5) {
                         return createPortal(
-                          <div className="fixed inset-y-0 right-0 z-[150] flex min-h-0 flex-col overflow-hidden rounded-tl-xl border-l border-[#ECECEC] bg-[#FBFBFB] shadow-[-8px_0_28px_rgba(0,0,0,0.1)] animate-in slide-in-from-right duration-300 w-[min(480px,100vw)]">
+                          <div className="fixed inset-y-0 right-0 z-[150] flex min-h-0 flex-col overflow-hidden rounded-tl-xl border-l border-[#ECECEC] bg-[#FBFBFB] shadow-[-8px_0_28px_rgba(0,0,0,0.1)] animate-in slide-in-from-right duration-300 w-[min(480px,var(--bs-vw,100vw))]">
                             {mobilePanel}
                           </div>,
                           document.body,
@@ -821,7 +833,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                       // 577–767: right drawer docked to the viewport edge (z above
                       // MobileNav z-60), full height, slide-in from the right.
                       return (
-                        <div className="fixed inset-y-0 right-0 z-[130] flex min-h-0 flex-col overflow-hidden rounded-tl-xl border-l border-[#ECECEC] bg-[#FBFBFB] shadow-[-8px_0_28px_rgba(0,0,0,0.08)] animate-in slide-in-from-right duration-300 min-w-[260px] w-[min(520px,42vw)] max-[580px]:min-w-[240px] max-[580px]:w-[min(360px,calc(100vw-40px))]">
+                        <div className="fixed inset-y-0 right-0 z-[130] flex min-h-0 flex-col overflow-hidden rounded-tl-xl border-l border-[#ECECEC] bg-[#FBFBFB] shadow-[-8px_0_28px_rgba(0,0,0,0.08)] animate-in slide-in-from-right duration-300 min-w-[260px] w-[min(520px,42vw)] max-[580px]:min-w-[240px] max-[580px]:w-[min(360px,calc(var(--bs-vw,100vw)-40px))]">
                           {mobilePanel}
                         </div>
                       );

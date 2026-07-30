@@ -84,7 +84,7 @@ export default function DevLogin() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-4">
+    <div className="flex min-h-[var(--bs-vh,100vh)] items-center justify-center bg-background p-4">
       <div className="w-full max-w-sm space-y-4 rounded-xl border bg-surface-primary p-8 shadow-lg">
         <div>
           <h1 className="text-xl font-semibold text-text-primary">Dev Login</h1>

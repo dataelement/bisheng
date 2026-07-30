@@ -65,15 +65,15 @@ export default function Root() {
               {/*
                 与 MainLayout 白卡对齐，占满卡片高度；内层 flex-1 min-h-0 overflow-hidden
                 把高度传给 ChatView，避免整页滚动把输入框卷出视口。
-                桌面端 main 有 p-2 留白，卡片高度为 100dvh-16px；移动端 main 无内边距
-                (min-h-[100dvh])，须占满 100dvh，否则底部会多出 16px 空白条。
+                桌面端 main 有 p-2 留白，卡片高度为 var(--bs-dvh,100dvh)-16px；移动端 main 无内边距
+                (min-h-[var(--bs-dvh,100dvh)])，须占满 var(--bs-dvh,100dvh)，否则底部会多出 16px 空白条。
               */}
               <div
                 className={cn(
                   'flex flex-col overflow-hidden min-w-0',
                   isSmallScreen
-                    ? 'h-[100dvh] max-h-[100dvh]'
-                    : 'h-[calc(100dvh-16px)] max-h-[calc(100dvh-16px)]',
+                    ? 'h-[var(--bs-dvh,100dvh)] max-h-[var(--bs-dvh,100dvh)]'
+                    : 'h-[calc(var(--bs-dvh,100dvh)-16px)] max-h-[calc(var(--bs-dvh,100dvh)-16px)]',
                 )}
               >
                 <Banner onHeightChange={setBannerHeight} />

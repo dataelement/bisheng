@@ -43,8 +43,8 @@ const PromptDetails = ({ group }: { group?: TPromptGroup }) => {
           </div>
         </div>
       </div>
-      <div className="flex h-full max-h-screen flex-col overflow-y-auto touch-desktop:flex-row">
-        <div className="flex flex-1 flex-col gap-4 p-0 touch-desktop:max-h-[calc(100vh-150px)] touch-desktop:p-2">
+      <div className="flex h-full max-h-[var(--bs-vh,100vh)] flex-col overflow-y-auto touch-desktop:flex-row">
+        <div className="flex flex-1 flex-col gap-4 p-0 touch-desktop:max-h-[calc(var(--bs-vh,100vh)-150px)] touch-desktop:p-2">
           <div>
             <h2 className="flex items-center justify-between rounded-t-lg border border-border-light py-2 pl-4 text-base font-semibold text-text-primary ">
               {localize('com_ui_prompt_text')}

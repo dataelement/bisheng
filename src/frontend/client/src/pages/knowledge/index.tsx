@@ -638,7 +638,7 @@ export default function Knowledge() {
             // scrolling is globally disabled (WebView bottom-strip fix in index.html),
             // so `h-full` collapses and the square's inner scroller never scrolls.
             // Pin the wrapper to 100dvh on mobile so the inner overflow-y-auto works.
-            <div className="relative flex h-full min-h-0 max-[767px]:h-[100dvh]">
+            <div className="relative flex h-full min-h-0 max-[767px]:h-[var(--bs-dvh,100dvh)]">
                 <KnowledgeSquare
                     onBack={() => {
                         setShowKnowledgeSquare(false);
@@ -833,7 +833,7 @@ export default function Knowledge() {
                         // Mobile needs a DEFINITE viewport height (the KeepAlive shell is h-auto,
                         // so percentage chains collapse): without it the content grows with the
                         // file count and the absolute-bottom AI dock drifts / the layout cramps.
-                        isH5 ? "h-[100dvh]" : "h-full",
+                        isH5 ? "h-[var(--bs-dvh,100dvh)]" : "h-full",
                     )}
                 >
                     {/* Mobile top bar now lives inside KnowledgeSpaceContent (it owns search/sort/upload). */}
@@ -904,7 +904,7 @@ export default function Knowledge() {
             ) : isH5 ? (
                 /* Mobile: standalone full-page space list. Tapping a space navigates to
                    /knowledge/space/:id (handled by handleSpaceSelect) → the file page. */
-                <div className="flex h-[100dvh] min-h-0 w-full flex-col overflow-hidden bg-white">
+                <div className="flex h-[var(--bs-dvh,100dvh)] min-h-0 w-full flex-col overflow-hidden bg-white">
                     <div className="shrink-0 rounded-t-xl bg-white pt-[calc(env(safe-area-inset-top,0px)+8px)]">
                         <div className="flex h-11 w-full min-w-0 items-center justify-between gap-3 px-4">
                             <button

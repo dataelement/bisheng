@@ -244,7 +244,7 @@ export function EditorCanvas({ isLoading, isPreviewMode }: EditorCanvasProps) {
                 >
                     <div
                         ref={containerRef}
-                        className="min-w-[1000px] h-screen">
+                        className="min-w-[1000px] h-[var(--bs-vh,100vh)]">
                         <div className="mx-auto min-h-full" style={{
                             ...gridBackgroundStyle,
                         }}>

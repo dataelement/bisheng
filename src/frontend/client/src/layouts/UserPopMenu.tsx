@@ -1,6 +1,6 @@
-import { Check, ChevronRight } from "lucide-react";
+import { ALargeSmall, Check, ChevronRight } from "lucide-react";
 import { Outlined } from "bisheng-icons";
-import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type MouseEvent } from "react";
 import { useRecoilState } from "recoil";
 import { AccountInfoDialog } from "~/components/AccountInfoDialog";
 import { NotificationsDialog } from "~/components/NotificationsDialog";
@@ -22,7 +22,17 @@ import {
     actionMenuLabelClassName,
     actionMenuSurfaceClassName,
 } from "~/components/ActionMenu";
+import { NotificationSeverity } from "~/common";
 import { useAuthContext, useLocalize } from "~/hooks";
+import { useToastContext } from "~/Providers";
+import {
+    FONT_SIZE_LEVELS,
+    getFontSizeLevel,
+    isFontSizeAvailable,
+    saveFontSizeLevel,
+    subscribeFontSizeAvailability,
+    type FontSizeLevel,
+} from "~/utils/fontSize";
 import { useNotificationCount } from "~/hooks/useNotificationCount";
 import { useNotificationsFromUrl } from "~/hooks/useNotificationsFromUrl";
 import store from "~/store";
@@ -307,8 +317,26 @@ function UserPopMenuRail() {
     const { unreadCount, refreshCount } = useNotificationCount();
 
     const localize = useLocalize();
+    const { showToast } = useToastContext();
     const [langcode, setLangcode] = useRecoilState(store.lang);
     const changeLang = (lang: string) => setLangcode(lang);
+    // COFCO desktop-only page zoom preference (small / standard / large).
+    const fontSizeAvailable = useSyncExternalStore(
+        subscribeFontSizeAvailability,
+        isFontSizeAvailable,
+        () => false,
+    );
+    const [fontSizeLevel, setFontSizeLevel] = useState<FontSizeLevel>(() => getFontSizeLevel());
+    const changeFontSize = (level: FontSizeLevel) => {
+        if (saveFontSizeLevel(level)) {
+            setFontSizeLevel(level);
+        } else {
+            showToast?.({
+                message: localize("com_nav_page_font_size_save_failed"),
+                severity: NotificationSeverity.ERROR,
+            });
+        }
+    };
     const displayName = user?.username || "admin";
     const [avatarUrl, setAvatarUrl] = useState<string>(user?.avatar || "");
     /** 避免打开瞬间菜单盖住头像时，同一套 pointer 事件的 click 落到下方菜单项（如退出登录） */
@@ -486,6 +514,25 @@ function UserPopMenuRail() {
                             )}
                         </DropdownMenuSubContent>
                     </DropdownMenuSub>
+
+                    {/* COFCO only: whole-page display size. Desktop only — the rail
+                        menu can still render below the breakpoint, so gate it here. */}
+                    {fontSizeAvailable && <DropdownMenuSub>
+                        <DropdownMenuSubTrigger className={cn(actionMenuItemClassName, "font-normal data-[state=open]:bg-[#f2f3f5]")}>
+                            <ALargeSmall className={actionMenuItemIconClassName} />
+                            <span className={cn(actionMenuLabelClassName, "flex-1")}>{localize('com_nav_page_font_size')}</span>
+                        </DropdownMenuSubTrigger>
+                        <DropdownMenuSubContent className={cn(actionMenuSurfaceClassName, "z-[100] ml-2 min-w-[140px] gap-0 p-2")}>
+                            {FONT_SIZE_LEVELS.map((level) => (
+                                <ActionMenuItem key={level} onSelect={runMenuItemSelect(() => changeFontSize(level))}>
+                                    <span className={cn(actionMenuLabelClassName, "flex-1")}>
+                                        {localize(`com_nav_page_font_size_${level}`)}
+                                    </span>
+                                    {fontSizeLevel === level && <Check className="ml-2 size-4 text-blue-500" />}
+                                </ActionMenuItem>
+                            ))}
+                        </DropdownMenuSubContent>
+                    </DropdownMenuSub>}
 
                     <ActionMenuItem
                         danger

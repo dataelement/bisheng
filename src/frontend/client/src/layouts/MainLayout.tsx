@@ -210,7 +210,7 @@ function Sidebar({
     <div
       className={cn(
         showExpandedHubSidebar ? (overlay ? 'w-full' : 'w-[38vw]') : 'w-16',
-        'h-[100dvh] flex flex-col justify-between py-4 px-2 shrink-0 bg-[rgb(227, 227, 227)]',
+        'h-[var(--bs-dvh,100dvh)] flex flex-col justify-between py-4 px-2 shrink-0 bg-[rgb(227, 227, 227)]',
         // Rail: let the content column shrink to its 44px width instead of stretching the track.
         // Expanded drawer keeps the stretched full-width layout.
         showExpandedHubSidebar ? undefined : 'items-center',
@@ -428,8 +428,8 @@ export default function MainLayout() {
   return (
     <div
       className={cn(
-        'relative flex w-screen bg-[#F8F8F8]',
-        isMobile ? 'min-h-[100dvh] overflow-x-clip' : 'h-[100dvh] overflow-hidden',
+        'relative flex w-[var(--bs-vw,100vw)] bg-[#F8F8F8]',
+        isMobile ? 'min-h-[var(--bs-dvh,100dvh)] overflow-x-clip' : 'h-[var(--bs-dvh,100dvh)] overflow-hidden',
       )}
     >
       <WorkbenchAccessGuard />
@@ -474,7 +474,7 @@ export default function MainLayout() {
       <main
         className={cn(
           'relative min-w-0 flex-1',
-          isMobile ? 'min-h-[100dvh]' : 'h-[100dvh] py-2 pr-2',
+          isMobile ? 'min-h-[var(--bs-dvh,100dvh)]' : 'h-[var(--bs-dvh,100dvh)] py-2 pr-2',
           shouldHideSidebarOnMobileAppsArea && 'transition-transform duration-300 ease-out',
           systemMenuRevealing && 'translate-x-16',
         )}
@@ -498,8 +498,8 @@ export default function MainLayout() {
               // the exposed left edge and clip content to it (parity with KeepAlive branch).
               systemMenuRevealing && 'rounded-l-[24px]',
               isMobile
-                ? 'h-auto min-h-[100dvh] overflow-visible'
-                : 'scrollbar-os h-[calc(100dvh-16px)] overflow-y-auto overscroll-y-none',
+                ? 'h-auto min-h-[var(--bs-dvh,100dvh)] overflow-visible'
+                : 'scrollbar-os h-[calc(var(--bs-dvh,100dvh)-16px)] overflow-y-auto overscroll-y-none',
               systemMenuRevealing && 'overflow-hidden',
             )}
           >
@@ -538,11 +538,11 @@ export default function MainLayout() {
               systemMenuRevealing && 'rounded-l-[24px]',
               isMobile
                 ? innerScrollShell
-                  ? 'flex h-[100dvh] min-h-0 w-full flex-col overflow-hidden'
-                  : 'h-auto min-h-[100dvh] overflow-visible'
+                  ? 'flex h-[var(--bs-dvh,100dvh)] min-h-0 w-full flex-col overflow-hidden'
+                  : 'h-auto min-h-[var(--bs-dvh,100dvh)] overflow-visible'
                 : innerScrollShell
-                  ? 'flex h-[calc(100dvh-16px)] min-h-0 flex-col overflow-hidden overscroll-y-none'
-                  : 'scrollbar-os h-[calc(100dvh-16px)] overflow-y-auto overscroll-y-none',
+                  ? 'flex h-[calc(var(--bs-dvh,100dvh)-16px)] min-h-0 flex-col overflow-hidden overscroll-y-none'
+                  : 'scrollbar-os h-[calc(var(--bs-dvh,100dvh)-16px)] overflow-y-auto overscroll-y-none',
               // While the system menu is revealed, clip content to the rounded corners so the
               // exposed left edge shows the radius (e.g. knowledge uses overflow-visible otherwise).
               systemMenuRevealing && 'overflow-hidden',

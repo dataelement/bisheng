@@ -8,6 +8,7 @@ import {
 import { Outlined } from "bisheng-icons";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { getDisplayScale, getLogicalViewport } from "~/utils/fontSize";
 import {
   getMineSpacesApi,
   getJoinedSpacesApi,
@@ -94,7 +95,7 @@ function useSubMenuLayout(menuRef: React.RefObject<HTMLDivElement | null>, trigg
       }
 
       // Initial estimate — will be refined in Phase 2
-      const spaceBelow = window.innerHeight - menuRect.top - BOTTOM_GAP;
+      const spaceBelow = getLogicalViewport().height - menuRect.top / getDisplayScale() - BOTTOM_GAP;
       const spaceAbove = menuRect.bottom - BOTTOM_GAP;
       const available = Math.max(spaceBelow, spaceAbove);
       setMaxH(Math.min(Math.max(available, 120), MAX_SUB_HEIGHT));
@@ -140,7 +141,7 @@ function useSubMenuLayout(menuRef: React.RefObject<HTMLDivElement | null>, trigg
       subContentRef.current = el;
 
       const rect = el.getBoundingClientRect();
-      const spaceBelow = window.innerHeight - rect.top - BOTTOM_GAP;
+      const spaceBelow = getLogicalViewport().height - rect.top / getDisplayScale() - BOTTOM_GAP;
       const finalH = Math.min(Math.max(spaceBelow, 120), MAX_SUB_HEIGHT);
       setMaxH(finalH);
     };
@@ -591,7 +592,7 @@ export const ChatKnowledge = ({
       const padT = MOBILE_MENU_COLLISION.top;
       const padB = MOBILE_MENU_COLLISION.bottom;
       const above = r.top - padT;
-      const below = window.innerHeight - r.bottom - padB;
+      const below = getLogicalViewport().height - r.bottom / getDisplayScale() - padB;
       // Mobile adaptive strategy:
       // prefer opening downward when there is enough space;
       // otherwise open upward to avoid being clipped by the chat input area.
@@ -708,7 +709,7 @@ export const ChatKnowledge = ({
           // skill / org lists) follow the same content-fit clamps as desktop
           // (180–240); the viewport term only guards tiny screens. No fixed
           // width — mobile popups auto-fit and freeze exactly like desktop.
-          isMobile && mobileTallPanel && 'touch-mobile:min-w-[180px] touch-mobile:max-w-[min(calc(100vw-24px),240px)]',
+          isMobile && mobileTallPanel && 'touch-mobile:min-w-[180px] touch-mobile:max-w-[min(calc(var(--bs-vw,100vw)-24px),240px)]',
           // Mobile knowledge popup only: replace `p-2` with `pt-2 px-2 pb-0` so
           // the scroll list's own `pb-2` handles the last-item spacing.
           isMobile && variant === 'knowledge' && 'touch-mobile:pt-2 touch-mobile:px-2 touch-mobile:pb-0',

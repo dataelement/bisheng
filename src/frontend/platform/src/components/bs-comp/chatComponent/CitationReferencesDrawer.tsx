@@ -577,7 +577,7 @@ export default function CitationReferencesDrawer({
       {open && (
         isFullBleedMobile ? (
           <aside
-            className="fixed inset-0 z-[120] flex h-[100dvh] min-h-0 flex-col overflow-hidden overscroll-contain bg-white"
+            className="fixed inset-0 z-[120] flex h-[var(--bs-dvh,100dvh)] min-h-0 flex-col overflow-hidden overscroll-contain bg-white"
             aria-label="参考资料"
           >
             {panelContent}
@@ -585,7 +585,7 @@ export default function CitationReferencesDrawer({
         ) : (
           <aside
             ref={drawerRef}
-            className="fixed inset-y-0 right-0 z-[120] flex h-full min-h-0 w-[min(520px,calc(100vw-24px))] min-w-0 flex-col bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)]"
+            className="fixed inset-y-0 right-0 z-[120] flex h-full min-h-0 w-[min(520px,calc(var(--bs-vw,100vw)-24px))] min-w-0 flex-col bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)]"
             aria-label="参考资料"
             onClick={(event) => event.stopPropagation()}
             onPointerDown={(event) => event.stopPropagation()}

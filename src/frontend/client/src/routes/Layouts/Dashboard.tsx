@@ -28,7 +28,7 @@ export default function DashboardRoute() {
 
   return (
     <DashboardContext.Provider value={{ prevLocationPath }}>
-      <div className="h-screen w-full">
+      <div className="h-[var(--bs-vh,100vh)] w-full">
         <Outlet />
       </div>
     </DashboardContext.Provider>

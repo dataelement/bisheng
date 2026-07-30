@@ -1020,8 +1020,8 @@ export function NotificationsDialog({
                 className={cn(
                     "p-0 gap-0 shadow-[0_8px_24px_rgba(0,0,0,0.12)] duration-500 ease-out [animation-duration:450ms] data-[state=closed]:[animation-duration:320ms]",
                     isNarrowMobileLayout
-                        ? "fixed inset-0 left-0 top-0 h-[100dvh] max-h-[100dvh] w-full max-w-none translate-x-0 translate-y-0 rounded-none"
-                        : "h-[80vh] max-h-[800px] w-[calc(100vw-80px)] max-w-[800px] rounded-xl sm:rounded-xl",
+                        ? "fixed inset-0 left-0 top-0 h-[var(--bs-dvh,100dvh)] max-h-[var(--bs-dvh,100dvh)] w-full max-w-none translate-x-0 translate-y-0 rounded-none"
+                        : "h-[80vh] max-h-[800px] w-[calc(var(--bs-vw,100vw)-80px)] max-w-[800px] rounded-xl sm:rounded-xl",
                 )}
             >
                 <button

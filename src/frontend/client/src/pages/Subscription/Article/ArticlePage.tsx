@@ -115,7 +115,7 @@ export default function ArticlePage() {
 
     if (isLoading) {
         return (
-            <div className="flex h-screen items-center justify-center bg-white">
+            <div className="flex h-[var(--bs-vh,100vh)] items-center justify-center bg-white">
                 <LoadingIcon className="size-20 text-primary" />
             </div>
         );
@@ -123,7 +123,7 @@ export default function ArticlePage() {
 
     if (isError || !article) {
         return (
-            <div className="flex h-screen items-center justify-center bg-white text-sm text-[#86909C]">
+            <div className="flex h-[var(--bs-vh,100vh)] items-center justify-center bg-white text-sm text-[#86909C]">
                 {localize("com_subscription.channel_invalid_or_inaccessible")}
             </div>
         );
@@ -132,7 +132,7 @@ export default function ArticlePage() {
     // === PC: identical to the in-app fullscreen view (centered ArticleDetail) ===
     if (!isH5) {
         return (
-            <div className="relative flex h-screen w-screen overflow-hidden bg-white">
+            <div className="relative flex h-[var(--bs-vh,100vh)] w-[var(--bs-vw,100vw)] overflow-hidden bg-white">
                 <div className="mx-auto h-full w-full max-w-[1000px]">
                     <ArticleDetail
                         screenFull
@@ -190,7 +190,7 @@ export default function ArticlePage() {
 </html>`;
 
     return (
-        <div className="relative h-screen w-screen bg-white">
+        <div className="relative h-[var(--bs-vh,100vh)] w-[var(--bs-vw,100vw)] bg-white">
             <iframe
                 ref={iframeRef}
                 title={article.title}

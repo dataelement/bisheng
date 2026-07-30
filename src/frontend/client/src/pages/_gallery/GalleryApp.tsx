@@ -111,7 +111,7 @@ export default function GalleryApp() {
   };
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-background text-foreground">
+    <div className="flex h-[var(--bs-vh,100vh)] w-full overflow-hidden bg-background text-foreground">
       {/* Sidebar */}
       <aside className="flex w-64 shrink-0 flex-col border-r border-border-light bg-muted/20">
         <div className="border-b border-border-light px-5 py-4">
