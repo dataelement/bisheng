@@ -126,6 +126,62 @@ async def test_prepare_file_list_pointer_block_format():
     assert "images: 3" in block
 
 
+async def test_prepare_file_list_media_asr_pointer_note():
+    from bisheng.linsight.domain.models.linsight_session_version import LinsightSessionVersion
+
+    sv = LinsightSessionVersion(
+        session_id="chat1",
+        user_id=1,
+        question="q",
+        files=[
+            {
+                "file_id": "f1",
+                "original_filename": "乔布斯_副本.MP3",
+                "workspace_path": "/uploads/乔布斯_副本.md",
+                "line_count": 4,
+                "image_count": 0,
+            }
+        ],
+    )
+    block = "\n".join(await LinsightWorkbenchImpl.prepare_file_list(sv))
+    assert "说明（音视频）" in block
+    assert "ASR 转写" in block
+    assert "name: 乔布斯_副本.MP3" in block
+    assert "path: /uploads/乔布斯_副本.md" in block
+    assert "非扩展名错误" in block
+
+
+async def test_prepare_file_list_media_and_docx_headers_both_present():
+    """Media ASR note must not be dropped when docx raw guidance is also emitted."""
+    from bisheng.linsight.domain.models.linsight_session_version import LinsightSessionVersion
+
+    sv = LinsightSessionVersion(
+        session_id="chat1",
+        user_id=1,
+        question="q",
+        files=[
+            {
+                "file_id": "f1",
+                "original_filename": "乔布斯_副本.MP3",
+                "workspace_path": "/uploads/乔布斯_副本.md",
+                "line_count": 4,
+                "image_count": 0,
+            },
+            {
+                "file_id": "f2",
+                "original_filename": "report.docx",
+                "workspace_path": "/uploads/report.docx/index.md",
+                "raw_workspace_path": "uploads/report.docx",
+                "line_count": 10,
+                "image_count": 0,
+            },
+        ],
+    )
+    block = "\n".join(await LinsightWorkbenchImpl.prepare_file_list(sv, has_code_interpreter=False))
+    assert "说明（音视频）" in block
+    assert "raw 是原始二进制文件" in block
+
+
 async def test_prepare_file_list_empty():
     from bisheng.linsight.domain.models.linsight_session_version import LinsightSessionVersion
 
@@ -346,11 +402,18 @@ def test_annotate_display_files_stamps_parse_result():
     display = [
         {"file_id": "ok", "filename": "good.txt", "type": "text/plain"},
         {"file_id": "bad", "filename": "broken.pdf", "type": "application/pdf"},
+        {"file_id": "vid", "filename": "clip.mp4", "type": "video/mp4"},
         {"file_id": "unknown", "filename": "x.txt"},  # no processed entry -> untouched
     ]
     processed = [
         {"file_id": "ok", "valid": True, "parsing_status": "completed"},
         {"file_id": "bad", "valid": False, "parsing_status": "failed", "error_message": "boom"},
+        {
+            "file_id": "vid",
+            "valid": True,
+            "parsing_status": "completed",
+            "cover_filepath": "tmp/cover.jpg",
+        },
     ]
     out = LinsightWorkbenchImpl._annotate_display_files(display, processed)
     by_id = {f["file_id"]: f for f in out}
@@ -359,6 +422,7 @@ def test_annotate_display_files_stamps_parse_result():
     assert by_id["bad"]["valid"] is False
     assert by_id["bad"]["parsing_status"] == "failed"
     assert by_id["bad"]["error_message"] == "boom"
+    assert by_id["vid"]["cover_filepath"] == "tmp/cover.jpg"
     # original display fields preserved; unmatched file left as-is
     assert by_id["ok"]["filename"] == "good.txt"
     assert "valid" not in by_id["unknown"]

@@ -2,6 +2,7 @@ import asyncio
 import json
 import mimetypes
 import os
+import time
 import uuid
 from dataclasses import dataclass
 from io import BytesIO
@@ -70,6 +71,7 @@ class LinsightWorkbenchImpl:
     """LinsightWorkbench Implementation Class"""
 
     # Class Constant
+    LINSIGHT_MEDIA_INGEST_LOG_PREFIX = "[linsight.media_ingest]"
     FILE_INFO_REDIS_KEY_PREFIX = "linsight_file:"
     CACHE_EXPIRATION_HOURS = 24
     # Image uploads preview as the picture itself (not their OCR/caption markdown),
@@ -114,6 +116,34 @@ class LinsightWorkbenchImpl:
         """Content type for a raw original, independent of the host mime database."""
         ext = os.path.splitext(filename or "")[1].lower().lstrip(".")
         return cls._RAW_CONTENT_TYPES.get(ext) or mimetypes.guess_type(filename or "")[0] or "application/octet-stream"
+
+    @classmethod
+    def _is_media_filename(cls, filename: str | None) -> bool:
+        from bisheng.knowledge.domain.upload_file_size import is_media_filename
+
+        return is_media_filename(filename)
+
+    @classmethod
+    def _media_kind_label(cls, filename: str | None) -> str:
+        from bisheng.knowledge.domain.upload_file_size import get_file_extension
+
+        ext = get_file_extension(filename)
+        return "video" if ext in {"mp4", "mov", "avi", "mkv", "webm"} else "audio"
+
+    @classmethod
+    def _log_media_ingest(cls, event: str, *, stage: str, chat_id: str, file_id: str, file_name: str, **fields) -> None:
+        """Structured, grep-friendly media parse telemetry at task submit ingestion."""
+        suffix = " ".join(f"{key}={value}" for key, value in fields.items() if value is not None)
+        logger.info(
+            "{} {} stage={} chat_id={} file_id={} file={}{}",
+            cls.LINSIGHT_MEDIA_INGEST_LOG_PREFIX,
+            event,
+            stage,
+            chat_id,
+            file_id,
+            file_name,
+            f" {suffix}" if suffix else "",
+        )
 
     class LinsightError(Exception):
         """LinsightRelated Errors"""
@@ -315,6 +345,8 @@ class LinsightWorkbenchImpl:
                 item["parsing_status"] = p.get("parsing_status") or item.get("parsing_status")
                 if p.get("error_message"):
                     item["error_message"] = p["error_message"]
+                if p.get("cover_filepath"):
+                    item["cover_filepath"] = p["cover_filepath"]
             annotated.append(item)
         return annotated
 
@@ -374,6 +406,15 @@ class LinsightWorkbenchImpl:
         # Track workspace filenames used in THIS submission so distinct files with
         # the same base name don't collide at the same uploads/<name> key.
         used_names: set[str] = set()
+        media_files = [f for f in files if cls._is_media_filename(f.file_name)]
+        if media_files:
+            logger.info(
+                "{} BATCH stage=submit_ingest chat_id={} media_count={} files={}",
+                cls.LINSIGHT_MEDIA_INGEST_LOG_PREFIX,
+                chat_id,
+                len(media_files),
+                ",".join(f.file_name for f in media_files),
+            )
         for submit_file in files:
             if submit_file.file_url:
                 entry = await cls._ingest_daily_file(submit_file, chat_id, minio_client, user_id, used_names)
@@ -431,6 +472,24 @@ class LinsightWorkbenchImpl:
             }
 
         file_name = submit_file.file_name or dl_name
+        is_media = cls._is_media_filename(file_name)
+        parse_started = time.monotonic()
+        if is_media:
+            file_bytes: int | None
+            try:
+                file_bytes = os.path.getsize(local_path)
+            except OSError:
+                file_bytes = None
+            cls._log_media_ingest(
+                "START",
+                stage="submit_ingest",
+                chat_id=chat_id,
+                file_id=submit_file.file_id,
+                file_name=file_name,
+                media_kind=cls._media_kind_label(file_name),
+                file_bytes=file_bytes,
+                user_id=user_id,
+            )
 
         # 2) Parse to markdown. On failure we still have the raw bytes, so keep the
         # original file in the workspace instead of dropping it.
@@ -450,13 +509,59 @@ class LinsightWorkbenchImpl:
             )
             result = await pipeline.arun()
             markdown = "\n\n".join(doc.page_content for doc in (result.documents or []) if doc.page_content)
+            if is_media:
+                loader_name = type(pipeline.loader).__name__ if pipeline.loader else "unknown"
+                user_metadata: dict = {}
+                if result.documents:
+                    user_metadata = (result.documents[0].metadata or {}).get("user_metadata") or {}
+                elapsed_ms = (time.monotonic() - parse_started) * 1000.0
+                cls._log_media_ingest(
+                    "OK",
+                    stage="submit_ingest",
+                    chat_id=chat_id,
+                    file_id=submit_file.file_id,
+                    file_name=file_name,
+                    media_kind=cls._media_kind_label(file_name),
+                    loader=loader_name,
+                    elapsed_ms=f"{elapsed_ms:.1f}",
+                    markdown_chars=len(markdown),
+                    markdown_lines=(markdown.count("\n") + 1 if markdown else 0),
+                    transcription_model_id=user_metadata.get("transcription_model_id"),
+                    transcription_model_name=user_metadata.get("transcription_model_name"),
+                )
         except Exception as e:
+            if is_media:
+                elapsed_ms = (time.monotonic() - parse_started) * 1000.0
+                cls._log_media_ingest(
+                    "FAIL",
+                    stage="submit_ingest",
+                    chat_id=chat_id,
+                    file_id=submit_file.file_id,
+                    file_name=file_name,
+                    media_kind=cls._media_kind_label(file_name),
+                    elapsed_ms=f"{elapsed_ms:.1f}",
+                    error_type=type(e).__name__,
+                    error=str(e)[:500],
+                )
             logger.exception(
                 f"daily file parse failed; keeping original in workspace (name={file_name!r} chat_id={chat_id})"
             )
-            return await cls._keep_original_in_workspace(
+            entry = await cls._keep_original_in_workspace(
                 submit_file, file_name, chat_id, minio_client, local_path, e, used_names
             )
+            if is_media:
+                cls._log_media_ingest(
+                    "DEGRADED",
+                    stage="submit_ingest",
+                    chat_id=chat_id,
+                    file_id=submit_file.file_id,
+                    file_name=file_name,
+                    media_kind=cls._media_kind_label(file_name),
+                    parsing_status=entry.get("parsing_status"),
+                    valid=entry.get("valid"),
+                    workspace_path=entry.get("workspace_path"),
+                )
+            return entry
 
         formal_object = cls._formal_markdown_object(submit_file.file_id, chat_id)
         await minio_client.put_object(
@@ -482,6 +587,19 @@ class LinsightWorkbenchImpl:
                     bucket_name=minio_client.bucket, object_name=formal_original, file=raw_bytes
                 )
                 entry["original_file_path"] = formal_original
+        if cls._media_kind_label(file_name) == "video":
+            try:
+                from bisheng.workstation.domain.services.media_cover_service import WorkstationMediaCoverService
+
+                cover_filepath = await WorkstationMediaCoverService.upload_video_cover(local_path, minio_client)
+                if cover_filepath:
+                    entry["cover_filepath"] = cover_filepath
+            except Exception as cover_exc:
+                logger.warning(
+                    "video cover extraction during submit ingest failed: file={} error={}",
+                    file_name,
+                    cover_exc,
+                )
         await cls._write_attachment_to_workspace(entry, chat_id, minio_client, used_names=used_names)
         return entry
 
@@ -955,6 +1073,7 @@ class LinsightWorkbenchImpl:
         items: list[str] = []
         has_raw = False
         has_unparsed = False
+        has_media = False
         for file in session_version.files:
             path = file.get("workspace_path") or f"/uploads/{file.get('file_id')}/index.md"
             name = file.get("original_filename", "")
@@ -991,18 +1110,27 @@ class LinsightWorkbenchImpl:
                 # where the original lives at ``uploads/<name>``; a leading slash
                 # would send it to the filesystem root and fail.
                 item += f"\n  raw: {raw_path.lstrip('/')}"
+            if cls._is_media_filename(name):
+                has_media = True
+                item += "\n  note: 音视频已 ASR 转写；path 为转写文本（.md），name 为原始上传文件名（非扩展名错误）"
             items.append(item)
 
         if not items:
             return []
 
-        header = ""
+        header_parts: list[str] = []
+        if has_media:
+            header_parts.append(
+                "说明（音视频）：<uploaded_files> 中 name 为 .mp3/.mp4 等原始上传名，"
+                "path 为平台 ASR 转写后的 .md 文本视图。请 read_file(path) 获取语音/视频内容；"
+                "这不是扩展名标注错误或误命名，勿在回复中声称「实际是文本文件」。\n"
+            )
         if has_raw or has_unparsed:
             # Say it once, at the top, instead of repeating per item: markdown is
             # the reading view, the original is the data. Without this the model
             # reads the flattened table and "eyeballs" numbers it could compute.
             if has_code_interpreter:
-                header = (
+                header_parts.append(
                     "说明：path 指向可直接 read_file 的文本视图；raw 指向同名原件"
                     "（表格/文档的精确数据、单元格、样式、页面结构都在原件里）。"
                     "需要精确数值或做数据分析时，用 bisheng_code_interpreter 读 raw 原件"
@@ -1012,11 +1140,12 @@ class LinsightWorkbenchImpl:
             else:
                 # No code interpreter this run: the original is unusable, so do not
                 # send the model chasing it. Say what it CAN do instead.
-                header = (
+                header_parts.append(
                     "说明：path 指向可直接 read_file 的文本视图；raw 是原始二进制文件，"
                     "本次没有可用的代码执行工具，无法读取原件——请基于文本视图作答，"
                     "并在结论中说明受原件格式限制的部分。不要对 raw 路径调用 read_file。\n"
                 )
+        header = "".join(header_parts)
 
         block = "<uploaded_files>\n" + header + "\n".join(items) + "\n</uploaded_files>"
         return [block]

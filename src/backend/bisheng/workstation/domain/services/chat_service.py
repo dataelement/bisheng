@@ -1152,15 +1152,19 @@ async def _agent_initialize_chat(data: APIChatCompletion, login_user: UserPayloa
 
 async def _process_agent_files(data: APIChatCompletion, model_info, login_user, ws_config):
     """Split uploaded files into visual (image base64 data URLs) and doc
-    (extracted text chunks concatenated up to maxTokens)."""
+    (extracted text chunks concatenated up to maxTokens).
+
+    Video covers are extracted during parse so history rows can render a poster
+    thumbnail once ASR/content extraction finishes.
+    """
     if not data.files:
-        return "", []
+        return "", [], data.files or []
     # Skip entries without a filepath (upload in flight / failed uploads still
     # sometimes reach us). Prevents `NoneType.split` inside async_file_download.
     valid_files = [f for f in data.files if f and f.get("filepath")]
     if not valid_files:
         logger.info(f"[process_agent_files] no files with filepath (received={len(data.files)})")
-        return "", []
+        return "", [], data.files
     download_tasks = [async_file_download(f.get("filepath")) for f in valid_files]
     downloaded_files = await asyncio.gather(*download_tasks)
 
@@ -1181,13 +1185,78 @@ async def _process_agent_files(data: APIChatCompletion, model_info, login_user, 
         asyncio.gather(*visual_tasks),
         asyncio.gather(*doc_tasks),
     )
+    annotated_valid = await _annotate_agent_files_with_video_covers(valid_files, downloaded_files)
+    merged_files = _merge_agent_file_covers(data.files, valid_files, annotated_valid)
     max_token = getattr(ws_config, "maxTokens", 15000) or 15000
     file_context = "\n".join(doc_results)[:max_token]
     logger.info(
         f"[process_agent_files] docs={len(doc_results)} visuals={len(visual_results)}"
         f" file_context_len={len(file_context)} max_token={max_token}"
+        f" video_covers={sum(1 for f in merged_files if f.get('cover_filepath'))}"
     )
-    return file_context, list(visual_results)
+    return file_context, list(visual_results), merged_files
+
+
+async def _annotate_agent_files_with_video_covers(
+    valid_files: list[dict],
+    downloaded_files: list[tuple[str, str]],
+) -> list[dict]:
+    """Extract a poster frame for each downloaded video attachment."""
+    from bisheng.core.storage.minio.minio_manager import get_minio_storage
+    from bisheng.workstation.domain.services.media_cover_service import WorkstationMediaCoverService
+
+    minio_client = await get_minio_storage()
+    annotated: list[dict] = []
+    for file_item, (local_path, filename) in zip(valid_files, downloaded_files):
+        item = dict(file_item)
+        if WorkstationMediaCoverService.is_video_filename(filename):
+            try:
+                cover_filepath = await WorkstationMediaCoverService.upload_video_cover(local_path, minio_client)
+                if cover_filepath:
+                    item["cover_filepath"] = cover_filepath
+            except Exception as exc:
+                logger.warning(
+                    "video cover extraction during daily chat parse failed: file={} error={}",
+                    filename,
+                    exc,
+                )
+        annotated.append(item)
+    return annotated
+
+
+def _merge_agent_file_covers(
+    original_files: list[dict] | None,
+    valid_files: list[dict],
+    annotated_valid: list[dict],
+) -> list[dict]:
+    """Stamp cover_filepath from the parsed subset back onto the full files list."""
+    if not original_files:
+        return []
+    cover_by_key: dict[str, str] = {}
+    for source, annotated in zip(valid_files, annotated_valid):
+        cover = annotated.get("cover_filepath")
+        if not cover:
+            continue
+        key = str(source.get("file_id") or source.get("filepath") or "")
+        if key:
+            cover_by_key[key] = cover
+    merged: list[dict] = []
+    for file_item in original_files:
+        item = dict(file_item)
+        key = str(file_item.get("file_id") or file_item.get("filepath") or "")
+        cover = cover_by_key.get(key)
+        if cover:
+            item["cover_filepath"] = cover
+        merged.append(item)
+    return merged
+
+
+async def _persist_question_file_attachments(message: ChatMessage, query: str, files: list[dict]) -> None:
+    """Update the persisted user question row with post-parse attachment metadata."""
+    payload = {"query": query or "", "files": files or []}
+    message.message = json.dumps(payload, ensure_ascii=False)
+    message.files = json.dumps(files) if files else None
+    await ChatMessageDao.aupdate_message_model(message)
 
 
 async def _agent_stream_chat_completion(
@@ -1412,12 +1481,26 @@ async def _agent_stream_chat_completion(
                 yield _sse_resp("agent_tool_call", "end", end_payload, conversation_id)
 
             # ---- Step 3: process uploaded files ----
-            file_context, image_bases64 = await _process_agent_files(
+            file_context, image_bases64, merged_files = await _process_agent_files(
                 data,
                 model_info,
                 login_user,
                 ws_config,
             )
+            if merged_files and any(
+                merged.get("cover_filepath") and not (orig or {}).get("cover_filepath")
+                for orig, merged in zip(data.files or [], merged_files)
+            ):
+                data.files = merged_files
+                await _persist_question_file_attachments(message, data.text or "", merged_files)
+                yield _sse_resp(
+                    "question",
+                    "update",
+                    {"query": data.text or "", "files": merged_files},
+                    conversation_id,
+                    message_id=message.id,
+                    is_bot=False,
+                )
 
             # ---- Step 4: compose user content + history ----
             user_text = _build_user_content(

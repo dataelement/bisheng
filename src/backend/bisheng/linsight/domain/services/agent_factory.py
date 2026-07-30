@@ -127,6 +127,7 @@ __KB_DELEGATE_LINE__   更新待办时只翻转 status（pending/in_progress/com
    - 3c（仅当选了 docx）：export_docx(source_path="output/<name>.md")，必须在 3a 之后。
    - 3d（仅当选了 pdf）：export_pdf(source_path="output/<name>.md")，必须在 3a 之后。
    最终交付物的撰写与拼装必须由你（主智能体）亲自完成，不得委派给子代理；中间产物写 scratch/。
+   **禁止**在未调用 write_file 写入 output/ 的情况下，在回复中声称「已保存为 xxx.md / 已写入 xxx」——用户界面只会展示真实写入 output/ 的交付物；口头提及的文件名无法被预览或下载。
 
 4. 【收尾】用 1-2 句话概括交付物的核心内容或结论（例如“已梳理出近一年的市场变化并给出三条关键建议”）；不要复述文件名、工作区路径（如 output/…）或“已完成”之类的状态字样——完成状态与可下载的文件由界面单独呈现，正文里无需重复。
 
@@ -165,6 +166,7 @@ __KB_TOOL_LINE__- write_file / read_file / edit_file / ls：工作区文件工�
 
 - 简洁，工具调用之间不加多余解释性文字。
 - 不要凭空编造事实；交付内容应基于检索到的资料/依据。
+- 凡需要在回复中引用可下载/可预览的交付物，必须先 write_file 写入 output/；不得仅口头描述文件名。
 """
 
 # search_knowledge_base is the ONLY tool whose presence is conditional on the
@@ -243,7 +245,10 @@ def _build_linsight_system_prompt(has_knowledge_base: bool) -> str:
     if has_knowledge_base:
         exec_line = (
             "   - 需要资料时用 search_knowledge_base 检索知识库/知识空间；"
-            "读写文件用 write_file / read_file / edit_file / ls。"
+            "读写文件用 write_file / read_file / edit_file / ls。\n"
+            "   - 用户上传的音视频（mp3/mp4 等）已在 submit 阶段 ASR 转写为 uploads/*.md；"
+            "<uploaded_files> 中 path 为转写文本、name 为原始文件名。"
+            "read_file(path) 即可获取内容，勿推断为「扩展名标注有误」或「实际是文本文件」。"
         )
         tool_line = "- search_knowledge_base：在授权的知识库/知识空间语义检索。\n"
         # Delegation must restate the KB ids: a subagent's messages are replaced
@@ -262,7 +267,10 @@ def _build_linsight_system_prompt(has_knowledge_base: bool) -> str:
         exec_line = (
             "   - 读写文件用 write_file / read_file / edit_file / ls；若用户上传了文件，"
             "用 ls / read_file 在工作区中查阅。本次任务没有可检索的知识库/知识空间，"
-            "请基于已有资料与自身知识完成，不要调用任何知识库检索工具。"
+            "请基于已有资料与自身知识完成，不要调用任何知识库检索工具。\n"
+            "   - 用户上传的音视频（mp3/mp4 等）已在 submit 阶段 ASR 转写为 uploads/*.md；"
+            "<uploaded_files> 中 path 为转写文本、name 为原始文件名。"
+            "read_file(path) 即可获取内容，勿推断为「扩展名标注有误」或「实际是文本文件」。"
         )
         tool_line = ""
         delegate_line = ""
@@ -280,14 +288,17 @@ def _build_researcher_prompt(has_knowledge_base: bool) -> str:
     tool subset (_subagent_tools), which mirrors the main graph; advertise it only
     when it is actually available.
     """
+    media_line = " 音视频附件的 path 为 ASR 转写文本（.md），name 为原始上传名，并非扩展名错误。"
     if has_knowledge_base:
         research_line = (
             "- 优先使用 search_knowledge_base 检索知识库/知识空间，并用 read_file / ls 阅读工作区中已有的资料。"
+            f"{media_line}"
         )
     else:
         research_line = (
             "- 用 read_file / ls 阅读工作区中已有的资料；本次没有可检索的知识库/知识空间，"
             "不要调用任何知识库检索工具，基于已有资料与自身知识给出结论。"
+            f"{media_line}"
         )
     return _LINSIGHT_RESEARCHER_PROMPT_TEMPLATE_ZH.replace("__KB_RESEARCH_LINE__", research_line)
 

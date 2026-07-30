@@ -288,11 +288,14 @@ const AiChatInput = memo(
 
         const hasAttachedFiles =
             (chatFiles?.length ?? 0) > 0 || uploadingFiles.length > 0;
+        const filesParsing = (chatFiles ?? []).some(
+            (file) => file?.parsing_status && !['completed', 'failed'].includes(file.parsing_status),
+        );
 
         const handleSend = useCallback(() => {
             const trimmed = text.trim();
             // Workbench: uploaded files require accompanying text before send.
-            if (!trimmed || disabled || sendDisabled || isStreaming || isParsingMedia || fileUploading) return;
+            if (!trimmed || disabled || sendDisabled || isStreaming || isParsingMedia || fileUploading || filesParsing) return;
             // Pass files through to parent
             onSend(trimmed, chatFiles);
             setText("");
@@ -309,7 +312,7 @@ const AiChatInput = memo(
                 window.clearTimeout(textareaScrollHideTimerRef.current);
                 textareaScrollHideTimerRef.current = null;
             }
-        }, [text, disabled, sendDisabled, isStreaming, isParsingMedia, fileUploading, onSend, chatFiles, setText]);
+        }, [text, disabled, sendDisabled, isStreaming, isParsingMedia, fileUploading, filesParsing, onSend, chatFiles, setText]);
 
         const handleKeyDown = useCallback(
             (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -400,6 +403,7 @@ const AiChatInput = memo(
                                     .filter((f) => f?.isUploading)
                                     .map((f) => ({
                                         id: String(f.id),
+                                        clientId: String(f.id),
                                         name: String(f.name || ""),
                                         ...(f.previewUrl ? { previewUrl: f.previewUrl } : {}),
                                         ...(f.mediaPreviewUrl ? { mediaPreviewUrl: f.mediaPreviewUrl } : {}),
@@ -412,6 +416,7 @@ const AiChatInput = memo(
                                 const completed = currentFiles
                                     .filter((f) => !f?.isUploading && f?.filePath)
                                     .map((f) => ({
+                                        clientId: String(f.id),
                                         file_id: f.fileId || f.id,
                                         filepath: f.filePath,
                                         type: f.type,
@@ -419,6 +424,10 @@ const AiChatInput = memo(
                                         filename: f.name,
                                         file_name: f.name,
                                         parsing_status: f.parsingStatus || 'completed',
+                                        parsingState:
+                                            f.parsingStatus && !['completed', 'failed'].includes(f.parsingStatus)
+                                                ? 'parsing'
+                                                : undefined,
                                         previewUrl: f.previewUrl,
                                         mediaPreviewUrl: f.mediaPreviewUrl,
                                         mediaCoverUrl: f.mediaCoverUrl,
@@ -638,7 +647,8 @@ const AiChatInput = memo(
                                         disabled ||
                                         sendDisabled ||
                                         isParsingMedia ||
-                                        fileUploading
+                                        fileUploading ||
+                                        filesParsing
                                     }
                                     className="btn-brand-primary flex h-8 w-8 items-center justify-center rounded-full bg-primary text-text-primary outline-offset-4 transition-all duration-200 disabled:cursor-not-allowed disabled:bg-[#E5E6EB] disabled:text-[#86909C] disabled:opacity-100 [&>svg]:text-white disabled:[&>svg]:text-[#4E5969]"
                                     aria-label="Send message"
@@ -649,7 +659,7 @@ const AiChatInput = memo(
                             )}
                         </div>
                     </div>
-                    {isParsingMedia && (
+                    {(isParsingMedia || filesParsing) && (
                         <p className="px-4 pb-1 text-center text-xs text-primary">
                             {localize('com_chat.media_parsing')}
                         </p>

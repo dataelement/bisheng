@@ -71,7 +71,7 @@ def stream_env(monkeypatch: pytest.MonkeyPatch):
     )
     monkeypatch.setattr(chat_service, "_resolve_user_kb_selection", AsyncMock(return_value=[]))
     monkeypatch.setattr(chat_service, "_prepare_tools", AsyncMock(return_value=([], [])))
-    monkeypatch.setattr(chat_service, "_process_agent_files", AsyncMock(return_value=("", [])))
+    monkeypatch.setattr(chat_service, "_process_agent_files", AsyncMock(return_value=("", [], [])))
     monkeypatch.setattr(chat_service, "_get_history_max_tokens", AsyncMock(return_value=4096))
     monkeypatch.setattr(
         chat_service.WorkStationService,

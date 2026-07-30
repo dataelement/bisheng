@@ -484,6 +484,9 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                                                                     valid: p.valid,
                                                                     parsing_status: p.parsing_status,
                                                                     error_message: p.error_message,
+                                                                    ...(p.cover_filepath
+                                                                        ? { cover_filepath: p.cover_filepath }
+                                                                        : {}),
                                                                 }
                                                               : mf;
                                                       }),
@@ -536,6 +539,38 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                             })
                             .catch(() => { /* non-critical */ });
                     }
+                },
+                onQuestionFilesUpdate: ({ messageId, files: updatedFiles }) => {
+                    if (!updatedFiles?.length) return;
+                    setMessages((prev) =>
+                        prev.map((m) => {
+                            if (!m.isCreatedByUser || !m.files?.length) return m;
+                            const matchesTarget =
+                                (messageId && (m.messageId === messageId || String(m.messageId) === messageId))
+                                || m.messageId === realUserMessageId
+                                || m.messageId === userMessageId;
+                            if (!matchesTarget) return m;
+                            const byKey = new Map(
+                                updatedFiles.map((f: any) => [
+                                    String(f.file_id || f.filepath || f.id || ''),
+                                    f,
+                                ]),
+                            );
+                            return {
+                                ...m,
+                                files: m.files.map((mf: any) => {
+                                    const key = String(mf.file_id || mf.filepath || mf.id || '');
+                                    const next = byKey.get(key);
+                                    if (!next?.cover_filepath) return mf;
+                                    return {
+                                        ...mf,
+                                        cover_filepath: next.cover_filepath,
+                                        parsingState: 'done' as MediaParsingState,
+                                    };
+                                }),
+                            };
+                        }),
+                    );
                 },
                 onMessage: (text, messageId) => {
                     finishMediaParsing(realUserMessageId);

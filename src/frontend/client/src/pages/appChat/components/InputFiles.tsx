@@ -1,6 +1,7 @@
 
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { uploadChatFile } from "~/api/apps";
+import { checkFileParseStatus } from "~/api/linsight";
 import { MediaAttachmentChip } from "~/components/Chat/attachments/MediaAttachmentChip";
 import { FileUploadThumbnail } from "~/components/Chat/attachments/UploadAttachmentThumbnail";
 import { AttachmentIcon } from "~/components/svg";
@@ -14,7 +15,19 @@ import {
     type UploadSizeLimits,
 } from "~/pages/knowledge/knowledgeUtils";
 import { MAX_MEDIA_FILES } from "~/pages/appChat/fileAcceptUtils";
-import { readMediaDurationFromFile, captureVideoPosterFromFile, getMediaKind, isMediaAttachmentFile } from "~/utils/mediaAttachmentUtils";
+import {
+    getMediaKind,
+    readMediaDurationFromFile,
+    isMediaAttachmentFile,
+} from "~/utils/mediaAttachmentUtils";
+
+/** Isolated blob for XHR — avoids stalling when blob: preview URLs read the same File. */
+function createUploadPayload(file: File): File | Blob {
+    if (getMediaKind(file.name) === 'video') {
+        return file.slice(0, file.size, file.type || undefined);
+    }
+    return file;
+}
 
 /** Unwrap BiSheng API envelope `{ status_code, data }` to the upload payload. */
 const unwrapUploadPayload = (response: any) => {
@@ -35,6 +48,35 @@ const notifyUploadedFiles = (getUploadedFileIds: () => any[], onChange: (files: 
 const logUploadStage = (fileName: string, stage: string, startedAt: number, extra?: Record<string, unknown>) => {
     const elapsedMs = Math.round(performance.now() - startedAt);
     console.info(`[client.media_upload] STAGE ${stage} elapsed_ms=${elapsedMs} file=${fileName}`, extra ?? '');
+};
+
+const normalizeParseStatusEntry = (entry: unknown) => {
+    if (typeof entry === 'string') {
+        return { parsing_status: entry };
+    }
+    if (entry && typeof entry === 'object') {
+        return entry as { parsing_status?: string; cover_filepath?: string };
+    }
+    return null;
+};
+
+const applyParseStatusToFile = (file: any, entry: { parsing_status?: string; cover_filepath?: string }) => {
+    const nextStatus = entry.parsing_status;
+    if (!nextStatus || nextStatus === 'failed') {
+        return null;
+    }
+    const coverFilepath = entry.cover_filepath;
+    const next = {
+        ...file,
+        parsingStatus: nextStatus,
+        isUploading: false,
+        ...(coverFilepath ? { cover_filepath: coverFilepath } : {}),
+    };
+    if (coverFilepath && file.mediaCoverUrl?.startsWith('blob:')) {
+        URL.revokeObjectURL(file.mediaCoverUrl);
+        next.mediaCoverUrl = undefined;
+    }
+    return next;
 };
 
 const checkFileType = (file, accepts) => {
@@ -65,14 +107,16 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
     const resolvedLimits: UploadSizeLimits | null = uploadSizeLimits ?? null;
     const defaultFileSizeLimit = (size ?? 50) * 1024 * 1024;
     const defaultParsingStatus = uploadMode === 'linsight' ? 'running' : 'completed';
-    const isLinsightParsing = (file) => {
-        return uploadMode === 'linsight'
-            && file?.parsingStatus
-            && !['completed', 'failed'].includes(file.parsingStatus);
+    const isMediaFileParsing = (file) => {
+        if (!file?.parsingStatus || ['completed', 'failed'].includes(file.parsingStatus)) {
+            return false;
+        }
+        return uploadMode === 'linsight';
     };
     const getUploadedFileIds = () => filesRef.current
         .filter((f) => f.id && !f.isUploading && f.filePath)
         .map((f) => ({
+        clientId: String(f.id),
         file_id: f.fileId || f.id,
         filepath: f.filePath,
         type: f.type,
@@ -80,6 +124,10 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
         filename: f.name,
         file_name: f.name,
         parsing_status: f.parsingStatus || defaultParsingStatus,
+        parsingState:
+            f.parsingStatus && !['completed', 'failed'].includes(f.parsingStatus)
+                ? 'parsing'
+                : undefined,
         previewUrl: f.previewUrl,
         mediaPreviewUrl: f.mediaPreviewUrl,
         mediaCoverUrl: f.mediaCoverUrl,
@@ -155,6 +203,7 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
         // Add valid files to state with initial progress
         const filesWithProgress = validFiles.map(({ file, id }) => {
             const isMedia = isMediaFileName(file.name);
+            const isVideo = getMediaKind(file.name) === 'video';
             return {
                 name: file.name,
                 size: file.size,
@@ -164,40 +213,11 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
                 id,
                 file,
                 previewUrl: file.type?.startsWith('image/') ? URL.createObjectURL(file) : undefined,
-                mediaPreviewUrl: isMedia ? URL.createObjectURL(file) : undefined,
+                // Video blob URLs during upload can block the XHR body on some browsers.
+                mediaPreviewUrl: isMedia && !isVideo ? URL.createObjectURL(file) : undefined,
                 mediaDurationSec: undefined,
             };
         });
-
-        if (validFiles.some(({ file }) => isMediaFileName(file.name))) {
-            validFiles.forEach(({ file, id }) => {
-                if (!isMediaFileName(file.name)) return;
-                readMediaDurationFromFile(file).then((mediaDurationSec) => {
-                    if (mediaDurationSec == null) return;
-                    setFiles((prevFiles) => {
-                        const updated = prevFiles.map((f) =>
-                            f.id === id ? { ...f, mediaDurationSec } : f,
-                        );
-                        filesRef.current = updated;
-                        onFilesStateChange?.(updated);
-                        return updated;
-                    });
-                });
-                if (getMediaKind(file.name) === 'video') {
-                    captureVideoPosterFromFile(file).then((mediaCoverUrl) => {
-                        if (!mediaCoverUrl) return;
-                        setFiles((prevFiles) => {
-                            const updated = prevFiles.map((f) =>
-                                f.id === id ? { ...f, mediaCoverUrl } : f,
-                            );
-                            filesRef.current = updated;
-                            onFilesStateChange?.(updated);
-                            return updated;
-                        });
-                    });
-                }
-            });
-        }
 
         setFiles(prevFiles => {
             const res = [...prevFiles, ...filesWithProgress];
@@ -209,12 +229,12 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
         // Keep track of the number of remaining uploads across concurrent batches.
         remainingUploadsRef.current += validFiles.length;
 
-        // Create an array of promises to handle multiple file uploads concurrently
-        const uploadPromises = validFiles.map(({ file, id }) => {
+        const uploadOne = ({ file, id }: { file: File; id: string }) => {
             const uploadStartedAt = performance.now();
+            const uploadPayload = createUploadPayload(file);
             logUploadStage(file.name, 'queue', uploadStartedAt, { size: file.size, type: file.type });
             let lastLoggedProgress = -1;
-            return uploadChatFile(v, file, (progress) => {
+            return uploadChatFile(v, uploadPayload, (progress) => {
                 if (progress >= 100 && lastLoggedProgress < 100) {
                     logUploadStage(file.name, 'xhr_upload_complete', uploadStartedAt, { progress });
                     lastLoggedProgress = 100;
@@ -234,7 +254,7 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
                     onFilesStateChange?.(updatedFiles);
                     return updatedFiles;
                 });
-            }, uploadMode).then(response => {
+            }, uploadMode, file.name).then(response => {
                 logUploadStage(file.name, 'api_response', uploadStartedAt, {
                     status_code: response?.status_code,
                 });
@@ -277,6 +297,20 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
                 setFiles(filesRef.current);
                 onFilesStateChange?.(filesRef.current);
 
+                if (isMediaFileName(file.name)) {
+                    readMediaDurationFromFile(file).then((mediaDurationSec) => {
+                        if (mediaDurationSec == null) return;
+                        setFiles((prevFiles) => {
+                            const updated = prevFiles.map((f) =>
+                                f.id === id ? { ...f, mediaDurationSec } : f,
+                            );
+                            filesRef.current = updated;
+                            onFilesStateChange?.(updated);
+                            return updated;
+                        });
+                    });
+                }
+
                 remainingUploadsRef.current -= 1; // Decrease the remaining uploads count
                 notifyUploadedFiles(getUploadedFileIds, onChange);
                 logUploadStage(file.name, 'state_committed', uploadStartedAt);
@@ -288,10 +322,18 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
                 remainingUploadsRef.current -= 1; // Decrease the remaining uploads count
                 notifyUploadedFiles(getUploadedFileIds, onChange);
             });
-        });
+        };
 
-        // Wait for all files to finish uploading
-        Promise.all(uploadPromises).then(() => {
+        // Video uploads are serialized so the XHR body is not starved by parallel work.
+        const hasVideo = validFiles.some(({ file }) => getMediaKind(file.name) === 'video');
+        const uploadTask = hasVideo
+            ? validFiles.reduce(
+                (chain, item) => chain.then(() => uploadOne(item)),
+                Promise.resolve(),
+            )
+            : Promise.all(validFiles.map((item) => uploadOne(item)));
+
+        uploadTask.then(() => {
             notifyUploadedFiles(getUploadedFileIds, onChange);
         });
     };
@@ -308,18 +350,21 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
             setFiles((prevFiles) => {
                 const updatedFiles = prevFiles.reduce((result, file) => {
                     const fileId = file.fileId || file.file_id;
-                    const status = statusMap?.get?.(fileId);
+                    const entry = normalizeParseStatusEntry(statusMap?.get?.(fileId));
 
-                    if (!status) {
+                    if (!entry) {
                         result.push(file);
                         return result;
                     }
 
-                    if (status === 'failed') {
+                    if (entry.parsing_status === 'failed') {
                         return result;
                     }
 
-                    result.push({ ...file, parsingStatus: status, isUploading: false });
+                    const nextFile = applyParseStatusToFile(file, entry);
+                    if (nextFile) {
+                        result.push(nextFile);
+                    }
                     return result;
                 }, []);
 
@@ -355,6 +400,72 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
         });
     }, []);
 
+    const mergeParseStatusUpdates = useCallback((updates: Map<string, { parsing_status?: string; cover_filepath?: string }>) => {
+        if (!updates.size) return;
+
+        setFiles((prevFiles) => {
+            let changed = false;
+            const nextFiles = prevFiles.reduce((result, file) => {
+                const fileId = file.fileId || file.file_id;
+                const entry = updates.get(fileId);
+                if (!entry) {
+                    result.push(file);
+                    return result;
+                }
+                if (entry.parsing_status === 'failed') {
+                    changed = true;
+                    return result;
+                }
+                const nextFile = applyParseStatusToFile(file, entry);
+                if (!nextFile) {
+                    return result;
+                }
+                changed = changed
+                    || nextFile.parsingStatus !== file.parsingStatus
+                    || nextFile.cover_filepath !== file.cover_filepath;
+                result.push(nextFile);
+                return result;
+            }, []);
+
+            if (!changed) return prevFiles;
+            filesRef.current = nextFiles;
+            onFilesStateChange?.(nextFiles);
+            notifyUploadedFiles(getUploadedFileIds, onChange);
+            return nextFiles;
+        });
+    }, [onChange, onFilesStateChange]);
+
+    // Poll linsight upload parse status (ASR, etc.) until completed.
+    useEffect(() => {
+        if (uploadMode !== 'linsight') return;
+
+        const pending = filesRef.current.filter((file) => {
+            const fileId = file.fileId || file.file_id;
+            return fileId && isMediaFileParsing(file);
+        });
+        if (!pending.length) return;
+
+        const intervalId = window.setInterval(async () => {
+            try {
+                const res = await checkFileParseStatus(
+                    pending.map((file) => String(file.fileId || file.file_id)),
+                );
+                const statusList = Array.isArray(res.data) ? res.data.filter(Boolean) : [];
+                const updates = new Map<string, { parsing_status?: string; cover_filepath?: string }>();
+                statusList.forEach((item: any) => {
+                    if (item?.file_id) {
+                        updates.set(String(item.file_id), item);
+                    }
+                });
+                mergeParseStatusUpdates(updates);
+            } catch (error) {
+                console.error('Media file parsing status check failed:', error);
+            }
+        }, 2000);
+
+        return () => window.clearInterval(intervalId);
+    }, [files, mergeParseStatusUpdates, uploadMode]);
+
     const handleFileRemove = (fileName) => {
         const removed = filesRef.current.find(file => file.name === fileName);
         if (removed?.previewUrl) URL.revokeObjectURL(removed.previewUrl);
@@ -377,7 +488,7 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
 
     const renderInlineFileChip = (file, index) => {
         const isMedia = isMediaAttachmentFile({ name: file.name });
-        const isParsing = isLinsightParsing(file);
+        const isParsing = isMediaFileParsing(file);
 
         if (isMedia) {
             return (

@@ -244,13 +244,20 @@ export async function getWorkstationFileShareUrlApi(filepath: string): Promise<s
 /**
  * 聊天窗上传文件
  */
-export async function uploadChatFile(v, file: File, onProgress, uploadMode?: 'linsight' | 'workstation'): Promise<any> {
+export async function uploadChatFile(
+    v,
+    file: File | Blob,
+    onProgress,
+    uploadMode?: 'linsight' | 'workstation',
+    fileName?: string,
+): Promise<any> {
+    const resolvedName = fileName ?? (file instanceof File ? file.name : 'upload');
     const formData = new FormData();
-    formData.append("file", file);
+    formData.append("file", file, resolvedName);
     if (uploadMode) {
         formData.append("endpoint", "custom");
         formData.append("file_id", generateUUID(32));
-        formData.append("file_name", file.name);
+        formData.append("file_name", resolvedName);
     }
     const urlMap = {
         linsight: '/api/v1/linsight/workbench/upload-file',
@@ -270,7 +277,6 @@ export async function uploadChatFile(v, file: File, onProgress, uploadMode?: 'li
         }
     });
 }
-
 
 export async function postBuildInit(data: {
     flow: any

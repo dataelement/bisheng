@@ -33,6 +33,12 @@ import { resolveKnowledgePreviewUrl } from "~/pages/knowledge/FilePreview/previe
 /** Fixed card geometry from the design (Figma 12841:47405). */
 const CARD_WIDTH = 148;
 
+/** Stable sequence key for a file attachment across upload → completed transition. */
+function attachmentSeqKey(clientId: string | undefined): string | undefined {
+    return clientId ? `att-${clientId}` : undefined;
+}
+
+
 function resolveFilePreviewUrl(file: {
     name?: string;
     previewUrl?: string;
@@ -211,6 +217,7 @@ const ArrowButton = ({
 interface AttachmentBarProps {
     uploadingFiles: Array<{
         id: string;
+        clientId?: string;
         name: string;
         previewUrl?: string;
         mediaPreviewUrl?: string;
@@ -255,8 +262,16 @@ export const AttachmentBar = ({
         );
         const activeUploads = uploadingFiles.filter((f) => !completedNames.has(f.name));
         const all: Entry[] = [
-            ...activeUploads.map((f) => ({ kind: "uploading" as const, key: `up-${f.id}`, data: f })),
-            ...files.map((f) => ({ kind: "file" as const, key: `file-${f.file_id || f.filepath || f.name}`, data: f })),
+            ...activeUploads.map((f) => ({
+                kind: "uploading" as const,
+                key: attachmentSeqKey(f.id) ?? `up-${f.id}`,
+                data: f,
+            })),
+            ...files.map((f) => ({
+                kind: "file" as const,
+                key: attachmentSeqKey(f.clientId || f.id) ?? `file-${f.file_id || f.filepath || f.name}`,
+                data: f,
+            })),
             ...kbs.map((k) => ({ kind: "kb" as const, key: `kb-${k.id}`, data: k })),
             ...skills.map((s) => ({ kind: "skill" as const, key: `skill-${s.name}`, data: s })),
         ];

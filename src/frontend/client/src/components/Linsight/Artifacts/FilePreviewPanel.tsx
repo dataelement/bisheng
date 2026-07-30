@@ -25,9 +25,11 @@ interface FilePreviewPanelProps {
     fileList?: ArtifactFile[];
     /** present when the preview was opened from the workspace drawer */
     onBack?: () => void;
+    /** Open another deliverable when a markdown link inside the preview is clicked. */
+    onArtifactPreview?: (file: ArtifactFile) => void;
 }
 
-export function FilePreviewPanel({ open, onOpenChange, file, versionId, fileList, onBack }: FilePreviewPanelProps) {
+export function FilePreviewPanel({ open, onOpenChange, file, versionId, fileList, onBack, onArtifactPreview }: FilePreviewPanelProps) {
     const localize = useLocalize();
 
     if (!file) return null;
@@ -68,7 +70,12 @@ export function FilePreviewPanel({ open, onOpenChange, file, versionId, fileList
                 {/* scrollbar-os: opt out of the forced custom webkit scrollbar so the
                     OS setting (auto-hide vs always-on) is respected (see style.css). */}
                 <div className="min-h-0 flex-1 overflow-y-auto scrollbar-os">
-                    <PreviewBody file={file} versionId={versionId} fileList={fileList} />
+                    <PreviewBody
+                        file={file}
+                        versionId={versionId}
+                        fileList={fileList}
+                        onArtifactPreview={onArtifactPreview}
+                    />
                 </div>
             </SheetContent>
         </Sheet>

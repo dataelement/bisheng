@@ -1,14 +1,14 @@
 /**
  * F035 Track H (P4): final-result artifact delivery (spec §5, fig 8/12).
  * Rendered in the ExecutionFlow `execution-artifacts` slot once the run
- * completes: report link row → answer markdown → output files card.
+ * completes: answer markdown → output files card (multi-file).
  */
+import { useCallback } from 'react';
 import { Outlined } from 'bisheng-icons';
 import Markdown from '~/components/Chat/Messages/Content/Markdown';
 import { useLocalize } from '~/hooks';
 import '~/markdown.css';
-import { type ArtifactFile, stripWorkspacePaths } from './artifactUtils';
-import { SaveAsButton } from './SaveAsButton';
+import { type ArtifactFile, resolveDeliverableLink, stripWorkspacePaths } from './artifactUtils';
 
 interface ResultSectionProps {
     /** output_result.answer — the run summary, markdown */
@@ -21,61 +21,33 @@ interface ResultSectionProps {
 
 export function ResultSection({ answer, files, versionId, onPreview }: ResultSectionProps) {
     const localize = useLocalize();
-    // Primary deliverable = files[0] (spec §5: report link row). The backend ranks
-    // the list by file TYPE then recency, so [0] is the headline artifact (a report
-    // outranks the charts it rendered afterwards), not just the newest write.
-    const primaryFile = files[0];
-    // With several deliverables the row names the headline file AND says how many
-    // there are in total — naming one of five silently would misrepresent the run,
-    // and a bare count would waste the row. The full manifest is the card below.
-    const multiple = files.length > 1;
-    const fileCount = String(files.length);
+    const resolveArtifactLink = useCallback(
+        (href: string) => resolveDeliverableLink(files, href),
+        [files],
+    );
 
     return (
         <div className="space-y-3">
-            {/* report link row */}
-            {primaryFile && (
-                <div className="flex items-center gap-1.5 text-sm text-gray-800">
-                    <span className="shrink-0">
-                        {multiple
-                            ? localize('com_linsight_files_ready_prefix', { 0: fileCount })
-                            : localize('com_linsight_report_ready')}
-                    </span>
-                    <button
-                        type="button"
-                        className="flex min-w-0 items-center gap-1 text-blue-600 transition-colors hover:text-blue-700"
-                        onClick={() => onPreview(primaryFile)}
-                    >
-                        <Outlined.File size={14} className="shrink-0" />
-                        <span className="truncate">{primaryFile.file_name}</span>
-                    </button>
-                    {/* shrink-0 so a long file name truncates but the "等 N 个文件"
-                        count stays fully visible — otherwise the user never learns
-                        there are more files than the one named. */}
-                    {multiple && (
-                        <span className="shrink-0">
-                            {localize('com_linsight_files_ready_suffix', { 0: fileCount })}
-                        </span>
-                    )}
-                </div>
-            )}
-
-            {/* answer summary, markdown rendered — plain paragraphs flush with the
-                report-link row above (no card chrome), matching the delivery design. */}
             {answer && (
                 <div className="bs-mkdown text-sm leading-6 text-gray-800 [&_p:last-child]:mb-0">
                     {/* strip internal output/ · scratch/ paths the model may have
                         echoed from a tool result — users don't need the workspace zone */}
-                    <Markdown content={stripWorkspacePaths(answer)} isLatestMessage={true} webContent={false} />
+                    <Markdown
+                        content={stripWorkspacePaths(answer)}
+                        isLatestMessage={true}
+                        webContent={false}
+                        resolveArtifactLink={resolveArtifactLink}
+                        onArtifactPreview={onPreview}
+                    />
                 </div>
             )}
 
             {/* output files card — dotted background matching ClarifyCard.
-                Only shown for MULTI-file runs: with a single deliverable the
-                report-link row above already surfaces it, so the card would just
-                repeat the same file name. Multi-file runs still get the card as the
-                full manifest (the link row stays the highlighted primary). */}
-            {files.length > 1 && (
+                Shown whenever the run produced deliverables. Single-file runs often
+                omit a markdown link in the answer ("可直接下载…" with no href), so
+                the card is the reliable preview/download affordance; in-answer links
+                still work via resolveDeliverableLink when present. */}
+            {files.length > 0 && (
                 <div
                     className="rounded-2xl border border-[#EEF2F6] p-5 shadow-[0_4px_20px_rgba(0,0,0,0.03)]"
                     style={{
