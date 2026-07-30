@@ -47,6 +47,21 @@ async def test_accessible_spaces_pin_comes_from_pin_table_and_sorts_first():
             f"{_KS}.KnowledgeSpaceUserPinDao.list_pinned_space_ids",
             new=AsyncMock(return_value={200}),
         ),
+        patch.object(
+            service,
+            "_batch_actions",
+            new=AsyncMock(
+                return_value={
+                    "100": frozenset({"visible"}),
+                    "200": frozenset({"visible"}),
+                }
+            ),
+        ),
+        patch.object(
+            service,
+            "_populate_root_file_counts",
+            new_callable=AsyncMock,
+        ),
         patch.object(service, "_decorate_department_metadata", new=AsyncMock(side_effect=lambda x: x)),
     ):
         result = await service._format_accessible_spaces([100, 200], "name")
@@ -75,6 +90,11 @@ async def test_member_spaces_pin_decoupled_from_member_row():
         patch(
             f"{_KS}.KnowledgeSpaceUserPinDao.list_pinned_space_ids",
             new=AsyncMock(return_value={300}),
+        ),
+        patch.object(
+            service,
+            "_populate_root_file_counts",
+            new_callable=AsyncMock,
         ),
         patch.object(service, "_decorate_department_metadata", new=AsyncMock(side_effect=lambda x: x)),
     ):

@@ -2298,5 +2298,88 @@
       "connection_lost": "接続が切断されました。もう一度お試しください"
     }
   },
-  "com_linsight_legacy_sop": "旧バージョンの SOP ドキュメント"
+  "com_linsight_legacy_sop": "旧バージョンの SOP ドキュメント",
+  "f048_permission": {
+    "dialog": {
+      "title": "権限管理",
+      "description": "権限ソースを確認し、付与可能なモデルでローカル権限を管理します。",
+      "loading": "リソース権限を読み込み中…",
+      "load_failed": "リソース権限を読み込めませんでした",
+      "roster": "現在の権限",
+      "manage_grants": "付与を管理"
+    },
+    "action_level": {
+      "unassigned": "未割り当て"
+    },
+    "model": {
+      "level": "派生レベル",
+      "inactive": "モデルは無効です"
+    },
+    "mode": {
+      "custom": "ローカル権限",
+      "inherit": "親から継承",
+      "parent": "親リソース",
+      "projection": "投影状態",
+      "switch_to_inherit": "継承に切り替え",
+      "switch_to_custom": "ローカルに切り替え",
+      "affected_assignees": "{{count}} 件の付与対象に影響する見込みです",
+      "cancel": "キャンセル",
+      "confirm": "変更を確認",
+      "conflict": "権限バージョンが変更されました。再読み込みしてください。",
+      "expired": "モード影響分析の有効期限が切れました。"
+    },
+    "roster": {
+      "empty": "付与対象はありません",
+      "loading": "権限を読み込み中…",
+      "loading_more": "さらに読み込み中…",
+      "load_more": "さらに読み込む",
+      "load_failed": "権限一覧を読み込めませんでした",
+      "summary_only": "自分の権限概要のみ表示できます。",
+      "protected": "保護対象",
+      "read_only": "読み取り専用",
+      "inherited_from": "継承元"
+    },
+    "scope": {
+      "local": "ローカル",
+      "inherited": "継承"
+    },
+    "source": {
+      "direct": "直接付与",
+      "department": "部門付与",
+      "user_group": "ユーザーグループ付与",
+      "creator": "作成者",
+      "inherited": "継承元",
+      "shared": "共有元",
+      "system": "システム元",
+      "include_children": "サブ部門を含む"
+    },
+    "subject": {
+      "user": "ユーザー",
+      "department": "部門",
+      "user_group": "ユーザーグループ"
+    },
+    "grant": {
+      "existing": "現在の付与",
+      "model": "権限モデル",
+      "add_model": "新規付与モデル",
+      "add": "追加",
+      "remove": "削除",
+      "pending": "{{count}} 件の変更を送信予定",
+      "submit": "変更を送信",
+      "conflict": "付与バージョンが変更されました。再読み込みしてください。"
+    },
+    "impact": {
+      "title": "影響の確認",
+      "description": "権限変更の影響を確認してください。",
+      "affected_assignees": "影響を受ける付与対象",
+      "expired": "影響分析の有効期限が切れました。"
+    },
+    "error": {
+      "version_conflict": "権限データが更新されました。再読み込みしてお試しください。",
+      "impact_expired": "影響分析の有効期限が切れました。再生成してください。",
+      "projection_failed": "権限投影に失敗したため、操作を拒否しました。",
+      "migration_blocked": "権限データ移行にブロック項目があります。",
+      "permission_denied": "権限が不足しています"
+    }
+  }
 }

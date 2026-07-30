@@ -29,11 +29,13 @@ from typing import Optional
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import Column, Integer, String, text
+from sqlalchemy import Column, String, text
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Field, SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
+
+from bisheng.core.context.tenant import bypass_tenant_filter
 
 
 # ── Real User SQLModel (replaces the conftest pre-mock for THIS file) ─────
@@ -95,6 +97,13 @@ _DDL = [
         is_tenant_root INTEGER NOT NULL DEFAULT 0,
         mounted_tenant_id INTEGER,
         is_deleted INTEGER NOT NULL DEFAULT 0,
+        last_sync_ts BIGINT NOT NULL DEFAULT 0,
+        default_role_ids JSON,
+        concurrent_session_limit INTEGER NOT NULL DEFAULT 0,
+        create_user INTEGER,
+        permission_projection_version BIGINT NOT NULL DEFAULT 0,
+        permission_projection_state VARCHAR(64) NOT NULL DEFAULT 'CURRENT',
+        permission_projection_operation_id BIGINT,
         create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
         update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
     )
@@ -138,6 +147,14 @@ _DDL = [
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────
+
+
+@pytest.fixture(autouse=True)
+def bypass_global_tenant_filter():
+    """The DAO applies its explicit tenant argument to this cross-tenant query."""
+    with bypass_tenant_filter():
+        yield
+
 
 @pytest_asyncio.fixture
 async def db_engine():

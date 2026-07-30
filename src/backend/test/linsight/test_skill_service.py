@@ -4,6 +4,7 @@ fake; disk IO runs against a tmp SkillStore."""
 
 import io
 import zipfile
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -83,8 +84,11 @@ class FakeSkillDao:
 def service(tmp_path, monkeypatch):
     FakeSkillDao.reset()
     monkeypatch.setattr(service_module, "LinsightSkillDao", FakeSkillDao)
-    monkeypatch.setattr(service_module.PermissionService, "authorize", AsyncMock())
-    return SkillService(store=SkillStore(root=tmp_path))
+    owner_projection = SimpleNamespace(authorize_created=AsyncMock())
+    return SkillService(
+        store=SkillStore(root=tmp_path),
+        owner_projection=owner_projection,
+    )
 
 
 def _form(**overrides) -> SkillCreateForm:
@@ -122,8 +126,8 @@ class TestCreate:
         # SKILL.md rendered with display-name metadata
         text = service.store.read_text(TENANT, detail.name)
         assert "display-name: 季度财报分析" in text
-        # owner tuple written best-effort
-        service_module.PermissionService.authorize.assert_awaited_once()
+        # F048 protected owner is durably projected before returning.
+        service._owner_projection.authorize_created.assert_awaited_once()
 
     async def test_duplicate_name_rejected(self, service):
         await service.create_from_form(TENANT, USER, _form())

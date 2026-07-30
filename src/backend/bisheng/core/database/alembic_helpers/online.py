@@ -40,6 +40,16 @@ def column_exists(table: str, column: str) -> bool:
     return _column_exists(op.get_bind(), table, column)
 
 
+def index_exists(table: str, index: str) -> bool:
+    """True iff ``table`` has the named index, including DM8 case folding."""
+
+    from bisheng.core.database.dialect_helpers import (
+        index_exists as _index_exists,
+    )
+
+    return _index_exists(op.get_bind(), table, index)
+
+
 def create_missing_model_tables(connection: Connection, metadata: MetaData) -> tuple[str, ...]:
     """Create every model table that is absent without altering existing tables.
 

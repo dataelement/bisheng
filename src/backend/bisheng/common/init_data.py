@@ -465,23 +465,19 @@ async def _backfill_guest_department_membership(session):
         has_any = (await session.exec(select(UserDepartment.id).where(UserDepartment.user_id == uid))).first()
         if has_any is not None:
             continue
-        session.add(
-            UserDepartment(
+        added_user_ids.append(int(uid))
+    if added_user_ids:
+        from bisheng.department.domain.services.department_service import (
+            DepartmentMembershipProjectionService,
+        )
+
+        for uid in added_user_ids:
+            await DepartmentMembershipProjectionService.aadd_member(
                 user_id=uid,
-                department_id=guest.id,
+                department_id=int(guest.id),
                 is_primary=1,
                 source="local",
             )
-        )
-        added_user_ids.append(int(uid))
-    await session.commit()
-    if added_user_ids:
-        from bisheng.department.domain.services.department_change_handler import (
-            DepartmentChangeHandler,
-        )
-
-        ops = DepartmentChangeHandler.on_members_added(guest.id, added_user_ids)
-        await DepartmentChangeHandler.execute_async(ops)
 
 
 def upload_preset_minio_file():

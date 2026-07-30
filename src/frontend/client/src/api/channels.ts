@@ -1,13 +1,4 @@
 import request from "./request";
-import type {
-  GrantDepartmentNode,
-  GrantDepartmentSearchResult,
-  GrantItem,
-  GrantUser,
-  PermissionEntry,
-  RelationModel,
-  RevokeItem,
-} from "./permission";
 
 // 排序方式
 export enum SortType {
@@ -23,61 +14,33 @@ export enum ChannelRole {
     MEMBER = "member"         // 普通成员
 }
 
-export type ChannelRelation = "owner" | "manager" | "editor" | "viewer";
-export type ChannelUserRole = ChannelRole | ChannelRelation;
-
-export type ChannelPermissionId =
-    | "view_channel"
-    | "edit_channel"
-    | "delete_channel"
-    | "manage_channel_owner"
-    | "manage_channel_manager"
-    | "manage_channel_user"
+export type ChannelAction =
+    | "visible"
+    | "edit"
+    | "manage_permission"
+    | "delete"
     | string;
 
-function hasPermissionIds(permissionIds?: ChannelPermissionId[] | null): permissionIds is ChannelPermissionId[] {
-    return Array.isArray(permissionIds);
+function hasAction(actions: ChannelAction[] | null | undefined, action: ChannelAction): boolean {
+    return Array.isArray(actions) && actions.includes(action);
 }
 
 export function canEditChannelSettings(
-    role?: ChannelUserRole | null,
-    permissionIds?: ChannelPermissionId[] | null,
+    actions?: ChannelAction[] | null,
 ): boolean {
-    if (hasPermissionIds(permissionIds)) {
-        return permissionIds.includes("edit_channel");
-    }
-    return role === "owner"
-        || role === "manager"
-        || role === "editor"
-        || role === ChannelRole.CREATOR
-        || role === ChannelRole.ADMIN;
+    return hasAction(actions, "edit");
 }
 
 export function canManageChannelPermissions(
-    role?: ChannelUserRole | null,
-    permissionIds?: ChannelPermissionId[] | null,
+    actions?: ChannelAction[] | null,
 ): boolean {
-    if (hasPermissionIds(permissionIds)) {
-        return permissionIds.some((permissionId) => (
-            permissionId === "manage_channel_user"
-            || permissionId === "manage_channel_manager"
-            || permissionId === "manage_channel_owner"
-        ));
-    }
-    return role === "owner"
-        || role === "manager"
-        || role === ChannelRole.CREATOR
-        || role === ChannelRole.ADMIN;
+    return hasAction(actions, "manage_permission");
 }
 
 export function canDeleteChannel(
-    role?: ChannelUserRole | null,
-    permissionIds?: ChannelPermissionId[] | null,
+    actions?: ChannelAction[] | null,
 ): boolean {
-    if (hasPermissionIds(permissionIds)) {
-        return permissionIds.includes("delete_channel");
-    }
-    return role === "owner" || role === ChannelRole.CREATOR;
+    return hasAction(actions, "delete");
 }
 
 // 子频道接口
@@ -97,8 +60,8 @@ export interface Channel {
     subscriberCount: number;   // 订阅人数
     articleCount: number;      // 文章数量
     unreadCount: number;       // 未读数量
-    role: ChannelUserRole;     // 当前用户的角色
-    permissionIds?: ChannelPermissionId[]; // 当前用户的频道权限项
+    role: ChannelRole;         // 当前用户的业务角色（授权以 actions 为准）
+    actions?: ChannelAction[];
     isPinned: boolean;         // 是否置顶
     createdAt: string;         // 创建时间
     updatedAt: string;         // 最近更新时间
@@ -183,8 +146,8 @@ export interface ChannelItemResponse {
     is_released: boolean;
     latest_article_update_time?: string;
     create_time?: string;
-    user_role: ChannelUserRole;
-    permission_ids?: ChannelPermissionId[];
+    user_role: ChannelRole;
+    actions?: ChannelAction[];
     is_pinned: boolean;
     subscribed_at?: string;
     unread_count?: number;
@@ -203,8 +166,7 @@ export interface ChannelDetailResponse {
     creator_name: string;
     subscriber_count: number;
     subscription_status: string;
-    relation?: ChannelRelation | null;
-    permission_ids?: ChannelPermissionId[];
+    actions?: ChannelAction[];
     article_count: number;
     filter_rules?: ManagerChannelFilterRule[];
     source_infos?: Array<{
@@ -240,18 +202,19 @@ export async function getChannelsApi(params: {
     return (Array.isArray(data) ? data : []).map((item: any) => ({
         id: item.id,
         name: item.name,
-        creator: "",
-        creatorId: "",
-        subscriberCount: 0,
-        articleCount: 0,
+        description: item.description,
+        creator: item.creator_name ?? "",
+        creatorId: String(item.creator_id ?? ""),
+        subscriberCount: Number(item.subscriber_count ?? 0),
+        articleCount: Number(item.article_count ?? 0),
         unreadCount: item.unread_count || 0,
-        role: (item.relation || item.user_role) as ChannelUserRole,
-        permissionIds: Array.isArray(item.permission_ids) ? item.permission_ids : [],
+        role: item.user_role as ChannelRole,
+        actions: Array.isArray(item.actions) ? item.actions : [],
         isPinned: item.is_pinned,
         createdAt: item.create_time,
         updatedAt: item.latest_article_update_time || item.update_time,
         subChannels: [],
-        ...item,
+        source_list: item.source_list,
     }));
 }
 
@@ -292,150 +255,6 @@ export async function subscribeChannelApi(channelId: string): Promise<void> {
 export async function unsubscribeChannelApi(channelId: string): Promise<any> {
     const res: any = await request.post(`/api/v1/channel/manager/${channelId}/unsubscribe`);
     return res;
-}
-
-interface ChannelPermissionRequestConfig {
-    signal?: AbortSignal;
-}
-
-export interface ChannelAuthorizePayload {
-    grants: GrantItem[];
-    revokes: RevokeItem[];
-}
-
-function withChannelPermissionRequestOptions(config?: ChannelPermissionRequestConfig) {
-    return {
-        skip403Redirect: true,
-        ...config,
-    };
-}
-
-function assertChannelPermissionSuccess(res: any) {
-    if (res && typeof res === "object" && "status_code" in res && res.status_code !== 200) {
-        throw new Error(res.status_message || `Channel permission request failed: ${res.status_code}`);
-    }
-}
-
-function unwrapChannelPermissionPayload<T>(res: any): T {
-    assertChannelPermissionSuccess(res);
-    return res && typeof res === "object" && "data" in res ? res.data : res;
-}
-
-function unwrapChannelPermissionArray<T = any>(res: any): T[] {
-    const data = unwrapChannelPermissionPayload<any>(res);
-    const rows = data?.data ?? data?.list ?? data?.records ?? data;
-    return Array.isArray(rows) ? rows : [];
-}
-
-export async function getChannelPermissionsApi(
-    channelId: string,
-    config?: ChannelPermissionRequestConfig
-): Promise<PermissionEntry[]> {
-    const res = await request.get(
-        `/api/v1/channel/manager/${channelId}/permissions`,
-        withChannelPermissionRequestOptions(config),
-    );
-    return unwrapChannelPermissionArray<PermissionEntry>(res);
-}
-
-export async function authorizeChannelApi(
-    channelId: string,
-    payload: ChannelAuthorizePayload,
-    config?: ChannelPermissionRequestConfig
-): Promise<null> {
-    const res = await request.post(
-        `/api/v1/channel/manager/${channelId}/authorize`,
-        payload,
-        withChannelPermissionRequestOptions(config),
-    );
-    return unwrapChannelPermissionPayload<null>(res);
-}
-
-export async function getChannelGrantableRelationModelsApi(
-    channelId: string,
-    config?: ChannelPermissionRequestConfig
-): Promise<RelationModel[]> {
-    const res = await request.get(
-        `/api/v1/channel/manager/${channelId}/grantable-relation-models`,
-        withChannelPermissionRequestOptions(config),
-    );
-    return unwrapChannelPermissionArray<RelationModel>(res);
-}
-
-export async function getChannelGrantSubjectsUsersApi(
-    channelId: string,
-    params?: { keyword?: string; page?: number; page_size?: number },
-    config?: ChannelPermissionRequestConfig
-): Promise<GrantUser[]> {
-    const res = await request.get(
-        `/api/v1/channel/manager/${channelId}/grant-subjects/users`,
-        {
-            params: {
-                keyword: params?.keyword ?? "",
-                page: params?.page ?? 1,
-                page_size: params?.page_size ?? 2000,
-            },
-            ...withChannelPermissionRequestOptions(config),
-        },
-    );
-    return unwrapChannelPermissionArray(res);
-}
-
-// F038: lazy variants of the channel grant-department tree (browse one layer /
-// server search / locate), mirroring the resource permission endpoints so the
-// channel picker shares the lazy tree without loading the whole org at once.
-
-export async function getChannelGrantSubjectsDepartmentChildrenApi(
-    channelId: string,
-    parentId: number | null,
-    config?: ChannelPermissionRequestConfig
-): Promise<GrantDepartmentNode[]> {
-    const res = await request.get(
-        `/api/v1/channel/manager/${channelId}/grant-subjects/departments/children`,
-        {
-            params: { parent_id: parentId ?? undefined },
-            ...withChannelPermissionRequestOptions(config),
-        },
-    );
-    return unwrapChannelPermissionArray<GrantDepartmentNode>(res);
-}
-
-export async function searchChannelGrantSubjectsDepartmentsApi(
-    channelId: string,
-    keyword: string,
-    limit = 50,
-    config?: ChannelPermissionRequestConfig
-): Promise<GrantDepartmentSearchResult> {
-    const res = await request.get(
-        `/api/v1/channel/manager/${channelId}/grant-subjects/departments/search`,
-        {
-            params: { keyword, limit },
-            ...withChannelPermissionRequestOptions(config),
-        },
-    );
-    // Fail safe on a `data:null` envelope (parity with the resource-scoped twin).
-    return (
-        unwrapChannelPermissionPayload<GrantDepartmentSearchResult>(res) ?? {
-            roots: [],
-            total_matches: 0,
-            truncated: false,
-        }
-    );
-}
-
-export async function getChannelGrantSubjectsUserGroupsApi(
-    channelId: string,
-    params?: { keyword?: string },
-    config?: ChannelPermissionRequestConfig
-): Promise<any[]> {
-    const res = await request.get(
-        `/api/v1/channel/manager/${channelId}/grant-subjects/user-groups`,
-        {
-            params: { keyword: params?.keyword ?? "" },
-            ...withChannelPermissionRequestOptions(config),
-        },
-    );
-    return unwrapChannelPermissionArray(res);
 }
 
 /**
@@ -766,7 +585,7 @@ export interface ChannelMember {
     user_id: number;
     user_name: string;
     avatar?: string;
-    role: ChannelUserRole;
+    role: ChannelRole;
     groups?: string[];
 }
 

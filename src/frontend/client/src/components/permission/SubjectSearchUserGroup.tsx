@@ -1,5 +1,5 @@
 import { Checkbox } from "~/components/ui/Checkbox";
-import { getResourceGrantUserGroups, getUserGroups } from "~/api/permission";
+import { getUserGroups } from "~/api/permission";
 import type { ResourceType, SelectedSubject } from "~/api/permission";
 import { Users, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -16,16 +16,12 @@ interface SubjectSearchUserGroupProps {
   resourceType?: ResourceType;
   resourceId?: string;
   disabledIds?: number[];
-  grantUserGroupsApi?: typeof getResourceGrantUserGroups;
 }
 
 export function SubjectSearchUserGroup({
   value,
   onChange,
-  resourceType,
-  resourceId,
   disabledIds = [],
-  grantUserGroupsApi,
 }: SubjectSearchUserGroupProps) {
   const localize = useLocalize();
   const [groups, setGroups] = useState<UserGroup[]>([]);
@@ -34,11 +30,7 @@ export function SubjectSearchUserGroup({
 
   useEffect(() => {
     const controller = new AbortController();
-    const getGrantUserGroups = grantUserGroupsApi ?? getResourceGrantUserGroups;
-    const request =
-      resourceType && resourceId
-        ? getGrantUserGroups(resourceType, resourceId, undefined, { signal: controller.signal })
-        : getUserGroups({ signal: controller.signal });
+    const request = getUserGroups({ signal: controller.signal });
 
     setLoading(true);
     request
@@ -52,7 +44,7 @@ export function SubjectSearchUserGroup({
       });
 
     return () => controller.abort();
-  }, [grantUserGroupsApi, resourceId, resourceType]);
+  }, []);
 
   const filtered = useMemo(() => {
     if (!keyword) return groups;

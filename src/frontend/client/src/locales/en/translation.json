@@ -2375,5 +2375,88 @@
       "connection_lost": "Connection lost, please try again"
     }
   },
-  "com_linsight_legacy_sop": "Legacy SOP document (pre-migration session)"
+  "com_linsight_legacy_sop": "Legacy SOP document (pre-migration session)",
+  "f048_permission": {
+    "dialog": {
+      "title": "Permissions",
+      "description": "Review permission sources or manage local grants with grantable models.",
+      "loading": "Loading resource permissions…",
+      "load_failed": "Failed to load resource permissions",
+      "roster": "Current Permissions",
+      "manage_grants": "Manage Grants"
+    },
+    "action_level": {
+      "unassigned": "Unassigned"
+    },
+    "model": {
+      "level": "Derived Level",
+      "inactive": "Model inactive"
+    },
+    "mode": {
+      "custom": "Local Permissions",
+      "inherit": "Inherit from Parent",
+      "parent": "Parent Resource",
+      "projection": "Projection Status",
+      "switch_to_inherit": "Switch to Inherited",
+      "switch_to_custom": "Switch to Local",
+      "affected_assignees": "Estimated impact: {{count}} assignees",
+      "cancel": "Cancel",
+      "confirm": "Confirm Change",
+      "conflict": "The permission version changed. Refresh and try again.",
+      "expired": "The mode impact analysis expired."
+    },
+    "roster": {
+      "empty": "No assignees",
+      "loading": "Loading permissions…",
+      "loading_more": "Loading more…",
+      "load_more": "Load More",
+      "load_failed": "Failed to load permissions",
+      "summary_only": "You can only view your own permission summary.",
+      "protected": "Protected",
+      "read_only": "Read-only",
+      "inherited_from": "Inherited from"
+    },
+    "scope": {
+      "local": "Local",
+      "inherited": "Inherited"
+    },
+    "source": {
+      "direct": "Direct Grant",
+      "department": "Department Grant",
+      "user_group": "User Group Grant",
+      "creator": "Creator",
+      "inherited": "Inherited Source",
+      "shared": "Shared Source",
+      "system": "System Source",
+      "include_children": "Include sub-departments"
+    },
+    "subject": {
+      "user": "User",
+      "department": "Department",
+      "user_group": "User Group"
+    },
+    "grant": {
+      "existing": "Current Grants",
+      "model": "Permission Model",
+      "add_model": "Model for New Grant",
+      "add": "Add",
+      "remove": "Remove",
+      "pending": "{{count}} pending changes",
+      "submit": "Submit Changes",
+      "conflict": "The grant version changed. Refresh and try again."
+    },
+    "impact": {
+      "title": "Impact Confirmation",
+      "description": "Review the authorization impact.",
+      "affected_assignees": "Affected Assignees",
+      "expired": "The impact analysis expired."
+    },
+    "error": {
+      "version_conflict": "Permission data changed. Refresh and try again.",
+      "impact_expired": "The impact analysis expired. Generate it again.",
+      "projection_failed": "Permission projection failed and the operation was denied.",
+      "migration_blocked": "Permission migration has blocking items.",
+      "permission_denied": "Permission denied"
+    }
+  }
 }

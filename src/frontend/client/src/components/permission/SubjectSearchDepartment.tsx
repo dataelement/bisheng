@@ -1,7 +1,7 @@
 import { Checkbox } from "~/components/ui/Checkbox";
 import {
-  getResourceGrantDepartmentChildren,
-  searchResourceGrantDepartments,
+  getDepartmentChildren,
+  searchDepartments,
 } from "~/api/permission";
 import type {
   GrantDepartmentNode,
@@ -29,8 +29,8 @@ interface SubjectSearchDepartmentProps {
   includeChildren: boolean;
   onSelectionSummaryChange?: (v: SelectedSubject[]) => void;
   disabledIds?: number[];
-  grantDepartmentChildrenApi?: typeof getResourceGrantDepartmentChildren;
-  grantDepartmentSearchApi?: typeof searchResourceGrantDepartments;
+  departmentChildrenApi?: typeof getDepartmentChildren;
+  departmentSearchApi?: typeof searchDepartments;
 }
 
 export function SubjectSearchDepartment({
@@ -41,19 +41,19 @@ export function SubjectSearchDepartment({
   includeChildren,
   onSelectionSummaryChange,
   disabledIds = [],
-  grantDepartmentChildrenApi,
-  grantDepartmentSearchApi,
+  departmentChildrenApi,
+  departmentSearchApi,
 }: SubjectSearchDepartmentProps) {
   const localize = useLocalize();
   const disabledIdSet = useMemo(() => new Set(disabledIds), [disabledIds]);
 
-  const fetchChildren = grantDepartmentChildrenApi ?? getResourceGrantDepartmentChildren;
-  const fetchSearch = grantDepartmentSearchApi ?? searchResourceGrantDepartments;
+  const fetchChildren = departmentChildrenApi ?? getDepartmentChildren;
+  const fetchSearch = departmentSearchApi ?? searchDepartments;
   const tree = useGrantDepartmentTree({
     fetchChildren: (parentId, signal) =>
-      fetchChildren(resourceType, resourceId, parentId, signal ? { signal } : undefined),
+      fetchChildren(parentId, signal ? { signal } : undefined),
     fetchSearch: (keyword, signal) =>
-      fetchSearch(resourceType, resourceId, keyword, 50, signal ? { signal } : undefined),
+      fetchSearch(keyword, 50, signal ? { signal } : undefined),
   });
 
   // Remember each selected dept's path at pick time so implicit selection can be

@@ -92,7 +92,7 @@ async def create(
         knowledge.auth_type = AuthTypeEnum.PUBLIC
         knowledge.is_released = False
         db_knowledge = await KnowledgeService.acreate_knowledge(request, login_user, knowledge)
-        # Enrich to the unified KnowledgeRead (user_name + permission_ids), matching
+        # Enrich to the unified KnowledgeRead (user_name + concrete actions), matching
         # the list/update output. The creator owns the KB → full permission ids.
         result = (await KnowledgeService.aconvert_knowledge_read(login_user, [db_knowledge]))[0]
         return resp_200(result)
@@ -105,12 +105,15 @@ async def create(
             is_released=knowledge.is_released,
         )
         # Spaces use a different permission model than KBs; populate user_name and
-        # the creator's effective space permission ids for a consistent output.
+        # the creator's effective space actions for a consistent output.
         result = KnowledgeRead(
             **space.model_dump(),
             user_name=login_user.user_name,
-            permission_ids=sorted(
-                await space_svc._get_effective_permission_ids("knowledge_space", space.id)
+            actions=sorted(
+                await space_svc._get_effective_actions(
+                    "knowledge_space",
+                    space.id,
+                )
             ),
         )
         return resp_200(result)

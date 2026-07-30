@@ -5,17 +5,12 @@ Provides easy dependency injection and lifecycle management
 """
 import asyncio
 from contextlib import asynccontextmanager, contextmanager
-from typing import Optional, Dict, Any, TypeVar, List, Union
+from typing import Any, TypeVar, Union
 
 from loguru import logger
 
 from bisheng.core.config.settings import Settings
-from bisheng.core.context.base import (
-    ContextRegistry,
-    BaseContextManager,
-    ContextState,
-    ContextError
-)
+from bisheng.core.context.base import BaseContextManager, ContextError, ContextRegistry, ContextState
 
 T = TypeVar('T')
 
@@ -31,8 +26,8 @@ class ApplicationContextManager:
         self._registry = ContextRegistry()
         self._initialized = False
         self._initialization_lock = asyncio.Lock()
-        self._initialization_order: List[str] = []
-        self._dependencies: Dict[str, List[str]] = {}
+        self._initialization_order: list[str] = []
+        self._dependencies: dict[str, list[str]] = {}
         self._optional_contexts: set[str] = set()
 
     async def initialize(self, config: Settings) -> None:
@@ -97,9 +92,15 @@ class ApplicationContextManager:
             if config.openfga.enabled:
                 try:
                     from bisheng.core.openfga.manager import FGAManager
-                    self.register_context(FGAManager(openfga_config=config.openfga), optional=True)
-                except Exception as e:
-                    logger.warning(f"Failed to register FGAManager (OpenFGA may not be available): {e}")
+
+                    self.register_context(
+                        FGAManager(openfga_config=config.openfga),
+                        optional=False,
+                    )
+                except ImportError as e:
+                    raise RuntimeError(
+                        "OpenFGA is enabled but FGAManager cannot be imported"
+                    ) from e
 
             logger.debug("Default contexts registered")
         except ImportError as e:
@@ -162,8 +163,8 @@ class ApplicationContextManager:
     def register_context(
             self,
             context: BaseContextManager,
-            dependencies: Optional[List[str]] = None,
-            initialize_order: Optional[int] = None,
+            dependencies: list[str] | None = None,
+            initialize_order: int | None = None,
             optional: bool = False,
     ) -> None:
         """Register a new context manager
@@ -210,7 +211,7 @@ class ApplicationContextManager:
         """Log out of the context manager"""
         self._registry.unregister(name)
 
-    async def health_check(self, include_details: bool = False) -> Union[Dict[str, bool], Dict[str, Dict[str, Any]]]:
+    async def health_check(self, include_details: bool = False) -> Union[dict[str, bool], dict[str, dict[str, Any]]]:
         """Perform a health check
 
         Args:
@@ -293,7 +294,7 @@ class ApplicationContextManager:
         """
         return self._registry
 
-    def get_context_info(self) -> Dict[str, Any]:
+    def get_context_info(self) -> dict[str, Any]:
         """Get app context details
 
         Returns:
@@ -385,7 +386,7 @@ class ApplicationContextManager:
         await self.async_get_instance(context_name)  # Trigger reinitialization
         logger.info(f"Context '{context_name}' restarted successfully")
 
-    def list_contexts(self, state_filter: Optional[ContextState] = None) -> List[str]:
+    def list_contexts(self, state_filter: ContextState | None = None) -> list[str]:
         """List all context names
 
         Args:
@@ -471,8 +472,8 @@ async def close_app_context() -> None:
 
 def register_context(
         context: BaseContextManager,
-        dependencies: Optional[List[str]] = None,
-        initialize_order: Optional[int] = None,
+        dependencies: list[str] | None = None,
+        initialize_order: int | None = None,
         optional: bool = False,
 ) -> None:
     """Convenient way to register a context
@@ -490,7 +491,7 @@ def register_context(
     app_context.register_context(context, dependencies, initialize_order, optional=optional)
 
 
-async def health_check(include_details: bool = False) -> Union[Dict[str, bool], Dict[str, Dict[str, Any]]]:
+async def health_check(include_details: bool = False) -> Union[dict[str, bool], dict[str, dict[str, Any]]]:
     """Convenient way to perform a health check
 
     Args:

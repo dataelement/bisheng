@@ -28,7 +28,7 @@ CHAT_PROMPT = ChatPromptTemplate.from_messages(messages)
 
 
 class ToolInputSchema(BaseModel):
-    query: str = Field(description='question asked by the user.')
+    query: str = Field(description="question asked by the user.")
 
 
 class KnowledgeRetrieverTool(BaseTool):
@@ -39,8 +39,8 @@ class KnowledgeRetrieverTool(BaseTool):
     vector_retriever: Optional[BaseRetriever] = None
     elastic_retriever: Optional[BaseRetriever] = None
     rerank: Optional[BaseDocumentCompressor] = None
-    max_content: int = Field(default=15000, description='The max length of the combined document content.')
-    sort_by_source_and_index: bool = Field(default=False, description='Sort by document name & chunk index.')
+    max_content: int = Field(default=15000, description="The max length of the combined document content.")
+    sort_by_source_and_index: bool = Field(default=False, description="Sort by document name & chunk index.")
     rrf_weights: List[float] = Field(default=None)
     rrf_remove_zero_score: bool = Field(default=False)
 
@@ -73,9 +73,11 @@ class KnowledgeRetrieverTool(BaseTool):
     def _rrf_rerank(self, milvus_docs: List[Document], es_docs: List[Document], query: str) -> List[Document]:
         if not milvus_docs and not es_docs:
             return []
-        rrf_rerank = RRFRerank(retrievers=[self.vector_retriever, self.elastic_retriever],
-                               weights=self.rrf_weights,
-                               remove_zero_score=self.rrf_remove_zero_score)
+        rrf_rerank = RRFRerank(
+            retrievers=[self.vector_retriever, self.elastic_retriever],
+            weights=self.rrf_weights,
+            remove_zero_score=self.rrf_remove_zero_score,
+        )
         finally_docs = rrf_rerank.compress_documents(documents=[milvus_docs, es_docs], query=query)
 
         # limit by max_chunk_size
@@ -86,14 +88,15 @@ class KnowledgeRetrieverTool(BaseTool):
             if doc_content_sum > self.max_content:
                 break
             doc_content_sum += len(doc.page_content)
-            same_file_id.add((doc.metadata.get('document_id'), doc.metadata.get('document_name')))
+            same_file_id.add((doc.metadata.get("document_id"), doc.metadata.get("document_name")))
             doc_num += 1
         finally_docs = finally_docs[:doc_num]
 
         # sort by source and index if only one file
         if self.sort_by_source_and_index and len(same_file_id) == 1:
-            finally_docs = sorted(finally_docs,
-                                  key=lambda x: (x.metadata.get('document_name', ""), x.metadata.get('chunk_index', 0)))
+            finally_docs = sorted(
+                finally_docs, key=lambda x: (x.metadata.get("document_name", ""), x.metadata.get("chunk_index", 0))
+            )
         return finally_docs
 
 
@@ -107,8 +110,8 @@ class KnowledgeRagTool(BaseTool):
 
     vector_retriever: Optional[BaseRetriever] = None
     elastic_retriever: Optional[BaseRetriever] = None
-    max_content: int = Field(default=15000, description='The max length of the combined document content.')
-    sort_by_source_and_index: bool = Field(default=False, description='Sort by document name & chunk index.')
+    max_content: int = Field(default=15000, description="The max length of the combined document content.")
+    sort_by_source_and_index: bool = Field(default=False, description="Sort by document name & chunk index.")
     rrf_weights: List[float] = Field(default=None)
     rrf_remove_zero_score: bool = Field(default=False)
 
@@ -116,17 +119,19 @@ class KnowledgeRagTool(BaseTool):
 
     @classmethod
     def init_knowledge_rag_tool(cls, name: str, description: str, **kwargs) -> BaseTool:
-        llm = kwargs.pop('llm')
-        chat_prompt = kwargs.pop('chat_prompt', CHAT_PROMPT)
+        llm = kwargs.pop("llm")
+        chat_prompt = kwargs.pop("chat_prompt", CHAT_PROMPT)
         # cancel assistant deep callback
         kwargs.pop("callbacks", None)
         knowledge_retriever_tool = KnowledgeRetrieverTool(**kwargs)
-        return cls(name=name,
-                   description=description,
-                   args_schema=ToolInputSchema,
-                   llm=llm,
-                   chat_prompt=chat_prompt,
-                   knowledge_retriever_tool=knowledge_retriever_tool)
+        return cls(
+            name=name,
+            description=description,
+            args_schema=ToolInputSchema,
+            llm=llm,
+            chat_prompt=chat_prompt,
+            knowledge_retriever_tool=knowledge_retriever_tool,
+        )
 
     def _run(self, query: str) -> Any:
         # 1. retrieve documents

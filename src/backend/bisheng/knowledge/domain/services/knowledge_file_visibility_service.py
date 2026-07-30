@@ -1,6 +1,6 @@
 """F029 KnowledgeFileVisibilityService.
 
-Implements the two-layer view_file permission filter shared by
+Implements the two-layer F048 ``visible`` filter shared by
 KnowledgeSpaceChatService.chat_folder, WorkStationService.queryChunksFromDB
 and CitationResolveService.
 
@@ -10,18 +10,19 @@ features/v2.6.0/029-knowledge-qa-permission-filter/spec.md §4 (AD-01/02/03/08).
 
 from __future__ import annotations
 
-import asyncio
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 
 from fastapi import Request
-from loguru import logger
 from sqlmodel import select
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.knowledge_space import SpacePermissionDeniedError
 from bisheng.core.config.settings import KnowledgeQAFilterConf
 from bisheng.core.database import get_async_db_session
+from bisheng.permission.application.business_authorization import (
+    batch_check_business_actions,
+)
 
 
 @dataclass
@@ -32,7 +33,7 @@ class IndexFilter:
     - ``in``    — ``document_id in [visible ids]``; small visible set.
     - ``notin`` — ``document_id not in [excluded ids]``; almost everything
       visible.
-    - ``none``  — no filter; either admin caller or both sides too large
+    - ``none``  — no index filter; both sides are too large
       (result-layer post-filter alone enforces visibility).
     - ``empty`` — user has zero visible files in the space; caller must skip
       retrieval entirely.
@@ -68,8 +69,7 @@ class KnowledgeFileVisibilityService:
         self.version_repo = None
 
     # ------------------------------------------------------------------
-    # Lazy KnowledgeSpaceService accessor — reused by is_space_visible and
-    # post_filter_visible_files to share the permission-binding context.
+    # Lazy KnowledgeSpaceService accessor used by the space-level gate.
     # ------------------------------------------------------------------
 
     def _space_service(self):
@@ -96,17 +96,19 @@ class KnowledgeFileVisibilityService:
     # ------------------------------------------------------------------
 
     async def is_space_visible(self, space_id: int) -> bool:
-        """Non-throwing wrapper around the view_space gate.
+        """Non-throwing wrapper around the concrete space ``visible`` gate.
 
-        Returns True for admin users (the underlying PermissionService
-        short-circuits) and for any user whose effective permissions on the
-        space include view_space; False otherwise. Errors other than
-        ``SpacePermissionDeniedError`` propagate.
+        Returns False on an ordinary authorization denial. Business/resource
+        errors still propagate.
         """
         svc = self._space_service()
         try:
             await svc._require_read_permission(space_id)
-            await svc._require_permission_id("knowledge_space", space_id, "view_space")
+            await svc._require_action(
+                "knowledge_space",
+                space_id,
+                "visible",
+            )
             return True
         except SpacePermissionDeniedError:
             return False
@@ -124,42 +126,30 @@ class KnowledgeFileVisibilityService:
 
         See spec §4 AD-02 for the IN / NOT-IN / none strategy matrix.
         """
-        from bisheng.permission.domain.services.permission_service import (
-            PermissionService,
-        )
-
-        accessible_ids = await PermissionService.list_accessible_ids(
-            user_id=self.login_user.user_id,
-            relation="can_read",
-            object_type="knowledge_file",
-            login_user=self.login_user,
-        )
-
         # candidate_file_ids carries the explicit folder / tag business scope.
         # Unlike the permission set, it has NO result-layer backstop
-        # (post_filter_visible_files only enforces view_file), so whenever it
+        # (post_filter_visible_files only enforces ``visible``), so whenever it
         # is provided it MUST be pushed down into the index — it can never be
-        # dropped via the admin or the both-sides-too-large 'none' shortcut.
+        # dropped via the both-sides-too-large 'none' shortcut.
         has_business_scope = candidate_file_ids is not None
 
-        # Admin: list_accessible_ids returns None → unrestricted by permission.
-        # With no business scope there is nothing to push down (admin sees the
-        # whole space); with a folder / tag scope we still must enforce it.
-        if accessible_ids is None and not has_business_scope:
-            return IndexFilter(strategy="none")
-
-        # Scope to this space — the user's full accessible set spans every
-        # knowledge_file they can read tenant-wide. We only care about files
-        # in the queried space.
         space_primary_ids = await self._list_primary_file_ids_in_space(space_id)
-        if accessible_ids is None:
-            # Admin: every file in the space is permission-visible.
-            scoped = set(space_primary_ids)
-        else:
-            accessible_int = {int(x) for x in accessible_ids if str(x).isdigit()}
-            scoped = accessible_int & space_primary_ids
+        candidates = set(space_primary_ids)
         if has_business_scope:
-            scoped &= {int(x) for x in candidate_file_ids}
+            candidates &= {int(x) for x in candidate_file_ids}
+
+        action_map = await batch_check_business_actions(
+            self.login_user,
+            resource_type="knowledge_file",
+            resource_ids=sorted(candidates),
+            actions=("visible",),
+        )
+        scoped = {
+            file_id
+            for file_id in candidates
+            if "visible"
+            in action_map.get(str(file_id), frozenset())
+        }
 
         if not scoped:
             return IndexFilter(strategy="empty", accessible_size=0)
@@ -216,62 +206,39 @@ class KnowledgeFileVisibilityService:
         space_id: int,
         file_ids: Iterable[int],
     ) -> set[int]:
-        """Return the subset of ``file_ids`` for which the current user holds
-        ``view_file`` in effective permissions.
+        """Return the subset of ``file_ids`` allowing F048 ``visible``.
 
-        Admin short-circuits to the input set.
         Empty input short-circuits before building the permission context.
-        Otherwise the per-file effective-permission resolution delegates to
-        ``KnowledgeSpaceService._get_child_item_effective_permission_ids``
-        — the same primitive the listing UI uses — guaranteeing the chat
-        path and the listing path agree on what is visible (INV-6 in
-        features/v2.6.0/release-contract.md).
-
-        The delegated call applies:
-        - per-item lineage walk (file → ancestor folders → space)
-        - ``nearest_binding_wins=True`` semantics so file-level revokes are
-          honoured against space-membership defaults
-        - membership default permissions when no lineage binding matched
-        - public-space viewer defaults
-
-        Without those parameters earlier revisions of this method would
-        return the union of all bindings, letting revoked files leak past
-        the filter — exactly the bug the user reported.
+        Business rows are loaded first, then the exact F048 ``visible`` action
+        is BatchChecked. OpenFGA identity relations handle super administrators;
+        this service has no creator/admin fallback.
         """
         file_id_set: set[int] = {int(x) for x in file_ids}
         if not file_id_set:
             return set()
 
-        if self.login_user.is_admin():
-            return file_id_set
-
         from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
 
         items = await KnowledgeFileDao.aget_file_by_ids(list(file_id_set))
-        if not items:
+        candidate_ids = {
+            int(item.id)
+            for item in items
+            if item.knowledge_id == space_id
+        }
+        if not candidate_ids:
             return set()
-
-        space_svc = self._space_service()
-        context = await space_svc._build_child_permission_context(space_id)
-        semaphore = asyncio.Semaphore(self._config().fine_grained_concurrency)
-
-        async def resolve(item) -> int | None:
-            async with semaphore:
-                try:
-                    effective = await space_svc._get_child_item_effective_permission_ids(
-                        item, space_id=space_id, context=context
-                    )
-                except Exception:
-                    logger.exception(
-                        "post_filter_visible_files: fine-grained resolution failed for file_id=%s space_id=%s",
-                        item.id,
-                        space_id,
-                    )
-                    return None
-            return int(item.id) if "view_file" in effective else None
-
-        results = await asyncio.gather(*(resolve(item) for item in items))
-        return {fid for fid in results if fid is not None}
+        action_map = await batch_check_business_actions(
+            self.login_user,
+            resource_type="knowledge_file",
+            resource_ids=sorted(candidate_ids),
+            actions=("visible",),
+        )
+        return {
+            file_id
+            for file_id in candidate_ids
+            if "visible"
+            in action_map.get(str(file_id), frozenset())
+        }
 
     # ------------------------------------------------------------------
     # Internal helpers (patched by tests via monkeypatch)

@@ -44,6 +44,9 @@ from bisheng.workstation.domain.services.workstation_service import WorkStationS
 
 router = APIRouter(prefix="/knowledge/space", tags=["knowledge_space"])
 
+SPACE_FILE_PREVIEW_PERMISSION_ACTION = None
+SPACE_FILE_DOWNLOAD_PERMISSION_ACTION = "download"
+
 
 # ──────────────────────────── Space CRUD ──────────────────────────────────────
 

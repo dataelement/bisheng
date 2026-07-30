@@ -24,8 +24,10 @@ from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.assistant import AssistantDao
 from bisheng.database.models.flow import Flow, FlowCreate, FlowDao, FlowRead, FlowStatus, FlowType, FlowUpdate
 from bisheng.database.models.flow_version import FlowVersionDao
-from bisheng.database.models.role_access import AccessType
-from bisheng.permission.domain.services.application_permission_service import ApplicationPermissionService
+from bisheng.permission.application.business_authorization import (
+    check_business_action,
+    require_business_action,
+)
 from bisheng.role.domain.services.quota_service import QuotaResourceType, require_quota
 from bisheng.share_link.api.dependencies import header_share_token_parser
 from bisheng.share_link.domain.models.share_link import ShareLink
@@ -59,22 +61,23 @@ async def check_app_write_auth(
     """Check if the user has administrative rights to the app"""
     if flow_type == FlowType.ASSISTANT.value:
         flow_info = await AssistantDao.aget_one_assistant(flow_id)
-        check_auth_type = AccessType.ASSISTANT_WRITE
     elif flow_type == FlowType.WORKFLOW.value:
         flow_info = await FlowDao.aget_flow_by_id(flow_id)
-        check_auth_type = AccessType.WORKFLOW_WRITE
         if flow_info and flow_info.flow_type != FlowType.WORKFLOW.value:
             flow_info = None
     else:
         raise NotFoundError.http_exception()
     if not flow_info:
         raise NotFoundError.http_exception()
-    owner_id = flow_info.user_id
-    if await ApplicationPermissionService.has_any_permission_async(
+    if await check_business_action(
         login_user,
-        "assistant" if flow_type == FlowType.ASSISTANT.value else "workflow",
-        str(flow_id),
-        ["edit_app"],
+        resource_type=(
+            "assistant"
+            if flow_type == FlowType.ASSISTANT.value
+            else "workflow"
+        ),
+        resource_id=flow_id,
+        action="edit",
     ):
         return resp_200()
     return AppWriteAuthError.return_resp()
@@ -93,11 +96,11 @@ async def get_report_file(
     flow_info = await FlowDao.aget_flow_by_id(workflow_id)
     if not flow_info:
         raise NotFoundError.http_exception()
-    if not await ApplicationPermissionService.has_any_permission_async(
+    if not await check_business_action(
         login_user,
-        "workflow",
-        str(workflow_id),
-        ["view_app", "use_app"],
+        resource_type="workflow",
+        resource_id=workflow_id,
+        action="visible",
     ):
         return UnAuthorizedError.return_resp()
 
@@ -163,11 +166,11 @@ async def force_save_report_file(
     flow_info = await FlowDao.aget_flow_by_id(workflow_id)
     if not flow_info:
         raise NotFoundError.http_exception()
-    if not await ApplicationPermissionService.has_any_permission_async(
+    if not await check_business_action(
         login_user,
-        "workflow",
-        str(workflow_id),
-        ["edit_app"],
+        resource_type="workflow",
+        resource_id=workflow_id,
+        action="edit",
     ):
         return AppWriteAuthError.return_resp()
 
@@ -234,15 +237,20 @@ async def upload_report_file(request: Request, data: dict = Body(...)):
 
 
 @router.post("/run_once", status_code=200)
-def run_once(
+async def run_once(
     request: Request,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
     node_input: dict | None = None,  # Input parameters of the node
-    node_data: dict = None,
+    node_data: dict | None = None,
     workflow_id: str = Body(..., description="The WorkflowID"),
 ):
     """Single node operation"""
-    result = WorkFlowService.run_once(login_user, node_input, node_data, workflow_id)
+    result = await WorkFlowService.run_once(
+        login_user,
+        node_input,
+        node_data,
+        workflow_id,
+    )
 
     return resp_200(data=result)
 
@@ -256,18 +264,18 @@ async def workflow_ws(
     login_user: UserPayload = Depends(UserPayload.get_login_user_from_ws),
 ):
     try:
-        if not await ApplicationPermissionService.has_any_permission_async(
+        await require_business_action(
             login_user,
-            "workflow",
-            str(workflow_id),
-            ["use_app"],
-        ):
-            await websocket.close(
-                code=http_status.WS_1008_POLICY_VIOLATION,
-                reason="No permission to use this app",
-            )
-            return
+            resource_type="workflow",
+            resource_id=workflow_id,
+            action="use",
+        )
         await chat_manager.dispatch_client(websocket, workflow_id, chat_id, login_user, WorkType.WORKFLOW, websocket)
+    except UnAuthorizedError:
+        await websocket.close(
+            code=http_status.WS_1008_POLICY_VIOLATION,
+            reason="No permission to use this app",
+        )
     except WebSocketException as exc:
         logger.error(f"Websocket exception: {exc!s}")
         await websocket.close(code=http_status.WS_1011_INTERNAL_ERROR, reason=str(exc))
@@ -275,7 +283,12 @@ async def workflow_ws(
 
 @router.post("/create", status_code=201)
 @require_quota(QuotaResourceType.WORKFLOW)
-def create_flow(*, request: Request, flow: FlowCreate, login_user: UserPayload = Depends(UserPayload.get_login_user)):
+async def create_flow(
+    *,
+    request: Request,
+    flow: FlowCreate,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
     """Create a new flow."""
     # Determine if the user repeats the skill name
     with get_sync_db_session() as session:
@@ -301,16 +314,20 @@ def create_flow(*, request: Request, flow: FlowCreate, login_user: UserPayload =
     current_version = FlowVersionDao.get_version_by_flow(db_flow.id)
     ret = FlowRead.model_validate(db_flow)
     ret.version_id = current_version.id
-    FlowService.create_flow_hook(request, login_user, db_flow)
+    await FlowService.create_flow_hook(request, login_user, db_flow)
     return resp_200(data=ret)
 
 
 @router.get("/versions", status_code=200)
-def get_versions(*, flow_id: str, login_user: UserPayload = Depends(UserPayload.get_login_user)):
+async def get_versions(
+    *,
+    flow_id: str,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
     """
     Get a list of versions for your skill
     """
-    return FlowService.get_version_list_by_flow(login_user, flow_id)
+    return await FlowService.get_version_list_by_flow(login_user, flow_id)
 
 
 @router.post("/versions", status_code=200)
@@ -339,19 +356,27 @@ async def update_versions(
 
 
 @router.delete("/versions/{version_id}", status_code=200)
-def delete_versions(*, version_id: int, login_user: UserPayload = Depends(UserPayload.get_login_user)):
+async def delete_versions(
+    *,
+    version_id: int,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
     """
     Remove Version
     """
-    return FlowService.delete_version(login_user, version_id)
+    return await FlowService.delete_version(login_user, version_id)
 
 
 @router.get("/versions/{version_id}", status_code=200)
-def get_version_info(*, version_id: int, login_user: UserPayload = Depends(UserPayload.get_login_user)):
+async def get_version_info(
+    *,
+    version_id: int,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
     """
     Get Version Info
     """
-    return FlowService.get_version_info(login_user, version_id)
+    return await FlowService.get_version_info(login_user, version_id)
 
 
 @router.post("/change_version", status_code=200)
@@ -388,11 +413,11 @@ async def update_flow(
     if not db_flow:
         raise NotFoundError()
 
-    if not await ApplicationPermissionService.has_any_permission_async(
+    if not await check_business_action(
         login_user,
-        "workflow",
-        str(flow_id),
-        ["edit_app"],
+        resource_type="workflow",
+        resource_id=flow_id,
+        action="edit",
     ):
         return UnAuthorizedError.return_resp()
 
@@ -437,11 +462,15 @@ async def read_flows(
     tag_id: int = Query(default=None, description="labelID"),
     flow_type: int = Query(default=None, description="Type 5 assistant 10 workflow"),
     page_size: int = Query(default=10, description="Items per page"),
-    status: int = None,
+    status: int | None = None,
     managed: bool = Query(
         default=False, description="Whether to query the list of apps with administrative permissions"
     ),
-    permission_id: str = Query(default="use_app", description="Fine-grained permission id for non-managed app lists"),
+    action: str = Query(
+        default="use",
+        pattern="^(visible|use)$",
+        description="Concrete action required for non-managed app lists",
+    ),
     cursor: str | None = Query(
         default=None,
         description="F027 cursor-based pagination token from the previous response's "
@@ -462,6 +491,6 @@ async def read_flows(
         cursor=cursor,
         page_size=page_size,
         managed=managed,
-        permission_id=permission_id,
+        action=action,
     )
     return resp_200(data=result)

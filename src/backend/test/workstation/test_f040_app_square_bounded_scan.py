@@ -41,8 +41,10 @@ def test_compat_scan_uses_keyset_batches_and_page_bounded_target():
     assert "while len(visible) < target_visible" in source
     assert "cursor=batch_cursor" in source
     assert "target_visible = normalized_page * normalized_page_size" in source
-    assert "build_app_permission_context_async" in source
-    assert "context=permission_context" in source
+    assert "requested_actions" in source
+    assert "_application_action_map" in source
+    assert '"edit"' in source
+    assert '"share"' in source
 
 
 def test_ranked_dao_uses_dm8_safe_keyset_helper_with_mixed_directions():

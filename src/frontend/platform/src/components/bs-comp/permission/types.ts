@@ -10,35 +10,9 @@ export type ResourceType =
   | 'tool'
   | 'channel'
   | 'dashboard'
-
-export type RelationLevel = 'owner' | 'manager' | 'editor' | 'viewer'
+  | 'linsight_skill'
 
 export type SubjectType = 'user' | 'department' | 'user_group'
-
-export interface PermissionEntry {
-  subject_type: SubjectType
-  subject_id: number
-  subject_name: string | null
-  subject_group_names?: string[]
-  subject_member_names?: string[]
-  relation: RelationLevel
-  model_id?: string
-  model_name?: string
-  include_children?: boolean
-  // Reserved for F008 inherited permissions
-  inherited_from?: string
-}
-
-export interface AuthorizeItem {
-  subject_type: SubjectType
-  subject_id: number
-  relation: RelationLevel
-  model_id?: string
-  include_children?: boolean
-}
-
-export type GrantItem = AuthorizeItem
-export type RevokeItem = AuthorizeItem
 
 export interface SelectedSubject {
   type: SubjectType

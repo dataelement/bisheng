@@ -28,9 +28,7 @@ class GptsToolsBase(SQLModelSerializable):
     api_params: list[dict] | None = Field(
         default=None, sa_column=Column(JsonType), description="Used to storeapiParameter and other information"
     )
-    user_id: int | None = Field(
-        default=None, index=True, description="Create UserID， nullIndicates system creation"
-    )
+    user_id: int | None = Field(default=None, index=True, description="Create UserID， nullIndicates system creation")
     tenant_id: int | None = Field(
         default=None,
         sa_column=Column(Integer, nullable=False, server_default=text("1"), index=True, comment="Tenant ID"),
@@ -68,9 +66,7 @@ class GptsToolsTypeBase(SQLModelSerializable):
         default=ToolPresetType.API.value,
         description="The category of the tool, the historical reason field is not renamed",
     )
-    user_id: int | None = Field(
-        default=None, index=True, description="Create UserID， nullIndicates system creation"
-    )
+    user_id: int | None = Field(default=None, index=True, description="Create UserID， nullIndicates system creation")
     is_delete: int = Field(default=0, description="1 Indicates logical deletion")
     is_shared: bool = Field(
         default=False,
@@ -118,13 +114,9 @@ class GptsToolsTypeRead(GptsToolsTypeBase):
     openapi_schema: str | None = Field(
         default="", description="of the tool categoryschemaContent, complies withopenapiSpecified Data"
     )
-    children: list[GptsTools] | None = Field(
-        default_factory=list, description="List of tools under the Tools category"
-    )
+    children: list[GptsTools] | None = Field(default_factory=list, description="List of tools under the Tools category")
     parameter_name: str | None = Field(default="", description="Custom request header parameter name")
-    api_location: str | None = Field(
-        default="", description="Custom Request Header Parameter Position header or query"
-    )
+    api_location: str | None = Field(default="", description="Custom Request Header Parameter Position header or query")
     write: bool | None = Field(default=False, description="Do you have write access")
     delete: bool | None = Field(default=False, description="Do you have delete access")
 

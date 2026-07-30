@@ -41,7 +41,11 @@ def space_cleanup(monkeypatch):
 
 def test_remove_department_membership_cleans_space_binding(monkeypatch, space_cleanup):
     """Removing a (secondary) membership revokes admin → must clean its space binding."""
-    monkeypatch.setattr(mod.UserDepartmentDao, "aremove_member", AsyncMock())
+    monkeypatch.setattr(
+        mod.DepartmentMembershipProjectionService,
+        "aremove_member",
+        AsyncMock(return_value=True),
+    )
     monkeypatch.setattr(mod.DepartmentChangeHandler, "execute_async", AsyncMock())
     monkeypatch.setattr(mod.DepartmentAdminGrantDao, "adelete", AsyncMock())
 

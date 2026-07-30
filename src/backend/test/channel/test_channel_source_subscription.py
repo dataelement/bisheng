@@ -28,6 +28,15 @@ from bisheng.common.models.space_channel_member import (
 _CS = "bisheng.channel.domain.services.channel_service"
 
 
+@pytest.fixture(autouse=True)
+def _stub_channel_quota():
+    with patch(
+        f"{_CS}.QuotaService.get_effective_quota",
+        new=AsyncMock(return_value=-1),
+    ):
+        yield
+
+
 class _LoginUser:
     user_id = 7
     user_name = "operator"
@@ -62,13 +71,27 @@ def _service(*, channel_repository, member_repository, info_source_repository):
     )
 
 
+def _permission_adapter():
+    return SimpleNamespace(
+        authorize_created=AsyncMock(),
+        load_permission_record=AsyncMock(
+            return_value=SimpleNamespace(tenant_id=1)
+        ),
+        project_delete=AsyncMock(),
+    )
+
+
 # --------------------------------------------------------------------------- create
 
 
 @pytest.mark.asyncio
 async def test_create_subscribes_only_missing_sources():
     """source_list=[A,B], A already in channel_info_source → only B is subscribed. (AC-01)"""
-    created = SimpleNamespace(id="channel-1", source_list=["A", "B"])
+    created = SimpleNamespace(
+        id="channel-1",
+        source_list=["A", "B"],
+        tenant_id=1,
+    )
     channel_repository = SimpleNamespace(save=AsyncMock(return_value=created))
     member_repository = SimpleNamespace(
         find_channel_memberships=AsyncMock(return_value=[]),
@@ -89,9 +112,13 @@ async def test_create_subscribes_only_missing_sources():
         subscribe_information_source=AsyncMock(),
         get_information_source_by_ids=AsyncMock(return_value=[_info_source_meta("B")]),
     )
+    permission_adapter = _permission_adapter()
 
     with (
-        patch(f"{_CS}.OwnerService.write_owner_tuple", new=AsyncMock()),
+        patch(
+            f"{_CS}.get_f048_resource_adapter",
+            return_value=permission_adapter,
+        ),
         patch(f"{_CS}.get_bisheng_information_client", new=AsyncMock(return_value=info_client)),
     ):
         await service.create_channel(
@@ -110,7 +137,11 @@ async def test_create_subscribes_only_missing_sources():
 @pytest.mark.asyncio
 async def test_create_skips_subscribe_when_all_present():
     """All sources already in channel_info_source → no subscribe call. (AC-02)"""
-    created = SimpleNamespace(id="channel-1", source_list=["A", "B"])
+    created = SimpleNamespace(
+        id="channel-1",
+        source_list=["A", "B"],
+        tenant_id=1,
+    )
     channel_repository = SimpleNamespace(save=AsyncMock(return_value=created))
     member_repository = SimpleNamespace(
         find_channel_memberships=AsyncMock(return_value=[]),
@@ -131,9 +162,13 @@ async def test_create_skips_subscribe_when_all_present():
         subscribe_information_source=AsyncMock(),
         get_information_source_by_ids=AsyncMock(return_value=[]),
     )
+    permission_adapter = _permission_adapter()
 
     with (
-        patch(f"{_CS}.OwnerService.write_owner_tuple", new=AsyncMock()),
+        patch(
+            f"{_CS}.get_f048_resource_adapter",
+            return_value=permission_adapter,
+        ),
         patch(f"{_CS}.get_bisheng_information_client", new=AsyncMock(return_value=info_client)),
     ):
         await service.create_channel(
@@ -154,7 +189,7 @@ async def test_create_skips_subscribe_when_all_present():
 @pytest.mark.asyncio
 async def test_create_inserts_metadata_rows_for_new_sources():
     """Missing source is subscribed and its metadata row is inserted. (AC-05)"""
-    created = SimpleNamespace(id="channel-1", source_list=["B"])
+    created = SimpleNamespace(id="channel-1", source_list=["B"], tenant_id=1)
     channel_repository = SimpleNamespace(save=AsyncMock(return_value=created))
     member_repository = SimpleNamespace(
         find_channel_memberships=AsyncMock(return_value=[]),
@@ -175,9 +210,13 @@ async def test_create_inserts_metadata_rows_for_new_sources():
         subscribe_information_source=AsyncMock(),
         get_information_source_by_ids=AsyncMock(return_value=[_info_source_meta("B")]),
     )
+    permission_adapter = _permission_adapter()
 
     with (
-        patch(f"{_CS}.OwnerService.write_owner_tuple", new=AsyncMock()),
+        patch(
+            f"{_CS}.get_f048_resource_adapter",
+            return_value=permission_adapter,
+        ),
         patch(f"{_CS}.get_bisheng_information_client", new=AsyncMock(return_value=info_client)),
     ):
         await service.create_channel(
@@ -217,10 +256,13 @@ async def test_create_aborts_before_persist_on_limit():
         subscribe_information_source=AsyncMock(side_effect=InformationSourceSubscriptionLimitError()),
         get_information_source_by_ids=AsyncMock(return_value=[]),
     )
-    write_owner_tuple = AsyncMock()
+    permission_adapter = _permission_adapter()
 
     with (
-        patch(f"{_CS}.OwnerService.write_owner_tuple", new=write_owner_tuple),
+        patch(
+            f"{_CS}.get_f048_resource_adapter",
+            return_value=permission_adapter,
+        ),
         patch(f"{_CS}.get_bisheng_information_client", new=AsyncMock(return_value=info_client)),
     ):
         with pytest.raises(InformationSourceSubscriptionLimitError):
@@ -236,7 +278,7 @@ async def test_create_aborts_before_persist_on_limit():
 
     channel_repository.save.assert_not_awaited()
     member_repository.add_member.assert_not_awaited()
-    write_owner_tuple.assert_not_awaited()
+    permission_adapter.authorize_created.assert_not_awaited()
 
 
 # --------------------------------------------------------------------------- update
@@ -281,7 +323,7 @@ async def test_update_add_subscribes_only_missing():
     )
 
     with (
-        patch(f"{_CS}.PermissionService.check", new=AsyncMock(return_value=True)),
+        patch(f"{_CS}.require_business_action", new=AsyncMock()),
         patch(f"{_CS}.get_bisheng_information_client", new=AsyncMock(return_value=info_client)),
     ):
         await service.update_channel(
@@ -321,7 +363,7 @@ async def test_update_remove_does_not_unsubscribe():
     )
 
     with (
-        patch(f"{_CS}.PermissionService.check", new=AsyncMock(return_value=True)),
+        patch(f"{_CS}.require_business_action", new=AsyncMock()),
         patch(f"{_CS}.get_bisheng_information_client", new=AsyncMock(return_value=info_client)),
     ):
         await service.update_channel(
@@ -375,9 +417,14 @@ async def test_dismiss_does_not_unsubscribe():
     service, info_source_repository = _dismiss_service(channel)
 
     info_client = SimpleNamespace(unsubscribe_information_source=AsyncMock())
+    permission_adapter = _permission_adapter()
 
     with (
-        patch(f"{_CS}.OwnerService.delete_resource_tuples", new=AsyncMock()),
+        patch(
+            f"{_CS}.get_f048_resource_adapter",
+            return_value=permission_adapter,
+        ),
+        patch(f"{_CS}.require_business_action", new=AsyncMock()),
         patch(f"{_CS}.get_bisheng_information_client", new=AsyncMock(return_value=info_client)),
     ):
         await service.dismiss_channel("channel-1", _LoginUser())
@@ -393,9 +440,14 @@ async def test_dismiss_shared_source_stays_subscribed():
     service, info_source_repository = _dismiss_service(channel)
 
     info_client = SimpleNamespace(unsubscribe_information_source=AsyncMock())
+    permission_adapter = _permission_adapter()
 
     with (
-        patch(f"{_CS}.OwnerService.delete_resource_tuples", new=AsyncMock()),
+        patch(
+            f"{_CS}.get_f048_resource_adapter",
+            return_value=permission_adapter,
+        ),
+        patch(f"{_CS}.require_business_action", new=AsyncMock()),
         patch(f"{_CS}.get_bisheng_information_client", new=AsyncMock(return_value=info_client)),
     ):
         await service.dismiss_channel("channel-A", _LoginUser())

@@ -5,7 +5,7 @@ Mirrors the F034 ``relation_model_backfill`` test style: only the pure
 read/write wrapper is idempotent and benign, covered by startup self-heal.
 """
 
-from bisheng.permission.domain.linsight_task_mode_menu_backfill import (
+from bisheng.linsight.domain.services.task_mode_menu_backfill import (
     compute_missing_task_mode_grants,
 )
 

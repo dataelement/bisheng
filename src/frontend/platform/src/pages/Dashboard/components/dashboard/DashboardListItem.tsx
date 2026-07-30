@@ -26,6 +26,7 @@ interface DashboardListItemProps {
     onDelete: (id: string) => void
     onPermission?: (dashboard: Dashboard) => void
     permissionBadge?: React.ReactNode
+    permissionActions: string[]
 }
 
 export function DashboardListItem({
@@ -39,6 +40,7 @@ export function DashboardListItem({
     onDelete,
     onPermission,
     permissionBadge,
+    permissionActions,
 }: DashboardListItemProps) {
     const { t } = useTranslation("dashboard")
 
@@ -59,8 +61,13 @@ export function DashboardListItem({
         }
     }, [isEditing])
 
+    const canView = permissionActions.includes("visible")
+    const canEdit = permissionActions.includes("edit")
+    const canDelete = permissionActions.includes("delete")
+    const canManagePermission = permissionActions.includes("manage_permission")
+
     const handleDoubleClick = () => {
-        !dashboard.mange && setIsEditing(true)
+        if (canEdit) setIsEditing(true)
     }
 
     const handleBlur = (e) => {
@@ -81,7 +88,7 @@ export function DashboardListItem({
             return
         }
 
-        if (trimmedTitle !== dashboard.title) {
+        if (canEdit && trimmedTitle !== dashboard.title) {
             onRename(dashboard.id, trimmedTitle)
         }
     }
@@ -95,6 +102,8 @@ export function DashboardListItem({
             setIsEditing(false)
         }
     }
+
+    if (!canView) return null
 
     return (
         <div
@@ -127,21 +136,26 @@ export function DashboardListItem({
 
             <DropdownMenu>
                 <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                    <Button variant="ghost" size="icon" className={`h-5 w-0 ${isEditing ? "" : "group-hover:w-5"}`}>
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label="dashboard.actions"
+                        className={`h-5 w-0 ${isEditing ? "" : "group-hover:w-5"}`}
+                    >
                         <MoreHorizontal className="h-4 w-4" />
                     </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                    {dashboard.write && appConfig.isDashboardPro && <DropdownMenuItem
+                    {canEdit && appConfig.isDashboardPro && <DropdownMenuItem
                         onClick={() => setTimeout(() => {
                             setIsEditing(true)
                         }, 300)} // hold close dropdownmenu
                     >{t('rename')}</DropdownMenuItem>}
                     {appConfig.isDashboardPro && <DropdownMenuItem disabled={dashboard.is_default} onClick={() => onDefault(dashboard.id)}>{dashboard.is_default ? t('alreadyDefault') : t('setAsDefault')}</DropdownMenuItem>}
-                    {dashboard.write && appConfig.isDashboardPro && <DropdownMenuItem onClick={() => onDuplicate(dashboard)}>{t('duplicate')}</DropdownMenuItem>}
-                    {onPermission && <DropdownMenuItem onClick={() => onPermission(dashboard)}>{t('managePermission', { ns: 'permission' })}</DropdownMenuItem>}
+                    {appConfig.isDashboardPro && <DropdownMenuItem onClick={() => onDuplicate(dashboard)}>{t('duplicate')}</DropdownMenuItem>}
+                    {canManagePermission && onPermission && <DropdownMenuItem onClick={() => onPermission(dashboard)}>{t('managePermission', { ns: 'permission' })}</DropdownMenuItem>}
                     <DropdownMenuItem onClick={() => onShare(dashboard.id)}>{t('share')}</DropdownMenuItem>
-                    {dashboard.write && appConfig.isDashboardPro && <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => onDelete(dashboard.id)}>
+                    {canDelete && appConfig.isDashboardPro && <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => onDelete(dashboard.id)}>
                         {t('delete')}
                     </DropdownMenuItem>}
                 </DropdownMenuContent>

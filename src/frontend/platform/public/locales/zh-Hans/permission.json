@@ -1,10 +1,4 @@
 {
-  "dialog": {
-    "title": "权限管理",
-    "tabList": "当前权限",
-    "tabGrant": "添加权限",
-    "tabShare": "链接分享"
-  },
   "level": {
     "owner": "所有者",
     "manager": "可管理",
@@ -43,13 +37,142 @@
   "managePermission": "权限管理",
   "error": {
     "permissionDenied": "权限不足，无法执行此操作",
+    "checkFailed": "权限校验失败，请稍后重试",
     "grantFailed": "授权失败",
     "lastOwner": "至少保留一个所有者，无法移除最后一个所有者",
-    "revokeFailed": "撤回失败"
+    "revokeFailed": "撤回失败",
+    "versionConflict": "权限数据已更新，请刷新后重试",
+    "impactExpired": "影响分析已过期，请重新生成",
+    "projectionFailed": "权限投影失败，操作已拒绝",
+    "migrationBlocked": "权限数据迁移存在阻断项"
   },
   "success": {
     "grant": "授权成功",
     "revoke": "已撤回权限",
     "modify": "权限级别已修改"
+  },
+  "catalog": {
+    "menuRoles": "菜单角色",
+    "actions": "权限动作",
+    "models": "权限模型",
+    "loading": "正在加载权限目录…",
+    "loadFailed": "权限目录加载失败",
+    "retry": "重试",
+    "publishSucceeded": "权限目录已发布"
+  },
+  "actionLevel": {
+    "title": "动作等级",
+    "description": "一个动作只能属于一个等级；未分配动作不会进入任何模型。",
+    "unassigned": "未分配",
+    "level": "等级 {{level}}",
+    "change": "调整动作等级",
+    "active": "动作状态",
+    "inactive": "已停用",
+    "empty": "此区域暂无动作"
+  },
+  "model": {
+    "title": "权限模型",
+    "list": "模型列表",
+    "empty": "暂无权限模型",
+    "name": "模型名称",
+    "actions": "包含的动作",
+    "action": "模型动作",
+    "active": "启用模型",
+    "inactive": "模型已停用",
+    "level": "派生等级",
+    "allowSameLevel": "允许同级授权",
+    "create": "新建模型",
+    "delete": "删除模型",
+    "save": "生成变更",
+    "saving": "正在生成…",
+    "kind": {
+      "standard": "标准模型",
+      "custom": "自定义模型"
+    },
+    "preset": {
+      "label": "初始化预设",
+      "select": "选择预设",
+      "apply": "应用预设"
+    }
+  },
+  "impact": {
+    "title": "发布影响确认",
+    "description": "请核对本次变更影响后再发布。",
+    "resources": "资源",
+    "grants": "授权",
+    "assignees": "授权对象",
+    "expansions": "新增权限",
+    "revocations": "收回权限",
+    "pending": "预计影响 {{resources}} 个资源、{{grants}} 条授权",
+    "review": "查看影响",
+    "blocked": "存在阻断项，当前不能发布",
+    "expired": "影响分析已过期，请重新生成",
+    "expiresAt": "有效期至 {{value}}",
+    "cancel": "取消",
+    "publish": "确认发布",
+    "publishing": "正在发布…",
+    "publishFailed": "发布失败，请刷新后重试"
+  },
+  "mode": {
+    "custom": "本级权限",
+    "inherit": "继承上级",
+    "parent": "上级资源",
+    "affectedAssignees": "预计影响 {{count}} 个授权对象",
+    "projection": "投影状态：{{state}}",
+    "confirmTitle": "确认切换权限模式",
+    "confirmDescription": "服务端将按影响分析切换模式，无需重新提交成员清单。",
+    "confirm": "确认切换",
+    "cancel": "取消",
+    "applying": "正在切换…",
+    "conflict": "权限版本已变化，请刷新后重试",
+    "expired": "模式影响分析已过期"
+  },
+  "roster": {
+    "empty": "暂无授权对象",
+    "loading": "正在加载权限…",
+    "loadingMore": "正在加载更多…",
+    "loadMore": "加载更多",
+    "loadFailed": "权限列表加载失败",
+    "myPermissions": "我的权限",
+    "summaryOnly": "你只能查看自己的权限摘要",
+    "protected": "受保护",
+    "readOnly": "只读",
+    "inheritedFrom": "继承自"
+  },
+  "scope": {
+    "local": "本级",
+    "inherited": "继承"
+  },
+  "source": {
+    "direct": "直接授权",
+    "department": "部门授权",
+    "user_group": "用户组授权",
+    "creator": "创建者",
+    "inherited": "继承来源",
+    "shared": "共享来源",
+    "system": "系统来源",
+    "includeChildren": "包含子部门"
+  },
+  "grant": {
+    "existing": "当前授权",
+    "model": "权限模型",
+    "addModel": "新增授权模型",
+    "add": "添加",
+    "move": "调整模型",
+    "remove": "移除",
+    "readOnly": "继承或受保护的授权不可编辑",
+    "submit": "提交变更",
+    "conflict": "授权版本已变化，请刷新后重试"
+  },
+  "dialog": {
+    "title": "权限管理",
+    "description": "查看权限来源，或按可授模型管理本级权限。",
+    "tabList": "当前权限",
+    "tabGrant": "添加权限",
+    "tabShare": "链接分享",
+    "roster": "当前权限",
+    "manageGrants": "管理授权",
+    "loading": "正在加载资源权限…",
+    "loadFailed": "资源权限加载失败"
   }
 }

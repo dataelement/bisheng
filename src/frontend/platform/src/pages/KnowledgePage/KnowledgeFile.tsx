@@ -41,11 +41,7 @@ const enum KnowledgeBaseStatus {
     Failed = 4       // Document knowledge base rebuild failed status
 }
 
-const KB_MANAGE_PERMISSION_IDS = [
-    'manage_kb_owner',
-    'manage_kb_manager',
-    'manage_kb_viewer',
-]
+const KB_MANAGE_ACTION = 'manage_permission'
 
 function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create', currentLib = null }) {
     const { t } = useTranslation('knowledge')
@@ -342,28 +338,28 @@ export default function KnowledgeFile() {
     const { data: datalist, loading, hasMore, search, reload, loadMore } = useInfiniteCursorTable(
         { cancelLoadingWhenReload: true },
         (param) =>
-            readFileLibDatabase({ cursor: param.cursor, pageSize: param.pageSize, name: param.keyword, permissionId: 'view_kb' }),
+            readFileLibDatabase({ cursor: param.cursor, pageSize: param.pageSize, name: param.keyword, action: 'visible' }),
     )
 
     // Permission levels for badge display
     // 列表已由后端 get_knowledge 按 ReBAC 过滤；勿再用批量 check 二次过滤，否则与 FGA/缓存短暂不同步时会出现「接口有数据但表格空白」。
     const visibleLibs = datalist;
-    const hasListPermission = (el: any, permissionId: string) =>
-        Array.isArray(el.permission_ids) && el.permission_ids.includes(permissionId);
+    const hasAction = (el: any, action: string) =>
+        Array.isArray(el.actions) && el.actions.includes(action);
     const canEdit = (el: any) =>
-        hasListPermission(el, 'edit_kb');
+        hasAction(el, 'edit');
     const canDelete = (el: any) =>
-        hasListPermission(el, 'delete_kb');
+        hasAction(el, 'delete');
     // PRD 3.3.3：「创建」「复制」与 ReBAC 编辑权解耦，由 WEB_MENU `create_knowledge` 控制（对齐「创建应用」+ 列表「复制」）
     const canCreateLibrary =
         user.role === 'admin' ||
         (user.web_menu || []).includes('create_knowledge');
     const canReadRow = (el: any) =>
-        hasListPermission(el, 'view_kb');
+        hasAction(el, 'visible');
     /** 与 apps.tsx 一致：create_knowledge 菜单 + 对目标库具备使用/可见（can_read） */
     const canUseCopy = (el: any) => canCreateLibrary && canReadRow(el);
     const canManageKb = (el: any) =>
-        KB_MANAGE_PERMISSION_IDS.some((permissionId) => hasListPermission(el, permissionId));
+        hasAction(el, KB_MANAGE_ACTION);
     const isLibraryBusy = (el: any) =>
         [KnowledgeBaseStatus.Copying, KnowledgeBaseStatus.Unpublished].includes(el.state);
     const canCopy = (el: any) =>

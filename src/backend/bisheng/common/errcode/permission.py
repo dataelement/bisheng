@@ -40,3 +40,71 @@ class PermissionRelationModelNameExistsError(BaseErrorCode):
 class PermissionLastOwnerError(BaseErrorCode):
     Code: int = 19007
     Msg: str = "Cannot remove the last owner of the resource"
+
+
+# F048 permission Catalog / Grant errors. These codes intentionally use the
+# feature-reserved 250xx range while the legacy 190xx errors remain available
+# to endpoints that have not migrated to the new contract yet.
+class InvalidCatalogActionError(BaseErrorCode):
+    Code: int = 25001
+    Msg: str = "Invalid or unavailable permission action"
+
+
+class PermissionVersionConflictError(BaseErrorCode):
+    Code: int = 25002
+    Msg: str = "Permission data version conflict"
+
+
+class ImmutableStandardModelError(BaseErrorCode):
+    Code: int = 25003
+    Msg: str = "Standard permission model fields are immutable"
+
+
+class PermissionModelStateConflictError(BaseErrorCode):
+    Code: int = 25004
+    Msg: str = "Permission model state does not allow this operation"
+
+
+class GrantLevelForbiddenError(BaseErrorCode):
+    Code: int = 25005
+    Msg: str = "Permission grant exceeds the operator grant level"
+
+
+class ProtectedAssignmentMutationError(BaseErrorCode):
+    Code: int = 25006
+    Msg: str = "Protected permission assignment cannot be changed"
+
+
+class InvalidPermissionModeError(BaseErrorCode):
+    Code: int = 25007
+    Msg: str = "Invalid resource permission mode"
+
+
+class PermissionPublishNotReadyError(BaseErrorCode):
+    Code: int = 25008
+    Msg: str = "Permission catalog or resource scope is not ready for writes"
+
+
+class PermissionProjectionFailedError(BaseErrorCode):
+    Code: int = 25009
+    Msg: str = "Permission projection could not be confirmed"
+
+
+class PermissionMigrationBlockedError(BaseErrorCode):
+    Code: int = 25010
+    Msg: str = "Permission migration is blocked"
+
+
+class AuthorizationModelMismatchError(BaseErrorCode):
+    Code: int = 25011
+    Msg: str = "OpenFGA store or authorization model pin does not match"
+
+
+class PermissionImpactExpiredError(BaseErrorCode):
+    Code: int = 25012
+    Msg: str = "Permission impact analysis has expired"
+
+
+class PermissionMutationTooLargeError(BaseErrorCode):
+    Code: int = 25013
+    Msg: str = "Permission mutation exceeds the atomic tuple limit"

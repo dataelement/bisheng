@@ -35,13 +35,10 @@ from bisheng.common.errcode.approval import (
     ApprovalRequestPermissionDeniedError,
     ApprovalSettingsPermissionDeniedError,
 )
-from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
-from bisheng.database.models.user_group import UserGroupDao
 from bisheng.knowledge.domain.models.department_knowledge_space import DepartmentKnowledgeSpaceDao
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_file import FileSource, FileType
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import KnowledgeSpaceFileResponse
-from bisheng.permission.domain.services.permission_service import PermissionService
 from bisheng.message.domain.models.inbox_message import MessageStatusEnum
 from bisheng.message.domain.repositories.implementations.inbox_message_repository_impl import (
     InboxMessageRepositoryImpl,
@@ -196,39 +193,6 @@ class ApprovalService:
         return out
 
     @classmethod
-    async def _expand_department_subject(
-        cls, department_id: int, include_children: bool,
-    ) -> List[int]:
-        dept_rows = await DepartmentDao.aget_by_ids([department_id])
-        if not dept_rows:
-            return []
-        dept = dept_rows[0]
-        dept_ids = [department_id]
-        if include_children and dept.path:
-            dept_ids = await DepartmentDao.aget_subtree_ids(dept.path)
-        user_ids: set[int] = set()
-        for one_id in dept_ids:
-            ids = await UserDepartmentDao.aget_user_ids_by_department(one_id)
-            user_ids.update(int(uid) for uid in ids)
-        return sorted(user_ids)
-
-    @classmethod
-    async def _expand_reviewer_subject(
-        cls,
-        *,
-        subject_type: str,
-        subject_id: int,
-        include_children: Optional[bool],
-    ) -> List[int]:
-        if subject_type == 'user':
-            return [subject_id]
-        if subject_type == 'department':
-            return await cls._expand_department_subject(subject_id, bool(include_children))
-        if subject_type == 'user_group':
-            return await UserGroupDao.aget_plain_member_user_ids(subject_id)
-        return []
-
-    @classmethod
     async def _resolve_reviewer_user_ids(
         cls,
         *,
@@ -237,43 +201,24 @@ class ApprovalService:
         space_id: int,
         parent_folder_id: Optional[int],
     ) -> List[int]:
-        from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
         from bisheng.common.models.space_channel_member import SpaceChannelMemberDao, UserRoleEnum
 
-        svc = KnowledgeSpaceService(request=request, login_user=login_user)
-        if parent_folder_id:
-            lineage = await svc._build_resource_lineage('folder', parent_folder_id, space_id=space_id)
-        else:
-            lineage = [('knowledge_space', space_id)]
-
-        reviewer_ids: set[int] = set()
-        for resource_type, resource_id in lineage:
-            permissions = await PermissionService.get_resource_permissions(resource_type, str(resource_id))
-            owner_manager = [
-                item for item in permissions if item.relation in ('owner', 'manager')
-            ]
-            if not owner_manager:
-                continue
-            for item in owner_manager:
-                reviewer_ids.update(
-                    await cls._expand_reviewer_subject(
-                        subject_type=item.subject_type,
-                        subject_id=item.subject_id,
-                        include_children=item.include_children,
-                    )
-                )
-            if reviewer_ids:
-                break
-
-        if reviewer_ids:
-            return sorted(reviewer_ids)
-
-        fallback_members = await SpaceChannelMemberDao.async_get_members_by_space(
+        # Approval routing is a business fact, not a second permission
+        # explanation engine. Department-space CREATOR/ADMIN membership remains
+        # the canonical reviewer roster while F048 separately decides whether a
+        # caller may upload/manage the resource.
+        del request, login_user, parent_folder_id
+        reviewer_members = await SpaceChannelMemberDao.async_get_members_by_space(
             space_id,
             user_roles=[UserRoleEnum.CREATOR, UserRoleEnum.ADMIN],
         )
-        reviewer_ids.update(member.user_id for member in fallback_members if member.is_active)
-        return sorted(reviewer_ids)
+        return sorted(
+            {
+                int(member.user_id)
+                for member in reviewer_members
+                if member.is_active
+            }
+        )
 
     @classmethod
     async def get_department_space_reviewer_user_ids(

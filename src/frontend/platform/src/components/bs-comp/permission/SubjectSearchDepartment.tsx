@@ -5,11 +5,6 @@ import {
   getDepartmentPathTreeApi,
   searchDepartmentsApi,
 } from "@/controllers/API/department"
-import {
-  getResourceGrantDepartmentChildrenApi,
-  getResourceGrantDepartmentPathTreeApi,
-  searchResourceGrantDepartmentsApi,
-} from "@/controllers/API/permission"
 import type { DepartmentTreeNode } from "@/types/api/department"
 import { useEffect, useRef } from "react"
 import { useTranslation } from "react-i18next"
@@ -54,27 +49,17 @@ export function SubjectSearchDepartment({
   const { t } = useTranslation("permission")
   const disabledIdSet = new Set(disabledIds)
 
-  const hasResource = !!(resourceType && resourceId)
-  // Data source: the authorization grant tree (resource scope) when granting a
-  // resource, otherwise the plain org tree (allowOrganizationTree). Inline
-  // fetchers are fine — the hook keeps them in a ref; cacheKey is the stable
-  // namespace.
+  // Subject discovery belongs to the organization domain. The permission API
+  // validates the selected subject when applying the Grant, but never queries
+  // organization tables to populate this picker.
   const tree = useLazyDepartmentTree(
-    hasResource
-      ? {
-          autoLoad: true,
-          cacheKey: `grant-dept:${resourceType}:${resourceId}`,
-          fetchChildren: (p) => getResourceGrantDepartmentChildrenApi(resourceType!, resourceId!, p),
-          fetchSearch: (kw) => searchResourceGrantDepartmentsApi(resourceType!, resourceId!, kw),
-          fetchPathTree: (id) => getResourceGrantDepartmentPathTreeApi(resourceType!, resourceId!, id),
-        }
-      : {
-          autoLoad: allowOrganizationTree,
-          cacheKey: "dept:false",
-          fetchChildren: (p) => getDepartmentChildrenApi(p, false),
-          fetchSearch: (kw) => searchDepartmentsApi(kw, false),
-          fetchPathTree: (id) => getDepartmentPathTreeApi(id, false),
-        }
+    {
+      autoLoad: Boolean(resourceType && resourceId) || allowOrganizationTree,
+      cacheKey: "permission-subject-departments",
+      fetchChildren: (p) => getDepartmentChildrenApi(p, false),
+      fetchSearch: (kw) => searchDepartmentsApi(kw, false),
+      fetchPathTree: (id) => getDepartmentPathTreeApi(id, false),
+    }
   )
 
   // Remember each selected dept's path at pick time so implicit selection can be

@@ -9,23 +9,21 @@ Strategy:
   permission checks, DAO update calls) so we only exercise the doc+V1 path.
 """
 from contextlib import asynccontextmanager
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
+from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum
+from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
+from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion
 from test.knowledge.test_knowledge_space_service import (
     _load_service_class,
     _make_file,
     _make_login_user,
     _make_space,
 )
-from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum
-from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
-from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -82,7 +80,7 @@ async def test_add_file_creates_document_and_v1(service, async_db_session: Async
     session_ctx = _make_session_context_manager(async_db_session)
 
     with patch.object(
-        service, "_require_permission_id", new_callable=AsyncMock,
+        service, "_require_action", new_callable=AsyncMock,
     ), patch(
         "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id",
         new_callable=AsyncMock,
@@ -103,14 +101,11 @@ async def test_add_file_creates_document_and_v1(service, async_db_session: Async
         "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeService.process_one_file",
         return_value=added_file,
     ), patch(
-        "bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.batch_write_tuples",
-        new_callable=AsyncMock,
-    ), patch(
-        "bisheng.knowledge.domain.services.knowledge_space_service.OwnerService.write_owner_tuple",
-        new_callable=AsyncMock,
-    ), patch(
         "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_knowledge_update_time_by_id",
         new_callable=AsyncMock,
+    ), patch(
+        "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.update",
+        side_effect=lambda row: row,
     ), patch.object(
         service, "update_folder_update_time", new_callable=AsyncMock,
     ), patch.object(
@@ -119,12 +114,9 @@ async def test_add_file_creates_document_and_v1(service, async_db_session: Async
         "bisheng.knowledge.domain.services.knowledge_space_service.get_async_db_session",
         new=session_ctx,
     ), patch(
-        "bisheng.knowledge.domain.services.knowledge_space_service.file_worker"
-        ".parse_knowledge_file_celery",
+        "bisheng.worker.knowledge.scheduler.enqueue_or_dispatch",
         new_callable=MagicMock,
-    ) as mock_celery:
-        mock_celery.delay = MagicMock()
-
+    ):
         result = await service.add_file(knowledge_id, ["/tmp/report.pdf"])
 
     # --- Assert: service returned the fake file ---

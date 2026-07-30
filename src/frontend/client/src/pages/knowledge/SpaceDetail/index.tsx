@@ -53,10 +53,13 @@ import { VersionManagementDialog } from "./VersionManagementDialog";
 import { VersionHistorySheet } from "./VersionHistorySheet";
 import { SimilarDocumentDialog } from "./SimilarDocumentDialog";
 import { SelectionPathBreadcrumb } from "./SelectionPathBreadcrumb";
-import { canOpenPermissionDialog, checkPermission } from "~/api/permission";
 import {
-    hasKnowledgeSpacePermission,
-    useKnowledgeSpaceActionPermissions,
+    checkResourceAction,
+    getMyResourcePermissions,
+} from "~/api/permission";
+import {
+    hasKnowledgeSpaceAction,
+    useKnowledgeSpaceActions,
 } from "../hooks/useKnowledgeSpacePermissions";
 import { useLocalize, usePrefersMobileLayout, useScrollRevealRef, useVersionManagementEnabled } from "~/hooks";
 import {
@@ -294,40 +297,29 @@ export function KnowledgeSpaceContent({
     }, [space.id]);
 
     const isAdmin = space.role === SpaceRole.CREATOR || space.role === SpaceRole.ADMIN;
-    // Delete is owner-only in the backend ReBAC model (can_delete maps to `owner`);
-    // a space manager (ADMIN) does NOT inherit it. Unlike read/edit/manage tiers,
-    // the delete probe must not short-circuit on the manager role — only the space
-    // creator is the implicit owner of every entry. Everyone else (managers, and
-    // platform super-admins for spaces they didn't create) falls through to the
-    // per-resource backend probe, which is the source of truth: it still grants
-    // delete on files the user owns, and on every file for a platform super-admin.
-    const isOwner = space.role === SpaceRole.CREATOR;
-    const { permissions: spaceActionPermissions, ensureSpacePermissions } = useKnowledgeSpaceActionPermissions([space.id]);
-    const canShareSpace = isAdmin || hasKnowledgeSpacePermission(
-        spaceActionPermissions,
+    const { actions: spaceActions, ensureSpaceActions } = useKnowledgeSpaceActions([space.id]);
+    useEffect(() => {
+        void ensureSpaceActions(space.id);
+    }, [ensureSpaceActions, space.id]);
+    const canShareSpace = hasKnowledgeSpaceAction(
+        spaceActions,
         space.id,
-        "share_space",
+        "share",
     );
-    // Delete-space gating mirrors the desktop sidebar (KnowledgeSpaceItem): only the
-    // creator/owner (or an explicit delete_space permission) may delete — a space ADMIN
-    // (manager / department admin) must NOT. Do not gate on isAdmin here (that includes
-    // the ADMIN role and would wrongly surface delete to managers).
-    const canDeleteSpace = isOwner || hasKnowledgeSpacePermission(
-        spaceActionPermissions,
+    const canDeleteSpace = hasKnowledgeSpaceAction(
+        spaceActions,
         space.id,
-        "delete_space",
+        "delete",
     );
-    // Permission management — mirrors the desktop sidebar (KnowledgeSpaceItem) gating.
-    const canManageMembers = isAdmin || hasKnowledgeSpacePermission(
-        spaceActionPermissions,
+    const canManageMembers = hasKnowledgeSpaceAction(
+        spaceActions,
         space.id,
-        "manage_space_relation",
+        "manage_permission",
     );
-    // Edit space — mirrors the desktop sidebar (KnowledgeSpaceItem) gating.
-    const canEditSpace = isAdmin || hasKnowledgeSpacePermission(
-        spaceActionPermissions,
+    const canEditSpace = hasKnowledgeSpaceAction(
+        spaceActions,
         space.id,
-        "edit_space",
+        "edit",
     );
     // ─── Version Management ──────────────────────────────────────────────
     const versionManagementEnabled = useVersionManagementEnabled();
@@ -368,10 +360,8 @@ export function KnowledgeSpaceContent({
     };
     const [canCreateFolder, setCanCreateFolder] = useState(false);
     const [canUploadFile, setCanUploadFile] = useState(false);
-    // Move permission is separate from upload (both can_edit tier, but a role may
-    // grant one without the other). Files and folders have independent move
-    // permissions (move_file / move_folder) — probe both so a user with only
-    // one of them isn't blocked on the other. Drives the move menu greyed state.
+    // The current target must accept uploaded content. Each source is checked
+    // against the concrete move action again by the business endpoint.
     const [canMoveFile, setCanMoveFile] = useState(false);
     const [canMoveFolder, setCanMoveFolder] = useState(false);
     const isSearching = searchQuery.trim().length > 0 || searchTagIds.length > 0;
@@ -403,35 +393,15 @@ export function KnowledgeSpaceContent({
         const objectId = currentFolderId || space.id;
 
         Promise.allSettled([
-            checkPermission(
-                objectType,
-                objectId,
-                "can_edit",
-                "create_folder",
+            checkResourceAction(
+                { resource_type: objectType, resource_id: objectId, action: "create_folder" },
                 { signal: controller.signal },
             ),
-            checkPermission(
-                objectType,
-                objectId,
-                "can_edit",
-                "upload_file",
+            checkResourceAction(
+                { resource_type: objectType, resource_id: objectId, action: "upload_file" },
                 { signal: controller.signal },
             ),
-            checkPermission(
-                objectType,
-                objectId,
-                "can_edit",
-                "move_file",
-                { signal: controller.signal },
-            ),
-            checkPermission(
-                objectType,
-                objectId,
-                "can_edit",
-                "move_folder",
-                { signal: controller.signal },
-            ),
-        ]).then(([createFolderResult, uploadFileResult, moveFileResult, moveFolderResult]) => {
+        ]).then(([createFolderResult, uploadFileResult]) => {
             if (cancelled) return;
             setCanCreateFolder(
                 createFolderResult.status === "fulfilled" && Boolean(createFolderResult.value?.allowed)
@@ -439,12 +409,10 @@ export function KnowledgeSpaceContent({
             setCanUploadFile(
                 uploadFileResult.status === "fulfilled" && Boolean(uploadFileResult.value?.allowed)
             );
-            setCanMoveFile(
-                moveFileResult.status === "fulfilled" && Boolean(moveFileResult.value?.allowed)
-            );
-            setCanMoveFolder(
-                moveFolderResult.status === "fulfilled" && Boolean(moveFolderResult.value?.allowed)
-            );
+            const canPlaceInTarget =
+                uploadFileResult.status === "fulfilled" && Boolean(uploadFileResult.value?.allowed);
+            setCanMoveFile(canPlaceInTarget);
+            setCanMoveFolder(canPlaceInTarget);
         }).catch(() => {
             if (!cancelled) {
                 setCanCreateFolder(false);
@@ -460,13 +428,8 @@ export function KnowledgeSpaceContent({
         };
     }, [currentFolderId, space.id]);
 
-    // F040: per-file action permissions (rename / download / delete / manage) are NO
-    // LONGER probed eagerly for every file on list load (that fired ~4 checkPermission
-    // per file → hundreds of requests). They are resolved lazily when the user opens a
-    // file's "⋯" action menu, via `ensureFilePermissions` below. `permissionEntryIds`
-    // etc. start empty and get populated on demand; menu items gate on them (fail-closed
-    // until the check resolves). Admin (rename/download/manage) and space-owner (delete)
-    // short-circuit without a request, matching the previous behavior.
+    // File actions resolve lazily from one F048 my-permissions summary when the
+    // user opens that file's menu. UI state remains fail-closed while loading.
     const checkedFileIdsRef = useRef<Set<string>>(new Set());
 
     // Drop lazily-cached grants when the listed files / folder change, so a re-opened
@@ -487,43 +450,26 @@ export function KnowledgeSpaceContent({
             checkedFileIdsRef.current.add(id);
 
             const resourceType = file.type === FileType.FOLDER ? "folder" : "knowledge_file";
-            const grant = (setter: (updater: (prev: Set<string>) => Set<string>) => void) =>
-                setter((prev) => new Set(prev).add(id));
-
-            // Admin holds rename/download/manage; space owner holds delete — no request.
-            if (isAdmin) {
-                grant(setPermissionEntryIds);
-                grant(setRenameEntryIds);
-                grant(setDownloadEntryIds);
+            try {
+                const summary = await getMyResourcePermissions(resourceType, file.id);
+                const allowed = new Set(summary.actions);
+                const grant = (
+                    action: string,
+                    setter: (updater: (prev: Set<string>) => Set<string>) => void,
+                ) => {
+                    if (allowed.has(action)) {
+                        setter((prev) => new Set(prev).add(id));
+                    }
+                };
+                grant("manage_permission", setPermissionEntryIds);
+                grant("rename", setRenameEntryIds);
+                grant("download", setDownloadEntryIds);
+                grant("delete", setDeleteEntryIds);
+            } catch {
+                checkedFileIdsRef.current.delete(id);
             }
-            if (isOwner) {
-                grant(setDeleteEntryIds);
-            }
-
-            const tasks: Promise<unknown>[] = [];
-            if (!isAdmin) {
-                tasks.push(
-                    canOpenPermissionDialog(resourceType, file.id)
-                        .then((ok) => { if (ok) grant(setPermissionEntryIds); })
-                        .catch(() => { }),
-                    checkPermission(resourceType, file.id, "can_edit", file.type === FileType.FOLDER ? "rename_folder" : "rename_file")
-                        .then((r) => { if (r.allowed) grant(setRenameEntryIds); })
-                        .catch(() => { }),
-                    checkPermission(resourceType, file.id, "can_read", file.type === FileType.FOLDER ? "download_folder" : "download_file")
-                        .then((r) => { if (r.allowed) grant(setDownloadEntryIds); })
-                        .catch(() => { }),
-                );
-            }
-            if (!isOwner) {
-                tasks.push(
-                    checkPermission(resourceType, file.id, "can_delete", file.type === FileType.FOLDER ? "delete_folder" : "delete_file")
-                        .then((r) => { if (r.allowed) grant(setDeleteEntryIds); })
-                        .catch(() => { }),
-                );
-            }
-            await Promise.all(tasks);
         },
-        [isAdmin, isOwner],
+        [],
     );
 
     // Read max file size from env config (MB), fallback to default 200MB
@@ -1004,9 +950,8 @@ export function KnowledgeSpaceContent({
     const hasFoldersSelected = displayFiles.some(f => selectedFiles.has(f.id) && f.type === FileType.FOLDER);
     const selectedList = displayFiles.filter(f => selectedFiles.has(f.id));
     const selectionHasFile = selectedList.some((f) => f.type !== FileType.FOLDER);
-    // Batch move requires the matching move permission for every kind in the
-    // selection: folders need move_folder, files need move_file (a role may
-    // grant only one). Uploading placeholders no longer block the entry — the
+    // Batch move requires the target to accept both selected resource kinds.
+    // Uploading placeholders no longer block the entry — the
     // move flow warns about them and lets the user move the rest (handleBatchMove).
     const canBatchMove =
         selectedList.length > 0 &&
@@ -1170,7 +1115,7 @@ export function KnowledgeSpaceContent({
                             >
                                 <Outlined.Search className="size-5" />
                             </button>
-                            <DropdownMenu onOpenChange={(open) => { if (open) ensureSpacePermissions(space.id); }}>
+                            <DropdownMenu onOpenChange={(open) => { if (open) ensureSpaceActions(space.id); }}>
                                 <DropdownMenuTrigger asChild disabled={spaceListOpen}>
                                     <button
                                         type="button"
@@ -1205,7 +1150,7 @@ export function KnowledgeSpaceContent({
                             {/* Hide the whole "..." trigger when every item is permission-gated
                                 away — an empty menu is confusing on mobile. */}
                             {(canUploadFile || canCreateFolder || showShareInMenu || canManageMembers || canDeleteSpace) && (
-                            <DropdownMenu onOpenChange={(open) => { if (open) ensureSpacePermissions(space.id); }}>
+                            <DropdownMenu onOpenChange={(open) => { if (open) ensureSpaceActions(space.id); }}>
                                 <DropdownMenuTrigger asChild disabled={spaceListOpen}>
                                     <button
                                         type="button"

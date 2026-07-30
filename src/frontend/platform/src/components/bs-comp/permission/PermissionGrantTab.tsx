@@ -1,434 +1,421 @@
 import { Button } from "@/components/bs-ui/button"
 import { Checkbox } from "@/components/bs-ui/checkBox"
-import { useToast } from "@/components/bs-ui/toast/use-toast"
 import {
-  authorizeResource,
-  getGrantableRelationModelsApi,
-  getResourcePermissions,
-  type RelationModel,
+  getGrantablePermissionModelsApi,
+  mutateResourceGrantsApi,
+  type GrantablePermissionModel,
+  type MutateResourceGrantsResult,
+  type PermissionGrantAssignee,
+  type PermissionGrantMutationChange,
+  type ResourcePermissionContext,
 } from "@/controllers/API/permission"
-import { Portal, Tooltip, TooltipContent, TooltipTrigger } from "@/components/bs-ui/tooltip"
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
-import { cn } from "@/utils"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { LockKeyhole } from "lucide-react"
+import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { RelationModelOption, RelationSelect } from "./RelationSelect"
+import { SourceBadge } from "./SourceBadge"
 import { SubjectSearchDepartment } from "./SubjectSearchDepartment"
 import { SubjectSearchUser } from "./SubjectSearchUser"
 import { SubjectSearchUserGroup } from "./SubjectSearchUserGroup"
-import { GrantItem, PermissionEntry, RelationLevel, ResourceType, SelectedSubject, SubjectType } from "./types"
+import type {
+  ResourceType,
+  SelectedSubject,
+  SubjectType,
+} from "./types"
 
-const SUBJECT_TYPES: SubjectType[] = ['user', 'department', 'user_group']
-const DEFAULT_MODELS: RelationModelOption[] = [
-  { id: 'owner', name: '所有者', relation: 'owner' },
-  { id: 'viewer', name: '可查看', relation: 'viewer' },
-  { id: 'editor', name: '可编辑', relation: 'editor' },
-  { id: 'manager', name: '可管理', relation: 'manager' },
-]
-
-const EMPTY_GRANTED_SUBJECT_IDS: Record<SubjectType, number[]> = {
-  user: [],
-  department: [],
-  user_group: [],
-}
-
-// Render selected subjects as chips. Horizontally scrollable with a right-edge fade when overflow occurs.
-function SelectedSubjectChips({ subjects, fullText }: { subjects: SelectedSubject[]; fullText: string }) {
-  const ref = useRef<HTMLDivElement | null>(null)
-  const [open, setOpen] = useState(false)
-  const [hasLeftOverflow, setHasLeftOverflow] = useState(false)
-  const [hasRightOverflow, setHasRightOverflow] = useState(false)
-
-  const updateOverflow = useCallback(() => {
-    const el = ref.current
-    if (!el) return
-    setHasLeftOverflow(el.scrollLeft > 1)
-    setHasRightOverflow(el.scrollWidth - el.clientWidth - el.scrollLeft > 1)
-  }, [])
-
-  useEffect(() => {
-    updateOverflow()
-    const el = ref.current
-    if (!el) return
-    const ro = new ResizeObserver(updateOverflow)
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [subjects, updateOverflow])
-
-  const handleOpenChange = (next: boolean) => {
-    if (!next) {
-      setOpen(false)
-      return
-    }
-    const el = ref.current
-    if (el && el.scrollWidth > el.clientWidth) {
-      setOpen(true)
-    }
-  }
-
-  if (subjects.length === 0) return null
-
-  return (
-    <Tooltip open={open} onOpenChange={handleOpenChange} delayDuration={200}>
-      <TooltipTrigger asChild>
-        <div
-          ref={ref}
-          onScroll={updateOverflow}
-          className="min-w-0 flex flex-1 items-center gap-1 overflow-x-auto scrollbar-hide"
-          style={(() => {
-            const leftStop = hasLeftOverflow ? '24px' : '0'
-            const rightStop = hasRightOverflow ? 'calc(100% - 24px)' : '100%'
-            if (!hasLeftOverflow && !hasRightOverflow) return undefined
-            const value = `linear-gradient(to right, transparent, black ${leftStop}, black ${rightStop}, transparent)`
-            return { maskImage: value, WebkitMaskImage: value }
-          })()}
-        >
-          {subjects.map((subject) => (
-            <span
-              key={subject.id}
-              className="inline-flex shrink-0 items-center rounded-[4px] bg-[#F2F3F5] px-2 py-0.5 text-[14px] leading-[22px] text-[#4E5969]"
-            >
-              {subject.name}
-            </span>
-          ))}
-        </div>
-      </TooltipTrigger>
-      <Portal>
-        <TooltipContent className="z-[120] text-sm shadow-md" side="top">
-          <div className="max-w-96 text-left break-all whitespace-normal">{fullText}</div>
-        </TooltipContent>
-      </Portal>
-    </Tooltip>
-  )
-}
+const SUBJECT_TYPES: SubjectType[] = ["user", "department", "user_group"]
 
 interface PermissionGrantTabProps {
   resourceType: ResourceType
   resourceId: string
-  onSuccess: () => void
-  prefetchedGrantableModels?: RelationModel[]
-  prefetchedGrantableModelsLoaded?: boolean
-  prefetchedUseDefaultModels?: boolean
-  skipGrantableModelsRequest?: boolean
+  context: ResourcePermissionContext
+  assignees?: PermissionGrantAssignee[]
   fixedSubjectType?: SubjectType
-  includeChildren?: boolean
-  onIncludeChildrenChange?: (value: boolean) => void
-  hideDepartmentIncludeChildrenControl?: boolean
+  onSuccess: (result: MutateResourceGrantsResult) => void
+}
+
+function createMutationIdempotencyKey(): string {
+  return `grant-mutate-${Date.now()}-${Math.random()
+    .toString(36)
+    .slice(2, 10)}`
+}
+
+interface ExistingAssigneeRowProps {
+  assignee: PermissionGrantAssignee
+  context: ResourcePermissionContext
+  models: GrantablePermissionModel[]
+  pending: boolean
+  onMove: (assignee: PermissionGrantAssignee, targetModelKey: string) => void
+  onRemove: (assignee: PermissionGrantAssignee) => void
+}
+
+function ExistingAssigneeRow({
+  assignee,
+  context,
+  models,
+  pending,
+  onMove,
+  onRemove,
+}: ExistingAssigneeRowProps) {
+  const { t } = useTranslation("permission")
+  const [targetModelKey, setTargetModelKey] = useState(assignee.model.key)
+  const editable =
+    context.mode === "CUSTOM" &&
+    context.can_manage_permission &&
+    assignee.scope === "LOCAL" &&
+    assignee.editable &&
+    !assignee.protected
+  const currentIsGrantable = models.some(
+    (model) => model.key === assignee.model.key,
+  )
+
+  useEffect(() => {
+    setTargetModelKey(assignee.model.key)
+  }, [assignee.assignee_id, assignee.model.key, assignee.assignee_version])
+
+  return (
+    <article className="grid gap-3 rounded-xl border p-3 md:grid-cols-[minmax(0,1fr)_minmax(11rem,0.7fr)_auto]">
+      <div className="min-w-0">
+        <div className="flex items-center gap-2">
+          <p className="truncate text-sm font-medium text-foreground">
+            {assignee.subject.name ||
+              `${assignee.subject.type}:${assignee.subject.id}`}
+          </p>
+          {assignee.protected && (
+            <LockKeyhole
+              aria-label={t("roster.protected")}
+              className="size-4 shrink-0 text-amber-700"
+            />
+          )}
+        </div>
+        <div className="mt-1 flex flex-wrap gap-1">
+          <SourceBadge source={assignee.source} />
+          {assignee.scope === "INHERITED" && (
+            <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+              {t("scope.inherited")}
+            </span>
+          )}
+        </div>
+      </div>
+
+      <select
+        aria-label={`grant.model.${assignee.assignee_id}`}
+        value={targetModelKey}
+        disabled={!editable || pending}
+        onChange={(event) => setTargetModelKey(event.target.value)}
+        className="min-h-11 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
+      >
+        {!currentIsGrantable && (
+          <option value={assignee.model.key}>{assignee.model.name}</option>
+        )}
+        {models.map((model) => (
+          <option key={model.key} value={model.key}>
+            {model.name}
+          </option>
+        ))}
+      </select>
+
+      <div className="flex flex-wrap items-start gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          className="min-h-11"
+          aria-label={`grant.move.${assignee.assignee_id}`}
+          disabled={
+            !editable || pending || targetModelKey === assignee.model.key
+          }
+          onClick={() => onMove(assignee, targetModelKey)}
+        >
+          {t("grant.move")}
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          className="min-h-11 text-red-700"
+          aria-label={`grant.remove.${assignee.assignee_id}`}
+          disabled={!editable || pending}
+          onClick={() => onRemove(assignee)}
+        >
+          {t("grant.remove")}
+        </Button>
+      </div>
+    </article>
+  )
 }
 
 export function PermissionGrantTab({
   resourceType,
   resourceId,
-  onSuccess,
-  prefetchedGrantableModels,
-  prefetchedGrantableModelsLoaded = false,
-  prefetchedUseDefaultModels = false,
-  skipGrantableModelsRequest = false,
+  context,
+  assignees = [],
   fixedSubjectType,
-  includeChildren: includeChildrenProp,
-  onIncludeChildrenChange,
-  hideDepartmentIncludeChildrenControl = false,
+  onSuccess,
 }: PermissionGrantTabProps) {
-  const { t } = useTranslation('permission')
-  const { message } = useToast()
-  const [subjectType, setSubjectType] = useState<SubjectType>(fixedSubjectType ?? 'user')
-  const [selected, setSelected] = useState<SelectedSubject[]>([])
-  const [modelSource, setModelSource] = useState<{
-    relationModels?: RelationModel[]
-    fallbackToDefault: boolean
-  }>({ fallbackToDefault: true })
-  const [selectedModelId, setSelectedModelId] = useState<string>('viewer')
-  const [internalIncludeChildren, setInternalIncludeChildren] = useState(true)
-  const [selectedDepartmentSummary, setSelectedDepartmentSummary] = useState<SelectedSubject[]>([])
-  const [grantedSubjectIds, setGrantedSubjectIds] = useState<Record<SubjectType, number[]>>(
-    EMPTY_GRANTED_SUBJECT_IDS,
+  const { t } = useTranslation("permission")
+  const [models, setModels] = useState<GrantablePermissionModel[]>([])
+  const [subjectType, setSubjectType] = useState<SubjectType>(
+    fixedSubjectType ?? "user",
   )
-  const [submitting, setSubmitting] = useState(false)
-  const includeChildren = includeChildrenProp ?? internalIncludeChildren
-  const handleIncludeChildrenChange = onIncludeChildrenChange ?? setInternalIncludeChildren
-
-  const applyRelationModels = useCallback((relationModels: RelationModel[] | undefined, fallbackToDefault: boolean) => {
-    const hasModels = Boolean(relationModels?.length)
-    const shouldUseDefault = fallbackToDefault
-    setModelSource({
-      relationModels: hasModels ? relationModels : [],
-      fallbackToDefault: shouldUseDefault,
-    })
-    if (shouldUseDefault) {
-      setSelectedModelId(DEFAULT_MODELS.find((model) => model.id === 'viewer')?.id ?? DEFAULT_MODELS[0].id)
-      return
-    }
-    if (!hasModels) {
-      setSelectedModelId('')
-      return
-    }
-
-    const preferredModel = relationModels!.find((model) => model.relation === 'viewer') ?? relationModels![0]
-    setSelectedModelId(preferredModel.id)
-  }, [])
-
-  const applyGrantedPermissions = useCallback((permissions: PermissionEntry[] | undefined) => {
-    const next = {
-      user: new Set<number>(),
-      department: new Set<number>(),
-      user_group: new Set<number>(),
-    }
-    for (const permission of Array.isArray(permissions) ? permissions : []) {
-      if (permission.subject_type in next) {
-        next[permission.subject_type].add(permission.subject_id)
-      }
-    }
-    setGrantedSubjectIds({
-      user: Array.from(next.user),
-      department: Array.from(next.department),
-      user_group: Array.from(next.user_group),
-    })
-  }, [])
-
-  useEffect(() => {
-    if (skipGrantableModelsRequest) {
-      if (!prefetchedGrantableModelsLoaded) return
-      applyRelationModels(prefetchedGrantableModels, prefetchedUseDefaultModels)
-      return
-    }
-
-    captureAndAlertRequestErrorHoc(
-      getGrantableRelationModelsApi(resourceType, resourceId),
-      () => true,
-    ).then((res) => {
-      if (res === false) {
-        applyRelationModels(undefined, false)
-        return
-      }
-      if (!res) return
-      applyRelationModels(res, false)
-    })
-  }, [
-    prefetchedGrantableModels,
-    prefetchedGrantableModelsLoaded,
-    prefetchedUseDefaultModels,
-    resourceId,
-    resourceType,
-    skipGrantableModelsRequest,
-    applyRelationModels,
-  ])
-
-  const models = useMemo<RelationModelOption[]>(() => {
-    if (!modelSource.fallbackToDefault && modelSource.relationModels?.length) {
-      return modelSource.relationModels.map((model) => ({
-        id: model.id,
-        name: model.is_system ? t(`level.${model.relation}`, { defaultValue: model.relation }) : model.name,
-        relation: model.relation as RelationLevel,
-      }))
-    }
-
-    return DEFAULT_MODELS.map((model) => ({
-      ...model,
-      name: t(`level.${model.relation}`, { defaultValue: model.relation }),
-    }))
-  }, [modelSource, t])
-
-  const relation = useMemo<RelationLevel>(() => {
-    return models.find((model) => model.id === selectedModelId)?.relation || 'viewer'
-  }, [models, selectedModelId])
-
-  const availableModels = useMemo(() => {
-    if (subjectType === 'user') return models
-    return models.filter((model) => model.relation !== 'owner')
-  }, [models, subjectType])
-
-  useEffect(() => {
-    if (!availableModels.length) return
-    if (availableModels.some((model) => model.id === selectedModelId)) return
-    setSelectedModelId(availableModels[0].id)
-  }, [availableModels, selectedModelId])
-
-  useEffect(() => {
-    setSelected((prev) =>
-      prev.map((item) =>
-        item.type === 'department'
-          ? { ...item, include_children: includeChildren }
-          : item,
-      ),
-    )
-  }, [includeChildren])
-
-  useEffect(() => {
-    if (!fixedSubjectType) return
-    setSubjectType(fixedSubjectType)
-    setSelected([])
-    setSelectedDepartmentSummary([])
-  }, [fixedSubjectType])
+  const [selectedSubjects, setSelectedSubjects] = useState<SelectedSubject[]>(
+    [],
+  )
+  const [selectedModelKey, setSelectedModelKey] = useState("")
+  const [includeChildren, setIncludeChildren] = useState(false)
+  const [loadingModels, setLoadingModels] = useState(false)
+  const [pendingKey, setPendingKey] = useState<string | null>(null)
+  const [conflict, setConflict] = useState(false)
 
   useEffect(() => {
     let cancelled = false
-    captureAndAlertRequestErrorHoc(
-      getResourcePermissions(resourceType, resourceId),
-      () => true,
-    ).then((res) => {
-      if (cancelled) return
-      if (res === false) {
-        setGrantedSubjectIds(EMPTY_GRANTED_SUBJECT_IDS)
-        return
-      }
-      applyGrantedPermissions(res)
-    })
+    setLoadingModels(true)
+    setConflict(false)
+    void getGrantablePermissionModelsApi(resourceType, resourceId)
+      .then((result) => {
+        if (cancelled) return
+        const activeModels = result.filter((model) => model.active)
+        setModels(activeModels)
+        setSelectedModelKey((current) =>
+          activeModels.some((model) => model.key === current)
+            ? current
+            : (activeModels[0]?.key ?? ""),
+        )
+      })
+      .catch(() => {
+        if (!cancelled) setConflict(true)
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingModels(false)
+      })
     return () => {
       cancelled = true
     }
-  }, [applyGrantedPermissions, resourceId, resourceType])
+  }, [resourceId, resourceType])
 
-  const handleSubjectTypeChange = (type: SubjectType) => {
-    setSubjectType(type)
-    setSelected([])
-    setSelectedDepartmentSummary([])
+  useEffect(() => {
+    if (fixedSubjectType) setSubjectType(fixedSubjectType)
+    setSelectedSubjects([])
+  }, [fixedSubjectType, resourceId])
+
+  const canEdit =
+    context.mode === "CUSTOM" && context.can_manage_permission
+  const disabledSubjectIds = useMemo(
+    () =>
+      assignees
+        .filter(
+          (assignee) =>
+            assignee.subject.type === subjectType &&
+            assignee.model.key === selectedModelKey,
+        )
+        .map((assignee) => Number(assignee.subject.id))
+        .filter(Number.isFinite),
+    [assignees, selectedModelKey, subjectType],
+  )
+
+  const mutate = async (
+    operationKey: string,
+    changes: PermissionGrantMutationChange[],
+  ) => {
+    if (!canEdit || pendingKey) return
+    setPendingKey(operationKey)
+    setConflict(false)
+    try {
+      const result = await mutateResourceGrantsApi(resourceType, resourceId, {
+        idempotency_key: createMutationIdempotencyKey(),
+        expected_resource_version: context.resource_version,
+        expected_catalog_release_id: context.catalog_release_id,
+        changes,
+      })
+      setSelectedSubjects([])
+      onSuccess(result)
+    } catch {
+      setConflict(true)
+    } finally {
+      setPendingKey(null)
+    }
   }
 
-  const handleSubmit = async () => {
-    if (selected.length === 0) return
-    if (subjectType !== 'user' && relation === 'owner') {
-      message({ title: '部门或用户组无法成为所有者', variant: 'error' })
-      return
-    }
-
-    const grants: GrantItem[] = selected.map((subject) => ({
-      subject_type: subject.type,
-      subject_id: subject.id,
-      relation,
-      model_id: selectedModelId,
-      ...(subject.type === 'department' ? { include_children: includeChildren } : {}),
-    }))
-
-    setSubmitting(true)
-    const res = await captureAndAlertRequestErrorHoc(
-      authorizeResource(resourceType, resourceId, grants, []),
+  const handleAdd = () => {
+    if (!selectedModelKey || selectedSubjects.length === 0) return
+    void mutate(
+      "add",
+      selectedSubjects.map((subject) => ({
+        op: "ADD",
+        model_key: selectedModelKey,
+        subject: {
+          type: subject.type,
+          id: String(subject.id),
+          ...(subject.type === "department"
+            ? {
+                include_children: includeChildren,
+                userset_relation: includeChildren
+                  ? "subtree_member"
+                  : "member",
+              }
+            : {}),
+        },
+      })),
     )
-    setSubmitting(false)
-
-    if (res !== false) {
-      message({ title: t('success.grant'), variant: 'success' })
-      setSelected([])
-      setSelectedDepartmentSummary([])
-      onSuccess()
-    }
   }
 
-  const subjectLabel = (type: SubjectType) => {
-    const map: Record<SubjectType, string> = {
-      user: t('subject.user'),
-      department: t('subject.department'),
-      user_group: t('subject.userGroup'),
-    }
-    return map[type]
+  const handleMove = (
+    assignee: PermissionGrantAssignee,
+    targetModelKey: string,
+  ) => {
+    void mutate(`move-${assignee.assignee_id}`, [
+      {
+        op: "MOVE",
+        assignee_id: assignee.assignee_id,
+        expected_assignee_version: assignee.assignee_version,
+        target_model_key: targetModelKey,
+      },
+    ])
   }
 
-  const showDepartmentIncludeChildrenControl =
-    subjectType === 'department' && !hideDepartmentIncludeChildrenControl
-  const selectedSubjectList =
-    subjectType === 'department' && selectedDepartmentSummary.length > 0
-      ? selectedDepartmentSummary
-      : selected
-  const selectedSummaryText = selectedSubjectList.map((subject) => subject.name).join('、')
+  const handleRemove = (assignee: PermissionGrantAssignee) => {
+    void mutate(`remove-${assignee.assignee_id}`, [
+      {
+        op: "REMOVE",
+        assignee_id: assignee.assignee_id,
+        expected_assignee_version: assignee.assignee_version,
+      },
+    ])
+  }
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden">
-      {!fixedSubjectType && (
-        <div className="flex items-center gap-3">
-          <div className="flex w-fit gap-1 rounded-md bg-muted p-1">
-            {SUBJECT_TYPES.map((type) => (
-              <button
-                key={type}
-                className={`rounded px-3 py-1.5 text-sm transition-colors ${subjectType === type
-                  ? 'bg-background text-foreground shadow'
-                  : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                onClick={() => handleSubjectTypeChange(type)}
-              >
-                {subjectLabel(type)}
-              </button>
-            ))}
-          </div>
-
-          {showDepartmentIncludeChildrenControl && (
-            <label className="flex shrink-0 cursor-pointer items-center gap-2 text-sm text-[#212121]">
-              <Checkbox
-                checked={includeChildren}
-                onCheckedChange={(value) => handleIncludeChildrenChange(value === true)}
-              />
-              {t('includeChildren')}
-            </label>
-          )}
-        </div>
+    <div className="flex min-h-0 flex-col gap-4">
+      {!canEdit && (
+        <p className="rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground">
+          {t("grant.readOnly")}
+        </p>
+      )}
+      {conflict && (
+        <p
+          className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-medium text-red-900"
+          role="alert"
+        >
+          {t("grant.conflict")}
+        </p>
       )}
 
-      <div
-        className={cn(
-          "min-h-0 flex-1 overflow-hidden",
-          !fixedSubjectType && "mt-4",
-        )}
-      >
-        {subjectType === 'user' && (
-          <SubjectSearchUser
-            value={selected}
-            onChange={setSelected}
-            resourceType={resourceType}
-            resourceId={resourceId}
-            disabledIds={grantedSubjectIds.user}
-          />
-        )}
-        {subjectType === 'department' && (
-          <SubjectSearchDepartment
-            value={selected}
-            onChange={setSelected}
-            resourceType={resourceType}
-            resourceId={resourceId}
-            includeChildren={includeChildren}
-            onIncludeChildrenChange={handleIncludeChildrenChange}
-            onSelectionSummaryChange={setSelectedDepartmentSummary}
-            showIncludeChildrenToggle={!hideDepartmentIncludeChildrenControl}
-            disabledIds={grantedSubjectIds.department}
-          />
-        )}
-        {subjectType === 'user_group' && (
-          <SubjectSearchUserGroup
-            value={selected}
-            onChange={setSelected}
-            resourceType={resourceType}
-            resourceId={resourceId}
-            disabledIds={grantedSubjectIds.user_group}
-          />
-        )}
-      </div>
+      {assignees.length > 0 && (
+        <section aria-label={t("grant.existing")} className="space-y-2">
+          <h3 className="text-sm font-semibold text-foreground">
+            {t("grant.existing")}
+          </h3>
+          {assignees.map((assignee) => (
+            <ExistingAssigneeRow
+              key={assignee.assignee_id}
+              assignee={assignee}
+              context={context}
+              models={models}
+              pending={pendingKey !== null}
+              onMove={handleMove}
+              onRemove={handleRemove}
+            />
+          ))}
+        </section>
+      )}
 
-      <div className="mt-3 flex h-10 shrink-0 items-center gap-4 overflow-hidden">
-        <div className="min-w-0 flex flex-1 items-center gap-2 overflow-hidden">
-          <span className="shrink-0 text-[14px] font-normal leading-[22px] text-[#999999]">
-            {`${t('action.grant')}${subjectLabel(subjectType)}:`}
-          </span>
-          <SelectedSubjectChips subjects={selectedSubjectList} fullText={selectedSummaryText} />
-        </div>
-
-        <div className="flex shrink-0 items-center gap-2">
-          <span className="shrink-0 text-[14px] font-normal leading-[22px] text-[#999999]">
-            {t('action.grant')}
-          </span>
-          <RelationSelect
-            value={selectedModelId}
-            onChange={setSelectedModelId}
-            options={availableModels}
-            className="w-[132px]"
-          />
-        </div>
-      </div>
-
-      <div className="mt-3 flex shrink-0 justify-end border-t pt-3">
-        <Button
-          onClick={handleSubmit}
-          disabled={selected.length === 0 || availableModels.length === 0 || submitting}
+      {canEdit && (
+        <section
+          aria-label={t("grant.add")}
+          className="flex min-h-0 flex-col gap-3 rounded-xl border p-4"
         >
-          {submitting ? t('action.submit') + '...' : t('action.submit')}
-        </Button>
-      </div>
+          {!fixedSubjectType && (
+            <div className="flex flex-wrap gap-1 rounded-lg bg-muted p-1">
+              {SUBJECT_TYPES.map((type) => (
+                <button
+                  key={type}
+                  type="button"
+                  aria-pressed={subjectType === type}
+                  className="min-h-11 rounded-md px-3 text-sm text-muted-foreground aria-pressed:bg-background aria-pressed:text-foreground aria-pressed:shadow-sm"
+                  onClick={() => {
+                    setSubjectType(type)
+                    setSelectedSubjects([])
+                  }}
+                >
+                  {t(`subject.${type === "user_group" ? "userGroup" : type}`)}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div className="min-h-48">
+            {subjectType === "user" && (
+              <SubjectSearchUser
+                value={selectedSubjects}
+                onChange={setSelectedSubjects}
+                resourceType={resourceType}
+                resourceId={resourceId}
+                disabledIds={disabledSubjectIds}
+              />
+            )}
+            {subjectType === "department" && (
+              <SubjectSearchDepartment
+                value={selectedSubjects}
+                onChange={setSelectedSubjects}
+                resourceType={resourceType}
+                resourceId={resourceId}
+                includeChildren={includeChildren}
+                onIncludeChildrenChange={setIncludeChildren}
+                disabledIds={disabledSubjectIds}
+                showIncludeChildrenToggle={false}
+              />
+            )}
+            {subjectType === "user_group" && (
+              <SubjectSearchUserGroup
+                value={selectedSubjects}
+                onChange={setSelectedSubjects}
+                resourceType={resourceType}
+                resourceId={resourceId}
+                disabledIds={disabledSubjectIds}
+              />
+            )}
+          </div>
+
+          {subjectType === "department" && (
+            <label className="flex min-h-11 items-center gap-2 text-sm">
+              <Checkbox
+                checked={includeChildren}
+                onCheckedChange={(checked) =>
+                  setIncludeChildren(checked === true)
+                }
+              />
+              {t("source.includeChildren")}
+            </label>
+          )}
+
+          <div className="flex flex-wrap items-end justify-between gap-3 border-t pt-3">
+            <label className="min-w-56 flex-1 text-sm font-medium">
+              <span className="mb-1 block">{t("grant.model")}</span>
+              <select
+                aria-label={t("grant.addModel")}
+                value={selectedModelKey}
+                disabled={loadingModels || models.length === 0}
+                onChange={(event) => setSelectedModelKey(event.target.value)}
+                className="min-h-11 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                {models.map((model) => (
+                  <option key={model.key} value={model.key}>
+                    {model.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <Button
+              type="button"
+              className="min-h-11"
+              disabled={
+                pendingKey !== null ||
+                selectedSubjects.length === 0 ||
+                !selectedModelKey
+              }
+              onClick={handleAdd}
+            >
+              {t("grant.submit")}
+            </Button>
+          </div>
+        </section>
+      )}
     </div>
   )
 }

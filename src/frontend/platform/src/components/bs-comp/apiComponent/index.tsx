@@ -1,6 +1,6 @@
 import { LoadingIcon } from '@/components/bs-icons/loading';
 import { Alert, AlertDescription } from '@/components/bs-ui/alert';
-import { hasPermissionId, usePermissionIds } from '@/components/bs-comp/permission/usePermissionLevels';
+import { hasResourceAction, useResourceActions } from '@/components/bs-comp/permission/useResourceActions';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
@@ -35,8 +35,8 @@ const ApiMainPage = ({ type = API_TYPE.ASSISTANT }: ApiMainPageProps) => {
     const { id } = useParams();
     const permissionType = type === API_TYPE.ASSISTANT ? 'assistant' : 'workflow';
     const resourceIds = id ? [String(id)] : [];
-    const { permissions, loading } = usePermissionIds(permissionType as any, resourceIds, ['share_app']);
-    const canManageShare = id ? hasPermissionId(permissions, id, 'share_app') : false;
+    const { actions, loading } = useResourceActions(permissionType, resourceIds, ['share']);
+    const canManageShare = id ? hasResourceAction(actions, id, 'share') : false;
 
     // 菜单配置项
     const menuItems = useMemo((): MenuItem[] => [

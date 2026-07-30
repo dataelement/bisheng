@@ -43,12 +43,16 @@ async def _used_page(*, page, limit, n=5, tag_spy=None):
         patch.object(apps_mod.FlowDao, "aget_all_apps", new_callable=AsyncMock, return_value=(rows, n), create=True),
         patch.object(
             apps_mod.WorkFlowService,
-            "filter_apps_by_permission_id",
-            new=AsyncMock(side_effect=lambda u, d, permission_id="use_app": d),
+            "filter_apps_by_action",
+            new=AsyncMock(side_effect=lambda _user, data, _action: data),
         ),
         patch.object(apps_mod.WorkFlowService, "get_logo_share_link", side_effect=lambda logo: logo, create=True),
         patch.object(apps_mod.TagDao, "get_tags_by_resource", new=tag_mock),
-        patch.object(apps_mod, "batch_user_may_share_app", new_callable=AsyncMock, return_value=[False] * n),
+        patch.object(
+            apps_mod.WorkFlowService,
+            "aenrich_apps_can_share",
+            new=AsyncMock(side_effect=lambda _user, data: data),
+        ),
     ):
         resp = await apps_mod.get_used_apps(login_user=user, page=page, limit=limit)
     return resp.data, tag_mock
