@@ -70,3 +70,17 @@ class DictionaryImportRowError(BaseErrorCode):
 
     Code: int = 19109
     Msg: str = "Row {row} import failed: {reason}"
+
+
+class DictionaryKeyFormatError(BaseErrorCode):
+    """字典键格式错误"""
+
+    Code: int = 19110
+    Msg: str = "dict_key only allows letters, numbers, underscores, and must start with a letter or number"
+
+
+class DictionaryKeyInUseError(BaseErrorCode):
+    """字典键已被 qa_expert 使用"""
+
+    Code: int = 19111
+    Msg: str = "dict_key is already used by qa_expert and cannot be modified or deleted"

@@ -1,5 +1,6 @@
 """Dictionary domain service - 系统字典业务逻辑层"""
 
+import re
 from io import BytesIO
 
 import openpyxl
@@ -16,6 +17,8 @@ from bisheng.common.errcode.dictionary import (
     DictionaryImportHeaderError,
     DictionaryImportParseError,
     DictionaryImportTypeInvalidError,
+    DictionaryKeyFormatError,
+    DictionaryKeyInUseError,
     DictionaryNotFoundError,
     DictionaryPermissionDeniedError,
 )
@@ -25,6 +28,7 @@ from bisheng.dictionary.domain.repositories.interfaces.system_dictionary_reposit
     SystemDictionaryRepository,
 )
 from bisheng.dictionary.domain.schemas.dictionary_schema import (
+    DICT_KEY_PATTERN,
     DICTIONARY_EXPORT_HEADERS,
     DICTIONARY_TYPE_CODE_TO_LABEL,
     DICTIONARY_TYPE_LABEL_TO_CODE,
@@ -35,6 +39,7 @@ from bisheng.dictionary.domain.schemas.dictionary_schema import (
     DictionaryTypeResponse,
     DictionaryUpdateRequest,
 )
+from bisheng.dictionary.infrastructure.qa_expert_reference_adapter import is_dict_key_in_use
 
 
 class DictionaryService:
@@ -49,13 +54,25 @@ class DictionaryService:
         if not user.is_admin():
             raise DictionaryPermissionDeniedError()
 
+    def _validate_dict_key_format(self, dict_key: str) -> None:
+        """校验 dict_key 格式:仅允许字母、数字、下划线,且以字母或数字开头"""
+        if not dict_key or not re.match(DICT_KEY_PATTERN, dict_key):
+            raise DictionaryKeyFormatError()
+
+    async def _ensure_dict_key_not_in_use(self, dict_type: str, dict_key: str) -> None:
+        """校验 dict_key 未被 qa_expert 相关字段使用"""
+        if await is_dict_key_in_use(dict_type, dict_key):
+            raise DictionaryKeyInUseError()
+
     async def create(
         self,
         request: DictionaryCreateRequest,
         user: UserPayload,
     ) -> DictionaryResponse:
-        """新增字典条目(管理员)"""
+        """创建字典条目(管理员)"""
         self._ensure_admin(user)
+
+        self._validate_dict_key_format(request.dict_key)
 
         existing = await self.repository.find_by_type_and_key(request.type, request.dict_key)
         if existing:
@@ -85,6 +102,14 @@ class DictionaryService:
             raise DictionaryNotFoundError()
 
         if request.dict_key is not None:
+            self._validate_dict_key_format(request.dict_key)
+            # 若 dict_key 发生变化,需确保原 dict_key 未被 qa_expert 使用,
+            # 且新的 dict_key 在当前类型下不重复
+            if entity.dict_key != request.dict_key:
+                await self._ensure_dict_key_not_in_use(entity.type, entity.dict_key)
+                existing = await self.repository.find_by_type_and_key(entity.type, request.dict_key)
+                if existing and existing.id != dictionary_id:
+                    raise DictionaryDuplicateError()
             entity.dict_key = request.dict_key
 
         if request.dict_value is not None:
@@ -110,6 +135,8 @@ class DictionaryService:
         entity = await self.repository.find_by_id(dictionary_id)
         if not entity:
             raise DictionaryNotFoundError()
+
+        await self._ensure_dict_key_not_in_use(entity.type, entity.dict_key)
 
         return await self.repository.delete(dictionary_id)
 
@@ -264,6 +291,7 @@ class DictionaryService:
                     raise ValueError("type is required")
                 if not dict_key:
                     raise ValueError("dict_key is required")
+                self._validate_dict_key_format(dict_key)
                 if not dict_value:
                     raise ValueError("dict_value is required")
 
