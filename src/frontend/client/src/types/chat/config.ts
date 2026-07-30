@@ -505,6 +505,12 @@ export type TStartupConfig = {
 export type BsConfig = {
   applicationCenterWelcomeMessage: string;
   applicationCenterDescription: string;
+  /**
+   * Admin-configured names for the workbench sidebar entries.
+   * Empty/absent → fall back to the localized defaults ("首页" / "应用").
+   */
+  homeMenuDisplayName?: string;
+  appCenterMenuDisplayName?: string;
   enable_etl4lm: boolean;
   sidebarIcon: {
     enabled: boolean;
@@ -577,6 +583,8 @@ export type BsConfig = {
      * Empty/absent → fall back to the localized default ("AI 助手").
      */
     assistant_name?: string;
+    /** Sidebar entry name; empty/absent → localized default ("知识空间"). */
+    menu_display_name?: string;
   };
   /**
    * Subscription/channel AI assistant config forwarded from the workbench config.
@@ -585,6 +593,8 @@ export type BsConfig = {
   subscription?: {
     /** Custom display name for the subscription AI assistant panel header. */
     assistant_name?: string;
+    /** Sidebar entry name; empty/absent → localized default ("订阅"). */
+    menu_display_name?: string;
   };
 };
 

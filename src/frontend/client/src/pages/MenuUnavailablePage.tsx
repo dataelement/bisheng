@@ -3,16 +3,17 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ApprovalApiError, applyMenuAccessApi, checkMenuAccessPendingApi } from '~/api/approval';
 import { useToastContext } from '~/Providers';
 import { NotificationSeverity } from '~/common';
-import { useAuthContext, useLocalize } from '~/hooks';
+import { useAuthContext, useLocalize, useWorkbenchMenuNames, type WorkbenchMenuKey } from '~/hooks';
 import { WorkbenchEmptyIllustration } from '~/components/workbench/WorkbenchEmptyIllustration';
 import { Button } from '~/components/ui/Button';
 import { CommentDialog } from '~/components/ui/CommentDialog';
 
-const MENU_LABEL_KEYS: Record<string, string> = {
-  home: 'com_nav_home',
-  knowledge_space: 'com_knowledge.knowledge_space',
-  subscription: 'com_ui_channel',
-  apps: 'com_nav_app_center',
+/** Plugin id → workbench menu key, so the copy uses the admin-configured entry name. */
+const MENU_NAME_KEYS: Record<string, WorkbenchMenuKey> = {
+  home: 'home',
+  knowledge_space: 'knowledge',
+  subscription: 'channel',
+  apps: 'apps',
 };
 
 const PLUGIN_DEFAULT_ROUTES: Record<string, string> = {
@@ -27,6 +28,7 @@ export default function MenuUnavailablePage() {
   const { user } = useAuthContext();
   const navigate = useNavigate();
   const localize = useLocalize();
+  const menuNames = useWorkbenchMenuNames();
   const { showToast } = useToastContext();
 
   const pluginId = searchParams.get('plugin') || '';
@@ -47,7 +49,8 @@ export default function MenuUnavailablePage() {
     const target = PLUGIN_DEFAULT_ROUTES[pluginId] ?? '/';
     navigate(target, { replace: true });
   }, [hasPlugin, pluginId]);
-  const menuName = pluginId ? localize((MENU_LABEL_KEYS[pluginId] || pluginId) as any) : '';
+  const menuNameKey = MENU_NAME_KEYS[pluginId];
+  const menuName = pluginId ? (menuNameKey ? menuNames[menuNameKey] : pluginId) : '';
 
   const [showDialog, setShowDialog] = useState(false);
   const [submitting, setSubmitting] = useState(false);

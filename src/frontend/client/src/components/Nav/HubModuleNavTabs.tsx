@@ -5,7 +5,7 @@ import BookOpenIcon from '~/components/ui/icon/BookOpen';
 import GlobeIcon from '~/components/ui/icon/Globe';
 import HomeIcon from '~/components/ui/icon/Home';
 import LinkIcon from '~/components/ui/icon/Link';
-import { useAuthContext, useLocalize } from '~/hooks';
+import { useAuthContext, useWorkbenchMenuNames } from '~/hooks';
 import { appsSectionLinkTarget, lastSectionPaths } from '~/layouts/appModuleNavPaths';
 import { cn } from '~/utils';
 import { canOpenWorkbench } from '~/utils/platformAccess';
@@ -42,7 +42,8 @@ const hubIconClassName = (on: boolean) =>
 
 export function useHubModuleLinks(): HubModuleLink[] {
   const { pathname } = useLocation();
-  const localize = useLocalize();
+  // Admin-configured entry names; falls back to the localized defaults.
+  const menuNames = useWorkbenchMenuNames();
   const { user } = useAuthContext();
   const plugins: string[] | null = Array.isArray((user as { plugins?: unknown })?.plugins)
     ? (user as { plugins: string[] }).plugins
@@ -74,7 +75,7 @@ export function useHubModuleLinks(): HubModuleLink[] {
         section: 'home' as const,
         to: hasPlugin('home') || !menuApprovalMode ? (lastSectionPaths.home || '/c/new') : '/menu-unavailable?plugin=home',
         icon: HomeIcon,
-        label: localize('com_nav_home'),
+        label: menuNames.home,
         isActive: /^\/(c|linsight)(\/|$)/.test(pathname),
         closeDrawerOnNavigate: true,
       },
@@ -82,7 +83,7 @@ export function useHubModuleLinks(): HubModuleLink[] {
         section: 'channel' as const,
         to: hasPlugin('subscription') || !menuApprovalMode ? (lastSectionPaths.channel || '/channel') : '/menu-unavailable?plugin=subscription',
         icon: LinkIcon,
-        label: localize('com_ui_channel'),
+        label: menuNames.channel,
         isActive: pathname.startsWith('/channel'),
         closeDrawerOnNavigate: true,
       },
@@ -90,7 +91,7 @@ export function useHubModuleLinks(): HubModuleLink[] {
         section: 'knowledge' as const,
         to: hasPlugin('knowledge_space') || !menuApprovalMode ? (lastSectionPaths.knowledge || '/knowledge') : '/menu-unavailable?plugin=knowledge_space',
         icon: BookOpenIcon,
-        label: localize('com_knowledge.knowledge_space'),
+        label: menuNames.knowledge,
         isActive: pathname.startsWith('/knowledge'),
         closeDrawerOnNavigate: true,
       },
@@ -98,7 +99,7 @@ export function useHubModuleLinks(): HubModuleLink[] {
         section: 'apps' as const,
         to: hasPlugin('apps') || !menuApprovalMode ? appsSectionLinkTarget() : '/menu-unavailable?plugin=apps',
         icon: GlobeIcon,
-        label: localize('com_nav_app_center'),
+        label: menuNames.apps,
         isActive:
           matchPath('/app/:id/:fid/:type', pathname) !== null || pathname.startsWith('/apps'),
         closeDrawerOnNavigate: true,
@@ -111,7 +112,9 @@ export function useHubModuleLinks(): HubModuleLink[] {
       return true;
     });
   },
-    [canOpenWorkbenchEntry, localize, pathname, showKnowledgeSpaceTab, showSubscriptionTab, showHomeTab, showAppsTab, menuApprovalMode, plugins],
+    // Menu names are read field-by-field: the hook returns a fresh object each render.
+    [canOpenWorkbenchEntry, menuNames.home, menuNames.channel, menuNames.knowledge, menuNames.apps,
+      pathname, showKnowledgeSpaceTab, showSubscriptionTab, showHomeTab, showAppsTab, menuApprovalMode, plugins],
   );
 }
 

@@ -1728,9 +1728,6 @@
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 6
-    },
-    "react-hooks/rules-of-hooks": {
-      "count": 14
     }
   },
   "src/pages/BuildPage/flow/Controls.tsx": {
