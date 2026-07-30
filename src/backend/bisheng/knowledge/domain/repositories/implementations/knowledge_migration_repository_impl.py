@@ -59,6 +59,7 @@ class KnowledgeMigrationRepositoryImpl(KnowledgeMigrationRepository):
             return found, False
         self.session.add(batch)
         await self.session.flush()
+        await self.session.refresh(batch)
         return batch, True
 
     async def find_batch_by_id(

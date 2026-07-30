@@ -535,10 +535,17 @@ class KnowledgeMigrationOperationsImpl:
                 ),
                 _index_counts(context.target_space, int(item.target.id)),
             )
-            if source_counts != target_counts:
+            copied_chunk_count = source_counts["milvus"]
+            expected_target_counts = {
+                "milvus": copied_chunk_count,
+                "elasticsearch": copied_chunk_count,
+            }
+            if target_counts != expected_target_counts:
                 raise RuntimeError(
-                    "target index counts do not match source: "
-                    f"source={source_counts}, target={target_counts}"
+                    "target index counts do not match copied source chunks: "
+                    f"source={source_counts}, "
+                    f"expected_target={expected_target_counts}, "
+                    f"target={target_counts}"
                 )
             expected_tags = manifest.get("tag_ids") or {
                 "approved": [],

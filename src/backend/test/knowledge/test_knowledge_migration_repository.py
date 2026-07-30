@@ -136,6 +136,36 @@ async def test_repository_idempotent_create_plan_claim_checkpoint_and_retry(migr
     assert retried.round_no == 2
 
 
+@pytest.mark.asyncio
+async def test_created_batch_loads_server_defaults_without_insert_returning():
+    table = KnowledgeMigrationBatch.__table__
+    original_implicit_returning = table.implicit_returning
+    table.implicit_returning = False
+    engine = create_async_engine(
+        "sqlite+aiosqlite://",
+        poolclass=StaticPool,
+        connect_args={"check_same_thread": False},
+    )
+    try:
+        async with engine.begin() as connection:
+            await connection.run_sync(table.create)
+        session = AsyncSession(engine, expire_on_commit=False)
+        try:
+            repo = KnowledgeMigrationRepositoryImpl(session)
+            saved, created = await repo.create_batch_idempotent(
+                _batch("server-defaults")
+            )
+            await repo.commit()
+
+            assert created is True
+            assert saved.create_time is not None
+        finally:
+            await session.close()
+    finally:
+        table.implicit_returning = original_implicit_returning
+        await engine.dispose()
+
+
 class _FakeRedisConnection:
     def __init__(self):
         self.value: str | None = None
