@@ -15,6 +15,7 @@ from bisheng.knowledge.rag.version_filter import build_primary_only_filter
 from bisheng.llm.domain import LLMService
 from bisheng.tool.domain.langchain.knowledge import KnowledgeRetrieverTool
 from bisheng.workflow.common.condition import ComparisonType
+from bisheng.workflow.common.retrieval_question import normalize_retrieval_question
 from bisheng.workflow.nodes.base import BaseNode
 
 
@@ -255,11 +256,10 @@ class RagUtils(BaseNode):
         return finally_docs
 
     def init_user_question(self) -> list[str]:
-        # Convert all user questions to strings by default
-        ret = []
-        for one in self.node_params["user_question"]:
-            ret.append(f"{self.get_other_node_variable(one)}")
-        return ret
+        return [
+            normalize_retrieval_question(self.get_other_node_variable(one))
+            for one in self.node_params["user_question"]
+        ]
 
     def init_rerank_model(self):
         if not self._rerank_flag or not self._rerank_model_id:

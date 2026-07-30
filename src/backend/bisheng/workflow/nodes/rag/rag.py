@@ -79,17 +79,18 @@ class RagNode(RagUtils):
         self.user_questions = self.init_user_question()
         for index, question in enumerate(self.user_questions):
             output_key = self._output_keys[index]
-            if question is None:
-                question = ""
             question_answer = self.rag_one_question(question, output_key, unique_id)
             ret[output_key] = question_answer
         return ret
 
     def rag_one_question(self, question: str, output_key: str, unique_id: str) -> str:
         try:
-            self.init_multi_retriever()
-            self.init_rerank_model()
-            source_documents = self.retrieve_question(question)
+            if question:
+                self.init_multi_retriever()
+                self.init_rerank_model()
+                source_documents = self.retrieve_question(question)
+            else:
+                source_documents = []
         except Exception as e:
             logger.exception("RagNode retrieve_question error: ")
             source_documents = [Document(page_content=str(e), metadata={})]
@@ -193,13 +194,6 @@ class RagNode(RagUtils):
 
             index += 1
             ret.append(one_ret)
-        return ret
-
-    def init_user_question(self) -> list[str]:
-        # Convert all user questions to strings by default
-        ret = []
-        for one in self.node_params["user_question"]:
-            ret.append(f"{self.get_other_node_variable(one)}")
         return ret
 
     def init_qa_prompt(self):
