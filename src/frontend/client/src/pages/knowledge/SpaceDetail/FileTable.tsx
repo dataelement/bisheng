@@ -59,6 +59,7 @@ import {
     fileEncodingBusinessDomainLabel,
     normalizeEncodingCode,
     parseFileEncoding,
+    resolveFileBusinessDomainCode,
 } from "../portal/uploadMetadata";
 
 /** 状态列悬停：下载 / 更多 — 白底、细灰边、4px 圆角 */
@@ -818,9 +819,10 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
         const fileCategoryCode = normalizeEncodingCode(
             nextDraft.fileCategoryCode ?? currentDraft.fileCategoryCode ?? parsed.fileCategoryCode,
         );
-        const businessDomainCode = normalizeEncodingCode(
-            nextDraft.businessDomainCode ?? currentDraft.businessDomainCode ?? parsed.businessDomainCode,
-        );
+        const businessDomainCode = resolveFileBusinessDomainCode(file, {
+            ...currentDraft,
+            ...nextDraft,
+        }, encodingPrefix);
         const normalizedSubcategoryCode = fileSubcategoryCode === undefined
             ? currentDraft.fileSubcategoryCode
             : normalizeEncodingCode(fileSubcategoryCode);
@@ -1170,9 +1172,7 @@ function FileRow({
     const selectedFileCategoryCode = normalizeEncodingCode(
         encodingDraft?.fileCategoryCode ?? parsedEncoding.fileCategoryCode,
     );
-    const selectedBusinessDomainCode = normalizeEncodingCode(
-        encodingDraft?.businessDomainCode ?? parsedEncoding.businessDomainCode,
-    );
+    const selectedBusinessDomainCode = resolveFileBusinessDomainCode(file, encodingDraft, encodingPrefix);
     const hasCurrentBusinessDomainOption = businessDomainOptions.some((option) => option.code === selectedBusinessDomainCode);
     const classificationEncodingText = selectedFileCategoryCode && selectedBusinessDomainCode
         ? composeFileEncoding(file.fileEncoding, selectedFileCategoryCode, selectedBusinessDomainCode, encodingPrefix)

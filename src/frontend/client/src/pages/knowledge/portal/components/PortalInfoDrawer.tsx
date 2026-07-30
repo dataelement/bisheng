@@ -10,6 +10,7 @@ import {
     fileEncodingBusinessDomainLabel,
     normalizeEncodingCode,
     parseFileEncoding,
+    resolveFileBusinessDomainCode,
 } from "../uploadMetadata";
 import { formatFileSize } from "../utils";
 import {
@@ -181,9 +182,7 @@ export function PortalInfoDrawer({
     const selectedFileCategoryCode = normalizeEncodingCode(
         encodingDraft.fileCategoryCode ?? parsedEncoding.fileCategoryCode,
     );
-    const selectedBusinessDomainCode = normalizeEncodingCode(
-        encodingDraft.businessDomainCode ?? parsedEncoding.businessDomainCode,
-    );
+    const selectedBusinessDomainCode = resolveFileBusinessDomainCode(selectedFile, encodingDraft, encodingPrefix);
     const hasCurrentBusinessDomainOption = businessDomainOptions.some((option) => option.code === selectedBusinessDomainCode);
     const displayFileEncoding = selectedFileCategoryCode && selectedBusinessDomainCode
         ? composeFileEncoding(selectedFile?.fileEncoding, selectedFileCategoryCode, selectedBusinessDomainCode, encodingPrefix)
@@ -194,8 +193,10 @@ export function PortalInfoDrawer({
         const fileCategoryCode = normalizeEncodingCode(
             nextDraft.fileCategoryCode ?? encodingDraft.fileCategoryCode ?? parsedEncoding.fileCategoryCode,
         );
-        const businessDomainCode = normalizeEncodingCode(
-            nextDraft.businessDomainCode ?? encodingDraft.businessDomainCode ?? parsedEncoding.businessDomainCode,
+        const businessDomainCode = resolveFileBusinessDomainCode(
+            selectedFile,
+            { ...encodingDraft, ...nextDraft },
+            encodingPrefix,
         );
         const normalizedSubcategoryCode = fileSubcategoryCode === undefined
             ? encodingDraft.fileSubcategoryCode
