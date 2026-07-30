@@ -1,20 +1,18 @@
 """Expert QA Repositories - 数据访问层"""
 
-from typing import List, Optional
 
-from sqlalchemy import Column, DateTime, Integer, String, delete, desc, func, text, update
+from sqlalchemy import desc, func, update
 from sqlmodel import and_, or_, select
-from sqlalchemy.ext.asyncio import AsyncSession
+
 from bisheng.core.database import get_async_db_session  # 确保导入了异步方法
 from bisheng.database.models.qa_expert import (
-    Expert,
-    Question,
     Answer,
-    Comment,
-    QuestionVote,
     AnswerVote,
-    CommentVote,
+    Comment,
+    Expert,
     QANotification,
+    Question,
+    QuestionVote,
 )
 
 RESOLUTION_RATE_PRECISION = 4
@@ -32,21 +30,21 @@ class ExpertRepository:
             await session.flush(expert)
             return expert
 
-    async def get_by_id(self, expert_id: int) -> Optional[Expert]:
+    async def get_by_id(self, expert_id: int) -> Expert | None:
         """根据ID获取专家"""
         async with get_async_db_session() as session:
             stmt = select(Expert).where(Expert.id == expert_id)
             result = await session.exec(stmt)
             return result.first()
 
-    async def get_by_user_name(self, name: str) -> Optional[Expert]:
+    async def get_by_user_name(self, name: str) -> Expert | None:
         """根据用户名称获取专家"""
         async with get_async_db_session() as session:
             stmt = select(Expert).where(Expert.expert_name == name)
             result = await session.exec(stmt)
             return result.first()
 
-    async def get_by_user_id(self, user_id: int) -> Optional[Expert]:
+    async def get_by_user_id(self, user_id: int) -> Expert | None:
         """根据用户ID获取专家"""
         async with get_async_db_session() as session:
             stmt = select(Expert).where(Expert.user_id == user_id)
@@ -55,20 +53,20 @@ class ExpertRepository:
 
     async def list_all(
         self,
-        keyword: Optional[str] = None,
-        department_id: Optional[str] = None,
-        job_family: Optional[str] = None,
-        job_category: Optional[str] = None,
-        position: Optional[str] = None,
-        major: Optional[str] = None,
+        keyword: str | None = None,
+        department_id: str | None = None,
+        job_family: str | None = None,
+        job_category: str | None = None,
+        position: str | None = None,
+        major: str | None = None,
         sort_by: str = "created_at",
         sort_order: str = "desc",
         skip: int = 0,
-        limit: Optional[int] = 20,
-        answer_desc: Optional[bool] = None,
-        adoption_desc: Optional[bool] = None,
-        vote_desc: Optional[bool] = None,
-    ) -> tuple[List[Expert], int]:
+        limit: int | None = 20,
+        answer_desc: bool | None = None,
+        adoption_desc: bool | None = None,
+        vote_desc: bool | None = None,
+    ) -> tuple[list[Expert], int]:
         """列表查询专家"""
         async with get_async_db_session() as session:
             # 1. 构建基础查询条件（复用条件，保证 count 和 data 一致）
@@ -187,7 +185,7 @@ class ExpertRepository:
             await session.exec(stmt)
             await session.commit()
 
-    async def update(self, expert_id: int, **kwargs) -> Optional[Expert]:
+    async def update(self, expert_id: int, **kwargs) -> Expert | None:
         """更新专家"""
         async with get_async_db_session() as session:
             expert = await self.get_by_id(expert_id)
@@ -239,7 +237,7 @@ class QuestionRepository:
             await session.refresh(question)
             return question
 
-    async def get_by_id(self, question_id: int) -> Optional[Question]:
+    async def get_by_id(self, question_id: int) -> Question | None:
         """根据ID获取问题"""
         async with get_async_db_session() as session:
             stmt = select(Question).where(Question.id == question_id)
@@ -259,14 +257,14 @@ class QuestionRepository:
 
     async def list_all(
         self,
-        business_domain: Optional[str] = None,
-        status: Optional[int] = 0,
+        business_domain: str | None = None,
+        status: int | None = 0,
         sort_by: str = "latest",
-        user_id: Optional[int] = None,  # 我提问的
+        user_id: int | None = None,  # 我提问的
         skip: int = 0,
         limit: int = 20,
-        expert_id: Optional[int] = None,  # 邀请我的专家ID
-    ) -> tuple[List[Question], int]:
+        expert_id: int | None = None,  # 邀请我的专家ID
+    ) -> tuple[list[Question], int]:
         """列表查询问题"""
         async with get_async_db_session() as session:
             stmt = select(Question)
@@ -315,7 +313,7 @@ class QuestionRepository:
             result = await session.exec(stmt)
             return result.all(), total
 
-    async def update(self, question_id: int, **kwargs) -> Optional[Question]:
+    async def update(self, question_id: int, **kwargs) -> Question | None:
         """更新问题"""
         async with get_async_db_session() as session:
             session.expire_on_commit = False
@@ -331,7 +329,7 @@ class QuestionRepository:
             await session.refresh(question)
             return question
 
-    async def get_business_domains(self) -> List[str]:
+    async def get_business_domains(self) -> list[str]:
         """获取所有业务域"""
         async with get_async_db_session() as session:
             stmt = select(func.distinct(Question.business_domain))
@@ -410,14 +408,14 @@ class AnswerRepository:
             await session.flush(answer)
             return answer
 
-    async def get_by_id(self, answer_id: int) -> Optional[Answer]:
+    async def get_by_id(self, answer_id: int) -> Answer | None:
         """根据ID获取回答"""
         async with get_async_db_session() as session:
             stmt = select(Answer).where(Answer.id == answer_id)
             result = await session.exec(stmt)
             return result.first()
 
-    async def get_by_expertname(self, expert_name: str, question_id: int) -> Optional[Answer]:
+    async def get_by_expertname(self, expert_name: str, question_id: int) -> Answer | None:
         """根据专家名称获取回答"""
         async with get_async_db_session() as session:
             stmt = select(Answer).where(and_(Answer.expert_name == expert_name, Answer.question_id == question_id))
@@ -426,8 +424,8 @@ class AnswerRepository:
             return result.first()
 
     async def get_by_question_id(
-        self, question_id: int, skip: int = 0, limit: int = 100, sort_by: Optional[str] = None
-    ) -> tuple[List[Answer], int]:
+        self, question_id: int, skip: int = 0, limit: int = 100, sort_by: str | None = None
+    ) -> tuple[list[Answer], int]:
         """获取问题的所有回答"""
         async with get_async_db_session() as session:
             stmt = select(Answer, func.count().over().label("total")).where(
@@ -452,7 +450,7 @@ class AnswerRepository:
 
             return answers, total
 
-    async def update(self, answer_id: int, **kwargs) -> Optional[Answer]:
+    async def update(self, answer_id: int, **kwargs) -> Answer | None:
         """更新回答"""
         async with get_async_db_session() as session:
             answer = await self.get_by_id(answer_id)
@@ -499,8 +497,8 @@ class CommentRepository:
             return comment
 
     async def get_by_answer_id(
-        self, answer_id: int, question_id: Optional[int] = None, skip: int = 0, limit: int = 100
-    ) -> tuple[List[Comment], int]:
+        self, answer_id: int, question_id: int | None = None, skip: int = 0, limit: int = 100
+    ) -> tuple[list[Comment], int]:
         """获取回答的所有评论"""
         if answer_id == 0 and not question_id:
             raise ValueError("当 answer_id 为 0 时，必须提供 question_id")
@@ -522,7 +520,7 @@ class CommentRepository:
 class VoteRepository:
     """投票仓储"""
 
-    async def add_question_vote(self, user_id: int, question_id: int) -> Optional[QuestionVote]:
+    async def add_question_vote(self, user_id: int, question_id: int) -> QuestionVote | None:
         """给问题点赞"""
         async with get_async_db_session() as session:
             # 检查是否已点赞
@@ -551,7 +549,7 @@ class VoteRepository:
             await session.delete(vote)
             return True
 
-    async def add_answer_vote(self, user_id: int, answer_id: int, vote_type: str = "helpful") -> Optional[AnswerVote]:
+    async def add_answer_vote(self, user_id: int, answer_id: int, vote_type: str = "helpful") -> AnswerVote | None:
         """给回答点赞"""
         async with get_async_db_session() as session:
             stmt = select(AnswerVote).where(and_(AnswerVote.user_id == user_id, AnswerVote.answer_id == answer_id))
@@ -588,7 +586,7 @@ class NotificationRepository:
 
     async def get_user_notifications(
         self, user_id: int, unread_only: bool = False, skip: int = 0, limit: int = 20
-    ) -> tuple[List[QANotification], int]:
+    ) -> tuple[list[QANotification], int]:
         """获取用户通知"""
         async with get_async_db_session() as session:
             stmt = select(QANotification).where(QANotification.recipient_id == user_id)
