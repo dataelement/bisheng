@@ -255,6 +255,7 @@ class ShougangPortalFavoriteFileItem(BaseModel):
     title: str = ""
     file_name: str = ""
     status: Literal["valid", "invalid"] = "valid"
+    invalid_reason: Literal["source_deleted"] | None = None
     updated_at: str = ""
 
 

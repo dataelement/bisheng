@@ -23,10 +23,6 @@ from bisheng.common.services.config_service import settings as bisheng_settings
 from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
 from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion
 from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFile, KnowledgeFileStatus
-from bisheng.knowledge.domain.services.favorite_notify import (
-    FAVORITE_SOURCE_VERSION_UPDATED,
-    notify_favorite_source_changed,
-)
 from bisheng.knowledge.domain.models.knowledge_file_similarity_candidate import (
     KnowledgeFileSimilarityCandidate,
 )
@@ -41,6 +37,18 @@ from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository 
 )
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_similarity_candidate_repository import (
     KnowledgeFileSimilarityCandidateRepository,
+)
+from bisheng.knowledge.domain.schemas.favorite_notification_schema import (
+    FavoriteChangeEvent,
+    FavoriteRecipientSnapshot,
+)
+from bisheng.knowledge.domain.services.favorite_notify import (
+    FAVORITE_SOURCE_PRIMARY_VERSION_CHANGED,
+    FAVORITE_SOURCE_VERSION_ADDED,
+    FAVORITE_SOURCE_VERSION_DELETED,
+    FAVORITE_SOURCE_VERSION_LINKED,
+    collect_favorite_recipient_snapshots,
+    enqueue_favorite_change_events,
 )
 
 
@@ -66,6 +74,7 @@ class KnowledgeVersionService:
         self.message_service = None
         self.document_entry_resolver = None
         self.document_distribution_service = None
+        self.department_file_view_access_service = None
 
     async def _delete_similarity_candidate_cache_by_file_ids(self, file_ids: list[int]) -> None:
         if self.similar_candidate_repo is None or not file_ids:
@@ -177,18 +186,19 @@ class KnowledgeVersionService:
             )
 
     async def _notify_favorite_version_changed(
-        self, affected_files: list[tuple[int, str]]
+        self,
+        affected_files: list[tuple[int, str, int]],
+        *,
+        action_code: str,
+        before_value: str,
+        after_value: str,
     ) -> None:
-        """版本关系变化 → 给收藏了『受影响文件』的用户发站内信。
-
-        affected_files: [(file_id, file_name_or_empty), ...]，按 file_id 去重。
-        message_service 缺失（如未注入）时静默跳过；notify_favorite_source_changed
-        内部 best-effort，绝不影响版本管理主流程。
-        """
-        if self.message_service is None:
+        """在版本关系成功变化后尽力投递动作级收藏事件。"""
+        if before_value == after_value:
             return
         seen: set[int] = set()
-        for file_id, file_name in affected_files:
+        events: list[FavoriteChangeEvent] = []
+        for file_id, file_name, source_space_id in affected_files:
             try:
                 fid = int(file_id)
             except (TypeError, ValueError):
@@ -196,14 +206,109 @@ class KnowledgeVersionService:
             if fid <= 0 or fid in seen:
                 continue
             seen.add(fid)
-            await notify_favorite_source_changed(
-                self.message_service,
-                source_file_id=fid,
-                file_name=file_name or "",
-                action_code=FAVORITE_SOURCE_VERSION_UPDATED,
-                actor_user_id=self.login_user.user_id,
-                actor_user_name=getattr(self.login_user, "user_name", None),
+            events.append(
+                FavoriteChangeEvent(
+                    tenant_id=int(getattr(self.login_user, "tenant_id", 1)),
+                    source_space_id=int(source_space_id),
+                    source_file_id=fid,
+                    file_name=file_name or "",
+                    action_code=action_code,
+                    before_value=before_value,
+                    after_value=after_value,
+                    actor_user_id=int(self.login_user.user_id),
+                    actor_user_name=getattr(self.login_user, "user_name", None),
+                )
             )
+        if not events:
+            return
+        try:
+            enqueue_favorite_change_events(events)
+        except Exception:
+            logger.exception(
+                "favorite version notify enqueue failed action_code={} event_count={}",
+                action_code,
+                len(events),
+            )
+
+    async def _prepare_favorite_version_delete_events(
+        self,
+        file_record: KnowledgeFile | None,
+        version_no: int,
+    ) -> list[FavoriteChangeEvent]:
+        """在历史版本文件删除前冻结合法收藏者。"""
+        if file_record is None:
+            return []
+        try:
+            from bisheng.knowledge.domain.services.department_file_view_access_service import (
+                DepartmentFileAccessStatus,
+            )
+            from bisheng.permission.domain.services.permission_service import (
+                PermissionService,
+            )
+            from bisheng.user.domain.models.user import UserDao
+            from bisheng.user.domain.models.user_role import UserRoleDao
+
+            async def can_view_file(user_id: int, source_file: KnowledgeFile) -> bool:
+                user = await UserDao.aget_user(int(user_id))
+                if user is None or int(getattr(user, "delete", 0) or 0) != 0:
+                    return False
+                roles = await UserRoleDao.aget_user_roles(int(user_id))
+                login_user = UserPayload(
+                    user_id=int(user_id),
+                    user_name=str(getattr(user, "user_name", "") or ""),
+                    user_role=[int(role.role_id) for role in roles] or [-1],
+                    tenant_id=int(self.login_user.tenant_id),
+                )
+                access_service = self.department_file_view_access_service
+                if access_service is not None:
+                    decision = await access_service.evaluate_file(
+                        login_user=login_user,
+                        file=source_file,
+                    )
+                    if decision.status == DepartmentFileAccessStatus.ALLOWED:
+                        return True
+                    if decision.status != DepartmentFileAccessStatus.NOT_APPLICABLE:
+                        return False
+                return await PermissionService.check(
+                    user_id=int(user_id),
+                    relation="can_read",
+                    object_type="knowledge_file",
+                    object_id=str(source_file.id),
+                    login_user=login_user,
+                )
+
+            snapshots_by_file = await collect_favorite_recipient_snapshots(
+                file_repository=self.knowledge_file_repo,
+                source_files=[file_record],
+                actor_user_id=int(self.login_user.user_id),
+                can_view_file=can_view_file,
+            )
+        except Exception:
+            logger.exception(
+                "favorite version delete snapshot failed file_id={}",
+                file_record.id,
+            )
+            return []
+        snapshots: list[FavoriteRecipientSnapshot] = snapshots_by_file.get(
+            int(file_record.id),
+            [],
+        )
+        if not snapshots:
+            return []
+        return [
+            FavoriteChangeEvent(
+                tenant_id=int(self.login_user.tenant_id),
+                source_space_id=int(file_record.knowledge_id),
+                source_file_id=int(file_record.id),
+                file_name=file_record.file_name or "",
+                action_code=FAVORITE_SOURCE_VERSION_DELETED,
+                before_value=f"V{version_no}",
+                after_value="",
+                actor_user_id=int(self.login_user.user_id),
+                actor_user_name=getattr(self.login_user, "user_name", None),
+                recipient_snapshots=snapshots,
+            )
+        ]
 
     async def list_versions_for_file(self, knowledge_file_id: int):
         """Return the entire version chain that contains the given physical file."""
@@ -472,10 +577,27 @@ class KnowledgeVersionService:
 
         # 版本管理变更 → 给收藏了「受影响文件」的用户发站内信。
         # 受影响文件：被关联为新版本的当前文件，以及被降级的旧 primary 文件。
-        affected_files: list[tuple[int, str]] = [(int(current_kf.id), current_kf.file_name or "")]
+        affected_files: list[tuple[int, str, int]] = [
+            (
+                int(current_kf.id),
+                current_kf.file_name or "",
+                int(current_kf.knowledge_id),
+            )
+        ]
         if old_primary is not None:
-            affected_files.append((int(old_primary.knowledge_file_id), ""))
-        await self._notify_favorite_version_changed(affected_files)
+            affected_files.append(
+                (
+                    int(old_primary.knowledge_file_id),
+                    target_primary_kf.file_name or "",
+                    int(target_primary_kf.knowledge_id),
+                )
+            )
+        await self._notify_favorite_version_changed(
+            affected_files,
+            action_code=FAVORITE_SOURCE_VERSION_LINKED,
+            before_value=f"V{target_primary_v.version_no}",
+            after_value=f"V{next_no}",
+        )
 
         return LinkResponse(document_id=target_document_id, new_version_no=next_no)
 
@@ -551,11 +673,22 @@ class KnowledgeVersionService:
                 raise KnowledgeDocumentStateConflictError() from exc
             if not result.idempotent:
                 affected_files = [
-                    (int(target_kf.id), target_kf.file_name or ""),
-                    (int(current_manager.id), current_manager.file_name or ""),
+                    (
+                        int(target_kf.id),
+                        target_kf.file_name or "",
+                        int(target_kf.knowledge_id),
+                    ),
+                    (
+                        int(current_manager.id),
+                        current_manager.file_name or "",
+                        int(current_manager.knowledge_id),
+                    ),
                 ]
                 await self._notify_favorite_version_changed(
-                    affected_files
+                    affected_files,
+                    action_code=FAVORITE_SOURCE_PRIMARY_VERSION_CHANGED,
+                    before_value=f"V{current_primary.version_no}",
+                    after_value=f"V{target_version.version_no}",
                 )
                 await self._enqueue_document_distribution_projection(
                     tenant_id=int(self.login_user.tenant_id),
@@ -589,10 +722,27 @@ class KnowledgeVersionService:
 
             # 版本管理变更 → 给收藏了「受影响文件」的用户发站内信。
             # 受影响文件：被设为主版本的文件，以及被降级的旧 primary 文件。
-            affected_files: list[tuple[int, str]] = [(int(target_kf.id), target_kf.file_name or "")]
+            affected_files: list[tuple[int, str, int]] = [
+                (
+                    int(target_kf.id),
+                    target_kf.file_name or "",
+                    int(target_kf.knowledge_id),
+                )
+            ]
             if old_primary is not None and int(old_primary.knowledge_file_id) != int(target_kf.id):
-                affected_files.append((int(old_primary.knowledge_file_id), ""))
-            await self._notify_favorite_version_changed(affected_files)
+                affected_files.append(
+                    (
+                        int(old_primary.knowledge_file_id),
+                        current_manager.file_name or "",
+                        int(current_manager.knowledge_id),
+                    )
+                )
+            await self._notify_favorite_version_changed(
+                affected_files,
+                action_code=FAVORITE_SOURCE_PRIMARY_VERSION_CHANGED,
+                before_value=f"V{old_primary.version_no}",
+                after_value=f"V{target_version.version_no}",
+            )
 
         KnowledgeAuditTelemetryService.audit_set_primary_version(
             self.login_user,
@@ -669,6 +819,9 @@ class KnowledgeVersionService:
         version_no = v.version_no
         kf_knowledge_id = kf.knowledge_id if kf else None
         kf_file_name = kf.file_name if kf else ""
+        favorite_delete_events = (
+            await self._prepare_favorite_version_delete_events(kf, version_no)
+        )
 
         # Look up the knowledge space BEFORE deleting DB rows so the object is still
         # accessible even if the backing store flushes references on delete.
@@ -723,6 +876,7 @@ class KnowledgeVersionService:
             kf_file_name,
             version_no,
         )
+        enqueue_favorite_change_events(favorite_delete_events)
         return DeleteVersionResponse(document_id=doc_id, deleted_version_no=version_no)
 
     async def scan_similar_for_file(
@@ -1663,10 +1817,27 @@ class KnowledgeVersionService:
 
         # 版本管理变更 → 给收藏了「受影响文件」的用户发站内信。
         # 受影响文件：被吸收为新主版本的源文件，以及被降级的旧 primary 文件。
-        affected_files: list[tuple[int, str]] = [(int(source_kf.id), source_kf.file_name or "")]
+        affected_files: list[tuple[int, str, int]] = [
+            (
+                int(source_kf.id),
+                source_kf.file_name or "",
+                int(source_kf.knowledge_id),
+            )
+        ]
         if old_primary is not None:
-            affected_files.append((int(old_primary.knowledge_file_id), ""))
-        await self._notify_favorite_version_changed(affected_files)
+            affected_files.append(
+                (
+                    int(old_primary.knowledge_file_id),
+                    current_kf.file_name or "",
+                    int(current_kf.knowledge_id),
+                )
+            )
+        await self._notify_favorite_version_changed(
+            affected_files,
+            action_code=FAVORITE_SOURCE_VERSION_ADDED,
+            before_value=f"V{getattr(old_primary, 'version_no', 1)}",
+            after_value=f"V{next_no}",
+        )
 
         return LinkResponse(document_id=target_doc_id, new_version_no=next_no)
 

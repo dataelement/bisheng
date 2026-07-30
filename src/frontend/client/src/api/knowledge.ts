@@ -3492,6 +3492,7 @@ export interface PortalFavoriteFile {
     title: string;
     fileName: string;
     status: "valid" | "invalid";
+    invalidReason?: "source_deleted";
     updatedAt: string;
 }
 
@@ -3503,6 +3504,7 @@ function mapFavoriteFile(raw: any): PortalFavoriteFile {
         title: raw?.title ?? "",
         fileName: raw?.file_name ?? "",
         status: raw?.status === "invalid" ? "invalid" : "valid",
+        invalidReason: raw?.invalid_reason === "source_deleted" ? "source_deleted" : undefined,
         updatedAt: raw?.updated_at ?? "",
     };
 }

@@ -118,7 +118,13 @@ export default function PortalFavoritesPanel({ space, onOpenSource }: PortalFavo
                                     type="button"
                                     disabled={!row.openable}
                                     onClick={() => handleOpen(row)}
-                                    title={row.invalid ? "源文件已失效，无法打开" : row.title}
+                                    title={
+                                        row.invalidReason === "source_deleted"
+                                            ? "原文档已删除，无法打开"
+                                            : row.invalid
+                                              ? "源文件已失效，无法打开"
+                                              : row.title
+                                    }
                                     className={
                                         row.openable
                                             ? "min-w-0 flex-1 truncate text-left text-sm text-text-primary hover:text-primary"
@@ -131,7 +137,7 @@ export default function PortalFavoritesPanel({ space, onOpenSource }: PortalFavo
                                             data-testid="favorite-invalid-tag"
                                             className="ml-2 inline-block rounded bg-[#f2f3f5] px-1.5 py-0.5 align-middle text-xs text-text-secondary"
                                         >
-                                            已失效
+                                            {row.invalidReason === "source_deleted" ? "原文档已删除" : "已失效"}
                                         </span>
                                     ) : null}
                                 </button>

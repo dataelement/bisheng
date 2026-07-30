@@ -7,6 +7,14 @@ from bisheng.worker.approval.notification_tasks import (
 )
 from bisheng.worker.approval.tasks import execute_approval_outbox, retry_approval_outbox
 from bisheng.worker.information.article import sync_information_article
+from bisheng.worker.knowledge.document_projection import (
+    fanout_document_projection_scan,
+    process_document_projection,
+    scan_tenant_document_projections,
+)
+from bisheng.worker.knowledge.favorite_notification import (
+    send_favorite_change_notifications,
+)
 from bisheng.worker.knowledge.file_title_worker import (
     extract_knowledge_file_title_celery,
 )
@@ -15,11 +23,6 @@ from bisheng.worker.knowledge.file_worker import (
     parse_knowledge_file_celery,
     refresh_file_similarity_candidates_celery,
     retry_knowledge_file_celery,
-)
-from bisheng.worker.knowledge.document_projection import (
-    fanout_document_projection_scan,
-    process_document_projection,
-    scan_tenant_document_projections,
 )
 from bisheng.worker.knowledge.pdf_artifact_worker import (
     generate_knowledge_file_pdf_celery,

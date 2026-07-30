@@ -62,6 +62,32 @@ it("marks invalid rows with a tag and disables opening", async () => {
     expect(onOpenSource).not.toHaveBeenCalled();
 });
 
+it("shows source deleted reason and still allows removing the favorite", async () => {
+    mockListFavorites.mockResolvedValue({
+        data: [
+            favorite({
+                favoriteFileId: "deleted",
+                status: "invalid",
+                invalidReason: "source_deleted",
+                title: "已删除文件",
+            }),
+        ],
+        total: 1,
+    });
+    mockRemoveFavorite.mockResolvedValue({ removed: true });
+    render(<PortalFavoritesPanel space={space} onOpenSource={jest.fn()} />);
+
+    expect(await screen.findByText("原文档已删除")).toBeInTheDocument();
+    expect(screen.getByTitle("原文档已删除，无法打开")).toBeDisabled();
+    fireEvent.click(screen.getByTestId("favorite-remove"));
+    await waitFor(() => {
+        expect(mockRemoveFavorite).toHaveBeenCalledWith({
+            sourceSpaceId: "10",
+            sourceFileId: "100",
+        });
+    });
+});
+
 it("calls onOpenSource when a valid row is clicked", async () => {
     const onOpenSource = jest.fn();
     mockListFavorites.mockResolvedValue({ data: [favorite()], total: 1 });

@@ -80,6 +80,30 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
+    async def find_favorite_referrers_by_source_file_ids(
+        self,
+        source_file_ids: list[int],
+    ) -> list[KnowledgeFile]:
+        normalized_ids = {int(file_id) for file_id in source_file_ids if int(file_id) > 0}
+        if not normalized_ids:
+            return []
+        result = await self.session.execute(
+            select(KnowledgeFile).where(
+                KnowledgeFile.file_source == "favorite_reference",
+            )
+        )
+        rows = list(result.scalars().all())
+        matched: list[KnowledgeFile] = []
+        for row in rows:
+            reference = (row.user_metadata or {}).get("favorite_reference") or {}
+            try:
+                source_file_id = int(reference.get("source_file_id") or 0)
+            except (TypeError, ValueError):
+                continue
+            if source_file_id in normalized_ids:
+                matched.append(row)
+        return matched
+
     async def prepare_delete_by_ids(self, entity_ids: list[int]) -> int:
         if not entity_ids:
             return 0
