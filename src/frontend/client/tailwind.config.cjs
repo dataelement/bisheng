@@ -47,6 +47,7 @@ module.exports = {
       // classNames never change per breakpoint. Each entry carries its own
       // font-weight (400 body tier / 500 heading tier) — no extra font-medium needed.
       fontSize: {
+        'caption-sm': ['var(--text-caption-sm)', { lineHeight: 'var(--leading-caption-sm)', fontWeight: '400' }],
         caption: ['var(--text-caption)', { lineHeight: 'var(--leading-caption)', fontWeight: '400' }],
         'body-sm': ['var(--text-body-sm)', { lineHeight: 'var(--leading-body-sm)', fontWeight: '400' }],
         body: ['var(--text-body)', { lineHeight: 'var(--leading-body)', fontWeight: '400' }],

@@ -1,6 +1,6 @@
 # 字体 Typography
 
-九档 semantic 字号（自带字重）+ 两档字重，纯系统字体栈（零 webfont 加载）。**组件与业务代码只用 semantic 类**（`text-body` / `text-h1`…），不写裸 `text-sm` 或数值。规范全文见「文档 → 设计规范 → 字体 Typography」。
+十档 semantic 字号（自带字重，含 10px caption-sm 例外档）+ 两档字重，纯系统字体栈（零 webfont 加载）。**组件与业务代码只用 semantic 类**（`text-body` / `text-h1`…），不写裸 `text-sm` 或数值。规范全文见「文档 → 设计规范 → 字体 Typography」。
 
 > 本页表格均从设计 token 单一源 `~/design-token.cjs` 渲染，与 Tailwind 主题、组件消费的是同一份数据。
 
@@ -45,7 +45,7 @@ export default () => (
 
 ## 字号阶梯 Semantic
 
-九档，token 即 Tailwind 类名，**自带字重与行高**。示例为该档实时渲染；窗口缩到 ≤768px 可看移动端重映射（同一类名自动换档）。
+十档，token 即 Tailwind 类名，**自带字重与行高**。示例为该档实时渲染；窗口缩到 ≤768px 可看移动端重映射（同一类名自动换档）。
 
 ```tsx
 import { TYPE_SCALE } from '~/design-token.cjs';

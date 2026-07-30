@@ -43,6 +43,7 @@ module.exports = {
       // semantic CSS vars in tokens.css, which remap under 768px, so
       // classNames never change per breakpoint.
       fontSize: {
+        'caption-sm': ['var(--text-caption-sm)', { lineHeight: 'var(--leading-caption-sm)', fontWeight: '400' }],
         caption: ['var(--text-caption)', { lineHeight: 'var(--leading-caption)', fontWeight: '400' }],
         'body-sm': ['var(--text-body-sm)', { lineHeight: 'var(--leading-body-sm)', fontWeight: '400' }],
         body: ['var(--text-body)', { lineHeight: 'var(--leading-body)', fontWeight: '400' }],

@@ -48,8 +48,12 @@ const FONT_FAMILY = {
   },
 };
 
-/** Semantic type scale — each entry is a Tailwind fontSize key AND its own weight. */
+/** Semantic type scale — each entry is a Tailwind fontSize key AND its own weight.
+ * Array order = primitive ladder order; PrimitiveTable derives `font-size-N`
+ * from the 0-based index (caption-sm sits BELOW the original 1–9 ladder as
+ * font-size-0, so existing numbered vars never renumber). */
 const TYPE_SCALE = [
+  { name: 'caption-sm', desktop: [10, 18], mobile: [10, 18], weight: 400, cssVar: '--text-caption-sm', leadingVar: '--leading-caption-sm', usage: '角标、徽标数字、极小标注（仅纯展示，禁用于可点击文字）' },
   { name: 'caption',  desktop: [12, 20], mobile: [12, 20], weight: 400, cssVar: '--text-caption',  leadingVar: '--leading-caption',  usage: '时间戳、标签、水印' },
   { name: 'body-sm',  desktop: [13, 21], mobile: [14, 22], weight: 400, cssVar: '--text-body-sm',  leadingVar: '--leading-body-sm',  usage: '密集表格、侧栏次要项' },
   { name: 'body',     desktop: [14, 22], mobile: [16, 24], weight: 400, cssVar: '--text-body',     leadingVar: '--leading-body',     usage: '正文基准，表单、表格默认' },

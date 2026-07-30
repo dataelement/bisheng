@@ -8,7 +8,7 @@
 
 | 组件 | 状态 | 内容 |
 |---|---|---|
-| [Typography 字体](/components/typography) | ✅ 规范 v1 | 字体栈实时示例 / 九档字号阶梯（实时渲染 + 移动端重映射）/ 两档字重 / 使用规则 |
+| [Typography 字体](/components/typography) | ✅ 规范 v1 | 字体栈实时示例 / 十档字号阶梯（实时渲染 + 移动端重映射）/ 两档字重 / 使用规则 |
 | [Color 色彩](/components/color) | ✅ 规范 v1 | 品牌色蓝绿双 ramp 色块 / 灰阶 1–10（实时取 var）/ semantic 层对照 + 实时示例 / 语义色四组 / 标签色 |
 | [Button 按钮](/components/button) | ✅ demo 齐全 | 常用类型 6 别名 / color×variant 3×5 全矩阵 / 尺寸三档 + iconOnly / 内容形态（纯文字、纯 icon square+circle、文字+icon、icon 在右）/ disabled + loading |
 | [Modal 弹窗](/components/modal) | 🟨 标准未定稿 | 基准候选壳（OGDialogTemplate）demo / 壳规格已定项 / 过渡期规则 / CommentDialog 共享壳 |

@@ -56,7 +56,10 @@
    * text-caption / text-body / text-h1 ...). Line height = size + 8px.
    * Components must reference the semantic layer only.
    * ============================================================ */
-  /* Primitive — desktop scale */
+  /* Primitive — desktop scale. font-size-0 sits below the original 1–9
+   * ladder (exception tier: pure display only, never clickable text) so
+   * existing numbers stay stable. */
+  --font-size-0: 0.625rem;   --line-height-0: 1.125rem;  /* 10 / 18 */
   --font-size-1: 0.75rem;    --line-height-1: 1.25rem;   /* 12 / 20 */
   --font-size-2: 0.8125rem;  --line-height-2: 1.3125rem; /* 13 / 21 */
   --font-size-3: 0.875rem;   --line-height-3: 1.375rem;  /* 14 / 22 */
@@ -68,6 +71,7 @@
   --font-size-9: 2.25rem;    --line-height-9: 2.75rem;   /* 36 / 44 */
 
   /* Semantic — referenced by tailwind.config.cjs theme.extend.fontSize */
+  --text-caption-sm: var(--font-size-0); --leading-caption-sm: var(--line-height-0);
   --text-caption: var(--font-size-1);  --leading-caption: var(--line-height-1);
   --text-body-sm: var(--font-size-2);  --leading-body-sm: var(--line-height-2);
   --text-body: var(--font-size-3);     --leading-body: var(--line-height-3);
