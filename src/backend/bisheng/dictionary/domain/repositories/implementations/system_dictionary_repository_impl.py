@@ -75,6 +75,7 @@ class SystemDictionaryRepositoryImpl(BaseRepositoryImpl[SystemDictionary, int], 
         offset = (page - 1) * page_size
         query = (
             query.order_by(
+                SystemDictionary.type.asc(),
                 SystemDictionary.sort_order.desc()
                 if sort_by is not None and not sort_by
                 else SystemDictionary.id.asc(),
@@ -133,6 +134,7 @@ class SystemDictionaryRepositoryImpl(BaseRepositoryImpl[SystemDictionary, int], 
             query = query.where(SystemDictionary.is_enabled == is_enabled)
 
         query = query.order_by(
+            SystemDictionary.type.asc(),
             SystemDictionary.sort_order.desc() if sort_by is not None and not sort_by else SystemDictionary.id.asc(),
             SystemDictionary.id.asc(),
         )

@@ -17,8 +17,8 @@ class DictionaryTypeEnum(str, Enum):
 
 # 数据库类型 code -> 展示中文(与 DictionaryTypeEnum 展示值保持一致)
 DICTIONARY_TYPE_CODE_TO_LABEL: dict[str, str] = {
-    "expert_position": "岗位",
-    "expert_title": "职务",
+    "expert_major": "岗位",
+    "expert_position": "职务",
     "expert_job_family": "职位族",
     "expert_job_category": "职位类",
 }
