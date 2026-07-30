@@ -17,6 +17,7 @@ import {
     deleteSpaceApi,
     downloadWatermarkedKnowledgeFileApi,
     getFilePreviewApi,
+    getPortalFilePreviewApi,
     getPublicSpaceFilePermissionsApi,
     getSpaceChildrenApi,
     getSpaceFolderStatsApi,
@@ -318,6 +319,13 @@ export default function PortalKnowledgeWorkbench() {
     const lastPortalLocationKeyRef = useRef("");
     const isDeepLinkRestoring = Boolean(
         portalDeepLinkTarget && restoringDeepLinkKey === portalDeepLinkTarget.key,
+    );
+    const selectedFileUsesPortalContentGate = Boolean(
+        activeSpace
+        && selectedFile
+        && getPortalSpaceLevel(activeSpace) === SpaceLevel.DEPARTMENT
+        && portalDeepLinkTarget?.spaceId === String(activeSpace.id)
+        && portalDeepLinkTarget.fileId === String(selectedFile.id)
     );
 
     useEffect(() => {
@@ -1682,7 +1690,10 @@ export default function PortalKnowledgeWorkbench() {
             previewData: null,
         });
 
-        getFilePreviewApi(
+        const loadPreview = selectedFileUsesPortalContentGate
+            ? getPortalFilePreviewApi
+            : getFilePreviewApi;
+        loadPreview(
             selectedFile.spaceId || activeSpace.id,
             selectedFile.id,
         )
@@ -1734,7 +1745,7 @@ export default function PortalKnowledgeWorkbench() {
         return () => {
             cancelled = true;
         };
-    }, [activeSpace, selectedFile]);
+    }, [activeSpace, selectedFile, selectedFileUsesPortalContentGate]);
 
     const showUnavailable = useCallback(() => {
         showToast({ message: "暂未开放", severity: NotificationSeverity.INFO });

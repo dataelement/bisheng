@@ -2344,6 +2344,50 @@ describe("PortalKnowledgeWorkbench", () => {
         });
     });
 
+    test("uses the portal content gate for a deep-linked department file granted by approval", async () => {
+        const departmentSpace = makeSpace("department-approval", "审批部门库", {
+            role: SpaceRole.MEMBER,
+            spaceLevel: SpaceLevel.DEPARTMENT,
+        });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [departmentSpace],
+            teamSpaces: [],
+            personalSpaces: [],
+        } as any);
+        jest.mocked(getSpaceInfoApi).mockResolvedValue(departmentSpace as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({
+            data: [],
+            total: 0,
+        } as any);
+        jest.mocked(searchSpaceChildrenApi).mockRejectedValue(new Error("generic permission denied"));
+        jest.mocked(getPortalFilePreviewApi).mockResolvedValue({
+            preview_url: "/approved-preview.pdf",
+            original_url: "/approved-origin.pdf",
+            can_download: false,
+        } as any);
+
+        renderWorkbench(
+            "/knowledge-portal?spaceId=department-approval&fileId=approved-file&fileName=%E5%AE%A1%E6%89%B9%E9%80%9A%E8%BF%87%E6%96%87%E4%BB%B6.pdf",
+        );
+
+        const preview = await screen.findByTestId("portal-preview-page");
+        expect(preview).toHaveTextContent("审批通过文件.pdf");
+        await waitFor(() => {
+            expect(getPortalFilePreviewApi).toHaveBeenCalledWith(
+                "department-approval",
+                "approved-file",
+            );
+        });
+        expect(getFilePreviewApi).not.toHaveBeenCalledWith(
+            "department-approval",
+            "approved-file",
+        );
+        expect(within(await screen.findByTestId("portal-document-actions"))
+            .queryByRole("button", { name: "下载" }))
+            .not.toBeInTheDocument();
+    });
+
     test("does not expose the default favorite space while restoring a deep-linked public file", async () => {
         const originalParent = window.parent;
         const parentWindow = { postMessage: jest.fn() };
