@@ -909,6 +909,43 @@ describe("ApprovalPage", () => {
     });
   });
 
+  it("keeps the route dialog scrollable when multiple AND conditions are added", async () => {
+    const user = userEvent.setup();
+    listApprovalScenarioPresetsApi.mockResolvedValue([
+      {
+        scenario_code: "knowledge_space_create_request",
+        scenario_name: "知识空间创建审批",
+        handler_key: "knowledge_space_create_request",
+        condition_fields: ["applicant_role", "space_level", "applicant_department_id"],
+        approver_source_types: ["direct_user", "department_admin", "role_user"],
+      },
+    ]);
+    listApprovalScenariosApi.mockResolvedValue([
+      {
+        id: 34,
+        scenario_code: "knowledge_space_create_request",
+        scenario_name: "知识空间创建审批",
+        enabled: true,
+      },
+    ]);
+    listApprovalRoutesApi.mockResolvedValue([]);
+
+    render(<ApprovalPage />);
+    await screen.findAllByText("知识空间创建审批");
+
+    await user.click(screen.getByRole("button", { name: /新增分支/ }));
+    await screen.findByText("新增条件分支");
+
+    await user.click(screen.getByRole("button", { name: "添加条件" }));
+    await user.click(screen.getByRole("button", { name: "添加条件" }));
+    expect(screen.getByLabelText("条件 3 字段")).toBeInTheDocument();
+
+    const dialog = screen.getByRole("dialog");
+    expect(dialog.className).toMatch(/max-h-\[90vh\]/);
+    expect(within(dialog).getByTestId("route-dialog-body")).toHaveClass("overflow-y-auto");
+    expect(within(dialog).getByRole("button", { name: "保存" })).toBeInTheDocument();
+  });
+
   it("keeps generic knowledge space source labels outside Shougang publish preset", async () => {
     const user = userEvent.setup();
     listApprovalScenarioPresetsApi.mockResolvedValue([
