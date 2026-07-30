@@ -91,7 +91,7 @@ import { PortalUploadedFilesDrawer } from "./components/PortalUploadedFilesDrawe
 import { SpaceSidebar } from "./components/SpaceSidebar";
 import { usePortalApprovalBridge } from "./hooks/usePortalApprovalBridge";
 import { resolvePortalDeepLinkTarget, usePortalDeepLink } from "./hooks/usePortalDeepLink";
-import { usePortalSpaces } from "./hooks/usePortalSpaces";
+import { getSpacesLevelQueryKey, usePortalSpaces } from "./hooks/usePortalSpaces";
 import { usePortalUploadDialog } from "./hooks/usePortalUploadDialog";
 import {
     BUSINESS_DOMAIN_OPTIONS,
@@ -559,7 +559,10 @@ export default function PortalKnowledgeWorkbench() {
             if (activeSpace?.id === space.id) {
                 setActiveSpace(getNextActiveSpace(space.id));
             }
-            await queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
+            // Only refresh the current category list — other levels are unchanged.
+            await queryClient.invalidateQueries({
+                queryKey: getSpacesLevelQueryKey(space.spaceLevel),
+            });
             showToast({ message: "知识库已删除", severity: NotificationSeverity.SUCCESS });
         } catch (error) {
             showToast({
@@ -2476,15 +2479,17 @@ export default function PortalKnowledgeWorkbench() {
             const result = await submitKnowledgeSpaceCreate(form);
 
             if (result.created && result.space) {
-                // 先等空间列表刷新（新空间进入 selectableSpaces），再切换当前空间；否则默认空间
-                // 守卫会在刷新完成前把 activeSpace 重置回默认库，导致“前往知识库”跳不到新空间。
-                await queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
+                // Wait for this category's list to include the new space before switching;
+                // otherwise the default-space guard can reset activeSpace too early.
+                await queryClient.invalidateQueries({
+                    queryKey: getSpacesLevelQueryKey(result.space.spaceLevel ?? form.spaceLevel),
+                });
                 setActiveSpace(result.space);
                 showToast({ message: "创建知识库成功", severity: NotificationSeverity.SUCCESS });
                 return true;
             }
 
-            void queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
+            // Approval-only: no space yet, so sidebar lists do not need a reload.
             showToast({ message: "已提交申请", severity: NotificationSeverity.SUCCESS });
             return { showSuccess: false };
         } catch (error) {

@@ -76,6 +76,19 @@ function getSpaceGroupKey(space?: Pick<KnowledgeSpace, "spaceLevel"> | null): Sp
     }
 }
 
+/**
+ * Map a space level to the list-query level used by `usePortalSpaces`.
+ * TEAM_KS shares the team sidebar group / query with TEAM.
+ */
+export function resolveSpacesListLevel(spaceLevel: SpaceLevel): SpaceLevel {
+    return spaceLevel === SpaceLevel.TEAM_KS ? SpaceLevel.TEAM : spaceLevel;
+}
+
+/** React Query key for the portal sidebar list of one space category. */
+export function getSpacesLevelQueryKey(spaceLevel: SpaceLevel) {
+    return ["knowledgeSpaces", "level", resolveSpacesListLevel(spaceLevel)] as const;
+}
+
 export function usePortalSpaces({
     activeSpace,
     setActiveSpace,
