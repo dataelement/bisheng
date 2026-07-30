@@ -365,10 +365,10 @@ class RagUtils(BaseNode):
         try:
             return run_async_safe(_fetch())
         except RuntimeError:
-            logger.warning("version filter skipped: running inside an event loop", exc_info=True)
+            logger.opt(exception=True).warning("version filter skipped: running inside an event loop")
             return []
         except Exception:
-            logger.warning("version filter fetch failed", exc_info=True)
+            logger.opt(exception=True).warning("version filter fetch failed")
             return []
 
     def init_knowledge_retriever(self):

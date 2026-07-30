@@ -139,6 +139,11 @@ class MinioConf(BaseModel):
     tmp_bucket: str | None = Field(
         default="tmp-dir", description="Ad hocbucket, stored files will have an expiration date"
     )
+    upload_timeout_seconds: int = Field(
+        default=1800,
+        description="MinIO HTTP read/connect timeout for uploads and downloads (seconds). "
+        "Default 1800 (30 min); minio-py otherwise caps at 300s and large video uploads fail.",
+    )
 
 
 class ObjectStore(BaseModel):

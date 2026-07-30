@@ -26,6 +26,7 @@ import AppRoot from './AppRoot';
 import Root from './Root';
 import Knowledge from '~/pages/knowledge';
 import FilePreviewPage from '~/pages/knowledge/FilePreview/FilePreviewPage';
+import MediaPlaybackPage from '~/pages/media/MediaPlaybackPage';
 import ArticlePage from '~/pages/Subscription/Article/ArticlePage';
 import DevLogin from '~/pages/DevLogin';
 import StandaloneChatPage from '~/pages/standaloneChat/StandaloneChatPage';
@@ -138,6 +139,14 @@ export const router = createBrowserRouter([
             element: <Root />,
             children: [
               { index: true, element: <HomeEntryRedirect /> },
+              {
+                path: 'c/media-playback',
+                element: (
+                  <MenuApprovalPluginGate pluginId="home">
+                    <MediaPlaybackPage />
+                  </MenuApprovalPluginGate>
+                ),
+              },
               {
                 path: 'c/:conversationId?',
                 element: (

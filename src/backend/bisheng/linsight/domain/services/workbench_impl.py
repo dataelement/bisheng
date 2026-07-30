@@ -1,5 +1,6 @@
 import asyncio
 import json
+import mimetypes
 import os
 import uuid
 from dataclasses import dataclass
@@ -44,6 +45,7 @@ from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
 from bisheng.tool.domain.services.executor import ToolExecutor
 from bisheng.utils import util
 from bisheng.utils.util import async_calculate_md5
+from bisheng_langchain.gpts.tools.code_interpreter.e2b_executor import SIZE_AUTOPUSH
 
 
 @dataclass
@@ -74,6 +76,44 @@ class LinsightWorkbenchImpl:
     # so the original bytes are persisted into the workspace (see _parse_file /
     # _ingest_one_file / _ingest_daily_file → entry["original_file_path"]).
     _IMAGE_EXTS = frozenset({"png", "jpg", "jpeg", "gif", "webp", "bmp"})
+    # Types whose ORIGINAL bytes stay useful after parsing, because the markdown
+    # view is lossy in a way that defeats the user's actual intent: a spreadsheet
+    # loses cell types / sheets / formulas (and ExcelLoader is a RAG chunker that
+    # hard-fails past 10k chars), a Word file loses styling, a PDF loses table
+    # geometry. These land in the workspace ALONGSIDE the .md so
+    # ``bisheng_code_interpreter`` can open them with pandas / python-docx / fitz.
+    # Images are deliberately absent: their originals are already promoted for
+    # frontend preview, and feeding one back through ``read_file`` yields an
+    # ``image`` block that a non-vision model rejects.
+    _RAW_KEEP_EXTS = frozenset({"xlsx", "xls", "csv", "docx", "doc", "pptx", "ppt", "pdf", "ofd"})
+    # Ceiling for carrying an original into the workspace + local task dir. Past
+    # this, the .md view is the only thing worth the storage and the download
+    # latency on every task start.
+    _RAW_KEEP_MAX_BYTES = 50 * 1024 * 1024
+
+    # ``mimetypes`` reads the SYSTEM mime database, which on a stock Linux image
+    # (every deploy target, and CI) knows nothing about the OOXML types — xlsx /
+    # docx / pptx all resolve to None there and every original lands in MinIO as
+    # application/octet-stream, so the browser downloads instead of previewing.
+    # macOS ships them, which is why this only shows up off the dev machine.
+    # Pin the ones we actually carry so the stored content type is platform-stable.
+    _RAW_CONTENT_TYPES = {
+        "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "xls": "application/vnd.ms-excel",
+        "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "doc": "application/msword",
+        "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "ppt": "application/vnd.ms-powerpoint",
+        "pdf": "application/pdf",
+        "csv": "text/csv",
+        "ofd": "application/ofd",
+    }
+
+    @classmethod
+    def _content_type_for(cls, filename: str) -> str:
+        """Content type for a raw original, independent of the host mime database."""
+        ext = os.path.splitext(filename or "")[1].lower().lstrip(".")
+        return cls._RAW_CONTENT_TYPES.get(ext) or mimetypes.guess_type(filename or "")[0] or "application/octet-stream"
 
     class LinsightError(Exception):
         """LinsightRelated Errors"""
@@ -430,14 +470,18 @@ class LinsightWorkbenchImpl:
             "valid": True,
             "markdown_file_path": formal_object,
         }
-        # Image uploads preview as the picture itself: persist the original bytes
-        # into the formal workspace bucket and record their key.
+        # Persist the original bytes into the formal workspace bucket and record
+        # their key — for images so the chip previews the picture, for
+        # _RAW_KEEP_EXTS so the workspace carries the original next to the .md.
         ext = os.path.splitext(file_name)[1].lower().lstrip(".")
-        if ext in cls._IMAGE_EXTS:
-            formal_original = f"linsight/{chat_id}/{submit_file.file_id}_original.{ext}"
-            raw_bytes = await asyncio.to_thread(lambda p: open(p, "rb").read(), local_path)
-            await minio_client.put_object(bucket_name=minio_client.bucket, object_name=formal_original, file=raw_bytes)
-            entry["original_file_path"] = formal_original
+        if ext in cls._IMAGE_EXTS or cls._should_keep_raw(file_name, local_path):
+            raw_bytes = await cls._read_local_bytes(local_path)
+            if raw_bytes:
+                formal_original = f"linsight/{chat_id}/{submit_file.file_id}_original.{ext}"
+                await minio_client.put_object(
+                    bucket_name=minio_client.bucket, object_name=formal_original, file=raw_bytes
+                )
+                entry["original_file_path"] = formal_original
         await cls._write_attachment_to_workspace(entry, chat_id, minio_client, used_names=used_names)
         return entry
 
@@ -458,6 +502,12 @@ class LinsightWorkbenchImpl:
         name + extension (``uploads/<name>.<ext>``) even though it couldn't be
         converted to markdown. Marked ``valid=False`` so the attachment chip shows
         a failed state.
+
+        The original always reaches the formal bucket (the user can still download
+        what they uploaded), but it only enters the WORKSPACE when something there
+        could actually consume it — see ``_original_is_usable``. An mp3 that no
+        parser, no ``read_file`` and no code interpreter can open is pure cost:
+        storage, a confusing ``ls`` entry, and a wasted tool call.
         """
 
         def _read_bytes(path: str) -> bytes:
@@ -469,16 +519,40 @@ class LinsightWorkbenchImpl:
         formal_object = f"linsight/{chat_id}/{submit_file.file_id}{ext}"
         await minio_client.put_object(bucket_name=minio_client.bucket, object_name=formal_object, file=raw)
 
+        usable = cls._original_is_usable(file_name)
         entry: dict = {
             "file_id": submit_file.file_id,
             "original_filename": file_name,
-            "parsing_status": "failed",
+            "parsing_status": "failed" if usable else "unsupported",
             "valid": False,
-            "error_message": f"file parse failed, original kept: {error}",
+            "error_message": (
+                f"file parse failed, original kept: {error}"
+                if usable
+                else f"unsupported file type, original not usable in the workspace: {error}"
+            ),
             "markdown_file_path": formal_object,
         }
-        await cls._write_attachment_to_workspace(entry, chat_id, minio_client, as_markdown=False, used_names=used_names)
+        if usable:
+            await cls._write_attachment_to_workspace(
+                entry, chat_id, minio_client, as_markdown=False, used_names=used_names
+            )
         return entry
+
+    # Types whose raw bytes are still worth carrying into the workspace after a
+    # failed parse: text-like ones are directly readable via ``read_file``, and
+    # _RAW_KEEP_EXTS / _IMAGE_EXTS have a consumer (code interpreter, image block).
+    _TEXT_LIKE_EXTS = frozenset(
+        {
+            "txt", "csv", "tsv", "md", "markdown", "json", "jsonl", "xml", "html", "htm",
+            "log", "yaml", "yml", "ini", "conf", "toml", "sql", "py", "js", "ts", "sh",
+        }
+    )  # fmt: skip
+
+    @classmethod
+    def _original_is_usable(cls, filename: str) -> bool:
+        """Whether an unparsed original has any consumer inside the workspace."""
+        ext = os.path.splitext(filename or "")[1].lower().lstrip(".")
+        return ext in cls._TEXT_LIKE_EXTS or ext in cls._RAW_KEEP_EXTS or ext in cls._IMAGE_EXTS
 
     @classmethod
     async def _ingest_one_file(
@@ -559,6 +633,42 @@ class LinsightWorkbenchImpl:
         return f"linsight/{chat_id}/{file_id}.md"
 
     @staticmethod
+    async def _read_local_bytes(path: str) -> bytes | None:
+        """Best-effort read of the transient local upload cache file.
+
+        Returns ``None`` instead of raising: the original is a bonus track (code
+        interpreter data / image preview), so losing it must never turn a file
+        whose markdown parsed fine into a failed attachment.
+        """
+        try:
+            return await asyncio.to_thread(lambda p: open(p, "rb").read(), path)
+        except OSError:
+            logger.warning("original bytes unavailable at {}; keeping only the parsed view", path)
+            return None
+
+    @classmethod
+    def _should_keep_raw(cls, filename: str, local_path: str | None = None, size: int | None = None) -> bool:
+        """Whether this upload's ORIGINAL bytes belong in the workspace too.
+
+        Extension gate + size ceiling. When neither ``size`` nor a stat-able
+        ``local_path`` is available the size check is skipped rather than
+        failing closed — an un-measurable file is still worth carrying, and the
+        ceiling exists to bound storage, not to gate correctness.
+        """
+        ext = os.path.splitext(filename or "")[1].lower().lstrip(".")
+        if ext not in cls._RAW_KEEP_EXTS:
+            return False
+        if size is None and local_path:
+            try:
+                size = os.path.getsize(local_path)
+            except OSError:
+                size = None
+        if size is not None and size > cls._RAW_KEEP_MAX_BYTES:
+            logger.info("skip carrying original {} into workspace: {} bytes exceeds ceiling", filename, size)
+            return False
+        return True
+
+    @staticmethod
     def _safe_basename(original_filename: str) -> str:
         """Path-safe filename that PRESERVES the original (incl. non-ASCII) name.
 
@@ -612,11 +722,20 @@ class LinsightWorkbenchImpl:
         Workspace layout (design §9.3.2): ``workspace/{chat_id}/uploads/<name>``
           - parsed markdown   -> ``uploads/<original-stem>.md`` (as_markdown=True)
           - unconverted original -> ``uploads/<original-name>.<ext>`` (False)
+          - **plus**, for ``_RAW_KEEP_EXTS`` that parsed fine, the ORIGINAL lands
+            next to its markdown as ``uploads/<original-name>.<ext>``.
+
+        The dual-track write is deliberate: markdown is the model's reading view
+        (``read_file``, token-cheap), the original is the tool's data
+        (``bisheng_code_interpreter`` with pandas / python-docx / fitz). A
+        spreadsheet flattened to markdown loses cell types, sheets and formulas —
+        exactly what a user uploading a spreadsheet wants to compute on.
 
         The original filename (incl. non-ASCII) is preserved so ``ls`` shows a
         recognizable per-file name; same-name collisions are de-duplicated. Sets
         ``workspace_path`` / ``markdown_filename`` / ``line_count`` /
-        ``image_count`` on ``entry`` for the pointer block + local prefetch.
+        ``image_count`` on ``entry`` for the pointer block + local prefetch, plus
+        ``raw_workspace_path`` / ``raw_filename`` when an original was carried.
         """
         from bisheng.linsight.domain.services.workspace_backend import WORKSPACE_PREFIX
 
@@ -640,7 +759,9 @@ class LinsightWorkbenchImpl:
             bucket_name=minio_client.bucket,
             object_name=object_key,
             file=file_bytes,
-            content_type="text/markdown" if as_markdown else "application/octet-stream",
+            # An unparsed original keeps its real type too, so the attachment chip
+            # and any download serve it as what it is.
+            content_type="text/markdown" if as_markdown else cls._content_type_for(filename),
         )
 
         entry["workspace_path"] = f"/{rel_path}"
@@ -651,6 +772,52 @@ class LinsightWorkbenchImpl:
         else:
             entry.setdefault("line_count", 0)
         entry["image_count"] = entry.get("image_count", 0)
+
+        if as_markdown:
+            await cls._write_raw_original_to_workspace(entry, chat_id, minio_client, safe, used_names)
+
+    @classmethod
+    async def _write_raw_original_to_workspace(
+        cls,
+        entry: dict,
+        chat_id: str,
+        minio_client,
+        safe_name: str,
+        used_names: set[str] | None,
+    ) -> None:
+        """Second track: copy the ORIGINAL next to its markdown view.
+
+        No-op unless the type is worth keeping raw AND an original was persisted
+        upstream (``entry["original_file_path"]``, set by ``_parse_file`` /
+        ``_ingest_daily_file``). Best-effort: a failure here must never sink an
+        attachment whose markdown view already landed — the task stays usable,
+        just without the precise-data track.
+        """
+        from bisheng.linsight.domain.services.workspace_backend import WORKSPACE_PREFIX
+
+        original_object = entry.get("original_file_path")
+        if not original_object or not cls._should_keep_raw(entry.get("original_filename", "")):
+            return
+
+        try:
+            raw_bytes = await minio_client.get_object(bucket_name=minio_client.bucket, object_name=original_object)
+            if not raw_bytes:
+                logger.warning("original {} is empty/missing; workspace keeps only the markdown view", original_object)
+                return
+
+            raw_filename = cls._dedupe_workspace_name(safe_name, used_names)
+            rel_path = f"uploads/{raw_filename}"
+            content_type = cls._content_type_for(raw_filename)
+            await minio_client.put_object(
+                bucket_name=minio_client.bucket,
+                object_name=f"{WORKSPACE_PREFIX}/{chat_id}/{rel_path}",
+                file=raw_bytes,
+                content_type=content_type,
+            )
+            entry["raw_workspace_path"] = f"/{rel_path}"
+            entry["raw_filename"] = raw_filename
+        except Exception:
+            logger.exception("failed to carry original {} into workspace {}", original_object, chat_id)
 
     # Chat titles live in message_session.name (VARCHAR(255)); a reasoning model
     # can emit far more than a title (a whole <think> block), so clamp the length.
@@ -758,14 +925,24 @@ class LinsightWorkbenchImpl:
         return await LinsightSessionVersionDao.get_session_versions_by_session_id(session_id)
 
     @classmethod
-    async def prepare_file_list(cls, session_version: LinsightSessionVersion) -> list[str]:
+    async def prepare_file_list(
+        cls, session_version: LinsightSessionVersion, has_code_interpreter: bool = False
+    ) -> list[str]:
         """Prepare the zero-body ``<uploaded_files>`` pointer block (design §9.3.3).
 
         Each valid attachment becomes a pointer item (path + name + lines +
         images) — **no file body or preview** is injected, preserving the
         offload-first contract (the model reads bodies on demand via
-        ``read_file``). Invalid attachments (expired metadata) are skipped here;
-        the frontend surfaces them via the ``valid=False`` flag.
+        ``read_file``). Attachments with no workspace object at all (expired
+        metadata) are skipped; ones that failed to parse but left their original
+        behind ARE announced, so the model does not meet an unreadable binary via
+        ``ls`` and try to ``read_file`` it.
+
+        Args:
+            has_code_interpreter: whether the sandboxed code interpreter is bound
+                this run. Gates the "open the original with Python" guidance —
+                naming a tool that is not bound is the same class of bug as the
+                ``search_knowledge_base`` prompt/tool mismatch.
 
         Returns:
             A single-element list holding the ``<uploaded_files>`` block, or an
@@ -776,23 +953,72 @@ class LinsightWorkbenchImpl:
             return []
 
         items: list[str] = []
+        has_raw = False
+        has_unparsed = False
         for file in session_version.files:
-            if file.get("valid") is False:
-                continue
             path = file.get("workspace_path") or f"/uploads/{file.get('file_id')}/index.md"
-            items.append(
-                "- path: {path}\n  name: {name}\n  lines: {lines}\n  images: {images}".format(
-                    path=path,
-                    name=file.get("original_filename", ""),
-                    lines=file.get("line_count", 0),
-                    images=file.get("image_count", 0),
-                )
+            name = file.get("original_filename", "")
+
+            if file.get("valid") is False:
+                # Previously skipped outright, which left the model to discover the
+                # file via ``ls`` with no idea it is an unparsed binary — it would
+                # then ``read_file`` it and blow up the task. Announce it instead,
+                # with the one route that actually works.
+                if not file.get("workspace_path"):
+                    # No workspace object at all. An unsupported type (mp3/mp4/zip)
+                    # is deliberately not carried in, but staying silent about it
+                    # means the user sees their attachment accepted while the model
+                    # never hears of it. Expired metadata stays skipped — there is
+                    # nothing to say beyond "re-upload", which the chip already says.
+                    if file.get("parsing_status") == "unsupported":
+                        items.append(f"- name: {name}\n  note: 该格式无法解析，也无法在工作区中读取，本次不可用")
+                    continue
+                has_unparsed = True
+                items.append(f"- path: {path}\n  name: {name}\n  note: 解析失败，工作区只有原件（不可 read_file）")
+                continue
+
+            item = "- path: {path}\n  name: {name}\n  lines: {lines}\n  images: {images}".format(
+                path=path,
+                name=name,
+                lines=file.get("line_count", 0),
+                images=file.get("image_count", 0),
             )
+            raw_path = file.get("raw_workspace_path")
+            if raw_path:
+                has_raw = True
+                # Rendered RELATIVE on purpose. The code interpreter resolves paths
+                # against its working directory (the local task dir / sandbox root),
+                # where the original lives at ``uploads/<name>``; a leading slash
+                # would send it to the filesystem root and fail.
+                item += f"\n  raw: {raw_path.lstrip('/')}"
+            items.append(item)
 
         if not items:
             return []
 
-        block = "<uploaded_files>\n" + "\n".join(items) + "\n</uploaded_files>"
+        header = ""
+        if has_raw or has_unparsed:
+            # Say it once, at the top, instead of repeating per item: markdown is
+            # the reading view, the original is the data. Without this the model
+            # reads the flattened table and "eyeballs" numbers it could compute.
+            if has_code_interpreter:
+                header = (
+                    "说明：path 指向可直接 read_file 的文本视图；raw 指向同名原件"
+                    "（表格/文档的精确数据、单元格、样式、页面结构都在原件里）。"
+                    "需要精确数值或做数据分析时，用 bisheng_code_interpreter 读 raw 原件"
+                    "（Excel 用 pandas/openpyxl，Word 用 python-docx，PDF 用 fitz），不要 read_file 原件。"
+                    "raw 是相对当前工作目录的路径，在代码里直接用该相对路径打开。\n"
+                )
+            else:
+                # No code interpreter this run: the original is unusable, so do not
+                # send the model chasing it. Say what it CAN do instead.
+                header = (
+                    "说明：path 指向可直接 read_file 的文本视图；raw 是原始二进制文件，"
+                    "本次没有可用的代码执行工具，无法读取原件——请基于文本视图作答，"
+                    "并在结论中说明受原件格式限制的部分。不要对 raw 路径调用 read_file。\n"
+                )
+
+        block = "<uploaded_files>\n" + header + "\n".join(items) + "\n</uploaded_files>"
         return [block]
 
     @classmethod
@@ -1071,16 +1297,22 @@ class LinsightWorkbenchImpl:
                 "markdown_file_md5": markdown_md5,
             }
 
-            # Image uploads should preview as the picture itself, not the
-            # OCR/caption markdown. The raw original only exists as a transient
-            # local cache file here, so persist it to the tmp bucket now and carry
-            # the key forward; ingest promotes it to the formal workspace bucket.
+            # The original bytes only exist as a transient LOCAL cache file at this
+            # point (``save_file_to_folder`` writes to CACHE_DIR, which the Linsight
+            # worker process cannot reach), so persist them to the tmp bucket now and
+            # carry the key forward; ingest promotes it to the formal bucket. Two
+            # distinct reasons to keep an original:
+            #   - images  -> the attachment chip previews the picture, not its caption;
+            #   - _RAW_KEEP_EXTS -> the workspace carries the original next to the .md
+            #     so the code interpreter can compute on real data (design: md is the
+            #     model's reading view, the original is the tool's data).
             ext = os.path.splitext(original_filename)[1].lower().lstrip(".")
-            if ext in cls._IMAGE_EXTS:
-                original_tmp_key = f"{file_id}_original.{ext}"
-                raw_bytes = await asyncio.to_thread(lambda p: open(p, "rb").read(), file_path)
-                await minio_client.put_object_tmp(original_tmp_key, raw_bytes)
-                result["original_file_path"] = original_tmp_key
+            if ext in cls._IMAGE_EXTS or cls._should_keep_raw(original_filename, file_path):
+                raw_bytes = await cls._read_local_bytes(file_path)
+                if raw_bytes:
+                    original_tmp_key = f"{file_id}_original.{ext}"
+                    await minio_client.put_object_tmp(original_tmp_key, raw_bytes)
+                    result["original_file_path"] = original_tmp_key
 
             return result
         except Exception as e:
@@ -1125,11 +1357,37 @@ class LinsightWorkbenchImpl:
         # Default60Validity period of minutes
         code_config["config"]["e2b"]["timeout"] = 3600
         code_config["config"]["e2b"]["keep_sandbox"] = True
+        # ``file_list`` is the E2B copy-in set: E2bCodeExecutor.__init__ reads every
+        # entry fully into worker memory and pushes it into the sandbox up front.
+        # E2B's own contract caps that at SIZE_AUTOPUSH — anything larger is meant to
+        # be requested explicitly per run — while the dual-track ingest keeps
+        # originals up to _RAW_KEEP_MAX_BYTES (50MB), which LocalExecutor serves for
+        # free through local_sync_path. Filter here so the E2B ceiling is honoured
+        # without shrinking what the local executor can reach.
         file_list = []
+        oversized: list[str] = []
         for root, dirs, files in os.walk(file_dir):
             for file in files:
                 file_path = os.path.join(root, file)
+                try:
+                    if os.path.getsize(file_path) > SIZE_AUTOPUSH:
+                        oversized.append(file_path)
+                        continue
+                except OSError:
+                    # Unstattable file: let it through rather than silently dropping
+                    # it — the push itself will surface any real problem.
+                    pass
                 file_list.append(WriteEntry(data=file_path, path=file_path.replace(file_dir, ".")))
+        if oversized:
+            # Never let a bounded copy-in look complete: the model is told these
+            # paths exist, so a silent drop reads as "the tool is broken".
+            logger.warning(
+                "code interpreter: {} file(s) exceed the E2B auto-push ceiling ({} bytes) and were not "
+                "pushed into the sandbox: {}",
+                len(oversized),
+                SIZE_AUTOPUSH,
+                ", ".join(os.path.basename(p) for p in oversized),
+            )
         code_config["config"]["e2b"]["file_list"] = file_list
 
         bisheng_code_tool.extra = code_config

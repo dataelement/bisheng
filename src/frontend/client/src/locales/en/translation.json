@@ -468,6 +468,8 @@
   "com_linsight_queue_position": "Position {{0}}",
   "com_linsight_queue_cancel": "Cancel queueing",
   "com_linsight_report_ready": "Here is your report",
+  "com_linsight_files_ready_prefix": "Here are your files, starting with",
+  "com_linsight_files_ready_suffix": "— {{0}} in total",
   "com_linsight_output_files": "Output files {{0}}",
   "com_linsight_save_as": "Save as",
   "com_linsight_preview": "Preview",
@@ -1211,6 +1213,9 @@
   "com_ui_upload_error": "There was an error uploading your file",
   "com_ui_upload_file_search": "Upload for File Search",
   "com_ui_upload_file_type_error": "This application does not support uploading this file type.",
+  "com_chat.media_parsing": "Parsing…",
+  "com_chat.media_file_too_large": "File size cannot exceed 1024MB. Please upload again.",
+  "com_chat.media_file_too_many": "You cannot upload more than 5 audio/video files.",
   "com_ui_upload_files": "Upload files",
   "com_ui_upload_image": "Upload an image",
   "com_ui_upload_image_input": "Upload Image",
@@ -2363,6 +2368,11 @@
       "spaceNotFound": "Knowledge space not found or deleted",
       "folderNotFound": "Folder not found or deleted",
       "renderFailed": "Failed to generate file, please try again"
+    },
+    "chat": {
+      "answer_interrupted": "This answer was interrupted while being generated; the content above may be incomplete.",
+      "answer_failed": "Something went wrong, please try again",
+      "connection_lost": "Connection lost, please try again"
     }
   },
   "com_linsight_legacy_sop": "Legacy SOP document (pre-migration session)",

@@ -148,3 +148,35 @@ async def test_get_linsight_tools_drops_file_operation_group():
 
     assert not (child_keys & _LEGACY_LOCAL_FILE_TOOL_NAMES)
     assert "search_knowledge_base" in child_keys
+
+
+async def test_e2b_file_list_honours_autopush_ceiling(monkeypatch: pytest.MonkeyPatch, tmp_path):
+    """E2bCodeExecutor reads every file_list entry fully into worker memory and
+    pushes it into the sandbox up front; E2B's own contract caps that at
+    SIZE_AUTOPUSH. The dual-track ingest keeps originals up to 50MB because
+    LocalExecutor serves those for free — so the ceiling belongs on this side only.
+    """
+    from bisheng_langchain.gpts.tools.code_interpreter.e2b_executor import SIZE_AUTOPUSH
+
+    (tmp_path / "uploads").mkdir()
+    (tmp_path / "uploads" / "small.xlsx").write_bytes(b"x" * 1024)
+    (tmp_path / "uploads" / "huge.xlsx").write_bytes(b"x" * (SIZE_AUTOPUSH + 1))
+
+    monkeypatch.setattr(GptsToolsDao, "aget_tool_by_tool_key", AsyncMock(return_value=_fake_code_tool_row()))
+    init_one = AsyncMock(return_value=object())
+    monkeypatch.setattr(ToolExecutor, "init_by_tool_id", init_one)
+    monkeypatch.setattr(ToolExecutor, "init_by_tool_ids", AsyncMock(return_value=[]))
+
+    await LinsightWorkbenchImpl.init_linsight_config_tools(
+        session_version=_session_with_tools([CODE_TOOL_ID]),
+        llm=object(),
+        need_upload=True,
+        file_dir=str(tmp_path),
+    )
+
+    bound_row = init_one.await_args.kwargs["tool"]
+    pushed = {entry.path for entry in bound_row.extra["config"]["e2b"]["file_list"]}
+    assert "./uploads/small.xlsx" in pushed
+    assert "./uploads/huge.xlsx" not in pushed
+    # LocalExecutor still reaches the big one through the shared directory.
+    assert bound_row.extra["config"]["local"]["local_sync_path"] == str(tmp_path)

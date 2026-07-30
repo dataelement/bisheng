@@ -453,6 +453,8 @@
   "com_linsight_queue_position": "{{0}} 番目",
   "com_linsight_queue_cancel": "順番待ちをキャンセル",
   "com_linsight_report_ready": "レポートをまとめました",
+  "com_linsight_files_ready_prefix": "まとめたファイル:",
+  "com_linsight_files_ready_suffix": "など {{0}} 件",
   "com_linsight_output_files": "出力ファイル {{0}}",
   "com_linsight_save_as": "名前を付けて保存",
   "com_linsight_preview": "プレビュー",
@@ -1139,6 +1141,9 @@
   "com_ui_upload_error": "ファイルのアップロードエラー",
   "com_ui_upload_file_search": "ファイル検索をアップロード",
   "com_ui_upload_file_type_error": "このアプリケーションはこのファイル形式のアップロードに対応していません。",
+  "com_chat.media_parsing": "解析中…",
+  "com_chat.media_file_too_large": "アップロードファイルサイズは1024MBを超えられません。再度アップロードしてください。",
+  "com_chat.media_file_too_many": "アップロードファイル数は5個を超えられません。",
   "com_ui_upload_files": "ファイルをアップロード",
   "com_ui_upload_image": "画像をアップロード",
   "com_ui_upload_image_input": "画像をアップロード",
@@ -2286,6 +2291,11 @@
       "spaceNotFound": "ナレッジスペースが見つかりません/削除されました",
       "folderNotFound": "フォルダが見つかりません/削除されました",
       "renderFailed": "ファイル生成に失敗しました。再度お試しください"
+    },
+    "chat": {
+      "answer_interrupted": "この回答は生成中に中断されました。上記の内容は不完全な可能性があります。",
+      "answer_failed": "エラーが発生しました。もう一度お試しください",
+      "connection_lost": "接続が切断されました。もう一度お試しください"
     }
   },
   "com_linsight_legacy_sop": "旧バージョンの SOP ドキュメント",

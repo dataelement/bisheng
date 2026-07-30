@@ -204,9 +204,9 @@ export default function useChatHelpers() {
                             chat_id,
                             id: messageId,
                             files: _files.map(el => ({
-                                // 兼容
                                 file_name: el.file_name || el.name,
-                                file_url: el.file_url || el.url || el.path
+                                file_url: el.file_url || el.url || el.path || el.filepath,
+                                filepath: el.filepath || el.file_path || el.file_url || el.url || el.path,
                             })),
                             is_bot,
                             message: msg,

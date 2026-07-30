@@ -33,6 +33,10 @@ from langgraph.prebuilt import InjectedState
 from langgraph.types import interrupt
 
 from bisheng.common.services.config_service import settings
+from bisheng.linsight.domain.services.binary_content_guard import (
+    CODE_INTERPRETER_TOOL,
+    build_binary_guards,
+)
 from bisheng.linsight.domain.services.resilience_middleware import build_resilience_middleware
 from bisheng.linsight.domain.services.tool_loop_middleware import build_tool_loop_breaker_middleware
 from bisheng.llm.domain.services import LLMService
@@ -579,9 +583,10 @@ def _subagent_tools(tools: Sequence[BaseTool]) -> list[BaseTool]:
 
     The returned list MUST be passed as the subagent spec's explicit ``tools`` key
     so deepagents does NOT fall back to inheriting ``[*tools, ask_user]``
-    (graph.py:670 — an explicit ``tools`` means the subagent gets ONLY those). The
-    subagent still receives ls/read_file/write_file/edit_file + write_todos from
-    its own middleware stack (graph.py:618-627), sharing the main WorkspaceBackend.
+    (graph.py:694 in deepagents 0.6.12 — an explicit ``tools`` means the subagent
+    gets ONLY those). The subagent still receives ls/read_file/write_file/edit_file
+    + write_todos from its own middleware stack (graph.py:643-652), sharing the
+    main WorkspaceBackend.
     """
     return [t for t in tools if t.name not in _SUBAGENT_TOOL_DENY and t.name not in _KNOWN_HITL_TOOL_NAMES]
 
@@ -592,14 +597,15 @@ def _build_researcher_subagent(tools: Sequence[BaseTool]) -> dict:
     Design #1 §4.1 (MVP = one researcher) / §4.2 (decision 1: same-name override).
 
     - ``name="general-purpose"``: providing our own spec with this name SUPPRESSES
-      deepagents' auto-injected default general-purpose subagent (graph.py:693), so
-      the unsafe default GP — which would inherit ``[*tools, ask_user]`` — never
-      gets built. The model decides whether to delegate from ``description``, not
-      ``name``, so the honest description below is what actually steers it.
+      deepagents' auto-injected default general-purpose subagent (graph.py:717 in
+      deepagents 0.6.12), so the unsafe default GP — which would inherit
+      ``[*tools, ask_user]`` — never gets built. The model decides whether to
+      delegate from ``description``, not ``name``, so the honest description below
+      is what actually steers it.
     - ``tools=_subagent_tools(tools)``: explicit subset (blacklist). Explicit
       ``tools`` is REQUIRED so the subagent does not inherit ask_user (§4.3).
     - NO ``model`` key: the subagent inherits the parent's per-task tenant model
-      (graph.py:608 ``spec.get("model", model)``).
+      (graph.py:633 ``spec.get("model", model)``).
     - NO ``permissions`` / ``interrupt_on`` keys: this is the SAFETY BASIS
       (design §3.1). Without them the subagent stack carries no
       HumanInTheLoopMiddleware and no filesystem interrupts, so the subagent has
@@ -674,9 +680,16 @@ async def create_linsight_agent(
     # weak model that keeps calling write_file with a truncated/missing content
     # arg) — soft nudge then graceful salvage-and-abort, instead of spinning to
     # recursion_limit. One instance per graph, same as the resilience middleware.
+    # Binary guards: keep raw upload bytes out of the model conversation. The
+    # workspace deliberately carries ORIGINAL xlsx/docx/pdf next to their .md views
+    # (for the code interpreter), and deepagents' ``read_file`` would happily turn
+    # those into file/audio/video content blocks — a hard 400 on most endpoints, a
+    # client-side ValueError for video, and silent mojibake for docx/xlsx.
+    has_code_interpreter = any(getattr(t, "name", None) == CODE_INTERPRETER_TOOL for t in tools)
     middlewares: list = [
         build_resilience_middleware(linsight_conf, is_subagent=False),
         build_tool_loop_breaker_middleware(linsight_conf, is_subagent=False),
+        *build_binary_guards(has_code_interpreter),
     ]
 
     # F035 Track D — skills (RE-ENABLED 2026-06-24, Fork X). The run's allowed skill
@@ -689,8 +702,8 @@ async def create_linsight_agent(
     # ``skills=`` param (which would reuse the workspace backend) discovers nothing.
     # SkillsMiddleware registers NO file tools, so this second backend does NOT shadow
     # the workspace read_file/write_file (the 2026-06-16 disable concern does not hold
-    # in deepagents 0.6.8); the model reads the same /skills/<name>/SKILL.md paths back
-    # through the WorkspaceBackend. The copy is the whitelist gate — no per-run
+    # in deepagents 0.6.8; re-verified unchanged in 0.6.12); the model reads the same
+    # /skills/<name>/SKILL.md paths back through the WorkspaceBackend. The copy is the whitelist gate — no per-run
     # active_skills config is threaded.
     if skills_present and file_dir:
         from deepagents.backends.filesystem import FilesystemBackend
@@ -720,7 +733,7 @@ async def create_linsight_agent(
     # can park-and-release for user input (F035 §4.6); deepagents ships no
     # built-in ask-human tool, so we inject our own.
     # design #1 §4.1/§4.2: a single MVP researcher subagent, named
-    # "general-purpose" to suppress deepagents' auto default GP (graph.py:693).
+    # "general-purpose" to suppress deepagents' auto default GP (graph.py:717).
     # ask_user is appended ONLY to the MAIN graph tools below; the subagent
     # receives _subagent_tools(tools), which never includes ask_user.
     #
@@ -744,6 +757,12 @@ async def create_linsight_agent(
         # Same tool-loop breaker on the subagent's own graph (its tool calls run in
         # a separate subgraph the main-graph middleware never wraps).
         build_tool_loop_breaker_middleware(linsight_conf, is_subagent=True),
+        # The researcher owns read_file too, and its subgraph is likewise outside
+        # the main-graph middleware — without its own pair of guards a subagent
+        # reading an original would fail the whole task. It sees the same code
+        # interpreter as the main graph (not in _SUBAGENT_TOOL_DENY), so the flag
+        # carries over; revisit if it is ever added to that deny list.
+        *build_binary_guards(has_code_interpreter),
         # Same tail language directive on the subagent's own stack (last -> after
         # its TodoList/Filesystem framework prompts), so the researcher also
         # reasons in the user's language.

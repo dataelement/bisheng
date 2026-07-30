@@ -184,6 +184,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
     title: chatTitle,
     isLoading,
     isStreaming,
+    isParsingMedia,
     sendMessage,
     stopGenerating,
     regenerate,
@@ -262,8 +263,10 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
   //  - the first submit on /c/new self-rewrites the URL to the real id; that is
   //    the SAME conversation, so the user's chosen mode is preserved (they can
   //    keep composing task turns, or toggle off manually).
-  //  - any OTHER navigation to an existing conversation (id !== 'new') leaves
-  //    task mode (you switched to viewing a daily chat, not composing a task).
+  //  - any OTHER navigation to an existing conversation (id !== 'new') defaults
+  //    to off HERE, before history loads (so a stale mode from another tab can't
+  //    leak in). The restore effect below re-enters task mode once the loaded
+  //    history proves this is a task conversation — a daily chat stays off.
   // location.key changes on every navigation so re-entering /c/new with the
   // same state still re-triggers.
   useEffect(() => {
@@ -366,7 +369,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
     // task workspace). Skills are still resolved separately.
     if (taskMode && canUseTaskMode) {
       const trimmed = text.trim();
-      if (!trimmed && !(files || []).length) return;
+      if (!trimmed) return;
       sendMessage(trimmed, files, { taskMode: true });
       setInputText('');
       return;
@@ -393,6 +396,36 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
     }
     return '';
   }, [messages]);
+
+  // F035: a conversation that already holds a task turn IS a task-mode
+  // conversation. Guard on the message's own conversationId so the stale
+  // previous-conversation message list that lingers for one commit during a
+  // navigation transition can't misfire (loaded rows carry chat_id, the
+  // optimistic promote carries the real chat_id — both equal conversationId
+  // once we're settled on this conversation).
+  const isTaskConversation = useMemo(
+    () =>
+      messages.some(
+        (m: any) =>
+          m?.category === 'task' &&
+          m?.linsightSessionVersionId &&
+          m?.conversationId === conversationId,
+      ),
+    [messages, conversationId],
+  );
+
+  // F035: restore task mode when returning to a task conversation. The reset
+  // effect above defaults every existing conversation to off before its history
+  // loads (so a stale mode from another tab doesn't leak in); this re-enables
+  // the toggle once the history resolves and proves this is a task conversation,
+  // so the user can keep composing task turns without re-toggling. Not gated on
+  // the toggle itself — an explicit manual off within a visit stays off (it
+  // doesn't change these deps), but a fresh navigation back re-enters task mode.
+  useEffect(() => {
+    if (conversationId === 'new') return;
+    if (isTaskConversation && canUseTaskMode) setTaskMode(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversationId, isTaskConversation, canUseTaskMode]);
 
   // F035: workspace drawer for the chat-embedded task mode. Lifted to ChatView
   // (the task turn renders inline per message, but the entry button lives in the
@@ -656,6 +689,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                               disabled={!bsConfig?.models?.length || !!shareToken}
                               sendDisabled={taskRunning}
                               isStreaming={isStreaming}
+                              isParsingMedia={isParsingMedia}
                               // Parked awaiting the user → not "running": drop the Stop
                               // button (sendDisabled still blocks a new round until the
                               // current one resolves). The user replies via the
@@ -832,6 +866,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                             disabled={!bsConfig?.models?.length || !!shareToken}
                             sendDisabled={taskRunning}
                             isStreaming={isStreaming}
+                            isParsingMedia={isParsingMedia}
                             features={{ taskModeEntry: canUseTaskMode, taskMode: taskMode && canUseTaskMode }}
                             onToggleTaskMode={() => setTaskMode((v) => !v)}
                             placeholder={taskMode

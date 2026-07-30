@@ -2,6 +2,7 @@
  * Direct API calls for the AI chat system.
  */
 import http from "~/api/request";
+import { normalizeHistoryMediaFiles } from "~/utils/mediaAttachmentUtils";
 
 // --- Endpoints ---
 const API = {
@@ -124,6 +125,10 @@ export interface ChatMessage {
         ServiceBusyNotice + Retry for transient codes (rate limit / busy) vs the red
         error bubble for terminal ones. */
     errorCode?: number;
+    /** Human-readable failure copy for an errored assistant row. Kept apart from
+        `text` so a stream that failed *after* emitting an answer keeps that answer
+        renderable — overwriting `text` would destroy it. */
+    errorText?: string;
     unfinished?: boolean;
     isCreatedByUser?: boolean;
     createdAt?: string;
@@ -247,13 +252,16 @@ function mapAgentResponseItem(row: any): ChatMessage {
         isCreatedByUser: !row.is_bot,
         createdAt: row.create_time,
         category,
-        files: Array.isArray(row.files) ? row.files : [],
+        files: normalizeHistoryMediaFiles(Array.isArray(row.files) ? row.files : []),
         citations: Array.isArray(row.citations) ? row.citations : null,
         liked: row.liked,
     };
 
     if (category === "question" && raw && typeof raw === "object") {
         base.text = raw.query ?? "";
+        if (!base.files?.length && Array.isArray(raw.files)) {
+            base.files = normalizeHistoryMediaFiles(raw.files);
+        }
         return base;
     }
 

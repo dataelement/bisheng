@@ -25,6 +25,27 @@ ABSOLUTE_PATH_NOTICE = (
     "deliverables or `scratch/temp.png` for intermediate files."
 )
 
+# Delivery zones of the executor working dir. ``output/`` is the ONLY zone the
+# linsight harvester (``get_final_result_file``) treats as deliverables;
+# ``scratch/`` is explicitly intermediate.
+OUTPUT_DIR_NAME = "output"
+SCRATCH_DIR_NAME = "scratch"
+
+# A file created at the working-directory ROOT sits in no zone at all, so it was
+# never delivered — the model just wrote ``report.xlsx`` instead of
+# ``output/report.xlsx``. The tool description asks for ``output/`` but that is a
+# soft contract the model regularly misses (and when it does, the deliverable
+# silently disappears from the result panel). The executor therefore relocates
+# such files itself and tells the model the new paths, because the old ones stop
+# resolving after the move.
+RELOCATED_PATH_NOTICE_HEADER = (
+    "\n\n[SYSTEM NOTICE] The following file(s) were written to the working-directory "
+    "ROOT, which is NOT a delivery zone — files there are never delivered to the user. "
+    "They have been MOVED into `output/`. Use the NEW paths from now on; the old paths "
+    "no longer exist. To avoid this, write deliverables to `output/` and intermediate "
+    "files to `scratch/` directly.\n"
+)
+
 
 class BaseExecutor(ABC):
     def __init__(self, minio: dict, **kwargs):
@@ -49,6 +70,20 @@ class BaseExecutor(ABC):
         if code and _ABSOLUTE_DELIVERABLE_RE.search(code):
             return ABSOLUTE_PATH_NOTICE
         return ""
+
+    @staticmethod
+    def relocation_advisory(moved: list[tuple[str, str]]) -> str:
+        """Corrective notice listing ``(old_rel, new_rel)`` relocations into
+        ``output/``; empty string when nothing was moved.
+
+        Paired with the relocation itself (not a substitute for it): the move is
+        what makes the file deliverable, the notice is what keeps the model's
+        follow-up reads from hitting a path that no longer exists.
+        """
+        if not moved:
+            return ""
+        lines = "\n".join(f"- {old} -> {new}" for old, new in moved)
+        return RELOCATED_PATH_NOTICE_HEADER + lines
 
     def upload_minio(
         self,

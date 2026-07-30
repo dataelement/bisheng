@@ -87,10 +87,9 @@ class Milvus(_LangchainMilvus):
         except Exception:
             # Non-critical: leave fields as-is and let the normal insert path
             # surface any real schema/connection error.
-            logger.warning(
+            logger.opt(exception=True).warning(
                 "milvus _ensure_fields_loaded failed for collection={}; proceeding without field refresh",
                 self.collection_name,
-                exc_info=True,
             )
 
     def add_texts(self, *args: Any, **kwargs: Any) -> list[str]:

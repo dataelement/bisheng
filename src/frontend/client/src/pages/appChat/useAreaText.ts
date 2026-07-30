@@ -2,8 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { useRecoilState, useRecoilValue } from "recoil";
 import { FLOW_TYPES } from ".";
 import { SkillMethod } from "./appUtils/skillMethod";
-import { chatFileState, chatIdState, currentChatState, runningState, submitDataState, tabsState } from "./store/atoms";
+import { chatFileState, chatIdState, currentChatState, runningState, submitDataState, tabsState, bishengConfState } from "./store/atoms";
 import { ActionType } from "./useWebsocket";
+import { fileAcceptToInputAccept, normalizeFileAccept } from "./fileAcceptUtils";
 
 const eventTarget = new EventTarget();
 const AREA_TEXT_EVENT = 'AREA_TEXT_EVENT'
@@ -22,6 +23,7 @@ export const FileTypes = {
     ALL: ['.PNG', '.JPEG', '.JPG', '.BMP', '.PDF', '.OFD', '.TXT', '.MD', '.HTML', '.XLS', '.XLSX', '.CSV', '.DOC', '.DOCX', '.PPT', '.PPTX'],
     IMAGE: ['.PNG', '.JPEG', '.JPG', '.BMP'],
     FILE: ['.PDF', '.OFD', '.TXT', '.MD', '.HTML', '.XLS', '.XLSX', '.CSV', '.DOC', '.DOCX', '.PPT', '.PPTX'],
+    MEDIA: ['.MP3', '.WAV', '.M4A', '.AAC', '.FLAC', '.OGG', '.MP4', '.MOV', '.AVI', '.MKV', '.WEBM'],
 }
 
 export const useAreaText = () => {
@@ -32,6 +34,7 @@ export const useAreaText = () => {
     const chatState = useRecoilValue(currentChatState)
     const [chatId] = useRecoilState(chatIdState)
     const [tabs] = useRecoilState(tabsState)
+    const bishengConfig = useRecoilValue(bishengConfState)
 
     const [accepts, setAccepts] = useState('')
 
@@ -171,13 +174,11 @@ export const useAreaText = () => {
             switch (action) {
                 case EVENT_TYPE.FILE_ACCEPTS:
                     const { chatId: _chatId, fileAccept } = event.detail
-                    let accepts = FileTypes.IMAGE.join(',') + ',' + FileTypes.FILE.join(',')
-                    if (fileAccept === 'image') {
-                        accepts = FileTypes.IMAGE.join(',')
-                    } else if (fileAccept === 'file') {
-                        accepts = FileTypes.FILE.join(',')
-                    }
-                    chatId === _chatId && setAccepts(accepts)
+                    const kinds = normalizeFileAccept(fileAccept, {
+                        mediaEnabled: !!bishengConfig?.enable_media_upload,
+                    })
+                    const acceptStr = fileAcceptToInputAccept(kinds)
+                    chatId === _chatId && setAccepts(acceptStr || '*')
                     break
                 case EVENT_TYPE.FORM_SUBMIT:
                     handleFormSubmit(event.detail)

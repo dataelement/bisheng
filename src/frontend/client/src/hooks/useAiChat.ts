@@ -18,6 +18,7 @@ import { useGetBsConfig } from "~/hooks/queries/data-provider";
 import { useLinsightManager } from "~/hooks/useLinsightManager";
 import { startLinsight, getLinsightSessionVersionList } from "~/api/linsight";
 import { SopStatus, taskModeSkillsState } from "~/store/linsight";
+import { isMediaAttachmentFile, type MediaParsingState } from "~/utils/mediaAttachmentUtils";
 
 const NO_PARENT = "00000000-0000-0000-0000-000000000000";
 
@@ -28,6 +29,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
     const [conversationId, setConversationId] = useState(initialConversationId);
     const [title, setTitle] = useState("");
     const [isStreaming, setIsStreaming] = useState(false);
+    const [isParsingMedia, setIsParsingMedia] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [sseSubmission, setSseSubmission] = useState<SSESubmission | null>(
         null
@@ -160,15 +162,70 @@ export default function useAiChat(initialConversationId: string = "new", isLings
     // is removed.
 
     // --- Send a message ---
+    const finishMediaParsing = useCallback((userMsgId: string) => {
+        setIsParsingMedia(false);
+        setMessages((prev) => {
+            let matched = false;
+            const next = prev.map((m) => {
+                if (!m.isCreatedByUser || !m.files?.length) return m;
+                const hasParsingMedia = m.files.some(
+                    (f) => isMediaAttachmentFile(f) && f.parsingState === 'parsing',
+                );
+                if (!hasParsingMedia) return m;
+                const matchesTarget =
+                    m.messageId === userMsgId || String(m.messageId) === String(userMsgId);
+                if (!matchesTarget) return m;
+                matched = true;
+                return {
+                    ...m,
+                    files: m.files.map((f) =>
+                        isMediaAttachmentFile(f)
+                            ? { ...f, parsingState: 'done' as MediaParsingState }
+                            : f,
+                    ),
+                };
+            });
+            if (matched) return next;
+
+            for (let i = next.length - 1; i >= 0; i -= 1) {
+                const m = next[i];
+                if (
+                    !m.isCreatedByUser
+                    || !m.files?.some((f) => isMediaAttachmentFile(f) && f.parsingState === 'parsing')
+                ) {
+                    continue;
+                }
+                next[i] = {
+                    ...m,
+                    files: m.files!.map((f) =>
+                        isMediaAttachmentFile(f)
+                            ? { ...f, parsingState: 'done' as MediaParsingState }
+                            : f,
+                    ),
+                };
+                break;
+            }
+            return next;
+        });
+    }, []);
+
     const sendMessage = useCallback(
         (text: string, files?: any[] | null, opts?: { taskMode?: boolean }) => {
-            if (!text.trim() || isStreaming) return;
+            if ((!text.trim() && !(files?.length)) || isStreaming) return;
             const taskMode = !!opts?.taskMode;
 
-            // Drop client-only fields (e.g. the local `previewUrl` blob string used
-            // for input-box image previews) before they reach the message state or
-            // the SSE payload — the backend only cares about the file ids/paths.
-            const cleanFiles = (files ?? []).map(({ previewUrl, ...rest }) => rest);
+            const filesForDisplay = (files ?? []).map((f) =>
+                isMediaAttachmentFile(f) ? { ...f, parsingState: 'parsing' as MediaParsingState } : f,
+            );
+            const hasMediaAttachments = filesForDisplay.some(isMediaAttachmentFile);
+            if (hasMediaAttachments) {
+                setIsParsingMedia(true);
+            }
+
+            // Strip blob preview URLs and UI-only parsing flags before SSE payload.
+            const cleanFiles = filesForDisplay.map(
+                ({ previewUrl, mediaPreviewUrl, mediaCoverUrl, parsingState, ...rest }) => rest,
+            );
 
             const parentMsg = messagesRef.current[messagesRef.current.length - 1];
             const parentMessageId = parentMsg?.messageId ?? NO_PARENT;
@@ -188,7 +245,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                 conversationId: currentConvoId ?? "",
                 messageId: userMessageId,
                 error: false,
-                files: cleanFiles,
+                files: filesForDisplay,
             };
 
             // Create placeholder response
@@ -481,6 +538,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                     }
                 },
                 onMessage: (text, messageId) => {
+                    finishMediaParsing(realUserMessageId);
                     console.log('[AiChat] message:', { text: text?.slice(0, 50), messageId });
                     setMessages((prev) => {
                         const msgs = [...prev];
@@ -500,6 +558,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                 // as separate sections instead of regex-parsing a `:::thinking:::`
                 // envelope.
                 onAgentUpdate: (patch) => {
+                    finishMediaParsing(realUserMessageId);
                     setMessages((prev) => {
                         const msgs = [...prev];
                         const lastMsg = msgs[msgs.length - 1];
@@ -593,14 +652,19 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                         }
                     }
                 },
+                // The failure copy lands in `errorText`, never in `text`: the backend
+                // emits the SSE error event *before* it finishes the turn, so a stream
+                // that already produced an answer would lose it if we overwrote `text`
+                // (and the bubble would then render that answer as raw error text).
                 onError: (error, errorCode) => {
+                    finishMediaParsing(realUserMessageId);
                     setMessages((prev) => {
                         const msgs = [...prev];
                         const lastMsg = msgs[msgs.length - 1];
                         if (lastMsg && !lastMsg.isCreatedByUser) {
                             msgs[msgs.length - 1] = {
                                 ...lastMsg,
-                                text: error || "发生错误，请重试",
+                                errorText: error || localize("workstation.chat.answer_failed"),
                                 error: true,
                                 errorCode,
                             };
@@ -609,6 +673,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                     });
                 },
                 onEnd: () => {
+                    finishMediaParsing(realUserMessageId);
                     setIsStreaming(false);
                     setSseSubmission(null);
                 },
@@ -618,13 +683,14 @@ export default function useAiChat(initialConversationId: string = "new", isLings
             setIsStreaming(true);
             setSseSubmission(submission);
         },
-        [conversationId, isStreaming, chatModel, selectedOrgKbs, searchType, selectedAgentTools, dailyTaskSkills, isLingsi, createLinsight, updateLinsight, localize, queryClient]
+        [conversationId, isStreaming, chatModel, selectedOrgKbs, searchType, selectedAgentTools, dailyTaskSkills, isLingsi, createLinsight, updateLinsight, localize, queryClient, finishMediaParsing]
     );
 
     // --- Stop generating ---
     const stopGenerating = useCallback(() => {
         abortSSE();
         setIsStreaming(false);
+        setIsParsingMedia(false);
         setSseSubmission(null);
     }, [abortSSE]);
 
@@ -761,6 +827,8 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                         setConversationId(data.conversation.conversationId);
                     }
                 },
+                // Same as the send path: failure copy goes to `errorText` so a
+                // partially-streamed answer survives the error.
                 onError: (error, errorCode) => {
                     setMessages((prev) => {
                         const msgs = [...prev];
@@ -770,7 +838,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                         if (idx >= 0) {
                             msgs[idx] = {
                                 ...msgs[idx],
-                                text: error || "发生错误，请重试",
+                                errorText: error || localize("workstation.chat.answer_failed"),
                                 error: true,
                                 errorCode,
                             };
@@ -787,7 +855,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
             setIsStreaming(true);
             setSseSubmission(submission);
         },
-        [conversationId, isStreaming, chatModel, selectedOrgKbs, searchType, selectedAgentTools]
+        [conversationId, isStreaming, chatModel, selectedOrgKbs, searchType, selectedAgentTools, localize]
     );
 
     return {
@@ -800,6 +868,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
         title,
         isLoading,
         isStreaming,
+        isParsingMedia,
 
         // Actions
         sendMessage,

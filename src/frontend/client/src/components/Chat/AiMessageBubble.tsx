@@ -33,7 +33,8 @@ import {
 } from "~/components/Chat/MessageSelection";
 import { copyText, cn } from "~/utils";
 import type { AgentEvent, ChatMessage } from "~/api/chatApi";
-import { getFileTypebyFileName } from "~/components/ui/icon/File/FileIcon";
+import { MediaAttachmentChip, isMediaChipFile } from "~/components/Chat/attachments/MediaAttachmentChip";
+import { ChatHistoryFileRow } from "~/components/Chat/attachments/ChatHistoryFileRow";
 
 // Transient/retryable backend error codes surfaced by daily-mode chat — LLM rate
 // limit (12046), generic busy (429/503), thread-pool full (10540), dept concurrency
@@ -41,51 +42,20 @@ import { getFileTypebyFileName } from "~/components/ui/icon/File/FileIcon";
 // red error bubble. Mirrors the classifier's RETRYABLE intent on the status-code side.
 const RETRYABLE_ERROR_CODES = new Set([12046, 429, 503, 10540, 12045]);
 
-// Map an uploaded file's extension to a bisheng outlined file-type icon.
-// Anything not listed falls back to the generic Outlined.File icon.
-const FILE_TYPE_ICONS: Record<string, typeof Outlined.File> = {
-    // FileExcel
-    xls: Outlined.FileExcel,
-    xlsx: Outlined.FileExcel,
-    csv: Outlined.FileExcel,
-    et: Outlined.FileExcel,
-    // FilePdf
-    pdf: Outlined.FilePdf,
-    ppt: Outlined.FilePdf,
-    dps: Outlined.FilePdf,
-    // FileTxt
-    txt: Outlined.FileTxt,
-    // FileWord
-    doc: Outlined.FileWord,
-    docx: Outlined.FileWord,
-    wps: Outlined.FileWord,
-    // FileImage
-    png: Outlined.FileImage,
-    jpg: Outlined.FileImage,
-    jpeg: Outlined.FileImage,
-    bmp: Outlined.FileImage,
-    // FileEditing
-    md: Outlined.FileEditing,
-    // File (generic)
-    html: Outlined.File,
-};
-
 /**
- * Uploaded-file list for a user message: a type icon + filename per row, never a
- * content preview. Stacks vertically and scrolls past 120px. A linear-gradient
- * mask softly fades the top/bottom edge (instead of a hard clip) whenever there
- * is more content to scroll in that direction — same fade trick used elsewhere.
+ * Uploaded-file list for a user message. All attachments render as square
+ * thumbnails in a single horizontal row (media + documents/images).
  */
 function UploadedFileList({ files }: { files: any[] }) {
     const scrollRef = useRef<HTMLDivElement>(null);
-    const [fade, setFade] = useState({ top: false, bottom: false });
+    const [fade, setFade] = useState({ left: false, right: false });
 
     const updateFade = useCallback(() => {
         const el = scrollRef.current;
         if (!el) return;
-        const top = el.scrollTop > 0;
-        const bottom = el.scrollTop + el.clientHeight < el.scrollHeight - 1;
-        setFade((prev) => (prev.top === top && prev.bottom === bottom ? prev : { top, bottom }));
+        const left = el.scrollLeft > 0;
+        const right = el.scrollLeft + el.clientWidth < el.scrollWidth - 1;
+        setFade((prev) => (prev.left === left && prev.right === right ? prev : { left, right }));
     }, []);
 
     useEffect(() => {
@@ -93,37 +63,35 @@ function UploadedFileList({ files }: { files: any[] }) {
     }, [files, updateFade]);
 
     const maskStyle = useMemo(() => {
-        if (!fade.top && !fade.bottom) return undefined;
-        const topStop = fade.top ? "16px" : "0";
-        const bottomStop = fade.bottom ? "calc(100% - 16px)" : "100%";
-        const value = `linear-gradient(to bottom, transparent, #000 ${topStop}, #000 ${bottomStop}, transparent)`;
+        if (!fade.left && !fade.right) return undefined;
+        const leftStop = fade.left ? "16px" : "0";
+        const rightStop = fade.right ? "calc(100% - 16px)" : "100%";
+        const value = `linear-gradient(to right, transparent, #000 ${leftStop}, #000 ${rightStop}, transparent)`;
         return { maskImage: value, WebkitMaskImage: value };
     }, [fade]);
 
     if (!files || files.length === 0) return null;
 
     return (
-        <div
-            ref={scrollRef}
-            onScroll={updateFade}
-            style={maskStyle}
-            className="scrollbar-os mb-2 mt-1 flex max-h-[120px] max-w-sm flex-col gap-3 overflow-y-auto"
-        >
-            {files.map((file, i) => {
-                const fileName = file.name || file.file_name || "File";
-                const fileType = getFileTypebyFileName(fileName);
-                const FileTypeIcon = FILE_TYPE_ICONS[fileType] ?? Outlined.File;
-                return (
-                    <div key={i} className="flex shrink-0 items-center gap-1 text-[#999999]">
-                        <FileTypeIcon size={12} className="shrink-0 text-[#CCCCCC]" />
-                        <div className="min-w-0 flex-1 overflow-hidden">
-                            <div className="truncate text-xs" title={fileName}>
-                                {fileName}
-                            </div>
-                        </div>
-                    </div>
-                );
-            })}
+        <div className="mb-2 mt-1 flex max-w-sm flex-col gap-2">
+            <div
+                ref={scrollRef}
+                onScroll={updateFade}
+                style={maskStyle}
+                className="scrollbar-os flex gap-2 overflow-x-auto"
+            >
+                {files.map((file, i) =>
+                    isMediaChipFile(file) ? (
+                        <MediaAttachmentChip
+                            key={`media-${i}`}
+                            file={file}
+                            variant="message"
+                        />
+                    ) : (
+                        <ChatHistoryFileRow key={`file-${i}`} file={file} />
+                    ),
+                )}
+            </div>
         </div>
     );
 }
@@ -573,6 +541,19 @@ function AssistantBubble({
         }
         return { ...parseMessageText(message.text || ""), finalTextIdx: -1 };
     }, [message.text, message.events, isAgentNative]);
+
+    // True only when `regularContent` came from the events timeline's trailing
+    // text block — i.e. it is a real answer the model streamed in. Every other
+    // path falls back to `message.text`, which `onError` overwrites with the
+    // error copy, so `regularContent` alone can't tell answer from error text.
+    const hasAnswerBody = finalTextIdx >= 0 && !!regularContent;
+
+    // What the failure notice says. When an answer body survived, the specific
+    // provider error is noise — what matters is that the answer is cut short.
+    const errorNotice = hasAnswerBody
+        ? localize("workstation.chat.answer_interrupted")
+        : message.errorText || regularContent || localize("workstation.chat.answer_failed");
+
     const { data: bsConfig } = useGetBsConfig()
 
     const modelName = message.sender || "AI";
@@ -681,30 +662,12 @@ function AssistantBubble({
                     </div>
                 )}
 
-                {/* Error state */}
-                {showWaiting ? null : message.error ? (
-                    isTransientError ? (
-                        // Transient upstream hiccup (rate limit / busy): calm neutral
-                        // notice + Retry (re-sends the last user message via regenerate),
-                        // never the red error bubble.
-                        <ServiceBusyNotice
-                            desc={regularContent || localize("api_errors.12046")}
-                            onRetry={onRegenerate}
-                        />
-                    ) : (
-                        <div
-                            className={cn(
-                                "text-red-500 bg-red-50 px-3 py-2",
-                                knowledgeChatLayout
-                                    ? "rounded-[2px] text-[14px] leading-[22px]"
-                                    : "text-sm rounded-[10px]"
-                            )}
-                        >
-                            {regularContent || "发生错误，请重试"}
-                        </div>
-                    )
-                ) : (
-                    /* Main content — uses existing Markdown with citation support */
+                {/* Main content — uses existing Markdown with citation support.
+                    Rendered even when the turn carries an error, as long as a real
+                    answer body streamed in: a stream that fails *after* emitting text
+                    must keep its markdown + citation rendering instead of degrading to
+                    raw text (which also leaks the private-use citation markers). */}
+                {!showWaiting && (hasAnswerBody || !message.error) && (
                     <div
                         className={cn(
                             "bs-mkdown message-content overflow-hidden break-words [word-break:break-all]",
@@ -730,6 +693,36 @@ function AssistantBubble({
                             />
                         )}
                     </div>
+                )}
+
+                {/* Error state — replaces the body when nothing streamed in, and sits
+                    below it when a partial answer did. */}
+                {!showWaiting && message.error && (
+                    isTransientError ? (
+                        // Transient upstream hiccup (rate limit / busy): calm neutral
+                        // notice + Retry (re-sends the last user message via regenerate),
+                        // never the red error bubble.
+                        <ServiceBusyNotice
+                            desc={
+                                hasAnswerBody
+                                    ? errorNotice
+                                    : message.errorText || localize("api_errors.12046")
+                            }
+                            onRetry={onRegenerate}
+                        />
+                    ) : (
+                        <div
+                            className={cn(
+                                "text-red-500 bg-red-50 px-3 py-2",
+                                hasAnswerBody && "mt-2",
+                                knowledgeChatLayout
+                                    ? "rounded-[2px] text-[14px] leading-[22px]"
+                                    : "text-sm rounded-[10px]"
+                            )}
+                        >
+                            {errorNotice}
+                        </div>
+                    )
                 )}
 
                 {/* Action buttons (only show when not streaming). Suppressed on the
