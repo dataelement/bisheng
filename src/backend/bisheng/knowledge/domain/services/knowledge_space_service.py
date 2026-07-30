@@ -106,6 +106,7 @@ from bisheng.core.openfga.client import (
 )
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 from bisheng.database.models.department import DepartmentDao, UserDepartment, UserDepartmentDao
+from bisheng.database.models.department_admin_grant import DepartmentAdminGrantDao
 from bisheng.database.models.group import GroupDao
 from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.review_tags import ReviewTag, ReviewTagDao
@@ -114,8 +115,8 @@ from bisheng.database.models.tenant import TenantDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.department.domain.services.department_service import DepartmentService
 from bisheng.knowledge.domain.constants import (
-    BUSINESS_DOMAIN_OPTIONS,
     BUSINESS_DOMAIN_CODE_KEY,
+    BUSINESS_DOMAIN_OPTIONS,
     get_business_domain_code_from_file,
     normalize_business_domain_code,
     parse_shougang_file_encoding_codes,
@@ -226,9 +227,6 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
 from bisheng.knowledge.domain.services.department_file_view_access_service import (
     DepartmentFileAccessStatus,
 )
-from bisheng.knowledge.domain.services.file_classification_label_service import (
-    FileClassificationLabelService,
-)
 from bisheng.knowledge.domain.services.favorite_notify import (
     FAVORITE_SOURCE_BUSINESS_DOMAIN_UPDATED,
     FAVORITE_SOURCE_DELETED,
@@ -239,6 +237,9 @@ from bisheng.knowledge.domain.services.favorite_notify import (
     can_user_view_favorite_source,
     collect_favorite_recipient_snapshots,
     enqueue_favorite_change_events,
+)
+from bisheng.knowledge.domain.services.file_classification_label_service import (
+    FileClassificationLabelService,
 )
 from bisheng.knowledge.domain.services.free_space_migration_service import (
     FreeSpaceMigrationService,
@@ -1536,30 +1537,27 @@ class KnowledgeSpaceService(KnowledgeUtils):
         """Return departments visible to the current user for space creation.
 
         Global admins (and approval delegates) see every active department in the
-        tenant; other users only see the departments they belong to plus their
-        descendants.
+        tenant; other users only see the departments they are administrators of
+        plus their descendants.
         """
         if self.login_user.is_admin() or approval_request:
             return await DepartmentDao.aget_active_by_tenant(int(self.login_user.tenant_id))
 
-        user_departments = await UserDepartmentDao.aget_user_departments(self.login_user.user_id)
-        user_department_ids = {
-            int(ud.department_id) for ud in user_departments if getattr(ud, "department_id", None) is not None
-        }
-        if not user_department_ids:
+        admin_department_ids = await DepartmentAdminGrantDao.aget_department_ids_by_user_id(self.login_user.user_id)
+        if not admin_department_ids:
             return []
 
         all_departments = await DepartmentDao.aget_active_by_tenant(int(self.login_user.tenant_id))
-        user_dept_paths = {
-            dept.path for dept in all_departments if dept.id in user_department_ids and getattr(dept, "path", None)
+        admin_dept_paths = {
+            dept.path for dept in all_departments if dept.id in admin_department_ids and getattr(dept, "path", None)
         }
-        if not user_dept_paths:
+        if not admin_dept_paths:
             return []
 
         return [
             dept
             for dept in all_departments
-            if getattr(dept, "path", None) and any(dept.path.startswith(path) for path in user_dept_paths)
+            if getattr(dept, "path", None) and any(dept.path.startswith(path) for path in admin_dept_paths)
         ]
 
     async def _department_options_for_create(
@@ -5669,20 +5667,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
             excluded_file_ids: set[int] = set()
             if self.version_repo is not None:
                 excluded_file_ids.update(
-                    await self.version_repo.find_non_primary_file_ids_by_knowledge_ids(
-                        space_ids
-                    )
-                    or []
+                    await self.version_repo.find_non_primary_file_ids_by_knowledge_ids(space_ids) or []
                 )
             from bisheng.knowledge.domain.services.knowledge_recycle_service import (
                 KnowledgeRecycleService,
             )
 
             recycled_groups = await asyncio.gather(
-                *(
-                    KnowledgeRecycleService.list_recycled_file_ids(space_id)
-                    for space_id in space_ids
-                )
+                *(KnowledgeRecycleService.list_recycled_file_ids(space_id) for space_id in space_ids)
             )
             for recycled_ids in recycled_groups:
                 excluded_file_ids.update(recycled_ids or [])
@@ -6051,33 +6043,21 @@ class KnowledgeSpaceService(KnowledgeUtils):
             space_id: int,
             files: list[KnowledgeFile],
         ) -> list[KnowledgeFile]:
-            candidates = [
-                file
-                for file in files
-                if self._is_qa_scope_file(file, space_id)
-            ]
+            candidates = [file for file in files if self._is_qa_scope_file(file, space_id)]
             if not candidates:
                 return []
 
             excluded_ids: set[int] = set()
             if self.version_repo is not None:
                 excluded_ids.update(
-                    await self.version_repo.find_non_primary_file_ids_by_knowledge_ids(
-                        [space_id]
-                    )
-                    or []
+                    await self.version_repo.find_non_primary_file_ids_by_knowledge_ids([space_id]) or []
                 )
             from bisheng.knowledge.domain.services.knowledge_recycle_service import (
                 KnowledgeRecycleService,
             )
 
-            excluded_ids.update(
-                await KnowledgeRecycleService.list_recycled_file_ids(space_id)
-                or []
-            )
-            current_candidates = [
-                file for file in candidates if int(file.id) not in excluded_ids
-            ]
+            excluded_ids.update(await KnowledgeRecycleService.list_recycled_file_ids(space_id) or [])
+            current_candidates = [file for file in candidates if int(file.id) not in excluded_ids]
             if not current_candidates:
                 return []
             return await self._filter_visible_child_items(
@@ -6192,14 +6172,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
             raise ValueError("一次最多可选择20个文件进行问答。")
         if denied_resource_count:
             logger.info(
-                "Portal QA filtered resources outside workbench scope "
-                f"denied_resource_count={denied_resource_count}"
+                f"Portal QA filtered resources outside workbench scope denied_resource_count={denied_resource_count}"
             )
         if denied_space_count:
-            logger.info(
-                "Portal QA filtered spaces outside workbench scope "
-                f"denied_space_count={denied_space_count}"
-            )
+            logger.info(f"Portal QA filtered spaces outside workbench scope denied_space_count={denied_space_count}")
         if deduped_count == 0:
             logger.info(
                 "Portal QA scope resolved to no authorized files; "
@@ -13222,11 +13198,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         delete_plan = await self._plan_cascade_version_links_on_delete(file_ids)
         favorite_delete_events = await self._prepare_favorite_delete_events(
             delete_plan.expanded_file_ids,
-            source_files=[
-                child
-                for child in children
-                if child.file_type != FileType.DIR.value
-            ],
+            source_files=[child for child in children if child.file_type != FileType.DIR.value],
         )
         await self._apply_cascade_version_delete_plan(delete_plan)
         expanded_file_ids = delete_plan.expanded_file_ids
@@ -13643,11 +13615,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
             )
 
         old_file_level_path = file_record.file_level_path or ""
-        old_location = (
-            await self._resolve_shougang_portal_source_folder_paths(
-                [file_record.model_dump()]
-            )
-        ).get(file_id, "根目录")
+        old_location = (await self._resolve_shougang_portal_source_folder_paths([file_record.model_dump()])).get(
+            file_id, "根目录"
+        )
         old_parent_type, old_parent_id = self._parent_tuple_ref_from_level_path(old_file_level_path, space_id)
         if target_folder_id is None:
             await self._require_permission_id("knowledge_space", space_id, "upload_file")
@@ -13701,11 +13671,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 entry_ids=[int(file_record.id)],
             )
         if next_file_level_path != old_file_level_path:
-            new_location = (
-                await self._resolve_shougang_portal_source_folder_paths(
-                    [updated_file.model_dump()]
-                )
-            ).get(file_id, "根目录")
+            new_location = (await self._resolve_shougang_portal_source_folder_paths([updated_file.model_dump()])).get(
+                file_id, "根目录"
+            )
             await self._notify_favorite_source_changed(
                 source_space_id=space_id,
                 source_file_id=file_id,
@@ -14654,9 +14622,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         old_encoding = file_record.file_encoding
         old_business_domain_code = self._extract_business_domain_code_from_encoding(old_encoding or "")
         new_business_domain_code = self._extract_business_domain_code_from_encoding(cleaned)
-        business_domain_changed = (
-            old_business_domain_code != new_business_domain_code
-        )
+        business_domain_changed = old_business_domain_code != new_business_domain_code
         if business_domain_changed:
             db_knowledge = await KnowledgeDao.aquery_by_id(file_record.knowledge_id)
             self._ensure_business_domain_allowed_for_space(
@@ -14802,28 +14768,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
         normalized_ids = self._dedupe_ids(file_ids)
         if not normalized_ids:
             return []
-        known_files = {
-            int(file.id): file
-            for file in source_files or []
-            if getattr(file, "id", None) is not None
-        }
-        missing_ids = [
-            file_id for file_id in normalized_ids if file_id not in known_files
-        ]
+        known_files = {int(file.id): file for file in source_files or [] if getattr(file, "id", None) is not None}
+        missing_ids = [file_id for file_id in normalized_ids if file_id not in known_files]
         if missing_ids:
             loaded_files = await KnowledgeFileDao.aget_file_by_ids(missing_ids)
-            known_files.update(
-                {
-                    int(file.id): file
-                    for file in loaded_files
-                    if getattr(file, "id", None) is not None
-                }
-            )
-        source_files = [
-            known_files[file_id]
-            for file_id in normalized_ids
-            if file_id in known_files
-        ]
+            known_files.update({int(file.id): file for file in loaded_files if getattr(file, "id", None) is not None})
+        source_files = [known_files[file_id] for file_id in normalized_ids if file_id in known_files]
         if not source_files:
             return []
 
@@ -14831,6 +14781,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             from bisheng.knowledge.domain.repositories.implementations.knowledge_file_repository_impl import (
                 KnowledgeFileRepositoryImpl,
             )
+
             async with get_async_db_session() as session:
                 file_repository = KnowledgeFileRepositoryImpl(session)
                 public_space_cache: dict[int, bool] = {}
@@ -15515,8 +15466,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         """2：支持对单文件的标签管理: Overwrite tags for a single file."""
         file_record = await self._get_file_for_action(file_id, space_id=space_id)
         before_tags = [
-            str(item.get("name") or "")
-            for item in (await self._load_file_tags_batch([file_id])).get(file_id, [])
+            str(item.get("name") or "") for item in (await self._load_file_tags_batch([file_id])).get(file_id, [])
         ]
         resolved = await self._require_document_content_manager(file_record)
         if resolved is None:
@@ -15548,8 +15498,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         )
         await KnowledgeDao.async_update_knowledge_update_time_by_id(space_id)
         after_tags = [
-            str(item.get("name") or "")
-            for item in (await self._load_file_tags_batch([file_id])).get(file_id, [])
+            str(item.get("name") or "") for item in (await self._load_file_tags_batch([file_id])).get(file_id, [])
         ]
         await self._notify_favorite_source_changed(
             source_space_id=space_id,
@@ -15571,9 +15520,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             return
 
         files = await self._get_space_files_or_raise(space_id, file_ids)
-        before_tags_by_file = await self._load_file_tags_batch(
-            [int(file_record.id) for file_record in files]
-        )
+        before_tags_by_file = await self._load_file_tags_batch([int(file_record.id) for file_record in files])
 
         resource_type = ResourceTypeEnum.SPACE_FILE
         tenant_id = int(self.login_user.tenant_id)
@@ -15611,9 +15558,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 )
 
         await KnowledgeDao.async_update_knowledge_update_time_by_id(space_id)
-        after_tags_by_file = await self._load_file_tags_batch(
-            [int(file_record.id) for file_record in files]
-        )
+        after_tags_by_file = await self._load_file_tags_batch([int(file_record.id) for file_record in files])
         for notified_file in files:
             notified_file_id = int(notified_file.id)
             await self._notify_favorite_source_changed(
@@ -15621,14 +15566,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 source_file_id=notified_file_id,
                 file_name=notified_file.file_name,
                 action_code=FAVORITE_SOURCE_TAGS_UPDATED,
-                before_value=[
-                    str(item.get("name") or "")
-                    for item in before_tags_by_file.get(notified_file_id, [])
-                ],
-                after_value=[
-                    str(item.get("name") or "")
-                    for item in after_tags_by_file.get(notified_file_id, [])
-                ],
+                before_value=[str(item.get("name") or "") for item in before_tags_by_file.get(notified_file_id, [])],
+                after_value=[str(item.get("name") or "") for item in after_tags_by_file.get(notified_file_id, [])],
             )
             if resolved_by_file_id[notified_file_id] is not None:
                 await self._mark_document_content_changed(notified_file)
@@ -15888,29 +15827,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 knowledge_id,
                 prefix,
             )
-            descendant_folder_ids.extend(
-                int(child.id)
-                for child in children
-                if child.file_type == FileType.DIR.value
-            )
-            descendant_file_ids.extend(
-                int(child.id)
-                for child in children
-                if child.file_type != FileType.DIR.value
-            )
-            descendant_files.extend(
-                child
-                for child in children
-                if child.file_type != FileType.DIR.value
-            )
+            descendant_folder_ids.extend(int(child.id) for child in children if child.file_type == FileType.DIR.value)
+            descendant_file_ids.extend(int(child.id) for child in children if child.file_type != FileType.DIR.value)
+            descendant_files.extend(child for child in children if child.file_type != FileType.DIR.value)
 
         direct_file_ids = [int(file.id) for file in ordinary_files]
-        planned_file_ids = self._dedupe_ids(
-            [*direct_file_ids, *descendant_file_ids]
-        )
-        delete_plan = await self._plan_cascade_version_links_on_delete(
-            planned_file_ids
-        )
+        planned_file_ids = self._dedupe_ids([*direct_file_ids, *descendant_file_ids])
+        delete_plan = await self._plan_cascade_version_links_on_delete(planned_file_ids)
         snapshot_file_ids = self._dedupe_ids(
             [
                 *delete_plan.expanded_file_ids,
@@ -15930,27 +15853,17 @@ class KnowledgeSpaceService(KnowledgeUtils):
         for file_record in distribution_files:
             await self._handle_distribution_file_delete(file_record)
 
-        all_folder_ids = self._dedupe_ids(
-            [*unique_folder_ids, *descendant_folder_ids]
-        )
+        all_folder_ids = self._dedupe_ids([*unique_folder_ids, *descendant_folder_ids])
         if delete_plan.expanded_file_ids or all_folder_ids:
             await recycle.soft_delete_file_ids(
                 space_id=int(knowledge_id),
-                root_id=int(
-                    unique_folder_ids[0]
-                    if unique_folder_ids
-                    else direct_file_ids[0]
-                ),
+                root_id=int(unique_folder_ids[0] if unique_folder_ids else direct_file_ids[0]),
                 file_ids=delete_plan.expanded_file_ids,
                 folder_ids=all_folder_ids,
                 list_entry_ids=[*unique_folder_ids, *direct_file_ids],
             )
-            await self._cleanup_review_tags_for_deleted_files(
-                delete_plan.expanded_file_ids
-            )
-            self._enqueue_recommendation_deleted_files(
-                delete_plan.expanded_file_ids
-            )
+            await self._cleanup_review_tags_for_deleted_files(delete_plan.expanded_file_ids)
+            self._enqueue_recommendation_deleted_files(delete_plan.expanded_file_ids)
 
         # Prune channel ➜ knowledge-folder sync bindings for the top-level
         # folders deleted in this batch so the Celery sync worker stops
