@@ -767,11 +767,12 @@ function RouteDialog({
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
+      {/* Cap height and scroll the body so multi-AND conditions cannot push Save off-screen. */}
+      <DialogContent className="flex max-h-[90vh] max-w-lg flex-col overflow-hidden">
+        <DialogHeader className="shrink-0">
           <DialogTitle>{initial.id ? t("approvalPage.editRoute") : t("approvalPage.addRoute")}</DialogTitle>
         </DialogHeader>
-        <div className="space-y-4 py-2">
+        <div data-testid="route-dialog-body" className="min-h-0 flex-1 space-y-4 overflow-y-auto py-2">
           <label className="block text-sm text-text-secondary">
             {t("approvalPage.routeNameLabel")}
             <input
@@ -987,7 +988,7 @@ function RouteDialog({
             </label>
           )}
         </div>
-        <DialogFooter>
+        <DialogFooter className="shrink-0">
           <button
             type="button"
             onClick={onClose}
