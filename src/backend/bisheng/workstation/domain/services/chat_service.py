@@ -171,7 +171,6 @@ from pydantic import SkipValidation
 
 from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema
 from bisheng.citation.domain.services.citation_prompt_helper import (
-    CITATION_PROMPT_RULES,
     CitationRegistryCollector,
     annotate_rag_documents_with_citations,
     annotate_web_results_with_citations,
@@ -179,8 +178,8 @@ from bisheng.citation.domain.services.citation_prompt_helper import (
     cache_citation_registry_items_sync,
     collect_rag_citation_registry_items,
     collect_web_citation_registry_items,
-    prompt_has_citation_rules,
     save_message_citations,
+    save_message_citations_sync,
     select_registry_items_for_persistence,
 )
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
@@ -1271,6 +1270,84 @@ async def _agent_stream_chat_completion(
             current_thinking_start = None
             return duration_ms
 
+        # True once the answer row has been written, so the interrupt path can't
+        # double-insert a turn the normal path already saved.
+        persisted = False
+
+        def finalise_dangling_events() -> None:
+            """Close the open thinking segment and force-close tool calls that
+            never received on_tool_end (e.g. the langgraph stream raised or was
+            cancelled mid-tool). Without this the persisted row would carry
+            tool_call entries with only `started_at` — they'd render as
+            perpetually in-flight on history reload."""
+            close_thinking()
+            if not inflight_tool_idx:
+                return
+            now_ms = int(time.time() * 1000)
+            for _tc_id, idx in inflight_tool_idx.items():
+                if 0 <= idx < len(events):
+                    ev = events[idx]
+                    if ev.get("ended_at") is None:
+                        ev["ended_at"] = now_ms
+                        if ev.get("error") is None:
+                            ev["error"] = error_msg or "tool did not complete"
+                        if "results" not in ev:
+                            ev["results"] = []
+                        if ev.get("started_at") is not None:
+                            ev["duration_ms"] = max(0, now_ms - ev["started_at"])
+            inflight_tool_idx.clear()
+
+        def build_answer_row(db_content: dict) -> ChatMessage:
+            return ChatMessage(
+                user_id=conversation.user_id,
+                chat_id=conversation_id,
+                flow_id="",
+                type="end",
+                is_bot=True,
+                # `default` is a last-resort net: tool results are already
+                # sanitised by _parse_tool_results, but a serialisation crash
+                # here would abort the stream and lose the whole turn, so never
+                # let an unexpected object type get that far.
+                message=json.dumps(db_content, ensure_ascii=False, default=str),
+                category="agent_answer",
+                sender=model_info.displayName,
+                extra=json.dumps({"error": True, "error_msg": error_msg}) if error_flag else "{}",
+                source=0,
+            )
+
+        def persist_interrupted_turn(reason: str) -> None:
+            """Save whatever the model produced when the stream is torn down.
+
+            Runs on the CancelledError / GeneratorExit path, where the task is
+            already being cancelled — hence the *synchronous* DAO calls: an
+            `await` here would be cancelled before reaching the DB and the whole
+            turn (question + every token already streamed to the user) would be
+            lost, leaving a reload showing only the question.
+            """
+            nonlocal persisted, error_flag, error_msg
+            if persisted:
+                return
+            persisted = True
+            error_flag = True
+            error_msg = error_msg or reason
+            finalise_dangling_events()
+            try:
+                resp = ChatMessageDao.insert_one(build_answer_row({"msg": final_msg, "events": events}))
+                save_message_citations_sync(
+                    message_id=resp.id,
+                    items=select_registry_items_for_persistence(
+                        citation_collector.list_items(),
+                        final_msg,
+                    ),
+                    chat_id=conversation_id,
+                    flow_id="",
+                )
+            except Exception:
+                # The stream is already being torn down and there is no channel
+                # left to report on; log with the traceback and let the original
+                # cancellation propagate.
+                logger.exception("Agent chat: failed to persist interrupted turn")
+
         # Emit first so the client can add the sidebar placeholder before any
         # streaming content arrives. onCreated hook in useAiChat keys on this.
         yield user_message(message.id, conversation_id, "User", data.text or "")
@@ -1696,50 +1773,25 @@ async def _agent_stream_chat_completion(
                 yield LLMRateLimitError().to_sse_event_instance_str()
             else:
                 yield ServerError(exception=exc).to_sse_event_instance_str()
+        except (asyncio.CancelledError, GeneratorExit):
+            # The stream was torn down mid-flight — client navigated away, gateway
+            # read timeout, worker restart. Neither is an `Exception`, so without
+            # this branch the code below never runs and the whole turn is lost:
+            # the conversation reloads showing only the question, even though the
+            # user watched a full answer stream in.
+            logger.warning("Agent chat stream interrupted; persisting partial answer")
+            persist_interrupted_turn("stream interrupted")
+            raise
 
-        # Finalise any dangling thinking event (e.g. stream interrupted mid-reasoning).
-        close_thinking()
-
-        # Force-finalise any tool events that never received on_tool_end (e.g.,
-        # the langgraph stream raised mid-tool). Without this, the persisted
-        # row would carry tool_call entries with only started_at — they'd
-        # render as perpetually "in-flight" on history reload.
-        if inflight_tool_idx:
-            now_ms = int(time.time() * 1000)
-            for _tc_id, idx in inflight_tool_idx.items():
-                if 0 <= idx < len(events):
-                    ev = events[idx]
-                    if ev.get("ended_at") is None:
-                        ev["ended_at"] = now_ms
-                        if ev.get("error") is None:
-                            ev["error"] = error_msg or "tool did not complete"
-                        if "results" not in ev:
-                            ev["results"] = []
-                        if ev.get("started_at") is not None:
-                            ev["duration_ms"] = max(0, now_ms - ev["started_at"])
-            inflight_tool_idx.clear()
+        # Finalise any dangling thinking / tool events (e.g. stream interrupted
+        # mid-reasoning or mid-tool).
+        finalise_dangling_events()
 
         # Persist agent_answer — new unified shape is `{msg, events}`.
         db_content: dict = {"msg": final_msg, "events": events}
 
-        resp_msg = await ChatMessageDao.ainsert_one(
-            ChatMessage(
-                user_id=conversation.user_id,
-                chat_id=conversation_id,
-                flow_id="",
-                type="end",
-                is_bot=True,
-                # `default` is a last-resort net: tool results are already
-                # sanitised by _parse_tool_results, but a serialisation crash
-                # here would abort the stream and lose the whole turn, so never
-                # let an unexpected object type get that far.
-                message=json.dumps(db_content, ensure_ascii=False, default=str),
-                category="agent_answer",
-                sender=model_info.displayName,
-                extra=json.dumps({"error": True, "error_msg": error_msg}) if error_flag else "{}",
-                source=0,
-            )
-        )
+        persisted = True
+        resp_msg = await ChatMessageDao.ainsert_one(build_answer_row(db_content))
         citation_items = select_registry_items_for_persistence(
             citation_collector.list_items(),
             final_msg,
@@ -1797,10 +1849,16 @@ async def _agent_stream_chat_completion(
                 yield DepartmentDailyChatConcurrentLimitError().to_sse_event_instance_str()
                 return
             dept_flow_slot = flow_dept
+        # Held explicitly so the inner generator can be closed deterministically:
+        # when this outer one is torn down, `impl` would otherwise be finalised
+        # whenever the GC and the loop's asyncgen hooks get to it — too late (or
+        # never, on a worker restart) for its interrupt branch to save the turn.
+        impl = _agent_event_stream_impl()
         try:
-            async for chunk in _agent_event_stream_impl():
+            async for chunk in impl:
                 yield chunk
         finally:
+            await impl.aclose()
             if dept_flow_slot is not None:
                 await DepartmentFlowService.release_daily_chat_slot(
                     dept_flow_slot,

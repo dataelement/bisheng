@@ -73,7 +73,7 @@ def _detect_cjk_font() -> str | None:
             if out and os.path.isfile(out):
                 return out
         except (subprocess.SubprocessError, OSError):
-            logger.warning("fc-match CJK font probe failed", exc_info=True)
+            logger.opt(exception=True).warning("fc-match CJK font probe failed")
 
     return None
 
@@ -111,7 +111,7 @@ def _ensure_cjk_fonts_registered() -> None:
             # and harmless for plain .ttf.
             pdfmetrics.registerFont(TTFont(name, font_path, subfontIndex=0))
         except Exception:
-            logger.warning("failed to register CJK font {!r} from {}", name, font_path, exc_info=True)
+            logger.opt(exception=True).warning("failed to register CJK font {!r} from {}", name, font_path)
 
 
 def _ensure_easyofd_patched() -> None:

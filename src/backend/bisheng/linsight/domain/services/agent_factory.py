@@ -33,6 +33,10 @@ from langgraph.prebuilt import InjectedState
 from langgraph.types import interrupt
 
 from bisheng.common.services.config_service import settings
+from bisheng.linsight.domain.services.binary_content_guard import (
+    CODE_INTERPRETER_TOOL,
+    build_binary_guards,
+)
 from bisheng.linsight.domain.services.resilience_middleware import build_resilience_middleware
 from bisheng.linsight.domain.services.tool_loop_middleware import build_tool_loop_breaker_middleware
 from bisheng.llm.domain.services import LLMService
@@ -674,9 +678,16 @@ async def create_linsight_agent(
     # weak model that keeps calling write_file with a truncated/missing content
     # arg) — soft nudge then graceful salvage-and-abort, instead of spinning to
     # recursion_limit. One instance per graph, same as the resilience middleware.
+    # Binary guards: keep raw upload bytes out of the model conversation. The
+    # workspace deliberately carries ORIGINAL xlsx/docx/pdf next to their .md views
+    # (for the code interpreter), and deepagents' ``read_file`` would happily turn
+    # those into file/audio/video content blocks — a hard 400 on most endpoints, a
+    # client-side ValueError for video, and silent mojibake for docx/xlsx.
+    has_code_interpreter = any(getattr(t, "name", None) == CODE_INTERPRETER_TOOL for t in tools)
     middlewares: list = [
         build_resilience_middleware(linsight_conf, is_subagent=False),
         build_tool_loop_breaker_middleware(linsight_conf, is_subagent=False),
+        *build_binary_guards(has_code_interpreter),
     ]
 
     # F035 Track D — skills (RE-ENABLED 2026-06-24, Fork X). The run's allowed skill
@@ -744,6 +755,12 @@ async def create_linsight_agent(
         # Same tool-loop breaker on the subagent's own graph (its tool calls run in
         # a separate subgraph the main-graph middleware never wraps).
         build_tool_loop_breaker_middleware(linsight_conf, is_subagent=True),
+        # The researcher owns read_file too, and its subgraph is likewise outside
+        # the main-graph middleware — without its own pair of guards a subagent
+        # reading an original would fail the whole task. It sees the same code
+        # interpreter as the main graph (not in _SUBAGENT_TOOL_DENY), so the flag
+        # carries over; revisit if it is ever added to that deny list.
+        *build_binary_guards(has_code_interpreter),
         # Same tail language directive on the subagent's own stack (last -> after
         # its TodoList/Filesystem framework prompts), so the researcher also
         # reasons in the user's language.

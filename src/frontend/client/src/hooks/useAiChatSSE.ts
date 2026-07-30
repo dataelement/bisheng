@@ -21,6 +21,7 @@ import { SSE } from "sse.js";
 import type { AgentEvent, ChatMessage, ContentPart } from "~/api/chatApi";
 import { getSSEUrl } from "~/api/chatApi";
 import { translateApiErrorMessage } from "~/api/request";
+import { useLocalize } from "~/hooks";
 
 /**
  * Structured update emitted as agent SSE events stream in. Consumers merge
@@ -71,6 +72,7 @@ export interface SSESubmission {
 
 export default function useAiChatSSE(submission: SSESubmission | null) {
     const sseRef = useRef<any>(null);
+    const localize = useLocalize();
 
     useEffect(() => {
         if (!submission) return;
@@ -396,9 +398,11 @@ export default function useAiChatSSE(submission: SSESubmission | null) {
                 // back to legacy plain-text shapes, then a generic message.
                 const resolved = translateApiErrorMessage(data);
                 const code = typeof data?.status_code === "number" ? data.status_code : undefined;
-                onError(resolved || data?.text || data?.message || "Stream error", code);
+                onError(resolved || data?.text || data?.message || localize("workstation.chat.connection_lost"), code);
             } catch {
-                onError("Connection error");
+                // Non-JSON payload — the stream dropped rather than the backend
+                // reporting a typed failure (gateway/proxy timeout, worker restart).
+                onError(localize("workstation.chat.connection_lost"));
             }
             safeEnd();
         });

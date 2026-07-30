@@ -28,6 +28,7 @@ Error codes (MMMEE) & module numbers → constitution **C5**. Pagination: `PageD
 - **Never use printf `%s` / `%r` / `%d` with loguru.** It does not interpolate them — the placeholder is printed literally and the args are silently dropped (this is a real bug, not a style nit: it has burned dry-run scripts).
 - f-strings (`logger.info(f"...")`) are also safe and still common in the tree; acceptable, but prefer `{}` for new logs.
 - Never downgrade `logger.exception(...)` (auto-attaches the traceback) to `logger.error`.
+- **Never pass `exc_info=` to loguru** — it has no such parameter, and *any* kwarg makes loguru run `str.format()` on the message. A message embedding a provider error (`Error code: 429 - {'error': {...}}`) then raises `KeyError` from inside `Logger._log`, before any handler. Want a traceback? `logger.exception(msg)` for ERROR, `logger.opt(exception=True).warning(msg)` for other levels. Guarded by `test/common/test_loguru_exc_info_guard.py`. Files using stdlib `logging.getLogger` are exempt — there `exc_info=` is correct and `core/logger.py`'s `InterceptHandler` forwards it properly.
 
 ---
 

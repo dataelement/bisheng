@@ -456,6 +456,8 @@
   "com_linsight_queue_position": "第 {{0}} 位",
   "com_linsight_queue_cancel": "取消排队",
   "com_linsight_report_ready": "已为您整理好",
+  "com_linsight_files_ready_prefix": "已为您整理好",
+  "com_linsight_files_ready_suffix": "等 {{0}} 个文件",
   "com_linsight_output_files": "已整理输出文件 {{0}}",
   "com_linsight_save_as": "另存为",
   "com_linsight_preview": "预览",
@@ -2290,6 +2292,11 @@
       "spaceNotFound": "知识空间不存在或已删除",
       "folderNotFound": "文件夹不存在或已删除",
       "renderFailed": "文件生成失败，请稍后重试"
+    },
+    "chat": {
+      "answer_interrupted": "本次回答在生成过程中中断，以上内容可能不完整。",
+      "answer_failed": "发生错误，请重试",
+      "connection_lost": "网络连接中断，请重试"
     }
   },
   "com_linsight_legacy_sop": "历史 SOP 文档（旧版会话）"

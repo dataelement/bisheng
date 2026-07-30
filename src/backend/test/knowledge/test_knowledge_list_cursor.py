@@ -10,6 +10,7 @@ Covers:
 - AD-15 sort_by=name fallback: pseudo-cursor (page_num offset), same response shape
 - type=0 (document KB) and type=1 (QA KB) both follow cursor protocol
 """
+
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -62,10 +63,19 @@ async def test_first_page_returns_cursor_envelope_no_total():
     # 21 rows ≥ page_size+1 → has_more=True
     rows = [_make_knowledge_row(i) for i in range(1, 22)]
 
-    with patch.object(mod.KnowledgeDao, "aget_knowledge_ids_created_by", new_callable=AsyncMock, return_value=[]), \
-         patch.object(KnowledgeService.permission_service, "get_knowledge_permission_map_async", new_callable=AsyncMock, return_value={1: {"view_kb"}, 2: {"view_kb"}, 3: {"view_kb"}}), \
-         patch.object(mod.KnowledgeDao, "aget_user_knowledge", new_callable=AsyncMock, return_value=rows), \
-         patch.object(KnowledgeService, "aconvert_knowledge_read", new_callable=AsyncMock, side_effect=lambda u, r, **kw: r):
+    with (
+        patch.object(mod.KnowledgeDao, "aget_knowledge_ids_created_by", new_callable=AsyncMock, return_value=[]),
+        patch.object(
+            KnowledgeService.permission_service,
+            "get_knowledge_permission_map_async",
+            new_callable=AsyncMock,
+            return_value={i: {"view_kb"} for i in range(1, 22)},
+        ),
+        patch.object(mod.KnowledgeDao, "aget_user_knowledge", new_callable=AsyncMock, return_value=rows),
+        patch.object(
+            KnowledgeService, "aconvert_knowledge_read", new_callable=AsyncMock, side_effect=lambda u, r, **kw: r
+        ),
+    ):
         result = await KnowledgeService.get_knowledge(
             request=MagicMock(),
             login_user=login_user,
@@ -92,10 +102,19 @@ async def test_last_page_returns_has_more_false_and_null_cursor():
     # Only 5 rows < page_size+1 → has_more=False, next_cursor=None
     rows = [_make_knowledge_row(i) for i in range(1, 6)]
 
-    with patch.object(mod.KnowledgeDao, "aget_knowledge_ids_created_by", new_callable=AsyncMock, return_value=[]), \
-         patch.object(KnowledgeService.permission_service, "get_knowledge_permission_map_async", new_callable=AsyncMock, return_value={i: {"view_kb"} for i in [1, 2, 3]}), \
-         patch.object(mod.KnowledgeDao, "aget_user_knowledge", new_callable=AsyncMock, return_value=rows), \
-         patch.object(KnowledgeService, "aconvert_knowledge_read", new_callable=AsyncMock, side_effect=lambda u, r, **kw: r):
+    with (
+        patch.object(mod.KnowledgeDao, "aget_knowledge_ids_created_by", new_callable=AsyncMock, return_value=[]),
+        patch.object(
+            KnowledgeService.permission_service,
+            "get_knowledge_permission_map_async",
+            new_callable=AsyncMock,
+            return_value={i: {"view_kb"} for i in range(1, 6)},
+        ),
+        patch.object(mod.KnowledgeDao, "aget_user_knowledge", new_callable=AsyncMock, return_value=rows),
+        patch.object(
+            KnowledgeService, "aconvert_knowledge_read", new_callable=AsyncMock, side_effect=lambda u, r, **kw: r
+        ),
+    ):
         result = await KnowledgeService.get_knowledge(
             request=MagicMock(),
             login_user=login_user,
@@ -109,6 +128,62 @@ async def test_last_page_returns_has_more_false_and_null_cursor():
     assert result.has_more is False
     assert result.next_cursor is None
     assert len(result.data) == 5
+
+
+@pytest.mark.asyncio
+async def test_permission_scan_refills_from_next_database_batch():
+    mod = _load_service()
+    KnowledgeService = mod.KnowledgeService
+    login_user = _make_login_user(accessible=tuple(str(i) for i in range(1, 101)))
+    first_batch = [_make_knowledge_row(i) for i in range(1, 51)]
+    second_batch = [_make_knowledge_row(i) for i in range(51, 101)]
+
+    async def permission_map(_user, knowledge_ids, _permission_ids):
+        allowed_ids = set(range(1, 11)) if knowledge_ids[0] == 1 else set(range(51, 62))
+        return {knowledge_id: {"view_kb"} for knowledge_id in knowledge_ids if knowledge_id in allowed_ids}
+
+    with (
+        patch.object(
+            mod.KnowledgeDao,
+            "aget_knowledge_ids_created_by",
+            new_callable=AsyncMock,
+            return_value=[],
+        ),
+        patch.object(
+            KnowledgeService.permission_service,
+            "get_knowledge_permission_map_async",
+            new_callable=AsyncMock,
+            side_effect=permission_map,
+        ) as permission_mock,
+        patch.object(
+            mod.KnowledgeDao,
+            "aget_user_knowledge",
+            new_callable=AsyncMock,
+            side_effect=[first_batch, second_batch],
+        ) as dao_mock,
+        patch.object(
+            KnowledgeService,
+            "aconvert_knowledge_read",
+            new_callable=AsyncMock,
+            side_effect=lambda _user, rows, **_kwargs: rows,
+        ),
+    ):
+        result = await KnowledgeService.get_knowledge(
+            request=MagicMock(),
+            login_user=login_user,
+            knowledge_type=KnowledgeTypeEnum.NORMAL,
+            cursor=None,
+            page_size=20,
+            sort_by="update_time",
+            permission_id="view_kb",
+        )
+
+    assert [one.id for one in result.data] == [*range(1, 11), *range(51, 61)]
+    assert result.has_more is True
+    assert dao_mock.await_count == 2
+    assert permission_mock.await_count == 2
+    assert all(len(call.args[1]) == 50 for call in permission_mock.await_args_list)
+    assert dao_mock.await_args_list[1].kwargs["cursor"] == [first_batch[-1].update_time, 50]
 
 
 # ---------------------------------------------------------------------------
@@ -125,10 +200,19 @@ async def test_next_cursor_encodes_last_visible_sort_key_and_id():
 
     rows = [_make_knowledge_row(i) for i in range(10, 32)]  # 22 rows
 
-    with patch.object(mod.KnowledgeDao, "aget_knowledge_ids_created_by", new_callable=AsyncMock, return_value=[]), \
-         patch.object(KnowledgeService.permission_service, "get_knowledge_permission_map_async", new_callable=AsyncMock, return_value={i: {"view_kb"} for i in [1, 2, 3]}), \
-         patch.object(mod.KnowledgeDao, "aget_user_knowledge", new_callable=AsyncMock, return_value=rows), \
-         patch.object(KnowledgeService, "aconvert_knowledge_read", new_callable=AsyncMock, side_effect=lambda u, r, **kw: r):
+    with (
+        patch.object(mod.KnowledgeDao, "aget_knowledge_ids_created_by", new_callable=AsyncMock, return_value=[]),
+        patch.object(
+            KnowledgeService.permission_service,
+            "get_knowledge_permission_map_async",
+            new_callable=AsyncMock,
+            return_value={i: {"view_kb"} for i in range(10, 32)},
+        ),
+        patch.object(mod.KnowledgeDao, "aget_user_knowledge", new_callable=AsyncMock, return_value=rows),
+        patch.object(
+            KnowledgeService, "aconvert_knowledge_read", new_callable=AsyncMock, side_effect=lambda u, r, **kw: r
+        ),
+    ):
         result = await KnowledgeService.get_knowledge(
             request=MagicMock(),
             login_user=login_user,
@@ -210,11 +294,20 @@ async def test_acount_user_knowledge_not_called():
     login_user = _make_login_user()
     rows = [_make_knowledge_row(i) for i in range(1, 6)]
 
-    with patch.object(mod.KnowledgeDao, "aget_knowledge_ids_created_by", new_callable=AsyncMock, return_value=[]), \
-         patch.object(KnowledgeService.permission_service, "get_knowledge_permission_map_async", new_callable=AsyncMock, return_value={i: {"view_kb"} for i in [1, 2, 3]}), \
-         patch.object(mod.KnowledgeDao, "aget_user_knowledge", new_callable=AsyncMock, return_value=rows), \
-         patch.object(mod.KnowledgeDao, "acount_user_knowledge", new_callable=AsyncMock, return_value=0) as count_mock, \
-         patch.object(KnowledgeService, "aconvert_knowledge_read", new_callable=AsyncMock, side_effect=lambda u, r, **kw: r):
+    with (
+        patch.object(mod.KnowledgeDao, "aget_knowledge_ids_created_by", new_callable=AsyncMock, return_value=[]),
+        patch.object(
+            KnowledgeService.permission_service,
+            "get_knowledge_permission_map_async",
+            new_callable=AsyncMock,
+            return_value={i: {"view_kb"} for i in range(1, 6)},
+        ),
+        patch.object(mod.KnowledgeDao, "aget_user_knowledge", new_callable=AsyncMock, return_value=rows),
+        patch.object(mod.KnowledgeDao, "acount_user_knowledge", new_callable=AsyncMock, return_value=0) as count_mock,
+        patch.object(
+            KnowledgeService, "aconvert_knowledge_read", new_callable=AsyncMock, side_effect=lambda u, r, **kw: r
+        ),
+    ):
         await KnowledgeService.get_knowledge(
             request=MagicMock(),
             login_user=login_user,
@@ -240,10 +333,19 @@ async def test_sort_by_name_uses_pseudo_cursor_encoding_page_num():
     login_user = _make_login_user()
     rows = [_make_knowledge_row(i) for i in range(1, 22)]  # 21 rows → has_more
 
-    with patch.object(mod.KnowledgeDao, "aget_knowledge_ids_created_by", new_callable=AsyncMock, return_value=[]), \
-         patch.object(KnowledgeService.permission_service, "get_knowledge_permission_map_async", new_callable=AsyncMock, return_value={i: {"view_kb"} for i in [1, 2, 3]}), \
-         patch.object(mod.KnowledgeDao, "aget_user_knowledge", new_callable=AsyncMock, return_value=rows), \
-         patch.object(KnowledgeService, "aconvert_knowledge_read", new_callable=AsyncMock, side_effect=lambda u, r, **kw: r):
+    with (
+        patch.object(mod.KnowledgeDao, "aget_knowledge_ids_created_by", new_callable=AsyncMock, return_value=[]),
+        patch.object(
+            KnowledgeService.permission_service,
+            "get_knowledge_permission_map_async",
+            new_callable=AsyncMock,
+            return_value={i: {"view_kb"} for i in range(1, 22)},
+        ),
+        patch.object(mod.KnowledgeDao, "aget_user_knowledge", new_callable=AsyncMock, return_value=rows),
+        patch.object(
+            KnowledgeService, "aconvert_knowledge_read", new_callable=AsyncMock, side_effect=lambda u, r, **kw: r
+        ),
+    ):
         result = await KnowledgeService.get_knowledge(
             request=MagicMock(),
             login_user=login_user,
@@ -265,6 +367,55 @@ async def test_sort_by_name_uses_pseudo_cursor_encoding_page_num():
     assert decoded == [2]  # first page → next page is 2
 
 
+@pytest.mark.asyncio
+async def test_sort_by_name_second_page_slices_after_visible_rows():
+    mod = _load_service()
+    KnowledgeService = mod.KnowledgeService
+    login_user = _make_login_user(accessible=tuple(str(i) for i in range(1, 11)))
+    rows = [_make_knowledge_row(i) for i in range(1, 11)]
+    cursor = encode_cursor((2,), context="knowledge|sort_by=name")
+
+    with (
+        patch.object(
+            mod.KnowledgeDao,
+            "aget_knowledge_ids_created_by",
+            new_callable=AsyncMock,
+            return_value=[],
+        ),
+        patch.object(
+            KnowledgeService.permission_service,
+            "get_knowledge_permission_map_async",
+            new_callable=AsyncMock,
+            return_value={i: {"view_kb"} for i in (2, 4, 6, 8, 10)},
+        ),
+        patch.object(
+            mod.KnowledgeDao,
+            "aget_user_knowledge",
+            new_callable=AsyncMock,
+            return_value=rows,
+        ) as dao_mock,
+        patch.object(
+            KnowledgeService,
+            "aconvert_knowledge_read",
+            new_callable=AsyncMock,
+            side_effect=lambda _user, visible_rows, **_kwargs: visible_rows,
+        ),
+    ):
+        result = await KnowledgeService.get_knowledge(
+            request=MagicMock(),
+            login_user=login_user,
+            knowledge_type=KnowledgeTypeEnum.NORMAL,
+            cursor=cursor,
+            page_size=2,
+            sort_by="name",
+            permission_id="view_kb",
+        )
+
+    assert [one.id for one in result.data] == [6, 8]
+    assert result.has_more is True
+    assert dao_mock.await_args.kwargs["page"] == 1
+
+
 # ---------------------------------------------------------------------------
 # AC-01: type=0 and type=1 both follow cursor protocol
 # ---------------------------------------------------------------------------
@@ -278,10 +429,19 @@ async def test_both_kb_types_follow_cursor_protocol(ktype):
     login_user = _make_login_user()
     rows = [_make_knowledge_row(i) for i in range(1, 6)]
 
-    with patch.object(mod.KnowledgeDao, "aget_knowledge_ids_created_by", new_callable=AsyncMock, return_value=[]), \
-         patch.object(KnowledgeService.permission_service, "get_knowledge_permission_map_async", new_callable=AsyncMock, return_value={i: {"view_kb"} for i in [1, 2, 3]}), \
-         patch.object(mod.KnowledgeDao, "aget_user_knowledge", new_callable=AsyncMock, return_value=rows), \
-         patch.object(KnowledgeService, "aconvert_knowledge_read", new_callable=AsyncMock, side_effect=lambda u, r, **kw: r):
+    with (
+        patch.object(mod.KnowledgeDao, "aget_knowledge_ids_created_by", new_callable=AsyncMock, return_value=[]),
+        patch.object(
+            KnowledgeService.permission_service,
+            "get_knowledge_permission_map_async",
+            new_callable=AsyncMock,
+            return_value={i: {"view_kb"} for i in range(1, 6)},
+        ),
+        patch.object(mod.KnowledgeDao, "aget_user_knowledge", new_callable=AsyncMock, return_value=rows),
+        patch.object(
+            KnowledgeService, "aconvert_knowledge_read", new_callable=AsyncMock, side_effect=lambda u, r, **kw: r
+        ),
+    ):
         result = await KnowledgeService.get_knowledge(
             request=MagicMock(),
             login_user=login_user,
