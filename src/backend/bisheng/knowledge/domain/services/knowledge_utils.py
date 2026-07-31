@@ -21,12 +21,84 @@ class KnowledgeUtils(BaseService):
     schema_ready_lock_ttl = 60
     schema_ready_wait_seconds = 20
     schema_ready_poll_interval = 0.5
+    preview_active_key_ttl = 86400
 
     @classmethod
-    def get_preview_cache_key(cls, knowledge_id: int, file_path: str, md5_value=None) -> str:
+    def build_split_fingerprint(cls, split_rule) -> str | None:
+        """Hash split/excel settings so preview cache keys vary with segmentation config."""
+        from bisheng.api.v1.schemas import FileProcessBase
+
+        if split_rule is None:
+            return None
+        if isinstance(split_rule, FileProcessBase):
+            payload = split_rule.model_dump(exclude={"knowledge_id"}, exclude_none=True)
+        else:
+            payload = {k: v for k, v in split_rule.items() if k != "knowledge_id" and v is not None}
+        if not payload:
+            return None
+        return md5_hash(json.dumps(payload, sort_keys=True, ensure_ascii=False))
+
+    @classmethod
+    def get_preview_cache_key(
+        cls,
+        knowledge_id: int,
+        file_path: str,
+        md5_value: str | None = None,
+        split_fingerprint: str | None = None,
+    ) -> str:
         if not md5_value:
             md5_value = md5_hash(file_path)
+        if split_fingerprint:
+            md5_value = md5_hash(f"{md5_value}:{split_fingerprint}")
         return f"preview_file_chunk:{knowledge_id}:{md5_value}"
+
+    @classmethod
+    def preview_cache_key_for_split_rule(
+        cls,
+        knowledge_id: int,
+        file_path: str,
+        split_rule=None,
+        md5_value: str | None = None,
+    ) -> str:
+        return cls.get_preview_cache_key(
+            knowledge_id,
+            file_path,
+            md5_value=md5_value,
+            split_fingerprint=cls.build_split_fingerprint(split_rule),
+        )
+
+    @classmethod
+    def _preview_active_key_index(cls, knowledge_id: int, file_path: str) -> str:
+        return f"preview_file_active_key:{knowledge_id}:{md5_hash(file_path)}"
+
+    @classmethod
+    async def async_bind_preview_cache_key(cls, knowledge_id: int, file_path: str, cache_key: str) -> None:
+        redis_client = await get_redis_client()
+        await redis_client.aset(
+            cls._preview_active_key_index(knowledge_id, file_path),
+            cache_key,
+            expiration=cls.preview_active_key_ttl,
+        )
+
+    @classmethod
+    async def async_resolve_preview_cache_key(cls, knowledge_id: int, file_path: str, split_rule=None) -> str:
+        redis_client = await get_redis_client()
+        bound_key = await redis_client.aget(cls._preview_active_key_index(knowledge_id, file_path))
+        if bound_key:
+            return bound_key
+        return cls.preview_cache_key_for_split_rule(knowledge_id, file_path, split_rule)
+
+    @classmethod
+    def resolve_preview_cache_key_sync(cls, knowledge_id: int, file_path: str, split_rule=None) -> str:
+        redis_client = get_redis_client_sync()
+        bound_key = redis_client.get(cls._preview_active_key_index(knowledge_id, file_path))
+        if bound_key:
+            return bound_key
+        return cls.preview_cache_key_for_split_rule(knowledge_id, file_path, split_rule)
+
+    @classmethod
+    def legacy_preview_cache_key(cls, knowledge_id: int, file_path: str, md5_value: str | None = None) -> str:
+        return cls.get_preview_cache_key(knowledge_id, file_path, md5_value=md5_value)
 
     @classmethod
     def aggregate_chunk_metadata(cls, chunk: str, metadata: dict) -> str:
@@ -416,7 +488,11 @@ class KnowledgeUtils(BaseService):
         db_file.updater_name = login_user_name
         db_file = await KnowledgeFileDao.async_update(db_file)
 
-        preview_cache_key = cls.get_preview_cache_key(req_data.knowledge_id, file_path=req_data.file_path)
+        preview_cache_key = cls.preview_cache_key_for_split_rule(
+            req_data.knowledge_id,
+            file_path=req_data.file_path,
+            split_rule=split_rule_dict,
+        )
         file_worker.retry_knowledge_file_celery.delay(db_file.id, preview_cache_key, req_data.callback_url)
 
         return db_file
@@ -445,7 +521,12 @@ class KnowledgeUtils(BaseService):
 
             # file exist
             file.object_name = input_file.get("object_name", file.object_name)
-            file_preview_cache_key = cls.get_preview_cache_key(file.knowledge_id, input_file.get("file_path", ""))
+            split_payload = json.loads(file.split_rule) if file.split_rule else {}
+            file_preview_cache_key = cls.preview_cache_key_for_split_rule(
+                file.knowledge_id,
+                input_file.get("file_path", ""),
+                split_payload,
+            )
 
             if file.object_name.startswith("tmp"):
                 # Moving Temporary Files to the Official Directory

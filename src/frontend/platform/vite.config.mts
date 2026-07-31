@@ -1,4 +1,5 @@
 import react from "@vitejs/plugin-react-swc";
+import fs from "fs";
 import path from "path";
 import { defineConfig, loadEnv } from "vite";
 import { createHtmlPlugin } from 'vite-plugin-html';
@@ -66,12 +67,39 @@ const createProxyConfig = (target: string, rewrite = true, isMinio = false, verb
 const apiRoutes = ["/api/", "/health"];
 const fileServiceRoutes = ["/bisheng", "/tmp-dir"];
 
+function resolveMinioProxyTarget(env: Record<string, string>): string {
+  if (env.VITE_MINIO_PROXY_TARGET) {
+    const configured = env.VITE_MINIO_PROXY_TARGET.trim();
+    return configured.endsWith('/') ? configured : `${configured}/`;
+  }
+
+  const configCandidates = [
+    path.resolve(__dirname, '../../../3.0/config.yaml'),
+  ];
+  for (const configPath of configCandidates) {
+    try {
+      if (!fs.existsSync(configPath)) continue;
+      const content = fs.readFileSync(configPath, 'utf8');
+      const sharepointMatch = content.match(/sharepoint:\s*["']?([^"'\n#]+)["']?/);
+      const schemaMatch = content.match(/schema:\s*(true|false)/);
+      if (sharepointMatch) {
+        const schema = schemaMatch?.[1] === 'true' ? 'https' : 'http';
+        return `${schema}://${sharepointMatch[1].trim()}/`;
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return 'http://127.0.0.1:9000/';
+}
+
 export default defineConfig(({ command, mode }) => {
   // 必须从 .env.development.local 等文件加载；仅用 process.env 时配置阶段读不到 VITE_ 变量，会回落到 7860，
   // 导致 /api/department-limit/*（仅 Gateway 提供）打到 bisheng 出现 404。
   const env = loadEnv(mode, path.resolve(__dirname), "");
   const target = env.VITE_PROXY_TARGET || "http://127.0.0.1:7860/";
-  const fileServiceTarget = env.VITE_MINIO_PROXY_TARGET || "http://127.0.0.1:7860/";
+  const fileServiceTarget = resolveMinioProxyTarget(env);
   // MinIO presigned URLs sign the Host header; this proxy's host MUST equal the
   // backend config.yaml object_storage.minio.sharepoint or every object 403s.
   if (command === 'serve') {

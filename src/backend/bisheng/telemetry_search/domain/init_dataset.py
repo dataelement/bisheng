@@ -1,9 +1,4 @@
-from bisheng.core.context.tenant import (
-    DEFAULT_TENANT_ID,
-    current_tenant_id,
-    set_current_tenant_id,
-    visible_tenant_ids,
-)
+from bisheng.core.context.tenant import bypass_tenant_filter
 from bisheng.core.database import get_async_db_session, get_database_connection
 from bisheng.telemetry_search.domain.models.dashboard import DashboardType
 from bisheng.telemetry_search.domain.models.dashboard_dao import DashboardDao
@@ -207,7 +202,7 @@ DASHBOARD_DATASET = [
                 DimensionConfig(name="部门名称", field="user_department_infos.department_name"),
                 DimensionConfig(name="应用ID", field="app_id"),
                 DimensionConfig(name="应用名称", field="app_name"),
-                DimensionConfig(name="来源类型（平台/API）", field="source"),  # noqa: RUF001
+                DimensionConfig(name="来源类型（平台/API）", field="source"),
             ],
         ).model_dump(),
     ),
@@ -832,25 +827,20 @@ async def _upgrade_datasets_add_department_dimensions(
 
 
 async def init_dashboard_datasets():
-    tenant_token = set_current_tenant_id(DEFAULT_TENANT_ID)
-    visible_tenants_token = visible_tenant_ids.set(None)
-    try:
-        db_manager = await get_database_connection()
-        await db_manager.create_db_and_tables()
-        async with get_async_db_session() as session:
-            dashboard_dataset_repository = DashboardDatasetRepositoryImpl(session)
-            if await dashboard_dataset_repository.count() == 0:
-                await dashboard_dataset_repository.bulk_save(DASHBOARD_DATASET)
-            else:
-                # Upgrade path: add department dimensions to existing datasets
-                await _upgrade_datasets_add_department_dimensions(dashboard_dataset_repository)
+    db_manager = await get_database_connection()
+    await db_manager.create_db_and_tables()
+    async with get_async_db_session() as session:
+        dashboard_dataset_repository = DashboardDatasetRepositoryImpl(session)
+        if await dashboard_dataset_repository.count() == 0:
+            await dashboard_dataset_repository.bulk_save(DASHBOARD_DATASET)
+        else:
+            # Upgrade path: add department dimensions to existing datasets
+            await _upgrade_datasets_add_department_dimensions(dashboard_dataset_repository)
+    with bypass_tenant_filter():
         preset_dashboard = await DashboardDao.get_dashboards(dashboard_type=[DashboardType.PRESET_OSS])
         if not preset_dashboard:
             await DashboardDao.exec_sql_str(preset_oss_dashboard_sql)
             await DashboardDao.exec_sql_str(preset_commercial_dashboard_sql)
-    finally:
-        visible_tenant_ids.reset(visible_tenants_token)
-        current_tenant_id.reset(tenant_token)
 
 
 if __name__ == "__main__":

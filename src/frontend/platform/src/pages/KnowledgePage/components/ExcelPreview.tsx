@@ -4,6 +4,11 @@ import XlsxPopulate from 'xlsx-populate/browser/xlsx-populate';
 import { LoadingIcon } from "@/components/bs-icons/loading";
 import { useTranslation } from "react-i18next";
 
+declare const __APP_ENV__: { BASE_URL: string };
+
+const resolvePreviewFileUrl = (filePath: string) =>
+  filePath.replace(/https?:\/\/[^/]+/, __APP_ENV__.BASE_URL);
+
 const ExcelPreview = ({ filePath }) => {
   const { t } = useTranslation('knowledge');
 
@@ -215,7 +220,7 @@ const ExcelPreview = ({ filePath }) => {
 
         if (!filePath) throw new Error(t('filePathEmpty'));
 
-        const response = await fetch(filePath);
+        const response = await fetch(resolvePreviewFileUrl(filePath));
         if (!response.ok) throw new Error(`${t('fileLoadFailed')}: ${response.status}`);
 
         const arrayBuffer = await response.arrayBuffer();
@@ -767,7 +772,7 @@ const ExcelPreview = ({ filePath }) => {
               {filePath && (
                 <button
                   className="mt-4 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm font-medium flex items-center"
-                  onClick={() => window.open(filePath, "_blank")}
+                  onClick={() => window.open(resolvePreviewFileUrl(filePath), "_blank")}
                 >
                   <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
