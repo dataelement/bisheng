@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from copy import deepcopy
@@ -382,6 +383,55 @@ async def test_evidence_provider_checks_canonical_remote_model() -> None:
 
     assert await provider._remote_model_checksum("remote-model") == authorization_model_checksum(model)
     assert await provider._remote_model_checksum("missing-model") is None
+
+
+def test_preserved_tuple_evidence_excludes_planned_stale_and_canonical_deletes() -> None:
+    def item(
+        *,
+        locator: str,
+        payload: dict,
+        source_kind: str = "TUPLE",
+        difference_type: str | None = None,
+    ) -> PermissionMigrationItem:
+        return PermissionMigrationItem(
+            run_id=1,
+            source_kind=source_kind,
+            source_locator=locator,
+            source_checksum="f" * 64,
+            status="READY",
+            severity="INFO",
+            difference_type=difference_type,
+            message=json.dumps(payload),
+        )
+
+    items = [
+        item(
+            locator="tuple:live-parent",
+            payload={"user": "folder:1", "relation": "parent", "object": "knowledge_file:2"},
+        ),
+        item(
+            locator="tuple:stale-parent",
+            payload={"user": "folder:3", "relation": "parent", "object": "knowledge_file:4"},
+            difference_type="STALE_RESOURCE_TUPLE",
+        ),
+        item(
+            locator="tuple:absent-member",
+            payload={"user": "user:683", "relation": "member", "object": "tenant:17"},
+        ),
+        item(
+            locator="failed_tuple:19349",
+            source_kind="FAILED_TUPLE",
+            payload={
+                "tuple_key": "user:683|member|tenant:17",
+                "resolution": "CANONICAL_IDENTITY_STATE",
+                "canonical_state": False,
+            },
+        ),
+    ]
+
+    assert LiveMigrationEvidenceProvider._preserved_tuple_identities(items) == {
+        ("folder:1", "parent", "knowledge_file:2"),
+    }
 
 
 class _TargetClient:

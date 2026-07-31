@@ -1154,6 +1154,15 @@
     child 修正、stale failed resource 退休、mapping blocker 明细持久化与 resume 忽略审计项。
   - **依赖**：T112～T127, T141
 
+- [x] **T143：修复 D4 checksum 与 preserved tuple 误报**
+  - **文件**：`migration_repository.py`, `f048_runtime_verification.py` 及对应测试
+  - **逻辑**：source checksum 在应用层按 source kind/locator 做确定性排序，消除数据库
+    collation 差异；preserved tuple 核对排除迁移计划已退休的 `STALE_RESOURCE_TUPLE` 和
+    `CANONICAL_IDENTITY_STATE=false` tuple，不恢复已经 canonical 事实确认失效的授权。
+  - **测试**：覆盖数据库返回顺序不同时 checksum 稳定，以及 stale parent/canonical-false
+    member 不进入 preserved expected 集合。
+  - **依赖**：T123, T124, T142
+
 ---
 
 ## 实际偏差记录
@@ -1185,3 +1194,6 @@
   自动兼容：仅可见模型不补动作、超出新等级的 manage scope 只收窄、无 tuple 的 binding 不复活、
   child tenant 取根 Knowledge、父目录已删除的 FAILED 文件不进入权限图。仍无法形成连续低级边界、
   未知动作、真实跨租户主体或冲突 tuple 继续 fail closed。
+- 116 的 D4 verify 进一步发现 MySQL collation 顺序与 Python 冻结顺序不同，以及 preserved
+  核对仍包含计划删除的 stale/canonical-false tuple；T143 只修正取证算法，不修改已经完成的
+  target tuple 写入和 legacy tuple 退休结果。

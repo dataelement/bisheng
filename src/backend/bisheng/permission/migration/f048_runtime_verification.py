@@ -435,13 +435,23 @@ class LiveMigrationEvidenceProvider:
     def _preserved_tuple_identities(
         items: list[PermissionMigrationItem],
     ) -> set[tuple[str, str, str]]:
+        canonically_absent = {
+            str(payload.get("tuple_key"))
+            for item in items
+            if item.source_kind == "FAILED_TUPLE"
+            and item.message
+            and (payload := json.loads(item.message)).get("resolution") == "CANONICAL_IDENTITY_STATE"
+            and payload.get("canonical_state") is False
+        }
         expected: set[tuple[str, str, str]] = set()
         for item in items:
-            if item.source_kind != "TUPLE" or not item.message:
+            if item.source_kind != "TUPLE" or not item.message or item.difference_type == "STALE_RESOURCE_TUPLE":
                 continue
             source = json.loads(item.message)
-            if source.get("relation") in PRESERVED_RELATIONS:
-                expected.add(_identity(source))
+            source_identity = _identity(source)
+            source_key = "|".join(source_identity)
+            if source.get("relation") in PRESERVED_RELATIONS and source_key not in canonically_absent:
+                expected.add(source_identity)
         return expected
 
     @staticmethod

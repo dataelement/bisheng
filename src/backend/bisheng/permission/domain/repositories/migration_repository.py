@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable
 from datetime import datetime
 from hashlib import sha256
 
@@ -23,6 +24,43 @@ from bisheng.permission.domain.repositories.catalog_repository import (
 from bisheng.permission.domain.repositories.interfaces import (
     PermissionMigrationRepositoryPort,
 )
+
+_SOURCE_CHECKSUM_KINDS = frozenset({"CONFIG", "RESOURCE", "TUPLE", "FAILED_TUPLE"})
+
+
+def _migration_source_checksum(
+    run: PermissionMigrationRun,
+    items: Iterable[PermissionMigrationItem],
+) -> str:
+    source_items = sorted(
+        (item for item in items if item.source_kind in _SOURCE_CHECKSUM_KINDS),
+        key=lambda item: (item.source_kind, item.source_locator),
+    )
+    payload = {
+        "environment": {
+            "store_id": run.store_id,
+            "source_model_id": run.source_model_id,
+            "source_watermark": run.source_watermark or "",
+        },
+        "items": [
+            {
+                "kind": item.source_kind,
+                "locator": item.source_locator,
+                "checksum": item.source_checksum,
+                "status": item.status,
+                "severity": item.severity,
+                "difference_type": item.difference_type,
+            }
+            for item in source_items
+        ],
+    }
+    canonical = json.dumps(
+        payload,
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    return sha256(canonical.encode("utf-8")).hexdigest()
 
 
 class MigrationRepository(
@@ -343,29 +381,4 @@ class MigrationRepository(
                     )
                 )
                 items = list((await session.execute(statement)).scalars().all())
-        payload = {
-            "environment": {
-                "store_id": run.store_id,
-                "source_model_id": run.source_model_id,
-                "source_watermark": run.source_watermark or "",
-            },
-            "items": [
-                {
-                    "kind": item.source_kind,
-                    "locator": item.source_locator,
-                    "checksum": item.source_checksum,
-                    "status": item.status,
-                    "severity": item.severity,
-                    "difference_type": item.difference_type,
-                }
-                for item in items
-                if item.source_kind in {"CONFIG", "RESOURCE", "TUPLE", "FAILED_TUPLE"}
-            ],
-        }
-        canonical = json.dumps(
-            payload,
-            ensure_ascii=True,
-            separators=(",", ":"),
-            sort_keys=True,
-        )
-        return sha256(canonical.encode("utf-8")).hexdigest()
+        return _migration_source_checksum(run, items)
