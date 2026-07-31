@@ -7,9 +7,14 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from loguru import logger
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from bisheng.api.router import router, router_rpc
 from bisheng.common.errcode import BaseErrorCode
+from bisheng.common.errcode.permission import (
+    AuthorizationModelMismatchError,
+    PermissionPublishNotReadyError,
+)
 from bisheng.common.exceptions.auth import AuthJWTException
 from bisheng.common.init_data import init_default_data
 from bisheng.common.middleware.admin_scope import AdminScopeMiddleware
@@ -52,6 +57,53 @@ _EXCEPTION_HANDLERS = {
 }
 
 
+class F048MigrationGateMiddleware:
+    """Keep the process reachable for operators while rejecting user traffic."""
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(
+        self,
+        scope: Scope,
+        receive: Receive,
+        send: Send,
+    ) -> None:
+        if scope["type"] not in {"http", "websocket"}:
+            await self.app(scope, receive, send)
+            return
+        fastapi_app = scope.get("app")
+        state = getattr(fastapi_app, "state", None)
+        manager = getattr(state, "f048_manager", None)
+        migration_required = manager is not None and manager.readiness().get("migration_required") is True
+        if not migration_required:
+            await self.app(scope, receive, send)
+            return
+        if scope["type"] == "http":
+            if scope.get("path") == "/health":
+                await self.app(scope, receive, send)
+                return
+            response = JSONResponse(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                content={
+                    "status": "ERROR",
+                    "status_code": status.HTTP_503_SERVICE_UNAVAILABLE,
+                    "status_message": (
+                        "F048 permission data migration is required; restart the service after migration"
+                    ),
+                },
+            )
+            await response(scope, receive, send)
+            return
+        await send(
+            {
+                "type": "websocket.close",
+                "code": 1013,
+                "reason": "F048 permission data migration is required",
+            }
+        )
+
+
 async def _initialize_f048_api_process(app: FastAPI) -> None:
     if not settings.openfga.enabled:
         return
@@ -70,18 +122,36 @@ async def _initialize_f048_api_process(app: FastAPI) -> None:
 
     manager = app_context.get_context("openfga")
     client = await manager.async_get_instance()
-    runtime = await initialize_f048_api_runtime(
-        client,
-        external_scopes={
-            "department": get_department_projection_scope(),
-        },
-    )
+    app.state.f048_manager = manager
+    readiness = manager.readiness()
+    if readiness.get("migration_required"):
+        logger.warning(
+            "F048 data migration is required before permission runtime startup; "
+            "API remains not-ready until migration completes and the service restarts"
+        )
+        return
+    try:
+        runtime = await initialize_f048_api_runtime(
+            client,
+            external_scopes={
+                "department": get_department_projection_scope(),
+            },
+        )
+    except (
+        AuthorizationModelMismatchError,
+        PermissionPublishNotReadyError,
+    ) as exc:
+        await manager.mark_migration_required()
+        logger.warning(
+            "F048 permission data is not ready; API remains available only for operator migration until restart: {}",
+            exc,
+        )
+        return
     configure_department_projection_runtime(runtime.components.projection)
     readiness = await bind_f048_process_runtime(
         manager,
         runtime.components.facade,
     )
-    app.state.f048_manager = manager
     app.state.f048_runtime = runtime
     app.state.f048_heartbeat_task = asyncio.create_task(
         run_f048_process_heartbeat(manager),
@@ -203,6 +273,9 @@ def create_app():
     app.add_middleware(AdminScopeMiddleware)
     app.add_middleware(CustomMiddleware)
     app.add_middleware(WebSocketLoggingMiddleware)
+    # Added last so migration-required HTTP/WS requests are rejected before
+    # authentication, tenant loading, or business handlers run.
+    app.add_middleware(F048MigrationGateMiddleware)
 
     @app.exception_handler(AuthJWTException)
     def authjwt_exception_handler(request: Request, exc: AuthJWTException):

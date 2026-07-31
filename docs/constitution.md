@@ -88,7 +88,13 @@ await require_business_action(
   ACTIVE authorization release referenced by the SQL CURRENT Catalog. Every
   Check/List/Write still sends that resolved model ID explicitly. Legacy/
   dual-model clients, runtime model writes, and fail-open behavior are
-  forbidden.
+  forbidden. During an explicit version upgrade, a predecessor model or an
+  incomplete CURRENT Catalog may keep the process alive only in
+  `MIGRATION_REQUIRED/NOT_READY`: it must not install the F048 runtime, publish
+  a ready heartbeat, serve production authorization, or start data migration.
+  While in this state, the API gate rejects every HTTP/WebSocket request except
+  `/health`, and Celery/Linsight must not consume tasks; a successful explicit
+  migration and process restart removes the gate and resumes task consumption.
 
 ## C5. Error-Code Convention
 

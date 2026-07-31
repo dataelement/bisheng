@@ -41,41 +41,65 @@ the service never invokes this script from API startup, Celery, or Linsight.
 Run every command from `src/backend/` with the same `config` value as the live
 deployment.
 
+Normal Compose upgrade flow:
+
+```bash
+docker compose pull
+docker compose up -d
+docker exec -it <backend-container> bash
+
+cd /app
+PYTHONPATH=./ .venv/bin/python scripts/migrate_f048_permission_data.py migrate --apply
+PYTHONPATH=./ .venv/bin/python scripts/migrate_f048_permission_data.py verify --run-id <run-id>
+exit
+
+docker compose restart backend backend_worker
+```
+
+No manual ingress switch is required. Before migration, the API process stays
+alive but `/health` returns HTTP 503 and the application gate rejects every
+other HTTP/WebSocket request. If the deployment splits Celery/Linsight into
+additional Compose services, include all backend process services in the final
+restart.
+
 #### D0/D1 prerequisites
 
-1. Enter maintenance and stop API, Celery workers, Celery Beat, Linsight, sync
-   jobs, and every permission writer. Wait until all runtime heartbeat keys
-   have expired.
-2. Confirm the configured stable OpenFGA Store name. The script discovers the
-   unique matching Store and latest source model, persists both IDs in the
-   durable migration run, and prints them for the change ticket; operators do
-   not query or copy them into configuration.
-3. Upgrade schema and prove the single Alembic head:
+1. Update the backend image and start the normal Compose services. When the
+   latest OpenFGA model is still the predecessor model, the API process stays
+   alive but `/health` returns HTTP 503 with
+   `authorization_model_migration_required`; the application gate rejects all
+   other HTTP/WebSocket traffic, and API/Worker/Linsight do not initialize the
+   F048 permission runtime or publish a ready heartbeat. Celery/Linsight task
+   consumption remains paused until the post-migration restart.
+2. Enter the backend container. Confirm the configured stable OpenFGA Store
+   name. The script discovers the unique matching Store and latest source
+   model, persists both IDs in the durable migration run, and prints them for
+   the change ticket; operators do not query or copy them into configuration.
+3. The API entrypoint has already run `alembic upgrade head`. Verify the
+   database revision and the single code head:
 
    ```bash
    export config=config.yaml
-   export F048_SERVICES_STOPPED=1
-   PYTHONPATH=./ .venv/bin/alembic upgrade head
+   PYTHONPATH=./ .venv/bin/alembic current
    PYTHONPATH=./ .venv/bin/alembic heads
    ```
 
-   `alembic heads` must print only `f048_permission_grants (head)`.
-4. Do not proceed if Redis is unavailable, a runtime heartbeat remains, the
-   dashboard tenant attribution is ambiguous, an unresolved failed tuple
-   exists, or the source watermark changes between scans.
+   Both commands must identify `f048_permission_grants` as the head.
+4. Do not proceed if Redis is unavailable, a ready F048 runtime heartbeat
+   remains, dashboard tenant attribution is ambiguous, an unresolved failed
+   tuple exists, or the source watermark changes between scans.
 
-`F048_SERVICES_STOPPED=1` is an operator acknowledgement, not sufficient proof
-by itself; the script also checks schema, the unique named Store, Redis
-heartbeats, and two identical source scans.
+No Store/model ID or manual stop acknowledgement is required. The script
+checks schema, the unique named Store, Redis readiness heartbeats, and two
+identical source scans.
 
 #### D2/D3 migrate
 
-Keep the service stopped and use its normal OpenFGA connection/Store-name
-configuration:
+From the started backend container, use its normal OpenFGA
+connection/Store-name configuration:
 
 ```bash
 export config=config.yaml
-export F048_SERVICES_STOPPED=1
 PYTHONPATH=./ .venv/bin/python scripts/migrate_f048_permission_data.py \
   migrate \
   --apply
@@ -87,8 +111,8 @@ batches of at most 90, verifies target tuples with higher consistency, then
 removes only the recorded legacy tuples and Config keys. It prints the run ID;
 record it in the change ticket.
 
-If the process exits before `VERIFYING`, keep all services stopped, fix the
-forward path, and resume the same run:
+If the process exits before `VERIFYING`, leave the automatic migration gate in
+place, fix the forward path, and resume the same run:
 
 ```bash
 PYTHONPATH=./ .venv/bin/python scripts/migrate_f048_permission_data.py \
@@ -103,8 +127,9 @@ completed batch is idempotent.
 
 #### D4 verify and runtime discovery
 
-After migrate reports `VERIFYING`, keep services stopped. Do not query
-Store/model/Catalog tables for values to copy into configuration. Ensure
+After migrate reports `VERIFYING`, leave the automatic migration gate in place
+and do not restart the processes yet. Do not query Store/model/Catalog tables
+for values to copy into configuration. Ensure
 `force_write_model=false`, `dual_model_mode=false`, and leave
 `legacy_model_id` empty, then run:
 
@@ -117,15 +142,17 @@ Verification independently rebuilds source and target checksums, requires exact
 target tuple counts, checks high-risk dashboard/download semantics, preserves
 allowed Store facts, requires the run target release to be the one referenced
 by the SQL CURRENT Catalog, and requires legacy Config/tuple and blocker counts
-to be zero. Success moves the run to `READY_TO_START`; only then may D5 start
-all processes.
+to be zero. Success moves the run to `READY_TO_START`; restart API and Worker
+processes so they discover the new F048 model and automatically remove the
+migration gate.
 
 At D5 each process resolves the unique Store by stable `store_name`, selects
 its latest model, and requires the discovered Store/model/checksum to equal the
 ACTIVE authorization release referenced by the SQL CURRENT Catalog. Each
 Check/List/Write then sends that resolved model ID explicitly. A duplicate
-Store name, missing Store/model, checksum mismatch, or Catalog mismatch fails
-startup/readiness.
+Store name or missing Store/model still fails startup. A predecessor checksum
+keeps the process alive but not ready for the explicit migration; after the
+post-migration restart, any model/Catalog mismatch fails readiness.
 
 There is no preview, dry-run, cleanup, rollback, Store switch, dual-model
 window, or automatic startup migration. A failure keeps maintenance active and

@@ -10,7 +10,7 @@
 **关联**：[spec.md](./spec.md) · [产品说明](./product-authorization-model-and-migration-guide.md) · [release contract](../release-contract.md)
 **版本**：v3.0.0-beta1
 **功能分支**：`feat/v3.0.0-beta1/048-rebac-permission-model-grants`
-**最后更新**：2026-07-30
+**最后更新**：2026-07-31
 
 ---
 
@@ -20,8 +20,8 @@
 
 F048 把“OpenFGA 四档关系 + Config 模型/Binding + DB creator/成员兜底”收敛为
 MySQL/DM8 中可审计、可版本化的 Action/Model/Grant 控制面，以及以具体 action relation
-为唯一最终 ALLOW/DENY 的 OpenFGA 执行面。它以原子 Catalog、可恢复投影和停服后在
-现有 OpenFGA Store 内完成的一次性 model/tuple 升级，支撑多主体来源并集、
+为唯一最终 ALLOW/DENY 的 OpenFGA 执行面。它以原子 Catalog、可恢复投影和应用自动访问
+门禁，在已启动的新镜像 backend 容器内完成一次性 model/tuple 升级，支撑多主体来源并集、
 `INHERIT`/`CUSTOM` 与受保护 owner。Platform 和 Client
 使用同一后端契约解释模型、来源、等级与模式。
 
@@ -54,13 +54,16 @@ MySQL/DM8 中可审计、可版本化的 Action/Model/Grant 控制面，以及�
   - Config 大 JSON 不再是运行时真相；
   - 生产 Check/List/Write 必须显式固定 Authorization Model ID；
   - 标准模型累计，自定义模型不因派生等级补齐动作；
-  - 正式迁移必须在全部权限读写进程停止后执行；沿用现有 Store，启服后只允许新 model ID。
+  - 正式迁移必须在 HTTP/WS 迁移门禁生效、ready F048 runtime heartbeat 为零后执行；
+    进程可保持 `MIGRATION_REQUIRED/NOT_READY` 以供容器内运维，沿用现有 Store，重启后
+    只允许新 model ID。
 - 本文严格区分两类“迁移”：
   - **Schema Migration**：`bisheng/core/database/alembic/versions/` 下的 Alembic revision，
     只负责 MySQL/DM8 DDL；不得读取旧业务数据、回填/清理数据或访问 OpenFGA。
   - **Permission Data Migration**：`src/backend/scripts/migrate_f048_permission_data.py`
-    执行的一次性停服数据升级；负责旧 Config/业务事实/OpenFGA tuple 的读取、转换、写入、
-    checkpoint、验证和旧数据退役，不注册为运行时 Service、API、Celery 或启动任务。
+    在已启动但 F048 未就绪的 backend 容器内执行的一次性数据升级；负责旧 Config/业务事实/
+    OpenFGA tuple 的读取、转换、写入、checkpoint、验证和旧数据退役，不注册为运行时
+    Service、API、Celery 或启动任务。
 - OpenFGA Authorization Model 不可变；Store/model/Catalog ID 会随首次初始化和功能升级
   变化，不写入部署配置。生产实例按稳定 `store_name` 查询且只接受唯一 Store，选择其
   最新 model，获取 checksum，再要求它与 SQL CURRENT Catalog 引用的唯一 ACTIVE
@@ -95,7 +98,7 @@ MySQL/DM8 中可审计、可版本化的 Action/Model/Grant 控制面，以及�
 | OQ-05 | viewer=false、editor=false、manager=false、owner=true | 无 `manage_permission` 的模型该值不产生能力；owner 可授同级 |
 | OQ-06 | 文件预览不设置 PermissionAction | 预览不调用动作鉴权；只有原件/打包下载检查 `download`；知识库 RAG 仍检查库 `use` |
 | OQ-07 | 选择 A：退役既有 F018 owner 交接 | F048 启服时移除该 API，本期不实现 protected owner transfer；其他 ordinary owner 仍可并存 |
-| 迁移发布 | 停服后在现有 Store 直接迁移，不支持预演和回滚 | 发布一个新不可变 model ID；源校验、tuple 转换、旧 tuple 退役和目标校验在同一正式 run 完成；启服后只运行新 model |
+| 迁移发布 | 启动新镜像并由应用自动拒绝业务访问后，在 backend 容器内对现有 Store 直接迁移，不支持预演和回滚 | 旧 model 下进程保持 `MIGRATION_REQUIRED/NOT_READY`，HTTP/WS 除 `/health` 外返回 503/关闭；发布一个新不可变 model ID，源校验、tuple 转换、旧 tuple 退役和目标校验在同一正式 run 完成；迁移后重启并只运行新 model |
 | 数据升级职责 | Alembic 仅执行 DDL；`src/backend/scripts/` 专用脚本执行数据迁移 | 先完成 schema upgrade，再由 `migrate_f048_permission_data.py --apply` 创建/续跑正式 data migration run；服务启动不自动迁数据 |
 
 确认本文即确认上表；若任一项变化，必须先更新 Spec/Design 并重新做 Design ★。
@@ -212,8 +215,9 @@ MySQL/DM8 中可审计、可版本化的 Action/Model/Grant 控制面，以及�
     隔离强，但引入 Store 切换、基础事实复制和双 Store 对账，本期没有需要。
   - B. 在同一 Store 同时维护旧、新 model client，做 shadow/灰度或兼容期双写。
     能在线比较，但正是用户明确不要的两套运行模型。
-  - C. 停止全部权限读写，在现有 Store 发布新的不可变 model ID；迁移 tuple、删除已迁移
-    资源的旧四档 tuple，校验后让所有实例只固定新 model ID。
+  - C. 让新镜像进程以 `MIGRATION_REQUIRED/NOT_READY` 启动并自动拒绝 HTTP/WS，在现有 Store
+    发布新的不可变 model ID；迁移 tuple、删除已迁移资源的旧四档 tuple，校验后重启所有
+    实例并只固定新 model ID。
 - **选定**：C。
 - **原因**：
   - OpenFGA Store 本来就是全部 relation tuple 的命名空间，没有理由搬迁仍有效的组织、
@@ -223,10 +227,12 @@ MySQL/DM8 中可审计、可版本化的 Action/Model/Grant 控制面，以及�
   - stored tuple 属于 Store 而不属于 model。迁移用 Store-scoped Read 取得源 tuple，
     Delete 按 tuple key 退役旧关系，只有新关系 Write 和目标语义 Check 显式固定新 model ID；
     `source_model_id` 只用于记录来源 DSL/checksum，不用于构造旧 model client；
-  - 官方迁移语义规定：新模型下不合法的旧 tuple 会被忽略，但可能拖慢查询。因此停服迁移
-    在启服前删除已迁移资源的旧四档/废弃 relation tuple，D4 要求遗留计数为零；
-  - 停服期间没有生产请求，无需旧/新 model shadow、旧模型结果不变证明或 compatibility model。
-    `dual_model_mode=false`、`legacy_model_id` 为空是 D5 硬门禁。
+  - 官方迁移语义规定：新模型下不合法的旧 tuple 会被忽略，但可能拖慢查询。因此在外部流量
+    关闭、F048 runtime 不就绪的迁移窗口内，于重启前删除已迁移资源的旧四档/废弃 relation
+    tuple，D4 要求遗留计数为零；
+  - 迁移期间应用门禁拒绝业务访问，进程不初始化 F048 权限运行时，也没有生产授权请求，无需旧/新
+    model shadow、旧模型结果不变证明或 compatibility model。`dual_model_mode=false`、
+    `legacy_model_id` 为空是 D5 硬门禁。
 - **何时重新考虑**：未来明确要求按租户拆 Store，或现有 Store 已发生无法原地修复的数据
   污染时另立 Store 迁移 Spec；不能把新 Store 当成本次普通 model 升级步骤。
 
@@ -324,29 +330,33 @@ reader 同时检查三个 marker scope：Catalog publish 用 global；tenant/dep
   不对通用 HTTP API 开放。
 - **何时重新考虑**：出现无法同版本升级的外部正式 API 消费者；需另立兼容 Spec 和下线日期。
 
-### 决策 11：停服后执行单向正式迁移，失败只做前向修复
+### 决策 11：应用自动阻断访问后执行单向正式迁移，失败只做前向修复
 
 - **备选**：
   - A. 运行旧 model 的同时先做独立 dry-run、影子旧/新对比，再灰度切流。验证充分，但形成双版本
     运行和用户已明确不需要的迁移预演。
   - B. 切换后保留回滚窗口与新→旧 down-conversion journal。能恢复旧逻辑，但新语义未必能
     无损表达为旧模型，会把实现和运维复杂度长期绑在旧系统上。
-  - C. 停止所有权限读写进程，在现有 Store 的一个正式 migration run 中完成源校验、
-    新 tuple 写入、旧 tuple 退役和目标校验；通过后全部服务只启用新 model。失败保持维护，
-    修复迁移器/数据后 checkpoint 续跑或用新 model 执行 durable forward-fix operation。
+  - C. 更新镜像并让进程以 `MIGRATION_REQUIRED/NOT_READY` 启动，由应用自动拒绝 HTTP/WS，
+    在 backend
+    容器内对现有 Store 的一个正式 migration run 完成源校验、新 tuple 写入、旧 tuple 退役
+    和目标校验；通过后重启全部服务并只启用新 model。失败保持维护，修复迁移器/数据后
+    checkpoint 续跑或用新 model 执行 durable forward-fix operation。
 - **选定**：C。
-- **原因**：这是用户明确选择的部署合同；停服消除了迁移中的增量追平和双裁决问题，
+- **原因**：这是用户明确选择的部署合同；应用访问门禁以及 F048 runtime 不就绪消除了
+  迁移中的增量追平和双裁决问题，
   同一 Store 中先写新 tuple、核对后删旧 tuple的 checkpoint 流程消除了半清理风险。
   checkpoint 只服务同一次正式迁移的幂等续跑，不是预演或回滚。
-- **何时重新考虑**：只有业务无法接受完整停服窗口或监管明确要求应用级回退时，重新立 Spec，
+- **何时重新考虑**：只有业务无法接受完整不可用窗口或监管明确要求应用级回退时，重新立 Spec，
   设计在线增量同步/回滚，不得在 F048 实现中暗藏旧运行时。
 
 失败处理固定为：
 
-1. D0～D4 任一步失败：不启动 API/Celery/Linsight，保留 migration run/item 与 checkpoint；
+1. D0～D4 任一步失败：保持应用访问门禁以及 API/Celery/Linsight 的 F048 runtime 不就绪，
+   保留 migration run/item 与 checkpoint；
 2. 修复数据或迁移代码后，从最后一个已验证批次继续，重复执行得到同一 Store/新 model 结果；
 3. D5 启服 smoke 失败：立即重新进入维护，停止权限写，并在新控制面/新 model 前向修复；
-4. 修复通过完整 D4 校验和 D5 全实例 readiness 后才重新开放流量；
+4. 修复通过完整 D4 校验和 D5 全实例 readiness 后，访问门禁才自动解除；
 5. 任何场景都不得重新 pin 旧 model、恢复 Config 第二 PDP、逐请求询问旧 model 或静默丢弃已成功写入。
 
 ### 决策 12：Alembic 只做结构变更，权限数据迁移由 scripts 专用脚本执行
@@ -356,9 +366,10 @@ reader 同时检查三个 marker scope：Catalog publish 用 global；tenant/dep
     部署命令少，但数据量不可控、无法安全断点续跑，还会把 API 启动绑定到跨系统数据变更。
   - B. 由 API lifespan、Celery 或权限运行时 Service 在新版本启动后自动迁移。
     可复用应用上下文，但服务会在新旧数据混合期间对外运行，多实例还可能并发执行。
-  - C. Alembic revision 仅提交幂等、MySQL/DM8 兼容的 DDL；停服后由
-    `src/backend/scripts/migrate_f048_permission_data.py` 初始化完整应用上下文并执行数据迁移，
-    `permission_migration_run/item` 只作为该脚本的 checkpoint/审计存储。
+  - C. Alembic revision 仅提交幂等、MySQL/DM8 兼容的 DDL；启动新镜像且应用访问门禁生效后，
+    运维进入 backend 容器，由 `src/backend/scripts/migrate_f048_permission_data.py` 初始化
+    完整应用上下文并执行数据迁移，`permission_migration_run/item` 只作为该脚本的
+    checkpoint/审计存储。
 - **选定**：C。
 - **原因**：
   - 项目迁移规范明确禁止在新 revision 中执行 `SELECT→UPDATE/INSERT`、seed、backfill、
@@ -903,7 +914,7 @@ operation 重试；出现混合集或 scope version 已被外部改变时标 FAI
 | `telemetry_search/.../DashboardService` | dashboard 业务加载、preset/status/组件规则、verified target 与 lifecycle projection | 不再调旧 AccessType/DASHBOARD relation |
 | `core/database/alembic/versions/<f048_revision>.py` | 新表、列、索引、约束等 MySQL/DM8 schema DDL | 不读取/转换/回填/清理业务数据，不访问 Config/OpenFGA，不 import 数据迁移脚本 |
 | `scripts/migrate_f048_permission_data.py` | 唯一数据迁移入口；初始化 app context，执行 source validation→publish-new-model→控制面/tuple 转换→retire legacy→checkpoint；`migrate` 必须显式 `--apply` | 不创建/修改 schema，不注册 API/Celery/startup，不直接使用业务 ORM，不提供 inventory/dry-run/rollback |
-| `scripts/README.md` | 记录脚本前置 schema head、停服条件、配置、正式命令、verify、退出码和失败续跑方式 | 不保存凭据或生产数据 |
+| `scripts/README.md` | 记录更新镜像并启动、自动访问门禁、脚本前置 schema head/ready heartbeat=0、容器内正式命令、verify、重启、退出码和失败续跑方式 | 不保存凭据或生产数据 |
 | permission notification adapter | 从 assignee/source/model 生成通知 | 不再解析 relation/binding |
 | Platform permission components | Catalog 配置、资源授权 | store 不直接 HTTP |
 | Client permission components | 资源模式、成员/来源、频道 adapter | 不复制 Catalog 管理能力 |
@@ -911,7 +922,8 @@ operation 重试；出现混合集或 scope version 已被外部改变时标 FAI
 其他业务域只把内部生成的 VerifiedPermissionTarget 交给 PermissionService；Permission
 domain 对业务 model/repository 的 import 必须由架构测试禁止。正式迁移前旧 service
 仍是旧 runtime；新模型启服构建的 runtime call graph 必须通过静态 grep/测试证明没有
-已迁移调用方。只有 `src/backend/scripts/migrate_f048_permission_data.py` 可以在停服窗口
+已迁移调用方。只有 `src/backend/scripts/migrate_f048_permission_data.py` 可以在应用访问
+门禁生效且 F048 runtime 不就绪的窗口
 读取旧 Config/tuple 并调用数据源 port；它不得调用旧 service 生成线上双模型对比结论。
 
 ---
@@ -921,7 +933,7 @@ domain 对业务 model/repository 的 import 必须由架构测试禁止。正�
 | # | 事实 | 不知道会怎样 | 处理位置 |
 |---|---|---|---|
 | 1 | tuple 不属于某个 model ID；Read/Delete 是 Store-scoped，只有新 tuple Write/目标查询固定新 model | 误以为切 model 会自动迁数据，或为删除旧 tuple 额外维护旧 client；遗留无效 tuple 虽被新模型忽略，仍可能拖慢读取 | `scripts/migrate_f048_permission_data.py:migrate_and_retire_legacy_tuples` + D4 legacy-count gate |
-| 2 | manager 启动会自动选择 Store 最新 model | 仅发布新 model 就可能让误启动实例尝试提前切换 | 迁移全程停服；`core/openfga/manager.py` 还必须匹配 F048 checksum 与 SQL CURRENT Catalog，不匹配即拒绝 readiness |
+| 2 | manager 启动会自动选择 Store 最新 model | 仅发布新 model 就可能让已启动实例尝试提前切换 | 启动时发现旧 checksum 则固定进入 `MIGRATION_REQUIRED/NOT_READY` 且不初始化 F048 runtime；迁移后必须重启，`core/openfga/manager.py` 再匹配 F048 checksum 与 SQL CURRENT Catalog |
 | 3 | OpenFGA Write 最多 100 tuple，才是原子边界 | 大批成员/模式切换被静默拆批后半生效 | `ProjectionService.compile_delta/commit`、`ModeService.apply` |
 | 4 | `user:*` 在 model release 上是能力 marker，不是资源公共授权 | 审计误报“全员可编辑所有资源” | `authorization_model_f048.py` namespace + model tests |
 | 5 | 标准模型累计，自定义模型不累计 | 按 level 给 custom 自动补动作会扩权 | `CatalogService.build_model_release` |
@@ -1262,7 +1274,7 @@ Constitution 头部要求 law change 经过 PR review；用户 Design ★ 确认
 `BENCH-01`：在实现/发布验证环境用生产脱敏分布覆盖 tenant/resource（含 dashboard）、
 model/Grant/assignee、部门树深度、folder/file 权限链深度及组合最坏路径，记录
 P50/P95/P99 与既有旧读路径基线对比并附 checksum。它是新读路径的性能验收，不是生产迁移 dry-run；
-未通过时不得进入正式停服窗口，也不能以 109 环境数据豁免，需回到 Design 调整。
+未通过时不得进入正式升级窗口，也不能以 109 环境数据豁免，需回到 Design 调整。
 
 ### 7.3 可观测
 
@@ -1355,7 +1367,7 @@ direct member、department member 和无权限用户；文档/日志不保存固
 
 ---
 
-## 8. 停服直迁、启服与前向修复 runbook
+## 8. 自动访问门禁直迁、重启与前向修复 runbook
 
 ### 8.1 来源映射
 
@@ -1409,12 +1421,12 @@ protected owner transfer 不再是开放项：F048 启服构建必须退役 F018
 
 | 阶段 | 服务状态 | 操作与退出门禁 |
 |---|---|---|
-| D0 停服与冻结 | 全部关闭 | 开维护；停止 API、Celery、Linsight、Beat/同步任务及所有权限读写入口；等待 heartbeat 归零；记录现有 Store ID、旧 model ID、Config/业务表 watermark 与 environment fingerprint |
-| D1 Schema Migration | 全部关闭 | 只执行 `alembic upgrade head` 的 MySQL/DM8 DDL；验证单 head 与新表/索引/约束存在；revision 不创建 run、不读取或写入业务数据、不访问 OpenFGA |
-| D2 Data Migration Script 初始化与控制面转换 | 全部关闭 | 运维从 `src/backend/` 以 live `config` 执行 `scripts/migrate_f048_permission_data.py migrate ... --apply`；脚本验证 D1/schema fingerprint，创建唯一正式 run，在**同一 Store**发布新 model 并跑 model tests，再导入 Action/Catalog/标准及自定义 Model、binding→Grant/assignee、mode 和人工项 |
-| D3 迁移并退役旧数据 | 全部关闭 | 原地复用仍合法的 tenant/department/user_group/system/shared/parent tuple；按 item/checkpoint 写新 Catalog/Grant/mode tuple，逐批核对后删除已迁移资源的旧四档/废弃 relation tuple；全部目标落稳后删除旧 Config 大 JSON 运行数据 |
-| D4 数据脚本 verify | 全部关闭 | 执行同一脚本的 `verify --run-id`；blocker=0；来源/目标计数和 checksum 一致；已迁移类型 legacy tuple/Config 计数为零；新 model 高风险 Check/List、owner、mode、多来源、dashboard、download 语义通过；run 转 `READY_TO_START` |
-| D5 自动发现并启服 | 关闭→新 model | 配置只保留 OpenFGA 连接信息、稳定 Store name，`dual_model_mode=false` 且无 `legacy_model_id`；全部实例发现唯一同名 Store/latest model，并要求它与 SQL CURRENT Catalog 的 ACTIVE release 一致；readiness/heartbeat 100% 且 smoke 通过才解除维护 |
+| D0 启动新镜像并自动阻断访问 | 进程存活、F048 不就绪 | 执行既有镜像更新与 `docker compose up -d`；API、Celery、Linsight 发现旧 model 后只进入 `MIGRATION_REQUIRED/NOT_READY`，不初始化 F048 runtime、不发布 ready heartbeat；HTTP/WS 门禁除 `/health` 外统一拒绝，Celery/Linsight 暂停消费任务；记录现有 Store ID、旧 model ID、Config/业务表 watermark 与 environment fingerprint |
+| D1 Schema Migration | 进程存活、F048 不就绪 | 正常启动链只执行 `alembic upgrade head` 的 MySQL/DM8 DDL；验证单 head 与新表/索引/约束存在；revision 不创建 run、不读取或写入业务数据、不访问 OpenFGA |
+| D2 Data Migration Script 初始化与控制面转换 | backend 容器可进入、访问门禁生效 | 运维进入 backend 容器，从 `src/backend/` 以 live `config` 执行 `scripts/migrate_f048_permission_data.py migrate ... --apply`；脚本验证 D1/schema fingerprint 与 ready heartbeat=0，创建唯一正式 run，在**同一 Store**发布新 model 并跑 model tests，再导入 Action/Catalog/标准及自定义 Model、binding→Grant/assignee、mode 和人工项 |
+| D3 迁移并退役旧数据 | 访问门禁生效、F048 不就绪 | 原地复用仍合法的 tenant/department/user_group/system/shared/parent tuple；按 item/checkpoint 写新 Catalog/Grant/mode tuple，逐批核对后删除已迁移资源的旧四档/废弃 relation tuple；全部目标落稳后删除旧 Config 大 JSON 运行数据 |
+| D4 数据脚本 verify | 访问门禁生效、尚未重启 | 执行同一脚本的 `verify --run-id`；blocker=0；来源/目标计数和 checksum 一致；已迁移类型 legacy tuple/Config 计数为零；新 model 高风险 Check/List、owner、mode、多来源、dashboard、download 语义通过；run 转 `READY_TO_START` |
+| D5 重启并自动发现 | 重启→新 model | 数据迁移成功后重启 API、Celery、Linsight 等服务；配置只保留 OpenFGA 连接信息、稳定 Store name，`dual_model_mode=false` 且无 `legacy_model_id`；全部实例发现唯一同名 Store/latest model，并要求它与 SQL CURRENT Catalog 的 ACTIVE release 一致；readiness/heartbeat 100% 且 smoke 通过后访问门禁自动解除 |
 | D6 前向运行 | 新 model | 正常读写只走新 model + projection ledger；问题只做前向修复；旧 model ID 仅作为 OpenFGA 不可删除的历史版本存在 |
 
 Alembic 在 D1 成功退出后即完成职责，不写入以下状态。正式 permission data migration
@@ -1437,7 +1449,7 @@ CREATED
 重新从 D2 校验，不能复用旧结果。
 
 `READY_TO_START` 是 migration run 的终态，状态为 `COMPLETED`。D4 同一事务将目标
-`authorization_model_release` 置为 `ACTIVE` 并退役来源 release；D5 是应用部署与启服阶段，
+`authorization_model_release` 置为 `ACTIVE` 并退役来源 release；D5 是应用重启与启服阶段，
 不再修改 data migration run，也不引入第三个 migration CLI 子命令。
 
 ### 8.3 正式迁移命令与启服门禁
@@ -1483,8 +1495,8 @@ relation tuple。
 
 D5 必须同时满足：
 
-- API、Celery、Linsight、Beat/同步任务及所有权限写入口 heartbeat=0，且 source watermark
-  自 D0 起未变化；
+- D0～D4 应用访问门禁保持生效，启动的 API、Celery、Linsight 不初始化 F048 runtime，
+  Celery/Linsight 不消费任务，ready heartbeat=0，且 source watermark 自 D0 起未变化；
 - migration run、SQL CURRENT Catalog 和启动时发现的 OpenFGA 实际 Store ID 三者相同，
   且与 D0 前 Store ID 完全一致；
 - 新 model ID/checksum 与 release 记录一致；旧 model ID 未出现在任何 runtime 配置、
@@ -1511,11 +1523,11 @@ D5 必须同时满足：
 
 | 失败时点 | 唯一处置 |
 |---|---|
-| D0 | 保持全部服务关闭；完成停服/水位冻结后重新核对，尚不执行 schema 或数据变更 |
-| D1 Alembic | 保持全部服务关闭；修复 DDL/单 head/双库兼容后重跑 `alembic upgrade head`；此时不得已有 permission data migration run |
-| D2 数据脚本 | 保持全部服务关闭；修复源数据/映射或脚本后，以同一 run/checkpoint 续跑 `migrate --apply` |
-| D3～D4 | 保持全部服务关闭；按 migration item 对 SQL/同一 Store 的新 tuple 与 legacy delete 做幂等前向修正，重跑完整 D4 |
-| D5 启动或 smoke | 立即恢复维护并停止全部权限写；新 model 仍是唯一目标，修复配置/代码/投影后重跑 D4+D5 |
+| D0 | 保持应用访问门禁；修复镜像/启动问题，确认进程存活但 F048 不就绪后重新核对，尚不执行数据迁移 |
+| D1 Alembic | 保持应用访问门禁和 F048 不就绪；修复 DDL/单 head/双库兼容后重跑 `alembic upgrade head`；此时不得已有 permission data migration run |
+| D2 数据脚本 | 保持应用访问门禁和 F048 不就绪；修复源数据/映射或脚本后，以同一 run/checkpoint 续跑 `migrate --apply` |
+| D3～D4 | 保持应用访问门禁和 F048 不就绪；按 migration item 对 SQL/同一 Store 的新 tuple 与 legacy delete 做幂等前向修正，重跑完整 D4 |
+| D5 重启或 smoke | 立即保持/恢复应用访问门禁并停止全部权限写；新 model 仍是唯一目标，修复配置/代码/投影后重跑 D4+D5 |
 | D6 运行中 | 由新业务 Service + `permission_projection_operation/tuple` 执行 forward-fix；`FAILED_CLOSED` 资源保持 fenced，修复并 higher-consistency 验证后再开放 |
 
 禁止重新 pin 旧 model、恢复 Config 第二 PDP、把新授权 down-convert 成四档 tuple、
@@ -1538,7 +1550,7 @@ D3 已完成全部旧运行数据退役，D6 没有延后的 cleanup 窗口。�
 
 ## 9. 已知短板与后续改进
 
-- 生产脱敏分布尚未落入仓库；`BENCH-01` 是进入正式停服窗口前的发布 blocker，不影响
+- 生产脱敏分布尚未落入仓库；`BENCH-01` 是进入正式升级窗口前的发布 blocker，不影响
   Design 代码实现，但不能在 E2E/发布评审中标绿。它验证新读路径性能，不是迁移预演。
 - Catalog 完整快照与 model release staging 是 O(模型数×动作数)，刻意换取原子性；
   当前无生产模型规模证据支持更复杂的增量图。
@@ -1549,8 +1561,8 @@ D3 已完成全部旧运行数据退役，D6 没有延后的 cleanup 窗口。�
 - 文件预览明确不设置 PermissionAction；原件/打包下载使用 `download`，知识库 RAG 使用库
   `use`，且 `use` 不得直接换取原始文件 URL。以后若产品要求控制预览，必须新增独立
   PermissionAction、Authorization Model release 和迁移 Spec，不能把既有 `download` 偷作别名。
-- 停服直迁会带来明确不可用窗口，并且 F048 不提供应用级回滚；这由用户明确选择。
-  若未来不可接受停服或必须回退，需要新 Feature 设计在线增量同步/恢复合同，不能在本期
+- 自动访问门禁直迁会带来明确不可用窗口，并且 F048 不提供应用级回滚；这由用户明确选择。
+  若未来不可接受不可用窗口或必须回退，需要新 Feature 设计在线增量同步/恢复合同，不能在本期
   临时加旧/新 model 影子、down-converter 或旧 Config fallback。
 - 权限数据升级是 `src/backend/scripts/` 中的人工运维步骤，不随 Alembic 或服务启动自动
   执行；这增加了发布 runbook 操作，但避免不可控 DML/FGA 写阻塞数据库结构升级或多实例
@@ -1567,6 +1579,7 @@ D3 已完成全部旧运行数据退役，D6 没有延后的 cleanup 窗口。�
 
 | 日期 | 改动 | 触发原因 |
 |---|---|---|
+| 2026-07-31 | 简化升级顺序为“更新镜像并启动→进入 backend 容器执行 migrate/verify→迁移成功后重启服务”；旧 model 下 API/Worker 进程允许存活但 F048 runtime 不初始化、readiness=503、ready heartbeat=0，应用自动拒绝非 health HTTP/WS；重启就绪后自动恢复访问；移除 `F048_SERVICES_STOPPED` 人工标记 | 用户明确要求沿用之前版本的简单升级流程，只额外增加迁移后重启 |
 | 2026-07-30 | 运行时不再配置 Store/model/Catalog ID；沿用按 Store name 查询唯一 Store 与 latest model 的方式，并增加 F048 checksum + SQL CURRENT Catalog 一致性门禁；迁移 CLI 移除 `--expected-store-id` | 用户明确纠正易变 ID 不应写入配置 |
 | 2026-07-30 | 将手工、SSO/F015 与组织 reconcile 的部门 create/move/archive 统一为业务状态与 projection operation 同 SQL 事务绑定；补充归档恢复到同一 parent 仍重建 mirror 的规则 | T066 实现期崩溃窗口审计 |
 | 2026-07-29 | 用户明确确认 Design ★，允许进入 `tasks.md` 编写与评审；尚未授权编码 | 用户回复“确认design” |

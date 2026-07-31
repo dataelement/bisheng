@@ -6,6 +6,10 @@ from celery.signals import celeryd_after_setup, worker_shutting_down
 from loguru import logger
 
 import bisheng.worker.tenant_context  # noqa: F401 — register tenant signals
+from bisheng.common.errcode.permission import (
+    AuthorizationModelMismatchError,
+    PermissionPublishNotReadyError,
+)
 from bisheng.common.services.config_service import settings
 from bisheng.core.cache.redis_manager import get_redis_client_sync
 from bisheng.core.logger import set_logger_config
@@ -37,6 +41,8 @@ async def _heartbeat_worker_openfga() -> None:
     from bisheng.core.context.manager import app_context
 
     manager = app_context.get_context("openfga")
+    if manager.readiness().get("migration_required"):
+        return
     if not await manager.heartbeat():
         raise RuntimeError("Celery F048 OpenFGA runtime heartbeat failed")
 
@@ -62,10 +68,10 @@ def worker_alive_beat(all_queues: list[str]):
     logger.debug("Worker alive beat stopped.")
 
 
-async def _init_worker_openfga() -> None:
+async def _init_worker_openfga() -> bool:
     """Initialize OpenFGA context in Celery workers for retry/reconcile tasks."""
     if not settings.openfga.enabled:
-        return
+        return True
     from bisheng.core.context.manager import app_context
     from bisheng.core.openfga.manager import FGAManager
 
@@ -79,6 +85,12 @@ async def _init_worker_openfga() -> None:
         app_context.register_context(manager, optional=False)
 
     client = await manager.async_get_instance()
+    if manager.readiness().get("migration_required"):
+        logger.warning(
+            "F048 data migration is required; Celery starts without the "
+            "permission runtime until migration completes and the worker restarts"
+        )
+        return False
     from bisheng.department.domain.services.department_projection_scope import (
         configure_department_projection_runtime,
         get_department_projection_scope,
@@ -88,12 +100,24 @@ async def _init_worker_openfga() -> None:
         initialize_f048_background_runtime,
     )
 
-    components = await initialize_f048_background_runtime(
-        client,
-        external_scopes={
-            "department": get_department_projection_scope(),
-        },
-    )
+    try:
+        components = await initialize_f048_background_runtime(
+            client,
+            external_scopes={
+                "department": get_department_projection_scope(),
+            },
+        )
+    except (
+        AuthorizationModelMismatchError,
+        PermissionPublishNotReadyError,
+    ) as exc:
+        await manager.mark_migration_required()
+        logger.warning(
+            "F048 permission data is not ready; Celery starts without the "
+            "permission runtime until migration completes and the worker restarts: {}",
+            exc,
+        )
+        return False
     configure_department_projection_runtime(components.projection)
     await bind_f048_process_runtime(
         manager,
@@ -106,6 +130,7 @@ async def _init_worker_openfga() -> None:
         readiness["model_id"],
         readiness["catalog_release_id"],
     )
+    return True
 
 
 @celeryd_after_setup.connect
@@ -115,7 +140,15 @@ def on_worker_init(*args, **kwargs):
     from bisheng.worker._asyncio_utils import get_worker_loop, run_async_task
 
     get_worker_loop()  # start the persistent loop thread before any task arrives
-    run_async_task(_init_worker_openfga)
+    f048_ready = run_async_task(_init_worker_openfga)
+    if not f048_ready:
+        logger.warning(
+            "Celery task consumption is paused until the explicit F048 migration completes and this worker is restarted"
+        )
+        # The deployment contract requires an explicit post-migration restart;
+        # do not poll and activate a worker against a model published mid-run.
+        while True:
+            time.sleep(_WORKER_BEAT_SLEEP)
     queues = bisheng_celery.amqp.queues
     all_queues = []
     for queue_name, _ in queues.items():

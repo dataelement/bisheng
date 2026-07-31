@@ -184,6 +184,46 @@ async def test_live_source_provider_short_circuits_before_business_scan(
     assert dashboard.backfill_calls == 0
 
 
+async def test_live_source_provider_needs_no_manual_stop_ack_without_ready_heartbeats(
+    monkeypatch,
+):
+    dashboard = _NoopDashboardRepository()
+    provider = LiveMigrationSourceProvider(
+        source_client=_NoopSourceClient(),
+        actual_store_id="store-live",
+        source_model_id="legacy-model",
+        sources=(),
+        dashboard_repository=dashboard,
+    )
+    empty_sources = {
+        "configs": (),
+        "resources": (),
+        "tuples": (),
+        "failed_tuples": (),
+    }
+
+    async def schema_ready():
+        return True
+
+    async def no_heartbeats():
+        return 0
+
+    async def load_sources():
+        return empty_sources
+
+    monkeypatch.delenv("F048_SERVICES_STOPPED", raising=False)
+    monkeypatch.setattr(provider, "_schema_ready", schema_ready)
+    monkeypatch.setattr(provider, "_active_heartbeats", no_heartbeats)
+    monkeypatch.setattr(provider, "_load_sources", load_sources)
+
+    snapshot = await provider.aload_snapshot(expected_store_id="store-live")
+
+    assert snapshot.environment.services_stopped is True
+    assert snapshot.environment.active_heartbeats == 0
+    assert snapshot.environment.source_watermark == snapshot.environment.observed_watermark
+    assert dashboard.backfill_calls == 1
+
+
 class _PublisherSourceClient:
     store_id = "store-live"
 

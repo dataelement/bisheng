@@ -25,6 +25,9 @@
   （ORM、错误码、配置、Alembic DDL）按模板例外置于最前。
 - Alembic revision **只做 MySQL/DM8 DDL**；旧 Config、业务事实和 OpenFGA tuple 的数据迁移
   只从 `src/backend/scripts/migrate_f048_permission_data.py` 显式启动，禁止 lifespan/API/Celery 自动迁移。
+- 升级沿用既有流程：更新镜像并启动；旧 model 下 API/Worker 进程只进入
+  `MIGRATION_REQUIRED/NOT_READY`，应用自动拒绝非 health HTTP/WS，Celery/Linsight 暂停
+  消费任务；运维从 backend 容器执行脚本，成功后重启服务并自动恢复访问/任务消费。
 - 权限领域只消费业务 Service 生成的 `VerifiedPermissionTarget` 或迁移 DTO，不查询资源存在性、
   tenant、状态、父级或展示名称。
 - Platform 与 Client 分开实现和测试；Platform 使用 Zustand/react-query v3/request wrapper，
@@ -880,8 +883,8 @@
 
 - [x] **T109：F048 迁移 source inventory 测试**
   - **文件**：`src/backend/test/permission/test_f048_migration_inventory.py`
-  - **测试**：D1 schema/停服/Store/watermark 前置，旧动作/模型/binding/tuple/parent/mode/
-    owner/failed_tuple 盘点，损坏 JSON、跨租户、孤儿和 blocker 分类；不形成 dry-run。
+  - **测试**：D1 schema/ready heartbeat=0/Store/watermark 前置，旧动作/模型/binding/tuple/
+    parent/mode/owner/failed_tuple 盘点，损坏 JSON、跨租户、孤儿和 blocker 分类；不形成 dry-run。
   - **覆盖 AC**：AC-71, AC-72, AC-73, AC-74, AC-75, AC-76, AC-99, AC-108, AC-113, AC-141, AC-142
   - **依赖**：T011, T014, T020, T052, T054, T056, T058, T060, T062, T064, T066, T068
 
@@ -975,7 +978,7 @@
   - **文件**：`src/backend/bisheng/permission/migration/f048_coordinator.py`
   - **逻辑**：从 D2 创建/续跑真实 run，在现有 Store 发布新 model，按 500 DB/90 FGA batch
     写控制面和 tuple、持久化 source/target checksum、发出 `permission_migration` metric-log，
-    核对后退役 legacy/Config；失败停服前向续跑。
+    核对后退役 legacy/Config；失败时保持应用访问门禁并前向续跑。
   - **验收**：T121 全部通过
   - **依赖**：T121
 
@@ -996,7 +999,8 @@
 - [x] **T125：数据迁移 CLI 合同测试**
   - **文件**：`src/backend/test/permission/test_f048_migration_cli.py`
   - **测试**：`migrate` 缺 `--apply` 直接参数错误且不扫描；`migrate --apply` 初始化/关闭完整
-    app context、验证 schema/store/停服并 resume；`verify` 只读既有 run；无 dry-run/rollback 子命令。
+    app context、验证 schema/store/ready heartbeat=0 并 resume；`verify` 只读既有 run；
+    无 dry-run/rollback 子命令。
   - **覆盖 AC**：AC-71, AC-93, AC-94, AC-95, AC-99, AC-100, AC-103, AC-108, AC-110, AC-113, AC-116, AC-158
   - **依赖**：T122, T124
 
@@ -1010,8 +1014,9 @@
 
 - [x] **T127：登记 F048 数据迁移脚本 runbook**
   - **文件**：`src/backend/scripts/README.md`
-  - **逻辑**：记录 D0/D1 前置、现有 Store/new model、migrate/verify 命令、`--apply` 含义、
-    exit code、checkpoint 续跑、停服和前向修复；不保存生产凭据或数据。
+  - **逻辑**：记录更新镜像并启动、自动访问门禁、D0/D1 前置、现有 Store/new model、
+    容器内 migrate/verify 命令、迁移后重启、`--apply` 含义、exit code、checkpoint 续跑和
+    前向修复；不保存生产凭据或数据。
   - **依赖**：T126
 
 - [x] **T128：旧权限运行时静态退役测试**
@@ -1135,3 +1140,8 @@
   T125～T127 改为按稳定 Store name 自动发现唯一 Store/latest model，运行时再与 F048
   checksum 和 SQL CURRENT Catalog 严格匹配；迁移 CLI 移除 `--expected-store-id`，
   resume/verify 只接受 durable run 已记录的 Store/source model。
+- 用户于 2026-07-31 将升级运维收敛为既有简单流程：更新镜像并启动后，旧 model 使
+  API/Worker 仅进入 `MIGRATION_REQUIRED/NOT_READY`，不初始化 F048 runtime、不发布 ready
+  heartbeat，应用自动拒绝非 health HTTP/WS；运维直接进入 backend 容器执行 migrate/verify，
+  成功后重启服务并自动恢复访问。因此移除 `F048_SERVICES_STOPPED` 人工标记，不引入自动
+  迁移、双 model、入口人工切换或额外运维容器。
