@@ -1047,10 +1047,12 @@ export function KnowledgeSpaceContent({
     }, [selectionActive, onSelectionActiveChange]);
 
     // ─── Ticked content → AI dock scope ─────────────────────────────────
-    // Order follows the tick order: `selectedFiles` is a Set, so an item that is
-    // unticked and ticked again lands at the end, which is what the reference row
-    // is meant to show. A file that did not parse cannot be answered from, so it
-    // never becomes a reference card (folders carry no parse state of their own).
+    // Most recent pick first, so the chip just added is visible without scrolling —
+    // same reading order as the chat input's attachment row. `selectedFiles` is a
+    // Set, so it iterates oldest-first and an item unticked then ticked again moves
+    // to the end; reversing turns both into "newest leftmost". A file that did not
+    // parse cannot be answered from, so it never becomes a reference card (folders
+    // carry no parse state of their own).
     //
     // Deliberately no dependency array: `displayFiles` is rebuilt on every render,
     // so any deps list containing it would re-fire the notify → parent setState →
@@ -1067,7 +1069,8 @@ export function KnowledgeSpaceContent({
             if (!isFolder && file.status !== FileStatus.SUCCESS) return;
             items.push({ id, name: file.name, isFolder });
         });
-        const signature = items.map((item) => `${item.id} ${item.name} ${item.isFolder}`).join("");
+        items.reverse();
+        const signature = JSON.stringify(items);
         if (signature === publishedSelectionRef.current) return;
         publishedSelectionRef.current = signature;
         onSelectedContentChange?.(items);
