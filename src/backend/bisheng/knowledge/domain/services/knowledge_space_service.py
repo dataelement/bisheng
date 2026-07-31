@@ -3,6 +3,7 @@ import json
 import logging
 import re
 import tempfile
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -33,7 +34,6 @@ from bisheng.common.errcode.knowledge_space import (
     SpaceFolderUploadCountExceededError,
     SpaceLimitError,
     SpaceNotFoundError,
-    SpaceOrganizationGrantExitDeniedError,
     SpacePermissionDeniedError,
     SpaceSubscribeLimitError,
     SpaceSubscribePrivateError,
@@ -92,6 +92,10 @@ from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import 
     KnowledgeAuditTelemetryService,
 )
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
+from bisheng.knowledge.domain.services.knowledge_permission_service import (
+    KnowledgeContainerPermissionRecord,
+    KnowledgeFilePermissionRecord,
+)
 from bisheng.knowledge.domain.services.knowledge_space_tag_library_service import (
     KnowledgeSpaceTagLibraryService,
 )
@@ -102,19 +106,15 @@ from bisheng.knowledge.domain.services.web_link_import_service import (
 )
 from bisheng.llm.domain import LLMService
 from bisheng.message.domain.services.notification_content import build_notify_content
-from bisheng.permission.domain.knowledge_space_permission_template import (
-    default_permission_ids_for_relation,
+from bisheng.permission.application.access import (
+    get_f048_resource_adapter,
+    get_f048_runtime,
 )
-from bisheng.permission.domain.schemas.permission_schema import (
-    AuthorizeGrantItem,
-    AuthorizeRevokeItem,
+from bisheng.permission.application.business_authorization import (
+    batch_check_business_actions,
+    check_business_action,
 )
-from bisheng.permission.domain.schemas.tuple_operation import TupleOperation
-from bisheng.permission.domain.services.fine_grained_permission_service import (
-    FineGrainedPermissionService,
-)
-from bisheng.permission.domain.services.owner_service import OwnerService
-from bisheng.permission.domain.services.permission_service import PermissionService
+from bisheng.permission.application.identity import resolve_permission_actor
 from bisheng.role.domain.services.quota_service import QuotaResourceType, QuotaService
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_uuid, get_request_ip
@@ -136,36 +136,43 @@ SPACE_ADMIN_REVOKED_MESSAGE = "revoked_knowledge_space_admin"
 SPACE_MEMBER_REMOVED_MESSAGE = "removed_knowledge_space_member"
 SPACE_MADE_PRIVATE_MESSAGE = "knowledge_space_made_private"
 SPACE_DELETED_MESSAGE = "knowledge_space_deleted"
-_SPACE_MEMBER_ROLE_TO_RELATION = {
-    UserRoleEnum.CREATOR: "owner",
+_SPACE_MEMBER_ROLE_TO_MODEL = {
     UserRoleEnum.ADMIN: "manager",
     UserRoleEnum.MEMBER: "viewer",
 }
-_SPACE_RELATION_LEVEL = {
-    "can_read": 1,
-    "can_edit": 2,
-    "can_manage": 3,
-    "can_delete": 4,
+_RESOURCE_ACTIONS = {
+    "knowledge_space": (
+        "visible",
+        "edit",
+        "create_folder",
+        "upload_file",
+        "delete",
+        "share",
+        "manage_permission",
+    ),
+    "folder": (
+        "visible",
+        "rename",
+        "create_folder",
+        "upload_file",
+        "move",
+        "download",
+        "delete",
+        "manage_permission",
+    ),
+    "knowledge_file": (
+        "visible",
+        "rename",
+        "move",
+        "download",
+        "delete",
+        "share",
+        "manage_permission",
+    ),
 }
-_SPACE_MEMBER_RELATION_LEVEL = {
-    "viewer": 1,
-    "editor": 2,
-    "manager": 3,
-    "owner": 4,
-}
-_SPACE_MEMBER_RELATIONS = {"owner", "manager", "editor", "viewer"}
-
 _logger = logging.getLogger(__name__)
 
-_PERMISSION_LEVEL_TO_RELATION = {
-    "owner": "owner",
-    "can_manage": "manager",
-    "can_edit": "editor",
-    "can_read": "viewer",
-}
-
 _CHILD_PERMISSION_SCAN_BATCH_SIZE = 100
-_CHILD_PERMISSION_CHECK_CONCURRENCY = 8
 # F040: keyword-search batch-scan window. A batch shrunk by ReBAC visibility
 # filtering is refilled from the next OFFSET window, so this only bounds per-round
 # DB fetch + visibility evaluation, not the page size.
@@ -182,11 +189,19 @@ class KnowledgeSpaceService(KnowledgeUtils):
     All business logic is async; DB access is delegated to DAO classes.
     """
 
-    def __init__(self, request: Request, login_user: UserPayload):
+    def __init__(
+        self,
+        request: Request,
+        login_user: UserPayload,
+        f048_permission_adapter=None,
+        f048_file_delivery=None,
+    ):
         self.request = request
         self.login_user = login_user
         self.message_service: MessageService | None = None
         self.approval_gate: ApprovalGate | None = None
+        self.f048_permission_adapter = f048_permission_adapter
+        self.f048_file_delivery = f048_file_delivery
         # Injected by DI factory after construction (same pattern as message_service).
         # When set, list_space_children will exclude non-primary version files and
         # return version enrichment fields.
@@ -195,6 +210,70 @@ class KnowledgeSpaceService(KnowledgeUtils):
         # cascade during file deletion to clear the logical-document anchor
         # whenever the whole chain (or its primary) gets removed.
         self.doc_repo: KnowledgeDocumentRepository | None = None
+
+    async def resolve_permission_target(
+        self,
+        *,
+        resource_id: str,
+        actor,
+        action: str,
+    ):
+        """Load a space through its business adapter before F048 checks."""
+
+        if self.f048_permission_adapter is None:
+            raise RuntimeError("F048 knowledge-space adapter is not configured")
+        return await self.f048_permission_adapter.resolve_permission_target(
+            resource_type="knowledge_space",
+            resource_id=resource_id,
+            actor=actor,
+            action=action,
+        )
+
+    async def _permission_actor(self):
+        return await resolve_permission_actor(self.login_user)
+
+    @staticmethod
+    def _resource_adapter(resource_type: str):
+        return get_f048_resource_adapter(resource_type)
+
+    async def _check_action(
+        self,
+        resource_type: str,
+        resource_id: int | str,
+        action: str,
+    ) -> bool:
+        return await check_business_action(
+            self.login_user,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            action=action,
+        )
+
+    async def _require_action(
+        self,
+        resource_type: str,
+        resource_id: int | str,
+        action: str,
+    ) -> None:
+        if not await self._check_action(
+            resource_type,
+            resource_id,
+            action,
+        ):
+            raise SpacePermissionDeniedError()
+
+    async def _batch_actions(
+        self,
+        resource_type: str,
+        resource_ids: list[int | str],
+        actions: tuple[str, ...],
+    ) -> dict[str, frozenset[str]]:
+        return await batch_check_business_actions(
+            self.login_user,
+            resource_type=resource_type,
+            resource_ids=resource_ids,
+            actions=actions,
+        )
 
     def _ensure_space_async_task_tenant_consistency(self, space: Knowledge, operation: str) -> None:
         current_tid = get_current_tenant_id()
@@ -323,7 +402,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         *,
         memberships: list[SpaceChannelMember] | None = None,
         exclude_created: bool = False,
-        required_permission_id: str | None = None,
+        required_action: str = "visible",
     ) -> list[KnowledgeRead]:
         if not space_ids:
             return []
@@ -340,52 +419,30 @@ class KnowledgeSpaceService(KnowledgeUtils):
         # reached only via ReBAC / department authorization, with no member row).
         pinned_ids = await KnowledgeSpaceUserPinDao.list_pinned_space_ids(self.login_user.user_id)
 
-        permission_space_ids = [
-            space.id for space in spaces if space.user_id != self.login_user.user_id and space.id not in membership_map
-        ]
-        permission_id_space_ids = [space.id for space in spaces if space.user_id != self.login_user.user_id]
-        permission_levels = {}
-        permission_ids_map: dict[int, set[str]] = {}
-        if permission_space_ids:
-            levels = await asyncio.gather(
-                *[
-                    PermissionService.get_permission_level(
-                        user_id=self.login_user.user_id,
-                        object_type="knowledge_space",
-                        object_id=str(space_id),
-                        login_user=self.login_user,
-                    )
-                    for space_id in permission_space_ids
-                ]
+        requested_actions = tuple(
+            dict.fromkeys(
+                (
+                    "visible",
+                    "manage_permission",
+                    required_action,
+                )
             )
-            permission_levels = {space_id: level for space_id, level in zip(permission_space_ids, levels)}
-        if required_permission_id and permission_id_space_ids:
-            # F040 (B): build the ReBAC binding index once and share an OpenFGA tuple
-            # cache across all spaces in this page, instead of rebuilding the index +
-            # re-reading tuples per space (the per-space N+1 on /space/joined etc.).
-            # The membership / public-space merge stays inside _get_effective_permission_ids,
-            # so the filtered result is identical to the per-space path.
-            shared_bindings = await self._get_relation_bindings()
-            shared_ctx = {
-                "binding_index": FineGrainedPermissionService.build_binding_index(shared_bindings),
-                "tuple_cache": {},
-                "tuple_department_paths": {},
-            }
-            permission_ids = await asyncio.gather(
-                *[
-                    self._get_effective_permission_ids(
-                        "knowledge_space",
-                        space_id,
-                        shared=shared_ctx,
-                    )
-                    for space_id in permission_id_space_ids
-                ]
-            )
-            permission_ids_map = {space_id: ids for space_id, ids in zip(permission_id_space_ids, permission_ids)}
+        )
+        action_map = await self._batch_actions(
+            "knowledge_space",
+            [space.id for space in spaces],
+            requested_actions,
+        )
 
         pinned_spaces = []
         normal_spaces = []
         for space in spaces:
+            effective_actions = action_map.get(str(space.id), frozenset())
+            if (
+                "visible" not in effective_actions
+                or required_action not in effective_actions
+            ):
+                continue
             member_conf = membership_map.get(space.id)
             result = KnowledgeSpaceInfoResp(
                 **space.model_dump(),
@@ -396,18 +453,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 result.user_role = UserRoleEnum.CREATOR
                 self._apply_subscription_flags(result, SpaceSubscriptionStatusEnum.SUBSCRIBED)
             elif member_conf:
-                if required_permission_id and required_permission_id not in permission_ids_map.get(space.id, set()):
-                    continue
                 result.user_role = member_conf.user_role
                 self._apply_subscription_flags(result, self._resolve_subscription_status(member_conf))
             else:
-                if required_permission_id and required_permission_id not in permission_ids_map.get(space.id, set()):
-                    continue
-                result.user_role = self._permission_level_to_space_user_role(
-                    permission_levels.get(space.id),
+                result.user_role = (
+                    UserRoleEnum.ADMIN if "manage_permission" in effective_actions else UserRoleEnum.MEMBER
                 )
-                if result.user_role is None:
-                    continue
                 self._apply_subscription_flags(result, SpaceSubscriptionStatusEnum.SUBSCRIBED)
 
             if result.is_pinned:
@@ -420,38 +471,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
         return await self._decorate_department_metadata(ordered)
 
     async def _require_write_permission(self, space_id: int) -> None:
-        """
-        Verify that the current user has can_edit permission on the space
-        via explicit ReBAC or active space membership.
-        """
-        allowed = await PermissionService.check(
-            user_id=self.login_user.user_id,
-            relation="can_edit",
-            object_type="knowledge_space",
-            object_id=str(space_id),
-            login_user=self.login_user,
-        )
-        if not allowed:
-            allowed = await self._membership_satisfies_relation(space_id, "can_edit")
-        if not allowed:
-            raise SpacePermissionDeniedError()
+        await self._require_action("knowledge_space", space_id, "edit")
 
     async def _require_manage_permission(self, space_id: int) -> None:
-        """
-        Verify that the current user has can_manage permission on the space
-        (required for member management operations).
-        """
-        allowed = await PermissionService.check(
-            user_id=self.login_user.user_id,
-            relation="can_manage",
-            object_type="knowledge_space",
-            object_id=str(space_id),
-            login_user=self.login_user,
+        await self._require_action(
+            "knowledge_space",
+            space_id,
+            "manage_permission",
         )
-        if not allowed:
-            allowed = await self._membership_satisfies_relation(space_id, "can_manage")
-        if not allowed:
-            raise SpacePermissionDeniedError()
 
     async def _require_delete_permission(self, space_id: int) -> Knowledge:
         """
@@ -460,45 +487,16 @@ class KnowledgeSpaceService(KnowledgeUtils):
         space = await KnowledgeDao.aquery_by_id(space_id)
         if not space or space.type != KnowledgeTypeEnum.SPACE.value:
             raise SpaceNotFoundError()
-        allowed = await PermissionService.check(
-            user_id=self.login_user.user_id,
-            relation="can_delete",
-            object_type="knowledge_space",
-            object_id=str(space_id),
-            login_user=self.login_user,
-        )
-        if not allowed:
-            allowed = await self._membership_satisfies_relation(space_id, "can_delete")
-        if not allowed:
-            raise SpacePermissionDeniedError()
+        await self._require_action("knowledge_space", space_id, "delete")
         return space
 
-    async def _require_resource_permission(
+    async def _require_resource_action(
         self,
-        relation: str,
+        action: str,
         object_type: str,
         object_id: int,
     ) -> None:
-        if relation == "can_read" and object_type in {"folder", "knowledge_file"}:
-            permission_ids = await self._get_effective_permission_ids(object_type, object_id)
-            required_permission = "view_folder" if object_type == "folder" else "view_file"
-            if required_permission in permission_ids:
-                return
-            raise SpacePermissionDeniedError()
-
-        allowed = await PermissionService.check(
-            user_id=self.login_user.user_id,
-            relation=relation,
-            object_type=object_type,
-            object_id=str(object_id),
-            login_user=self.login_user,
-        )
-        if not allowed:
-            space_id = await self._space_id_for_resource(object_type, object_id)
-            if space_id is not None:
-                allowed = await self._membership_satisfies_relation(space_id, relation)
-        if not allowed:
-            raise SpacePermissionDeniedError()
+        await self._require_action(object_type, object_id, action)
 
     @staticmethod
     def _dedupe_ids(resource_ids: list[int]) -> list[int]:
@@ -534,26 +532,26 @@ class KnowledgeSpaceService(KnowledgeUtils):
             self._ensure_space_file(file_record, space_id)
         return file_records
 
-    async def _require_folder_relation(
+    async def _require_folder_action(
         self,
         space_id: int,
         folder_id: int,
-        relation: str,
+        action: str,
     ) -> KnowledgeFile:
         await self._require_read_permission(space_id)
         folder = await KnowledgeFileDao.query_by_id(folder_id)
         folder = self._ensure_space_folder(folder, space_id)
-        await self._require_resource_permission(relation, "folder", folder.id)
+        await self._require_resource_action(action, "folder", folder.id)
         return folder
 
     async def _get_folder_for_action(self, space_id: int, folder_id: int) -> KnowledgeFile:
         folder = await KnowledgeFileDao.query_by_id(folder_id)
         return self._ensure_space_folder(folder, space_id)
 
-    async def _require_file_relation(
+    async def _require_file_action(
         self,
         file_id: int,
-        relation: str,
+        action: str,
         *,
         space_id: int | None = None,
     ) -> KnowledgeFile:
@@ -563,7 +561,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
         actual_space_id = space_id or file_record.knowledge_id
         await self._require_read_permission(actual_space_id)
         file_record = self._ensure_space_file(file_record, actual_space_id)
-        await self._require_resource_permission(relation, "knowledge_file", file_record.id)
+        await self._require_resource_action(
+            action,
+            "knowledge_file",
+            file_record.id,
+        )
         return file_record
 
     async def _get_file_for_action(
@@ -577,47 +579,34 @@ class KnowledgeSpaceService(KnowledgeUtils):
             raise SpaceFileNotFoundError()
         return self._ensure_space_file(file_record, space_id or file_record.knowledge_id)
 
-    async def _require_file_or_folder_relation(
+    async def _require_file_or_folder_action(
         self,
         space_id: int,
         resource_id: int,
-        relation: str,
+        action: str,
     ) -> KnowledgeFile:
         resource = await KnowledgeFileDao.query_by_id(resource_id)
         if not resource:
             raise SpaceFileNotFoundError()
         if resource.file_type == FileType.DIR.value:
-            return await self._require_folder_relation(space_id, resource_id, relation)
-        return await self._require_file_relation(resource_id, relation, space_id=space_id)
+            return await self._require_folder_action(
+                space_id,
+                resource_id,
+                action,
+            )
+        return await self._require_file_action(
+            resource_id,
+            action,
+            space_id=space_id,
+        )
 
     async def _get_active_space_membership(self, space_id: int) -> SpaceChannelMember | None:
-        # F036: request-scoped memo. A single /children request resolves membership for the same
-        # space multiple times (read-permission check, view_space check, context build); the
-        # service instance is per-request (FastAPI Depends), so caching here dedups those DB hits
-        # without any cross-request state.
         cache = self.__dict__.setdefault("_active_membership_cache", {})
         if space_id in cache:
             return cache[space_id]
         member = await SpaceChannelMemberDao.async_find_member(space_id, self.login_user.user_id)
         cache[space_id] = member if (member and member.is_active) else None
         return cache[space_id]
-
-    async def _membership_satisfies_relation(self, space_id: int, relation: str) -> bool:
-        required_level = _SPACE_RELATION_LEVEL.get(relation)
-        if required_level is None:
-            return False
-        member = await self._get_active_space_membership(space_id)
-        if not member:
-            return False
-        member_relation = _SPACE_MEMBER_ROLE_TO_RELATION.get(member.user_role)
-        return _SPACE_MEMBER_RELATION_LEVEL.get(member_relation or "", 0) >= required_level
-
-    async def _membership_permission_ids(self, space_id: int) -> set[str]:
-        member = await self._get_active_space_membership(space_id)
-        if not member:
-            return set()
-        relation = _SPACE_MEMBER_ROLE_TO_RELATION.get(member.user_role)
-        return default_permission_ids_for_relation(relation or "")
 
     @staticmethod
     def _build_item_lineage(item: KnowledgeFile, space_id: int) -> list[tuple[str, int]]:
@@ -640,37 +629,46 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 return resource.knowledge_id
         return None
 
-    async def _write_resource_parent_tuple(
-        self,
-        object_type: str,
-        object_id: int,
+    @staticmethod
+    def _new_file_permission_record(
+        *,
+        row: KnowledgeFile,
+        resource_type: str,
         parent_type: str,
         parent_id: int,
-    ) -> None:
-        try:
-            await PermissionService.batch_write_tuples(
-                [
-                    TupleOperation(
-                        action="write",
-                        user=f"{parent_type}:{parent_id}",
-                        relation="parent",
-                        object=f"{object_type}:{object_id}",
-                    ),
-                ],
-                crash_safe=True,
-                raise_on_failure=True,
-                stop_on_failure=True,
+    ) -> KnowledgeFilePermissionRecord:
+        if row.id is None or row.tenant_id is None or row.user_id is None:
+            raise SpaceFileNotFoundError()
+        ancestors = tuple(part for part in (row.file_level_path or "").split("/") if part)
+        return KnowledgeFilePermissionRecord(
+            tenant_id=int(row.tenant_id),
+            resource_type=resource_type,
+            resource_id=str(row.id),
+            status=("ACTIVE" if resource_type == "folder" else KnowledgeFileStatus(row.status).name),
+            owner_user_id=int(row.user_id),
+            permission_version=0,
+            context_version=f"created:{resource_type}:{row.id}",
+            parent_type=parent_type,
+            parent_id=str(parent_id),
+            mode="INHERIT",
+            ancestor_ids=ancestors,
+        )
+
+    async def _load_resource_permission_records(
+        self,
+        resources: list[tuple[str, int]],
+    ) -> list[KnowledgeFilePermissionRecord]:
+        records: list[KnowledgeFilePermissionRecord] = []
+        for resource_type, resource_id in resources:
+            adapter = self._resource_adapter(resource_type)
+            record = await adapter.load_permission_record(
+                resource_type=resource_type,
+                resource_id=str(resource_id),
             )
-        except Exception as e:
-            _logger.exception(
-                "Failed to write parent tuple %s:%s -> %s:%s: %s",
-                parent_type,
-                parent_id,
-                object_type,
-                object_id,
-                e,
-            )
-            raise
+            if record is None:
+                raise SpaceFileNotFoundError()
+            records.append(record)
+        return records
 
     async def _initialize_child_resource_permissions(
         self,
@@ -679,81 +677,37 @@ class KnowledgeSpaceService(KnowledgeUtils):
         parent_type: str,
         parent_id: int,
     ) -> None:
-        await self._write_resource_parent_tuple(object_type, object_id, parent_type, parent_id)
-        try:
-            await OwnerService.write_owner_tuple(
-                self.login_user.user_id,
-                object_type,
-                str(object_id),
-                enforce_fga_success=True,
-            )
-        except Exception as e:
-            _logger.exception(
-                "Failed to write owner tuple for %s %s: %s",
-                object_type,
-                object_id,
-                e,
-            )
-            raise
-
-    async def _cleanup_resource_tuples(self, resources: list[tuple[str, int]]) -> None:
-        for resource_type, resource_id in resources:
-            try:
-                await OwnerService.delete_resource_tuples(resource_type, str(resource_id))
-            except Exception as e:
-                _logger.warning(
-                    "Failed to delete FGA tuples for %s %s: %s",
-                    resource_type,
-                    resource_id,
-                    e,
-                )
-
-    async def _get_relation_models_map(self) -> dict[str, dict]:
-        if hasattr(self, "_relation_models_map_cache"):
-            return self._relation_models_map_cache
-        from bisheng.permission.api.endpoints.resource_permission import (
-            _get_relation_models,
-            _normalize_model_dict,
+        row = await KnowledgeFileDao.query_by_id(object_id)
+        if row is None:
+            raise SpaceFileNotFoundError()
+        record = self._new_file_permission_record(
+            row=row,
+            resource_type=object_type,
+            parent_type=parent_type,
+            parent_id=parent_id,
+        )
+        await self._resource_adapter(object_type).authorize_created(
+            record=record,
+            actor=await self._permission_actor(),
         )
 
-        raw_models = await _get_relation_models()
-        self._relation_models_map_cache = {m["id"]: _normalize_model_dict(m) for m in raw_models}
-        return self._relation_models_map_cache
+    async def _project_resource_deletes(
+        self,
+        records: list[KnowledgeFilePermissionRecord],
+    ) -> None:
+        actor = await self._permission_actor()
+        for record in records:
+            await self._resource_adapter(record.resource_type).project_delete(
+                record=record,
+                actor=actor,
+            )
 
-    async def _get_relation_bindings(self) -> list[dict]:
-        if hasattr(self, "_relation_bindings_cache"):
-            return self._relation_bindings_cache
-        from bisheng.permission.api.endpoints.resource_permission import _get_bindings
-
-        self._relation_bindings_cache = await _get_bindings()
-        return self._relation_bindings_cache
-
-    @staticmethod
-    def _is_direct_space_user_binding(binding: dict, space_id: int, user_id: int) -> bool:
-        return (
-            binding.get("resource_type") == "knowledge_space"
-            and str(binding.get("resource_id")) == str(space_id)
-            and binding.get("subject_type") == "user"
-            and str(binding.get("subject_id")) == str(user_id)
-        )
-
-    async def _directly_granted_space_ids(self, user_id: int) -> list[str]:
-        """Space ids the user holds a direct 'user' authorization binding on.
-
-        Used to recover an admin's explicitly-authorized spaces for the followed list,
-        since ``list_accessible_ids`` returns None (can-read-all) for admins and would
-        otherwise hide spaces the admin was granted but is not a member of.
-        """
-        from bisheng.permission.api.endpoints.resource_permission import _get_bindings
-
-        bindings = await _get_bindings()
-        return [
-            str(binding.get("resource_id"))
-            for binding in bindings
-            if binding.get("resource_type") == "knowledge_space"
-            and binding.get("subject_type") == "user"
-            and str(binding.get("subject_id")) == str(user_id)
-        ]
+    async def _cleanup_resource_tuples(
+        self,
+        resources: list[tuple[str, int]],
+    ) -> None:
+        records = await self._load_resource_permission_records(resources)
+        await self._project_resource_deletes(records)
 
     @classmethod
     async def sync_direct_space_user_permissions(
@@ -763,93 +717,18 @@ class KnowledgeSpaceService(KnowledgeUtils):
         user_role: UserRoleEnum | None,
         *,
         is_active: bool,
+        operator_user_id: int | None = None,
     ) -> None:
-        """Keep direct space memberships and ReBAC grants in sync."""
-        from bisheng.permission.api.endpoints.resource_permission import (
-            _binding_key_with_scope,
-            _get_bindings,
-            _save_bindings,
+        """Project one active business membership as a stable Grant source."""
+
+        model_key = _SPACE_MEMBER_ROLE_TO_MODEL.get(user_role) if is_active and user_role is not None else None
+        adapter = get_f048_resource_adapter("knowledge_space")
+        await adapter.sync_membership(
+            resource_id=str(space_id),
+            operator_user_id=operator_user_id or user_id,
+            subject_user_id=user_id,
+            model_key=model_key,
         )
-
-        desired_relation = None
-        if is_active and user_role is not None:
-            desired_relation = _SPACE_MEMBER_ROLE_TO_RELATION.get(user_role)
-            if desired_relation == "owner":
-                desired_relation = None
-
-        relations_to_revoke = {"viewer", "editor", "manager"}
-        if desired_relation:
-            relations_to_revoke.discard(desired_relation)
-
-        revokes = [
-            AuthorizeRevokeItem(
-                subject_type="user",
-                subject_id=int(user_id),
-                relation=relation,
-                include_children=False,
-            )
-            for relation in sorted(relations_to_revoke)
-        ]
-        grants = []
-        if desired_relation:
-            grants.append(
-                AuthorizeGrantItem(
-                    subject_type="user",
-                    subject_id=int(user_id),
-                    relation=desired_relation,
-                    include_children=False,
-                    model_id=desired_relation,
-                )
-            )
-
-        await PermissionService.authorize(
-            object_type="knowledge_space",
-            object_id=str(space_id),
-            grants=grants,
-            revokes=revokes,
-            enforce_fga_success=True,
-        )
-
-        bindings = await _get_bindings()
-        updated_bindings = [
-            binding for binding in bindings if not cls._is_direct_space_user_binding(binding, space_id, user_id)
-        ]
-        if desired_relation:
-            key = _binding_key_with_scope(
-                "knowledge_space",
-                str(space_id),
-                "user",
-                int(user_id),
-                desired_relation,
-                None,
-            )
-            updated_bindings.append(
-                {
-                    "key": key,
-                    "resource_type": "knowledge_space",
-                    "resource_id": str(space_id),
-                    "subject_type": "user",
-                    "subject_id": int(user_id),
-                    "relation": desired_relation,
-                    "include_children": None,
-                    "model_id": desired_relation,
-                }
-            )
-        await _save_bindings(updated_bindings)
-
-    @staticmethod
-    def _should_preserve_private_space_tuple(
-        creator_user_id: int,
-        resource_type: str,
-        tuple_item: dict,
-    ) -> bool:
-        relation = tuple_item.get("relation")
-        tuple_user = tuple_item.get("user")
-        if resource_type == "knowledge_space":
-            return relation == "owner" and tuple_user == f"user:{creator_user_id}"
-        if resource_type in {"folder", "knowledge_file"}:
-            return relation == "parent"
-        return False
 
     @classmethod
     async def clear_space_authorization_for_private(
@@ -857,57 +736,77 @@ class KnowledgeSpaceService(KnowledgeUtils):
         *,
         space: Knowledge,
         child_resources: list[tuple[str, int]],
+        operator_user_id: int,
     ) -> None:
-        """Remove non-owner space permissions when a space becomes private."""
-        from bisheng.permission.api.endpoints.resource_permission import (
-            _get_bindings,
-            _save_bindings,
+        """Remove ordinary local sources while preserving creator and parents."""
+
+        container = get_f048_resource_adapter("knowledge_space")
+        record = await container.load_permission_record(
+            resource_type="knowledge_space",
+            resource_id=str(space.id),
         )
-
-        resources = [("knowledge_space", int(space.id))] + list(child_resources)
-        resource_keys = {(resource_type, str(resource_id)) for resource_type, resource_id in resources}
-
-        bindings = await _get_bindings()
-        await _save_bindings(
-            [
-                binding
-                for binding in bindings
-                if (binding.get("resource_type"), str(binding.get("resource_id"))) not in resource_keys
-            ]
+        if record is None:
+            raise SpaceNotFoundError()
+        actor = await cls._actor_for_record(
+            operator_user_id=operator_user_id,
+            tenant_id=record.tenant_id,
         )
-
-        fga = await PermissionService._aget_fga()
-        if fga is None:
-            raise RuntimeError("FGAClient not available while clearing private-space permissions")
-
-        operations: list[TupleOperation] = []
-        for resource_type, resource_id in resources:
-            tuples = await fga.read_tuples(object=f"{resource_type}:{resource_id}")
-            for tuple_item in tuples:
-                if cls._should_preserve_private_space_tuple(space.user_id, resource_type, tuple_item):
-                    continue
-                operations.append(
-                    TupleOperation(
-                        action="delete",
-                        user=tuple_item["user"],
-                        relation=tuple_item["relation"],
-                        object=tuple_item["object"],
-                    )
-                )
-
-        if operations:
-            await PermissionService.batch_write_tuples(
-                operations,
-                crash_safe=True,
-                raise_on_failure=True,
-                stop_on_failure=True,
+        while True:
+            target = await container.resolve_permission_target(
+                resource_type="knowledge_space",
+                resource_id=str(space.id),
+                actor=actor,
+                action="manage_permission",
             )
+            outcome = await get_f048_runtime().remove_ordinary_sources(
+                actor=actor,
+                target=target,
+                idempotency_key=(f"space-private:{space.id}:{target.resource_version}"),
+            )
+            if outcome is None:
+                break
+        record = await container.load_permission_record(
+            resource_type="knowledge_space",
+            resource_id=str(space.id),
+        )
+        if record is None:
+            raise SpaceNotFoundError()
+        await container.sync_public_reader(
+            record=record,
+            actor=actor,
+            enabled=False,
+        )
 
-        await OwnerService.write_owner_tuple(
-            space.user_id,
-            "knowledge_space",
-            str(space.id),
-            enforce_fga_success=True,
+        for resource_type, resource_id in child_resources:
+            adapter = get_f048_resource_adapter(resource_type)
+            while True:
+                target = await adapter.resolve_permission_target(
+                    resource_type=resource_type,
+                    resource_id=str(resource_id),
+                    actor=actor,
+                    action="manage_permission",
+                )
+                outcome = await get_f048_runtime().remove_ordinary_sources(
+                    actor=actor,
+                    target=target,
+                    idempotency_key=(f"space-private:{resource_type}:{resource_id}:{target.resource_version}"),
+                )
+                if outcome is None:
+                    break
+
+    @staticmethod
+    async def _actor_for_record(
+        *,
+        operator_user_id: int,
+        tenant_id: int,
+    ):
+        from bisheng.permission.domain.services.permission_action_service import (
+            PermissionActor,
+        )
+
+        return PermissionActor(
+            user_id=operator_user_id,
+            current_tenant_id=tenant_id,
         )
 
     async def _revoke_direct_space_user_permissions(self, space_id: int, user_id: int) -> None:
@@ -917,158 +816,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
             user_id,
             None,
             is_active=False,
+            operator_user_id=self.login_user.user_id,
         )
-        if hasattr(self, "_relation_bindings_cache"):
-            delattr(self, "_relation_bindings_cache")
 
-    async def _get_current_user_subject_strings(self) -> set[str]:
-        if hasattr(self, "_current_user_subjects_cache"):
-            return self._current_user_subjects_cache
-
-        self._current_user_subjects_cache = await FineGrainedPermissionService.get_current_user_subject_strings(
-            self.login_user,
-        )
-        return self._current_user_subjects_cache
-
-    async def _get_binding_department_paths(self, bindings: list[dict]) -> dict[int, str]:
-        if hasattr(self, "_binding_department_paths_cache"):
-            return self._binding_department_paths_cache
-
-        department_ids = {
-            int(binding["subject_id"])
-            for binding in bindings
-            if binding.get("subject_type") == "department" and binding.get("include_children")
-        }
-        departments = await DepartmentDao.aget_by_ids(list(department_ids))
-        self._binding_department_paths_cache = {dept.id: dept.path or "" for dept in departments}
-        return self._binding_department_paths_cache
-
-    @staticmethod
-    def _permission_ids_for_relation(
-        relation: str,
-        model: dict | None = None,
-    ) -> set[str]:
-        # Runtime is permission-first. If a relation model explicitly defines
-        # permissions[], those ids are authoritative for action checks.
-        if model is not None:
-            permissions = model.get("permissions") or []
-            if permissions:
-                return set(permissions)
-            # Built-in system models still rely on their canonical defaults.
-            if model.get("is_system"):
-                return default_permission_ids_for_relation(model.get("relation"))
-            return set()
-        # Legacy tuples without binding metadata fall back to system defaults so
-        # old data remains readable during migration.
-        return default_permission_ids_for_relation(relation)
-
-    @staticmethod
-    def _user_matches_binding(
-        binding: dict,
-        tuple_user: str,
-        user_subject_strings: set[str],
-    ) -> bool:
-        if tuple_user not in user_subject_strings:
-            return False
-
-        expected = (
-            f"user:{binding['subject_id']}"
-            if binding.get("subject_type") == "user"
-            else f"{binding.get('subject_type')}:{binding['subject_id']}#member"
-        )
-        return tuple_user == expected
-
-    async def _resolve_binding_for_tuple(
-        self,
-        resource_type: str,
-        resource_id: int,
-        tuple_user: str,
-        relation: str,
-        bindings: list[dict],
-        binding_department_paths: dict[int, str],
-        user_subject_strings: set[str],
-    ) -> dict | None:
-        exact_subject_type = "user"
-        exact_subject_id = None
-        if tuple_user.startswith("user_group:"):
-            exact_subject_type = "user_group"
-            exact_subject_id = int(tuple_user.split(":", 1)[1].split("#", 1)[0])
-        elif tuple_user.startswith("department:"):
-            exact_subject_type = "department"
-            exact_subject_id = int(tuple_user.split(":", 1)[1].split("#", 1)[0])
-        elif tuple_user.startswith("user:"):
-            exact_subject_id = int(tuple_user.split(":", 1)[1])
-
-        for binding in bindings:
-            if binding.get("resource_type") != resource_type or str(binding.get("resource_id")) != str(resource_id):
-                continue
-            if binding.get("relation") != relation:
-                continue
-            if exact_subject_id is not None and not binding.get("include_children"):
-                if (
-                    binding.get("subject_type") == exact_subject_type
-                    and int(binding.get("subject_id")) == exact_subject_id
-                    and self._user_matches_binding(
-                        binding,
-                        tuple_user,
-                        user_subject_strings,
-                    )
-                ):
-                    return binding
-
-        if tuple_user.startswith("department:"):
-            tuple_department_id = int(tuple_user.split(":", 1)[1].split("#", 1)[0])
-            tuple_department_rows = await DepartmentDao.aget_by_ids([tuple_department_id])
-            tuple_department_path = tuple_department_rows[0].path if tuple_department_rows else ""
-            for binding in bindings:
-                if binding.get("resource_type") != resource_type or str(binding.get("resource_id")) != str(resource_id):
-                    continue
-                if binding.get("relation") != relation:
-                    continue
-                if binding.get("subject_type") != "department" or not binding.get("include_children"):
-                    continue
-                binding_path = binding_department_paths.get(int(binding.get("subject_id")))
-                if binding_path and tuple_department_path and tuple_department_path.startswith(binding_path):
-                    return binding
-        return None
-
-    async def _build_resource_lineage(
-        self,
-        object_type: str,
-        object_id: int,
-        *,
-        space_id: int | None = None,
-    ) -> list[tuple[str, int]]:
-        if object_type == "knowledge_space":
-            return [("knowledge_space", object_id)]
-
-        if object_type == "folder":
-            folder = await KnowledgeFileDao.query_by_id(object_id)
-            folder = self._ensure_space_folder(folder, space_id or folder.knowledge_id)
-            ancestor_ids = [int(part) for part in (folder.file_level_path or "").split("/") if part]
-            return (
-                [("folder", folder.id)]
-                + [("folder", fid) for fid in reversed(ancestor_ids)]
-                + [
-                    ("knowledge_space", folder.knowledge_id),
-                ]
-            )
-
-        if object_type == "knowledge_file":
-            file_record = await KnowledgeFileDao.query_by_id(object_id)
-            file_record = self._ensure_space_file(file_record, space_id or file_record.knowledge_id)
-            ancestor_ids = [int(part) for part in (file_record.file_level_path or "").split("/") if part]
-            return (
-                [("knowledge_file", file_record.id)]
-                + [("folder", fid) for fid in reversed(ancestor_ids)]
-                + [
-                    ("knowledge_space", file_record.knowledge_id),
-                ]
-            )
-
-        return [(object_type, object_id)]
-
-    async def _get_effective_permission_ids(
+    async def _get_effective_actions(
         self,
         object_type: str,
         object_id: int,
@@ -1077,206 +828,70 @@ class KnowledgeSpaceService(KnowledgeUtils):
         shared: dict | None = None,
         include_public_viewer: bool = True,
     ) -> set[str]:
-        # F036: request-scoped memo. The /children entry does the same `view_space` evaluation
-        # twice (read-permission + view_space checks) and the no-parent branch repeats it; this
-        # full evaluation includes an OpenFGA read + membership/public-space lookups. Caching by
-        # (object_type, object_id, space_id) on the per-request service instance collapses those
-        # duplicates to one. Returned sets are read-only at all call sites; a copy is returned to
-        # be defensive against accidental mutation.
-        cache = self.__dict__.setdefault("_effective_permission_ids_cache", {})
-        cache_key = (object_type, str(object_id), space_id, include_public_viewer)
+        del space_id, shared, include_public_viewer
+        if object_type not in _RESOURCE_ACTIONS:
+            return set()
+        cache = self.__dict__.setdefault("_effective_actions_cache", {})
+        cache_key = (object_type, str(object_id))
         if cache_key in cache:
             return set(cache[cache_key])
-        # Evaluate permissions across the resource lineage from child -> parent.
-        # For a tuple backed by a custom relation model, permissions[] controls
-        # runtime actions. Relation-only defaults are kept only as a legacy
-        # fallback for old tuples or built-in system models.
-        lineage = await self._build_resource_lineage(object_type, object_id, space_id=space_id)
-        user_subject_strings = await self._get_current_user_subject_strings()
-        bindings = await self._get_relation_bindings()
-        binding_department_paths = await self._get_binding_department_paths(bindings)
-        models = await self._get_relation_models_map()
-        lineage_binding_can_override = object_type in {"folder", "knowledge_file"}
-        # F040 (B): when evaluating a *batch* of spaces (e.g. _format_accessible_spaces),
-        # the caller passes a shared context so the binding index is built once and the
-        # OpenFGA tuple reads are memoized across spaces, instead of rebuilt per space.
-        # Omitted → get_effective_permission_ids_async derives them per call (unchanged).
-        shared_kwargs = {}
-        if shared is not None:
-            shared_kwargs = {
-                "binding_index": shared.get("binding_index"),
-                "tuple_cache": shared.get("tuple_cache"),
-                "tuple_department_paths": shared.get("tuple_department_paths"),
-            }
-        (
-            effective_permissions,
-            matched_lineage_binding,
-        ) = await FineGrainedPermissionService.get_effective_permission_ids_async(
-            self.login_user,
+        action_map = await self._batch_actions(
             object_type,
-            object_id,
-            models=models,
-            bindings=bindings,
-            binding_department_paths=binding_department_paths,
-            user_subject_strings=user_subject_strings,
-            lineage=lineage,
-            nearest_binding_wins=lineage_binding_can_override,
-            return_match_metadata=True,
-            **shared_kwargs,
+            [object_id],
+            _RESOURCE_ACTIONS[object_type],
         )
-        for lineage_type, lineage_id in lineage:
-            if lineage_type == "knowledge_space":
-                if not (lineage_binding_can_override and matched_lineage_binding):
-                    effective_permissions.update(await self._membership_permission_ids(int(lineage_id)))
-                break
-        if include_public_viewer:
-            effective_permissions.update(await self._public_space_viewer_permission_ids(lineage))
-        cache[cache_key] = set(effective_permissions)
-        return effective_permissions
+        actions = set(action_map.get(str(object_id), frozenset()))
+        cache[cache_key] = actions
+        return set(actions)
 
     async def _build_child_permission_context(self, space_id: int) -> dict:
-        user_subject_strings = await self._get_current_user_subject_strings()
-        bindings = await self._get_relation_bindings()
-        binding_department_paths = await self._get_binding_department_paths(bindings)
-        models = await self._get_relation_models_map()
-        membership_permission_ids = await self._membership_permission_ids(space_id)
-        public_space_permission_ids = await self._public_space_viewer_permission_ids([("knowledge_space", space_id)])
         return {
-            "models": models,
-            "bindings": bindings,
-            # F036-③: build the (resource_type, resource_id)->bindings index once per request
-            # and reuse across every child item, instead of rebuilding/linear-scanning per item.
-            "binding_index": FineGrainedPermissionService.build_binding_index(bindings),
-            "binding_department_paths": binding_department_paths,
-            "user_subject_strings": user_subject_strings,
-            "membership_permission_ids": membership_permission_ids,
-            "public_space_permission_ids": public_space_permission_ids,
-            "tuple_cache": {},
-            "tuple_department_paths": {},
+            "space_id": space_id,
+            "permissions": {},
         }
 
-    async def _get_child_item_effective_permission_ids(
+    async def _get_child_item_effective_actions(
         self,
         item: KnowledgeFile,
         *,
         space_id: int,
         context: dict,
     ) -> set[str]:
+        del space_id
         object_type = "folder" if item.file_type == FileType.DIR.value else "knowledge_file"
-        lineage = self._build_item_lineage(item, space_id)
-        (
-            effective_permissions,
-            matched_lineage_binding,
-        ) = await FineGrainedPermissionService.get_effective_permission_ids_async(
-            self.login_user,
-            object_type,
-            item.id,
-            models=context["models"],
-            bindings=context["bindings"],
-            binding_department_paths=context["binding_department_paths"],
-            user_subject_strings=context["user_subject_strings"],
-            lineage=lineage,
-            nearest_binding_wins=True,
-            return_match_metadata=True,
-            tuple_cache=context["tuple_cache"],
-            tuple_department_paths=context["tuple_department_paths"],
-            binding_index=context["binding_index"],
-        )
-        if not matched_lineage_binding:
-            effective_permissions.update(context["membership_permission_ids"])
-        effective_permissions.update(context["public_space_permission_ids"])
-        return effective_permissions
+        key = (object_type, str(item.id))
+        permissions = context.setdefault("permissions", {})
+        if key not in permissions:
+            permissions[key] = await self._get_effective_actions(
+                object_type,
+                item.id,
+            )
+        return set(permissions[key])
 
-    async def _chain_effective_permission_ids(
+    async def _chain_effective_actions(
         self,
         ancestor_ids: list[int],
         *,
         space_id: int,
         context: dict,
     ) -> set[str]:
-        """F036-①: effective permission ids for the ancestor chain (nearest folder -> space),
-        excluding the leaf item itself.
-
-        Mirrors ``_get_child_item_effective_permission_ids`` exactly but starts the lineage at the
-        item's nearest ancestor folder (or the space when the item is at the space root). For a
-        child item that has no nearer-than-chain binding and is not owned by the current user, its
-        view decision is fully determined by this chain (the leaf's own tuples are either the
-        additive ``owner`` grant -- handled separately via ``user_id`` -- or the structural
-        ``parent`` edge, neither of which changes the ``view_file``/``view_folder`` boolean).
-        Result is memoized per distinct ancestor chain by the caller.
-        """
+        del context
         if ancestor_ids:
-            nearest_type, nearest_id = "folder", ancestor_ids[-1]
-            lineage: list[tuple[str, int]] = [("folder", fid) for fid in reversed(ancestor_ids)] + [
-                ("knowledge_space", space_id),
-            ]
-        else:
-            nearest_type, nearest_id = "knowledge_space", space_id
-            lineage = [("knowledge_space", space_id)]
-
-        (
-            effective_permissions,
-            matched_lineage_binding,
-        ) = await FineGrainedPermissionService.get_effective_permission_ids_async(
-            self.login_user,
-            nearest_type,
-            nearest_id,
-            models=context["models"],
-            bindings=context["bindings"],
-            binding_department_paths=context["binding_department_paths"],
-            user_subject_strings=context["user_subject_strings"],
-            lineage=lineage,
-            nearest_binding_wins=True,
-            return_match_metadata=True,
-            tuple_cache=context["tuple_cache"],
-            tuple_department_paths=context["tuple_department_paths"],
-            binding_index=context["binding_index"],
+            return await self._get_effective_actions(
+                "folder",
+                ancestor_ids[-1],
+            )
+        return await self._get_effective_actions(
+            "knowledge_space",
+            space_id,
         )
-        if not matched_lineage_binding:
-            effective_permissions.update(context["membership_permission_ids"])
-        effective_permissions.update(context["public_space_permission_ids"])
-        return effective_permissions
 
-    async def _public_space_viewer_permission_ids(self, lineage: list[tuple[str, int]]) -> set[str]:
-        space_id = next(
-            (lineage_id for lineage_type, lineage_id in lineage if lineage_type == "knowledge_space"),
-            None,
-        )
-        if space_id is None:
-            return set()
-        # F036: request-scoped memo (see _get_active_space_membership). Called once per
-        # _get_effective_permission_ids invocation; dedups the repeated space lookup per request.
-        cache = self.__dict__.setdefault("_public_space_viewer_cache", {})
-        if int(space_id) in cache:
-            return set(cache[int(space_id)])
-        space = await KnowledgeDao.aquery_by_id(int(space_id))
-        if (
-            space
-            and space.type == KnowledgeTypeEnum.SPACE.value
-            and space.is_released
-            and space.auth_type == AuthTypeEnum.PUBLIC
-        ):
-            result = default_permission_ids_for_relation("viewer")
-        else:
-            result = set()
-        cache[int(space_id)] = set(result)
-        return result
-
-    async def _require_permission_id(
+    async def _public_space_viewer_actions(
         self,
-        object_type: str,
-        object_id: int,
-        permission_id: str,
-        *,
-        space_id: int | None = None,
-    ) -> None:
-        effective_permissions = await self._get_effective_permission_ids(
-            object_type,
-            object_id,
-            space_id=space_id,
-        )
-        if permission_id not in effective_permissions:
-            raise SpacePermissionDeniedError()
+        lineage: list[tuple[str, int]],
+    ) -> set[str]:
+        del lineage
+        return set()
 
     async def can_write_space_container(self, space_id: int, parent_id: int | None = None) -> bool:
         """F030: best-effort boolean — can the acting user upload into this container?
@@ -1285,11 +900,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
         ``add_file`` path enforces: ``upload_file`` on the target folder, or on
         the knowledge space itself when listing the root.
         """
-        if parent_id:
-            effective = await self._get_effective_permission_ids("folder", parent_id, space_id=space_id)
-        else:
-            effective = await self._get_effective_permission_ids("knowledge_space", space_id)
-        return "upload_file" in effective
+        resource_type = "folder" if parent_id else "knowledge_space"
+        resource_id = parent_id or space_id
+        return await self._check_action(
+            resource_type,
+            resource_id,
+            "upload_file",
+        )
 
     async def _list_space_child_resources(self, space_id: int) -> list[tuple[str, int]]:
         async with get_async_db_session() as session:
@@ -1309,9 +926,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         space = await KnowledgeDao.aquery_by_id(space_id)
         if not space or space.type != KnowledgeTypeEnum.SPACE.value:
             raise SpaceNotFoundError()
-        effective_permissions = await self._get_effective_permission_ids("knowledge_space", space_id)
-        if "view_space" not in effective_permissions:
-            raise SpacePermissionDeniedError()
+        await self._require_action("knowledge_space", space_id, "visible")
         return space
 
     @staticmethod
@@ -1325,11 +940,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
         space = await KnowledgeDao.aquery_by_id(space_id)
         if not space or space.type != KnowledgeTypeEnum.SPACE.value:
             raise SpaceNotFoundError()
-        effective_permissions = await self._get_effective_permission_ids("knowledge_space", space_id)
-        if "view_space" in effective_permissions:
+        if await self._check_action(
+            "knowledge_space",
+            space_id,
+            "visible",
+        ):
             return space, True
-        if self._is_square_preview_space(space):
-            return space, False
         raise SpacePermissionDeniedError()
 
     # ──────────────────────────── Space CRUD ──────────────────────────────────
@@ -1483,6 +1099,34 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 knowledge_space.auto_tag_library_id = resolved_library_id
                 knowledge_space = await KnowledgeDao.async_update_space(knowledge_space)
 
+        container_adapter = self._resource_adapter("knowledge_space")
+        actor = await self._permission_actor()
+        await container_adapter.authorize_created(
+            record=KnowledgeContainerPermissionRecord(
+                tenant_id=int(knowledge_space.tenant_id),
+                resource_type="knowledge_space",
+                resource_id=str(knowledge_space.id),
+                status=KnowledgeState.PUBLISHED.name,
+                kind=KnowledgeTypeEnum.SPACE.name,
+                owner_user_id=int(knowledge_space.user_id),
+                permission_version=0,
+                context_version=(f"created:knowledge_space:{knowledge_space.id}"),
+            ),
+            actor=actor,
+        )
+        if self._is_square_preview_space(knowledge_space):
+            current_record = await container_adapter.load_permission_record(
+                resource_type="knowledge_space",
+                resource_id=str(knowledge_space.id),
+            )
+            if current_record is None:
+                raise SpaceNotFoundError()
+            await container_adapter.sync_public_reader(
+                record=current_record,
+                actor=actor,
+                enabled=True,
+            )
+
         member = SpaceChannelMember(
             business_id=str(knowledge_space.id),
             business_type=BusinessTypeEnum.SPACE,
@@ -1491,20 +1135,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
             status=MembershipStatusEnum.ACTIVE,
         )
         await SpaceChannelMemberDao.async_insert_member(member)
-
-        # F008: Write owner tuple to OpenFGA (INV-2)
-        try:
-            await OwnerService.write_owner_tuple(
-                self.login_user.user_id,
-                "knowledge_space",
-                str(knowledge_space.id),
-            )
-        except Exception as e:
-            _logger.warning(
-                "Failed to write owner tuple for knowledge_space %s: %s",
-                knowledge_space.id,
-                e,
-            )
 
         # Audit log for knowledge space creation
         await KnowledgeAuditTelemetryService.audit_create_knowledge_space(
@@ -1538,28 +1168,16 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 self._apply_subscription_flags(result, self._resolve_subscription_status(member_info))
                 if member_info.is_active:
                     result.user_role = member_info.user_role
-            elif has_content_permission and not self.login_user.is_admin():
-                # On a released PUBLIC space every user is synthetically granted view_space
-                # by _public_space_viewer_permission_ids, so has_content_permission alone
-                # cannot distinguish "subscribed" from "merely able to preview from the
-                # square". Mirror get_knowledge_square: only a *real* view_space grant
-                # (ReBAC tuple / membership), not the public-viewer synthesis, counts as
-                # subscribed.
-                real_permissions = await self._get_effective_permission_ids(
-                    "knowledge_space", space_id, include_public_viewer=False
-                )
-                if "view_space" in real_permissions:
-                    self._apply_subscription_flags(result, SpaceSubscriptionStatusEnum.SUBSCRIBED)
             if result.user_role is None and has_content_permission:
-                level = await PermissionService.get_permission_level(
-                    user_id=self.login_user.user_id,
-                    object_type="knowledge_space",
-                    object_id=str(space_id),
-                    login_user=self.login_user,
+                result.user_role = (
+                    UserRoleEnum.ADMIN
+                    if await self._check_action(
+                        "knowledge_space",
+                        space_id,
+                        "manage_permission",
+                    )
+                    else UserRoleEnum.MEMBER
                 )
-                result.user_role = self._permission_level_to_space_user_role(level)
-            if result.user_role is None and has_content_permission:
-                result.user_role = UserRoleEnum.MEMBER
         result.follower_num = follower_num
         result.file_num = total_file_num
         await self._decorate_department_metadata([result])
@@ -1596,8 +1214,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
         space = await KnowledgeDao.aquery_by_id(space_id)
         if not space or space.type != KnowledgeTypeEnum.SPACE.value:
             raise SpaceNotFoundError()
-        await self._require_permission_id("knowledge_space", space_id, "delete_space")
+        await self._require_action("knowledge_space", space_id, "delete")
         child_resources = await self._list_space_child_resources(space_id)
+        child_permission_records = await self._load_resource_permission_records(child_resources)
+        await self._project_resource_deletes(child_permission_records)
 
         # Cleaned vector + ES data
         await asyncio.to_thread(KnowledgeService.delete_knowledge_file_in_vector, space)
@@ -1611,18 +1231,29 @@ class KnowledgeSpaceService(KnowledgeUtils):
         # empty ones so the cleared space stays queryable (empty result, not 500).
         await asyncio.to_thread(KnowledgeService._init_knowledge_indices_sync, self.login_user.user_id, space)
 
-        # F008: drop FGA tuples for child resources only; keep the space's tuple.
-        await self._cleanup_resource_tuples(child_resources)
-
     async def delete_space(self, space_id: int) -> None:
         space = await KnowledgeDao.aquery_by_id(space_id)
         if not space or space.type != KnowledgeTypeEnum.SPACE.value:
             raise SpaceNotFoundError()
-        await self._require_permission_id("knowledge_space", space_id, "delete_space")
+        await self._require_action("knowledge_space", space_id, "delete")
         child_resources = await self._list_space_child_resources(space_id)
         original_members = await SpaceChannelMemberDao.async_get_members_by_space(space_id)
         original_member_ids = {member.user_id for member in original_members}
         original_member_ids.update(await self._authorized_space_user_ids(space_id))
+        child_permission_records = await self._load_resource_permission_records(child_resources)
+        container_adapter = self._resource_adapter("knowledge_space")
+        container_record = await container_adapter.load_permission_record(
+            resource_type="knowledge_space",
+            resource_id=str(space_id),
+        )
+        if container_record is None:
+            raise SpaceNotFoundError()
+        actor = await self._permission_actor()
+        await self._project_resource_deletes(child_permission_records)
+        await container_adapter.project_delete(
+            record=container_record,
+            actor=actor,
+        )
 
         # Cleaned vectorData in
         await asyncio.to_thread(KnowledgeService.delete_knowledge_file_in_vector, space)
@@ -1649,9 +1280,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 space_id,
                 e,
             )
-
-        # F008: Delete all FGA tuples for this space and its child resources
-        await self._cleanup_resource_tuples(child_resources + [("knowledge_space", space_id)])
 
         # delete space channel memeber
         await SpaceChannelMemberDao.clean_space_member(space_id)
@@ -1695,9 +1323,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if not space or space.type != KnowledgeTypeEnum.SPACE.value:
             raise SpaceNotFoundError()
 
-        await self._require_permission_id("knowledge_space", space_id, "edit_space")
+        await self._require_action("knowledge_space", space_id, "edit")
 
         old_auth_type = space.auth_type
+        old_square_visible = self._is_square_preview_space(space)
 
         if name is not None:
             space.name = name
@@ -1742,6 +1371,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         space = await KnowledgeDao.async_update_space(space)
         new_auth_type = space.auth_type
+        new_square_visible = self._is_square_preview_space(space)
 
         # When switching to PRIVATE, remove all non-creator members
         if old_auth_type != AuthTypeEnum.PRIVATE and new_auth_type == AuthTypeEnum.PRIVATE:
@@ -1754,15 +1384,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
             await self.__class__.clear_space_authorization_for_private(
                 space=space,
                 child_resources=child_resources,
+                operator_user_id=self.login_user.user_id,
             )
             await SpaceChannelMemberDao.async_delete_non_creator_members(space_id)
-            final_removed_user_ids = []
-            for user_id in removed_user_ids:
-                if not await self._user_can_read_space(user_id, space_id):
-                    final_removed_user_ids.append(user_id)
             await self._send_space_event_notification(
                 action_code=SPACE_MADE_PRIVATE_MESSAGE,
-                receiver_user_ids=sorted(final_removed_user_ids),
+                receiver_user_ids=sorted(removed_user_ids),
                 space_id=space_id,
                 space_name=space.name,
                 navigable=False,
@@ -1780,8 +1407,23 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     member.user_id,
                     member.user_role,
                     is_active=True,
+                    operator_user_id=self.login_user.user_id,
                 )
             await SpaceChannelMemberDao.async_delete_rejected_members(space_id)
+
+        if new_auth_type != AuthTypeEnum.PRIVATE and old_square_visible != new_square_visible:
+            container_adapter = self._resource_adapter("knowledge_space")
+            current_record = await container_adapter.load_permission_record(
+                resource_type="knowledge_space",
+                resource_id=str(space_id),
+            )
+            if current_record is None:
+                raise SpaceNotFoundError()
+            await container_adapter.sync_public_reader(
+                record=current_record,
+                actor=await self._permission_actor(),
+                enabled=new_square_visible,
+            )
 
         return space
 
@@ -1839,22 +1481,49 @@ class KnowledgeSpaceService(KnowledgeUtils):
             members = [member for member in members if int(member.business_id) not in department_space_ids]
         return await self._format_member_spaces(members, order_by)
 
+    async def _scan_space_action_ids(
+        self,
+        action: str,
+        *,
+        exclude_square_public: bool = False,
+    ) -> list[int]:
+        result: list[int] = []
+        cursor = None
+        while True:
+            rows = await KnowledgeDao.aget_all_knowledge(
+                knowledge_type=KnowledgeTypeEnum.SPACE,
+                sort_by="update_time",
+                limit=100,
+                cursor=cursor,
+            )
+            if not rows:
+                break
+            action_map = await self._batch_actions(
+                "knowledge_space",
+                [row.id for row in rows],
+                (action,),
+            )
+            result.extend(
+                int(row.id)
+                for row in rows
+                if action in action_map.get(str(row.id), frozenset())
+                and not (exclude_square_public and self._is_square_preview_space(row))
+            )
+            if len(rows) < 100:
+                break
+            last = rows[-1]
+            cursor = [last.update_time, last.id]
+        return result
+
     async def get_my_managed_spaces(self, order_by: str = "name") -> list[KnowledgeRead]:
         members = await SpaceChannelMemberDao.async_get_user_managed_members(self.login_user.user_id)
-        accessible_ids = await PermissionService.list_accessible_ids(
-            user_id=self.login_user.user_id,
-            relation="can_manage",
-            object_type="knowledge_space",
-            login_user=self.login_user,
-        )
         space_ids = {int(member.business_id) for member in members}
-        if accessible_ids is not None:
-            space_ids |= {int(space_id) for space_id in accessible_ids if str(space_id).isdigit()}
+        space_ids.update(await self._scan_space_action_ids("manage_permission"))
         return await self._format_accessible_spaces(
             list(space_ids),
             order_by,
             memberships=members,
-            required_permission_id="manage_space_relation",
+            required_action="manage_permission",
         )
 
     async def get_my_followed_spaces(self, order_by: str = "update_time") -> list[KnowledgeRead]:
@@ -1865,27 +1534,20 @@ class KnowledgeSpaceService(KnowledgeUtils):
         """
         # Fetch members ordered by is_pinned DESC so we know which are pinned
         members = await SpaceChannelMemberDao.async_get_user_followed_members(self.login_user.user_id)
-        accessible_ids = await PermissionService.list_accessible_ids(
-            user_id=self.login_user.user_id,
-            relation="can_read",
-            object_type="knowledge_space",
-            login_user=self.login_user,
-        )
-        if accessible_ids is None:
-            # Admins short-circuit list_accessible_ids to None ("can read all"), which would
-            # otherwise drop spaces the admin was specifically authorized to (direct user
-            # grant: ReBAC + binding, no membership row). Recover those from the admin's own
-            # direct space bindings so they still surface in the followed list.
-            accessible_ids = await self._directly_granted_space_ids(self.login_user.user_id)
         space_ids = {int(member.business_id) for member in members}
-        if accessible_ids is not None:
-            space_ids |= {int(space_id) for space_id in accessible_ids if str(space_id).isdigit()}
+        if not self.login_user.is_admin():
+            space_ids.update(
+                await self._scan_space_action_ids(
+                    "visible",
+                    exclude_square_public=True,
+                )
+            )
         return await self._format_accessible_spaces(
             list(space_ids),
             order_by,
             memberships=members,
             exclude_created=True,
-            required_permission_id="view_space",
+            required_action="visible",
         )
 
     async def alist_mine_and_joined_cursor(
@@ -1947,12 +1609,15 @@ class KnowledgeSpaceService(KnowledgeUtils):
             user_ids = {sp.user_id for sp in page_items if sp.user_id is not None}
             users = await UserDao.aget_user_by_ids(list(user_ids)) or []
             user_name_map = {u.user_id: u.user_name for u in users}
-            perm_id_lists = await asyncio.gather(
-                *[self._get_effective_permission_ids("knowledge_space", sp.id) for sp in page_items]
+            action_lists = await asyncio.gather(
+                *[
+                    self._get_effective_actions("knowledge_space", sp.id)
+                    for sp in page_items
+                ]
             )
-            for sp, perm_ids in zip(page_items, perm_id_lists):
+            for sp, actions in zip(page_items, action_lists, strict=True):
                 sp.user_name = user_name_map.get(sp.user_id, str(sp.user_id))
-                sp.permission_ids = sorted(perm_ids)
+                sp.actions = sorted(actions)
 
         next_cursor = encode_cursor((page_num + 1,), context=context) if has_more else None
         return PageInfiniteCursorData(
@@ -2017,80 +1682,40 @@ class KnowledgeSpaceService(KnowledgeUtils):
         keyword: str | None = None,
         limit: int = 200,
     ) -> list[Knowledge]:
-        """List knowledge spaces where the current user has ``upload_file`` permission.
+        """Scan tenant-owned candidates and BatchCheck exact upload_file."""
 
-        Used by F028 (workstation conversation export → import to knowledge
-        space) to populate the target picker. The ``upload_file`` permission
-        is granted by the ``can_edit`` OpenFGA relation per the knowledge_space
-        permission template, so we list_objects against ``can_edit`` and let
-        OpenFGA's role inheritance (owner/manager ⊃ editor) cover higher tiers.
-
-        Behavior:
-        - Admin (`list_accessible_ids` returns None) → list all SPACE-type
-          knowledge in the current tenant, ordered by update_time DESC.
-        - Normal user → ReBAC list ∪ creator-owned spaces, intersected with
-          SPACE type, ordered by update_time DESC.
-        - ``keyword`` does substring (case-insensitive) match against name.
-        - ``limit`` caps the result size (default 200); INV-6 cursor pagination
-          is deliberately skipped per spec §3 — typical user has <100 such
-          spaces.
-        """
-        accessible_ids = await PermissionService.list_accessible_ids(
-            user_id=self.login_user.user_id,
-            relation="can_read",
-            object_type="knowledge_space",
-            login_user=self.login_user,
-        )
-
-        if accessible_ids is None:
-            # Admin path: tenant filter is auto-injected by the multi-tenant
-            # SQLAlchemy event; we just constrain by resource type + order.
-            async with get_async_db_session() as session:
-                stmt = (
-                    select(Knowledge)
-                    .where(Knowledge.type == KnowledgeTypeEnum.SPACE.value)
-                    .order_by(Knowledge.update_time.desc())
-                    .limit(limit)
-                )
-                spaces = list((await session.exec(stmt)).all())
-        else:
-            creator_ids = await KnowledgeDao.aget_knowledge_ids_created_by(
-                self.login_user.user_id,
-                KnowledgeTypeEnum.SPACE,
+        spaces: list[Knowledge] = []
+        cursor = None
+        while len(spaces) < limit:
+            batch = await KnowledgeDao.aget_all_knowledge(
+                name=keyword,
+                knowledge_type=KnowledgeTypeEnum.SPACE,
+                sort_by="update_time",
+                limit=100,
+                cursor=cursor,
             )
-            ids = set(creator_ids) | {int(sid) for sid in accessible_ids if str(sid).isdigit()}
-            if not ids:
-                return []
-            spaces = await KnowledgeDao.aget_list_by_ids(list(ids))
-            spaces = [s for s in spaces if s.type == KnowledgeTypeEnum.SPACE.value]
-            # can_read only narrows the candidate set; filter to spaces the user
-            # can actually upload into, using the SAME fine-grained check as the
-            # upload path. A custom permission template may grant upload_file
-            # under a viewer-tier relation that can_read/can_edit can't express,
-            # so the coarse list_objects relation alone is not a valid proxy.
-            # F040 (B/AC-09): evaluate candidates in parallel instead of a serial loop.
-            perms_per_space = await asyncio.gather(
-                *[self._get_effective_permission_ids("knowledge_space", s.id) for s in spaces]
+            if not batch:
+                break
+            action_map = await self._batch_actions(
+                "knowledge_space",
+                [space.id for space in batch],
+                ("upload_file",),
             )
-            spaces = [s for s, perms in zip(spaces, perms_per_space) if "upload_file" in perms]
-            spaces.sort(
-                key=lambda s: s.update_time or datetime.min,
-                reverse=True,
-            )
-            spaces = spaces[:limit]
-
-        if keyword:
-            kw = keyword.lower()
-            spaces = [s for s in spaces if s.name and kw in s.name.lower()]
-        return spaces
+            spaces.extend(space for space in batch if "upload_file" in action_map.get(str(space.id), frozenset()))
+            if len(batch) < 100:
+                break
+            last = batch[-1]
+            cursor = [last.update_time, last.id]
+        return spaces[:limit]
 
     async def pin_space(self, space_id: int, is_pinned: bool = True) -> bool:
         """Pin/unpin a knowledge space for the current user.
 
         Pin state lives in the decoupled ``knowledge_space_user_pin`` table, not
         on the membership row — a user may pin a space reachable only via ReBAC /
-        department authorization (no membership row). We gate on ``view_space``
-        first so a pin can only be written for a space the user can actually see.
+        department authorization (no membership row). We gate on concrete
+        ``visible`` first so a pin can only be written for a space the user can
+        actually see.
         """
         await self._require_read_permission(space_id)
         if is_pinned:
@@ -2106,7 +1731,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         Return PUBLIC/APPROVAL spaces for the Knowledge Square with pagination, sorted by:
         1. Not-joined first (easier to explore)
         2. Already-joined or pending last
-        3. Within each group: sorted by update_time DESC
+        3. Within each group: unique active subscriber count descending
         Sorting and pagination are handled at the SQL level for efficiency.
         Returns: {"total": int, "page": int, "page_size": int, "data": List[KnowledgeSpaceInfoResp]}
         """
@@ -2130,65 +1755,24 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         # 3. Batch fetch creator info and file counts for the current page only
         creator_users_task = UserDao.aget_user_by_ids(creator_ids) if creator_ids else None
-        if self.login_user.is_admin():
-            if creator_users_task:
-                creator_users, success_file_map = await asyncio.gather(
-                    creator_users_task,
-                    KnowledgeFileDao.async_count_success_files_batch(space_ids_int),
-                )
-            else:
-                creator_users = []
-                success_file_map = await KnowledgeFileDao.async_count_success_files_batch(space_ids_int)
-            readable_space_ids = None
+        if creator_users_task:
+            creator_users, success_file_map = await asyncio.gather(
+                creator_users_task,
+                KnowledgeFileDao.async_count_success_files_batch(space_ids_int),
+            )
         else:
-            if creator_users_task:
-                (
-                    creator_users,
-                    success_file_map,
-                    readable_space_ids,
-                ) = await asyncio.gather(
-                    creator_users_task,
-                    KnowledgeFileDao.async_count_success_files_batch(space_ids_int),
-                    PermissionService.list_accessible_ids(
-                        user_id=self.login_user.user_id,
-                        relation="can_read",
-                        object_type="knowledge_space",
-                        login_user=self.login_user,
-                    ),
-                )
-            else:
-                success_file_map, readable_space_ids = await asyncio.gather(
-                    KnowledgeFileDao.async_count_success_files_batch(space_ids_int),
-                    PermissionService.list_accessible_ids(
-                        user_id=self.login_user.user_id,
-                        relation="can_read",
-                        object_type="knowledge_space",
-                        login_user=self.login_user,
-                    ),
-                )
-                creator_users = []
+            creator_users = []
+            success_file_map = await KnowledgeFileDao.async_count_success_files_batch(space_ids_int)
+        visible_map = await self._batch_actions(
+            "knowledge_space",
+            space_ids_int,
+            ("visible",),
+        )
+        rows = [row for row in rows if "visible" in visible_map.get(str(row[0].id), frozenset())]
         user_map = {u.user_id: u for u in (creator_users or [])}
         resolved_subscription_status = {
             row[0].id: self._resolve_subscription_status_from_fields(row[1], row[2]) for row in rows
         }
-        readable_space_id_set = set()
-        readable_space_with_view_permission = set()
-        if readable_space_ids is not None:
-            readable_space_id_set = {int(space_id) for space_id in readable_space_ids if str(space_id).isdigit()}
-        readable_candidates = [
-            space_id
-            for space_id in readable_space_id_set
-            if resolved_subscription_status.get(space_id) != SpaceSubscriptionStatusEnum.SUBSCRIBED
-        ]
-        if readable_candidates:
-            effective_permission_ids = await asyncio.gather(
-                *[self._get_effective_permission_ids("knowledge_space", space_id) for space_id in readable_candidates]
-            )
-            readable_space_with_view_permission = {
-                space_id
-                for space_id, permission_ids in zip(readable_candidates, effective_permission_ids)
-                if "view_space" in permission_ids
-            }
 
         # 4. Build response items
         result_list: list = []
@@ -2206,9 +1790,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 user_subscription_status,
                 user_subscription_update_time,
             )
-            if space.id in readable_space_with_view_permission:
-                subscription_status = SpaceSubscriptionStatusEnum.SUBSCRIBED
-
             result_list.append(
                 KnowledgeSpaceInfoResp(
                     **space.model_dump(),
@@ -2270,43 +1851,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
             )
 
     @staticmethod
-    async def _user_can_manage_space(user_id: int, space_id: int) -> bool:
-        return await PermissionService.check(
-            user_id=user_id,
-            relation="can_manage",
-            object_type="knowledge_space",
-            object_id=str(space_id),
-        )
-
-    @staticmethod
-    async def _user_can_read_space(user_id: int, space_id: int) -> bool:
-        return await PermissionService.check(
-            user_id=user_id,
-            relation="can_read",
-            object_type="knowledge_space",
-            object_id=str(space_id),
-        )
-
-    @staticmethod
     async def _authorized_space_user_ids(space_id: int) -> set[int]:
-        permissions = await PermissionService.get_resource_permissions("knowledge_space", str(space_id))
-        user_ids: set[int] = set()
-        for permission in permissions:
-            if getattr(permission, "relation", None) not in _SPACE_MEMBER_RELATIONS:
-                continue
-            try:
-                subject_id = int(getattr(permission, "subject_id", 0) or 0)
-            except (TypeError, ValueError):
-                continue
-            include_children = getattr(permission, "include_children", None)
-            user_ids.update(
-                await PermissionService._affected_user_ids_for_subject(
-                    getattr(permission, "subject_type", ""),
-                    subject_id,
-                    True if include_children is None else bool(include_children),
-                )
-            )
-        return user_ids
+        del space_id
+        return set()
 
     async def _enrich_with_version_info(self, items: list[KnowledgeFile]) -> list[KnowledgeFile]:
         """Attach version_no / is_multi_version / has_similar to file items in-place.
@@ -2467,27 +2014,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
         space_id: int,
         context: dict | None = None,
     ) -> list[KnowledgeFile]:
-        """Reference (oracle) path: full per-item ReBAC evaluation (pre-F036 behaviour).
-
-        Retained as the equivalence oracle for F036 tests and as a documented fallback if the
-        invariant behind the optimized path (every non-owner file/folder grant carries a binding)
-        ever needs to be re-verified against the live tuple store. NOT on the hot path.
-        """
-        permission_context = context or await self._build_child_permission_context(space_id)
-        semaphore = asyncio.Semaphore(_CHILD_PERMISSION_CHECK_CONCURRENCY)
-
-        async def can_view(item: KnowledgeFile) -> bool:
-            async with semaphore:
-                permission_id = "view_folder" if item.file_type == FileType.DIR.value else "view_file"
-                effective_permissions = await self._get_child_item_effective_permission_ids(
-                    item,
-                    space_id=space_id,
-                    context=permission_context,
-                )
-                return permission_id in effective_permissions
-
-        visibility = await asyncio.gather(*(can_view(item) for item in items))
-        return [item for item, allowed in zip(items, visibility) if allowed]
+        return await self._filter_visible_child_items(
+            items,
+            space_id=space_id,
+            context=context,
+        )
 
     async def _filter_visible_child_items(
         self,
@@ -2496,50 +2027,38 @@ class KnowledgeSpaceService(KnowledgeUtils):
         space_id: int,
         context: dict | None = None,
     ) -> list[KnowledgeFile]:
-        """F036-① inheritance fast-path. Visibility-equivalent to the full path under the verified
-        invariant "every non-owner file/folder grant has a binding".
-
-        Per item, decide ``view_file``/``view_folder`` as:
-        - leaf carries its own file/folder binding  -> full per-item eval (nearest-wins, unchanged);
-        - current user owns the item                 -> visible (additive ``owner`` grant);
-        - otherwise                                  -> inherit the ancestor-chain decision
-          (computed once per distinct chain; ancestor-folder bindings are honoured inside the
-          chain eval via nearest-binding-wins).
-        """
-        permission_context = context or await self._build_child_permission_context(space_id)
-        binding_index = permission_context["binding_index"]
-        bound_ff = {key for key in binding_index if key[0] in ("knowledge_file", "folder")}
-        user_id = self.login_user.user_id
-        chain_cache: dict[tuple[int, ...], set[str]] = {}
-        semaphore = asyncio.Semaphore(_CHILD_PERMISSION_CHECK_CONCURRENCY)
-
-        async def chain_perms(ancestor_ids: list[int]) -> set[str]:
-            key = tuple(ancestor_ids)
-            if key not in chain_cache:
-                chain_cache[key] = await self._chain_effective_permission_ids(
-                    ancestor_ids, space_id=space_id, context=permission_context
+        del space_id
+        if not items:
+            return []
+        context = context or {"permissions": {}}
+        permissions = context.setdefault("permissions", {})
+        by_type = {
+            "folder": [item.id for item in items if item.file_type == FileType.DIR.value],
+            "knowledge_file": [item.id for item in items if item.file_type != FileType.DIR.value],
+        }
+        for resource_type, resource_ids in by_type.items():
+            if not resource_ids:
+                continue
+            action_map = await self._batch_actions(
+                resource_type,
+                resource_ids,
+                ("visible",),
+            )
+            for resource_id in resource_ids:
+                permissions[(resource_type, str(resource_id))] = (
+                    {"visible"}
+                    if "visible" in action_map.get(str(resource_id), frozenset())
+                    else set()
                 )
-            return chain_cache[key]
-
-        async def can_view(item: KnowledgeFile) -> bool:
-            object_type = "folder" if item.file_type == FileType.DIR.value else "knowledge_file"
-            permission_id = "view_folder" if item.file_type == FileType.DIR.value else "view_file"
-            if (object_type, str(item.id)) in bound_ff:
-                async with semaphore:
-                    effective_permissions = await self._get_child_item_effective_permission_ids(
-                        item,
-                        space_id=space_id,
-                        context=permission_context,
-                    )
-                return permission_id in effective_permissions
-            item_owner = getattr(item, "user_id", None)
-            if item_owner is not None and item_owner == user_id:
-                return True
-            ancestor_ids = [int(p) for p in (item.file_level_path or "").split("/") if p]
-            return permission_id in await chain_perms(ancestor_ids)
-
-        visibility = await asyncio.gather(*(can_view(item) for item in items))
-        return [item for item, allowed in zip(items, visibility) if allowed]
+        return [
+            item
+            for item in items
+            if (
+                ("folder" if item.file_type == FileType.DIR.value else "knowledge_file"),
+                str(item.id),
+            )
+            in {key for key, value in permissions.items() if value}
+        ]
 
     async def _scan_visible_child_items(
         self,
@@ -2698,10 +2217,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         await self._require_read_permission(space_id)
         if parent_id:
-            await self._require_folder_relation(space_id, parent_id, "can_read")
-            await self._require_permission_id("folder", parent_id, "view_folder", space_id=space_id)
+            await self._require_folder_action(
+                space_id,
+                parent_id,
+                "visible",
+            )
         else:
-            await self._require_permission_id("knowledge_space", space_id, "view_space")
+            await self._require_action("knowledge_space", space_id, "visible")
 
         context = f"space_children|order={order_field}_{(order_sort or 'asc').lower()}"
         try:
@@ -2770,14 +2292,17 @@ class KnowledgeSpaceService(KnowledgeUtils):
     ) -> dict:
         space = await self._require_read_permission(space_id)
         if not parent_id:
-            await self._require_permission_id("knowledge_space", space_id, "view_space")
+            await self._require_action("knowledge_space", space_id, "visible")
 
         file_level_path = None
         filter_files = []
 
         if parent_id:
-            parent_folder = await self._require_folder_relation(space_id, parent_id, "can_read")
-            await self._require_permission_id("folder", parent_id, "view_folder", space_id=space_id)
+            parent_folder = await self._require_folder_action(
+                space_id,
+                parent_id,
+                "visible",
+            )
             file_level_path = f"{parent_folder.file_level_path}/{parent_folder.id}"
             children_ids = await SpaceFileDao.get_children_by_prefix(space_id, file_level_path)
             if not children_ids:
@@ -2888,9 +2413,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
         parent_id: int | None = None,
     ) -> KnowledgeFile:
         if parent_id:
-            await self._require_permission_id("folder", parent_id, "create_folder", space_id=knowledge_id)
+            await self._require_action("folder", parent_id, "create_folder")
         else:
-            await self._require_permission_id("knowledge_space", knowledge_id, "create_folder")
+            await self._require_action(
+                "knowledge_space",
+                knowledge_id,
+                "create_folder",
+            )
         level = 0
         file_level_path = ""
         parent_type = "knowledge_space"
@@ -2930,7 +2459,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 parent_resource_id,
             )
         except Exception:
-            await self._cleanup_resource_tuples([("folder", added_folder.id)])
             await KnowledgeFileDao.adelete_batch([added_folder.id])
             raise
         await KnowledgeDao.async_update_knowledge_update_time_by_id(knowledge_id)
@@ -2941,7 +2469,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if not folder or folder.file_type != 0:
             raise SpaceFolderNotFoundError()
         folder = self._ensure_space_folder(folder, folder.knowledge_id)
-        await self._require_permission_id("folder", folder_id, "rename_folder", space_id=folder.knowledge_id)
+        await self._require_action("folder", folder_id, "rename")
 
         if (
             await SpaceFileDao.count_folder_by_name(
@@ -2963,7 +2491,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         from bisheng.worker.knowledge.file_worker import delete_knowledge_file_celery
 
         folder = await self._get_folder_for_action(space_id, folder_id)
-        await self._require_permission_id("folder", folder_id, "delete_folder", space_id=space_id)
+        await self._require_action("folder", folder_id, "delete")
         space = await KnowledgeDao.aquery_by_id(space_id)
         if not space:
             raise SpaceNotFoundError()
@@ -2976,11 +2504,15 @@ class KnowledgeSpaceService(KnowledgeUtils):
         resource_tuples_to_cleanup = [("folder", folder_id)]
         for child in children:
             if child.file_type == FileType.DIR.value:
-                await self._require_permission_id("folder", child.id, "delete_folder", space_id=space_id)
+                await self._require_action("folder", child.id, "delete")
                 floder_ids.append(child.id)
                 resource_tuples_to_cleanup.append(("folder", child.id))
             else:
-                await self._require_permission_id("knowledge_file", child.id, "delete_file", space_id=space_id)
+                await self._require_action(
+                    "knowledge_file",
+                    child.id,
+                    "delete",
+                )
                 file_ids.append(child.id)
                 resource_tuples_to_cleanup.append(("knowledge_file", child.id))
 
@@ -3019,12 +2551,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
         await KnowledgeDao.async_update_knowledge_update_time_by_id(folder.knowledge_id)
 
     async def get_folder_file_parent(self, space_id: int, file_id: int) -> list[dict]:
-        file_record = await self._require_file_or_folder_relation(space_id, file_id, "can_read")
-        await self._require_permission_id(
-            "folder" if file_record.file_type == FileType.DIR.value else "knowledge_file",
-            file_record.id,
-            "view_folder" if file_record.file_type == FileType.DIR.value else "view_file",
-            space_id=space_id,
+        file_record = await self._require_file_or_folder_action(
+            space_id,
+            file_id,
+            "visible",
         )
         # Build the breadcrumb path: ancestors (from file_level_path) followed by
         # the target folder/file itself as the leaf. The leaf is included so the
@@ -3130,9 +2660,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
         overwrite: bool = False,
     ) -> KnowledgeFile:
         if parent_id:
-            await self._require_permission_id("folder", parent_id, "upload_file", space_id=knowledge_id)
+            await self._require_action("folder", parent_id, "upload_file")
         else:
-            await self._require_permission_id("knowledge_space", knowledge_id, "upload_file")
+            await self._require_action(
+                "knowledge_space",
+                knowledge_id,
+                "upload_file",
+            )
 
         db_knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
         if not db_knowledge:
@@ -3359,9 +2893,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if file_source is None:
             file_source = FileSource.SPACE_UPLOAD
         if parent_id:
-            await self._require_permission_id("folder", parent_id, "upload_file", space_id=knowledge_id)
+            await self._require_action("folder", parent_id, "upload_file")
         else:
-            await self._require_permission_id("knowledge_space", knowledge_id, "upload_file")
+            await self._require_action(
+                "knowledge_space",
+                knowledge_id,
+                "upload_file",
+            )
 
         db_knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
         if not db_knowledge:
@@ -3553,9 +3091,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         # Entry permission: same gate as single-file upload (design §9.4 / C4).
         if parent_id:
-            await self._require_permission_id("folder", parent_id, "upload_file", space_id=knowledge_id)
+            await self._require_action("folder", parent_id, "upload_file")
         else:
-            await self._require_permission_id("knowledge_space", knowledge_id, "upload_file")
+            await self._require_action(
+                "knowledge_space",
+                knowledge_id,
+                "upload_file",
+            )
 
         db_knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
         if not db_knowledge:
@@ -3675,7 +3217,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         )
 
         file_record = await self._get_file_for_action(file_id)
-        await self._require_permission_id("knowledge_file", file_id, "rename_file", space_id=file_record.knowledge_id)
+        await self._require_action("knowledge_file", file_id, "rename")
         space = await KnowledgeDao.aquery_by_id(file_record.knowledge_id)
         if not space:
             raise SpaceNotFoundError()
@@ -3726,47 +3268,30 @@ class KnowledgeSpaceService(KnowledgeUtils):
         old_parent: tuple[str, int],
         new_parent: tuple[str, int],
     ) -> None:
-        """Atomically swap a resource's `parent` tuple (delete old, write new).
+        """Project a business-validated parent change through the ledger."""
 
-        Inherited permissions (AC-09) recompute automatically from the new parent
-        via OpenFGA tupleToUserset — no manual re-grant. Directly-granted tuples
-        on the resource are untouched.
-        """
-        ops = []
-        if old_parent:
-            ops.append(
-                TupleOperation(
-                    action="delete",
-                    user=f"{old_parent[0]}:{old_parent[1]}",
-                    relation="parent",
-                    object=f"{object_type}:{object_id}",
-                )
-            )
-        ops.append(
-            TupleOperation(
-                action="write",
-                user=f"{new_parent[0]}:{new_parent[1]}",
-                relation="parent",
-                object=f"{object_type}:{object_id}",
-            )
+        adapter = self._resource_adapter(object_type)
+        target = await adapter.load_permission_record(
+            resource_type=object_type,
+            resource_id=str(object_id),
         )
-        try:
-            await PermissionService.batch_write_tuples(
-                ops,
-                crash_safe=True,
-                raise_on_failure=True,
-                stop_on_failure=True,
-            )
-        except Exception as e:
-            _logger.exception(
-                "Failed to replace parent tuple for %s:%s (%s -> %s): %s",
-                object_type,
-                object_id,
-                old_parent,
-                new_parent,
-                e,
-            )
-            raise
+        if target is None:
+            raise SpaceFileNotFoundError()
+        if (
+            target.parent_type,
+            target.parent_id,
+        ) != (new_parent[0], str(new_parent[1])):
+            raise SpacePermissionDeniedError()
+        source = replace(
+            target,
+            parent_type=old_parent[0],
+            parent_id=str(old_parent[1]),
+        )
+        await adapter.project_move(
+            source=source,
+            target=target,
+            actor=await self._permission_actor(),
+        )
 
     async def _dispatch_cross_space_migration(self, file_id: int, source_space_id: int) -> None:
         """Hand a file's retrieval-data migration to the async worker (T007).
@@ -3869,14 +3394,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
             # blocks direct API calls into a no-permission target (decision-8
             # reversal, see 测试反馈修复-R1.md #5).
             if target_folder_id:
-                target_perms = await self._get_effective_permission_ids(
+                target_actions = await self._get_effective_actions(
                     "folder", target_folder_id, space_id=target_space_id
                 )
             else:
-                target_perms = await self._get_effective_permission_ids(
+                target_actions = await self._get_effective_actions(
                     "knowledge_space", target_space_id, space_id=target_space_id
                 )
-            if "upload_file" not in target_perms:
+            if "upload_file" not in target_actions:
                 raise SpacePermissionDeniedError()
 
             # ── validate each item ──
@@ -3889,12 +3414,15 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 is_folder = rec.file_type == FileType.DIR.value
                 word = "folder" if is_folder else "file"
                 otype = "folder" if is_folder else "knowledge_file"
-                perm_id = "move_folder" if is_folder else "move_file"
                 self_prefix = f"{rec.file_level_path}/{rec.id}"
 
                 reason: str | None = None
-                eff = await self._get_effective_permission_ids(otype, rec.id, space_id=space_id)
-                if perm_id not in eff:
+                effective_actions = await self._get_effective_actions(
+                    otype,
+                    rec.id,
+                    space_id=space_id,
+                )
+                if "move" not in effective_actions:
                     reason = "no_permission"
                 elif is_folder and not cross_space and target_folder_id == rec.id:
                     reason = "into_self"
@@ -4051,14 +3579,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
     ) -> KnowledgeFile:
         """Update a file's file_encoding (shougang feature). Owner/admin only."""
         file_record = await self._get_file_for_action(file_id)
-        # Reuse 'rename_file' permission action — that action is owner/admin-only,
+        # Reuse the concrete rename action; that action is owner/admin-only,
         # matching the required privilege level for editing encoding.
-        await self._require_permission_id(
-            "knowledge_file",
-            file_id,
-            "rename_file",
-            space_id=file_record.knowledge_id,
-        )
+        await self._require_action("knowledge_file", file_id, "rename")
 
         cleaned = encoding.strip()
         if not cleaned:
@@ -4129,26 +3652,28 @@ class KnowledgeSpaceService(KnowledgeUtils):
         from bisheng.worker.knowledge.file_worker import delete_knowledge_file_celery
 
         file_record = await self._get_file_for_action(file_id)
-        await self._require_permission_id("knowledge_file", file_id, "delete_file", space_id=file_record.knowledge_id)
+        await self._require_action("knowledge_file", file_id, "delete")
         space = await KnowledgeDao.aquery_by_id(file_record.knowledge_id)
         if not space:
             raise SpaceNotFoundError()
         self._ensure_space_async_task_tenant_consistency(space, "delete_file")
 
         expanded_ids = await self._cascade_version_links_on_delete([file_id])
+        await self._cleanup_resource_tuples([("knowledge_file", fid) for fid in expanded_ids])
         await KnowledgeFileDao.adelete_batch(expanded_ids)
         delete_knowledge_file_celery.delay(
             file_ids=expanded_ids,
             knowledge_id=file_record.knowledge_id,
             clear_minio=True,
         )
-        await self._cleanup_resource_tuples([("knowledge_file", fid) for fid in expanded_ids])
         await self.update_folder_update_time(file_record.file_level_path)
         await KnowledgeDao.async_update_knowledge_update_time_by_id(file_record.knowledge_id)
 
     async def get_file_preview(self, file_id: int) -> dict:
-        file_record = await self._require_file_relation(file_id, "can_read")
-        await self._require_permission_id("knowledge_file", file_id, "view_file", space_id=file_record.knowledge_id)
+        # Product contract: preview is intentionally action-free. The business
+        # service still resolves the canonical file row and status, but it does
+        # not invoke PermissionAction or treat `visible` as a preview action.
+        file_record = await self._get_file_for_action(file_id)
 
         original_url, preview_url = KnowledgeService.get_file_share_url(file_id)
         metadata = file_record.user_metadata or {}
@@ -4169,13 +3694,27 @@ class KnowledgeSpaceService(KnowledgeUtils):
         }
 
     async def get_file_download(self, file_id: int, *, space_id: int | None = None) -> dict:
-        file_record = await self._get_file_for_action(file_id, space_id=space_id)
-        await self._require_permission_id(
-            "knowledge_file",
-            file_id,
-            "download_file",
-            space_id=file_record.knowledge_id,
-        )
+        await self._get_file_for_action(file_id, space_id=space_id)
+        if self.f048_file_delivery is not None:
+            from bisheng.permission.domain.services.permission_action_service import (
+                PermissionActor,
+            )
+
+            await self.f048_file_delivery.require_download(
+                resource_type="knowledge_file",
+                resource_id=str(file_id),
+                actor=PermissionActor(
+                    user_id=self.login_user.user_id,
+                    current_tenant_id=self.login_user.tenant_id,
+                    super_admin=bool(self.login_user.is_global_super),
+                ),
+            )
+        else:
+            await self._require_action(
+                "knowledge_file",
+                file_id,
+                "download",
+            )
 
         original_url, preview_url = KnowledgeService.get_file_share_url(file_id)
 
@@ -4187,14 +3726,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
     # ──────────────────────────── Tags ───────────────────────────────────
     async def get_space_tags(self, space_id: int) -> list[Tag]:
         await self._require_read_permission(space_id)
-        await self._require_permission_id("knowledge_space", space_id, "view_space")
+        await self._require_action("knowledge_space", space_id, "visible")
         tags = await TagDao.get_tags_by_business(
             business_type=TagBusinessTypeEnum.KNOWLEDGE_SPACE, business_id=str(space_id)
         )
         return tags
 
     async def add_space_tag(self, space_id: int, tag_name: str) -> Tag:
-        await self._require_permission_id("knowledge_space", space_id, "edit_space")
+        await self._require_action("knowledge_space", space_id, "edit")
 
         existing_tags = await TagDao.get_tags_by_business(
             business_type=TagBusinessTypeEnum.KNOWLEDGE_SPACE,
@@ -4213,7 +3752,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         return await TagDao.ainsert_tag(new_tag)
 
     async def delete_space_tag(self, space_id: int, tag_id: int):
-        await self._require_permission_id("knowledge_space", space_id, "edit_space")
+        await self._require_action("knowledge_space", space_id, "edit")
         return await TagDao.delete_business_tag(
             tag_id,
             business_id=str(space_id),
@@ -4223,7 +3762,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
     async def update_file_tags(self, space_id: int, file_id: int, tag_ids: list[int]):
         """2：支持对单文件的标签管理: Overwrite tags for a single file."""
         await self._get_file_for_action(file_id, space_id=space_id)
-        await self._require_permission_id("knowledge_file", file_id, "rename_file", space_id=space_id)
+        await self._require_action("knowledge_file", file_id, "rename")
 
         resource_id = str(file_id)
         resource_type = ResourceTypeEnum.SPACE_FILE
@@ -4240,7 +3779,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         resource_type = ResourceTypeEnum.SPACE_FILE
         for file_record in files:
-            await self._require_permission_id("knowledge_file", file_record.id, "rename_file", space_id=space_id)
+            await self._require_action(
+                "knowledge_file",
+                file_record.id,
+                "rename",
+            )
             await TagDao.add_tags(tag_ids, str(file_record.id), resource_type, self.login_user.user_id)
 
         await KnowledgeDao.async_update_knowledge_update_time_by_id(space_id)
@@ -4269,7 +3812,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
         for db_file in db_files:
             if db_file.knowledge_id != space_id:
                 raise SpaceFileNotFoundError()
-            await self._require_resource_permission("can_edit", "knowledge_file", db_file.id)
+            await self._require_resource_action(
+                "rename",
+                "knowledge_file",
+                db_file.id,
+            )
 
         tmp, file_level_path = await self.process_retry_files(db_files, id2input, self.login_user)
 
@@ -4299,18 +3846,30 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if file.knowledge_id != space_id:
                 continue
             if file.file_type == FileType.FILE.value and file.status in retryable_status:
-                await self._require_resource_permission("can_edit", "knowledge_file", file.id)
+                await self._require_resource_action(
+                    "rename",
+                    "knowledge_file",
+                    file.id,
+                )
                 retry_knowledge_file_celery.delay(file.id)
                 all_file_ids.append(file.id)
                 all_file_level_path.add(file.file_level_path)
             elif file.file_type == FileType.DIR.value:
-                await self._require_resource_permission("can_edit", "folder", file.id)
+                await self._require_resource_action(
+                    "rename",
+                    "folder",
+                    file.id,
+                )
                 all_failed_files = await SpaceFileDao.get_children_by_prefix(
                     knowledge_id=space_id, prefix=file.file_level_path + f"/{file.id}"
                 )
                 for item in all_failed_files:
                     if item.status in retryable_status and item.file_type == FileType.FILE.value:
-                        await self._require_resource_permission("can_edit", "knowledge_file", item.id)
+                        await self._require_resource_action(
+                            "rename",
+                            "knowledge_file",
+                            item.id,
+                        )
                         retry_knowledge_file_celery.delay(item.id)
                         all_file_ids.append(item.id)
                         all_file_level_path.add(file.file_level_path)
@@ -4343,18 +3902,21 @@ class KnowledgeSpaceService(KnowledgeUtils):
             direct_files = []
             for file_id in self._dedupe_ids(file_ids):
                 file_record = await self._get_file_for_action(file_id, space_id=knowledge_id)
-                await self._require_permission_id("knowledge_file", file_id, "delete_file", space_id=knowledge_id)
+                await self._require_action(
+                    "knowledge_file",
+                    file_id,
+                    "delete",
+                )
                 direct_files.append(file_record)
             direct_file_ids = [file.id for file in direct_files]
             expanded_file_ids = await self._cascade_version_links_on_delete(direct_file_ids)
+            await self._cleanup_resource_tuples([("knowledge_file", file_id) for file_id in expanded_file_ids])
             await KnowledgeFileDao.adelete_batch(expanded_file_ids)
             delete_knowledge_file_celery.delay(
                 file_ids=expanded_file_ids,
                 knowledge_id=knowledge.id,
                 clear_minio=True,
             )
-            await self._cleanup_resource_tuples([("knowledge_file", file_id) for file_id in expanded_file_ids])
-
         # Prune channel ➜ knowledge-folder sync bindings for the top-level
         # folders deleted in this batch so the Celery sync worker stops
         # referencing a tombstone. Per-folder cascades are pruned by
@@ -4394,25 +3956,32 @@ class KnowledgeSpaceService(KnowledgeUtils):
         direct_files = []
         for file_id in self._dedupe_ids(file_ids):
             file_record = await self._get_file_for_action(file_id, space_id=space_id)
-            await self._require_permission_id("knowledge_file", file_id, "download_file", space_id=space_id)
+            await self._require_action(
+                "knowledge_file",
+                file_id,
+                "download",
+            )
             direct_files.append(file_record)
 
         # Files & sub-folders under every requested folder_id
         folder_db_records: list[KnowledgeFile] = []
         for folder_id in self._dedupe_ids(folder_ids):
             folder = await self._get_folder_for_action(space_id, folder_id)
-            await self._require_permission_id("folder", folder_id, "download_folder", space_id=space_id)
+            await self._require_action("folder", folder_id, "download")
             prefix = f"{folder.file_level_path}/{folder.id}"
             descendants = await SpaceFileDao.get_children_by_prefix(folder.knowledge_id, prefix)
             for descendant in descendants:
                 if descendant.file_type == FileType.DIR.value:
-                    await self._require_permission_id("folder", descendant.id, "download_folder", space_id=space_id)
+                    await self._require_action(
+                        "folder",
+                        descendant.id,
+                        "download",
+                    )
                 else:
-                    await self._require_permission_id(
+                    await self._require_action(
                         "knowledge_file",
                         descendant.id,
-                        "download_file",
-                        space_id=space_id,
+                        "download",
                     )
             folder_db_records.append(folder)
             folder_db_records.extend(descendants)
@@ -4646,6 +4215,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     member.user_id,
                     member.user_role,
                     is_active=True,
+                    operator_user_id=self.login_user.user_id,
                 )
                 return {
                     "status": "subscribed",
@@ -4674,6 +4244,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 member.user_id,
                 member.user_role,
                 is_active=True,
+                operator_user_id=self.login_user.user_id,
             )
 
         return {
@@ -4768,17 +4339,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
             current_membership and current_membership.user_role == UserRoleEnum.CREATOR
         ):
             raise SpacePermissionDeniedError()
-
-        organization_subject_types = await FineGrainedPermissionService.get_matching_binding_subject_types_async(
-            self.login_user,
-            "knowledge_space",
-            space_id,
-            {"department", "user_group"},
-        )
-        if organization_subject_types:
-            raise SpaceOrganizationGrantExitDeniedError(
-                blocked_by=sorted(organization_subject_types),
-            )
 
         await self._revoke_direct_space_user_permissions(space_id, self.login_user.user_id)
         deleted = await SpaceChannelMemberDao.delete_space_member(space_id, self.login_user.user_id)

@@ -60,7 +60,7 @@ class DepartmentAdminSet(BaseModel):
 
 
 class DepartmentMemberAdd(BaseModel):
-    user_ids: list[int] = Field(..., min_length=1)
+    user_ids: list[int] = Field(..., min_length=1, max_length=50)
     is_primary: int = 0
 
 

@@ -1,5 +1,6 @@
+import asyncio
 import os
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
@@ -20,6 +21,7 @@ from bisheng.utils.threadpool import thread_pool
 
 
 def handle_http_exception(req: Request, exc: Exception) -> JSONResponse:
+    http_status = status.HTTP_200_OK
     if isinstance(exc, HTTPException):
         msg = {
             "status_code": exc.status_code,
@@ -31,8 +33,9 @@ def handle_http_exception(req: Request, exc: Exception) -> JSONResponse:
     else:
         logger.exception("Unhandled exception")
         msg = {"status_code": 500, "status_message": str(exc)}
+        http_status = status.HTTP_500_INTERNAL_SERVER_ERROR
     logger.error(f"{req.method} {req.url} {exc!s}")
-    return JSONResponse(content=msg)
+    return JSONResponse(status_code=http_status, content=msg)
 
 
 def handle_request_validation_error(req: Request, exc: RequestValidationError) -> JSONResponse:
@@ -49,46 +52,98 @@ _EXCEPTION_HANDLERS = {
 }
 
 
+async def _initialize_f048_api_process(app: FastAPI) -> None:
+    if not settings.openfga.enabled:
+        return
+    from bisheng.api.services.f048_permission_runtime import (
+        initialize_f048_api_runtime,
+    )
+    from bisheng.core.context.manager import app_context
+    from bisheng.department.domain.services.department_projection_scope import (
+        configure_department_projection_runtime,
+        get_department_projection_scope,
+    )
+    from bisheng.permission.application.process_runtime import (
+        bind_f048_process_runtime,
+        run_f048_process_heartbeat,
+    )
+
+    manager = app_context.get_context("openfga")
+    client = await manager.async_get_instance()
+    runtime = await initialize_f048_api_runtime(
+        client,
+        external_scopes={
+            "department": get_department_projection_scope(),
+        },
+    )
+    configure_department_projection_runtime(runtime.components.projection)
+    readiness = await bind_f048_process_runtime(
+        manager,
+        runtime.components.facade,
+    )
+    app.state.f048_manager = manager
+    app.state.f048_runtime = runtime
+    app.state.f048_heartbeat_task = asyncio.create_task(
+        run_f048_process_heartbeat(manager),
+        name="f048-api-runtime-heartbeat",
+    )
+    logger.info(
+        "F048 API runtime initialized: store={} model={} catalog={}",
+        readiness["store_id"],
+        readiness["model_id"],
+        readiness["catalog_release_id"],
+    )
+
+
+async def _close_f048_api_process(app: FastAPI) -> None:
+    heartbeat_task = getattr(
+        app.state,
+        "f048_heartbeat_task",
+        None,
+    )
+    if heartbeat_task is not None:
+        heartbeat_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await heartbeat_task
+    from bisheng.department.domain.services.department_projection_scope import (
+        clear_department_projection_runtime,
+    )
+    from bisheng.permission.application.access import clear_f048_runtime
+
+    clear_department_projection_runtime()
+    clear_f048_runtime()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await initialize_app_context(config=settings)
-    await init_default_data()
-    # F034: align frozen system permission tiers with newly-added
-    # move_file/move_folder on every boot. Idempotent + non-critical — a failure
-    # only leaves the admin permission UI stale, so it must never block startup.
     try:
-        from bisheng.permission.domain.relation_model_backfill import (
-            backfill_relation_model_move_permissions,
-        )
+        await _initialize_f048_api_process(app)
+        await init_default_data()
+        # F035 task-mode compatibility data remains unrelated to F048 resource
+        # authorization and is safe to maintain independently.
+        try:
+            from bisheng.linsight.domain.services.task_mode_menu_backfill import (
+                backfill_linsight_task_mode_web_menu,
+            )
 
-        await backfill_relation_model_move_permissions()
-    except Exception:
-        logger.exception("relation-model move-permission backfill failed; continuing startup")
-    # F035: align legacy linsight data with the deepagents task-mode shape on every
-    # boot. Both are idempotent + non-critical — failure only leaves stale menu
-    # grants / model config (operators can re-run the standalone scripts), so it
-    # must never block startup. The SOP->Skill data migration is intentionally NOT
-    # here (it writes object storage and is heavier — stays a manual ops script).
-    try:
-        from bisheng.permission.domain.linsight_task_mode_menu_backfill import (
-            backfill_linsight_task_mode_web_menu,
-        )
+            await backfill_linsight_task_mode_web_menu()
+        except Exception:
+            logger.exception("linsight task-mode menu backfill failed; continuing startup")
+        try:
+            from bisheng.llm.domain.services.linsight_default_model_backfill import (
+                backfill_linsight_default_model,
+            )
 
-        await backfill_linsight_task_mode_web_menu()
-    except Exception:
-        logger.exception("linsight task-mode menu backfill failed; continuing startup")
-    try:
-        from bisheng.llm.domain.services.linsight_default_model_backfill import (
-            backfill_linsight_default_model,
-        )
-
-        await backfill_linsight_default_model()
-    except Exception:
-        logger.exception("linsight default-model backfill failed; continuing startup")
-    # LangfuseInstance.update()
-    yield
-    thread_pool.tear_down()
-    await close_app_context()
+            await backfill_linsight_default_model()
+        except Exception:
+            logger.exception("linsight default-model backfill failed; continuing startup")
+        # LangfuseInstance.update()
+        yield
+    finally:
+        await _close_f048_api_process(app)
+        thread_pool.tear_down()
+        await close_app_context()
 
 
 def create_app():
@@ -99,8 +154,8 @@ def create_app():
         lifespan=lifespan,
     )
 
-    # 前端 axios 使用 withCredentials=true 时，浏览器禁止 ACAO 为 *。
-    # 可通过环境变量 BISHENG_CORS_ORIGINS 覆盖，逗号分隔，例如：
+    # Browsers reject ACAO=* when axios uses withCredentials=true.
+    # Override with comma-separated BISHENG_CORS_ORIGINS when needed.
     # BISHENG_CORS_ORIGINS=http://localhost:3001,http://127.0.0.1:3001
     _cors_raw = (os.getenv("BISHENG_CORS_ORIGINS") or "").strip()
     if _cors_raw:
@@ -117,7 +172,20 @@ def create_app():
 
     @app.get("/health")
     def get_health():
-        return {"status": "OK"}
+        manager = getattr(app.state, "f048_manager", None)
+        if manager is None:
+            return {"status": "OK"}
+        readiness = manager.readiness()
+        response = {
+            "status": "OK" if readiness.get("ready") else "ERROR",
+            "openfga": readiness,
+        }
+        if readiness.get("ready"):
+            return response
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content=response,
+        )
 
     app.add_middleware(
         CORSMiddleware,

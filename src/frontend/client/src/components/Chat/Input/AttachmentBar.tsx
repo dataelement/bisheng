@@ -5,7 +5,7 @@
  * Layout: a full-bleed light-gray strip with rounded top corners, sitting above
  * the textarea inside the input box. Cards are a single non-wrapping row that
  * scrolls horizontally:
- *  - newest item appears leftmost (unified across files / knowledge spaces);
+ *  - items appear in insertion order (oldest left, newest right);
  *  - mouse wheel scrolls the row horizontally;
  *  - left / right chevron buttons page-scroll (one viewport per click) and only
  *    occupy width while their direction has more content — at an edge the arrow
@@ -20,52 +20,37 @@ import {
     useRef,
     useState,
 } from "react";
-import { Loader2 } from "lucide-react";
 import { Outlined } from "bisheng-icons";
 import BookOpen from "~/components/ui/icon/BookOpen";
 import BooksIcon from "~/components/ui/icon/Books";
-import type { FileType } from "~/components/ui/icon/File/FileIcon";
 import { OGDialog, OGDialogContent } from "~/components/ui";
 import { cn } from "~/utils";
+import { isMediaChipFile, MediaAttachmentChip } from "~/components/Chat/attachments/MediaAttachmentChip";
+import { FileUploadThumbnail } from "~/components/Chat/attachments/UploadAttachmentThumbnail";
+import { isMediaAttachmentFile } from "~/utils/mediaAttachmentUtils";
+import { resolveKnowledgePreviewUrl } from "~/pages/knowledge/FilePreview/previewUrlUtils";
 
 /** Fixed card geometry from the design (Figma 12841:47405). */
 const CARD_WIDTH = 148;
 
-// File-chip icons: flat bisheng outlined icons so they render in the same
-// single-color (#999) style as the knowledge-space chip icons.
-const CHIP_FILE_ICONS: Record<string, typeof Outlined.File> = {
-    xls: Outlined.FileExcel,
-    xlsx: Outlined.FileExcel,
-    csv: Outlined.FileExcel,
-    pdf: Outlined.FilePdf,
-    ppt: Outlined.FilePdf,
-    pptx: Outlined.FilePdf,
-    txt: Outlined.FileTxt,
-    doc: Outlined.FileWord,
-    docx: Outlined.FileWord,
-    png: Outlined.FileImage,
-    jpg: Outlined.FileImage,
-    jpeg: Outlined.FileImage,
-    bmp: Outlined.FileImage,
-    md: Outlined.FileEditing,
-};
+/** Stable sequence key for a file attachment across upload → completed transition. */
+function attachmentSeqKey(clientId: string | undefined): string | undefined {
+    return clientId ? `att-${clientId}` : undefined;
+}
 
-function resolveFileType(input: any): FileType {
-    const nameCandidate =
-        input?.name ||
-        input?.file_name ||
-        input?.filename ||
-        input?.filepath ||
-        input?.file_path ||
-        "";
-    const baseName = String(nameCandidate).split("/").pop()?.split("?")[0] || "";
-    const ext = baseName.includes(".") ? baseName.split(".").pop()?.toLowerCase() : "";
-    const normalized = ext === "htm" ? "html" : ext === "et" ? "xlsx" : ext === "jpeg" ? "jpg" : ext;
-    const allowed: FileType[] = [
-        "pdf", "doc", "docx", "ppt", "pptx", "md", "html", "txt",
-        "jpg", "jpeg", "png", "bmp", "csv", "xls", "xlsx",
-    ];
-    return (allowed as string[]).includes(normalized || "") ? (normalized as FileType) : "txt";
+
+function resolveFilePreviewUrl(file: {
+    name?: string;
+    previewUrl?: string;
+    filepath?: string;
+    file_path?: string;
+    file_url?: string;
+    url?: string;
+}): string | undefined {
+    if (file.previewUrl) return file.previewUrl;
+    const remote = file.filepath || file.file_path || file.file_url || file.url;
+    if (!remote || remote.startsWith('blob:')) return undefined;
+    return resolveKnowledgePreviewUrl(remote);
 }
 
 /** Shared card shell: fixed width, white surface, optional hover-only remove. */
@@ -123,27 +108,32 @@ const KbCard = ({ kb, onRemove }: { kb: any; onRemove?: () => void }) => (
 );
 
 const FileCard = ({ file, onRemove }: { file: any; onRemove?: () => void }) => {
-    const FileTypeIcon = CHIP_FILE_ICONS[resolveFileType(file)] ?? Outlined.File;
-    // Locally-generated preview URL for pasted / uploaded images. When present the
-    // chip shows a thumbnail and opens a full-size preview on click.
-    const previewUrl: string | undefined = file?.previewUrl;
-    const [previewOpen, setPreviewOpen] = useState(false);
+    const fileName = file.name || file.file_name || file.filename || 'File';
 
-    if (previewUrl) {
+    if (isMediaChipFile({ ...file, name: fileName })) {
         return (
-            <>
-                <CardShell
-                    icon={
-                        <img
-                            src={previewUrl}
-                            alt=""
-                            className="size-4 rounded-[2px] object-cover"
-                        />
-                    }
-                    label={file.name}
-                    onRemove={onRemove}
-                    onClick={() => setPreviewOpen(true)}
-                />
+            <MediaAttachmentChip
+                file={{ ...file, name: fileName }}
+                onRemove={onRemove}
+                variant="bar"
+            />
+        );
+    }
+
+    const previewUrl = resolveFilePreviewUrl(file);
+    const [previewOpen, setPreviewOpen] = useState(false);
+    const isImagePreview = !!previewUrl && /\.(png|jpe?g|bmp|gif|webp)$/i.test(fileName);
+
+    return (
+        <>
+            <FileUploadThumbnail
+                fileName={fileName}
+                previewUrl={isImagePreview ? previewUrl : undefined}
+                variant="bar"
+                onRemove={onRemove}
+                onClick={isImagePreview ? () => setPreviewOpen(true) : undefined}
+            />
+            {isImagePreview && (
                 <OGDialog open={previewOpen} onOpenChange={setPreviewOpen}>
                     <OGDialogContent
                         showCloseButton={false}
@@ -152,21 +142,13 @@ const FileCard = ({ file, onRemove }: { file: any; onRemove?: () => void }) => {
                     >
                         <img
                             src={previewUrl}
-                            alt={file.name}
+                            alt={fileName}
                             className="max-h-[85vh] max-w-full rounded-md object-contain"
                         />
                     </OGDialogContent>
                 </OGDialog>
-            </>
-        );
-    }
-
-    return (
-        <CardShell
-            icon={<FileTypeIcon size={16} />}
-            label={file.name}
-            onRemove={onRemove}
-        />
+            )}
+        </>
     );
 };
 
@@ -178,9 +160,34 @@ const SkillCard = ({ skill, onRemove }: { skill: any; onRemove?: () => void }) =
     />
 );
 
-const UploadingCard = ({ name }: { name: string }) => (
-    <CardShell icon={<Loader2 className="size-4 animate-spin" />} label={name} />
-);
+const UploadingCard = ({
+    name,
+    file,
+    onRemove,
+}: {
+    name: string;
+    file?: any;
+    onRemove?: () => void;
+}) => {
+    if (file && isMediaAttachmentFile({ name: file.name || name })) {
+        return (
+            <MediaAttachmentChip
+                file={{ name, isUploading: true, ...file }}
+                onRemove={onRemove}
+                variant="bar"
+            />
+        );
+    }
+    return (
+        <FileUploadThumbnail
+            fileName={name}
+            previewUrl={file?.previewUrl}
+            variant="bar"
+            isUploading
+            onRemove={onRemove}
+        />
+    );
+};
 
 const ArrowButton = ({
     direction,
@@ -208,7 +215,16 @@ const ArrowButton = ({
 };
 
 interface AttachmentBarProps {
-    uploadingFiles: Array<{ id: string; name: string }>;
+    uploadingFiles: Array<{
+        id: string;
+        clientId?: string;
+        name: string;
+        previewUrl?: string;
+        mediaPreviewUrl?: string;
+        mediaCoverUrl?: string;
+        cover_filepath?: string;
+        mediaDurationSec?: number;
+    }>;
     files: any[];
     kbs: any[];
     skills: any[];
@@ -218,7 +234,7 @@ interface AttachmentBarProps {
 }
 
 type Entry =
-    | { kind: "uploading"; key: string; data: { id: string; name: string } }
+    | { kind: "uploading"; key: string; data: AttachmentBarProps['uploadingFiles'][number] }
     | { kind: "file"; key: string; data: any }
     | { kind: "kb"; key: string; data: any }
     | { kind: "skill"; key: string; data: any };
@@ -233,16 +249,29 @@ export const AttachmentBar = ({
     onRemoveSkill,
 }: AttachmentBarProps) => {
     const scrollRef = useRef<HTMLDivElement>(null);
-    // Insertion sequence per item key so the row can show newest-first across
-    // all types (files + knowledge spaces) without timestamps on the data.
+    // Insertion sequence per item key — oldest first, newest appended to the right.
     const seqRef = useRef<{ map: Map<string, number>; n: number }>({ map: new Map(), n: 0 });
     const [canLeft, setCanLeft] = useState(false);
     const [canRight, setCanRight] = useState(false);
 
     const entries = useMemo<Entry[]>(() => {
+        const completedNames = new Set(
+            files
+                .map((f) => f.name || f.file_name || f.filename)
+                .filter(Boolean),
+        );
+        const activeUploads = uploadingFiles.filter((f) => !completedNames.has(f.name));
         const all: Entry[] = [
-            ...uploadingFiles.map((f) => ({ kind: "uploading" as const, key: `up-${f.id}`, data: f })),
-            ...files.map((f) => ({ kind: "file" as const, key: `file-${f.file_id || f.filepath || f.name}`, data: f })),
+            ...activeUploads.map((f) => ({
+                kind: "uploading" as const,
+                key: attachmentSeqKey(f.id) ?? `up-${f.id}`,
+                data: f,
+            })),
+            ...files.map((f) => ({
+                kind: "file" as const,
+                key: attachmentSeqKey(f.clientId || f.id) ?? `file-${f.file_id || f.filepath || f.name}`,
+                data: f,
+            })),
             ...kbs.map((k) => ({ kind: "kb" as const, key: `kb-${k.id}`, data: k })),
             ...skills.map((s) => ({ kind: "skill" as const, key: `skill-${s.name}`, data: s })),
         ];
@@ -250,8 +279,8 @@ export const AttachmentBar = ({
         for (const it of all) {
             if (!map.has(it.key)) map.set(it.key, seqRef.current.n++);
         }
-        // Newest (highest sequence) first → leftmost.
-        return all.sort((a, b) => (map.get(b.key) ?? 0) - (map.get(a.key) ?? 0));
+        // Oldest (lowest sequence) first → leftmost; newest appended on the right.
+        return all.sort((a, b) => (map.get(a.key) ?? 0) - (map.get(b.key) ?? 0));
     }, [uploadingFiles, files, kbs, skills]);
 
     const updateEdges = useCallback(() => {
@@ -272,11 +301,13 @@ export const AttachmentBar = ({
         return () => ro.disconnect();
     }, [updateEdges, entries.length]);
 
-    // Keep the newest (leftmost) item in view whenever a new front item arrives.
-    const frontKey = entries[0]?.key;
+    // Scroll to the newest (rightmost) item when a new attachment arrives.
+    const backKey = entries[entries.length - 1]?.key;
     useEffect(() => {
-        scrollRef.current?.scrollTo({ left: 0 });
-    }, [frontKey]);
+        const el = scrollRef.current;
+        if (!el) return;
+        el.scrollTo({ left: el.scrollWidth, behavior: 'smooth' });
+    }, [backKey]);
 
     // Native non-passive wheel listener so preventDefault actually works
     // (React's synthetic onWheel is passive and can't block page scroll).
@@ -303,7 +334,7 @@ export const AttachmentBar = ({
     }, []);
 
     return (
-        <div className="relative -mb-4 w-full overflow-hidden rounded-t-2xl bg-[rgba(244,244,244,0.55)] px-2 pb-6 pt-2">
+        <div className="w-full pb-2 mb-1">
             <div className="flex items-center">
                 {canLeft && <ArrowButton direction="left" onClick={() => pageScroll("left")} />}
                 <div className="relative min-w-0 flex-1">
@@ -316,7 +347,18 @@ export const AttachmentBar = ({
                         {entries.map((entry) => {
                             switch (entry.kind) {
                                 case "uploading":
-                                    return <UploadingCard key={entry.key} name={entry.data.name} />;
+                                    return (
+                                        <UploadingCard
+                                            key={entry.key}
+                                            name={entry.data.name}
+                                            file={entry.data}
+                                            onRemove={
+                                                onRemoveFile
+                                                    ? () => onRemoveFile({ name: entry.data.name })
+                                                    : undefined
+                                            }
+                                        />
+                                    );
                                 case "file":
                                     return (
                                         <FileCard
@@ -349,14 +391,14 @@ export const AttachmentBar = ({
                     {/* Left-edge fade hinting at content scrolled off to the left. */}
                     <div
                         className={cn(
-                            "pointer-events-none absolute left-0 top-0 h-full w-6 bg-gradient-to-r from-[#f9f9f9] from-[49%] to-transparent transition-opacity",
+                            "pointer-events-none absolute left-0 top-0 h-full w-6 bg-gradient-to-r from-white from-[49%] to-transparent transition-opacity",
                             canLeft ? "opacity-100" : "opacity-0",
                         )}
                     />
                     {/* Right-edge fade hinting at hidden overflow (Figma gradient). */}
                     <div
                         className={cn(
-                            "pointer-events-none absolute right-0 top-0 h-full w-6 bg-gradient-to-l from-[#f9f9f9] from-[49%] to-transparent transition-opacity",
+                            "pointer-events-none absolute right-0 top-0 h-full w-6 bg-gradient-to-l from-white from-[49%] to-transparent transition-opacity",
                             canRight ? "opacity-100" : "opacity-0",
                         )}
                     />

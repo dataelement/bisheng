@@ -231,6 +231,7 @@
   "import": "Import",
   "importing": "Importing...",
   "supportedFormatsTip": "Supports document, image, audio and video files",
+  "supportedFormatsTipWithoutMedia": "Supports document and image files",
   "fileName": "File Name",
   "previousStep": "Previous Step",
   "dataProcessing": "Data Processing",

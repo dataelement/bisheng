@@ -127,6 +127,7 @@ __KB_DELEGATE_LINE__   更新待办时只翻转 status（pending/in_progress/com
    - 3c（仅当选了 docx）：export_docx(source_path="output/<name>.md")，必须在 3a 之后。
    - 3d（仅当选了 pdf）：export_pdf(source_path="output/<name>.md")，必须在 3a 之后。
    最终交付物的撰写与拼装必须由你（主智能体）亲自完成，不得委派给子代理；中间产物写 scratch/。
+   **禁止**在未调用 write_file 写入 output/ 的情况下，在回复中声称「已保存为 xxx.md / 已写入 xxx」——用户界面只会展示真实写入 output/ 的交付物；口头提及的文件名无法被预览或下载。
 
 4. 【收尾】用 1-2 句话概括交付物的核心内容或结论（例如“已梳理出近一年的市场变化并给出三条关键建议”）；不要复述文件名、工作区路径（如 output/…）或“已完成”之类的状态字样——完成状态与可下载的文件由界面单独呈现，正文里无需重复。
 
@@ -165,6 +166,7 @@ __KB_TOOL_LINE__- write_file / read_file / edit_file / ls：工作区文件工�
 
 - 简洁，工具调用之间不加多余解释性文字。
 - 不要凭空编造事实；交付内容应基于检索到的资料/依据。
+- 凡需要在回复中引用可下载/可预览的交付物，必须先 write_file 写入 output/；不得仅口头描述文件名。
 """
 
 # search_knowledge_base is the ONLY tool whose presence is conditional on the
@@ -243,7 +245,10 @@ def _build_linsight_system_prompt(has_knowledge_base: bool) -> str:
     if has_knowledge_base:
         exec_line = (
             "   - 需要资料时用 search_knowledge_base 检索知识库/知识空间；"
-            "读写文件用 write_file / read_file / edit_file / ls。"
+            "读写文件用 write_file / read_file / edit_file / ls。\n"
+            "   - 用户上传的音视频（mp3/mp4 等）已在 submit 阶段 ASR 转写为 uploads/*.md；"
+            "<uploaded_files> 中 path 为转写文本、name 为原始文件名。"
+            "read_file(path) 即可获取内容，勿推断为「扩展名标注有误」或「实际是文本文件」。"
         )
         tool_line = "- search_knowledge_base：在授权的知识库/知识空间语义检索。\n"
         # Delegation must restate the KB ids: a subagent's messages are replaced
@@ -262,7 +267,10 @@ def _build_linsight_system_prompt(has_knowledge_base: bool) -> str:
         exec_line = (
             "   - 读写文件用 write_file / read_file / edit_file / ls；若用户上传了文件，"
             "用 ls / read_file 在工作区中查阅。本次任务没有可检索的知识库/知识空间，"
-            "请基于已有资料与自身知识完成，不要调用任何知识库检索工具。"
+            "请基于已有资料与自身知识完成，不要调用任何知识库检索工具。\n"
+            "   - 用户上传的音视频（mp3/mp4 等）已在 submit 阶段 ASR 转写为 uploads/*.md；"
+            "<uploaded_files> 中 path 为转写文本、name 为原始文件名。"
+            "read_file(path) 即可获取内容，勿推断为「扩展名标注有误」或「实际是文本文件」。"
         )
         tool_line = ""
         delegate_line = ""
@@ -280,14 +288,17 @@ def _build_researcher_prompt(has_knowledge_base: bool) -> str:
     tool subset (_subagent_tools), which mirrors the main graph; advertise it only
     when it is actually available.
     """
+    media_line = " 音视频附件的 path 为 ASR 转写文本（.md），name 为原始上传名，并非扩展名错误。"
     if has_knowledge_base:
         research_line = (
             "- 优先使用 search_knowledge_base 检索知识库/知识空间，并用 read_file / ls 阅读工作区中已有的资料。"
+            f"{media_line}"
         )
     else:
         research_line = (
             "- 用 read_file / ls 阅读工作区中已有的资料；本次没有可检索的知识库/知识空间，"
             "不要调用任何知识库检索工具，基于已有资料与自身知识给出结论。"
+            f"{media_line}"
         )
     return _LINSIGHT_RESEARCHER_PROMPT_TEMPLATE_ZH.replace("__KB_RESEARCH_LINE__", research_line)
 
@@ -583,9 +594,10 @@ def _subagent_tools(tools: Sequence[BaseTool]) -> list[BaseTool]:
 
     The returned list MUST be passed as the subagent spec's explicit ``tools`` key
     so deepagents does NOT fall back to inheriting ``[*tools, ask_user]``
-    (graph.py:670 — an explicit ``tools`` means the subagent gets ONLY those). The
-    subagent still receives ls/read_file/write_file/edit_file + write_todos from
-    its own middleware stack (graph.py:618-627), sharing the main WorkspaceBackend.
+    (graph.py:694 in deepagents 0.6.12 — an explicit ``tools`` means the subagent
+    gets ONLY those). The subagent still receives ls/read_file/write_file/edit_file
+    + write_todos from its own middleware stack (graph.py:643-652), sharing the
+    main WorkspaceBackend.
     """
     return [t for t in tools if t.name not in _SUBAGENT_TOOL_DENY and t.name not in _KNOWN_HITL_TOOL_NAMES]
 
@@ -596,14 +608,15 @@ def _build_researcher_subagent(tools: Sequence[BaseTool]) -> dict:
     Design #1 §4.1 (MVP = one researcher) / §4.2 (decision 1: same-name override).
 
     - ``name="general-purpose"``: providing our own spec with this name SUPPRESSES
-      deepagents' auto-injected default general-purpose subagent (graph.py:693), so
-      the unsafe default GP — which would inherit ``[*tools, ask_user]`` — never
-      gets built. The model decides whether to delegate from ``description``, not
-      ``name``, so the honest description below is what actually steers it.
+      deepagents' auto-injected default general-purpose subagent (graph.py:717 in
+      deepagents 0.6.12), so the unsafe default GP — which would inherit
+      ``[*tools, ask_user]`` — never gets built. The model decides whether to
+      delegate from ``description``, not ``name``, so the honest description below
+      is what actually steers it.
     - ``tools=_subagent_tools(tools)``: explicit subset (blacklist). Explicit
       ``tools`` is REQUIRED so the subagent does not inherit ask_user (§4.3).
     - NO ``model`` key: the subagent inherits the parent's per-task tenant model
-      (graph.py:608 ``spec.get("model", model)``).
+      (graph.py:633 ``spec.get("model", model)``).
     - NO ``permissions`` / ``interrupt_on`` keys: this is the SAFETY BASIS
       (design §3.1). Without them the subagent stack carries no
       HumanInTheLoopMiddleware and no filesystem interrupts, so the subagent has
@@ -700,8 +713,8 @@ async def create_linsight_agent(
     # ``skills=`` param (which would reuse the workspace backend) discovers nothing.
     # SkillsMiddleware registers NO file tools, so this second backend does NOT shadow
     # the workspace read_file/write_file (the 2026-06-16 disable concern does not hold
-    # in deepagents 0.6.8); the model reads the same /skills/<name>/SKILL.md paths back
-    # through the WorkspaceBackend. The copy is the whitelist gate — no per-run
+    # in deepagents 0.6.8; re-verified unchanged in 0.6.12); the model reads the same
+    # /skills/<name>/SKILL.md paths back through the WorkspaceBackend. The copy is the whitelist gate — no per-run
     # active_skills config is threaded.
     if skills_present and file_dir:
         from deepagents.backends.filesystem import FilesystemBackend
@@ -731,7 +744,7 @@ async def create_linsight_agent(
     # can park-and-release for user input (F035 §4.6); deepagents ships no
     # built-in ask-human tool, so we inject our own.
     # design #1 §4.1/§4.2: a single MVP researcher subagent, named
-    # "general-purpose" to suppress deepagents' auto default GP (graph.py:693).
+    # "general-purpose" to suppress deepagents' auto default GP (graph.py:717).
     # ask_user is appended ONLY to the MAIN graph tools below; the subagent
     # receives _subagent_tools(tools), which never includes ask_user.
     #

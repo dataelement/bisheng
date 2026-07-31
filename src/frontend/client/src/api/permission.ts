@@ -9,43 +9,135 @@ export type ResourceType =
   | "assistant"
   | "tool"
   | "channel"
-  | "dashboard";
+  | "dashboard"
+  | "linsight_skill";
 
-export type RelationLevel = "owner" | "manager" | "editor" | "viewer";
 export type SubjectType = "user" | "department" | "user_group";
+export type PermissionActionLevel = 1 | 2 | 3 | 4;
+export type ResourcePermissionMode = "INHERIT" | "CUSTOM";
 
-export interface PermissionEntry {
-  subject_type: SubjectType;
-  subject_id: number;
-  subject_name: string | null;
-  subject_group_names?: string[];
-  subject_member_names?: string[];
-  relation: RelationLevel;
-  model_id?: string;
-  model_name?: string;
-  include_children?: boolean;
-  /** Channel creator: permission level is permanent and not editable. */
-  is_creator?: boolean;
-}
-
-export interface GrantItem {
-  subject_type: SubjectType;
-  subject_id: number;
-  relation: RelationLevel;
-  model_id?: string;
-  include_children?: boolean;
-}
-
-export type RevokeItem = Omit<GrantItem, "model_id">;
-
-export interface RelationModel {
-  id: string;
+export interface GrantablePermissionModel {
+  key: string;
   name: string;
-  relation: RelationLevel;
-  grant_tier?: "owner" | "manager" | "usage";
-  permissions: string[];
-  permissions_explicit?: boolean;
-  is_system: boolean;
+  level: PermissionActionLevel | null;
+  active: boolean;
+}
+
+export interface ResourcePermissionContext {
+  mode: ResourcePermissionMode;
+  parent_type: ResourceType | null;
+  parent_id: string | null;
+  resource_version: number;
+  catalog_release_id: number;
+  projection_state: string;
+  can_manage_permission: boolean;
+}
+
+export interface PermissionGrantSubject {
+  type: SubjectType;
+  id: string;
+  name: string | null;
+}
+
+export interface PermissionGrantSource {
+  type: string;
+  include_children: boolean;
+}
+
+export interface PermissionGrantAssignee {
+  assignee_id: number;
+  assignee_version: number;
+  subject: PermissionGrantSubject;
+  model: GrantablePermissionModel;
+  source: PermissionGrantSource;
+  scope: "LOCAL" | "INHERITED";
+  inherited_from: string | null;
+  protected: boolean;
+  editable: boolean;
+}
+
+export interface PermissionGrantCursorPage {
+  data: PermissionGrantAssignee[];
+  page_size: number;
+  has_more: boolean;
+  next_cursor: string | null;
+}
+
+export interface MyResourcePermissions {
+  mode: ResourcePermissionMode;
+  actions: string[];
+  sources: PermissionGrantSource[];
+  roster_complete: boolean;
+}
+
+export interface PermissionGrantSubjectInput {
+  type: SubjectType;
+  id: string;
+  userset_relation?: string | null;
+  include_children?: boolean;
+}
+
+export type PermissionGrantMutationChange =
+  | {
+      op: "ADD";
+      model_key: string;
+      subject: PermissionGrantSubjectInput;
+    }
+  | {
+      op: "MOVE";
+      assignee_id: number;
+      expected_assignee_version: number;
+      target_model_key: string;
+    }
+  | {
+      op: "REMOVE";
+      assignee_id: number;
+      expected_assignee_version: number;
+    };
+
+export interface MutateResourceGrantsRequest {
+  idempotency_key: string;
+  expected_resource_version: number;
+  expected_catalog_release_id: number;
+  changes: PermissionGrantMutationChange[];
+}
+
+export interface MutateResourceGrantsResult {
+  resource_version: number;
+  items: PermissionGrantAssignee[];
+}
+
+export interface CreatePermissionModeDraftRequest {
+  target_mode: ResourcePermissionMode;
+  expected_resource_version: number;
+  expected_catalog_release_id: number;
+}
+
+export interface PermissionModeDraft {
+  draft_id: string;
+  target_mode: ResourcePermissionMode;
+  impact_checksum: string;
+  affected_assignees: number;
+  expires_at: string;
+}
+
+export interface ApplyPermissionModeDraftRequest {
+  idempotency_key: string;
+  expected_resource_version: number;
+  expected_catalog_release_id: number;
+  confirmed: true;
+}
+
+export interface ApplyPermissionModeDraftResult {
+  applied: boolean;
+  mode: ResourcePermissionMode;
+  resource_version: number;
+}
+
+export interface CheckResourceActionRequest {
+  resource_type: ResourceType;
+  resource_id: string;
+  action: string;
 }
 
 export interface SelectedSubject {
@@ -89,76 +181,121 @@ function withPermissionRequestOptions(config?: PermissionRequestConfig) {
 
 // ── Permission APIs ──────────────────────────────────
 
-export async function getResourcePermissions(
-  resourceType: string,
-  resourceId: string,
-  config?: PermissionRequestConfig
-): Promise<PermissionEntry[]> {
-  const res = await request.get(
-    `/api/v1/permissions/resources/${resourceType}/${resourceId}/permissions`,
-    withPermissionRequestOptions(config)
-  );
-  return unwrapArray<PermissionEntry>(res);
+function permissionResourcePath(
+  resourceType: ResourceType,
+  resourceId: string
+): string {
+  return `/api/v1/permissions/resources/${resourceType}/${resourceId}`;
 }
 
-export async function authorizeResource(
-  resourceType: string,
+export async function getResourcePermissionContext(
+  resourceType: ResourceType,
   resourceId: string,
-  grants: GrantItem[],
-  revokes: RevokeItem[],
   config?: PermissionRequestConfig
-): Promise<null> {
-  const res = await request.post(
-    `/api/v1/permissions/resources/${resourceType}/${resourceId}/authorize`,
-    { grants, revokes },
+): Promise<ResourcePermissionContext> {
+  const res = await request.get(
+    `${permissionResourcePath(resourceType, resourceId)}/context`,
     withPermissionRequestOptions(config)
   );
   return unwrap(res);
 }
 
-export async function checkPermission(
-  objectType: string,
-  objectId: string,
-  relation: string,
-  permissionIdOrConfig?: string | PermissionRequestConfig,
+export async function getResourcePermissionGrants(
+  resourceType: ResourceType,
+  resourceId: string,
+  params: { cursor?: string | null; page_size?: number } = {},
+  config?: PermissionRequestConfig
+): Promise<PermissionGrantCursorPage> {
+  const res = await request.get(
+    `${permissionResourcePath(resourceType, resourceId)}/grants`,
+    {
+      params: {
+        cursor: params.cursor ?? undefined,
+        page_size: params.page_size ?? 50,
+      },
+      ...withPermissionRequestOptions(config),
+    }
+  );
+  return unwrap(res);
+}
+
+export async function getMyResourcePermissions(
+  resourceType: ResourceType,
+  resourceId: string,
+  config?: PermissionRequestConfig
+): Promise<MyResourcePermissions> {
+  const res = await request.get(
+    `${permissionResourcePath(resourceType, resourceId)}/my-permissions`,
+    withPermissionRequestOptions(config)
+  );
+  return unwrap(res);
+}
+
+export async function getGrantablePermissionModels(
+  resourceType: ResourceType,
+  resourceId: string,
+  config?: PermissionRequestConfig
+): Promise<GrantablePermissionModel[]> {
+  const res = await request.get(
+    `${permissionResourcePath(resourceType, resourceId)}/grantable-models`,
+    withPermissionRequestOptions(config)
+  );
+  return unwrap(res);
+}
+
+export async function mutateResourceGrants(
+  resourceType: ResourceType,
+  resourceId: string,
+  payload: MutateResourceGrantsRequest,
+  config?: PermissionRequestConfig
+): Promise<MutateResourceGrantsResult> {
+  const res = await request.post(
+    `${permissionResourcePath(resourceType, resourceId)}/grants:mutate`,
+    payload,
+    withPermissionRequestOptions(config)
+  );
+  return unwrap(res);
+}
+
+export async function createResourcePermissionModeDraft(
+  resourceType: ResourceType,
+  resourceId: string,
+  payload: CreatePermissionModeDraftRequest,
+  config?: PermissionRequestConfig
+): Promise<PermissionModeDraft> {
+  const res = await request.post(
+    `${permissionResourcePath(resourceType, resourceId)}/mode-drafts`,
+    payload,
+    withPermissionRequestOptions(config)
+  );
+  return unwrap(res);
+}
+
+export async function applyResourcePermissionModeDraft(
+  resourceType: ResourceType,
+  resourceId: string,
+  draftId: string,
+  payload: ApplyPermissionModeDraftRequest,
+  config?: PermissionRequestConfig
+): Promise<ApplyPermissionModeDraftResult> {
+  const res = await request.post(
+    `${permissionResourcePath(resourceType, resourceId)}/mode-drafts/${draftId}/apply`,
+    payload,
+    withPermissionRequestOptions(config)
+  );
+  return unwrap(res);
+}
+
+export async function checkResourceAction(
+  payload: CheckResourceActionRequest,
   config?: PermissionRequestConfig
 ): Promise<{ allowed: boolean }> {
-  const permissionId =
-    typeof permissionIdOrConfig === "string" ? permissionIdOrConfig : undefined;
-  const requestConfig =
-    typeof permissionIdOrConfig === "string" ? config : permissionIdOrConfig;
-  const res = await request.post(`/api/v1/permissions/check`, {
-    object_type: objectType,
-    object_id: objectId,
-    relation,
-    permission_id: permissionId,
-  }, withPermissionRequestOptions(requestConfig));
-  return unwrap(res);
-}
-
-export async function getGrantableRelationModels(
-  objectType: string,
-  objectId: string,
-  config?: PermissionRequestConfig
-): Promise<RelationModel[]> {
-  const res = await request.get(`/api/v1/permissions/relation-models/grantable`, {
-    params: { object_type: objectType, object_id: objectId },
-    ...withPermissionRequestOptions(config),
-  });
-  return unwrapArray<RelationModel>(res);
-}
-
-export async function canOpenPermissionDialog(
-  objectType: ResourceType,
-  objectId: string,
-  config?: PermissionRequestConfig
-): Promise<boolean> {
-  const models = await getGrantableRelationModels(
-    objectType,
-    objectId,
-    config
+  const res = await request.post(
+    "/api/v1/permissions/check",
+    payload,
+    withPermissionRequestOptions(config)
   );
-  return Array.isArray(models) && models.length > 0;
+  return unwrap(res);
 }
 
 // ── Subject search APIs ──────────────────────────────
@@ -197,35 +334,7 @@ export async function searchUsers(
   };
 }
 
-export async function getResourceGrantUsers(
-  resourceType: ResourceType,
-  resourceId: string,
-  params?: { keyword?: string; page?: number; page_size?: number },
-  config?: { signal?: AbortSignal }
-): Promise<GrantUser[]> {
-  const res = await request.get(
-    `/api/v1/permissions/resources/${resourceType}/${resourceId}/grant-subjects/users`,
-    {
-      params: {
-        keyword: params?.keyword ?? "",
-        page: params?.page ?? 1,
-        page_size: params?.page_size ?? 2000,
-      },
-      ...withPermissionRequestOptions(config),
-    }
-  );
-  return unwrapArray(res);
-}
-
-export async function getKnowledgeSpaceGrantUsers(
-  resourceId: string,
-  params?: { keyword?: string; page?: number; page_size?: number },
-  config?: { signal?: AbortSignal }
-): Promise<GrantUser[]> {
-  return getResourceGrantUsers("knowledge_space", resourceId, params, config);
-}
-
-// ── Lazy grant-department tree (F038) ────────────────
+// ── Lazy organization-department tree ────────────────
 // Browse one visible layer / server search / locate-by-id, so a large org tree
 // is never loaded at once. Same authorization scope as the full-tree endpoint
 // above (tenant subtree minus child-tenant mounts). `path` is the materialized
@@ -260,14 +369,12 @@ const EMPTY_DEPARTMENT_SEARCH_RESULT: GrantDepartmentSearchResult = {
   truncated: false,
 };
 
-export async function getResourceGrantDepartmentChildren(
-  resourceType: ResourceType,
-  resourceId: string,
+export async function getDepartmentChildren(
   parentId: number | null,
   config?: { signal?: AbortSignal }
 ): Promise<GrantDepartmentNode[]> {
   const res = await request.get(
-    `/api/v1/permissions/resources/${resourceType}/${resourceId}/grant-subjects/departments/children`,
+    `/api/v1/departments/children`,
     {
       params: { parent_id: parentId ?? undefined },
       ...withPermissionRequestOptions(config),
@@ -276,15 +383,13 @@ export async function getResourceGrantDepartmentChildren(
   return unwrapArray<GrantDepartmentNode>(res);
 }
 
-export async function searchResourceGrantDepartments(
-  resourceType: ResourceType,
-  resourceId: string,
+export async function searchDepartments(
   keyword: string,
   limit = 50,
   config?: { signal?: AbortSignal }
 ): Promise<GrantDepartmentSearchResult> {
   const res = await request.get(
-    `/api/v1/permissions/resources/${resourceType}/${resourceId}/grant-subjects/departments/search`,
+    `/api/v1/departments/search`,
     {
       params: { keyword, limit },
       ...withPermissionRequestOptions(config),
@@ -306,28 +411,4 @@ export async function getUserGroups(
   const data = unwrap<any>(res);
   const rows = data?.records ?? data;
   return Array.isArray(rows) ? rows : [];
-}
-
-export async function getResourceGrantUserGroups(
-  resourceType: ResourceType,
-  resourceId: string,
-  params?: { keyword?: string },
-  config?: { signal?: AbortSignal }
-): Promise<any[]> {
-  const res = await request.get(
-    `/api/v1/permissions/resources/${resourceType}/${resourceId}/grant-subjects/user-groups`,
-    {
-      params: { keyword: params?.keyword ?? "" },
-      ...withPermissionRequestOptions(config),
-    }
-  );
-  return unwrapArray(res);
-}
-
-export async function getKnowledgeSpaceGrantUserGroups(
-  resourceId: string,
-  params?: { keyword?: string },
-  config?: { signal?: AbortSignal }
-): Promise<any[]> {
-  return getResourceGrantUserGroups("knowledge_space", resourceId, params, config);
 }

@@ -22,6 +22,7 @@ import {
     isAbsoluteImageSrc,
     matchArtifactByRelPath,
     resolveArtifactUrl,
+    resolveDeliverableLink,
     stripEmptyHtmlPlaceholders,
 } from './artifactUtils';
 
@@ -151,9 +152,11 @@ interface PreviewBodyProps {
      * broken-image behaviour), everything else is unaffected.
      */
     fileList?: ArtifactFile[];
+    /** Switch preview to another deliverable when a markdown link is clicked. */
+    onArtifactPreview?: (file: ArtifactFile) => void;
 }
 
-export function PreviewBody({ file, versionId, fileList }: PreviewBodyProps) {
+export function PreviewBody({ file, versionId, fileList, onArtifactPreview }: PreviewBodyProps) {
     const localize = useLocalize();
     const { showToast } = useToastContext();
     const { loading, error, text, imageUrl, resolvedUrl } = usePreviewSource(file, versionId);
@@ -188,6 +191,20 @@ export function PreviewBody({ file, versionId, fileList }: PreviewBodyProps) {
             return null;
         }
     }, []);
+
+    const resolveArtifactLink = useCallback(
+        (href: string) => resolveDeliverableLink(fileListRef.current, href),
+        [],
+    );
+
+    const handleArtifactPreview = useCallback(
+        (matched: unknown) => {
+            if (matched && onArtifactPreview) {
+                onArtifactPreview(matched as ArtifactFile);
+            }
+        },
+        [onArtifactPreview],
+    );
 
     // Strip empty raw-HTML placeholder boxes (comment/figure scaffolding meant for
     // the derived HTML/PDF) so they don't leak as literal text in the md preview.
@@ -263,6 +280,8 @@ export function PreviewBody({ file, versionId, fileList }: PreviewBodyProps) {
                     isLatestMessage={true}
                     webContent={false}
                     resolveImageSrc={resolveImageSrc}
+                    resolveArtifactLink={onArtifactPreview ? resolveArtifactLink : undefined}
+                    onArtifactPreview={onArtifactPreview ? handleArtifactPreview : undefined}
                 />
             </div>
         );

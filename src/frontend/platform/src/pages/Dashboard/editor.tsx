@@ -6,7 +6,11 @@ import { useQuery } from "react-query"
 import { useNavigate, useParams } from "react-router-dom"
 import { EditorCanvas } from "./components/editor/EditorCanvas"
 import { EditorHeader } from "./components/editor/EditorHeader"
-import { DashboardQueryKey, useEditorShortcuts } from "./hook"
+import {
+    DashboardQueryKey,
+    useDashboardPermissions,
+    useEditorShortcuts,
+} from "./hook"
 
 export default function EditorPage() {
     const params = useParams()
@@ -22,10 +26,15 @@ export default function EditorPage() {
         queryKey: [DashboardQueryKey, Number(dashboardId)],
         queryFn: () => getDashboard(dashboardId),
     })
+    const {
+        permissions,
+        loading: permissionsLoading,
+    } = useDashboardPermissions([dashboardId])
+    const canEdit = permissions[dashboardId]?.includes("edit") ?? false
 
-    if (dashboard && !dashboard.write) {
-        navigate("404")
-    }
+    useEffect(() => {
+        if (dashboard && !permissionsLoading && !canEdit) navigate("404")
+    }, [canEdit, dashboard, navigate, permissionsLoading])
 
     useEffect(() => {
         if (dashboard) {
@@ -38,7 +47,7 @@ export default function EditorPage() {
     // undo redo
     useEditorShortcuts()
 
-    if (!dashboard) return null
+    if (!dashboard || isLoading || permissionsLoading || !canEdit) return null
 
     return (
         <div className="h-screen flex flex-col">

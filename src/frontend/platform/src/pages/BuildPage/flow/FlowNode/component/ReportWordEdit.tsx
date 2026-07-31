@@ -1,9 +1,12 @@
 import { LoadingIcon } from "@/components/bs-icons/loading"
 import { Button } from "@/components/bs-ui/button"
 import { DialogClose } from "@/components/bs-ui/dialog"
-import { getWorkflowReportTemplate } from "@/controllers/API/workflow"
+import { useToast } from "@/components/bs-ui/toast/use-toast"
+import { getWorkflowReportTemplate, saveWorkflowReportTemplate } from "@/controllers/API/workflow"
+import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { uploadFileWithProgress } from "@/modals/UploadModal/upload"
 import Word from "@/pages/Report/components/Word"
+import { getOfficeReachableUrl } from "@/utils/officeUrl"
 import { ChevronDown, ChevronLeft } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
@@ -12,7 +15,9 @@ import SelectVar from "./SelectVar"
 // save(fe) -> office(onlyofc) -> upload(be)
 export default function ReportWordEdit({ versionKey, nodeId, onChange }) {
     const { t } = useTranslation()
+    const { message } = useToast()
     const { id: flowId } = useParams();
+    const [saving, setSaving] = useState(false)
 
     const { docx, loading, pageLoading, createDocx, importDocx } = useReport(versionKey, flowId, onChange)
 
@@ -30,6 +35,30 @@ export default function ReportWordEdit({ versionKey, nodeId, onChange }) {
         }), '*');
     }
     const [show, setShow] = useState(true) // 处理var select聚焦问题
+
+    // Placeholders carry the node name so a template with several variables is
+    // readable, but the backend still resolves values by node id — renaming a
+    // node must not break an existing template. Strip the characters that would
+    // break the `{{name|nodeId.field}}` shape out of the name.
+    const buildMarker = (node, varValue: string) => {
+        const key = `${node.id}.${varValue}`
+        const displayName = (node.name || '').replace(/[{}|]/g, '').trim()
+        return displayName ? `${displayName}|${key}` : key
+    }
+
+    // Manual save: auto-save fails silently often enough to lose edits, so the
+    // user needs a way to force a flush. The document server writes the file
+    // through its callback — a success here only means the command was accepted.
+    const handleSave = async () => {
+        if (saving) return
+        setSaving(true)
+        const res = await captureAndAlertRequestErrorHoc(saveWorkflowReportTemplate(docx.key, flowId))
+        setSaving(false)
+        // Failures are already surfaced by the request interceptor.
+        if (res?.saved) {
+            message({ description: t('report.saveSuccess'), variant: 'success' })
+        }
+    }
 
     if (pageLoading) return <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-primary/20">
         <LoadingIcon />
@@ -72,7 +101,7 @@ export default function ReportWordEdit({ versionKey, nodeId, onChange }) {
                         itemKey={''}
                         align="normal"
                         onSelect={(E, v) => {
-                            handleInset(`${E.id}.${v.value}`)
+                            handleInset(buildMarker(E, v.value))
                             setShow(false)
                             setTimeout(() => {
                                 setShow(true)
@@ -80,6 +109,10 @@ export default function ReportWordEdit({ versionKey, nodeId, onChange }) {
                         }}>
                         <Button className="h-8">{t('inserVar')}<ChevronDown size={14} /></Button>
                     </SelectVar>}
+                    <Button className="h-8" disabled={saving} onClick={handleSave}>
+                        {saving && <LoadingIcon className="mr-1 size-4" />}
+                        {t('report.saveTemplate')}
+                    </Button>
                 </div>
                 <Word data={docx} workflow></Word>
                 {/* <LabelPanne onInset={handleInset}></LabelPanne> */}
@@ -113,9 +146,9 @@ const useReport = (versionKey, flowId, onchange) => {
 
 
     const handleCreate = async () => {
-        // 本地调试
-        // setDocx(docx => ({ ...docx, path: 'http://192.168.106.120:3002/empty.docx' }))
-        setDocx(doc => ({ ...docx, path: location.origin + __APP_ENV__.BASE_URL + '/empty.docx' }))// 文档服务能访问到的文件地址
+        // Must be an address the document server itself can fetch — in local dev
+        // override it via VITE_OFFICE_PUBLIC_ORIGIN (see utils/officeUrl).
+        setDocx(doc => ({ ...docx, path: getOfficeReachableUrl('/empty.docx') }))
     }
 
     const handleImport = () => {

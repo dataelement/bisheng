@@ -3,12 +3,12 @@
  * Rendered in the ExecutionFlow `execution-artifacts` slot once the run
  * completes: report link row → answer markdown → output files card.
  */
+import { useCallback } from 'react';
 import { Outlined } from 'bisheng-icons';
 import Markdown from '~/components/Chat/Messages/Content/Markdown';
 import { useLocalize } from '~/hooks';
 import '~/markdown.css';
-import { type ArtifactFile, stripWorkspacePaths } from './artifactUtils';
-import { SaveAsButton } from './SaveAsButton';
+import { type ArtifactFile, resolveDeliverableLink, stripWorkspacePaths } from './artifactUtils';
 
 interface ResultSectionProps {
     /** output_result.answer — the run summary, markdown */
@@ -21,6 +21,10 @@ interface ResultSectionProps {
 
 export function ResultSection({ answer, files, versionId, onPreview }: ResultSectionProps) {
     const localize = useLocalize();
+    const resolveArtifactLink = useCallback(
+        (href: string) => resolveDeliverableLink(files, href),
+        [files],
+    );
     // Primary deliverable = files[0] (spec §5: report link row). The backend ranks
     // the list by file TYPE then recency, so [0] is the headline artifact (a report
     // outranks the charts it rendered afterwards), not just the newest write.
@@ -66,15 +70,20 @@ export function ResultSection({ answer, files, versionId, onPreview }: ResultSec
                 <div className="bs-mkdown text-sm leading-6 text-gray-800 [&_p:last-child]:mb-0">
                     {/* strip internal output/ · scratch/ paths the model may have
                         echoed from a tool result — users don't need the workspace zone */}
-                    <Markdown content={stripWorkspacePaths(answer)} isLatestMessage={true} webContent={false} />
+                    <Markdown
+                        content={stripWorkspacePaths(answer)}
+                        isLatestMessage={true}
+                        webContent={false}
+                        resolveArtifactLink={resolveArtifactLink}
+                        onArtifactPreview={onPreview}
+                    />
                 </div>
             )}
 
             {/* output files card — dotted background matching ClarifyCard.
-                Only shown for MULTI-file runs: with a single deliverable the
-                report-link row above already surfaces it, so the card would just
-                repeat the same file name. Multi-file runs still get the card as the
-                full manifest (the link row stays the highlighted primary). */}
+                Only shown for multi-file runs because the report-link row already
+                surfaces a single deliverable. In-answer links still resolve to the
+                matching artifact and open the same preview. */}
             {files.length > 1 && (
                 <div
                     className="rounded-2xl border border-[#EEF2F6] p-5 shadow-[0_4px_20px_rgba(0,0,0,0.03)]"

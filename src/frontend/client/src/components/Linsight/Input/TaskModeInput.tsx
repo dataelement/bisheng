@@ -15,7 +15,9 @@ import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 're
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useRecoilState, useRecoilValue } from 'recoil';
 import { checkFileParseStatus } from '~/api/linsight';
-import { File_Accept, NotificationSeverity } from '~/common';
+import { buildChatAccept } from '~/common/chatAccept';
+import { NotificationSeverity } from '~/common';
+import { resolveUploadSizeLimits } from '~/pages/knowledge/knowledgeUtils';
 import DragDropOverlay from '~/components/Chat/Input/Files/DragDropOverlay';
 import { TextareaAutosize } from '~/components/ui';
 import {
@@ -43,7 +45,7 @@ import {
     type TaskModeToolItem,
 } from '~/store/linsight';
 import { cn, removeFocusRings } from '~/utils';
-import { ContextChips } from './ContextChips';
+import { ContextChips, type ContextAttachmentFile } from './ContextChips';
 import { KnowledgeSpaceSelect } from './KnowledgeSpaceSelect';
 import { ModelSelector } from './ModelSelector';
 import { PlusMenu } from './PlusMenu';
@@ -91,7 +93,7 @@ export function TaskModeInput({ conversationId = 'new', disabled = false, onFoll
     const [model, setModel] = useState('');
     const [confirmStopOpen, setConfirmStopOpen] = useState(false);
     const [fileUploading, setFileUploading] = useState(false);
-    const [uploadingFiles, setUploadingFiles] = useState<{ id: string; name: string }[]>([]);
+    const [attachmentFiles, setAttachmentFiles] = useState<ContextAttachmentFile[]>([]);
     const textAreaRef = useRef<HTMLTextAreaElement>(null);
     const inputFilesRef = useRef<any>(null);
 
@@ -143,7 +145,7 @@ export function TaskModeInput({ conversationId = 'new', disabled = false, onFoll
             try {
                 const res = await checkFileParseStatus(pending.map((file: any) => file.file_id));
                 const statusList = Array.isArray(res.data) ? res.data.filter(Boolean) : [];
-                const statusMap = new Map(statusList.map((item: any) => [item.file_id, item.parsing_status]));
+                const statusMap = new Map(statusList.map((item: any) => [item.file_id, item]));
                 if (!statusMap.size) return;
 
                 inputFilesRef.current?.updateParsingStatus?.(statusMap);
@@ -151,10 +153,13 @@ export function TaskModeInput({ conversationId = 'new', disabled = false, onFoll
                 setContext((prev) => {
                     let changed = false;
                     const nextFiles = prev.files.reduce((result: any[], file: any) => {
-                        const nextStatus = statusMap.get(file?.file_id);
-                        if (!nextStatus) {
+                        const item = statusMap.get(file?.file_id);
+                        if (!item) {
                             result.push(file);
-                        } else if (nextStatus === 'failed') {
+                            return result;
+                        }
+                        const nextStatus = item.parsing_status;
+                        if (nextStatus === 'failed') {
                             changed = true;
                             showToast({
                                 message: localize('com_file_parse_failed_auto_removed', {
@@ -162,9 +167,16 @@ export function TaskModeInput({ conversationId = 'new', disabled = false, onFoll
                                 }),
                                 severity: NotificationSeverity.ERROR,
                             });
-                        } else if (nextStatus !== file.parsing_status) {
+                        } else if (
+                            nextStatus !== file.parsing_status
+                            || (item.cover_filepath && item.cover_filepath !== file.cover_filepath)
+                        ) {
                             changed = true;
-                            result.push({ ...file, parsing_status: nextStatus });
+                            result.push({
+                                ...file,
+                                parsing_status: nextStatus,
+                                ...(item.cover_filepath ? { cover_filepath: item.cover_filepath } : {}),
+                            });
                         } else {
                             result.push(file);
                         }
@@ -190,7 +202,7 @@ export function TaskModeInput({ conversationId = 'new', disabled = false, onFoll
     const clearInputAfterSend = useCallback(() => {
         setText('');
         setContext((prev) => ({ ...prev, files: [] }));
-        setUploadingFiles([]);
+        setAttachmentFiles([]);
         inputFilesRef.current?.clear();
         if (textAreaRef.current) textAreaRef.current.style.height = 'auto';
     }, [setContext]);
@@ -237,7 +249,7 @@ export function TaskModeInput({ conversationId = 'new', disabled = false, onFoll
 
         setText('');
         setContext((prev) => ({ ...prev, files: [] }));
-        setUploadingFiles([]);
+        setAttachmentFiles([]);
         inputFilesRef.current?.clear();
         if (textAreaRef.current) textAreaRef.current.style.height = 'auto';
         if (!location.pathname.includes('/linsight')) navigate('/linsight/new');
@@ -275,7 +287,11 @@ export function TaskModeInput({ conversationId = 'new', disabled = false, onFoll
     };
 
     const hasText = !!text.trim();
-    const accept = (bsConfig as any)?.enable_etl4lm ? File_Accept.Linsight_Etl4lm : File_Accept.Linsight;
+    const accept = buildChatAccept({
+        enableMedia: !!(envConfig as any)?.enable_media_upload,
+        enableEtl4lm: !!(bsConfig as any)?.enable_etl4lm,
+        includeOfd: false,
+    });
     const InputFilesAny = InputFiles as any;
 
     return (
@@ -291,16 +307,28 @@ export function TaskModeInput({ conversationId = 'new', disabled = false, onFoll
                     hideTrigger
                     hideList
                     uploadMode="linsight"
+                    uploadSizeLimits={resolveUploadSizeLimits(envConfig as any)}
                     size={(envConfig as any)?.uploaded_files_maximum_size || 50}
                     onFilesStateChange={(currentFiles: any[] = []) => {
-                        setUploadingFiles(
-                            currentFiles
-                                .filter((f) => f?.isUploading)
-                                .map((f) => ({ id: String(f.id), name: String(f.name || '') })),
+                        setAttachmentFiles(
+                            currentFiles.map((f) => ({
+                                clientId: String(f.id),
+                                name: String(f.name || ''),
+                                isUploading: !!f?.isUploading,
+                                file_id: f.fileId,
+                                filepath: f.filePath,
+                                filename: f.name,
+                                file_name: f.name,
+                                parsing_status: f.parsingStatus,
+                            })),
                         );
                     }}
                     onChange={(files: any) => {
-                        setFileUploading(!files);
+                        if (files === null) {
+                            setFileUploading(true);
+                            return;
+                        }
+                        setFileUploading(false);
                         setContext((prev) => ({ ...prev, files: files || [] }));
                     }}
                 />
@@ -309,8 +337,7 @@ export function TaskModeInput({ conversationId = 'new', disabled = false, onFoll
                 <ContextChips
                     skills={skills}
                     knowledge={context.knowledge}
-                    files={context.files}
-                    uploadingFiles={uploadingFiles}
+                    attachmentFiles={attachmentFiles}
                     onRemoveSkill={handleRemoveSkill}
                     onRemoveKnowledge={handleRemoveKnowledge}
                     onRemoveFile={handleRemoveFile}

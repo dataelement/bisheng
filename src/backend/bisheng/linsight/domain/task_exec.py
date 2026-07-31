@@ -18,6 +18,7 @@ from bisheng.core.cache.utils import CACHE_DIR, create_cache_folder_async
 from bisheng.core.context.tenant import bypass_tenant_filter, current_tenant_id, set_current_tenant_id
 from bisheng.core.external.http_client.http_client_manager import get_http_client
 from bisheng.core.logger import trace_id_var
+from bisheng.core.openfga.worker_runtime import ensure_linsight_fga_runtime
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.linsight.domain import utils as linsight_execute_utils
 from bisheng.linsight.domain.models.linsight_execute_task import (
@@ -64,6 +65,26 @@ class TaskAlreadyInProgressError(Exception):
     """Task already in progress Exception"""
 
     pass
+
+
+async def ensure_linsight_permission_runtime(manager=None) -> dict:
+    """Initialize and verify Linsight's single F048 runtime pin."""
+
+    if manager is None:
+        if not settings.openfga.enabled:
+            raise RuntimeError("linsight F048 OpenFGA runtime is disabled")
+        from bisheng.core.context.manager import app_context
+        from bisheng.core.openfga.manager import FGAManager
+
+        try:
+            manager = app_context.get_context("openfga")
+        except KeyError:
+            manager = FGAManager(
+                openfga_config=settings.openfga,
+                instance_role="linsight",
+            )
+            app_context.register_context(manager, optional=False)
+    return await ensure_linsight_fga_runtime(manager)
 
 
 # Apology preamble prepended to a salvaged partial result (L3 tool-loop breaker /
@@ -161,7 +182,11 @@ class LinsightWorkflowTask:
 
     # ==================== Core Execution Logic ====================
 
-    async def async_run(self, session_version_id: str) -> None:
+    async def async_run(
+        self,
+        session_version_id: str,
+        tenant_id: int | None = None,
+    ) -> None:
         """Asynchronous Task Execution Entry"""
 
         self.session_version_id = session_version_id
@@ -169,7 +194,11 @@ class LinsightWorkflowTask:
         logger.info(f"Start the task: session_version_id={self.session_version_id}")
         tenant_context_token: Token | None = None
         try:
-            tenant_context_token = await self._restore_tenant_context(session_version_id)
+            tenant_context_token = await self._restore_tenant_context(
+                session_version_id,
+                task_tenant_id=tenant_id,
+            )
+            await ensure_linsight_permission_runtime()
 
             async with self._managed_execution() as session_model:
                 await self._execute_workflow(session_model)
@@ -193,8 +222,26 @@ class LinsightWorkflowTask:
             if tenant_context_token is not None:
                 current_tenant_id.reset(tenant_context_token)
 
-    async def _restore_tenant_context(self, session_version_id: str) -> Token:
-        """Restore tenant ContextVar for standalone Linsight worker tasks."""
+    async def _restore_tenant_context(
+        self,
+        session_version_id: str,
+        *,
+        task_tenant_id: int | None,
+    ) -> Token:
+        """Verify the queue payload against the row and restore ContextVar."""
+
+        current_tenant_id.set(None)
+        if isinstance(task_tenant_id, bool):
+            raise TaskExecutionError("Linsight task tenant_id must be a positive integer")
+        try:
+            payload_tenant_id = int(task_tenant_id)
+        except (TypeError, ValueError) as exc:
+            raise TaskExecutionError(
+                "Linsight task tenant_id must be a positive integer"
+            ) from exc
+        if payload_tenant_id <= 0:
+            raise TaskExecutionError("Linsight task tenant_id must be a positive integer")
+
         try:
             with bypass_tenant_filter():
                 session_model = await LinsightSessionVersionDao.get_by_id(session_version_id)
@@ -204,15 +251,32 @@ class LinsightWorkflowTask:
         if not session_model:
             raise TaskExecutionError(f"Session version not found: {session_version_id}")
 
-        tenant_id = session_model.tenant_id
-        if tenant_id is None:
+        persisted_tenant_id = session_model.tenant_id
+        if persisted_tenant_id is None:
             raise TaskExecutionError(f"Session version {session_version_id} is missing tenant_id")
-
-        return set_current_tenant_id(int(tenant_id))
+        try:
+            persisted_tenant_id = int(persisted_tenant_id)
+        except (TypeError, ValueError) as exc:
+            raise TaskExecutionError(
+                f"Session version {session_version_id} has invalid tenant_id"
+            ) from exc
+        if (
+            persisted_tenant_id <= 0
+            or persisted_tenant_id != payload_tenant_id
+        ):
+            raise TaskExecutionError(
+                f"Linsight task tenant mismatch for session {session_version_id}"
+            )
+        return set_current_tenant_id(payload_tenant_id)
 
     # ==================== Resume (park-and-release, Track B) ====================
 
-    async def async_resume(self, session_version_id: str, user_input=None) -> None:
+    async def async_resume(
+        self,
+        session_version_id: str,
+        user_input=None,
+        tenant_id: int | None = None,
+    ) -> None:
         """Resume a parked (WAITING_FOR_USER_INPUT) task after the user answered.
 
         park-and-release entry point (design §4.4 / §4.6): a parked task holds no
@@ -228,7 +292,11 @@ class LinsightWorkflowTask:
         logger.info(f"Resume the task: session_version_id={self.session_version_id}")
         tenant_context_token: Token | None = None
         try:
-            tenant_context_token = await self._restore_tenant_context(session_version_id)
+            tenant_context_token = await self._restore_tenant_context(
+                session_version_id,
+                task_tenant_id=tenant_id,
+            )
+            await ensure_linsight_permission_runtime()
             async with self._managed_resume() as session_model:
                 await self._resume_workflow(session_model, user_input)
         except UserTerminationError:
@@ -354,7 +422,12 @@ class LinsightWorkflowTask:
 
     # ==================== Continue (multi-turn conversation) ====================
 
-    async def async_continue(self, session_version_id: str, question: str) -> None:
+    async def async_continue(
+        self,
+        session_version_id: str,
+        question: str,
+        tenant_id: int | None = None,
+    ) -> None:
         """Continue a finished conversation with a new user turn (F035 multi-turn).
 
         Unlike ``async_resume`` (which answers a parked ask_user interrupt via
@@ -371,7 +444,11 @@ class LinsightWorkflowTask:
         logger.info(f"Continue the conversation: session_version_id={self.session_version_id}")
         tenant_context_token: Token | None = None
         try:
-            tenant_context_token = await self._restore_tenant_context(session_version_id)
+            tenant_context_token = await self._restore_tenant_context(
+                session_version_id,
+                task_tenant_id=tenant_id,
+            )
+            await ensure_linsight_permission_runtime()
             async with self._managed_resume() as session_model:
                 await self._continue_workflow(session_model, question)
         except UserTerminationError:
@@ -1485,9 +1562,14 @@ class LinsightWorkflowTask:
         final_files = await linsight_execute_utils.get_final_result_file(
             session_model=session_model, file_details=file_details, baseline_paths=self._baseline_files
         )
-        # Synthesize a fallback report ONLY when the model actually planned work but
-        # produced no deliverable — never for a trivial greeting/Q&A with no output.
-        if not final_files and planned_tasks:
+        # Synthesize a fallback report when the model planned work, wrote a long
+        # direct answer, or answered substantively about uploaded sources — but
+        # never for a trivial greeting one-liner with no output/.
+        if not final_files and linsight_execute_utils.should_synthesize_direct_answer_report(
+            answer,
+            planned_tasks=planned_tasks,
+            baseline_paths=self._baseline_files,
+        ):
             final_files = await linsight_execute_utils.build_fallback_report_file(
                 session_model=session_model, answer=answer, file_dir=self.file_dir
             )

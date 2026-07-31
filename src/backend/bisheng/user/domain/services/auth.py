@@ -29,36 +29,9 @@ from ..models.user_role import UserRoleDao
 
 logger = logging.getLogger(__name__)
 
-# 部门管理员：工作台 + 管理后台全量菜单（含路由用的 sys、仅 UI 的 log/system_config）
-_DEPARTMENT_ADMIN_WEB_MENU_FULL = frozenset(
-    {
-        "workstation",
-        "admin",
-        "build",
-        "create_app",
-        "knowledge",
-        "create_knowledge",
-        "knowledge_space",
-        "model",
-        "tool",
-        "mcp",
-        "channel",
-        "evaluation",
-        "dataset",
-        "mark_task",
-        "board",
-        "subscription",
-        "home",
-        "linsight_task_mode",
-        "apps",
-        "frontend",
-        "backend",
-        "create_dashboard",
-        "log",
-        "system_config",
-        "sys",
-    }
-)
+# Department admins always receive the admin-console parent and system menu.
+# All other business menus continue to come from role or personal grants.
+_DEPARTMENT_ADMIN_WEB_MENU_SYSTEM = frozenset({"admin", "system_config", "sys"})
 
 # 角色管理 UI：一级「工作台 / 管理后台」关闭时，二级项仍存库但不应对用户生效（与 Roles.tsx 一致）
 _WORKBENCH_ENTRY_KEYS = frozenset({"workstation", "frontend"})
@@ -82,6 +55,7 @@ _ROLE_UI_ADMIN_CHILDREN = frozenset(
         "build",
         "create_app",
         "evaluation",
+        "dataset",
         "mark_task",
     }
 )
@@ -129,21 +103,27 @@ def _effective_web_menu_strip_orphans(web_menu: list[str]) -> list[str]:
     return list(s)
 
 
-# ── AccessType → ReBAC mapping (F008, AD-02) ────────────────
-# Maps old RBAC AccessType to one-or-more (relation, object_type) pairs for
-# ReBAC delegation.
-_ACCESS_TYPE_TO_REBAC: dict[int, tuple[tuple[str, str], ...]] = {
-    AccessType.KNOWLEDGE: (("can_read", "knowledge_library"),),
-    AccessType.KNOWLEDGE_WRITE: (("can_edit", "knowledge_library"),),
-    AccessType.WORKFLOW: (("can_read", "workflow"),),
-    AccessType.WORKFLOW_WRITE: (("can_edit", "workflow"),),
-    AccessType.ASSISTANT_READ: (("can_read", "assistant"),),
-    AccessType.ASSISTANT_WRITE: (("can_edit", "assistant"),),
-    AccessType.GPTS_TOOL_READ: (("can_read", "tool"),),
-    AccessType.GPTS_TOOL_WRITE: (("can_edit", "tool"),),
-    AccessType.DASHBOARD: (("can_read", "dashboard"),),
-    AccessType.DASHBOARD_WRITE: (("can_edit", "dashboard"),),
-}
+# F048 retires AccessType as a business-resource authorization input. Keeping
+# these values explicit lets old callers fail loudly instead of falling back to
+# the role_access table and creating a second ALLOW path.
+_F048_RETIRED_ACCESS_TYPES = frozenset(
+    {
+        AccessType.KNOWLEDGE,
+        AccessType.KNOWLEDGE_WRITE,
+        AccessType.ASSISTANT_READ,
+        AccessType.ASSISTANT_WRITE,
+        AccessType.GPTS_TOOL_READ,
+        AccessType.GPTS_TOOL_WRITE,
+        AccessType.WORKFLOW,
+        AccessType.WORKFLOW_WRITE,
+        AccessType.DASHBOARD,
+        AccessType.DASHBOARD_WRITE,
+    }
+)
+_ACCESS_TYPE_TO_REBAC: dict[
+    AccessType,
+    tuple[tuple[str, str], ...],
+] = {}
 
 
 class AuthJwt:
@@ -292,13 +272,18 @@ class LoginUser(BaseModel):
 
         return wrapper
 
-    @wrapper_access_check
     def access_check(self, owner_user_id: int, target_id: str, access_type: AccessType) -> bool:
         """Check if the user has permission to a resource.
 
         F008 adapter: delegates to ReBAC (rebac_check) for mapped AccessType values.
         Falls back to legacy RoleAccessDao for unmapped types (backward compat).
         """
+        if access_type in _F048_RETIRED_ACCESS_TYPES:
+            raise RuntimeError(
+                "Business-resource AccessType checks were retired by F048"
+            )
+        if self.is_admin():
+            return True
         rebac_targets = self._rebac_targets_for_access_type(access_type)
         if rebac_targets:
             from bisheng.permission.domain.services.owner_service import _run_async_safe
@@ -315,9 +300,14 @@ class LoginUser(BaseModel):
             return True
         return False
 
-    @async_wrapper_access_check
     async def async_access_check(self, owner_user_id: int, target_id: str, access_type: AccessType) -> bool:
         """Async permission check — delegates to ReBAC for mapped types."""
+        if access_type in _F048_RETIRED_ACCESS_TYPES:
+            raise RuntimeError(
+                "Business-resource AccessType checks were retired by F048"
+            )
+        if self.is_admin():
+            return True
         rebac_targets = self._rebac_targets_for_access_type(access_type)
         if rebac_targets:
             results = await asyncio.gather(
@@ -409,6 +399,13 @@ class LoginUser(BaseModel):
         F008 adapter: delegates to ReBAC list_accessible for mapped AccessType.
         Falls back to legacy RoleAccessDao for unmapped types.
         """
+        if any(
+            access_type in _F048_RETIRED_ACCESS_TYPES
+            for access_type in access_types
+        ):
+            raise RuntimeError(
+                "Business-resource AccessType lists were retired by F048"
+            )
         rebac_targets = self._rebac_targets_for_access_types(access_types)
         if rebac_targets:
             from bisheng.permission.domain.services.owner_service import _run_async_safe
@@ -426,6 +423,13 @@ class LoginUser(BaseModel):
 
     async def aget_user_access_resource_ids(self, access_types: list[AccessType]) -> list[str]:
         """Async version — delegates to ReBAC for mapped types."""
+        if any(
+            access_type in _F048_RETIRED_ACCESS_TYPES
+            for access_type in access_types
+        ):
+            raise RuntimeError(
+                "Business-resource AccessType lists were retired by F048"
+            )
         rebac_targets = self._rebac_targets_for_access_types(access_types)
         if rebac_targets:
             merged: dict[str, None] = {}
@@ -441,41 +445,13 @@ class LoginUser(BaseModel):
         role_access = await RoleAccessDao.aget_role_access_batch(self.user_role, access_types)
         return list(set([one.third_id for one in role_access]))
 
-    def get_merged_rebac_app_resource_ids(self, *, for_write: bool = False) -> list[str]:
-        """合并 workflow + assistant 的 ReBAC 可见 ID（构建/工作台应用列表）。
-
-        ⚠️ 仅供 async 调用方使用 sync 适配器时兜底。新代码请用
-        ``aget_merged_rebac_app_resource_ids``：在 FastAPI 的 sync endpoint
-        线程池里新建 event loop 调 FGAClient 会跨 loop 失败，导致部门管理员
-        看不到下属创建的应用。
-        """
-        from bisheng.permission.domain.services.owner_service import _run_async_safe
-
-        relation = "can_edit" if for_write else "can_read"
-        wf_ids = _run_async_safe(self.rebac_list_accessible(relation, "workflow"))
-        asst_ids = _run_async_safe(self.rebac_list_accessible(relation, "assistant"))
-        wf_ids = wf_ids or []
-        asst_ids = asst_ids or []
-        return list(set(wf_ids) | set(asst_ids))
-
-    async def aget_merged_rebac_app_resource_ids(
-        self,
-        *,
-        for_write: bool = False,
-    ) -> list[str]:
-        """async 版本：合并 workflow + assistant 的 ReBAC 可见 ID。"""
-        relation = "can_edit" if for_write else "can_read"
-        wf_ids = await self.rebac_list_accessible(relation, "workflow")
-        asst_ids = await self.rebac_list_accessible(relation, "assistant")
-        return list(set(wf_ids or []) | set(asst_ids or []))
-
-    # ── ReBAC permission methods (F004, INV-3) ─────────────────
+    # ── Identity/LLM compatibility methods ──────────────────────
 
     async def rebac_check(self, relation: str, object_type: str, object_id: str) -> bool:
-        """ReBAC permission check — unified entry point for resource-level access.
+        """Check an identity/LLM relation through the legacy compatibility port.
 
-        Delegates to PermissionService.check() which implements the five-level chain:
-        L1 admin → L2 cache → L3 OpenFGA → L4 owner fallback → L5 fail-closed.
+        F048 business resources are rejected by ``PermissionService`` and must
+        use their business-owned verified target plus a concrete action.
         """
         from bisheng.permission.domain.services.permission_service import PermissionService
 
@@ -488,10 +464,9 @@ class LoginUser(BaseModel):
         )
 
     async def rebac_list_accessible(self, relation: str, object_type: str) -> list[str] | None:
-        """List accessible resource IDs via ReBAC.
+        """List identity/LLM objects through the compatibility port.
 
-        Returns None for admin (caller should not filter).
-        Returns list of ID strings for normal users.
+        F048 business-resource enumeration is intentionally unavailable here.
         """
         from bisheng.permission.domain.services.permission_service import PermissionService
 
@@ -667,7 +642,8 @@ class LoginUser(BaseModel):
         """Resolve role key(s) and web_menu.
 
         - AC-13: multi-role web_menu is the **union** of each role's WEB_MENU entries.
-        - Department admins get workstation + admin console menus in full (PRD 2.5).
+        - Department admins always get the system menu; business menus still come from
+          role or personal grants.
         - ``system_config`` is only granted via super-admin or department-admin; it is
           stripped for other users even if legacy role_access rows exist.
         """
@@ -694,7 +670,7 @@ class LoginUser(BaseModel):
             )
             web_menu = list(set(web_menu) | set(personal_menu))
             if is_department_admin:
-                web_menu = list(set(web_menu) | set(_DEPARTMENT_ADMIN_WEB_MENU_FULL))
+                web_menu = list(set(web_menu) | set(_DEPARTMENT_ADMIN_WEB_MENU_SYSTEM))
             else:
                 web_menu = [m for m in web_menu if m not in ("system_config", "sys")]
             web_menu = _effective_web_menu_strip_orphans(web_menu)

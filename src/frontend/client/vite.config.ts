@@ -15,7 +15,7 @@ const app_env = {
   BISHENG_HOST: '/admin'
 }
 
-const minioPathRE = /^\/(?:workspace\/)?bisheng(?:\/|$)/;
+const minioPathRE = /^\/(?:workspace\/)?(?:bisheng|tmp-dir)(?:\/|$)/;
 
 // Emit one loud, actionable warning the first time MinIO answers a proxied
 // object request with 403. For presigned (SigV4) URLs to the public bucket a
@@ -54,7 +54,7 @@ function minioFileProxyPlugin(minioTarget: string): Plugin {
           return;
         }
 
-        const rewrittenUrl = requestUrl.replace(/^\/workspace(?=\/bisheng(?:\/|$))/, '');
+        const rewrittenUrl = requestUrl.replace(/^\/workspace(?=\/(?:bisheng|tmp-dir)(?:\/|$))/, '');
         const targetUrl = new URL(rewrittenUrl, minioTarget);
         const proxyReq = http.request(
           {
@@ -105,6 +105,9 @@ export default defineConfig(({ command, mode }) => {
   // SignatureDoesNotMatch (e.g. set http://localhost:9000 when sharepoint=localhost:9000).
   const minioTarget = env.VITE_DEV_MINIO_TARGET || 'http://127.0.0.1:9000';
   const apiTarget = env.VITE_DEV_API_TARGET || 'http://127.0.0.1:7860';
+  // Per-request proxy logging is opt-in (VITE_PROXY_LOG=1): on by default it prints
+  // dozens of lines per page load and buries the warnings that matter.
+  const proxyLog = env.VITE_PROXY_LOG === '1';
 
   return {
     base: app_env.BASE_URL || '/',
@@ -135,9 +138,11 @@ export default defineConfig(({ command, mode }) => {
           secure: false,
           ws: true,
           configure: (proxy, options) => {
-            proxy.on('proxyReq', (proxyReq, req, res) => {
-              console.log('Proxying request to:', proxyReq.path);
-            });
+            if (proxyLog) {
+              proxy.on('proxyReq', (proxyReq, req, res) => {
+                console.log('Proxying request to:', proxyReq.path);
+              });
+            }
           },
           rewrite: (path) => {
             return path.replace(/^\/workspace/, '');
@@ -234,6 +239,13 @@ export default defineConfig(({ command, mode }) => {
           {
             src: 'node_modules/pdfjs-dist/build/pdf.worker.min.js',
             dest: './'
+          },
+          {
+            // Full CMap set for PDFs using CID-keyed, non-embedded CJK fonts
+            // (e.g. GBK-EUC-H from CEB-converted government docs) — without the
+            // matching .bcmap the text layer renders blank.
+            src: 'node_modules/pdfjs-dist/cmaps/*',
+            dest: 'cmaps/'
           }
         ]
       }),

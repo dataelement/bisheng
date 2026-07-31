@@ -55,11 +55,9 @@ export default function ChannelItem({
     const { showToast } = useToastContext();
     const confirm = useConfirm()
 
-    // Dissolving deletes the channel for everyone — gate it on the delete
-    // permission (or owner/creator), not on whether the user created it, so a
-    // user explicitly granted `delete_channel` sees the action. Unsubscribe is
-    // independent: any subscriber can leave, including one who can also dissolve.
-    const canDissolve = canDeleteChannel(channel.role, channel.permissionIds);
+    // Dissolve uses the concrete delete action. Unsubscribe remains an
+    // independent business operation for subscribed-list entries.
+    const canDissolve = canDeleteChannel(channel.actions);
     const canUnsubscribe = type === "subscribed";
 
     const rename = (e) => {
@@ -166,7 +164,7 @@ export default function ChannelItem({
                     </DropdownMenuTrigger>
 
                     <SidebarListMoreMenuContent onClick={(e) => e.stopPropagation()}>
-                        {canEditChannelSettings(channel.role, channel.permissionIds) && (
+                        {canEditChannelSettings(channel.actions) && (
                             <DropdownMenuItem
                                 className={sidebarListMoreMenuItemClassName}
                                 onClick={() => onChannelSettings(channel)}
@@ -177,7 +175,7 @@ export default function ChannelItem({
                                 </span>
                             </DropdownMenuItem>
                         )}
-                        {canManageChannelPermissions(channel.role, channel.permissionIds) && (
+                        {canManageChannelPermissions(channel.actions) && (
                             <DropdownMenuItem
                                 className={sidebarListMoreMenuItemClassName}
                                 onClick={() => onManageMembers(channel)}

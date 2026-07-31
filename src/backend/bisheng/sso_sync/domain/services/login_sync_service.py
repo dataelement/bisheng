@@ -46,6 +46,10 @@ from bisheng.database.models.tenant import ROOT_TENANT_ID
 from bisheng.department.domain.services.department_change_handler import (
     DepartmentChangeHandler,
 )
+from bisheng.department.domain.services.department_service import (
+    DepartmentMembershipProjectionService,
+    _uses_f048_department_projection,
+)
 from bisheng.permission.domain.services.legacy_rbac_sync_service import LegacyRBACSyncService
 from bisheng.sso_sync.domain.constants import (
     DEFAULT_SSO_SYNC_SOURCE,
@@ -443,9 +447,9 @@ class LoginSyncService:
             # Orphan → join the guest department as primary. Track the row as a
             # bisheng-internal placeholder (source='local'), matching
             # self-registration, so provider-scoped reconcile never touches it.
-            await UserDepartmentDao.aadd_member(
-                user_id,
-                guest_id,
+            await DepartmentMembershipProjectionService.aadd_member(
+                user_id=user_id,
+                department_id=guest_id,
                 is_primary=1,
                 source="local",
             )
@@ -484,9 +488,9 @@ class LoginSyncService:
                 is_primary=1,
             )
         else:
-            await UserDepartmentDao.aadd_member(
-                user_id,
-                dept_id,
+            await DepartmentMembershipProjectionService.aadd_member(
+                user_id=user_id,
+                department_id=dept_id,
                 is_primary=1,
                 source=row_source,
             )
@@ -524,16 +528,16 @@ class LoginSyncService:
             await cls._remove_department_membership(user_id, department_id)
 
         if primary_dept_id is not None:
-            await UserDepartmentDao.aadd_member(
-                user_id,
-                int(primary_dept_id),
+            await DepartmentMembershipProjectionService.aadd_member(
+                user_id=user_id,
+                department_id=int(primary_dept_id),
                 is_primary=1,
                 source=row_source,
             )
         for department_id in desired_secondary_ids:
-            await UserDepartmentDao.aadd_member(
-                user_id,
-                int(department_id),
+            await DepartmentMembershipProjectionService.aadd_member(
+                user_id=user_id,
+                department_id=int(department_id),
                 is_primary=0,
                 source=row_source,
             )
@@ -601,6 +605,8 @@ class LoginSyncService:
         idempotent and lets department-resource grants work immediately.
         """
         if not dept_ids:
+            return
+        if _uses_f048_department_projection():
             return
         ops = []
         for dept_id in dict.fromkeys(int(did) for did in dept_ids):
@@ -721,10 +727,14 @@ class LoginSyncService:
         department_id: int,
     ) -> None:
         """Remove a department membership and its FGA/admin markers."""
-        await UserDepartmentDao.aremove_member(user_id, department_id)
-        ops = DepartmentChangeHandler.on_member_removed(
-            department_id, user_id
-        ) + DepartmentChangeHandler.on_admin_removed(department_id, [user_id])
+        await DepartmentMembershipProjectionService.aremove_member(
+            user_id=user_id,
+            department_id=department_id,
+        )
+        ops = DepartmentChangeHandler.on_admin_removed(
+            department_id,
+            [user_id],
+        )
         await DepartmentChangeHandler.execute_async(ops)
         await DepartmentAdminGrantDao.adelete(user_id, department_id)
         # Clear the derived knowledge-space binding (space_channel_member row +
@@ -804,9 +814,9 @@ class LoginSyncService:
         existing_ids = {row.department_id for row in existing_rows}
         to_add = [d for d in dept_ids if d not in existing_ids]
         for dept_id in to_add:
-            await UserDepartmentDao.aadd_member(
-                user_id,
-                dept_id,
+            await DepartmentMembershipProjectionService.aadd_member(
+                user_id=user_id,
+                department_id=dept_id,
                 is_primary=0,
                 source=row_source,
             )

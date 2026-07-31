@@ -1144,6 +1144,9 @@
   "com_ui_upload_error": "上传文件错误",
   "com_ui_upload_file_search": "上传文件搜索",
   "com_ui_upload_file_type_error": "该应用不支持上传此类型文件",
+  "com_chat.media_parsing": "解析中…",
+  "com_chat.media_file_too_large": "上传文件大小不能超过1024M，请重新上传",
+  "com_chat.media_file_too_many": "上传文件个数不能超过5个",
   "com_ui_upload_files": "上传文件",
   "com_ui_upload_image": "上传图片",
   "com_ui_upload_image_input": "上传图片",
@@ -1655,6 +1658,7 @@
     "max_40_chars": "最多输入 40 个字符",
     "max_file_size_200m": "每个文件最大支持200mb",
     "upload_size_limits_hint": "文档/图片每个文件最大支持{{docMax}}mb，音视频每个文件最大支持{{mediaMax}}mb",
+    "upload_size_limit_hint_without_media": "文档/图片每个文件最大支持{{docMax}}mb",
     "max_folder_depth_reached": "已达文件夹层级上限 {{0}} 级",
     "max_upload_50": "单次最多允许上传 50 个文件",
     "max_upload_50_short": "单次最多上传50个",
@@ -1761,6 +1765,7 @@
     "upload_feature_dev": "上传文件功能开发中",
     "upload_file": "上传文件",
     "upload_file_types_tip": "支持上传文档、图片、音频和视频文件",
+    "upload_file_types_tip_without_media": "支持上传文档和图片文件",
     "upload_folder": "上传文件夹",
     "uploading_status": "上传中",
     "users_count": "用户",
@@ -2299,5 +2304,88 @@
       "connection_lost": "网络连接中断，请重试"
     }
   },
-  "com_linsight_legacy_sop": "历史 SOP 文档（旧版会话）"
+  "com_linsight_legacy_sop": "历史 SOP 文档（旧版会话）",
+  "f048_permission": {
+    "dialog": {
+      "title": "权限管理",
+      "description": "查看权限来源，或按可授模型管理本级权限。",
+      "loading": "正在加载资源权限…",
+      "load_failed": "资源权限加载失败",
+      "roster": "当前权限",
+      "manage_grants": "管理授权"
+    },
+    "action_level": {
+      "unassigned": "未分配"
+    },
+    "model": {
+      "level": "派生等级",
+      "inactive": "模型已停用"
+    },
+    "mode": {
+      "custom": "本级权限",
+      "inherit": "继承上级",
+      "parent": "上级资源",
+      "projection": "投影状态",
+      "switch_to_inherit": "切换为继承上级",
+      "switch_to_custom": "切换为本级权限",
+      "affected_assignees": "预计影响 {{count}} 个授权对象",
+      "cancel": "取消",
+      "confirm": "确认切换",
+      "conflict": "权限版本已变化，请刷新后重试",
+      "expired": "模式影响分析已过期"
+    },
+    "roster": {
+      "empty": "暂无授权对象",
+      "loading": "正在加载权限…",
+      "loading_more": "正在加载更多…",
+      "load_more": "加载更多",
+      "load_failed": "权限列表加载失败",
+      "summary_only": "你只能查看自己的权限摘要",
+      "protected": "受保护",
+      "read_only": "只读",
+      "inherited_from": "继承自"
+    },
+    "scope": {
+      "local": "本级",
+      "inherited": "继承"
+    },
+    "source": {
+      "direct": "直接授权",
+      "department": "部门授权",
+      "user_group": "用户组授权",
+      "creator": "创建者",
+      "inherited": "继承来源",
+      "shared": "共享来源",
+      "system": "系统来源",
+      "include_children": "包含子部门"
+    },
+    "subject": {
+      "user": "用户",
+      "department": "部门",
+      "user_group": "用户组"
+    },
+    "grant": {
+      "existing": "当前授权",
+      "model": "权限模型",
+      "add_model": "新增授权模型",
+      "add": "添加",
+      "remove": "移除",
+      "pending": "待提交 {{count}} 项变更",
+      "submit": "提交变更",
+      "conflict": "授权版本已变化，请刷新后重试"
+    },
+    "impact": {
+      "title": "影响确认",
+      "description": "请核对权限变更影响。",
+      "affected_assignees": "受影响授权对象",
+      "expired": "影响分析已过期"
+    },
+    "error": {
+      "version_conflict": "权限数据已更新，请刷新后重试",
+      "impact_expired": "影响分析已过期，请重新生成",
+      "projection_failed": "权限投影失败，操作已拒绝",
+      "migration_blocked": "权限数据迁移存在阻断项",
+      "permission_denied": "权限不足"
+    }
+  }
 }

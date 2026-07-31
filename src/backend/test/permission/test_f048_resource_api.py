@@ -1,0 +1,210 @@
+"""F048 resource API business-boundary contracts."""
+
+from __future__ import annotations
+
+from types import SimpleNamespace
+
+import pytest
+
+from bisheng.permission.application.resource_api import (
+    F048ResourcePermissionApi,
+)
+from bisheng.permission.domain.schemas import (
+    GrantMutationRequest,
+    VerifiedPermissionTarget,
+)
+from bisheng.permission.domain.services.grant_source_service import (
+    GrantSourceService,
+)
+from bisheng.permission.domain.services.permission_action_service import (
+    PermissionActor,
+)
+from bisheng.permission.domain.services.permission_explain_service import (
+    PermissionSourceExplanation,
+)
+
+
+class _Resources:
+    async def resolve(self, **kwargs):
+        del kwargs
+        return VerifiedPermissionTarget.from_business_service(
+            tenant_id=9,
+            resource_type="workflow",
+            resource_id="wf-1",
+            resource_version=3,
+            context_version="workflow:wf-1:v3",
+        )
+
+
+class _Runtime:
+    def __init__(self) -> None:
+        self.changes = ()
+        self.page_calls = []
+
+    async def allocate_source_ids(self, count):
+        assert count == 1
+        return (91,)
+
+    async def mutate_grants(self, **kwargs):
+        self.changes = kwargs["changes"]
+        model = SimpleNamespace(
+            model_key="viewer",
+            derived_level=1,
+            active=True,
+        )
+        source = SimpleNamespace(
+            source_id=91,
+            version=2,
+            subject_type="user",
+            subject_id="8",
+            source_type="DIRECT",
+            include_children=False,
+            protected=False,
+            active=True,
+        )
+        return SimpleNamespace(
+            resource_version=4,
+            grants=(
+                SimpleNamespace(
+                    model=model,
+                    active=True,
+                    sources=(source,),
+                ),
+            ),
+        )
+
+    async def require_manage_permission(self, actor, target):
+        del actor, target
+
+    async def current_catalog(self):
+        model = SimpleNamespace(
+            snapshot=SimpleNamespace(model_key="viewer"),
+            name="Viewer",
+        )
+        return SimpleNamespace(release_id=12, models=(model,))
+
+    async def list_permission_sources_page(self, **kwargs):
+        self.page_calls.append(kwargs)
+        return (
+            (
+                PermissionSourceExplanation(
+                    source_id=91,
+                    source_version=2,
+                    subject_type="user",
+                    subject_id="8",
+                    userset_relation=None,
+                    include_children=False,
+                    source_type="DIRECT",
+                    model_key="viewer",
+                    model_level=1,
+                    scope="LOCAL",
+                    inherited_from=None,
+                    protected=False,
+                    editable=True,
+                ),
+            ),
+            True,
+        )
+
+
+class _Subjects:
+    def __init__(self) -> None:
+        self.tenant_ids = []
+        self.sources = GrantSourceService()
+
+    async def canonical_source(self, *, tenant_id, source_id, **kwargs):
+        self.tenant_ids.append(tenant_id)
+        return self.sources.canonicalize_source(
+            source_id=source_id,
+            subject_type=kwargs["subject_type"],
+            subject_id=kwargs["subject_id"],
+            source_type="DIRECT",
+        )
+
+    async def display_names(self, subjects):
+        return {("user", "8"): "Member 8"}
+
+
+@pytest.mark.asyncio
+async def test_super_admin_subject_validation_uses_target_tenant() -> None:
+    runtime = _Runtime()
+    subjects = _Subjects()
+    api = F048ResourcePermissionApi(
+        resources=_Resources(),
+        runtime=runtime,
+        subjects=subjects,
+    )
+    actor = PermissionActor(
+        user_id=7,
+        current_tenant_id=5,
+        super_admin=True,
+    )
+
+    result = await api.mutate_grants(
+        resource_type="workflow",
+        resource_id="wf-1",
+        actor=actor,
+        request=GrantMutationRequest.model_validate(
+            {
+                "idempotency_key": "grant-target-tenant",
+                "expected_resource_version": 3,
+                "expected_catalog_release_id": 12,
+                "changes": [
+                    {
+                        "op": "ADD",
+                        "model_key": "viewer",
+                        "subject": {
+                            "type": "user",
+                            "id": "8",
+                        },
+                    }
+                ],
+            }
+        ),
+    )
+
+    assert result["resource_version"] == 4
+    assert result["items"][0]["subject"] == {
+        "type": "user",
+        "id": "8",
+        "name": None,
+    }
+    assert subjects.tenant_ids == [9]
+    assert runtime.changes[0].source.projected_subject == "user:8"
+    assert runtime.page_calls == []
+
+
+@pytest.mark.asyncio
+async def test_roster_uses_bounded_sql_page_instead_of_full_explanation() -> None:
+    runtime = _Runtime()
+    subjects = _Subjects()
+    api = F048ResourcePermissionApi(
+        resources=_Resources(),
+        runtime=runtime,
+        subjects=subjects,
+    )
+    actor = PermissionActor(
+        user_id=7,
+        current_tenant_id=9,
+        tenant_admin_tenant_ids=frozenset({9}),
+    )
+
+    result = await api.list_grants(
+        resource_type="workflow",
+        resource_id="wf-1",
+        actor=actor,
+        cursor=None,
+        page_size=25,
+    )
+
+    assert result["data"][0]["subject"]["name"] == "Member 8"
+    assert result["has_more"] is True
+    assert result["next_cursor"]
+    assert runtime.page_calls == [
+        {
+            "actor": actor,
+            "target": await _Resources().resolve(),
+            "after_id": 0,
+            "limit": 25,
+        }
+    ]

@@ -17,6 +17,7 @@ export type AppConfig = {
     uploaded_files_maximum_size: number;
     /** 音视频单文件最大上传大小 mb */
     uploaded_media_maximum_size?: number;
+  enable_media_upload?: boolean;
     /** 是否部署 ETL4LM  */
     enable_etl4lm: boolean;
 };

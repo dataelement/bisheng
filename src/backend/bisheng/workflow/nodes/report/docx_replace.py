@@ -9,6 +9,28 @@ from docx.shared import Pt, Inches, RGBColor
 from docx.table import _Cell
 from docx.text.paragraph import Paragraph
 
+# Separator between the human-readable node name and the lookup key inside a
+# placeholder: ``{{display name|node_id.field}}``. The name is a snapshot taken
+# when the variable was inserted -- it exists purely so the template is readable
+# and is never used to resolve values (release-contract INV-8).
+PLACEHOLDER_DISPLAY_SEPARATOR = '|'
+
+
+def normalize_placeholder_key(raw: str) -> str:
+    """Reduce a placeholder body to the key used for variable lookup.
+
+    ``报告生成|node_a.output`` -> ``node_a.output``; a legacy ``node_a.output``
+    is returned as-is. Splitting on the LAST separator keeps node names that
+    themselves contain a ``|`` from shifting the split point.
+
+    Callers must keep the ORIGINAL placeholder text as the replacement map key
+    -- replacement matches the document verbatim, so normalizing too early
+    leaves raw ``{{...}}`` behind in the rendered report.
+    """
+    if PLACEHOLDER_DISPLAY_SEPARATOR in raw:
+        raw = raw.rsplit(PLACEHOLDER_DISPLAY_SEPARATOR, 1)[-1]
+    return raw.strip()
+
 
 class DocxReplacer:
     """

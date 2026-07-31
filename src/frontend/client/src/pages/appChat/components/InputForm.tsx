@@ -1,11 +1,14 @@
 
 import { useRef, useState } from "react";
+import { useRecoilValue } from "recoil";
 import { Button } from "~/components";
 import MultiSelect from "~/components/ui/MultiSelect";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/Select";
 import { useToastContext } from "~/Providers";
 import { useLocalize } from "~/hooks";
-import { emitAreaTextEvent, EVENT_TYPE, FileTypes } from "../useAreaText";
+import { emitAreaTextEvent, EVENT_TYPE } from "../useAreaText";
+import { fileAcceptToInputAccept, normalizeFileAccept } from "../fileAcceptUtils";
+import { bishengConfState } from "../store/atoms";
 import InputComponent from "./InputComponent";
 import InputFileComponent from "./InputFileComponent";
 import { MessageWarper } from "./MessageBsChoose";
@@ -43,6 +46,7 @@ interface WorkflowNodeParam {
 
 const InputForm = ({ data, flow, logo }: { data: WorkflowNodeParam, flow: any }) => {
     const localize = useLocalize()
+    const bishengConfig = useRecoilValue(bishengConfState)
     const formDataRef = useRef(data.value.reduce((map, item) => {
         map[item.key] = { key: item.key, type: item.type, label: item.value, fileName: '', value: '' }
         return map
@@ -155,7 +159,11 @@ const InputForm = ({ data, flow, logo }: { data: WorkflowNodeParam, flow: any })
                                                 multiple={item.multiple}
                                                 onChange={(name) => updataFileName(item, name)}
                                                 // fileTypes={FileTypes[item.file_type.toUpperCase()]}
-                                                suffixes={FileTypes[item.file_type.toUpperCase()]}
+                                                suffixes={fileAcceptToInputAccept(
+                                                    normalizeFileAccept(item.file_type, {
+                                                        mediaEnabled: !!bishengConfig?.enable_media_upload,
+                                                    }),
+                                                )}
                                                 onFileChange={(val) => handleChange(item, val)}
                                             />
                                         )

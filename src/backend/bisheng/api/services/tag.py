@@ -5,14 +5,17 @@ from fastapi import Request
 from loguru import logger
 
 from bisheng.common.dependencies.user_deps import UserPayload
-from bisheng.common.errcode.http_error import UnAuthorizedError, NotFoundError
+from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.common.errcode.tag import TagExistError, TagNotExistError
 from bisheng.common.models.config import ConfigDao, ConfigKeyEnum, Config
 from bisheng.database.models.assistant import AssistantDao
 from bisheng.database.models.flow import FlowDao
 from bisheng.database.models.group_resource import ResourceTypeEnum
-from bisheng.database.models.role_access import AccessType
 from bisheng.database.models.tag import TagDao, Tag, TagLink, TagBusinessTypeEnum
+from bisheng.permission.application.business_authorization import (
+    require_business_action,
+)
+from bisheng.utils.async_utils import run_async_safe
 
 
 class TagService:
@@ -75,24 +78,27 @@ class TagService:
                                   resource_id: str,
                                   resource_type: ResourceTypeEnum) -> bool:
         """ Check if labeling of resources is allowed """
-        if login_user.is_admin():
-            return True
         resource_info = None
-        access_type: AccessType
+        f048_resource_type: str
         if resource_type == ResourceTypeEnum.ASSISTANT:
             resource_info = AssistantDao.get_one_assistant(resource_id)
-            access_type = AccessType.ASSISTANT_WRITE
+            f048_resource_type = "assistant"
         elif resource_type == ResourceTypeEnum.WORK_FLOW:
             resource_info = FlowDao.get_flow_by_id(resource_id)
-            access_type = AccessType.WORKFLOW_WRITE
+            f048_resource_type = "workflow"
         else:
             raise NotFoundError()
         if not resource_info:
             raise NotFoundError()
 
-        # F008: access_check now delegates to ReBAC via T01 adapter
-        if not login_user.access_check(resource_info.user_id, resource_id, access_type):
-            raise UnAuthorizedError()
+        run_async_safe(
+            require_business_action(
+                login_user,
+                resource_type=f048_resource_type,
+                resource_id=resource_id,
+                action="edit",
+            )
+        )
 
         return True
 

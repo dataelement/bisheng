@@ -78,7 +78,7 @@ export default function KnowledgeSelectItem({ data, nodeId, onChange, onVarEvent
     const requestSeqRef = useRef(0)
     const reload = (cursor: string | null, name: string) => {
         const requestSeq = ++requestSeqRef.current
-        readFileLibDatabase({ cursor, pageSize, name, type: 0, permissionId: 'use_kb' }).then(res => {
+        readFileLibDatabase({ cursor, pageSize, name, type: 0, action: 'use' }).then(res => {
             if (requestSeq !== requestSeqRef.current) return
             cursorRef.current = res.next_cursor
             originOptionsRef.current = res.data

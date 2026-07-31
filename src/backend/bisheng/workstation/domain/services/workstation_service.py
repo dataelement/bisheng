@@ -1113,10 +1113,10 @@ class WorkStationService(BaseService):
 
             org_kb_ids = [int(x) for x in visibility_filter["org_kb_ids"]]
             if org_kb_ids and not login_user.is_admin():
-                permitted_org_ids = await KnowledgePermissionService().filter_knowledge_ids_by_permission_async(
+                permitted_org_ids = await KnowledgePermissionService().filter_knowledge_ids_by_action_async(
                     login_user,
                     org_kb_ids,
-                    "use_kb",
+                    "use",
                 )
                 denied_org_ids = [kb_id for kb_id in org_kb_ids if kb_id not in set(permitted_org_ids)]
                 for kb_id in denied_org_ids:

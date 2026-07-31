@@ -112,7 +112,12 @@ async def test_create_channel_quota_is_authoritative_not_hardcoded_ten():
 @pytest.mark.asyncio
 async def test_create_channel_unlimited_allows_beyond_legacy_ten():
     """effective == -1 (unlimited) creates successfully even with >10 existing channels."""
-    channel = SimpleNamespace(id="channel-1", name="资讯频道", source_list=[])
+    channel = SimpleNamespace(
+        id="channel-1",
+        name="资讯频道",
+        source_list=[],
+        tenant_id=1,
+    )
     channel_repository = SimpleNamespace(save=AsyncMock(return_value=channel))
     member_repository = SimpleNamespace(
         # 15 existing — old hardcoded cap of 10 would have blocked this
@@ -124,8 +129,9 @@ async def test_create_channel_unlimited_allows_beyond_legacy_ten():
     with (
         patch(_QUOTA_PATCH, new=AsyncMock(return_value=-1)),
         patch(
-            "bisheng.channel.domain.services.channel_service.OwnerService.write_owner_tuple",
-            new=AsyncMock(),
+            "bisheng.channel.domain.services.channel_service."
+            "get_f048_resource_adapter",
+            return_value=SimpleNamespace(authorize_created=AsyncMock()),
         ),
         patch(
             "bisheng.channel.domain.services.channel_service.get_bisheng_information_client",
@@ -148,7 +154,12 @@ async def test_create_channel_ignores_orphan_membership():
     early — the "configured 14, only 13 usable" bug. Now the count intersects with channels
     that still exist, so the orphan is ignored and the 2nd channel can be created.
     """
-    saved = SimpleNamespace(id="channel-new", name="资讯频道", source_list=[])
+    saved = SimpleNamespace(
+        id="channel-new",
+        name="资讯频道",
+        source_list=[],
+        tenant_id=1,
+    )
     member_repository = SimpleNamespace(
         find_channel_memberships=AsyncMock(return_value=[_membership("real-1"), _membership("orphan-1")]),
         add_member=AsyncMock(),
@@ -160,8 +171,9 @@ async def test_create_channel_ignores_orphan_membership():
     with (
         patch(_QUOTA_PATCH, new=AsyncMock(return_value=2)),
         patch(
-            "bisheng.channel.domain.services.channel_service.OwnerService.write_owner_tuple",
-            new=AsyncMock(),
+            "bisheng.channel.domain.services.channel_service."
+            "get_f048_resource_adapter",
+            return_value=SimpleNamespace(authorize_created=AsyncMock()),
         ),
         patch(
             "bisheng.channel.domain.services.channel_service.get_bisheng_information_client",

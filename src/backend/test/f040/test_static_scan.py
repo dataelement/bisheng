@@ -32,8 +32,10 @@ def _func_src(src: str, name: str) -> str:
 def test_channel_detail_reuses_context_and_drops_unread():
     src = _read(_BACKEND / "channel" / "domain" / "services" / "channel_service.py")
     detail = _func_src(src, "get_channel_detail")
-    # permission ids computed with a reused context (no context-less rebuild branch)
-    assert "context=" in detail, "get_channel_detail must pass a reused permission context"
+    # F048 retired the legacy permission-context adapter. Detail now resolves the
+    # exact action set once and reuses it for the visibility gate and response.
+    assert "_get_channel_actions" in detail
+    assert '"visible"' in detail
     # unread moved to its own endpoint — detail must not compute sub-channel unread
     assert "_calculate_sub_channel_unread_counts" not in detail
     # article total goes through the Redis count cache
@@ -49,16 +51,12 @@ def test_unread_counts_live_on_their_own_endpoint():
 
 
 def test_format_accessible_spaces_shares_context_and_parallelizes():
-    """T5 方案1 (D3): the per-space serial loop is replaced by a shared binding
-    index + parallel evaluation. (The per-space get_permission_level -> single
-    cross-space batch_check is 方案2, deferred — so it may still appear, but only
-    inside asyncio.gather with a shared context, never a serial await-in-for.)"""
+    """The candidate page is filtered with one action-native batch."""
     src = _read(_BACKEND / "knowledge" / "domain" / "services" / "knowledge_space_service.py")
     fmt = _func_src(src, "_format_accessible_spaces")
-    # Shared context built once, threaded into every per-space eval.
-    assert "binding_index" in fmt and "shared=" in fmt, "T5: shared binding index must be threaded"
-    # Per-space work is parallelized via gather, not a serial await-in-for loop.
-    assert "asyncio.gather" in fmt
+    assert "_batch_actions" in fmt
+    assert '"visible"' in fmt
+    assert "manage_permission" in fmt
 
 
 # ─────────────────────────── C — lists ────────────────────────────────────
@@ -111,10 +109,10 @@ def test_client_sidebar_permissions_are_lazy():
     if not p.exists():  # frontend tree may be absent in some CI shards
         return
     src = _read(p)
-    assert "ensureSpacePermissions" in src, "lazy per-space resolver must exist"
-    # No mount-time fan-out: checkPermission must not be mapped over a space list.
-    assert ".map(" not in src or "checkPermission" not in src.split("ensureSpacePermissions")[0], (
-        "checkPermission must not be fanned out at mount time"
+    assert "ensureSpaceActions" in src, "lazy per-space resolver must exist"
+    # No mount-time action fan-out over every sidebar space.
+    assert ".map(" not in src or "checkResourceAction" not in src.split("ensureSpaceActions")[0], (
+        "action checks must not be fanned out at mount time"
     )
 
 
@@ -124,17 +122,3 @@ def test_client_file_search_drives_pagination_off_has_more():
         return
     src = _read(p)
     assert "has_more" in src, "search pagination must read has_more (T6c)"
-
-
-# ─────────────────────────── E — roster version cache ─────────────────────
-
-
-def test_roster_cache_key_is_version_derived():
-    src = _read(_BACKEND / "permission" / "domain" / "services" / "relation_roster_cache.py")
-    build = _func_src(src, "get_or_build")
-    assert "version" in build, "roster cache must key on a data version (fail-safe when None)"
-
-
-def test_roster_cache_wired_with_config_version_probe():
-    src = _read(_BACKEND / "permission" / "api" / "endpoints" / "resource_permission.py")
-    assert "aget_config_version" in src, "roster cache version comes from a lightweight config probe"

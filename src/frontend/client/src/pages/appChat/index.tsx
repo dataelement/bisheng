@@ -3,7 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useRecoilState, useRecoilValue, useSetRecoilState } from "recoil";
 import { ChatMessageType, FlowData } from "~/@types/chat";
 import { getAssistantDetailApi, getChatHistoryApi, getDeleteFlowApi, getFlowApi, postBuildInit } from "~/api/apps";
-import { checkPermission } from "~/api/permission";
+import { checkResourceAction } from "~/api/permission";
 import { NotificationSeverity } from "~/common";
 import { useToastContext } from "~/Providers";
 import { useLocalize } from "~/hooks";
@@ -108,7 +108,11 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
         const numericType = Number(type);
         const ensureUseAppPermission = async (objectType: "workflow" | "assistant") => {
             if (shareToken || isGuestMode) return true;
-            const permission = await checkPermission(objectType, fid!, "can_read", "use_app")
+            const permission = await checkResourceAction({
+                resource_type: objectType,
+                resource_id: fid!,
+                action: "use",
+            })
                 .catch(() => ({ allowed: false }));
             if (permission?.allowed) return true;
             showToast?.({ message: '无访问权限，请联系管理员', severity: NotificationSeverity.ERROR });

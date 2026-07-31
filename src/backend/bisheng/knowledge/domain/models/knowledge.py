@@ -13,7 +13,6 @@ from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT, JsonType, name_sort_clauses
 from bisheng.core.database.manager import get_database_connection
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile, KnowledgeFileDao
-from bisheng.user.domain.models.user import UserDao
 
 
 class KnowledgeTypeEnum(Enum):
@@ -122,7 +121,7 @@ class KnowledgeRead(KnowledgeBase):
     user_name: str | None = None
     copiable: bool | None = None
     is_pinned: bool | None = False
-    permission_ids: list[str] | None = None
+    actions: list[str] | None = None
 
 
 class KnowledgeUpdate(BaseModel):
@@ -438,73 +437,6 @@ class KnowledgeDao(KnowledgeBase):
     def count_by_filter(cls, filters: list[Any]) -> int:
         with get_sync_db_session() as session:
             return session.scalar(select(Knowledge.id).where(*filters))
-
-    @classmethod
-    def judge_knowledge_permission(cls, user_name: str, knowledge_ids: list[int]) -> list[Knowledge]:
-        """Filter knowledge_ids to those the user can read.
-
-        F008 follow-up: delegates to ReBAC via PermissionService instead of
-        the legacy role_access table. Admin still gets the full set; owners
-        and tenant-admin scope are picked up by list_accessible_ids' implicit
-        scope expansion.
-        """
-        if not knowledge_ids:
-            return []
-        user_info = UserDao.get_user_by_username(user_name)
-        if not user_info:
-            return []
-
-        from bisheng.permission.domain.services.owner_service import _run_async_safe
-        from bisheng.permission.domain.services.permission_service import PermissionService
-        from bisheng.user.domain.services.auth import LoginUser
-
-        login_user = LoginUser.init_login_user_sync(
-            user_id=user_info.user_id,
-            user_name=user_name,
-        )
-        accessible_ids = _run_async_safe(
-            PermissionService.list_accessible_ids(
-                user_id=login_user.user_id,
-                relation="can_read",
-                object_type="knowledge_library",
-                login_user=login_user,
-            ),
-        )
-        if accessible_ids is None:
-            return cls.get_list_by_ids(knowledge_ids)
-
-        accessible_set = {int(x) for x in accessible_ids}
-        filtered = [kid for kid in knowledge_ids if int(kid) in accessible_set]
-        return cls.get_list_by_ids(filtered) if filtered else []
-
-    @classmethod
-    async def ajudge_knowledge_permission(cls, user_name: str, knowledge_ids: list[int]) -> list[Knowledge]:
-        """Async variant of :meth:`judge_knowledge_permission`. Same semantics."""
-        if not knowledge_ids:
-            return []
-        user_info = await UserDao.aget_user_by_username(user_name)
-        if not user_info:
-            return []
-
-        from bisheng.permission.domain.services.permission_service import PermissionService
-        from bisheng.user.domain.services.auth import LoginUser
-
-        login_user = await LoginUser.init_login_user(
-            user_id=user_info.user_id,
-            user_name=user_name,
-        )
-        accessible_ids = await PermissionService.list_accessible_ids(
-            user_id=login_user.user_id,
-            relation="can_read",
-            object_type="knowledge_library",
-            login_user=login_user,
-        )
-        if accessible_ids is None:
-            return await cls.aget_list_by_ids(knowledge_ids)
-
-        accessible_set = {int(x) for x in accessible_ids}
-        filtered = [kid for kid in knowledge_ids if int(kid) in accessible_set]
-        return await cls.aget_list_by_ids(filtered) if filtered else []
 
     @classmethod
     def filter_knowledge_by_ids(
@@ -847,11 +779,11 @@ class KnowledgeDao(KnowledgeBase):
 
         kid_str = col(Knowledge.id).cast(String)
 
-        # Subquery: count subscribers (status=ACTIVE) per space
+        # Subquery: count unique active subscribers per space
         subscriber_subq = (
             select(
                 SpaceChannelMember.business_id,
-                func.count().label("subscriber_count"),
+                func.count(func.distinct(SpaceChannelMember.user_id)).label("subscriber_count"),
             )
             .where(
                 SpaceChannelMember.business_type == BusinessTypeEnum.SPACE,
@@ -896,7 +828,10 @@ class KnowledgeDao(KnowledgeBase):
                 )
             )
 
-        # Sort: not-subscribed first, then by update_time DESC
+        subscriber_count = func.coalesce(subscriber_subq.c.subscriber_count, 0)
+
+        # Sort by lightweight membership facts only. Permission evaluation remains
+        # a response-layer concern and does not affect SQL pagination.
         subscription_order = case(
             (SpaceChannelMember.status.is_(None), 0),
             (
@@ -908,7 +843,9 @@ class KnowledgeDao(KnowledgeBase):
         )
         query = query.order_by(
             subscription_order.asc(),
+            subscriber_count.desc(),
             func.coalesce(Knowledge.update_time, Knowledge.create_time).desc(),
+            Knowledge.id.asc(),
         )
 
         # Pagination

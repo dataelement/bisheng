@@ -228,11 +228,9 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onSubscrip
     const btnConfig = getButtonConfig(effectiveSubscribeStatus);
 
     // REVIEW channels hide the article list until the viewer subscribes and is
-    // approved. Admins and ReBAC-granted users carry `view_channel` in
-    // permission_ids and may read without subscribing — mirrors knowledge-space
-    // APPROVAL access (backend get_article_detail enforces the same view_channel gate).
+    // approved. F048 `visible` is the sole permission-derived content gate.
     const canViewChannelContent =
-        channelDetail?.permission_ids?.includes("view_channel") ?? false;
+        channelDetail?.actions?.includes("visible") ?? false;
     const hideArticles =
         channelDetail?.visibility === "review" &&
         !isCreatorView &&

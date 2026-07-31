@@ -14,7 +14,7 @@ import {
 } from "react";
 import { useNavigate } from "react-router-dom";
 import { useRecoilValue, useRecoilState } from "recoil";
-import { File_Accept } from "~/common";
+import { buildChatAccept } from "~/common/chatAccept";
 import { SkillSelector } from "~/components/Linsight/Input/SkillSelector";
 import { taskModeSkillsState } from "~/store/linsight";
 import AgentToolSelector from "~/components/Chat/Input/AgentToolSelector";
@@ -29,7 +29,9 @@ import { Button, TextareaAutosize } from "~/components/ui";
 import SpeechToTextComponent from "~/components/Voice/SpeechToText";
 import { useContainerCompact, TOOLBAR_COMPACT_THRESHOLD } from "~/hooks";
 import { useGetWorkbenchModelsQuery } from "~/hooks/queries/data-provider";
+import useLocalize from "~/hooks/useLocalize";
 import InputFiles from "~/pages/appChat/components/InputFiles";
+import { resolveUploadSizeLimits } from "~/pages/knowledge/knowledgeUtils";
 import { useFileDropAndPaste } from "~/pages/appChat/useFileDropAndPaste";
 import { bishengConfState } from "~/pages/appChat/store/atoms";
 import { checkIfScrollable, cn, removeFocusRings } from "~/utils";
@@ -59,6 +61,8 @@ interface AiChatInputProps {
      */
     sendDisabled?: boolean;
     isStreaming?: boolean;
+    /** True while backend ASR is processing attached media after send. */
+    isParsingMedia?: boolean;
     /**
      * F035: a linsight task round is executing. The handoff SSE stream already
      * closed (so ``isStreaming`` is false), but the task keeps running via the
@@ -117,6 +121,7 @@ const AiChatInput = memo(
         disabled = false,
         sendDisabled = false,
         isStreaming = false,
+        isParsingMedia = false,
         taskRunning = false,
         modelOptions,
         modelValue,
@@ -138,6 +143,7 @@ const AiChatInput = memo(
         onSelectionPresenceChange,
         onToggleTaskMode,
     }: AiChatInputProps) => {
+        const localize = useLocalize();
         const {
             modelSelect = true,
             knowledgeBase = true,
@@ -233,7 +239,15 @@ const AiChatInput = memo(
         // File upload state
         const [fileUploading, setFileUploading] = useState(false);
         const [chatFiles, setChatFiles] = useState<any[] | null>(null);
-        const [uploadingFiles, setUploadingFiles] = useState<Array<{ id: string; name: string }>>([]);
+        const [uploadingFiles, setUploadingFiles] = useState<Array<{
+            id: string;
+            name: string;
+            previewUrl?: string;
+            mediaPreviewUrl?: string;
+            mediaCoverUrl?: string;
+            cover_filepath?: string;
+            mediaDurationSec?: number;
+        }>>([]);
         const inputFilesRef = useRef<any>(null);
 
         // Voice input: check if ASR model is available
@@ -272,9 +286,16 @@ const AiChatInput = memo(
             }
         }, [externalValue, isControlled]);
 
+        const hasAttachedFiles =
+            (chatFiles?.length ?? 0) > 0 || uploadingFiles.length > 0;
+        const filesParsing = (chatFiles ?? []).some(
+            (file) => file?.parsing_status && !['completed', 'failed'].includes(file.parsing_status),
+        );
+
         const handleSend = useCallback(() => {
             const trimmed = text.trim();
-            if ((!trimmed && !chatFiles?.length) || disabled || sendDisabled || isStreaming || fileUploading) return;
+            // Workbench: uploaded files require accompanying text before send.
+            if (!trimmed || disabled || sendDisabled || isStreaming || isParsingMedia || fileUploading || filesParsing) return;
             // Pass files through to parent
             onSend(trimmed, chatFiles);
             setText("");
@@ -291,7 +312,7 @@ const AiChatInput = memo(
                 window.clearTimeout(textareaScrollHideTimerRef.current);
                 textareaScrollHideTimerRef.current = null;
             }
-        }, [text, disabled, sendDisabled, isStreaming, fileUploading, onSend, chatFiles, setText]);
+        }, [text, disabled, sendDisabled, isStreaming, isParsingMedia, fileUploading, filesParsing, onSend, chatFiles, setText]);
 
         const handleKeyDown = useCallback(
             (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -333,52 +354,39 @@ const AiChatInput = memo(
                     </div>
                 </div>}
 
-                {/* Mounted knowledge spaces / files — a gray strip stacked ABOVE the
-                    input box (Figma 12841:47449). The strip overlaps the box by 16px
-                    (= the box's corner radius) via -mb-4, so the white box's rounded
-                    top corner reaches the edge exactly at the strip's bottom → the
-                    left/right edges read as one continuous line ("连下来"), with the
-                    white box appearing to emerge from the gray strip. The strip's
-                    visible height (62 − 16 = 46px) matches the hidden subtitle's
-                    footprint, so the title / input box stay put. */}
-                {hasSelectionTags && (
-                    <AttachmentBar
-                        uploadingFiles={uploadingFiles}
-                        files={chatFiles || []}
-                        kbs={selectedOrgKbs}
-                        skills={taskMode ? dailySkills : []}
-                        onRemoveFile={(file) => {
-                            inputFilesRef.current?.removeByName?.(file.name);
-                            setChatFiles((prev) => (prev || []).filter((i) => i.name !== file.name));
-                        }}
-                        onRemoveKb={onSelectedOrgKbsChange ? (kb) => {
-                            onSelectedOrgKbsChange(selectedOrgKbs.filter((i) => i.id !== kb.id));
-                        } : undefined}
-                        onRemoveSkill={(skill) => setDailySkills(dailySkills.filter((s) => s.name !== skill.name))}
-                    />
-                )}
-
                 <div
                     className={cn(
-                        // Figma 12669:66966 — white surface, 16px radius, hairline
-                        // border (replaces the legacy gray fill). z-[1] keeps it
-                        // painted above the attachment strip it overlaps.
-                        "relative z-[1] flex w-full flex-col items-start gap-0 overflow-hidden rounded-2xl border border-[#ECECEC] bg-white p-3",
-                        // Soft drop shadow on the landing page (always) and on the
-                        // in-conversation input only while it has a mounted knowledge
-                        // space / file; otherwise in-conversation inputs stay flat
-                        // against the message list.
+                        // Figma 12669:66966 — white surface, 16px radius, hairline border.
+                        "relative flex w-full flex-col items-start gap-0 overflow-hidden rounded-2xl border border-[#ECECEC] bg-white p-3",
                         (elevated || hasSelectionTags) && "shadow-[0_0_8px_rgba(3,7,117,0.05)]",
                     )}
                 >
+                    {hasSelectionTags && (
+                        <AttachmentBar
+                            uploadingFiles={uploadingFiles}
+                            files={chatFiles || []}
+                            kbs={selectedOrgKbs}
+                            skills={taskMode ? dailySkills : []}
+                            onRemoveFile={(file) => {
+                                inputFilesRef.current?.removeByName?.(file.name);
+                                setChatFiles((prev) => (prev || []).filter((i) => i.name !== file.name));
+                            }}
+                            onRemoveKb={onSelectedOrgKbsChange ? (kb) => {
+                                onSelectedOrgKbsChange(selectedOrgKbs.filter((i) => i.id !== kb.id));
+                            } : undefined}
+                            onRemoveSkill={(skill) => setDailySkills(dailySkills.filter((s) => s.name !== skill.name))}
+                        />
+                    )}
+
                     {/* File upload area: file list only. Upload entry lives in the
                         "+" menu; keep the picker trigger hidden here. */}
                     {showUpload && (() => {
                         const InputFilesAny = InputFiles as any;
-                        const baseAccept = bsConfig?.enable_etl4lm ? File_Accept.Linsight_Etl4lm : File_Accept.Linsight;
-                        // Workstation (daily) chat also accepts OFD. Linsight shares this
-                        // enum but is out of scope, so only extend the non-Lingsi path.
-                        const accept = isLingsi ? baseAccept : `${baseAccept},.ofd`;
+                        const accept = buildChatAccept({
+                            enableMedia: !!envConfig?.enable_media_upload,
+                            enableEtl4lm: !!bsConfig?.enable_etl4lm,
+                            includeOfd: !isLingsi,
+                        });
                         return <InputFilesAny
                             ref={inputFilesRef}
                             v={""}
@@ -388,16 +396,56 @@ const AiChatInput = memo(
                             hideTrigger
                             hideList
                             uploadMode={isLingsi ? 'linsight' : 'workstation'}
+                            uploadSizeLimits={resolveUploadSizeLimits(envConfig)}
                             size={envConfig?.uploaded_files_maximum_size || 50}
                             onFilesStateChange={(currentFiles: any[] = []) => {
                                 const pending = currentFiles
                                     .filter((f) => f?.isUploading)
-                                    .map((f) => ({ id: String(f.id), name: String(f.name || "") }));
+                                    .map((f) => ({
+                                        id: String(f.id),
+                                        clientId: String(f.id),
+                                        name: String(f.name || ""),
+                                        ...(f.previewUrl ? { previewUrl: f.previewUrl } : {}),
+                                        ...(f.mediaPreviewUrl ? { mediaPreviewUrl: f.mediaPreviewUrl } : {}),
+                                        ...(f.mediaCoverUrl ? { mediaCoverUrl: f.mediaCoverUrl } : {}),
+                                        ...(f.cover_filepath ? { cover_filepath: f.cover_filepath } : {}),
+                                        ...(f.mediaDurationSec != null ? { mediaDurationSec: f.mediaDurationSec } : {}),
+                                    }));
                                 setUploadingFiles(pending);
+
+                                const completed = currentFiles
+                                    .filter((f) => !f?.isUploading && f?.filePath)
+                                    .map((f) => ({
+                                        clientId: String(f.id),
+                                        file_id: f.fileId || f.id,
+                                        filepath: f.filePath,
+                                        type: f.type,
+                                        name: f.name,
+                                        filename: f.name,
+                                        file_name: f.name,
+                                        parsing_status: f.parsingStatus || 'completed',
+                                        parsingState:
+                                            f.parsingStatus && !['completed', 'failed'].includes(f.parsingStatus)
+                                                ? 'parsing'
+                                                : undefined,
+                                        previewUrl: f.previewUrl,
+                                        mediaPreviewUrl: f.mediaPreviewUrl,
+                                        mediaCoverUrl: f.mediaCoverUrl,
+                                        cover_filepath: f.cover_filepath,
+                                        mediaDurationSec: f.mediaDurationSec,
+                                    }));
+                                if (completed.length) {
+                                    setFileUploading(pending.length > 0);
+                                    setChatFiles(completed);
+                                }
                             }}
                             onChange={(files: any) => {
-                                setFileUploading(!files);
-                                setChatFiles(files);
+                                if (files === null) {
+                                    setFileUploading(true);
+                                    return;
+                                }
+                                setFileUploading(false);
+                                setChatFiles(files?.length ? files : []);
                                 // Legacy mutex: adding files clears kb + tools.
                                 // Agent mode keeps them independent so the model can use everything.
                                 if (files && files.length > 0 && !agentMode) {
@@ -417,7 +465,7 @@ const AiChatInput = memo(
                         onPaste={handlePaste}
                         onScroll={handleTextareaScroll}
                         onHeightChange={updateTextareaScrollable}
-                        disabled={disabled || isStreaming}
+                        disabled={disabled || isStreaming || isParsingMedia}
                         placeholder={placeholder || bsConfig?.inputPlaceholder}
                         tabIndex={0}
                         data-testid="ai-chat-input"
@@ -578,9 +626,11 @@ const AiChatInput = memo(
                                         />
                                     </svg>
                                 </button>
-                            ) : showVoice && !text?.trim() ? (
+                            ) : showVoice && !text?.trim() && !hasAttachedFiles ? (
                                 // Empty input → voice button (default); typing any
                                 // text flips it to the send button below.
+                                // When files are attached, keep the send button visible
+                                // (disabled until text is entered).
                                 <SpeechToTextComponent
                                     disabled={disabled}
                                     onChange={(e) => {
@@ -596,7 +646,9 @@ const AiChatInput = memo(
                                         !text?.trim() ||
                                         disabled ||
                                         sendDisabled ||
-                                        fileUploading
+                                        isParsingMedia ||
+                                        fileUploading ||
+                                        filesParsing
                                     }
                                     className="btn-brand-primary flex h-8 w-8 items-center justify-center rounded-full bg-primary text-text-primary outline-offset-4 transition-all duration-200 disabled:cursor-not-allowed disabled:bg-[#E5E6EB] disabled:text-[#86909C] disabled:opacity-100 [&>svg]:text-white disabled:[&>svg]:text-[#4E5969]"
                                     aria-label="Send message"
@@ -607,6 +659,11 @@ const AiChatInput = memo(
                             )}
                         </div>
                     </div>
+                    {(isParsingMedia || filesParsing) && (
+                        <p className="px-4 pb-1 text-center text-xs text-primary">
+                            {localize('com_chat.media_parsing')}
+                        </p>
+                    )}
                 </div>
             </div>
         );

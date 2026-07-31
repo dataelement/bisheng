@@ -1,4 +1,8 @@
-a {
+/* Scoped to the tooltip's injected HTML. The old bare `a` element selector is
+   NOT hashed by CSS modules — it leaked a global `a { color: white }` into the
+   whole app (and the docs site), turning unstyled links white-on-white in
+   light contexts. */
+.tooltipHtml a {
   text-decoration: underline;
   color: white;
 }

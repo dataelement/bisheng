@@ -14,6 +14,9 @@ from bisheng.database.models.department_admin_grant import DepartmentAdminGrant
 from bisheng.department.domain.services.department_change_handler import (
     DepartmentChangeHandler,
 )
+from bisheng.department.domain.services.department_service import (
+    DepartmentMembershipProjectionService,
+)
 from bisheng.sso_sync.domain.constants import WECOM_SOURCE
 from bisheng.user.domain.models.user import User, UserDao
 
@@ -48,11 +51,7 @@ async def disable_wecom_users_absent_from_import(
     member/admin tuples. Token versions are bumped so existing sessions are
     forced out.
     """
-    imported = {
-        str(one).strip()
-        for one in (imported_external_ids or set())
-        if one is not None and str(one).strip()
-    }
+    imported = {str(one).strip() for one in (imported_external_ids or set()) if one is not None and str(one).strip()}
 
     async with get_async_db_session() as session:
         stmt = select(User.user_id).where(
@@ -81,10 +80,20 @@ async def disable_wecom_users_absent_from_import(
                 continue
             dept_user_pairs.append((dept_id, uid))
 
+    seen: set[Tuple[int, int]] = set()
+    for dept_id, uid in dept_user_pairs:
+        key = (dept_id, uid)
+        if key in seen:
+            continue
+        seen.add(key)
+        await DepartmentMembershipProjectionService.aremove_member(
+            user_id=uid,
+            department_id=dept_id,
+        )
+
+    async with get_async_db_session() as session:
         await session.execute(
-            update(User)
-            .where(User.user_id.in_(user_ids))
-            .values(delete=1, disable_source='wecom_absent'),
+            update(User).where(User.user_id.in_(user_ids)).values(delete=1, disable_source="wecom_absent"),
         )
         await session.execute(
             delete(UserDepartment).where(UserDepartment.user_id.in_(user_ids)),
@@ -97,13 +106,7 @@ async def disable_wecom_users_absent_from_import(
         await session.commit()
 
     ops: list = []
-    seen: set[Tuple[int, int]] = set()
-    for dept_id, uid in dept_user_pairs:
-        key = (dept_id, uid)
-        if key in seen:
-            continue
-        seen.add(key)
-        ops.extend(DepartmentChangeHandler.on_member_removed(dept_id, uid))
+    for dept_id, uid in seen:
         ops.extend(DepartmentChangeHandler.on_admin_removed(dept_id, [uid]))
     if ops:
         await DepartmentChangeHandler.execute_async(ops)
@@ -114,7 +117,7 @@ async def disable_wecom_users_absent_from_import(
             await UserDao.aincrement_token_version(user_id)
         except Exception as exc:  # noqa: BLE001
             logger.warning(
-                'Failed to bump token_version for absent WeCom user %s: %s',
+                "Failed to bump token_version for absent WeCom user %s: %s",
                 user_id,
                 exc,
             )

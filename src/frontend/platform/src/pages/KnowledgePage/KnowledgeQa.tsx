@@ -31,11 +31,7 @@ const enum KnowledgeBaseStatus {
     Failed = 4
 }
 
-const KB_MANAGE_PERMISSION_IDS = [
-    'manage_kb_owner',
-    'manage_kb_manager',
-    'manage_kb_viewer',
-]
+const KB_MANAGE_ACTION = 'manage_permission'
 
 function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create', currentLib = null }) {
     const { t } = useTranslation('knowledge')
@@ -291,24 +287,23 @@ export default function KnowledgeQa(params) {
     const { data: datalist, loading, hasMore, search, reload, loadMore } = useInfiniteCursorTable(
         { cancelLoadingWhenReload: true },
         (param) =>
-            readFileLibDatabase({ cursor: param.cursor, pageSize: param.pageSize, name: param.keyword, type: 1, permissionId: 'view_kb' }),
+            readFileLibDatabase({ cursor: param.cursor, pageSize: param.pageSize, name: param.keyword, type: 1, action: 'visible' }),
     );
     const visibleLibs = datalist;
-    const hasListPermission = (el: any, permissionId: string) =>
-        Array.isArray(el.permission_ids) && el.permission_ids.includes(permissionId);
+    const hasAction = (el: any, action: string) =>
+        Array.isArray(el.actions) && el.actions.includes(action);
     const canEdit = (el: any) =>
-        hasListPermission(el, 'edit_kb');
+        hasAction(el, 'edit');
     const canDelete = (el: any) =>
-        hasListPermission(el, 'delete_kb');
+        hasAction(el, 'delete');
     const canCreateLibrary =
         user.role === 'admin' ||
-        Boolean(user.is_department_admin) ||
         (user.web_menu || []).includes('create_knowledge');
     const canReadRow = (el: any) =>
-        hasListPermission(el, 'view_kb');
+        hasAction(el, 'visible');
     const canUseCopy = (el: any) => canCreateLibrary && canReadRow(el);
     const canManageKb = (el: any) =>
-        KB_MANAGE_PERMISSION_IDS.some((permissionId) => hasListPermission(el, permissionId));
+        hasAction(el, KB_MANAGE_ACTION);
     const isLibraryBusy = (el: any) =>
         [KnowledgeBaseStatus.Copying, KnowledgeBaseStatus.Unpublished].includes(el.state);
     const canCopy = (el: any) =>

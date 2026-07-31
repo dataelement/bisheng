@@ -66,6 +66,10 @@ from bisheng.utils.mask_data import JsonFieldMasker
 from ..llm import BishengASR, BishengEmbedding, BishengLLM, BishengTTS
 from ..llm.rerank import BishengRerank
 
+# A probe sends a couple of tokens; anything slower than this is unusable in a
+# real request anyway, and without a cap one dead endpoint hangs the caller.
+MODEL_TEST_TIMEOUT = 30
+
 
 def _resolve_tenant_id(tenant_id: int | None) -> int:
     """Pick a tenant_id for system-config DAO calls.
@@ -719,6 +723,12 @@ class LLMService:
 
     @classmethod
     async def test_model_status(cls, model: LLMModel | LLMModelInfo, login_user: UserPayload):
+        """Probe a model with one real call and record the verdict.
+
+        Writes on BOTH outcomes: a model that was marked abnormal and has since
+        been fixed has to be able to go back to normal, otherwise re-checking it
+        can never change anything.
+        """
         common_params = {
             "app_id": ApplicationTypeEnum.MODEL_TEST.value,
             "app_name": ApplicationTypeEnum.MODEL_TEST.value,
@@ -726,30 +736,40 @@ class LLMService:
             "user_id": login_user.user_id,
         }
         try:
-            if model.model_type == LLMModelType.LLM.value:
-                bisheng_model = await cls.get_bisheng_llm(
-                    model_id=model.id, ignore_online=True, streaming=False, **common_params
-                )
-                await bisheng_model.ainvoke("hello")
-            elif model.model_type == LLMModelType.EMBEDDING.value:
-                bisheng_embed = await cls.get_bisheng_embedding(model_id=model.id, ignore_online=True, **common_params)
-                await bisheng_embed.aembed_query("hello")
-            elif model.model_type == LLMModelType.TTS.value:
-                bisheng_tts = await cls.get_bisheng_tts(model_id=model.id, ignore_online=True, **common_params)
-                await bisheng_tts.ainvoke("hello")
-            elif model.model_type == LLMModelType.ASR.value:
-                example_file_path = os.path.join(os.path.dirname(__file__), "./asr_example.wav")
-                with open(example_file_path, "rb") as f:
-                    bisheng_asr = await cls.get_bisheng_asr(model_id=model.id, ignore_online=True, **common_params)
-                    await bisheng_asr.ainvoke(f)
-            elif model.model_type == LLMModelType.RERANK.value:
-                bisheng_rerank = await cls.get_bisheng_rerank(model_id=model.id, ignore_online=True, **common_params)
-                await bisheng_rerank.acompress_documents(
-                    documents=[Document(page_content="hello world")], query="hello"
-                )
+            async with asyncio.timeout(MODEL_TEST_TIMEOUT):
+                await cls._invoke_model_probe(model, common_params)
+        except TimeoutError:
+            LLMDao.update_model_status(model.id, 1, f"Timeout after {MODEL_TEST_TIMEOUT}s")
+            logger.warning("test model status timeout: {} {}", model.id, model.model_name)
         except Exception as e:
             LLMDao.update_model_status(model.id, 1, str(e))
             logger.exception(f"test model status: {model.id} {model.model_name}")
+        else:
+            # Clear any stale failure reason along with the status.
+            LLMDao.update_model_status(model.id, 0, "")
+
+    @classmethod
+    async def _invoke_model_probe(cls, model: LLMModel | LLMModelInfo, common_params: dict):
+        """Issue the smallest meaningful call for this model type."""
+        if model.model_type == LLMModelType.LLM.value:
+            bisheng_model = await cls.get_bisheng_llm(
+                model_id=model.id, ignore_online=True, streaming=False, **common_params
+            )
+            await bisheng_model.ainvoke("hello")
+        elif model.model_type == LLMModelType.EMBEDDING.value:
+            bisheng_embed = await cls.get_bisheng_embedding(model_id=model.id, ignore_online=True, **common_params)
+            await bisheng_embed.aembed_query("hello")
+        elif model.model_type == LLMModelType.TTS.value:
+            bisheng_tts = await cls.get_bisheng_tts(model_id=model.id, ignore_online=True, **common_params)
+            await bisheng_tts.ainvoke("hello")
+        elif model.model_type == LLMModelType.ASR.value:
+            example_file_path = os.path.join(os.path.dirname(__file__), "./asr_example.wav")
+            with open(example_file_path, "rb") as f:
+                bisheng_asr = await cls.get_bisheng_asr(model_id=model.id, ignore_online=True, **common_params)
+                await bisheng_asr.ainvoke(f)
+        elif model.model_type == LLMModelType.RERANK.value:
+            bisheng_rerank = await cls.get_bisheng_rerank(model_id=model.id, ignore_online=True, **common_params)
+            await bisheng_rerank.acompress_documents(documents=[Document(page_content="hello world")], query="hello")
 
     @classmethod
     async def set_default_model(cls, model: LLMModel | LLMModelInfo):
@@ -903,6 +923,23 @@ class LLMService:
             ):
                 await cls.test_model_status(one, login_user)
         return new_server_info
+
+    @classmethod
+    async def verify_model_status(cls, model_id: int, login_user: UserPayload) -> LLMModelInfo:
+        """Re-probe one model on demand and return its refreshed state.
+
+        The stored status is otherwise only decided when the provider config is
+        saved, so it can be weeks stale; this lets an admin confirm a model is
+        actually reachable right now without leaving the model list.
+        """
+        exist_model = await LLMDao.aget_model_by_id(model_id)
+        if not exist_model:
+            raise NotFoundError.http_exception()
+        # Probing ignores the online flag on purpose: a model taken offline
+        # still needs checking before you decide to bring it back.
+        await cls.test_model_status(exist_model, login_user)
+        refreshed = await LLMDao.aget_model_by_id(model_id)
+        return LLMModelInfo(**refreshed.model_dump())
 
     @classmethod
     async def update_model_online(cls, model_id: int, online: bool) -> LLMModelInfo:

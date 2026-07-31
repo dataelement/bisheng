@@ -54,8 +54,8 @@ def test_grant_on_child_tenant_returns_200(client):
     fake_tenant = SimpleNamespace(id=5, parent_tenant_id=1)
     fake_fga = MagicMock()
     fake_fga.write_tuples = AsyncMock()
-    with patch('bisheng.permission.domain.services.tenant_admin_service.TenantDao') as dao, \
-         patch('bisheng.permission.domain.services.tenant_admin_service._aget_fga_client_with_fallback',
+    with patch('bisheng.tenant.domain.services.tenant_admin_service.TenantDao') as dao, \
+         patch('bisheng.tenant.domain.services.tenant_admin_service._aget_fga_client_with_fallback',
                AsyncMock(return_value=fake_fga)):
         dao.aget_by_id = AsyncMock(return_value=fake_tenant)
         response = client.post('/tenants/5/admins', json={'user_id': 10})
@@ -68,8 +68,8 @@ def test_revoke_on_child_tenant_returns_200(client):
     fake_tenant = SimpleNamespace(id=5, parent_tenant_id=1)
     fake_fga = MagicMock()
     fake_fga.write_tuples = AsyncMock()
-    with patch('bisheng.permission.domain.services.tenant_admin_service.TenantDao') as dao, \
-         patch('bisheng.permission.domain.services.tenant_admin_service._aget_fga_client_with_fallback',
+    with patch('bisheng.tenant.domain.services.tenant_admin_service.TenantDao') as dao, \
+         patch('bisheng.tenant.domain.services.tenant_admin_service._aget_fga_client_with_fallback',
                AsyncMock(return_value=fake_fga)):
         dao.aget_by_id = AsyncMock(return_value=fake_tenant)
         response = client.delete('/tenants/5/admins/10')
@@ -83,7 +83,7 @@ def test_list_admins_returns_user_ids(client):
         {'user': 'user:7', 'relation': 'admin', 'object': 'tenant:5'},
         {'user': 'user:9', 'relation': 'admin', 'object': 'tenant:5'},
     ])
-    with patch('bisheng.permission.domain.services.tenant_admin_service._aget_fga_client_with_fallback',
+    with patch('bisheng.tenant.domain.services.tenant_admin_service._aget_fga_client_with_fallback',
                AsyncMock(return_value=fake_fga)):
         response = client.get('/tenants/5/admins')
 
@@ -104,7 +104,7 @@ def test_list_admins_root_returns_empty(client):
 
 
 def test_grant_on_missing_tenant_returns_tenant_not_found(client):
-    with patch('bisheng.permission.domain.services.tenant_admin_service.TenantDao') as dao:
+    with patch('bisheng.tenant.domain.services.tenant_admin_service.TenantDao') as dao:
         dao.aget_by_id = AsyncMock(return_value=None)
         response = client.post('/tenants/99/admins', json={'user_id': 10})
 

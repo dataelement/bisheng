@@ -229,16 +229,35 @@ export async function getSourceChunksApi(chatId: string, messageId: number, keys
 }
 
 
+import { normalizeMinioObjectPath } from '~/utils/mediaAttachmentUtils';
+
+/**
+ * Refresh a MinIO presigned URL for a workstation chat attachment.
+ */
+export async function getWorkstationFileShareUrlApi(filepath: string): Promise<string> {
+    const res: { data?: { url?: string } } = await request.get('/api/v1/workstation/files/share-url', {
+        params: { filepath: normalizeMinioObjectPath(filepath) },
+    });
+    return res?.data?.url ?? '';
+}
+
 /**
  * 聊天窗上传文件
  */
-export async function uploadChatFile(v, file: File, onProgress, uploadMode?: 'linsight' | 'workstation'): Promise<any> {
+export async function uploadChatFile(
+    v,
+    file: File | Blob,
+    onProgress,
+    uploadMode?: 'linsight' | 'workstation',
+    fileName?: string,
+): Promise<any> {
+    const resolvedName = fileName ?? (file instanceof File ? file.name : 'upload');
     const formData = new FormData();
-    formData.append("file", file);
+    formData.append("file", file, resolvedName);
     if (uploadMode) {
         formData.append("endpoint", "custom");
         formData.append("file_id", generateUUID(32));
-        formData.append("file_name", file.name);
+        formData.append("file_name", resolvedName);
     }
     const urlMap = {
         linsight: '/api/v1/linsight/workbench/upload-file',
@@ -258,7 +277,6 @@ export async function uploadChatFile(v, file: File, onProgress, uploadMode?: 'li
         }
     });
 }
-
 
 export async function postBuildInit(data: {
     flow: any
@@ -400,12 +418,12 @@ export async function getAppsApi({ page = 1, pageSize = 8, keyword, tag_id = -1,
 }
 
 
-export const getChatOnlineApi = async (page, keyword, tag_id, disableLimit = 8, permissionId = 'view_app') => {
+export const getChatOnlineApi = async (page, keyword, tag_id, disableLimit = 8, action: 'visible' | 'use' = 'visible') => {
     const params = {
         page,
         keyword,
         limit: disableLimit,
-        permission_id: permissionId
+        action
     }
     if (tag_id !== -1 && tag_id != null) {
         params.tag_id = tag_id

@@ -1,28 +1,21 @@
-import asyncio
 from datetime import datetime
-from typing import List, Any, Dict, Optional
+from typing import Dict, List, Optional
 
-from fastapi import Request, HTTPException
-from fastapi.encoders import jsonable_encoder
+from fastapi import Request
 from loguru import logger
 
-from bisheng.api.services.assistant import AssistantService
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.v1.schemas import resp_200
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.errcode.user import AdminUserUpdateForbiddenError
 from bisheng.database.constants import AdminRole
-from bisheng.database.models.assistant import AssistantDao
-from bisheng.database.models.flow import FlowDao, FlowType
+from bisheng.database.models.flow import FlowDao
 from bisheng.database.models.group import Group, GroupCreate, GroupDao, GroupRead
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
 from bisheng.database.models.user_group import UserGroupCreate, UserGroupDao, UserGroupRead
-from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
 from bisheng.permission.domain.services.legacy_rbac_sync_service import LegacyRBACSyncService
 from bisheng.permission.domain.services.owner_service import OwnerService, _run_async_safe
-from bisheng.telemetry_search.domain.services.dashboard import DashboardService
-from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
 from bisheng.user.domain.models.user import User, UserDao
 from bisheng.user.domain.models.user_role import UserRoleDao
 from bisheng.user.domain.services.user import UserService
@@ -30,8 +23,7 @@ from bisheng.user_group.domain.services.group_change_handler import GroupChangeH
 from bisheng.utils import get_request_ip
 
 
-class RoleGroupService():
-
+class RoleGroupService:
     @staticmethod
     def _execute_group_change_ops(operations: List[TupleOperation]) -> None:
         if not operations:
@@ -39,15 +31,15 @@ class RoleGroupService():
         try:
             _run_async_safe(GroupChangeHandler.execute_async(operations))
         except Exception as exc:
-            logger.warning('Failed to sync legacy user_group change to OpenFGA: %s', exc)
+            logger.warning("Failed to sync legacy user_group change to OpenFGA: %s", exc)
 
     @staticmethod
     def _cleanup_group_fga(group_id: int) -> None:
-        OwnerService.delete_resource_tuples_sync('user_group', str(group_id))
+        OwnerService.delete_resource_tuples_sync("user_group", str(group_id))
         try:
             _run_async_safe(LegacyRBACSyncService.cleanup_user_group_subject_tuples(group_id))
         except Exception as exc:
-            logger.warning('Failed to cleanup legacy user_group subject tuples group=%s: %s', group_id, exc)
+            logger.warning("Failed to cleanup legacy user_group subject tuples group=%s: %s", group_id, exc)
 
     def enrich_group_reads(self, groups: List[Group]) -> List[GroupRead]:
         """Attach admins to Group ORM rows and return GroupRead list."""
@@ -63,7 +55,8 @@ class RoleGroupService():
         groupReads = [GroupRead.validate(group) for group in groups]
         for group in groupReads:
             group.group_admins = [
-                self._dump_user_with_avatar_share_link(users_dict.get(user.user_id)) for user in user_admin
+                self._dump_user_with_avatar_share_link(users_dict.get(user.user_id))
+                for user in user_admin
                 if user.group_id == group.id
             ]
         return groupReads
@@ -85,14 +78,14 @@ class RoleGroupService():
         group.update_user = login_user.user_id
         group = GroupDao.insert_group(group)
         if group_admin:
-            logger.info('set_admin group_admins={} group_id={}', group_admin, group.id)
+            logger.info("set_admin group_admins={} group_id={}", group_admin, group.id)
             self.set_group_admin(request, login_user, group_admin, group.id)
         self.create_group_hook(request, login_user, group)
         return group
 
     def create_group_hook(self, request: Request, login_user: UserPayload, group: Group) -> bool:
-        """ New User Group Post Action """
-        logger.info(f'act=create_group_hook user={login_user.user_name} group_id={group.id}')
+        """New User Group Post Action"""
+        logger.info(f"act=create_group_hook user={login_user.user_name} group_id={group.id}")
         # Log Audit Logs
         AuditLogService.create_user_group(login_user, get_request_ip(request), group)
         return True
@@ -101,10 +94,10 @@ class RoleGroupService():
         """Update User"""
         exist_group = GroupDao.get_user_group(group.id)
         if not exist_group:
-            raise ValueError('User group does not exist')
+            raise ValueError("User group does not exist")
         exist_group.group_name = group.group_name
         exist_group.remark = group.remark
-        if getattr(group, 'visibility', None) in ('public', 'private'):
+        if getattr(group, "visibility", None) in ("public", "private"):
             exist_group.visibility = group.visibility
         exist_group.update_user = login_user.user_id
         exist_group.update_time = datetime.now()
@@ -114,7 +107,7 @@ class RoleGroupService():
         return group
 
     def update_group_hook(self, request: Request, login_user: UserPayload, group: Group):
-        logger.info(f'act=update_group_hook user={login_user.user_name} group_id={group.id}')
+        logger.info(f"act=update_group_hook user={login_user.user_name} group_id={group.id}")
         # Log Audit Logs
         AuditLogService.update_user_group(login_user, get_request_ip(request), group)
 
@@ -130,7 +123,7 @@ class RoleGroupService():
         return resp_200()
 
     def delete_group_hook(self, request: Request, login_user: UserPayload, group_info: Group):
-        logger.info(f'act=delete_group_hook user={login_user.user_name} group_id={group_info.id}')
+        logger.info(f"act=delete_group_hook user={login_user.user_name} group_id={group_info.id}")
         # Log Audit Logs
         AuditLogService.delete_user_group(login_user, get_request_ip(request), group_info)
         # Resources and roles are no longer associated with user groups, so deletion
@@ -159,7 +152,7 @@ class RoleGroupService():
         if not user:
             return {}
         user_data = user.model_dump()
-        user_data['avatar'] = UserService.get_avatar_share_link_sync(user_data.get('avatar'))
+        user_data["avatar"] = UserService.get_avatar_share_link_sync(user_data.get("avatar"))
         return user_data
 
     def insert_user_group(self, user_group: UserGroupCreate) -> UserGroupRead:
@@ -167,7 +160,7 @@ class RoleGroupService():
 
         user_groups = UserGroupDao.get_user_group(user_group.user_id)
         if user_groups and user_group.group_id in [ug.group_id for ug in user_groups]:
-            raise ValueError('Duplicate setup user group')
+            raise ValueError("Duplicate setup user group")
 
         row = UserGroupDao.insert_user_group(user_group)
         ops = (
@@ -179,7 +172,7 @@ class RoleGroupService():
         return row
 
     def replace_user_groups(self, request: Request, login_user: UserPayload, user_id: int, group_ids: List[int]):
-        """ Overwrite the user group the user belongs to """
+        """Overwrite the user group the user belongs to"""
         # Determine if the Operated User is a Super Admin
         user_role_list = UserRoleDao.get_user_roles(user_id)
         if any(one.role_id == AdminRole for one in user_role_list):
@@ -224,12 +217,12 @@ class RoleGroupService():
             group_dict[one.id] = one.group_name
         note = "Pre-edit user groups:"
         for one in old_group:
-            note += f'{group_dict.get(one, one)}、'
-        note = note.rstrip('、')
+            note += f"{group_dict.get(one, one)}、"
+        note = note.rstrip("、")
         note += "Post-edit user groups:"
         for one in group_ids:
-            note += f'{group_dict.get(one, one)}、'
-        note = note.rstrip('、')
+            note += f"{group_dict.get(one, one)}、"
+        note = note.rstrip("、")
         AuditLogService.update_user(login_user, get_request_ip(request), user_id, list(group_dict.keys()), note)
         return None
 
@@ -300,129 +293,10 @@ class RoleGroupService():
         """Set up user group administrators"""
         GroupDao.update_group_update_user(group_id, login_user.user_id)
 
-    async def get_group_resources(self, group_id: int, resource_type: ResourceTypeEnum, name: str,
-                                  page_size: int, page_num: int) -> (List[Any], int):
-        """ Get resources under user """
-        if resource_type.value == ResourceTypeEnum.KNOWLEDGE.value:
-            return await asyncio.to_thread(self.get_group_knowledge, group_id, name, page_size, page_num)
-        elif resource_type.value == ResourceTypeEnum.WORK_FLOW.value:
-            return await asyncio.to_thread(self.get_group_flow, group_id, name, page_size, page_num, FlowType.WORKFLOW)
-        elif resource_type.value == ResourceTypeEnum.ASSISTANT.value:
-            return await asyncio.to_thread(self.get_group_assistant, group_id, name, page_size, page_num)
-        elif resource_type.value == ResourceTypeEnum.GPTS_TOOL.value:
-            return await asyncio.to_thread(self.get_group_tool, group_id, name, page_size, page_num)
-        elif resource_type.value == ResourceTypeEnum.DASHBOARD.value:
-            return await self.get_group_dashboards(group_id, name, page_size, page_num)
-        logger.warning('not support resource type: %s', resource_type)
-        return [], 0
-
-    def get_user_map(self, user_ids: set[int]):
-        user_list = UserDao.get_user_by_ids(list(user_ids))
-        user_map = {user.user_id: user.user_name for user in user_list}
-        return user_map
-
-    async def aget_user_map(self, user_ids: set[int]):
-        user_list = await UserDao.aget_user_by_ids(list(user_ids))
-        user_map = {user.user_id: user.user_name for user in user_list}
-        return user_map
-
-    def get_group_flow(self, group_id: int, keyword: str, page_size: int, page_num: int,
-                       flow_type: FlowType = FlowType.WORKFLOW) -> (List[Any], int):
-        """ Get a list of knowledge bases under user groups """
-        resource_list = GroupResourceDao.get_group_resource(group_id, ResourceTypeEnum.WORK_FLOW)
-        if not resource_list:
-            return [], 0
-        res = []
-        flow_ids = [resource.third_id for resource in resource_list]
-        data, total = FlowDao.filter_flows_by_ids(flow_ids, keyword, page_num, page_size, flow_type.value)
-        db_user_ids = {one.user_id for one in data}
-        user_map = self.get_user_map(db_user_ids)
-        for one in data:
-            one_dict = jsonable_encoder(one)
-            one_dict["user_name"] = user_map.get(one.user_id, one.user_id)
-            res.append(one_dict)
-
-        return res, total
-
-    def get_group_knowledge(self, group_id: int, keyword: str, page_size: int, page_num: int) -> (List[Any], int):
-        """ Get a list of knowledge bases under user groups """
-        # Query Knowledge Base under User GroupsIDVertical
-        resource_list = GroupResourceDao.get_group_resource(group_id, ResourceTypeEnum.KNOWLEDGE)
-        if not resource_list:
-            return [], 0
-        res = []
-        knowledge_ids = [int(resource.third_id) for resource in resource_list]
-        # Query Knowledge Base
-        data, total = KnowledgeDao.filter_knowledge_by_ids(knowledge_ids, keyword, page_num, page_size)
-        db_user_ids = {one.user_id for one in data}
-        user_map = self.get_user_map(db_user_ids)
-        for one in data:
-            one_dict = jsonable_encoder(one)
-            one_dict["user_name"] = user_map.get(one.user_id, one.user_id)
-            res.append(one_dict)
-        return res, total
-
-    def get_group_assistant(self, group_id: int, keyword: str, page_size: int, page_num: int) -> (List[Any], int):
-        """ Get a list of helpers under a user group """
-        # Query Assistant under User GroupsIDVertical
-        resource_list = GroupResourceDao.get_group_resource(group_id, ResourceTypeEnum.ASSISTANT)
-        if not resource_list:
-            return [], 0
-        res = []
-        assistant_ids = [resource.third_id for resource in resource_list]  # Query Assistant
-        data, total = AssistantDao.filter_assistant_by_id(assistant_ids, keyword, page_num, page_size)
-        for one in data:
-            simple_one = AssistantService.return_simple_assistant_info(one)
-            res.append(simple_one)
-        return res, total
-
-    def get_group_tool(self, group_id: int, keyword: str, page_size: int, page_num: int) -> (List[Any], int):
-        """ Get a list of tools under user groups """
-        # Query Tools under User GroupsIDVertical
-        resource_list = GroupResourceDao.get_group_resource(group_id, ResourceTypeEnum.GPTS_TOOL)
-        if not resource_list:
-            return [], 0
-        res = []
-        tool_ids = [int(resource.third_id) for resource in resource_list]
-        # Query Tools
-        data, total = GptsToolsDao.filter_tool_types_by_ids(tool_ids, keyword, page_num, page_size)
-        db_user_ids = {one.user_id for one in data}
-        user_map = self.get_user_map(db_user_ids)
-        for one in data:
-            one_dict = jsonable_encoder(one)
-            one_dict["user_name"] = user_map.get(one.user_id, one.user_id)
-            res.append(one_dict)
-        return res, total
-
-    async def get_group_dashboards(self, group_id: int, keyword: str, page_size: int, page_num: int) -> (List[Any],
-                                                                                                         int):
-
-        """ Get a list of dashboards under a user group """
-        # Query the dashboard under the user groupIDVertical
-        resource_list = await GroupResourceDao.aget_group_resources(group_id=group_id,
-                                                                    resource_type=ResourceTypeEnum.DASHBOARD)
-        if not resource_list:
-            return [], 0
-        res = []
-        dashboard_ids = [int(resource.third_id) for resource in resource_list]
-        # Query Dashboard
-        data = await DashboardService.get_simple_dashboards(keyword=keyword, filter_ids=dashboard_ids)
-
-        user_map = await self.aget_user_map(set([one.user_id for one in data]))
-        for one in data:
-            one_dict = one.model_dump(exclude={"layout_config", "style_config"})
-            one_dict["name"] = one.title
-            one_dict["user_name"] = user_map.get(one.user_id, one.user_id)
-            res.append(one_dict)
-        if page_size and page_num:
-            start_index = (page_num - 1) * page_size
-            end_index = start_index + page_size
-            paged_res = res[start_index:end_index]
-            return paged_res, len(res)
-        return res, len(res)
-
-    async def get_manage_resources(self, login_user: UserPayload, keyword: str, page: int, page_size: int) -> (list, int):
-        """ Get a list of apps under a user group managed by a user Contains skills, assistants, workflows"""
+    async def get_manage_resources(
+        self, login_user: UserPayload, keyword: str, page: int, page_size: int
+    ) -> (list, int):
+        """Get a list of apps under a user group managed by a user Contains skills, assistants, workflows"""
         groups = []
         if not login_user.is_admin():
             groups = [str(one.group_id) for one in await UserGroupDao.aget_user_admin_group(login_user.user_id)]
@@ -432,10 +306,13 @@ class RoleGroupService():
         resource_ids = []
         # Description is a user group administrator, need to filter to get the resources under the corresponding group
         if groups:
-            group_resources = await GroupResourceDao.get_groups_resource(groups, resource_types=[
-                ResourceTypeEnum.ASSISTANT,
-                ResourceTypeEnum.WORK_FLOW,
-            ])
+            group_resources = await GroupResourceDao.get_groups_resource(
+                groups,
+                resource_types=[
+                    ResourceTypeEnum.ASSISTANT,
+                    ResourceTypeEnum.WORK_FLOW,
+                ],
+            )
             if not group_resources:
                 return [], 0
             resource_ids = [one.third_id for one in group_resources]

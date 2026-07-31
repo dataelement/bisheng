@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import List, Optional, Tuple, Any
+from typing import Any
 
 from bisheng.channel.domain.models.channel import Channel
 from bisheng.common.repositories.interfaces.base_repository import BaseRepository
@@ -9,13 +9,28 @@ class ChannelRepository(BaseRepository[Channel, str], ABC):
     """Channel Repository Interface"""
 
     @abstractmethod
-    async def find_channels_by_ids(self, channel_ids: List[str]) -> List[Channel]:
+    async def find_channels_by_ids(self, channel_ids: list[str]) -> list[Channel]:
         """Find channels by a list of channel IDs."""
         pass
 
     @abstractmethod
-    async def find_square_channels(self, user_id: int, keyword: Optional[str] = None,
-                                   page: int = 1, page_size: int = 20) -> List[Tuple[Any, ...]]:
+    async def find_permission_candidates(
+        self,
+        *,
+        after_id: str | None,
+        limit: int,
+    ) -> list[Channel]:
+        """Return one tenant-scoped business cursor page for BatchCheck."""
+        pass
+
+    @abstractmethod
+    async def find_square_channels(
+        self,
+        user_id: int,
+        keyword: str | None = None,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> list[tuple[Any, ...]]:
         """
         Find released channels for the channel square with subscription status and subscriber count.
         Returns a list of tuples:
@@ -25,8 +40,10 @@ class ChannelRepository(BaseRepository[Channel, str], ABC):
 
     @abstractmethod
     async def find_public_recommend_channels(
-        self, user_id: int, candidate_limit: int = 100
-    ) -> List[Tuple[Any, ...]]:
+        self,
+        user_id: int,
+        candidate_limit: int = 100,
+    ) -> list[tuple[Any, ...]]:
         """
         Find released PUBLIC channels for the home-page discovery carousel.
         Same tuple shape as find_square_channels, restricted to visibility=PUBLIC and
@@ -35,7 +52,7 @@ class ChannelRepository(BaseRepository[Channel, str], ABC):
         pass
 
     @abstractmethod
-    async def count_square_channels(self, keyword: Optional[str] = None) -> int:
+    async def count_square_channels(self, keyword: str | None = None) -> int:
         """Count total released channels matching the keyword filter."""
         pass
 

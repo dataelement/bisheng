@@ -1,10 +1,4 @@
 {
-  "dialog": {
-    "title": "権限管理",
-    "tabList": "現在の権限",
-    "tabGrant": "権限を追加",
-    "tabShare": "リンク共有"
-  },
   "level": {
     "owner": "オーナー",
     "manager": "マネージャー",
@@ -43,13 +37,142 @@
   "managePermission": "権限管理",
   "error": {
     "permissionDenied": "権限が不足しています",
+    "checkFailed": "権限チェックに失敗しました。後でもう一度お試しください。",
     "grantFailed": "権限付与に失敗しました",
     "lastOwner": "少なくとも 1 人の所有者を残す必要があります。最後の所有者は削除できません。",
-    "revokeFailed": "権限取消に失敗しました"
+    "revokeFailed": "権限取消に失敗しました",
+    "versionConflict": "権限データが更新されました。再読み込みしてお試しください。",
+    "impactExpired": "影響分析の有効期限が切れました。再生成してください。",
+    "projectionFailed": "権限投影に失敗したため、操作を拒否しました。",
+    "migrationBlocked": "権限データ移行にブロック項目があります。"
   },
   "success": {
     "grant": "権限を付与しました",
     "revoke": "権限を取り消しました",
     "modify": "権限レベルを変更しました"
+  },
+  "catalog": {
+    "menuRoles": "メニューロール",
+    "actions": "権限アクション",
+    "models": "権限モデル",
+    "loading": "権限カタログを読み込み中…",
+    "loadFailed": "権限カタログを読み込めませんでした",
+    "retry": "再試行",
+    "publishSucceeded": "権限カタログを公開しました"
+  },
+  "actionLevel": {
+    "title": "アクションレベル",
+    "description": "各アクションは 1 つのレベルに属します。未割り当てのアクションはモデルに含まれません。",
+    "unassigned": "未割り当て",
+    "level": "レベル {{level}}",
+    "change": "アクションレベルを変更",
+    "active": "アクション状態",
+    "inactive": "無効",
+    "empty": "この領域にアクションはありません"
+  },
+  "model": {
+    "title": "権限モデル",
+    "list": "モデル一覧",
+    "empty": "権限モデルはありません",
+    "name": "モデル名",
+    "actions": "含まれるアクション",
+    "action": "モデルアクション",
+    "active": "モデルを有効化",
+    "inactive": "モデルは無効です",
+    "level": "派生レベル",
+    "allowSameLevel": "同レベルへの付与を許可",
+    "create": "モデルを作成",
+    "delete": "モデルを削除",
+    "save": "変更を作成",
+    "saving": "作成中…",
+    "kind": {
+      "standard": "標準モデル",
+      "custom": "カスタムモデル"
+    },
+    "preset": {
+      "label": "初期化プリセット",
+      "select": "プリセットを選択",
+      "apply": "プリセットを適用"
+    }
+  },
+  "impact": {
+    "title": "公開影響の確認",
+    "description": "公開前に影響する権限データを確認してください。",
+    "resources": "リソース",
+    "grants": "付与",
+    "assignees": "付与対象",
+    "expansions": "追加権限",
+    "revocations": "取消権限",
+    "pending": "{{resources}} 件のリソースと {{grants}} 件の付与に影響する見込みです",
+    "review": "影響を確認",
+    "blocked": "ブロック項目があるため公開できません",
+    "expired": "影響分析の有効期限が切れました。再生成してください。",
+    "expiresAt": "有効期限：{{value}}",
+    "cancel": "キャンセル",
+    "publish": "公開を確認",
+    "publishing": "公開中…",
+    "publishFailed": "公開に失敗しました。再読み込みしてお試しください。"
+  },
+  "mode": {
+    "custom": "ローカル権限",
+    "inherit": "親から継承",
+    "parent": "親リソース",
+    "affectedAssignees": "{{count}} 件の付与対象に影響する見込みです",
+    "projection": "投影状態：{{state}}",
+    "confirmTitle": "権限モード変更の確認",
+    "confirmDescription": "サーバーが分析結果に従って切り替えます。メンバー一覧は再送信しません。",
+    "confirm": "変更を確認",
+    "cancel": "キャンセル",
+    "applying": "適用中…",
+    "conflict": "権限バージョンが変更されました。再読み込みしてください。",
+    "expired": "モード影響分析の有効期限が切れました。"
+  },
+  "roster": {
+    "empty": "付与対象はありません",
+    "loading": "権限を読み込み中…",
+    "loadingMore": "さらに読み込み中…",
+    "loadMore": "さらに読み込む",
+    "loadFailed": "権限一覧を読み込めませんでした",
+    "myPermissions": "自分の権限",
+    "summaryOnly": "自分の権限概要のみ表示できます。",
+    "protected": "保護対象",
+    "readOnly": "読み取り専用",
+    "inheritedFrom": "継承元"
+  },
+  "scope": {
+    "local": "ローカル",
+    "inherited": "継承"
+  },
+  "source": {
+    "direct": "直接付与",
+    "department": "部門付与",
+    "user_group": "ユーザーグループ付与",
+    "creator": "作成者",
+    "inherited": "継承元",
+    "shared": "共有元",
+    "system": "システム元",
+    "includeChildren": "サブ部門を含む"
+  },
+  "grant": {
+    "existing": "現在の付与",
+    "model": "権限モデル",
+    "addModel": "新規付与モデル",
+    "add": "追加",
+    "move": "モデルを変更",
+    "remove": "削除",
+    "readOnly": "継承または保護された付与は編集できません。",
+    "submit": "変更を送信",
+    "conflict": "付与バージョンが変更されました。再読み込みしてください。"
+  },
+  "dialog": {
+    "title": "権限管理",
+    "description": "権限ソースを確認し、付与可能なモデルでローカル権限を管理します。",
+    "tabList": "現在の権限",
+    "tabGrant": "権限を追加",
+    "tabShare": "リンク共有",
+    "roster": "現在の権限",
+    "manageGrants": "付与を管理",
+    "loading": "リソース権限を読み込み中…",
+    "loadFailed": "リソース権限を読み込めませんでした"
   }
 }

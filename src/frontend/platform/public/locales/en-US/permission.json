@@ -1,10 +1,4 @@
 {
-  "dialog": {
-    "title": "Permissions",
-    "tabList": "Current Permissions",
-    "tabGrant": "Grant Access",
-    "tabShare": "Share Link"
-  },
   "level": {
     "owner": "Owner",
     "manager": "Manager",
@@ -43,13 +37,142 @@
   "managePermission": "Permissions",
   "error": {
     "permissionDenied": "Permission denied",
+    "checkFailed": "Permission check failed. Try again later.",
     "grantFailed": "Failed to grant permission",
     "lastOwner": "At least one owner must remain. You cannot remove the last owner.",
-    "revokeFailed": "Failed to revoke permission"
+    "revokeFailed": "Failed to revoke permission",
+    "versionConflict": "Permission data changed. Refresh and try again.",
+    "impactExpired": "The impact analysis expired. Generate it again.",
+    "projectionFailed": "Permission projection failed and the operation was denied.",
+    "migrationBlocked": "Permission migration has blocking items."
   },
   "success": {
     "grant": "Permission granted",
     "revoke": "Permission revoked",
     "modify": "Permission level updated"
+  },
+  "catalog": {
+    "menuRoles": "Menu Roles",
+    "actions": "Permission Actions",
+    "models": "Permission Models",
+    "loading": "Loading permission catalog…",
+    "loadFailed": "Failed to load the permission catalog",
+    "retry": "Retry",
+    "publishSucceeded": "Permission catalog published"
+  },
+  "actionLevel": {
+    "title": "Action Levels",
+    "description": "Each action belongs to one level. Unassigned actions are excluded from every model.",
+    "unassigned": "Unassigned",
+    "level": "Level {{level}}",
+    "change": "Change action level",
+    "active": "Action status",
+    "inactive": "Inactive",
+    "empty": "No actions in this area"
+  },
+  "model": {
+    "title": "Permission Model",
+    "list": "Model List",
+    "empty": "No permission models",
+    "name": "Model Name",
+    "actions": "Included Actions",
+    "action": "Model action",
+    "active": "Enable Model",
+    "inactive": "Model inactive",
+    "level": "Derived Level",
+    "allowSameLevel": "Allow Same-level Grants",
+    "create": "New Model",
+    "delete": "Delete Model",
+    "save": "Create Change",
+    "saving": "Creating…",
+    "kind": {
+      "standard": "Standard Model",
+      "custom": "Custom Model"
+    },
+    "preset": {
+      "label": "Initialization Preset",
+      "select": "Select a preset",
+      "apply": "Apply Preset"
+    }
+  },
+  "impact": {
+    "title": "Confirm Publish Impact",
+    "description": "Review the affected authorization data before publishing.",
+    "resources": "Resources",
+    "grants": "Grants",
+    "assignees": "Assignees",
+    "expansions": "New Permissions",
+    "revocations": "Revoked Permissions",
+    "pending": "Estimated impact: {{resources}} resources and {{grants}} grants",
+    "review": "Review Impact",
+    "blocked": "Blocking items prevent publishing",
+    "expired": "The impact analysis expired. Generate it again.",
+    "expiresAt": "Valid until {{value}}",
+    "cancel": "Cancel",
+    "publish": "Confirm Publish",
+    "publishing": "Publishing…",
+    "publishFailed": "Publish failed. Refresh and try again."
+  },
+  "mode": {
+    "custom": "Local Permissions",
+    "inherit": "Inherit from Parent",
+    "parent": "Parent Resource",
+    "affectedAssignees": "Estimated impact: {{count}} assignees",
+    "projection": "Projection status: {{state}}",
+    "confirmTitle": "Confirm Permission Mode Change",
+    "confirmDescription": "The server applies the analyzed change; the member list is not resubmitted.",
+    "confirm": "Confirm Change",
+    "cancel": "Cancel",
+    "applying": "Applying…",
+    "conflict": "The permission version changed. Refresh and try again.",
+    "expired": "The mode impact analysis expired."
+  },
+  "roster": {
+    "empty": "No assignees",
+    "loading": "Loading permissions…",
+    "loadingMore": "Loading more…",
+    "loadMore": "Load More",
+    "loadFailed": "Failed to load permissions",
+    "myPermissions": "My Permissions",
+    "summaryOnly": "You can only view your own permission summary.",
+    "protected": "Protected",
+    "readOnly": "Read-only",
+    "inheritedFrom": "Inherited from"
+  },
+  "scope": {
+    "local": "Local",
+    "inherited": "Inherited"
+  },
+  "source": {
+    "direct": "Direct Grant",
+    "department": "Department Grant",
+    "user_group": "User Group Grant",
+    "creator": "Creator",
+    "inherited": "Inherited Source",
+    "shared": "Shared Source",
+    "system": "System Source",
+    "includeChildren": "Include sub-departments"
+  },
+  "grant": {
+    "existing": "Current Grants",
+    "model": "Permission Model",
+    "addModel": "Model for New Grant",
+    "add": "Add",
+    "move": "Change Model",
+    "remove": "Remove",
+    "readOnly": "Inherited or protected grants cannot be edited.",
+    "submit": "Submit Changes",
+    "conflict": "The grant version changed. Refresh and try again."
+  },
+  "dialog": {
+    "title": "Permissions",
+    "description": "Review permission sources or manage local grants with grantable models.",
+    "tabList": "Current Permissions",
+    "tabGrant": "Grant Access",
+    "tabShare": "Share Link",
+    "roster": "Current Permissions",
+    "manageGrants": "Manage Grants",
+    "loading": "Loading resource permissions…",
+    "loadFailed": "Failed to load resource permissions"
   }
 }

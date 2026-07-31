@@ -11,7 +11,7 @@ import tempfile
 from collections import OrderedDict
 from io import BytesIO
 from pathlib import Path
-from typing import Any, Dict, Union, BinaryIO
+from typing import Any, BinaryIO, Union
 from urllib.parse import unquote, urlparse
 from uuid import uuid4
 
@@ -26,9 +26,9 @@ from urllib3.util import parse_url
 from bisheng.core.external.http_client.http_client_manager import get_http_client
 from bisheng.core.storage.minio.minio_manager import get_minio_storage, get_minio_storage_sync
 
-CACHE: Dict[str, Any] = {}
+CACHE: dict[str, Any] = {}
 
-CACHE_DIR = user_cache_dir('bisheng', 'bisheng')
+CACHE_DIR = user_cache_dir("bisheng", "bisheng")
 
 
 def create_cache_folder(func):
@@ -85,18 +85,16 @@ def memoize_dict(maxsize=128):
     return decorator
 
 
-PREFIX = 'bisheng_cache'
+PREFIX = "bisheng_cache"
 
 
 @create_cache_folder
 def clear_old_cache_files(max_cache_size: int = 3):
     cache_dir = Path(tempfile.gettempdir()) / PREFIX
-    cache_files = list(cache_dir.glob('*.dill'))
+    cache_files = list(cache_dir.glob("*.dill"))
 
     if len(cache_files) > max_cache_size:
-        cache_files_sorted_by_mtime = sorted(cache_files,
-                                             key=lambda x: x.stat().st_mtime,
-                                             reverse=True)
+        cache_files_sorted_by_mtime = sorted(cache_files, key=lambda x: x.stat().st_mtime, reverse=True)
 
         for cache_file in cache_files_sorted_by_mtime[max_cache_size:]:
             with contextlib.suppress(OSError):
@@ -107,29 +105,29 @@ def compute_dict_hash(graph_data):
     graph_data = filter_json(graph_data)
 
     cleaned_graph_json = json.dumps(graph_data, sort_keys=True)
-    return hashlib.sha256(cleaned_graph_json.encode('utf-8')).hexdigest()
+    return hashlib.sha256(cleaned_graph_json.encode("utf-8")).hexdigest()
 
 
 def filter_json(json_data):
     filtered_data = json_data.copy()
 
     # Remove 'viewport' and 'chatHistory' keys
-    if 'viewport' in filtered_data:
-        del filtered_data['viewport']
-    if 'chatHistory' in filtered_data:
-        del filtered_data['chatHistory']
+    if "viewport" in filtered_data:
+        del filtered_data["viewport"]
+    if "chatHistory" in filtered_data:
+        del filtered_data["chatHistory"]
 
     # Filter nodes
-    if 'nodes' in filtered_data:
-        for node in filtered_data['nodes']:
-            if 'position' in node:
-                del node['position']
-            if 'positionAbsolute' in node:
-                del node['positionAbsolute']
-            if 'selected' in node:
-                del node['selected']
-            if 'dragging' in node:
-                del node['dragging']
+    if "nodes" in filtered_data:
+        for node in filtered_data["nodes"]:
+            if "position" in node:
+                del node["position"]
+            if "positionAbsolute" in node:
+                del node["positionAbsolute"]
+            if "selected" in node:
+                del node["selected"]
+            if "dragging" in node:
+                del node["dragging"]
 
     return filtered_data
 
@@ -147,20 +145,20 @@ def save_binary_file(content: str, file_name: str, accepted_types: list[str]) ->
         The path to the saved file.
     """
     if not any(file_name.endswith(suffix) for suffix in accepted_types):
-        raise ValueError(f'File {file_name} is not accepted')
+        raise ValueError(f"File {file_name} is not accepted")
 
     # Get the destination folder
     cache_path = Path(CACHE_DIR) / PREFIX
     if not content:
-        raise ValueError('Please, reload the file in the loader.')
-    data = content.split(',')[1]
+        raise ValueError("Please, reload the file in the loader.")
+    data = content.split(",")[1]
     decoded_bytes = base64.b64decode(data)
 
     # Create the full file path
     file_path = os.path.join(cache_path, file_name)
 
     # Save the binary content to the file
-    with open(file_path, 'wb') as file:
+    with open(file_path, "wb") as file:
         file.write(decoded_bytes)
 
     return file_path
@@ -169,12 +167,12 @@ def save_binary_file(content: str, file_name: str, accepted_types: list[str]) ->
 def detect_encoding_cchardet(file_bytes: bytes, num_bytes=1024):
     """UsecchardetEncoding of the test file"""
     result = cchardet.detect(file_bytes)
-    encoding = result['encoding']
-    confidence = result['confidence']
+    encoding = result["encoding"]
+    confidence = result["confidence"]
     return encoding, confidence
 
 
-def convert_encoding_cchardet(content: bytes, target_encoding='utf-8') -> BytesIO:
+def convert_encoding_cchardet(content: bytes, target_encoding="utf-8") -> BytesIO:
     """
     Convert file encoding to target_encoding using cchardet for detection.
     Args:
@@ -195,7 +193,7 @@ def convert_encoding_cchardet(content: bytes, target_encoding='utf-8') -> BytesI
         text = content.decode(source_encoding)
     except (UnicodeDecodeError, LookupError):
         # If decoding fails, replace errors
-        text = content.decode(target_encoding, errors='replace')
+        text = content.decode(target_encoding, errors="replace")
 
     # encode to target encoding
     return BytesIO(text.encode(target_encoding))
@@ -224,7 +222,7 @@ async def save_file_to_folder(file: UploadFile, folder_name: str, file_name: str
 
     # Save the file to the specified folder
     file_path = folder_path / file_name
-    async with aiofiles.open(file_path, 'wb') as out_file:
+    async with aiofiles.open(file_path, "wb") as out_file:
         while content := await file.read(8192):
             await out_file.write(content)
 
@@ -255,27 +253,28 @@ async def save_uploaded_file(file: UploadFile, folder_name, file_name, bucket_na
     if not folder_path.exists():
         folder_path.mkdir(parents=True, exist_ok=True)
 
-    file_ext = file_name.split('.')[-1].lower()
+    file_ext = file_name.split(".")[-1].lower()
 
     file_data_to_upload = None
     is_converted_text = False
 
     try:
-        if file_ext in ('txt', 'md', 'csv'):
+        if file_ext in ("txt", "md", "csv"):
             raw_content = await file.read()
 
             file_data_to_upload = await asyncio.to_thread(
-                convert_encoding_cchardet,
-                content=raw_content,
-                target_encoding='utf-8'
+                convert_encoding_cchardet, content=raw_content, target_encoding="utf-8"
             )
             is_converted_text = True
 
         else:
-            # For other file types, use the original uploaded file
-            file_data_to_upload = file.file
-            # Reset file pointer to the beginning
-            file_data_to_upload.seek(0)
+            # Buffer the upload body before MinIO put. Streaming `file.file` directly
+            # can stall when the client is still sending (or when another browser
+            # consumer is reading the same File concurrently on the frontend).
+            raw_content = await file.read()
+            if not raw_content:
+                raise ValueError(f"upload body is empty for {file_name!r}")
+            file_data_to_upload = BytesIO(raw_content)
             is_converted_text = False
 
         await minio_client.put_object_tmp(object_name=file_name, file=file_data_to_upload)
@@ -304,7 +303,7 @@ def save_download_file(file_input: Union[bytes, BinaryIO, BaseHTTPResponse], fol
         src_stream = file_input
         # Make sure the pointer is at the beginning
         try:
-            if hasattr(src_stream, 'seek'):
+            if hasattr(src_stream, "seek"):
                 src_stream.seek(0)
         # http response objects may not support seek, so we can ignore UnsupportedOperation exceptions
         except io.UnsupportedOperation:
@@ -325,15 +324,15 @@ def save_download_file(file_input: Union[bytes, BinaryIO, BaseHTTPResponse], fol
 
     try:
         # Write to temporary file and calculate SHA256 simultaneously
-        with open(temp_file_path, 'wb') as dst_file:
+        with open(temp_file_path, "wb") as dst_file:
             chunk_size = 65536  # 64KB
             # minio response
-            if hasattr(src_stream, 'stream'):
+            if hasattr(src_stream, "stream"):
                 for one in src_stream.stream(chunk_size):
                     sha256_hash.update(one)
                     dst_file.write(one)
             # requests response
-            elif hasattr(src_stream, 'iter_content'):
+            elif hasattr(src_stream, "iter_content"):
                 for one in src_stream.iter_content(chunk_size):
                     sha256_hash.update(one)
                     dst_file.write(one)
@@ -354,7 +353,7 @@ def save_download_file(file_input: Union[bytes, BinaryIO, BaseHTTPResponse], fol
         if len(filename) > 60:
             safe_filename = filename[-60:]
 
-        final_file_name = f'{file_hash}_{safe_filename}'
+        final_file_name = f"{file_hash}_{safe_filename}"
         final_file_path = folder_path / final_file_name
 
         # Rename (Move) Temporary File to Final Path
@@ -381,11 +380,11 @@ def file_download(file_path: str):
 
     # Try processing as a local file first (extracted URL Parameters)
     # If the system mounts a storage volume, remove ? The signature parameters behind it are read directly
-    local_candidate = file_path.split('?')[0]
+    local_candidate = file_path.split("?")[0]
     if os.path.isfile(local_candidate):
         file_name = os.path.basename(local_candidate)
         # Compatible with legacy logic: handles what might be included in the filename md5 Prefix
-        file_name = file_name.split('_', 1)[-1] if '_' in file_name else file_name
+        file_name = file_name.split("_", 1)[-1] if "_" in file_name else file_name
         return local_candidate, file_name
 
     # Legacy Logic: Check if it is standard URL (Bawa http/https)
@@ -393,36 +392,36 @@ def file_download(file_path: str):
         minio_client = get_minio_storage_sync()
         minio_share_host = minio_client.get_minio_share_host()
         url_obj = urlparse(file_path)
-        filename = unquote(url_obj.path.split('/')[-1])
+        filename = unquote(url_obj.path.split("/")[-1])
 
         if file_path.startswith(minio_share_host):
             # download file from minio sdk
-            bucket_name, object_name = url_obj.path.replace(minio_share_host, "", 1).lstrip("/").split('/', 1)
+            bucket_name, object_name = url_obj.path.replace(minio_share_host, "", 1).lstrip("/").split("/", 1)
             object_name = unquote(object_name)
             file_response = minio_client.download_object_sync(bucket_name, object_name)
         else:
             # download file from http url
             r = requests.get(file_path, verify=False, stream=True)
             if r.status_code != 200:
-                raise ValueError('Check the url of your file; returned status code %s' % r.status_code)
+                raise ValueError("Check the url of your file; returned status code %s" % r.status_code)
             # Content-Disposition header to find the filename
-            content_disposition = r.headers.get('Content-Disposition')
+            content_disposition = r.headers.get("Content-Disposition")
             if content_disposition:
-                filename = unquote(content_disposition).split('filename=')[-1].strip("\"'")
+                filename = unquote(content_disposition).split("filename=")[-1].strip("\"'")
             file_response = r
         try:
-            file_path = save_download_file(file_response, 'bisheng', filename)
+            file_path = save_download_file(file_response, "bisheng", filename)
         finally:
             if file_response:
                 file_response.close()
-                if hasattr(file_response, 'release_conn'):
+                if hasattr(file_response, "release_conn"):
                     file_response.release_conn()
         return file_path, filename
 
     # <g id="Bold">Medical Treatment:</g> MinIO Relative path (In / Starts with a signature parameter)
     # For Input: /bisheng/original/82324.docx?X-Amz-Algorithm=...
     # No in this case host, cannot be accessed _is_valid_url Branch
-    elif file_path.startswith('/') and 'X-Amz-Algorithm' in file_path:
+    elif file_path.startswith("/") and "X-Amz-Algorithm" in file_path:
         try:
             minio_client = get_minio_storage_sync()
 
@@ -430,7 +429,7 @@ def file_download(file_path: str):
             url_obj = urlparse(file_path)
             # path similar to /bisheng/original/82324.docx
             # Remove the beginning /, and then split the first / Get bucket And object
-            path_parts = url_obj.path.lstrip("/").split('/', 1)
+            path_parts = url_obj.path.lstrip("/").split("/", 1)
 
             if len(path_parts) == 2:
                 bucket_name, object_name = path_parts
@@ -439,8 +438,8 @@ def file_download(file_path: str):
                 file_response = None
                 try:
                     file_response = minio_client.download_object_sync(bucket_name, object_name)
-                    filename = unquote(object_name.split('/')[-1])
-                    file_path = save_download_file(file_response, 'bisheng', filename)
+                    filename = unquote(object_name.split("/")[-1])
+                    file_path = save_download_file(file_response, "bisheng", filename)
                     return file_path, filename
                 finally:
                     if file_response:
@@ -451,11 +450,11 @@ def file_download(file_path: str):
             print(f"Error handling relative MinIO path: {e}")
 
     elif not os.path.isfile(file_path):
-        raise ValueError('File path %s is not a valid file or url' % file_path)
+        raise ValueError("File path %s is not a valid file or url" % file_path)
 
     # This is the one that handles purely local file paths (the one with no parameters) and is usually handled by the topmost logic 1 Interception
     file_name = os.path.basename(file_path)
-    file_name = file_name.split('_', 1)[-1] if '_' in file_name else file_name
+    file_name = file_name.split("_", 1)[-1] if "_" in file_name else file_name
     return file_path, file_name
 
 
@@ -464,11 +463,11 @@ async def async_file_download(file_path: str):
 
     # Try processing as a local file first (extracted URL Parameters)
     # If the system mounts the storage volume, this will solve the problem directly
-    local_candidate = file_path.split('?')[0]
+    local_candidate = file_path.split("?")[0]
     if os.path.isfile(local_candidate):
         file_name = os.path.basename(local_candidate)
         # Is it included under processing?md5Logic of (Keep original logic)
-        file_name = file_name.split('_', 1)[-1] if '_' in file_name else file_name
+        file_name = file_name.split("_", 1)[-1] if "_" in file_name else file_name
         return local_candidate, file_name
 
     # Check if it is standard URL
@@ -477,22 +476,22 @@ async def async_file_download(file_path: str):
         minio_client = await get_minio_storage()
         minio_share_host = minio_client.get_minio_share_host()
         url_obj = parse_url(file_path)
-        filename = unquote(url_obj.path.split('/')[-1])
+        filename = unquote(url_obj.path.split("/")[-1])
 
         if file_path.startswith(minio_share_host):
             # download file from minio sdk
-            bucket_name, object_name = url_obj.path.replace(minio_share_host, "", 1).lstrip("/").split('/', 1)
+            bucket_name, object_name = url_obj.path.replace(minio_share_host, "", 1).lstrip("/").split("/", 1)
             object_name = unquote(object_name)
             file_content = await minio_client.get_object(bucket_name, object_name)
         else:
             r = await http_client.get(url=file_path, data_type="binary")
             if r.status_code != 200:
-                raise ValueError('Check the url of your file; returned status code %s' % r.status_code)
-            content_disposition = r.headers.get('Content-Disposition') if r.headers else None
+                raise ValueError("Check the url of your file; returned status code %s" % r.status_code)
+            content_disposition = r.headers.get("Content-Disposition") if r.headers else None
             if content_disposition:
-                filename = unquote(content_disposition).split('filename=')[-1].strip("\"'")
+                filename = unquote(content_disposition).split("filename=")[-1].strip("\"'")
             file_content = r.body
-        file_path = save_download_file(file_content, 'bisheng', filename)
+        file_path = save_download_file(file_content, "bisheng", filename)
         return file_path, filename
 
     # <g id="Bold">Medical Treatment:</g> MinIO Relative path (In / Starts with a signature parameter)
@@ -503,7 +502,7 @@ async def async_file_download(file_path: str):
             # Resolve Path /bucket/object_key
             url_obj = urlparse(file_path)
             # path turned into /bisheng/original/82324.docx, remove the opening / and split the first one /
-            path_parts = url_obj.path.lstrip("/").split('/', 1)
+            path_parts = url_obj.path.lstrip("/").split("/", 1)
 
             if len(path_parts) == 2:
                 bucket_name, object_name = path_parts
@@ -511,14 +510,14 @@ async def async_file_download(file_path: str):
                 # Directly usable after finished products  leave the factory minio client Download without http Request
                 file_content = await minio_client.get_object(bucket_name, object_name)
 
-                filename = unquote(object_name.split('/')[-1])
-                file_path = save_download_file(file_content, 'bisheng', filename)
+                filename = unquote(object_name.split("/")[-1])
+                file_path = save_download_file(file_content, "bisheng", filename)
                 return file_path, filename
         except Exception as e:
             # If parsing or downloading fails, log or drop it below ValueError
             print(f"Error handling relative MinIO path: {e}")
 
-    raise ValueError('File path %s is not a valid file or url' % file_path)
+    raise ValueError("File path %s is not a valid file or url" % file_path)
 
 
 def _is_valid_url(url: str):

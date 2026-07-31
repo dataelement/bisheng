@@ -199,6 +199,32 @@ class Department(SQLModelSerializable, table=True):
         default=None,
         sa_column=Column(Integer, nullable=True, comment="Creator user ID"),
     )
+    permission_projection_version: int = Field(
+        default=0,
+        sa_column=Column(
+            BigInteger,
+            nullable=False,
+            server_default=text("0"),
+            comment="F048 department identity projection version",
+        ),
+    )
+    permission_projection_state: str = Field(
+        default="CURRENT",
+        sa_column=Column(
+            String(64),
+            nullable=False,
+            server_default=text("'CURRENT'"),
+            comment="F048 department identity projection state",
+        ),
+    )
+    permission_projection_operation_id: int | None = Field(
+        default=None,
+        sa_column=Column(
+            BigInteger,
+            nullable=True,
+            comment="F048 durable projection operation ID",
+        ),
+    )
     create_time: datetime | None = Field(
         default=None,
         sa_column=Column(

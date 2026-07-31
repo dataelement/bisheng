@@ -51,6 +51,9 @@ from bisheng.channel.domain.schemas.channel_manager_schema import (
 )
 from bisheng.channel.domain.services.article_count_cache import ArticleCountCache
 from bisheng.channel.domain.services.article_es_service import ArticleEsService
+from bisheng.channel.domain.services.f048_channel_permission import (
+    ChannelPermissionRecord,
+)
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.channel import (
     ArticleSensitiveViolationError,
@@ -59,11 +62,9 @@ from bisheng.common.errcode.channel import (
     ChannelCreateLimitExceededError,
     ChannelNotFoundError,
     ChannelOrganizationGrantUnsubscribeDeniedError,
-    ChannelPermissionDeniedError,
 )
 from bisheng.common.errcode.knowledge_space import SpaceFileNameDuplicateError, SpacePermissionDeniedError
 from bisheng.common.models.space_channel_member import (
-    CHANNEL_ROLE_TO_RELATION,
     REJECTED_STATUS_DISPLAY_WINDOW,
     BusinessTypeEnum,
     ChannelRelationEnum,
@@ -79,16 +80,15 @@ from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.knowledge.domain.models.knowledge_file import FileSource
 from bisheng.message.domain.services.message_service import MessageService
 from bisheng.message.domain.services.notification_content import build_notify_content
-from bisheng.permission.domain.channel_permission_template import (
-    default_permission_ids_for_relation as default_channel_permission_ids_for_relation,
+from bisheng.permission.application.access import get_f048_resource_adapter
+from bisheng.permission.application.business_authorization import (
+    batch_check_business_actions,
+    require_business_action,
 )
-from bisheng.permission.domain.channel_permission_template import (
-    relation_from_channel_permission_ids,
+from bisheng.permission.application.identity import resolve_permission_actor
+from bisheng.permission.domain.services.permission_action_service import (
+    PermissionActor,
 )
-from bisheng.permission.domain.schemas.permission_schema import AuthorizeGrantItem, AuthorizeRevokeItem
-from bisheng.permission.domain.services.fine_grained_permission_service import FineGrainedPermissionService
-from bisheng.permission.domain.services.owner_service import OwnerService
-from bisheng.permission.domain.services.permission_service import PermissionService
 from bisheng.role.domain.services.quota_service import QuotaResourceType, QuotaService
 from bisheng.sensitive_word.domain.schemas import SensitiveWordBusinessType
 from bisheng.sensitive_word.domain.services.sensitive_word_policy_service import SensitiveWordPolicyService
@@ -107,11 +107,40 @@ CHANNEL_ADMIN_REVOKED_MESSAGE = "revoked_channel_admin"
 CHANNEL_MEMBER_REMOVED_MESSAGE = "removed_channel_member"
 CHANNEL_MADE_PRIVATE_MESSAGE = "channel_made_private"
 CHANNEL_DISMISSED_MESSAGE = "channel_dismissed"
-CHANNEL_MEMBER_RELATIONS = {"owner", "manager", "editor", "viewer"}
+CHANNEL_EFFECTIVE_ACTIONS = (
+    "visible",
+    "edit",
+    "manage_permission",
+    "delete",
+)
+CHANNEL_MEMBERSHIP_MODEL = {
+    UserRoleEnum.ADMIN: "manager",
+    UserRoleEnum.MEMBER: "viewer",
+}
 # F037-B: a single ES `terms` clause holds up to index.max_terms_count ids
 # (default 65536). Beyond that, the batched unread query falls back to the
 # per-channel total-minus-read path to avoid a query error.
 _MAX_UNREAD_EXCLUDE_TERMS = 65536
+
+
+class ChannelResourceAuthorizationPort:
+    """Bind the F048 channel adapter to the resource registry."""
+
+    def __init__(self, adapter) -> None:
+        self._adapter = adapter
+
+    async def resolve_permission_target(
+        self,
+        *,
+        resource_id: str,
+        actor,
+        action: str,
+    ):
+        return await self._adapter.resolve_permission_target(
+            resource_id=resource_id,
+            actor=actor,
+            action=action,
+        )
 
 
 def _self_channel_binding_key(channel_id: str, user_id: int, relation: ChannelRelationEnum) -> str:
@@ -146,23 +175,7 @@ def _is_authorized_channel_source(member) -> bool:
     return getattr(member, "grant_subject_type", None) in {"user", "department", "user_group"}
 
 
-def _sorted_channel_permission_ids(permission_ids: set[str]) -> list[str]:
-    return sorted(permission_ids)
-
-
-def _business_member_permission_ids(member) -> set[str]:
-    if not member or _is_authorized_channel_source(member):
-        return set()
-    relation = resolve_channel_relation(member)
-    if relation is None:
-        return set()
-    return default_channel_permission_ids_for_relation(relation.value)
-
-
-def _effective_relation_value(permission_ids: set[str], member) -> str | None:
-    relation = relation_from_channel_permission_ids(permission_ids)
-    if relation:
-        return relation
+def _effective_relation_value(member) -> str | None:
     if member and not _is_authorized_channel_source(member):
         return _member_relation_value(member)
     return None
@@ -195,69 +208,29 @@ class ChannelService:
         self.message_service = message_service
         self.approval_gate = approval_gate
 
-    async def _get_channel_permission_ids(
-        self,
-        channel_id: str,
-        login_user: UserPayload,
-        membership=None,
-        *,
-        context: dict | None = None,
-    ) -> set[str]:
-        # F037: when resolving permission ids for a *list* of channels, the user
-        # subject strings / bindings / models / binding index are identical across
-        # every channel in the request. Building them once (via
-        # ``_build_channel_permission_context``) and passing them in here is
-        # equivalent to letting ``get_effective_permission_ids_async`` derive them
-        # per call -- it falls back to the same helpers when the kwargs are omitted
-        # -- but avoids recomputing them (and their DB round-trips) per channel.
-        try:
-            permission_ids = set(
-                await FineGrainedPermissionService.get_effective_permission_ids_async(
-                    login_user,
-                    "channel",
-                    channel_id,
-                    **(context or {}),
-                )
-            )
-        except Exception:
-            logger.exception("failed to resolve channel permission ids: channel_id=%s", channel_id)
-            permission_ids = set()
-        permission_ids.update(_business_member_permission_ids(membership))
-        return permission_ids
-
-    async def _build_channel_permission_context(self, login_user: UserPayload) -> dict:
-        """F037: per-request shared ReBAC evaluation context for channel-list paths.
-
-        These inputs do not vary by channel within a single request; computing them
-        once and passing them to each ``_get_channel_permission_ids`` call collapses
-        N per-channel recomputations (subject expansion, bindings/models fetch,
-        binding index build) into one. The object-specific ``lineage`` is
-        intentionally *not* included so every channel still gets its own lineage.
-        """
-        from bisheng.permission.api.endpoints.resource_permission import _get_bindings
-
-        bindings = await _get_bindings()
-        models = await FineGrainedPermissionService.get_relation_models_map()
-        user_subject_strings = await FineGrainedPermissionService.get_current_user_subject_strings(login_user)
-        binding_department_paths = await FineGrainedPermissionService.get_binding_department_paths(bindings)
-        return {
-            "models": models,
-            "bindings": bindings,
-            "binding_department_paths": binding_department_paths,
-            "user_subject_strings": user_subject_strings,
-            "binding_index": FineGrainedPermissionService.build_binding_index(bindings),
-        }
-
-    async def _get_channel_organization_grant_subject_types(
+    async def _get_channel_actions(
         self,
         channel_id: str,
         login_user: UserPayload,
     ) -> set[str]:
-        return await FineGrainedPermissionService.get_matching_binding_subject_types_async(
+        action_map = await batch_check_business_actions(
             login_user,
-            "channel",
-            channel_id,
-            {"department", "user_group"},
+            resource_type="channel",
+            resource_ids=(channel_id,),
+            actions=CHANNEL_EFFECTIVE_ACTIONS,
+        )
+        return set(action_map.get(str(channel_id), frozenset()))
+
+    @staticmethod
+    async def _batch_channel_actions(
+        channel_ids: list[str],
+        login_user: UserPayload,
+    ) -> dict[str, frozenset[str]]:
+        return await batch_check_business_actions(
+            login_user,
+            resource_type="channel",
+            resource_ids=channel_ids,
+            actions=CHANNEL_EFFECTIVE_ACTIONS,
         )
 
     @staticmethod
@@ -342,7 +315,7 @@ class ChannelService:
             business_type=SensitiveWordBusinessType.CHANNEL_ARTICLE,
             texts=[cls._article_review_text(article) for article in articles],
         )
-        for article, result in zip(articles, results):
+        for article, result in zip(articles, results, strict=True):
             article.sensitive_review = cls._to_sensitive_review(
                 enabled=result.enabled,
                 hits=result.hits,
@@ -508,6 +481,19 @@ class ChannelService:
 
         channel_model = await self.channel_repository.save(channel_model)
 
+        tenant_id = int(channel_model.tenant_id or self._current_tenant_id(login_user))
+        await get_f048_resource_adapter("channel").authorize_created(
+            record=ChannelPermissionRecord(
+                tenant_id=tenant_id,
+                resource_id=str(channel_model.id),
+                status="ACTIVE",
+                creator_user_id=login_user.user_id,
+                permission_version=0,
+                context_version=f"channel-create:{channel_model.id}"[:64],
+            ),
+            actor=await resolve_permission_actor(login_user),
+        )
+
         # Add the creator as a member of the channel
         await self.space_channel_member_repository.add_member(
             business_id=channel_model.id,
@@ -525,16 +511,6 @@ class ChannelService:
                 ChannelRelationEnum.OWNER,
             ),
         )
-
-        # F008: Write owner tuple to OpenFGA (INV-2)
-        try:
-            await OwnerService.write_owner_tuple(
-                login_user.user_id,
-                "channel",
-                str(channel_model.id),
-            )
-        except Exception as e:
-            logger.warning("Failed to write owner tuple for channel %s: %s", channel_model.id, e)
 
         # Update latest_article_update_time for the new channel
         if channel_model.source_list:
@@ -576,30 +552,29 @@ class ChannelService:
             user_id=login_user.user_id, roles=roles, statuses=[MembershipStatusEnum.ACTIVE]
         )
 
-        accessible_ids: list[str] = []
+        permission_candidate_ids: list[str] = []
         if query_data.query_type == QueryTypeEnum.FOLLOWED:
-            listed_ids = await PermissionService.list_accessible_ids(
-                user_id=login_user.user_id,
-                relation="can_read",
-                object_type="channel",
-                login_user=login_user,
-            )
-            if listed_ids is not None:
-                accessible_ids = [str(channel_id) for channel_id in listed_ids]
-            else:
-                # Admins short-circuit list_accessible_ids to None ("can read all"), which
-                # would otherwise drop channels the admin was specifically authorized to via
-                # member management (direct user grant: ReBAC + binding, no membership row).
-                # Recover those from the admin's own direct channel bindings so they still
-                # surface in the followed list — without dumping every channel.
-                accessible_ids = await self._directly_granted_channel_ids(login_user.user_id)
+            after_id: str | None = None
+            while True:
+                candidate_page = await self.channel_repository.find_permission_candidates(
+                    after_id=after_id,
+                    limit=100,
+                )
+                if not candidate_page:
+                    break
+                permission_candidate_ids.extend(str(channel.id) for channel in candidate_page)
+                after_id = str(candidate_page[-1].id)
+                if len(candidate_page) < 100:
+                    break
 
-        # Batch query channels by IDs
+        # Ordinary F048 Grants need no synthetic membership row, so the
+        # followed view checks tenant-scoped business candidates in bounded
+        # cursor pages.
         channel_ids = list(
             dict.fromkeys(
                 [
                     *(m.business_id for m in memberships),
-                    *accessible_ids,
+                    *permission_candidate_ids,
                 ]
             )
         )
@@ -615,23 +590,10 @@ class ChannelService:
 
         # Build a map of business_id to membership for quick lookup
         membership_map = {m.business_id: m for m in memberships}
-        # F037: build the shared ReBAC evaluation context once, then reuse it for
-        # every channel instead of recomputing subjects/bindings/models per channel.
-        permission_context = await self._build_channel_permission_context(login_user)
-        permission_id_results = await asyncio.gather(
-            *[
-                self._get_channel_permission_ids(
-                    channel.id,
-                    login_user,
-                    membership_map.get(channel.id),
-                    context=permission_context,
-                )
-                for channel in channels
-            ]
+        action_map = await self._batch_channel_actions(
+            [str(channel.id) for channel in channels],
+            login_user,
         )
-        permission_ids_map = {
-            channel.id: permission_ids for channel, permission_ids in zip(channels, permission_id_results)
-        }
 
         # Construct the result list, filtering out non-authorized private channels for "followed" query type
         result: list[ChannelItemResponse] = []
@@ -641,21 +603,15 @@ class ChannelService:
             if not channel:
                 continue
             membership = membership_map.get(channel_id)
-            permission_ids = permission_ids_map.get(channel_id, set())
+            actions = action_map.get(str(channel_id), frozenset())
 
             if query_data.query_type == QueryTypeEnum.FOLLOWED:
                 if getattr(channel, "user_id", None) == login_user.user_id:
                     continue
-                has_view_permission = "view_channel" in permission_ids
-                has_business_membership = bool(membership and not _is_authorized_channel_source(membership))
-                if not has_business_membership and not has_view_permission:
-                    continue
-                if membership and _is_authorized_channel_source(membership) and not has_view_permission:
-                    continue
-                if channel.visibility == ChannelVisibilityEnum.PRIVATE and not has_view_permission:
+                if "visible" not in actions:
                     continue
 
-            channels_to_process.append((channel, membership, permission_ids))
+            channels_to_process.append((channel, membership, actions))
 
         # F037-B: unread counts for the whole page in a single ES msearch round-trip
         # (was N channels x (1 total + read-id chunks) sequential count queries).
@@ -663,8 +619,12 @@ class ChannelService:
             [channel for channel, _, _ in channels_to_process], all_read_ids
         )
 
-        for (channel, membership, permission_ids), unread_count in zip(channels_to_process, unread_counts):
-            relation = _effective_relation_value(permission_ids, membership)
+        for (channel, membership, actions), unread_count in zip(
+            channels_to_process,
+            unread_counts,
+            strict=True,
+        ):
+            relation = _effective_relation_value(membership)
             item = ChannelItemResponse(
                 id=channel.id,
                 name=channel.name,
@@ -675,7 +635,7 @@ class ChannelService:
                 create_time=channel.create_time,
                 user_role=_legacy_role_value_for_relation(relation, membership),
                 relation=relation,
-                permission_ids=_sorted_channel_permission_ids(permission_ids),
+                actions=sorted(actions),
                 is_pinned=bool(membership and membership.is_pinned),
                 subscribed_at=membership.create_time if membership else None,
                 unread_count=unread_count,
@@ -758,7 +718,7 @@ class ChannelService:
         return max(0, total_count - matching_read_count)
 
     async def _calculate_sub_channel_unread_counts(self, channel: Channel, all_read_ids: list[str]) -> dict[str, int]:
-        """Unread count per sub-channel: total − read for (main rules AND that sub's rules).
+        """Unread count per sub-channel: total - read for (main rules AND that sub's rules).
 
         Mirrors _calculate_unread_count but combines the main filter rules with each
         sub-channel's rules (same AND semantics the article search uses)."""
@@ -798,7 +758,7 @@ class ChannelService:
         if not sub_names:
             return {}
         counts = await asyncio.gather(*[unread_for(n) for n in sub_names])
-        return {name: count for name, count in zip(sub_names, counts)}
+        return dict(zip(sub_names, counts, strict=True))
 
     async def _calculate_sub_channel_unread_counts_batch(
         self, channel: Channel, all_read_ids: list[str]
@@ -836,7 +796,7 @@ class ChannelService:
                 }
             )
         counts = await self.article_es_service.count_articles_batch(requests)
-        return {name: count for name, count in zip(sub_names, counts)}
+        return dict(zip(sub_names, counts, strict=True))
 
     async def get_sub_channel_unread_counts(self, channel_id: str, login_user: UserPayload) -> dict[str, int]:
         """F040: per-sub-channel unread for the current user — served by the dedicated
@@ -911,14 +871,14 @@ class ChannelService:
         - Return user information and associated user groups
         - Sorting: Creators and administrators at the top, regular members sorted by username
         """
-        # 1. Verify if the current user is a member of the channel
-        current_membership = await self.space_channel_member_repository.find_membership(
-            business_id=channel_id, business_type=BusinessTypeEnum.CHANNEL, user_id=login_user.user_id
+        await require_business_action(
+            login_user,
+            resource_type="channel",
+            resource_id=channel_id,
+            action="manage_permission",
         )
-        if not current_membership or current_membership.status != MembershipStatusEnum.ACTIVE:
-            raise ValueError("You are not a member of this channel and cannot view the member list")
 
-        # 2. If a keyword is provided, perform a fuzzy search on usernames to get matched user_ids
+        # If a keyword is provided, perform a fuzzy search on usernames.
         search_user_ids = None
         if keyword:
             matched_users = await UserDao.afilter_users(user_ids=[], keyword=keyword)
@@ -974,15 +934,18 @@ class ChannelService:
         - Admins cannot promote others to admin, nor can they modify the roles of other admins or creators
         - Modifying the creator's role is not allowed
         """
-        # 1. Verify current user permissions
+        await require_business_action(
+            login_user,
+            resource_type="channel",
+            resource_id=req.channel_id,
+            action="manage_permission",
+        )
+
+        # Load the business membership only for channel-role constraints. F048 is
+        # the final authorization decision.
         current_membership = await self.space_channel_member_repository.find_membership(
             business_id=req.channel_id, business_type=BusinessTypeEnum.CHANNEL, user_id=login_user.user_id
         )
-        if not current_membership or current_membership.status != MembershipStatusEnum.ACTIVE:
-            raise ChannelNotFoundError()
-
-        if current_membership.user_role not in (UserRoleEnum.CREATOR, UserRoleEnum.ADMIN):
-            raise ChannelPermissionDeniedError()
 
         # 2. Query target member
         target_membership = await self.space_channel_member_repository.find_membership(
@@ -996,7 +959,7 @@ class ChannelService:
             raise ValueError("Modifying the creator's role is not allowed")
 
         # 4. Admin permission limits
-        if current_membership.user_role == UserRoleEnum.ADMIN:
+        if current_membership is None or current_membership.user_role != UserRoleEnum.CREATOR:
             # Admins cannot set others as admins
             if req.role == UserRoleEnum.ADMIN.value:
                 raise ValueError("Admins do not have permission to set others as admins")
@@ -1025,9 +988,26 @@ class ChannelService:
                 req.channel_id,
             )
 
-        # 6. Update role
-        target_membership.user_role = UserRoleEnum(req.role)
+        old_role = target_membership.user_role
+        new_role = UserRoleEnum(req.role)
+        if old_role == UserRoleEnum.ADMIN and new_role == UserRoleEnum.MEMBER:
+            await self.__class__.sync_direct_channel_user_permissions(
+                req.channel_id,
+                target_membership.user_id,
+                new_role,
+                is_active=True,
+                operator_user_id=login_user.user_id,
+            )
+        target_membership.user_role = new_role
         await self.space_channel_member_repository.update(target_membership)
+        if old_role != UserRoleEnum.ADMIN or new_role != UserRoleEnum.MEMBER:
+            await self.__class__.sync_direct_channel_user_permissions(
+                req.channel_id,
+                target_membership.user_id,
+                new_role,
+                is_active=True,
+                operator_user_id=login_user.user_id,
+            )
 
         if should_notify_admin_assignment and self.message_service and not had_manage_access:
             await self._send_admin_assignment_notification(
@@ -1136,48 +1116,60 @@ class ChannelService:
             )
 
     @staticmethod
-    async def _user_can_manage_channel(user_id: int, channel_id: str) -> bool:
-        return await PermissionService.check(
+    async def _user_can_channel_action(
+        user_id: int,
+        channel_id: str,
+        action: str,
+    ) -> bool:
+        adapter = get_f048_resource_adapter("channel")
+        record = await adapter.load_permission_record(channel_id)
+        if record is None:
+            return False
+        actor = PermissionActor(
             user_id=user_id,
-            relation="can_manage",
-            object_type="channel",
-            object_id=channel_id,
+            current_tenant_id=record.tenant_id,
+        )
+        return await adapter.check_action(
+            resource_id=channel_id,
+            actor=actor,
+            action=action,
         )
 
-    @staticmethod
-    async def _user_can_edit_channel(user_id: int, channel_id: str) -> bool:
-        return await PermissionService.check(
-            user_id=user_id,
-            relation="can_edit",
-            object_type="channel",
-            object_id=channel_id,
+    @classmethod
+    async def _user_can_manage_channel(
+        cls,
+        user_id: int,
+        channel_id: str,
+    ) -> bool:
+        return await cls._user_can_channel_action(
+            user_id,
+            channel_id,
+            "manage_permission",
         )
 
-    @staticmethod
-    async def _user_can_read_channel(user_id: int, channel_id: str) -> bool:
-        return await PermissionService.check(
-            user_id=user_id,
-            relation="can_read",
-            object_type="channel",
-            object_id=channel_id,
+    @classmethod
+    async def _user_can_edit_channel(
+        cls,
+        user_id: int,
+        channel_id: str,
+    ) -> bool:
+        return await cls._user_can_channel_action(
+            user_id,
+            channel_id,
+            "edit",
         )
 
-    @staticmethod
-    async def _authorized_channel_user_ids(channel_id: str) -> set[int]:
-        permissions = await PermissionService.get_resource_permissions("channel", channel_id)
-        user_ids: set[int] = set()
-        for permission in permissions:
-            if getattr(permission, "relation", None) not in CHANNEL_MEMBER_RELATIONS:
-                continue
-            include_children = getattr(permission, "include_children", None)
-            user_ids.update(
-                await PermissionService._affected_user_ids_for_subject(
-                    getattr(permission, "subject_type", ""),
-                    int(getattr(permission, "subject_id", 0) or 0),
-                    True if include_children is None else bool(include_children),
-                )
-            )
-        return user_ids
+    @classmethod
+    async def _user_can_read_channel(
+        cls,
+        user_id: int,
+        channel_id: str,
+    ) -> bool:
+        return await cls._user_can_channel_action(
+            user_id,
+            channel_id,
+            "visible",
+        )
 
     async def remove_member(self, req: RemoveMemberRequest, login_user: UserPayload) -> bool:
         """
@@ -1187,15 +1179,18 @@ class ChannelService:
         - Admins can remove regular members
         - Admins cannot remove other admins or creators
         """
-        # 1. Verify current user permissions
+        await require_business_action(
+            login_user,
+            resource_type="channel",
+            resource_id=req.channel_id,
+            action="manage_permission",
+        )
+
+        # Membership role remains a business constraint; it is not an ALLOW
+        # fallback.
         current_membership = await self.space_channel_member_repository.find_membership(
             business_id=req.channel_id, business_type=BusinessTypeEnum.CHANNEL, user_id=login_user.user_id
         )
-        if not current_membership or current_membership.status != MembershipStatusEnum.ACTIVE:
-            raise ValueError("You are not a member of this channel")
-
-        if current_membership.user_role not in (UserRoleEnum.CREATOR, UserRoleEnum.ADMIN):
-            raise ValueError("You do not have permission to remove members")
 
         # 2. Cannot remove yourself
         if req.user_id == login_user.user_id:
@@ -1213,11 +1208,19 @@ class ChannelService:
             raise ValueError("Removing the creator is not allowed")
 
         # 5. Admins cannot remove other admins
-        if current_membership.user_role == UserRoleEnum.ADMIN:
+        if current_membership is None or current_membership.user_role != UserRoleEnum.CREATOR:
             if target_membership.user_role == UserRoleEnum.ADMIN:
                 raise ValueError("Admins do not have permission to remove other admins")
 
-        # 6. Hard delete: remove from database
+        # Revoke permission before deleting the business source. A projection
+        # failure leaves the member row intact and therefore fails closed.
+        await self.__class__.sync_direct_channel_user_permissions(
+            req.channel_id,
+            target_membership.user_id,
+            None,
+            is_active=False,
+            operator_user_id=login_user.user_id,
+        )
         await self.space_channel_member_repository.delete(target_membership.id)
         if self.message_service and not await self._user_can_read_channel(req.user_id, req.channel_id):
             await self._send_channel_event_notification(
@@ -1240,7 +1243,7 @@ class ChannelService:
         - Supports fuzzy search by channel name and description
         - Unsubscribed/unapplied channels are shown first
         - Subscribed/applied channels are shown last
-        - Within each group, sorted by update_time descending
+        - Within each group, sorted by unique active subscriber count descending
         """
         # 1. Multi-table join query for channels with subscription info
         rows = await self.channel_repository.find_square_channels(
@@ -1449,6 +1452,7 @@ class ChannelService:
                 login_user.user_id,
                 UserRoleEnum.MEMBER,
                 is_active=True,
+                operator_user_id=login_user.user_id,
             )
 
         if channel.visibility == ChannelVisibilityEnum.REVIEW:
@@ -1499,6 +1503,7 @@ class ChannelService:
                     login_user.user_id,
                     UserRoleEnum.MEMBER,
                     is_active=True,
+                    operator_user_id=login_user.user_id,
                 )
                 return SubscriptionStatusEnum.SUBSCRIBED
             if gate_result.decision == ApprovalGateDecision.PENDING and gate_result.task_ids and self.message_service:
@@ -1604,15 +1609,12 @@ class ChannelService:
         if not channel:
             raise ChannelNotFoundError()
 
-        # 2. Verify current user can edit channel settings. Super admins are always
-        # allowed; otherwise the ReBAC ``can_edit`` relation decides. ``can_edit`` is
-        # satisfied by owner / manager / editor (permission pyramid), and—unlike the
-        # membership table—also honours edit grants delivered through departments,
-        # user groups or direct OpenFGA tuples.
-        if not login_user.is_admin() and not await self._user_can_edit_channel(login_user.user_id, channel_id):
-            raise ChannelPermissionDeniedError(
-                msg="Only the owner, manager, or editor can update the channel information"
-            )
+        await require_business_action(
+            login_user,
+            resource_type="channel",
+            resource_id=channel_id,
+            action="edit",
+        )
 
         bisheng_information_client = await get_bisheng_information_client()
 
@@ -1634,6 +1636,14 @@ class ChannelService:
                 # by its owner(s): square subscribers, directly authorized users,
                 # and department/user_group grants alike.
                 if new_visibility == ChannelVisibilityEnum.PRIVATE:
+                    adapter = get_f048_resource_adapter("channel")
+                    record = await adapter.load_permission_record(channel_id)
+                    if record is None:
+                        raise ChannelNotFoundError()
+                    await adapter.remove_ordinary_sources(
+                        record=record,
+                        actor=await resolve_permission_actor(login_user),
+                    )
                     owners = await self.space_channel_member_repository.find_members_by_role(
                         channel_id,
                         UserRoleEnum.CREATOR,
@@ -1652,40 +1662,9 @@ class ChannelService:
                             for member in existing_members
                             if member.status == MembershipStatusEnum.ACTIVE and member.user_id not in owner_user_ids
                         ]
-                    # 1. Drop every non-owner membership row.
+                    # Projection has committed, so business membership cleanup can
+                    # proceed without leaving stale ALLOW tuples.
                     await self.space_channel_member_repository.remove_non_creator_members(channel_id)
-                    # 2. Revoke every non-owner ReBAC relation (users, departments,
-                    #    user groups) at the FGA layer.
-                    try:
-                        await OwnerService.delete_non_owner_resource_tuples("channel", channel_id)
-                    except Exception as e:
-                        logger.warning(
-                            "Failed to revoke non-owner FGA tuples after PRIVATE switch for channel %s: %s",
-                            channel_id,
-                            e,
-                        )
-                    # 3. Drop their relation-model bindings so a later re-grant
-                    #    cannot resurrect a stale model.
-                    try:
-                        from bisheng.channel.domain.services.channel_authorization_service import (
-                            ChannelAuthorizationService,
-                        )
-
-                        await ChannelAuthorizationService.clear_non_owner_bindings(channel_id)
-                    except Exception as e:
-                        logger.warning(
-                            "Failed to clear non-owner relation-model bindings after PRIVATE switch for channel %s: %s",
-                            channel_id,
-                            e,
-                        )
-                    # 4. Re-assert owner FGA tuples defensively.
-                    try:
-                        for owner in owners:
-                            await OwnerService.write_owner_tuple(owner.user_id, "channel", channel_id)
-                    except Exception as e:
-                        logger.warning(
-                            "Failed to ensure owner FGA tuples after PRIVATE switch for channel %s: %s", channel_id, e
-                        )
                     if removed_user_ids and self.message_service:
                         final_removed_user_ids = []
                         for user_id in removed_user_ids:
@@ -1716,6 +1695,7 @@ class ChannelService:
                                 member.user_id,
                                 member.user_role,
                                 is_active=True,
+                                operator_user_id=login_user.user_id,
                             )
                     await self.space_channel_member_repository.remove_rejected_members(channel_id)
                     if self.message_service:
@@ -1808,19 +1788,10 @@ class ChannelService:
             business_type=BusinessTypeEnum.CHANNEL,
             user_id=login_user.user_id,
         )
-        # F040: build the F037 shared ReBAC context once and pass it in, instead of
-        # letting ``_get_channel_permission_ids`` re-derive bindings/models/subject
-        # strings inline on every detail request.
-        permission_context = await self._build_channel_permission_context(login_user)
-        permission_ids = await self._get_channel_permission_ids(
-            channel_id,
-            login_user,
-            current_membership,
-            context=permission_context,
-        )
+        actions = await self._get_channel_actions(channel_id, login_user)
         if not current_membership or current_membership.status != MembershipStatusEnum.ACTIVE:
             # If private, only members can view unless special requirement
-            if channel.visibility == ChannelVisibilityEnum.PRIVATE and "view_channel" not in permission_ids:
+            if channel.visibility == ChannelVisibilityEnum.PRIVATE and "visible" not in actions:
                 raise ChannelAccessDeniedError(msg="You do not have permission to view this channel")
 
         # 3. Get Creator Name
@@ -1892,7 +1863,7 @@ class ChannelService:
         if is_creator:
             knowledge_sync_cfg = await self._load_knowledge_sync(channel.id)
 
-        relation = _effective_relation_value(permission_ids, current_membership)
+        relation = _effective_relation_value(current_membership)
 
         return ChannelDetailResponse(
             id=channel.id,
@@ -1909,7 +1880,7 @@ class ChannelService:
             article_count=article_count,
             subscription_status=subscription_status,
             relation=relation,
-            permission_ids=_sorted_channel_permission_ids(permission_ids),
+            actions=sorted(actions),
             knowledge_sync=knowledge_sync_cfg,
         )
 
@@ -2076,29 +2047,17 @@ class ChannelService:
             raise ChannelNotFoundError()
         channel = channels[0]
 
-        # 2. Verify current user may dismiss the channel: a super admin, the creator,
-        #    or a user granted the `delete_channel` fine-grained permission via ReBAC.
-        current_membership = await self.space_channel_member_repository.find_membership(
-            business_id=channel_id, business_type=BusinessTypeEnum.CHANNEL, user_id=login_user.user_id
+        await require_business_action(
+            login_user,
+            resource_type="channel",
+            resource_id=channel_id,
+            action="delete",
         )
-        is_active_creator = (
-            current_membership is not None
-            and current_membership.status == MembershipStatusEnum.ACTIVE
-            and current_membership.user_role == UserRoleEnum.CREATOR
-        )
-        if not login_user.is_admin() and not is_active_creator:
-            permission_ids = await self._get_channel_permission_ids(channel_id, login_user, current_membership)
-            if "delete_channel" not in permission_ids:
-                raise ChannelPermissionDeniedError(
-                    msg="Only the creator or a user with delete permission can dismiss the channel"
-                )
 
-        # 3. Delete all user relationships
         members = await self.space_channel_member_repository.find_all(
             business_id=channel_id, business_type=BusinessTypeEnum.CHANNEL
         )
         original_member_ids = {member.user_id for member in members if member.status == MembershipStatusEnum.ACTIVE}
-        original_member_ids.update(await self._authorized_channel_user_ids(channel_id))
         await self._send_channel_event_notification(
             action_code=CHANNEL_DISMISSED_MESSAGE,
             operator_user_id=login_user.user_id,
@@ -2108,16 +2067,17 @@ class ChannelService:
             channel_name=channel.name,
             navigable=False,
         )
+        adapter = get_f048_resource_adapter("channel")
+        record = await adapter.load_permission_record(channel_id)
+        if record is None:
+            raise ChannelNotFoundError()
+        await adapter.project_delete(
+            record=record,
+            actor=await resolve_permission_actor(login_user),
+        )
         for member in members:
             await self.space_channel_member_repository.delete(member.id)
 
-        # F008: Delete all FGA tuples for this channel
-        try:
-            await OwnerService.delete_resource_tuples("channel", channel_id)
-        except Exception as e:
-            logger.warning("Failed to delete FGA tuples for channel %s: %s", channel_id, e)
-
-        # 4. Delete channel
         await self.channel_repository.delete(channel_id)
 
         # 5. Information sources are NOT unsubscribed here. Unsubscription is deferred to
@@ -2143,27 +2103,6 @@ class ChannelService:
             business_id=channel_id, business_type=BusinessTypeEnum.CHANNEL, user_id=login_user.user_id
         )
         if not current_membership or current_membership.status != MembershipStatusEnum.ACTIVE:
-            model_organization_subject_types = await self._get_channel_organization_grant_subject_types(
-                channel_id,
-                login_user,
-            )
-            if model_organization_subject_types:
-                raise ChannelOrganizationGrantUnsubscribeDeniedError(
-                    blocked_by=sorted(model_organization_subject_types),
-                )
-            # A member-management direct USER authorization grants a ReBAC relation + UI
-            # binding but no membership row (F026 keeps authorization separate from
-            # membership), yet the channel still appears in the user's followed list, which
-            # includes ReBAC-accessible channels. Mirror knowledge_space.unsubscribe_space:
-            # revoke the direct grant instead of failing with "not subscribed".
-            if await self._has_direct_channel_user_grant(channel_id, login_user.user_id):
-                await self.__class__.sync_direct_channel_user_permissions(
-                    channel_id,
-                    login_user.user_id,
-                    None,
-                    is_active=False,
-                )
-                return True
             raise ValueError("You are not subscribed to this channel")
 
         sources = await self.space_channel_member_repository.find_channel_membership_sources(
@@ -2184,57 +2123,15 @@ class ChannelService:
                 blocked_by=sorted(member_organization_subject_types),
             )
 
-        model_organization_subject_types = await self._get_channel_organization_grant_subject_types(
-            channel_id,
-            login_user,
-        )
-        blocked_by = sorted(model_organization_subject_types)
-        if blocked_by:
-            raise ChannelOrganizationGrantUnsubscribeDeniedError(blocked_by=blocked_by)
-
         targets = direct_sources or [current_membership]
         for source in targets:
-            await self._remove_channel_direct_source(channel_id, source)
+            await self._remove_channel_direct_source(
+                channel_id,
+                source,
+                operator_user_id=login_user.user_id,
+            )
 
         return True
-
-    @staticmethod
-    def _is_direct_channel_user_binding(binding: dict, channel_id: str, user_id: int) -> bool:
-        return (
-            binding.get("resource_type") == "channel"
-            and str(binding.get("resource_id")) == str(channel_id)
-            and binding.get("subject_type") == "user"
-            and str(binding.get("subject_id")) == str(user_id)
-        )
-
-    async def _has_direct_channel_user_grant(self, channel_id: str, user_id: int) -> bool:
-        """Whether the user holds a direct 'user' authorization binding on the channel.
-
-        Detects member-management grants that exist only as ReBAC tuples + a UI binding
-        (no membership row), so unsubscribe can revoke them like a self-subscribe.
-        """
-        from bisheng.permission.api.endpoints.resource_permission import _get_bindings
-
-        bindings = await _get_bindings()
-        return any(self._is_direct_channel_user_binding(binding, channel_id, user_id) for binding in bindings)
-
-    async def _directly_granted_channel_ids(self, user_id: int) -> list[str]:
-        """Channel ids the user holds a direct 'user' authorization binding on.
-
-        Used to recover an admin's explicitly-authorized channels for the followed list,
-        since ``list_accessible_ids`` returns None (can-read-all) for admins and would
-        otherwise hide channels the admin was granted but is not a member of.
-        """
-        from bisheng.permission.api.endpoints.resource_permission import _get_bindings
-
-        bindings = await _get_bindings()
-        return [
-            str(binding.get("resource_id"))
-            for binding in bindings
-            if binding.get("resource_type") == "channel"
-            and binding.get("subject_type") == "user"
-            and str(binding.get("subject_id")) == str(user_id)
-        ]
 
     @classmethod
     async def sync_direct_channel_user_permissions(
@@ -2244,98 +2141,27 @@ class ChannelService:
         user_role: UserRoleEnum | None,
         *,
         is_active: bool,
+        operator_user_id: int | None = None,
     ) -> None:
-        """Keep direct channel memberships and ReBAC grants in sync.
+        """Project the business-owned membership as one F048 Grant source."""
 
-        Active members receive a single explicit relation grant (viewer/editor/manager)
-        plus the matching UI binding so they surface in the channel authorization list.
-        The owner relation is never mirrored here; it is managed by OwnerService.
-        """
-        from bisheng.permission.api.endpoints.resource_permission import (
-            _binding_key_with_scope,
-            _get_bindings,
-            _save_bindings,
-        )
-
-        desired_relation: str | None = None
+        desired_model = None
         if is_active and user_role is not None:
-            relation_enum = CHANNEL_ROLE_TO_RELATION.get(UserRoleEnum(user_role))
-            desired_relation = relation_enum.value if relation_enum else None
-            if desired_relation == ChannelRelationEnum.OWNER.value:
-                desired_relation = None
-
-        relations_to_revoke = {
-            ChannelRelationEnum.VIEWER.value,
-            ChannelRelationEnum.EDITOR.value,
-            ChannelRelationEnum.MANAGER.value,
-        }
-        if desired_relation:
-            relations_to_revoke.discard(desired_relation)
-
-        revokes = [
-            AuthorizeRevokeItem(
-                subject_type="user",
-                subject_id=int(user_id),
-                relation=relation,
-                include_children=False,
-            )
-            for relation in sorted(relations_to_revoke)
-        ]
-        grants = []
-        if desired_relation:
-            grants.append(
-                AuthorizeGrantItem(
-                    subject_type="user",
-                    subject_id=int(user_id),
-                    relation=desired_relation,
-                    include_children=False,
-                    model_id=desired_relation,
-                )
-            )
-
-        await PermissionService.authorize(
-            object_type="channel",
-            object_id=str(channel_id),
-            grants=grants,
-            revokes=revokes,
-            enforce_fga_success=True,
+            desired_model = CHANNEL_MEMBERSHIP_MODEL.get(UserRoleEnum(user_role))
+        await get_f048_resource_adapter("channel").sync_membership(
+            resource_id=str(channel_id),
+            operator_user_id=operator_user_id or user_id,
+            subject_user_id=user_id,
+            model_key=desired_model,
         )
 
-        bindings = await _get_bindings()
-        updated_bindings = [
-            binding for binding in bindings if not cls._is_direct_channel_user_binding(binding, channel_id, user_id)
-        ]
-        if desired_relation:
-            key = _binding_key_with_scope(
-                "channel",
-                str(channel_id),
-                "user",
-                int(user_id),
-                desired_relation,
-                None,
-            )
-            updated_bindings.append(
-                {
-                    "key": key,
-                    "resource_type": "channel",
-                    "resource_id": str(channel_id),
-                    "subject_type": "user",
-                    "subject_id": int(user_id),
-                    "relation": desired_relation,
-                    "include_children": None,
-                    "model_id": desired_relation,
-                }
-            )
-        await _save_bindings(updated_bindings)
-
-    async def _remove_channel_direct_source(self, channel_id: str, source) -> None:
-        # Subscribe mirrors a direct membership into an explicit ReBAC grant
-        # (viewer/editor/manager) plus a UI binding via
-        # sync_direct_channel_user_permissions. Unsubscribe must tear both down,
-        # otherwise the user keeps channel access through ReBAC and still surfaces
-        # in the authorization list after the membership row is deleted. This
-        # covers self-subscribe (grant_subject_type None/'self') and admin-direct
-        # user grants (grant_subject_type 'user') alike.
+    async def _remove_channel_direct_source(
+        self,
+        channel_id: str,
+        source,
+        *,
+        operator_user_id: int,
+    ) -> None:
         revoke_user_id = getattr(source, "grant_subject_id", None) or getattr(source, "user_id", None)
         if revoke_user_id is not None:
             await self.__class__.sync_direct_channel_user_permissions(
@@ -2343,6 +2169,7 @@ class ChannelService:
                 int(revoke_user_id),
                 None,
                 is_active=False,
+                operator_user_id=operator_user_id,
             )
 
         binding_key = getattr(source, "grant_binding_key", None)
@@ -2386,6 +2213,14 @@ class ChannelService:
         if not channels:
             raise ValueError("Channel not found")
         channel = channels[0]
+        if login_user is None:
+            raise ChannelAccessDeniedError()
+        await require_business_action(
+            login_user,
+            resource_type="channel",
+            resource_id=channel_id,
+            action="visible",
+        )
 
         # 2. Determine info source list
         channel_source_ids = channel.source_list or []
@@ -2469,22 +2304,12 @@ class ChannelService:
             raise ChannelNotFoundError()
         channel = channels[0]
 
-        current_membership = await self.space_channel_member_repository.find_membership(
-            business_id=channel_id,
-            business_type=BusinessTypeEnum.CHANNEL,
-            user_id=login_user.user_id,
+        await require_business_action(
+            login_user,
+            resource_type="channel",
+            resource_id=channel_id,
+            action="visible",
         )
-        if not current_membership or current_membership.status != MembershipStatusEnum.ACTIVE:
-            # Non-members may still view when granted `view_channel` via ReBAC, or
-            # when they are a super/tenant admin (resolved to owner-equivalent
-            # permissions). Mirrors knowledge-space APPROVAL access, where admins /
-            # ReBAC-granted users read content without subscribing. find_membership
-            # is ACTIVE-only for channels, so a PENDING applicant resolves to None
-            # here and gains no membership-derived permission — the approval gate
-            # stays intact.
-            permission_ids = await self._get_channel_permission_ids(channel_id, login_user, current_membership)
-            if "view_channel" not in permission_ids:
-                raise ChannelAccessDeniedError(msg="You do not have permission to view this channel")
 
         # 1. Fetch article from ES
         article = await self.article_es_service.get_article(article_id)

@@ -1,5 +1,4 @@
 import { SubjectSearchUser } from "@/components/bs-comp/permission/SubjectSearchUser";
-import { getResourceGrantUsersApi } from "@/controllers/API/permission";
 import { userContext } from "@/contexts/userContext";
 import {
   getGroupUsersApi,
@@ -22,10 +21,6 @@ vi.mock("@/controllers/API/user", () => ({
   getUserMembershipGroupsApi: vi.fn(),
 }));
 
-vi.mock("@/controllers/API/permission", () => ({
-  getResourceGrantUsersApi: vi.fn(),
-}));
-
 vi.mock("@/components/bs-ui/input", () => ({
   SearchInput: ({ value, onChange, placeholder }: any) => (
     <input value={value} onChange={onChange} placeholder={placeholder} />
@@ -39,7 +34,6 @@ vi.mock("@/components/bs-ui/checkBox", () => ({
 const mockedGetUsersApi = vi.mocked(getUsersApi);
 const mockedGetGroupUsersApi = vi.mocked(getGroupUsersApi);
 const mockedGetUserMembershipGroupsApi = vi.mocked(getUserMembershipGroupsApi);
-const mockedGetResourceGrantUsersApi = vi.mocked(getResourceGrantUsersApi);
 
 describe("SubjectSearchUser", () => {
   beforeEach(() => {
@@ -72,10 +66,14 @@ describe("SubjectSearchUser", () => {
     expect(mockedGetGroupUsersApi).toHaveBeenCalledWith(101);
   });
 
-  it("uses resource grant candidates for knowledge-space permission grants", async () => {
-    mockedGetResourceGrantUsersApi.mockResolvedValue([
-      { user_id: 11, user_name: "Carol", primary_department_path: "总部/产品部" },
-    ] as any);
+  it("keeps subject discovery in the user domain for knowledge-space grants", async () => {
+    mockedGetUsersApi.mockResolvedValue({
+      data: [
+        { user_id: 11, user_name: "Carol", primary_department_path: "总部/产品部" },
+      ],
+      total: 1,
+    } as any);
+    mockedGetUserMembershipGroupsApi.mockResolvedValue([] as any);
 
     render(
       <userContext.Provider value={{ user: { user_id: 7 } } as any}>
@@ -92,13 +90,13 @@ describe("SubjectSearchUser", () => {
       expect(screen.getByText("Carol")).toBeInTheDocument();
     });
 
-    expect(mockedGetResourceGrantUsersApi).toHaveBeenCalledWith("knowledge_space", "88", {
-      keyword: "",
-      page: 1,
-      page_size: 1000,
+    expect(mockedGetUsersApi).toHaveBeenCalledWith(
+      { name: "", page: 1, pageSize: 50 },
+      { signal: expect.any(AbortSignal) },
+    );
+    expect(mockedGetUserMembershipGroupsApi).toHaveBeenCalledWith(7, {
+      signal: expect.any(AbortSignal),
     });
-    expect(mockedGetUsersApi).not.toHaveBeenCalled();
-    expect(mockedGetUserMembershipGroupsApi).not.toHaveBeenCalled();
   });
 
   it("filters same-group peers by keyword on subsequent search", async () => {

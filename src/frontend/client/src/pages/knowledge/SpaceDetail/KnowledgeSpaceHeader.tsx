@@ -21,6 +21,9 @@ import { Button } from "~/components/ui/Button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
 import { CopyShareLinkButton } from "~/components/CopyShareLinkButton";
 import { useLocalize, useMediaQuery, usePrefersMobileLayout } from "~/hooks";
+import { knowledgeUploadCapabilities } from "../knowledgeUploadCapabilities";
+import { useRecoilValue } from "recoil";
+import { bishengConfState } from "~/pages/appChat/store/atoms";
 
 interface KnowledgeSpaceHeaderProps {
     space: KnowledgeSpace;
@@ -112,6 +115,7 @@ export function KnowledgeSpaceHeader({
     canManageMembers = false,
 }: KnowledgeSpaceHeaderProps) {
     const localize = useLocalize();
+    const bishengConfig = useRecoilValue(bishengConfState);
     const isH5 = usePrefersMobileLayout();
     const isNarrow576 = useMediaQuery("(max-width: 576px)");
 
@@ -352,7 +356,11 @@ export function KnowledgeSpaceHeader({
                                                 side="left"
                                                 className="z-[999] max-w-md bg-white px-3 py-2 text-sm text-[#4e5969] shadow-md"
                                             >
-                                                {localize("com_knowledge.upload_file_types_tip")}
+                                                {localize(
+                                                    bishengConfig?.enable_media_upload
+                                                        ? "com_knowledge.upload_file_types_tip"
+                                                        : "com_knowledge.upload_file_types_tip_without_media",
+                                                )}
                                             </TooltipContent>
                                         </Tooltip>
                                     </div>
@@ -362,11 +370,13 @@ export function KnowledgeSpaceHeader({
                                     icon={<FolderUp />}
                                     label={localize("com_knowledge.upload_folder")}
                                 />
-                                <ActionMenuItem
-                                    onClick={onTriggerWebLink}
-                                    icon={<Link2 />}
-                                    label={localize("com_knowledge.web_link")}
-                                />
+                                {knowledgeUploadCapabilities.webLink && (
+                                    <ActionMenuItem
+                                        onClick={onTriggerWebLink}
+                                        icon={<Link2 />}
+                                        label={localize("com_knowledge.web_link")}
+                                    />
+                                )}
                             </>
                         )}
                     </ActionMenuContent>

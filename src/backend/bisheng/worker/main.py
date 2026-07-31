@@ -9,6 +9,7 @@ import bisheng.worker.tenant_context  # noqa: F401 — register tenant signals
 from bisheng.common.services.config_service import settings
 from bisheng.core.cache.redis_manager import get_redis_client_sync
 from bisheng.core.logger import set_logger_config
+from bisheng.core.openfga.worker_runtime import ensure_worker_fga_runtime
 
 
 def create_celery_app():
@@ -30,6 +31,16 @@ WORKER_ALIVE_KEY = "celery_worker_alive_queues"
 bisheng_celery = create_celery_app()
 
 
+async def _heartbeat_worker_openfga() -> None:
+    if not settings.openfga.enabled:
+        return
+    from bisheng.core.context.manager import app_context
+
+    manager = app_context.get_context("openfga")
+    if not await manager.heartbeat():
+        raise RuntimeError("Celery F048 OpenFGA runtime heartbeat failed")
+
+
 def worker_alive_beat(all_queues: list[str]):
     """Worker heartbeat function."""
     logger.debug(f"Worker heartbeat function: {all_queues}")
@@ -39,6 +50,10 @@ def worker_alive_beat(all_queues: list[str]):
             current_timestamp = str(int(time.time()))
             redis_client = get_redis_client_sync()
             redis_client.hset(WORKER_ALIVE_KEY, mapping=dict.fromkeys(all_queues, current_timestamp))
+            if settings.openfga.enabled:
+                from bisheng.worker._asyncio_utils import run_async_task
+
+                run_async_task(_heartbeat_worker_openfga)
             time.sleep(_WORKER_BEAT_SLEEP)
         except Exception as e:
             logger.error(f"Error in worker alive beat: {e}")
@@ -51,19 +66,46 @@ async def _init_worker_openfga() -> None:
     """Initialize OpenFGA context in Celery workers for retry/reconcile tasks."""
     if not settings.openfga.enabled:
         return
+    from bisheng.core.context.manager import app_context
+    from bisheng.core.openfga.manager import FGAManager
+
     try:
-        from bisheng.core.context.manager import app_context
-        from bisheng.core.openfga.manager import FGAManager, aget_fga_client
+        manager = app_context.get_context("openfga")
+    except KeyError:
+        manager = FGAManager(
+            openfga_config=settings.openfga,
+            instance_role="celery",
+        )
+        app_context.register_context(manager, optional=False)
 
-        try:
-            app_context.get_context("openfga")
-        except KeyError:
-            app_context.register_context(FGAManager(openfga_config=settings.openfga), optional=True)
+    client = await manager.async_get_instance()
+    from bisheng.department.domain.services.department_projection_scope import (
+        configure_department_projection_runtime,
+        get_department_projection_scope,
+    )
+    from bisheng.permission.application.process_runtime import (
+        bind_f048_process_runtime,
+        initialize_f048_background_runtime,
+    )
 
-        await aget_fga_client()
-        logger.info("Celery worker OpenFGA context initialized.")
-    except Exception as e:
-        logger.warning("Celery worker OpenFGA context initialization failed: {}", e)
+    components = await initialize_f048_background_runtime(
+        client,
+        external_scopes={
+            "department": get_department_projection_scope(),
+        },
+    )
+    configure_department_projection_runtime(components.projection)
+    await bind_f048_process_runtime(
+        manager,
+        components.facade,
+    )
+    readiness = await ensure_worker_fga_runtime(manager)
+    logger.info(
+        "Celery worker F048 runtime initialized: store={} model={} catalog={}",
+        readiness["store_id"],
+        readiness["model_id"],
+        readiness["catalog_release_id"],
+    )
 
 
 @celeryd_after_setup.connect

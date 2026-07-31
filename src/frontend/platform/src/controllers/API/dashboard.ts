@@ -8,9 +8,7 @@ import axios from "../request";
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 export async function getDashboards(): Promise<Dashboard[]> {
-    // has administrative privileges or can view published dashboards
-    return await axios.get(`/api/v1/telemetry/dashboard`).then(res =>
-        res.data.filter(dashboard => (dashboard.write || dashboard.status === 'published')));
+    return await axios.get(`/api/v1/telemetry/dashboard`).then(res => res.data);
 }
 
 export async function getDashboard(id: string, fromShare: boolean = false): Promise<Dashboard> {

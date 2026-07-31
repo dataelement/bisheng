@@ -68,6 +68,8 @@ export interface SSESubmission {
      * daily conversation, no /linsight navigation.
      */
     onTaskHandoff?: (data: { session_version_id: string; chat_id: string }) => void;
+    /** Daily chat: server finished parse-time cover extraction for attachments. */
+    onQuestionFilesUpdate?: (data: { messageId?: string; files: any[] }) => void;
 }
 
 export default function useAiChatSSE(submission: SSESubmission | null) {
@@ -88,6 +90,7 @@ export default function useAiChatSSE(submission: SSESubmission | null) {
             onStart,
             onEnd,
             onTaskHandoff,
+            onQuestionFilesUpdate,
         } = submission;
 
         // ---- Agent-mode accumulators ---------------------------------------
@@ -318,8 +321,20 @@ export default function useAiChatSSE(submission: SSESubmission | null) {
                         return;
                     }
 
-                    if (category === "processing" || category === "question") {
-                        // Noise events — nothing to render here.
+                    if (category === "processing") {
+                        return;
+                    }
+
+                    if (category === "question" && type === "update" && Array.isArray(message?.files)) {
+                        onQuestionFilesUpdate?.({
+                            messageId: message_id != null ? String(message_id) : undefined,
+                            files: message.files,
+                        });
+                        return;
+                    }
+
+                    if (category === "question") {
+                        // Initial question/over events carry no post-parse metadata.
                         return;
                     }
 

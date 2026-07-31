@@ -10,7 +10,7 @@ import {
 import Config from "./components/Config"
 import OrganizationAndMembers from "./components/OrganizationAndMembers"
 import OrgSync from "./components/OrgSync"
-import RolesAndPermissions from "./components/RolesAndPermissions"
+import { RolesAndPermissions } from "./components/RolesAndPermissions"
 import Theme from "./theme"
 import UserGroups from "./components/UserGroup"
 import Users from "./components/Users"

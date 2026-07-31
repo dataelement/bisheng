@@ -12,6 +12,7 @@ from bisheng.message.domain.schemas.message_schema import MessageContentItem, Us
 from bisheng.message.domain.services.approval_handler import ApprovalHandler
 from bisheng.user.domain.models.user import UserDao, User
 
+
 class KnowledgeSpaceSubscribeHandler(ApprovalHandler):
     def __init__(self, notify_sender: Callable[[int, List[int], Any], Awaitable[InboxMessage]]):
         self.notify_sender = notify_sender
@@ -20,10 +21,9 @@ class KnowledgeSpaceSubscribeHandler(ApprovalHandler):
         """Return the channel subscription approval action code."""
         return "request_knowledge_space"
 
-    async def _get_base_info(self, message: InboxMessage, operator_user_id: int) -> Tuple[
-        Knowledge | None,
-        SpaceChannelMember | None,
-        User | None]:
+    async def _get_base_info(
+        self, message: InboxMessage, operator_user_id: int
+    ) -> Tuple[Knowledge | None, SpaceChannelMember | None, User | None]:
         space_id = self._extract_business_id(message.content, "knowledge_space_id")
         applicant_user_id = self._extract_applicant_user_id(message.content)
         space_info = await KnowledgeDao.aquery_by_id(int(space_id))
@@ -50,6 +50,7 @@ class KnowledgeSpaceSubscribeHandler(ApprovalHandler):
             memory_info.user_id,
             memory_info.user_role,
             is_active=True,
+            operator_user_id=operator_user_id,
         )
 
         await self.notify_sender(
@@ -58,7 +59,9 @@ class KnowledgeSpaceSubscribeHandler(ApprovalHandler):
             [
                 UserContentItem(
                     user_id=operator_user_id,
-                    user_name=operator_user_info.user_name if operator_user_info else f"Unknown user {operator_user_id}",
+                    user_name=operator_user_info.user_name
+                    if operator_user_info
+                    else f"Unknown user {operator_user_id}",
                 ),
                 MessageContentItem(
                     type="system_text",
@@ -68,7 +71,7 @@ class KnowledgeSpaceSubscribeHandler(ApprovalHandler):
                     business_name=space_info.name,
                     business_type="knowledge_space_id",
                     business_id=str(space_info.id),
-                )
+                ),
             ],
         )
 
@@ -87,7 +90,9 @@ class KnowledgeSpaceSubscribeHandler(ApprovalHandler):
             [
                 UserContentItem(
                     user_id=operator_user_id,
-                    user_name=operator_user_info.user_name if operator_user_info else f"Unknown user {operator_user_id}",
+                    user_name=operator_user_info.user_name
+                    if operator_user_info
+                    else f"Unknown user {operator_user_id}",
                 ),
                 MessageContentItem(
                     type="system_text",
@@ -97,6 +102,6 @@ class KnowledgeSpaceSubscribeHandler(ApprovalHandler):
                     business_name=space_info.name,
                     business_type="knowledge_space_id",
                     business_id=str(space_info.id),
-                )
+                ),
             ],
         )

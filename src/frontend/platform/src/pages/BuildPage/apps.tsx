@@ -2,7 +2,7 @@ import CardComponent from "@/components/bs-comp/cardComponent";
 import AppAvator from "@/components/bs-comp/cardComponent/avatar";
 import LabelShow from "@/components/bs-comp/cardComponent/LabelShow";
 import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
-import { hasPermissionId, usePermissionIds } from "@/components/bs-comp/permission/usePermissionLevels";
+import { hasResourceAction, useResourceActions } from "@/components/bs-comp/permission/useResourceActions";
 import AppTempSheet from "@/components/bs-comp/sheets/AppTempSheet";
 import { LoadingIcon } from "@/components/bs-icons/loading";
 import { MoveOneIcon } from "@/components/bs-icons/moveOne";
@@ -89,15 +89,13 @@ const TypeNames = {
     10: AppType.FLOW
 }
 
-const APP_PERMISSION_IDS = [
-    'view_app',
-    'edit_app',
-    'publish_app',
-    'unpublish_app',
-    'delete_app',
-    'manage_app_owner',
-    'manage_app_manager',
-    'manage_app_viewer',
+const APP_ACTIONS = [
+    'visible',
+    'edit',
+    'publish',
+    'unpublish',
+    'delete',
+    'manage_permission',
 ]
 
 export default function apps() {
@@ -112,8 +110,8 @@ export default function apps() {
     const navigate = useNavigate()
 
     // Build page lists apps the user can manage. Backend treats managed=true
-    // as "filter by edit_app" (admins still see everything via the admin
-    // short-circuit). permission_id is unused server-side when managed=true.
+    // as "filter by edit" (admins still see everything via the admin
+    // short-circuit).
     // F027: cursor-based infinite scroll; `total` / `page` / `setPage` are gone.
     // `managed: true` is seeded via initial param so it flows through every
     // request automatically; `filterData({tag_id|type|status: ...})` then
@@ -140,30 +138,25 @@ export default function apps() {
     const assistantResourceIds = dataSource
         .filter((item: any) => item.flow_type === AppNumType.ASSISTANT)
         .map((item: any) => String(item.id));
-    const { permissions: workflowPermIds } = usePermissionIds('workflow', workflowResourceIds, APP_PERMISSION_IDS);
-    const { permissions: assistantPermIds } = usePermissionIds('assistant', assistantResourceIds, APP_PERMISSION_IDS);
-    const permIds = { ...workflowPermIds, ...assistantPermIds };
+    const { actions: workflowActions } = useResourceActions('workflow', workflowResourceIds, APP_ACTIONS);
+    const { actions: assistantActions } = useResourceActions('assistant', assistantResourceIds, APP_ACTIONS);
+    const resourceActions = { ...workflowActions, ...assistantActions };
     const listedAppIds = new Set(dataSource.map((item: any) => String(item.id)));
     const canRead = (id: string | number) =>
         user.role === 'admin' ||
-        hasPermissionId(permIds, id, 'view_app') ||
+        hasResourceAction(resourceActions, id, 'visible') ||
         listedAppIds.has(String(id));
-    const canEdit = (id: string | number) => hasPermissionId(permIds, id, 'edit_app');
-    const canPublish = (id: string | number) => hasPermissionId(permIds, id, 'publish_app');
-    const canUnpublish = (id: string | number) => hasPermissionId(permIds, id, 'unpublish_app');
-    const canManage = (id: string | number) =>
-        hasPermissionId(permIds, id, 'manage_app_owner') ||
-        hasPermissionId(permIds, id, 'manage_app_manager') ||
-        hasPermissionId(permIds, id, 'manage_app_viewer');
-    const canDelete = (id: string | number) => hasPermissionId(permIds, id, 'delete_app');
+    const canEdit = (id: string | number) => hasResourceAction(resourceActions, id, 'edit');
+    const canPublish = (id: string | number) => hasResourceAction(resourceActions, id, 'publish');
+    const canUnpublish = (id: string | number) => hasResourceAction(resourceActions, id, 'unpublish');
+    const canManage = (id: string | number) => hasResourceAction(resourceActions, id, 'manage_permission');
+    const canDelete = (id: string | number) => hasResourceAction(resourceActions, id, 'delete');
     const visibleApps = dataSource;
 
-    // 角色菜单权限：`create_app` 控制"新建应用/管理应用模板"入口是否可见。
-    // 超管：始终可见。组织上的部门管理员（is_department_admin）：与 PRD 一致默认可见（与 MainLayout 全量子壳一致）。
-    // 其余用户：依赖 web_menu 中的 create_app（角色里「创建应用」开关）。
+    // `create_app` controls the create and template-management entries.
+    // Only global super admins bypass the role menu permission.
     const canCreateApp =
         user.role === 'admin' ||
-        Boolean(user.is_department_admin) ||
         (user.web_menu || []).includes('create_app');
 
     const [copyingId, setCopyingId] = useState<string | number | null>(null);

@@ -205,7 +205,15 @@ class TestKnowledgeSpaceChatPermissions:
         ), patch.object(
             chat_service, 'space_rag', _empty_space_rag,
         ):
-            result = [item async for item in chat_service.chat_single_file(1, 11, 'hi')]
+            result = [
+                item
+                async for item in chat_service.chat_single_file(
+                    1,
+                    11,
+                    "hi",
+                    1,
+                )
+            ]
 
         assert result == []
         mock_require_view.assert_awaited_once_with(1, 11)
@@ -292,9 +300,30 @@ class TestKnowledgeSpaceChatPermissions:
             new_callable=AsyncMock,
             return_value=[],
         ), patch.object(
-            chat_service, 'space_rag', _empty_space_rag,
+            chat_service,
+            "get_space_llm_config",
+            new_callable=AsyncMock,
+            return_value=(MagicMock(), SimpleNamespace(max_chunk_size=100)),
+        ), patch.object(
+            chat_service,
+            "_retrieve_and_filter",
+            new_callable=AsyncMock,
+            return_value=[],
+        ), patch.object(
+            chat_service,
+            "_render_rag_response",
+            _empty_space_rag,
         ):
-            result = [item async for item in chat_service.chat_folder(1, 22, 'chat-1', 'hello')]
+            result = [
+                item
+                async for item in chat_service.chat_folder(
+                    1,
+                    22,
+                    "chat-1",
+                    "hello",
+                    1,
+                )
+            ]
 
         assert result == []
         mock_require_space.assert_awaited_once_with(1)

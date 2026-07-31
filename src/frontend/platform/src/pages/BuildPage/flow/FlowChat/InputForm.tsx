@@ -5,9 +5,10 @@ import { useToast } from "@/components/bs-ui/toast/use-toast";
 import InputComponent from "@/components/inputComponent";
 import InputFileComponent from "@/components/inputFileComponent";
 import { WorkflowNodeParam } from "@/types/flow";
-import { useRef, useState } from "react";
+import { useRef, useState, useContext } from "react";
 import { useTranslation } from "react-i18next";
-import { FileTypes } from "./ChatInput";
+import { locationContext } from "@/contexts/locationContext";
+import { fileAcceptToInputAccept, normalizeFileAccept } from "@/util/fileAcceptUtils";
 
 const enum FormItemType {
     Text = 'text',
@@ -17,6 +18,7 @@ const enum FormItemType {
 
 const InputForm = ({ data }: { data: WorkflowNodeParam }) => {
     const { t } = useTranslation()
+    const { appConfig } = useContext(locationContext)
 
     const formDataRef = useRef(data.value.reduce((map, item) => {
         map[item.key] = { key: item.key, type: item.type, label: item.value, fileName: '', value: '' }
@@ -134,8 +136,11 @@ const InputForm = ({ data }: { data: WorkflowNodeParam }) => {
                                                     value={''}
                                                     multiple={item.multiple}
                                                     onChange={(name) => updataFileName(item, name)}
-                                                    // fileTypes={FileTypes[item.file_type.toUpperCase()]}
-                                                    suffixes={FileTypes[item.file_type.toUpperCase()]}
+                                                    suffixes={fileAcceptToInputAccept(
+                                                        normalizeFileAccept(item.file_type, {
+                                                            mediaEnabled: !!appConfig.enableMediaUpload,
+                                                        }),
+                                                    )}
                                                     onFileChange={(val) => handleChange(item, val)}
                                                 />
                                             )

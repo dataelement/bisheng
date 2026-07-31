@@ -84,16 +84,12 @@ export function ChannelActionsMenu({
         onChannelSelect,
     });
 
-    // Gate every management entry by the actual role/ReBAC permission (not by which
-    // list the channel sits in), mirroring the channel-sidebar (ChannelItem). A user
-    // granted ownership rather than being the original creator has the channel in the
-    // followed list, yet must still see 频道设置 / 解散频道.
-    const canEditSettings = canEditChannelSettings(liveChannel.role, liveChannel.permissionIds);
-    const canManageMembers = canManageChannelPermissions(liveChannel.role, liveChannel.permissionIds);
-    // Dissolving deletes the channel for everyone — gate on the delete permission, not
-    // on creation. Unsubscribe is independent: any subscriber can leave (a granted owner
-    // who is also a subscriber may see both).
-    const canDissolve = canDeleteChannel(liveChannel.role, liveChannel.permissionIds);
+    // Gate every management entry by its concrete F048 action, independent of
+    // which business list contains the channel.
+    const canEditSettings = canEditChannelSettings(liveChannel.actions);
+    const canManageMembers = canManageChannelPermissions(liveChannel.actions);
+    // Unsubscribe remains a separate subscription operation.
+    const canDissolve = canDeleteChannel(liveChannel.actions);
     const canUnsubscribe = type === "subscribed";
     const itemCls = "flex w-full cursor-pointer items-center gap-2 rounded-[6px] px-2 py-[5px] text-sm leading-[22px] text-[#212121]";
     const iconCls = "size-4 text-[#4E5969]";

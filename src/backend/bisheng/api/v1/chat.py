@@ -24,9 +24,10 @@ async def get_online_chat(
     limit: int | None = 10,
     sort_by: str | None = None,
     search_description: bool | None = False,
-    permission_id: str = Query(
-        default="use_app",
-        description="Fine-grained permission id for app list visibility",
+    action: str = Query(
+        default="use",
+        pattern="^(visible|use)$",
+        description="Concrete action required for each app",
     ),
     user: UserPayload = Depends(UserPayload.get_login_user),
 ):
@@ -52,7 +53,7 @@ async def get_online_chat(
             limit,
             skip_pagination=False,
             search_description=bool(search_description),
-            permission_id=permission_id,
+            action=action,
         )
     else:
         flow_fetch_start = perf_counter()
@@ -65,7 +66,7 @@ async def get_online_chat(
             page,
             limit,
             search_description=bool(search_description),
-            permission_id=permission_id,
+            action=action,
         )
         logger.info(
             "[perf][chat.online.flow_fetch] user_id={} flow_type={} keyword={} rows={} took_ms={:.2f}",
@@ -89,14 +90,14 @@ async def get_online_chat(
 
     logger.info(
         "[perf][chat.online.total] user_id={} flow_type={} sort_by={} page={} limit={} rows={} "
-        "permission_id={} took_ms={:.2f}",
+        "action={} took_ms={:.2f}",
         user.user_id,
         flow_type,
         sort_by,
         page,
         limit,
         len(data),
-        permission_id,
+        action,
         (perf_counter() - total_start) * 1000,
     )
     return resp_200(data=data)

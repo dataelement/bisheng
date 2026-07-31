@@ -84,16 +84,16 @@ export function PlusMenu({
                     onSelect={() => onToggleTaskMode()}
                     className="flex cursor-pointer items-center gap-3 rounded-xl px-2 py-1.5 outline-none"
                 >
-                    <Outlined.Binoculars size={16} className={cn(taskModeActive ? 'text-blue-600' : 'text-slate-600')} />
+                    <Outlined.Binoculars size={16} className={cn(taskModeActive ? 'text-blue-500' : 'text-slate-600')} />
                     <span
                         className={cn(
                             'flex-1 text-[14px] font-normal',
-                            taskModeActive ? 'text-blue-600' : 'text-slate-700',
+                            taskModeActive ? 'text-blue-500' : 'text-slate-700',
                         )}
                     >
                         {localize('com_linsight_task_mode')}
                     </span>
-                    {taskModeActive && <Check size={14} className="text-blue-600" />}
+                    {taskModeActive && <Check size={14} className="text-blue-500" />}
                 </DropdownMenuItem>
 
                 {/* Add Skill submenu — task mode only (hidden in daily mode) */}
@@ -109,7 +109,7 @@ export function PlusMenu({
                                 <div className="relative">
                                     <Outlined.Newspaper
                                         size={16}
-                                        className={cn(selectedSkills.length > 0 ? 'text-blue-600' : 'text-slate-600')}
+                                        className={cn(selectedSkills.length > 0 ? 'text-blue-500' : 'text-slate-600')}
                                     />
                                     {selectedSkills.length > 0 && (
                                         <span className="absolute -right-1 -top-1 size-2.5 rounded-full border-2 border-white bg-blue-500" />

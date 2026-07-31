@@ -55,6 +55,12 @@ async def test_model_status_checks_llm_with_non_streaming(monkeypatch):
         return SimpleNamespace(ainvoke=AsyncMock())
 
     monkeypatch.setattr(LLMService, "get_bisheng_llm", fake_get_bisheng_llm)
+    # The probe records its verdict on success too (F044), so stub the write —
+    # this test is only about how the model gets called.
+    monkeypatch.setattr(
+        "bisheng.llm.domain.services.llm.LLMDao.update_model_status",
+        lambda *args, **kwargs: None,
+    )
 
     await LLMService.test_model_status(
         SimpleNamespace(id=10, model_name="glm-4-plus", model_type=LLMModelType.LLM.value),

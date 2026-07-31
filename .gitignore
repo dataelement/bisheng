@@ -298,3 +298,12 @@ docs-ui-refactor/
 # CoAligne local state + sync config (per-developer; the tool rewrites them itself)
 .coaligne/
 .coaligneignore
+
+# design-sync (claude.ai/design) — generated component bundle + local tooling.
+# All generated/scaffolding, produced by syncing the Linsight UI; not versioned
+# here. To version .ds-sync-gen hand-authored build inputs for a fresh clone,
+# `git add -f` them explicitly.
+/ds-bundle/
+/.ds-sync/
+/.design-sync/
+/src/frontend/client/.ds-sync-gen/

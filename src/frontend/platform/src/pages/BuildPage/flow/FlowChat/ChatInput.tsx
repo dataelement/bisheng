@@ -19,12 +19,14 @@ import GuideQuestions from "./GuideQuestions";
 import { useMessageStore } from "./messageStore";
 import DragDropOverlay from "./DragDropOverlay";
 import { useFileDropAndPaste } from "./useFileDropAndPaste";
+import { fileAcceptToInputAccept, normalizeFileAccept } from "@/util/fileAcceptUtils";
 const GuideQuestionsAny = GuideQuestions as any;
 
 export const FileTypes = {
     ALL: ['.PNG', '.JPEG', '.JPG', '.BMP', '.PDF', '.OFD', '.TXT', '.MD', '.HTML', '.XLS', '.XLSX', '.CSV', '.DOC', '.DOCX', '.PPT', '.PPTX'],
     IMAGE: ['.PNG', '.JPEG', '.JPG', '.BMP'],
     FILE: ['.PDF', '.OFD', '.TXT', '.MD', '.HTML', '.XLS', '.XLSX', '.CSV', '.DOC', '.DOCX', '.PPT', '.PPTX'],
+    MEDIA: ['.MP3', '.WAV', '.M4A', '.AAC', '.FLAC', '.OGG', '.MP4', '.MOV', '.AVI', '.MKV', '.WEBM'],
 }
 
 export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBeforSend, onLoad }) {
@@ -314,13 +316,11 @@ export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBefo
                 const uploadSwithItem = input_schema.value?.find(el => el?.key === 'user_input_file')
                 setUploadLock(uploadSwithItem ? uploadSwithItem.value : true)
                 const fileAccept = schemaItem?.value
-                if (fileAccept === 'image') {
-                    setAccepts(FileTypes.IMAGE.join(','))
-                } else if (fileAccept === 'file') {
-                    setAccepts(FileTypes.FILE.join(','))
-                } else {
-                    setAccepts(FileTypes.IMAGE.join(',') + ',' + FileTypes.FILE.join(','))
-                }
+                const kinds = normalizeFileAccept(fileAccept, {
+                    mediaEnabled: !!appConfig.enableMediaUpload,
+                })
+                const acceptStr = fileAcceptToInputAccept(kinds)
+                setAccepts(acceptStr || '*')
             }
             // 待用户输入
             input_schema.tab === 'form_input' ? setInputForm(input_schema) : setInputLock({ locked: false, reason: '' })

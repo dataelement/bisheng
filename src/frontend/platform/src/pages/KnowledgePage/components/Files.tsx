@@ -19,7 +19,7 @@ import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { downloadFile, truncateString } from "@/util/utils";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@radix-ui/react-dropdown-menu";
 import { CircleAlertIcon, ClipboardPenLine, Filter, RotateCw, Trash2, Download, Tag as TagIcon } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useContext } from "react";
 import { useTranslation } from "react-i18next";
 import { SearchInput } from "../../../components/bs-ui/input";
 import AutoPagination from "../../../components/bs-ui/pagination/autoPagination";
@@ -33,6 +33,8 @@ import WebLinkImportDialog from "./WebLinkImportDialog";
 import FileTagList from "./tags/FileTagList";
 import KnowledgeTagSelect from "./tags/KnowledgeTagSelect";
 import { resolveKnowledgeParseFailure } from "../knowledgeParseFailureMessage";
+import { knowledgeUploadCapabilities } from "../knowledgeUploadCapabilities";
+import { locationContext } from "@/contexts/locationContext";
 
 interface StatusIndicatorProps {
     status: number;
@@ -162,6 +164,7 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({ status, remark
 };
 
 export default function Files({ onPreview, canEditKb = false, canDeleteKb = false }) {
+    const { appConfig } = useContext(locationContext);
     const { t } = useTranslation('knowledge')
     const { id } = useParams()
     const { toast } = useToast()
@@ -528,9 +531,18 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
                     {canEditKb && (
                         <AddKnowledgeFileMenu
                             buttonClassName="px-4 md:px-8"
-                            supportedFormatsLabel={t("supportedFormatsTip", { defaultValue: "" })}
+                            supportedFormatsLabel={t(
+                                appConfig.enableMediaUpload
+                                    ? "supportedFormatsTip"
+                                    : "supportedFormatsTipWithoutMedia",
+                                { defaultValue: "" },
+                            )}
                             onUploadFile={() => navigate(`/filelib/upload/${id}`)}
-                            onWebLink={() => setWebLinkOpen(true)}
+                            onWebLink={() => {
+                                if (knowledgeUploadCapabilities.webLink) {
+                                    setWebLinkOpen(true);
+                                }
+                            }}
                         />
                     )}
                 </div>
@@ -798,12 +810,14 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
                 id={id}
                 initialMetadata={metadataFields}
             />
-            <WebLinkImportDialog
-                knowledgeId={id}
-                open={webLinkOpen}
-                onOpenChange={setWebLinkOpen}
-                onImported={reload}
-            />
+            {knowledgeUploadCapabilities.webLink && (
+                <WebLinkImportDialog
+                    knowledgeId={id}
+                    open={webLinkOpen}
+                    onOpenChange={setWebLinkOpen}
+                    onImported={reload}
+                />
+            )}
         </div>
 
     )

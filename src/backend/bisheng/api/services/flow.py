@@ -1,43 +1,68 @@
 import asyncio
 import copy
-from typing import List, Dict, AsyncGenerator, Union
+from collections.abc import AsyncGenerator
+from hashlib import sha256
+from typing import Union
 
 from fastapi import Request
 from fastapi.encoders import jsonable_encoder
 from loguru import logger
 
 from bisheng.api.services.audit_log import AuditLogService
-from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200, FlowVersionCreate, FlowCompareReq, resp_500, \
-    StreamData
+from bisheng.api.v1.schemas import (
+    FlowCompareReq,
+    FlowVersionCreate,
+    StreamData,
+    UnifiedResponseModel,
+    resp_200,
+    resp_500,
+)
 from bisheng.common.chat.utils import process_node_data
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
-from bisheng.common.errcode.flow import NotFoundVersionError, CurVersionDelError, VersionNameExistsError, \
-    WorkFlowOnlineEditError
+from bisheng.common.errcode.flow import (
+    CurVersionDelError,
+    NotFoundVersionError,
+    VersionNameExistsError,
+    WorkFlowOnlineEditError,
+)
 from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.base import BaseService
 from bisheng.core.logger import trace_id_var
-from bisheng.database.models.flow import FlowDao, FlowStatus, Flow, FlowType
-from bisheng.database.models.flow_version import FlowVersionDao, FlowVersionRead, FlowVersion
-from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum, GroupResource
-from bisheng.database.models.role_access import AccessType
-from bisheng.permission.domain.services.owner_service import OwnerService
-from bisheng.permission.domain.workflow_app_permission import user_may_share_app
+from bisheng.database.models.flow import Flow, FlowDao, FlowStatus, FlowType
+from bisheng.database.models.flow_version import FlowVersion, FlowVersionDao, FlowVersionRead
+from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
 from bisheng.database.models.session import MessageSessionDao
-from bisheng.database.models.user_group import UserGroupDao
-from bisheng.permission.domain.services.application_permission_service import ApplicationPermissionService
+from bisheng.permission.application.access import get_f048_resource_adapter
+from bisheng.permission.application.business_authorization import (
+    check_business_action,
+    require_business_action,
+)
+from bisheng.permission.application.identity import resolve_permission_actor
 from bisheng.share_link.domain.models.share_link import ShareLink
 from bisheng.utils import get_request_ip
+
+from .f048_application_permission import ApplicationPermissionRecord
 
 
 class FlowService(BaseService):
 
     @classmethod
-    def get_version_list_by_flow(cls, user: UserPayload, flow_id: str) -> UnifiedResponseModel[List[FlowVersionRead]]:
+    async def get_version_list_by_flow(
+        cls,
+        user: UserPayload,
+        flow_id: str,
+    ) -> UnifiedResponseModel[list[FlowVersionRead]]:
         """
         By SkillID Get all versions of a skill
         """
+        await require_business_action(
+            user,
+            resource_type="workflow",
+            resource_id=flow_id,
+            action="visible",
+        )
         data = FlowVersionDao.get_list_by_flow(flow_id)
         # Include Deleted Versions
         all_version_num = FlowVersionDao.count_list_by_flow(flow_id, include_delete=True)
@@ -47,15 +72,31 @@ class FlowService(BaseService):
         })
 
     @classmethod
-    def get_version_info(cls, user: UserPayload, version_id: int) -> UnifiedResponseModel[FlowVersion]:
+    async def get_version_info(
+        cls,
+        user: UserPayload,
+        version_id: int,
+    ) -> UnifiedResponseModel[FlowVersion]:
         """
         According to versionIDGet version details
         """
         data = FlowVersionDao.get_version_by_id(version_id)
+        if data is None:
+            return NotFoundVersionError.return_resp()
+        await require_business_action(
+            user,
+            resource_type="workflow",
+            resource_id=data.flow_id,
+            action="visible",
+        )
         return resp_200(data=data)
 
     @classmethod
-    def delete_version(cls, user: UserPayload, version_id: int) -> UnifiedResponseModel[None]:
+    async def delete_version(
+        cls,
+        user: UserPayload,
+        version_id: int,
+    ) -> UnifiedResponseModel[None]:
         """
         According to versionIDRemove Version
         """
@@ -72,14 +113,12 @@ class FlowService(BaseService):
         if not flow_info or flow_info.flow_type != FlowType.WORKFLOW.value:
             return NotFoundError.return_resp()
 
-        # Determine permissions
-        if not ApplicationPermissionService.has_any_permission_sync(
+        await require_business_action(
             user,
-            'workflow',
-            str(flow_info.id),
-            ['edit_app'],
-        ):
-            return UnAuthorizedError.return_resp()
+            resource_type="workflow",
+            resource_id=flow_info.id,
+            action="edit",
+        )
 
         if version_info.is_current == 1:
             return CurVersionDelError.return_resp()
@@ -93,14 +132,12 @@ class FlowService(BaseService):
         if not flow_info or flow_info.flow_type != FlowType.WORKFLOW.value:
             raise NotFoundError.http_exception()
 
-        # Determine permissions
-        if not await ApplicationPermissionService.has_any_permission_async(
+        await require_business_action(
             user,
-            'workflow',
-            str(flow_info.id),
-            ['edit_app'],
-        ):
-            raise UnAuthorizedError.http_exception()
+            resource_type="workflow",
+            resource_id=flow_info.id,
+            action="edit",
+        )
         return flow_info
 
     @classmethod
@@ -210,22 +247,27 @@ class FlowService(BaseService):
             meta_data = share_link.meta_data or {}
             share_flow_id = str(meta_data.get('flowId') or share_link.resource_id or '')
             has_share_grant = share_flow_id == str(flow_id)
-        if not has_share_grant and not await ApplicationPermissionService.has_any_permission_async(
+        if not has_share_grant and not await check_business_action(
             login_user,
-            'workflow',
-            str(flow_info.id),
-            ['view_app', 'use_app'],
+            resource_type="workflow",
+            resource_id=flow_info.id,
+            action="visible",
         ):
             raise UnAuthorizedError()
 
         flow_info.logo = await cls.get_logo_share_link_async(flow_info.logo)
 
         payload = jsonable_encoder(flow_info)
-        payload['can_share'] = await user_may_share_app(login_user, 'workflow', flow_id)
+        payload['can_share'] = await check_business_action(
+            login_user,
+            resource_type="workflow",
+            resource_id=flow_id,
+            action="share",
+        )
         return resp_200(data=payload)
 
     @classmethod
-    async def get_compare_tasks(cls, user: UserPayload, req: FlowCompareReq) -> List:
+    async def get_compare_tasks(cls, user: UserPayload, req: FlowCompareReq) -> list:
         """
         Get Comparison Tasks
         """
@@ -251,7 +293,7 @@ class FlowService(BaseService):
         return tasks
 
     @classmethod
-    def parse_compare_inputs(cls, inputs: Dict, question) -> (Dict, Dict):
+    def parse_compare_inputs(cls, inputs: dict, question) -> (dict, dict):
         # Under special treatmentinputs, Hold and PasswebsocketSessions are formatted consistently
         if inputs.get('data', None):
             for one in inputs['data']:
@@ -260,7 +302,7 @@ class FlowService(BaseService):
                     one['file_path'] = one['value']
 
         # Paddingquestion and Generate Replacementtweaks
-        for key, val in inputs.items():
+        for key, _val in inputs.items():
             if key != 'data' and key != 'id':
                 # Default inputkey, replace the firstkey
                 logger.info(f"replace_inputs {key} replace to {question}")
@@ -277,7 +319,7 @@ class FlowService(BaseService):
         return inputs, tweaks
 
     @classmethod
-    async def compare_flow_node(cls, user: UserPayload, req: FlowCompareReq) -> UnifiedResponseModel[Dict]:
+    async def compare_flow_node(cls, user: UserPayload, req: FlowCompareReq) -> UnifiedResponseModel[dict]:
         """
         Compare nodes in two versions Output Results
         """
@@ -293,7 +335,7 @@ class FlowService(BaseService):
                 else:
                     res[index] = answer
         except Exception as e:
-            return resp_500(message="Workflow comparison error:{}".format(str(e)))
+            return resp_500(message=f"Workflow comparison error:{e!s}")
         return resp_200(data=res)
 
     @classmethod
@@ -313,17 +355,23 @@ class FlowService(BaseService):
                                            'answer': answer}))
 
     @classmethod
-    async def exec_flow_node(cls, inputs: Dict, tweaks: Dict, index: int, versions: List[FlowVersion]):
+    async def exec_flow_node(cls, inputs: dict, tweaks: dict, index: int, versions: list[FlowVersion]):
         # Gantianswer
         raise ValueError("flow is not supported")
 
     @classmethod
-    def create_flow_hook(cls, request: Request, login_user: UserPayload, flow_info: Flow) -> bool:
+    async def create_flow_hook(
+        cls,
+        request: Request,
+        login_user: UserPayload,
+        flow_info: Flow,
+    ) -> bool:
         logger.info(f'create_flow_hook flow: {flow_info.id}, user_payload: {login_user.user_id}')
 
-        # F008: Write owner tuple to OpenFGA (INV-2)
-        from bisheng.permission.domain.services.owner_service import OwnerService
-        OwnerService.write_owner_tuple_sync(login_user.user_id, 'workflow', str(flow_info.id))
+        await get_f048_resource_adapter("workflow").authorize_created(
+            record=cls._new_permission_record(flow_info),
+            actor=await resolve_permission_actor(login_user),
+        )
 
         AuditLogService.create_build_workflow(login_user, get_request_ip(request), flow_info.id)
 
@@ -340,6 +388,30 @@ class FlowService(BaseService):
         return True
 
     @classmethod
+    async def project_flow_delete(
+        cls,
+        login_user: UserPayload,
+        flow_info: Flow,
+    ) -> None:
+        await require_business_action(
+            login_user,
+            resource_type="workflow",
+            resource_id=flow_info.id,
+            action="delete",
+        )
+        adapter = get_f048_resource_adapter("workflow")
+        record = await adapter.load_permission_record(
+            resource_type="workflow",
+            resource_id=str(flow_info.id),
+        )
+        if record is None:
+            raise NotFoundError()
+        await adapter.project_delete(
+            record=record,
+            actor=await resolve_permission_actor(login_user),
+        )
+
+    @classmethod
     def delete_flow_hook(cls, request: Request, login_user: UserPayload, flow_info: Flow) -> bool:
         logger.info(f'delete_flow_hook flow: {flow_info.id}, user_payload: {login_user.user_id}')
 
@@ -349,10 +421,27 @@ class FlowService(BaseService):
         # Delete Skills Associated Under User Group
         GroupResourceDao.delete_group_resource_by_third_id(flow_info.id, ResourceTypeEnum.WORK_FLOW)
 
-        # F008: Clean up all ReBAC tuples for the deleted workflow.
-        OwnerService.delete_resource_tuples_sync('workflow', str(flow_info.id))
-
         # Update session information
         MessageSessionDao.update_session_info_by_flow(flow_info.name, flow_info.description, flow_info.logo,
                                                       flow_info.id, flow_info.flow_type)
         return True
+
+    @staticmethod
+    def _new_permission_record(
+        flow_info: Flow,
+    ) -> ApplicationPermissionRecord:
+        context_version = sha256(
+            (
+                f"workflow|{flow_info.id}|{flow_info.tenant_id}|"
+                f"{flow_info.user_id}|{flow_info.status}"
+            ).encode()
+        ).hexdigest()
+        return ApplicationPermissionRecord(
+            tenant_id=int(flow_info.tenant_id or 0),
+            resource_type="workflow",
+            resource_id=str(flow_info.id),
+            status=FlowStatus(flow_info.status).name,
+            owner_user_id=int(flow_info.user_id or 0),
+            permission_version=0,
+            context_version=context_version,
+        )

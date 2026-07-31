@@ -139,6 +139,11 @@ class MinioConf(BaseModel):
     tmp_bucket: str | None = Field(
         default="tmp-dir", description="Ad hocbucket, stored files will have an expiration date"
     )
+    upload_timeout_seconds: int = Field(
+        default=1800,
+        description="MinIO HTTP read/connect timeout for uploads and downloads (seconds). "
+        "Default 1800 (30 min); minio-py otherwise caps at 300s and large video uploads fail.",
+    )
 
 
 class ObjectStore(BaseModel):
@@ -346,9 +351,9 @@ class KnowledgeQAFilterConf(BaseModel):
         ge=1,
         le=64,
         description=(
-            "AD-08 concurrency. Semaphore limit when resolving view_file per file "
-            "via FineGrainedPermissionService; mirrors KnowledgeSpaceService's "
-            "_CHILD_PERMISSION_CHECK_CONCURRENCY default."
+            "Legacy-compatible concurrency cap for bounded per-file checks. "
+            "F048 authorization uses concrete actions through the unified "
+            "permission facade."
         ),
     )
 

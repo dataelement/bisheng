@@ -6,7 +6,7 @@
 > - `scripts/arch-guard.sh` is the **machine-enforcement arm** of this document: each RULE maps to a clause below (see the anchor table).
 > - Violations are reported as **BLOCKER** during `/sdd-review design`.
 > - **Change governance**: editing this file requires PR review (a law change affects every feature). If a RULE is involved, sync the "→ Cx" note in `arch-guard.sh`.
-> - Last revised: 2026-06-05.
+> - Last revised: 2026-07-29 (F048: verified targets and single action runtime).
 
 ## Anchor Table (clause ↔ arch-guard RULE)
 
@@ -53,17 +53,42 @@ macOS: the DM8 driver (`dmPython`/`dmAsync`) is not installed (`sys_platform != 
 **Never write `WHERE tenant_id = X` manually.** SQLAlchemy events handle it automatically for 23+ tables.
 `multi_tenant.enabled=false` behaves identically to single-tenant (default `tenant_id=1`).
 
-## C4. Permissions — Unified Entry Point
+## C4. Permissions — Verified Business Target + Unified Action Runtime
 
 ```python
-from bisheng.permission.domain.services.permission_service import PermissionService
-await PermissionService.check(...)      # check access
-await PermissionService.authorize(...)  # write OpenFGA owner tuple on resource creation (required)
+from bisheng.permission.application.business_authorization import (
+    require_business_action,
+)
+
+await require_business_action(
+    login_user,
+    resource_type="workflow",
+    resource_id=workflow_id,
+    action="edit",
+)
 ```
 
-- **Never** query `role_access` directly for resource authorization (RULE-8 / historical invariant **INV-T19**, VIOLATION).
-- Resource creation **must** call `PermissionService.authorize()`; failures go to the `failed_tuples` retry table.
-- Five-level short-circuit: `super_admin` → tenant mismatch deny → tenant admin → ReBAC (OpenFGA) → RBAC menu.
+- The owning business Service/adapter first loads the resource, checks
+  tenant/status/parent/version rules, then creates `VerifiedPermissionTarget`.
+  The permission module only performs business-independent authorization; it
+  **must not** import or query business ORM/DAO/Repository/Service objects.
+- **Never** query `role_access`, OpenFGA, or legacy relation/`permission_id`
+  templates directly for resource authorization (RULE-8 / historical invariant
+  **INV-T19**, VIOLATION). Concrete actions go through the sole F048 runtime.
+- Resource creation/move/copy/delete, Grant mutation, mode switch, and Catalog
+  publish must pre-record a durable operation/tuple projection ledger before
+  OpenFGA mutation. SQL finalize is allowed only after the atomic projection
+  succeeds; retry/forward repair uses the same idempotency key and frozen plan.
+- Concrete resource decisions short-circuit in this order:
+  `super_admin` → tenant mismatch deny → tenant admin → Catalog/action gate →
+  OpenFGA. RBAC menu access remains a separate navigation/API-capability
+  concern and is never a fallback ALLOW for resource actions.
+- Production resolves one unique OpenFGA Store by stable name and its latest
+  model at startup, then requires that Store/model/checksum to match the one
+  ACTIVE authorization release referenced by the SQL CURRENT Catalog. Every
+  Check/List/Write still sends that resolved model ID explicitly. Legacy/
+  dual-model clients, runtime model writes, and fail-open behavior are
+  forbidden.
 
 ## C5. Error-Code Convention
 

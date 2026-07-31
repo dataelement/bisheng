@@ -88,11 +88,14 @@ export function AiAssistantPanel({
         title: chatTitle,
         isLoading,
         isStreaming,
+        isParsingMedia: workstationIsParsingMedia,
         sendMessage,
         stopGenerating,
         clearConversation,
         regenerate,
     } = activeChat;
+
+    const isParsingMedia = isSimpleMode ? false : workstationIsParsingMedia;
 
     const { data: bsConfig } = useGetBsConfig();
     const { user } = useAuthContext();
@@ -218,6 +221,7 @@ export function AiAssistantPanel({
                     disabled={allowModelSelect ? !bsConfig?.models?.length : false}
                     placeholder={localize("com_subscription.input_question_placeholder")}
                     isStreaming={isStreaming}
+                    isParsingMedia={isParsingMedia}
                     onScrollToBottom={() => { }}
                     modelOptions={allowModelSelect ? bsConfig?.models : undefined}
                     modelValue={allowModelSelect ? chatModel.id : undefined}

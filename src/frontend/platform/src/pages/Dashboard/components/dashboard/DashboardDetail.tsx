@@ -8,11 +8,14 @@ import { Input } from "@/components/bs-ui/input"
 import { useToast } from "@/components/bs-ui/toast/use-toast"
 import Tip from "@/components/bs-ui/tooltip/tip"
 import { locationContext } from "@/contexts/locationContext"
-import { userContext } from "@/contexts/userContext"
 import { CircleAlert } from "lucide-react"
 import { useContext, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { DashboardStatus, usePublishDashboard } from "../../hook"
+import {
+    DashboardStatus,
+    useDashboardPermissions,
+    usePublishDashboard,
+} from "../../hook"
 import { Dashboard } from "../../types/dataConfig"
 import { EditorCanvas } from "../editor/EditorCanvas"
 import { ExpandIcon } from "@/components/bs-icons/expand"
@@ -45,9 +48,15 @@ export function DashboardDetail({
     const [title, setTitle] = useState(dashboard?.title || "")
     const inputRef = useRef<HTMLInputElement>(null)
     const { appConfig } = useContext(locationContext)
-    const { user } = useContext(userContext);
-    const isAdmin = user.role === 'admin'
     const { toast } = useToast()
+    const dashboardId = dashboard ? String(dashboard.id) : ""
+    const {
+        permissions,
+        loading: permissionsLoading,
+    } = useDashboardPermissions(dashboardId ? [dashboardId] : [])
+    const permissionActions = permissions[dashboardId] ?? []
+    const canView = permissionActions.includes("visible")
+    const canEdit = permissionActions.includes("edit")
 
     useEffect(() => {
         if (dashboard) {
@@ -63,7 +72,7 @@ export function DashboardDetail({
     }, [isEditingTitle])
 
     const handleDoubleClick = () => {
-        if (appConfig.isDashboardPro && dashboard.write) {
+        if (appConfig.isDashboardPro && canEdit) {
             setIsEditingTitle(true)
         }
     }
@@ -111,7 +120,7 @@ export function DashboardDetail({
 
     const { publish } = usePublishDashboard()
 
-    if (isLoading) {
+    if (isLoading || permissionsLoading) {
         return <div className="flex-1 flex justify-center items-center z-10">
             <LoadingIcon />
         </div>
@@ -120,8 +129,9 @@ export function DashboardDetail({
     if (!dashboard) {
         return <div className="flex-1 flex items-center justify-center text-muted-foreground">{t('selectADashboard')}</div>
     }
+    if (!canView) return null
+
     const isPublished = dashboard.status === DashboardStatus.Published
-    console.log('dashboard :>> ', dashboard);
 
     return (
         <div className="flex-1 flex flex-col h-full min-w-0">
@@ -183,7 +193,7 @@ export function DashboardDetail({
                 <div className="flex items-center gap-2">
                     <ButtonGroup>
                         <Button variant="outline" size="sm" onClick={handleFullscreen}>{t('fullScreen')}</Button>
-                        {appConfig.isDashboardPro && dashboard.write && <Button variant="outline" size="sm" onClick={() => publish(dashboard.id, isPublished)}>{isPublished ? t('unpublish') : t('publish')}</Button>}
+                        {appConfig.isDashboardPro && canEdit && <Button variant="outline" size="sm" onClick={() => publish(dashboard.id, isPublished)}>{isPublished ? t('unpublish') : t('publish')}</Button>}
                         <Button variant="outline" size="sm" onClick={() => onShare(dashboard.id)}>{t('share')}</Button>
                     </ButtonGroup>
 
@@ -196,7 +206,7 @@ export function DashboardDetail({
                         {dashboard.is_default ? t('alreadyDefault') : t('setAsDefault')}
                     </Button>}
 
-                    {appConfig.isDashboardPro && dashboard.write &&
+                    {appConfig.isDashboardPro && canEdit &&
                         <Tip content={isPublished ? t('editAfterUnpublish') : ""} side={"top"} styleClasses="-translate-x-12" >
                             <Button
                                 className="disabled:pointer-events-auto"

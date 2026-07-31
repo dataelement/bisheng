@@ -14,8 +14,7 @@ from fastapi import HTTPException
 
 import bisheng.open_endpoints.api.endpoints.filelib as filelib
 from bisheng.common.errcode.knowledge import KnowledgeTypeNotSupportedError
-from bisheng.knowledge.domain.models.knowledge import (AuthTypeEnum, KnowledgeCreate,
-                                                       KnowledgeTypeEnum, KnowledgeUpdate)
+from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum, KnowledgeCreate, KnowledgeTypeEnum, KnowledgeUpdate
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
 
@@ -87,7 +86,7 @@ async def test_create_dispatch_kb(monkeypatch):
 
 async def test_create_dispatch_space(monkeypatch):
     """AC-09: type=3 → create_knowledge_space (model ignored); output enriched with
-    user_name + creator's effective space permission_ids."""
+    user_name + creator's effective space actions."""
     captured = {}
 
     async def _fake_space_create(self, **kwargs):
@@ -98,17 +97,17 @@ async def test_create_dispatch_space(monkeypatch):
         })()
 
     async def _fake_eff(self, object_type, object_id, **kw):
-        return {"view_space", "edit_space"}
+        return {"visible", "edit"}
 
     monkeypatch.setattr(KnowledgeSpaceService, "create_knowledge_space", _fake_space_create)
-    monkeypatch.setattr(KnowledgeSpaceService, "_get_effective_permission_ids", _fake_eff)
+    monkeypatch.setattr(KnowledgeSpaceService, "_get_effective_actions", _fake_eff)
 
     req = KnowledgeCreate(name="space", type=KnowledgeTypeEnum.SPACE.value, model="ignored",
                           auth_type=AuthTypeEnum.PRIVATE, is_released=True)
     resp = await filelib.create(request=None, knowledge=req, version_repo=None, doc_repo=None)
     assert resp.data.type == KnowledgeTypeEnum.SPACE.value
     assert resp.data.user_name == "operator"               # enriched
-    assert set(resp.data.permission_ids) == {"edit_space", "view_space"}  # enriched
+    assert set(resp.data.actions) == {"edit", "visible"}  # enriched
     # model is never forwarded to the space create path.
     assert "model" not in captured
     assert captured["auth_type"] == AuthTypeEnum.PRIVATE
@@ -318,6 +317,21 @@ def _setup_delete_knowledge_mocks(monkeypatch, knowledge, qa_delete_spy):
     monkeypatch.setattr(KnowledgeService, "delete_knowledge_file_in_minio", classmethod(lambda cls, kid: None))
     monkeypatch.setattr(KnowledgeService.permission_service, "ensure_knowledge_delete_sync", lambda **kw: None)
     monkeypatch.setattr(KnowledgeService.audit_telemetry_service, "telemetry_delete_knowledge", lambda u: None)
+
+    async def _project_library_deletion(
+        cls,
+        login_user,
+        *,
+        knowledge_id,
+        include_container,
+    ):
+        return None
+
+    monkeypatch.setattr(
+        KnowledgeService,
+        "_project_library_deletion",
+        classmethod(_project_library_deletion),
+    )
 
     class _QA:
         def __init__(self, i):

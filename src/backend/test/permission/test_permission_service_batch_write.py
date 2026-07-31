@@ -25,12 +25,12 @@ async def test_batch_write_tuples_ignores_duplicate_write_errors():
         if writes == [{
             'user': 'user:400',
             'relation': 'owner',
-            'object': 'tool:2202',
+            'object': 'llm_model:2202',
         }]:
             raise FGAWriteError('cannot write a tuple which already exists')
 
     fake_fga = SimpleNamespace(write_tuples=AsyncMock(side_effect=side_effect))
-    ops = [_op('write', 'tool:2202'), _op('write', 'tool:2203')]
+    ops = [_op('write', 'llm_model:2202'), _op('write', 'llm_model:2203')]
 
     with patch.object(PermissionService, '_get_fga', return_value=fake_fga), \
             patch.object(PermissionService, '_save_failed_tuples', AsyncMock()) as save_failed:
@@ -48,12 +48,12 @@ async def test_batch_write_tuples_ignores_missing_delete_errors():
         if deletes == [{
             'user': 'user:400',
             'relation': 'owner',
-            'object': 'tool:2202',
+            'object': 'llm_model:2202',
         }]:
             raise FGAWriteError('tuple to be deleted did not exist')
 
     fake_fga = SimpleNamespace(write_tuples=AsyncMock(side_effect=side_effect))
-    ops = [_op('delete', 'tool:2202'), _op('delete', 'tool:2203')]
+    ops = [_op('delete', 'llm_model:2202'), _op('delete', 'llm_model:2203')]
 
     with patch.object(PermissionService, '_get_fga', return_value=fake_fga), \
             patch.object(PermissionService, '_save_failed_tuples', AsyncMock()) as save_failed:
@@ -71,12 +71,12 @@ async def test_batch_write_tuples_records_only_unresolved_single_failures():
         if writes == [{
             'user': 'user:400',
             'relation': 'owner',
-            'object': 'tool:2203',
+            'object': 'llm_model:2203',
         }]:
             raise FGAWriteError('unexpected validation failure')
 
     fake_fga = SimpleNamespace(write_tuples=AsyncMock(side_effect=side_effect))
-    ops = [_op('write', 'tool:2202'), _op('write', 'tool:2203')]
+    ops = [_op('write', 'llm_model:2202'), _op('write', 'llm_model:2203')]
 
     with patch.object(PermissionService, '_get_fga', return_value=fake_fga), \
             patch.object(PermissionService, '_save_failed_tuples', AsyncMock()) as save_failed:
@@ -84,7 +84,7 @@ async def test_batch_write_tuples_records_only_unresolved_single_failures():
 
     save_failed.assert_awaited_once()
     failed_ops, error_msg = save_failed.await_args.args
-    assert failed_ops == [_op('write', 'tool:2203')]
+    assert failed_ops == [_op('write', 'llm_model:2203')]
     assert error_msg == 'OpenFGA single-tuple fallback failed'
 
 
@@ -96,12 +96,12 @@ async def test_batch_write_tuples_strict_stops_before_revokes_after_failed_grant
         if writes == [{
             'user': 'user:400',
             'relation': 'owner',
-            'object': 'tool:2202',
+            'object': 'llm_model:2202',
         }]:
             raise FGAWriteError('unexpected validation failure')
 
     fake_fga = SimpleNamespace(write_tuples=AsyncMock(side_effect=side_effect))
-    ops = [_op('write', 'tool:2202'), _op('delete', 'tool:2203')]
+    ops = [_op('write', 'llm_model:2202'), _op('delete', 'llm_model:2203')]
 
     with patch.object(PermissionService, '_get_fga', return_value=fake_fga), \
             patch.object(PermissionService, '_save_failed_tuples', AsyncMock()) as save_failed:
@@ -126,7 +126,7 @@ async def test_batch_write_tuples_strict_stops_before_revokes_after_failed_grant
 @pytest.mark.asyncio
 async def test_batch_write_tuples_uses_async_fga_accessor_first():
     fake_fga = SimpleNamespace(write_tuples=AsyncMock())
-    ops = [_op('write', 'assistant:2202')]
+    ops = [_op('write', 'llm_model:2202')]
 
     with patch(
         'bisheng.core.openfga.manager.aget_fga_client',
@@ -148,7 +148,7 @@ async def test_batch_write_tuples_uses_async_fga_accessor_first():
         writes=[{
             'user': 'user:400',
             'relation': 'owner',
-            'object': 'assistant:2202',
+            'object': 'llm_model:2202',
         }],
         deletes=None,
     )

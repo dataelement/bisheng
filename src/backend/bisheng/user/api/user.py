@@ -1,6 +1,5 @@
 import asyncio
 import hashlib
-import json
 import random
 from base64 import b64encode
 from datetime import datetime
@@ -27,7 +26,6 @@ from bisheng.database.models.department import DepartmentDao, UserDepartment
 from bisheng.database.models.group import GroupDao
 from bisheng.database.models.mark_task import MarkTaskDao
 from bisheng.database.models.role import Role, RoleCreate, RoleDao, RoleUpdate
-from bisheng.database.models.role_access import AccessType, RoleAccessDao, RoleRefresh
 from bisheng.database.models.tenant import UserTenantDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.permission.domain.services.legacy_rbac_sync_service import LegacyRBACSyncService
@@ -528,6 +526,10 @@ async def list_user(
     group_dict = {}
     for one, avatar_url in zip(users, avatar_urls):
         one_data = one.model_dump()
+        # Never expose sensitive/internal User columns in the list response — the
+        # ORM dump carries the full row; the frontend uses none of these fields.
+        for sensitive_field in ("password", "password_update_time", "token_version"):
+            one_data.pop(sensitive_field, None)
         primary_dept_id = primary_dept_by_user.get(int(one.user_id)) if one.user_id is not None else None
         one_data["department_id"] = primary_dept_id
         if with_department_path:
@@ -995,150 +997,6 @@ def update_user_role_hook(
         note += role_dict[one] + "、"
     note = note.rstrip("、")
     AuditLogService.update_user(login_user, get_request_ip(request), user_id, group_ids, note)
-
-
-# AccessType.value → (fga_object_type, fga_relation)
-_ACCESS_TYPE_TO_FGA: dict[int, tuple] = {
-    1: ("knowledge_library", "viewer"),
-    3: ("knowledge_library", "editor"),
-    5: ("assistant", "viewer"),
-    6: ("assistant", "editor"),
-    7: ("tool", "viewer"),
-    8: ("tool", "editor"),
-    9: ("workflow", "viewer"),
-    10: ("workflow", "editor"),
-    11: ("dashboard", "viewer"),
-    12: ("dashboard", "editor"),
-}
-
-
-def _has_resource_permission_user_binding(
-    obj_type: str,
-    resource_id: str,
-    relation: str,
-    user_id: int,
-    bindings: list[dict],
-) -> bool:
-    check_types = {obj_type}
-    if obj_type == "knowledge_library":
-        check_types.add("knowledge_space")
-    elif obj_type == "knowledge_space":
-        check_types.add("knowledge_library")
-
-    return any(
-        binding.get("resource_type") in check_types
-        and str(binding.get("resource_id")) == str(resource_id)
-        and binding.get("subject_type") == "user"
-        and str(binding.get("subject_id")) == str(user_id)
-        and binding.get("relation") == relation
-        for binding in bindings
-    )
-
-
-async def _get_resource_permission_bindings() -> list[dict]:
-    from bisheng.common.models.config import ConfigDao
-
-    row = await ConfigDao.aget_config_by_key("permission_relation_model_bindings_v1")
-    if not row or not (row.value or "").strip():
-        return []
-    try:
-        bindings = json.loads(row.value or "[]")
-    except Exception:
-        logger.warning("Failed to parse resource permission bindings config")
-        return []
-    if not isinstance(bindings, list):
-        return []
-    return [binding for binding in bindings if isinstance(binding, dict)]
-
-
-async def _sync_role_access_fga(
-    role_id: int,
-    access_type: int,
-    old_ids: set[str],
-    new_ids: set[str],
-) -> None:
-    await LegacyRBACSyncService.sync_role_access_change(
-        role_id,
-        access_type,
-        old_ids,
-        new_ids,
-    )
-
-
-async def _can_use_legacy_role_access_endpoint(
-    db_role,
-    login_user: LoginUser,
-    *,
-    for_mutation: bool,
-) -> bool:
-    if getattr(db_role, "group_id", None) and await login_user.async_check_group_admin(db_role.group_id):
-        return True
-    try:
-        from bisheng.role.domain.services.role_service import RoleService
-
-        await RoleService._check_role_permission(login_user)
-        if for_mutation:
-            await RoleService._ensure_role_mutation_access(db_role, login_user)
-        else:
-            await RoleService._ensure_role_scope_access(db_role, login_user, for_mutation=False)
-        return True
-    except Exception:
-        logger.exception(
-            "legacy role_access permission denied role_id=%s user=%s mutation=%s",
-            getattr(db_role, "id", None),
-            getattr(login_user, "user_id", None),
-            for_mutation,
-        )
-        return False
-
-
-@router.post("/role_access/refresh", status_code=200)
-async def access_refresh(
-    *, request: Request, data: RoleRefresh, login_user: LoginUser = Depends(LoginUser.get_login_user)
-):
-    db_role = await RoleDao.aget_role_by_id(data.role_id)
-    if not db_role:
-        raise NotFoundError().http_exception()
-    if db_role.id == AdminRole:
-        raise UnAuthorizedError.http_exception()
-    if not await _can_use_legacy_role_access_endpoint(db_role, login_user, for_mutation=True):
-        raise UnAuthorizedError.http_exception()
-
-    role_id = data.role_id
-    access_type = data.type
-    access_id = data.access_id
-
-    old_records = await RoleAccessDao.aget_role_access([role_id], AccessType(access_type))
-    old_ids = {str(r.third_id) for r in old_records}
-
-    await RoleAccessDao.update_role_access_all(role_id, AccessType(access_type), access_id)
-
-    await _sync_role_access_fga(role_id, access_type, old_ids, {str(aid) for aid in access_id})
-
-    update_role_hook(request, login_user, db_role)
-    return resp_200()
-
-
-@router.get("/role_access/list", status_code=200)
-async def access_list(
-    *,
-    role_id: int,
-    access_type: int | None = Query(default=None, alias="type"),
-    login_user: LoginUser = Depends(LoginUser.get_login_user),
-):
-    db_role = await RoleDao.aget_role_by_id(role_id)
-    if not db_role:
-        raise NotFoundError().http_exception()
-
-    if not await _can_use_legacy_role_access_endpoint(db_role, login_user, for_mutation=False):
-        return UnAuthorizedError.return_resp()
-
-    access_type = None
-    if access_type:
-        access_type = AccessType(access_type)
-    res = await RoleAccessDao.aget_role_access([role_id], access_type)
-
-    return resp_200({"data": res, "total": len(res)})
 
 
 @router.get("/user/get_captcha", status_code=200)

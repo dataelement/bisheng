@@ -279,7 +279,14 @@ export default function FileView({
         // sass环境使用sass地址
         const pdfUrl = fileUrl.replace(/https?:\/\/[^\/]+/, __APP_ENV__.BASE_URL);  // '/doc.pdf';
         pdfjsLib.GlobalWorkerOptions.workerSrc = __APP_ENV__.BASE_URL + '/pdf.worker.min.js';
-        pdfjsLib.getDocument(pdfUrl).promise.then(async (pdfDocument) => {
+        pdfjsLib.getDocument({
+            url: pdfUrl,
+            // CMaps are required for CID-keyed PDFs with non-embedded CJK fonts
+            // (e.g. GBK-EUC-H government docs) — without them the text layer
+            // renders blank. Shipped to /cmaps/ by viteStaticCopy.
+            cMapUrl: __APP_ENV__.BASE_URL + '/cmaps/',
+            cMapPacked: true,
+        }).promise.then(async (pdfDocument) => {
             pdfPageCache = {}
             const page = pdfPageCache[1] || await pdfDocument.getPage(1);
             pdfPageCache[1] = page

@@ -1,6 +1,6 @@
 import AppAvator from "@/components/bs-comp/cardComponent/avatar";
 import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
-import { hasPermissionId, usePermissionIds } from "@/components/bs-comp/permission/usePermissionLevels";
+import { hasResourceAction, useResourceActions } from "@/components/bs-comp/permission/useResourceActions";
 import { Button } from "@/components/bs-ui/button";
 import { Dialog, DialogTrigger } from "@/components/bs-ui/dialog";
 import { useAssistantStore } from "@/store/assistantStore";
@@ -11,13 +11,11 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import EditAssistantDialog from "./EditAssistantDialog";
 
-const APP_HEADER_PERMISSION_IDS = [
-    'edit_app',
-    'publish_app',
-    'unpublish_app',
-    'manage_app_owner',
-    'manage_app_manager',
-    'manage_app_viewer',
+const APP_HEADER_ACTIONS = [
+    'edit',
+    'publish',
+    'unpublish',
+    'manage_permission',
 ]
 
 export default function Header({ loca, onSave, onLine, onTabChange, canEdit: canEditProp }) {
@@ -26,15 +24,11 @@ export default function Header({ loca, onSave, onLine, onTabChange, canEdit: can
 
     const { assistantState, dispatchAssistant } = useAssistantStore()
     const assistantId = assistantState?.id ? String(assistantState.id) : ''
-    const { permissions } = usePermissionIds('assistant', assistantId ? [assistantId] : [], APP_HEADER_PERMISSION_IDS)
-    const canManage = assistantId ? (
-        hasPermissionId(permissions, assistantId, 'manage_app_owner') ||
-        hasPermissionId(permissions, assistantId, 'manage_app_manager') ||
-        hasPermissionId(permissions, assistantId, 'manage_app_viewer')
-    ) : false
-    const canEdit = canEditProp ?? (assistantId ? hasPermissionId(permissions, assistantId, 'edit_app') : false)
-    const canPublish = assistantId ? hasPermissionId(permissions, assistantId, 'publish_app') : false
-    const canUnpublish = assistantId ? hasPermissionId(permissions, assistantId, 'unpublish_app') : false
+    const { actions } = useResourceActions('assistant', assistantId ? [assistantId] : [], APP_HEADER_ACTIONS)
+    const canManage = assistantId ? hasResourceAction(actions, assistantId, 'manage_permission') : false
+    const canEdit = canEditProp ?? (assistantId ? hasResourceAction(actions, assistantId, 'edit') : false)
+    const canPublish = assistantId ? hasResourceAction(actions, assistantId, 'publish') : false
+    const canUnpublish = assistantId ? hasResourceAction(actions, assistantId, 'unpublish') : false
     const [editShow, setEditShow] = useState(false);
     const [permDialogOpen, setPermDialogOpen] = useState(false);
 

@@ -88,19 +88,23 @@ class KnowledgeSpaceChatService:
     async def _require_space_view_permission(self, space_id: int):
         svc = self._permission_service()
         await svc._require_read_permission(space_id)
-        await svc._require_permission_id("knowledge_space", space_id, "view_space")
+        await svc._require_action("knowledge_space", space_id, "visible")
 
     async def _require_folder_view_permission(self, space_id: int, folder_id: int):
         svc = self._permission_service()
-        folder = await svc._require_folder_relation(space_id, folder_id, "can_read")
-        await svc._require_permission_id("folder", folder_id, "view_folder", space_id=space_id)
-        return folder
+        return await svc._require_folder_action(
+            space_id,
+            folder_id,
+            "visible",
+        )
 
     async def _require_file_view_permission(self, space_id: int, file_id: int):
         svc = self._permission_service()
-        file_record = await svc._require_file_relation(file_id, "can_read", space_id=space_id)
-        await svc._require_permission_id("knowledge_file", file_id, "view_file", space_id=space_id)
-        return file_record
+        return await svc._require_file_action(
+            file_id,
+            "visible",
+            space_id=space_id,
+        )
 
     @staticmethod
     async def _prepare_rag_citation_context(
@@ -974,9 +978,9 @@ class KnowledgeSpaceChatService:
         from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 
         kb_id = kb.id
-        # KB-level read permission (raises UnAuthorizedError on denial → surfaced
+        # KB-level use permission (raises UnAuthorizedError on denial → surfaced
         # by the endpoint's BaseErrorCode handler).
-        await KnowledgeService.permission_service.ensure_knowledge_read_async(
+        await KnowledgeService.permission_service.ensure_knowledge_use_async(
             login_user=self.login_user,
             owner_user_id=kb.user_id,
             knowledge_id=kb_id,

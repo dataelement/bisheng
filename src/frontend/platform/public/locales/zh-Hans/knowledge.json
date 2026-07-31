@@ -211,6 +211,7 @@
   "import": "导入",
   "importing": "导入中...",
   "supportedFormatsTip": "支持上传文档、图片、音频和视频文件",
+  "supportedFormatsTipWithoutMedia": "支持上传文档和图片文件",
   "segmentStrategy": "分段策略",
   "docAnalysisStrategy": "文档解析策略",
   "docSplitStrategy": "文档切分策略",
