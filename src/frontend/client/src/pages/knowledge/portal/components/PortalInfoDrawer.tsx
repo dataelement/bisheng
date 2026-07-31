@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Copy, X } from "lucide-react";
 import type { KnowledgeFile, KnowledgeSpace } from "~/api/knowledge";
-import { SpaceLevel, SpaceRole, VisibilityType, getFileStatsApi } from "~/api/knowledge";
+import { FileStatus, SpaceLevel, SpaceRole, VisibilityType, getFileStatsApi } from "~/api/knowledge";
 import type { PanelKey, PortalFileCategoryGroupOption } from "../types";
 import {
     type BusinessDomainOptionItem,
@@ -190,6 +190,8 @@ export function PortalInfoDrawer({
 
     const handleEncodingPartChange = async (nextDraft: EncodingDraft, fileSubcategoryCode?: string | null) => {
         if (!selectedFile || !canEditEncoding) return;
+        // Domain is part of the composed encoding; reject edits while parse is in flight.
+        if (nextDraft.businessDomainCode !== undefined && selectedFile.status === FileStatus.PROCESSING) return;
         const fileCategoryCode = normalizeEncodingCode(
             nextDraft.fileCategoryCode ?? encodingDraft.fileCategoryCode ?? parsedEncoding.fileCategoryCode,
         );
@@ -251,36 +253,46 @@ export function PortalInfoDrawer({
         </div>
     );
 
-    const renderBusinessDomainItem = () => (
-        <div className={s.detailItem}>
-            <span className={s.detailLabel}>业务域类型</span>
-            {selectedFile && canEditEncoding ? (
-                <select
-                    className={s.detailSelect}
-                    aria-label={`修改${selectedFile.name}业务域类型 当前业务域：${selectedBusinessDomainCode || "未识别"}`}
-                    value={selectedBusinessDomainCode}
-                    disabled={savingEncoding}
-                    onChange={(event) => void handleEncodingPartChange({ businessDomainCode: event.currentTarget.value })}
-                >
-                    <option value="">未识别</option>
-                    {selectedBusinessDomainCode && !hasCurrentBusinessDomainOption ? (
-                        <option value={selectedBusinessDomainCode}>
-                            {fileEncodingBusinessDomainLabel(selectedBusinessDomainCode, businessDomainOptions)}
-                        </option>
-                    ) : null}
-                    {businessDomainOptions.map((option) => (
-                        <option key={option.code} value={option.code}>
-                            {option.code} / {option.name}
-                        </option>
-                    ))}
-                </select>
-            ) : (
-                <span className={s.detailValue}>
-                    {selectedFile ? fileEncodingBusinessDomainLabel(selectedBusinessDomainCode, businessDomainOptions) : "-"}
-                </span>
-            )}
-        </div>
-    );
+    const renderBusinessDomainItem = () => {
+        // Encoding updates rewrite the composed file code; block domain edits while parse is in flight.
+        const isBusinessDomainLocked = selectedFile?.status === FileStatus.PROCESSING;
+        return (
+            <div className={s.detailItem}>
+                <span className={s.detailLabel}>业务域类型</span>
+                {selectedFile && canEditEncoding ? (
+                    // Wrap disabled select so hover tooltip still works (native title on :disabled is unreliable).
+                    <span
+                        className={isBusinessDomainLocked ? s.detailSelectLocked : undefined}
+                        title={isBusinessDomainLocked ? "文档解析中无法更改" : undefined}
+                    >
+                        <select
+                            className={s.detailSelect}
+                            aria-label={`修改${selectedFile.name}业务域类型 当前业务域：${selectedBusinessDomainCode || "未识别"}`}
+                            value={selectedBusinessDomainCode}
+                            disabled={savingEncoding || isBusinessDomainLocked}
+                            onChange={(event) => void handleEncodingPartChange({ businessDomainCode: event.currentTarget.value })}
+                        >
+                            <option value="">未识别</option>
+                            {selectedBusinessDomainCode && !hasCurrentBusinessDomainOption ? (
+                                <option value={selectedBusinessDomainCode}>
+                                    {fileEncodingBusinessDomainLabel(selectedBusinessDomainCode, businessDomainOptions)}
+                                </option>
+                            ) : null}
+                            {businessDomainOptions.map((option) => (
+                                <option key={option.code} value={option.code}>
+                                    {option.code} / {option.name}
+                                </option>
+                            ))}
+                        </select>
+                    </span>
+                ) : (
+                    <span className={s.detailValue}>
+                        {selectedFile ? fileEncodingBusinessDomainLabel(selectedBusinessDomainCode, businessDomainOptions) : "-"}
+                    </span>
+                )}
+            </div>
+        );
+    };
 
     const renderFileEncodingItem = () => (
         <div className={s.detailItem}>

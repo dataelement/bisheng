@@ -813,6 +813,8 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
     ) => {
         if (!showEncodingClassification || file.type === FileType.FOLDER) return;
         if (!canEditFileMetadata(file)) return;
+        // Domain is part of the composed encoding; reject edits while parse is in flight.
+        if (nextDraft.businessDomainCode !== undefined && file.status === FileStatus.PROCESSING) return;
 
         const parsed = parseFileEncoding(file.fileEncoding, encodingPrefix);
         const currentDraft = encodingDrafts[file.id] ?? {};
@@ -1177,7 +1179,10 @@ function FileRow({
     const classificationEncodingText = selectedFileCategoryCode && selectedBusinessDomainCode
         ? composeFileEncoding(file.fileEncoding, selectedFileCategoryCode, selectedBusinessDomainCode, encodingPrefix)
         : fileEncodingText;
-    const encodingSelectClassName = "h-8 w-full min-w-0 rounded border border-[#dee2ec] bg-white px-2 text-sm text-[#4e5969] outline-none transition-colors focus:border-[#165dff] disabled:cursor-not-allowed disabled:bg-[#f7f8fa]";
+    // Encoding updates rewrite the composed file code; block domain edits while parse is in flight.
+    const isBusinessDomainLocked = file.status === FileStatus.PROCESSING;
+    // disabled:pointer-events-none lets the wrapper title tooltip show on hover.
+    const encodingSelectClassName = "h-8 w-full min-w-0 rounded border border-[#dee2ec] bg-white px-2 text-sm text-[#4e5969] outline-none transition-colors focus:border-[#165dff] disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-[#f7f8fa] disabled:text-[#86909c]";
     const editTagsButton = canEditTags ? (
         <button
             type="button"
@@ -1606,28 +1611,34 @@ function FileRow({
                         {isFolder ? (
                             <span className="truncate block">{EMPTY_FIELD_PLACEHOLDER}</span>
                         ) : canEditEncoding ? (
-                            <select
-                                className={encodingSelectClassName}
-                                aria-label={`修改${file.name}业务域类型 当前业务域：${selectedBusinessDomainCode || "未识别"}`}
-                                value={selectedBusinessDomainCode}
-                                disabled={savingEncoding}
-                                onClick={(event) => event.stopPropagation()}
-                                onChange={(event) => void onEncodingPartChange?.(file, { businessDomainCode: event.currentTarget.value })}
+                            // Wrap disabled select so hover tooltip still works (native title on :disabled is unreliable).
+                            <span
+                                className={cn("block w-full min-w-0", isBusinessDomainLocked && "cursor-not-allowed")}
+                                title={isBusinessDomainLocked ? "文档解析中无法更改" : undefined}
                             >
-                                {!selectedBusinessDomainCode ? (
-                                    <option value="" disabled>{EMPTY_FIELD_PLACEHOLDER}</option>
-                                ) : null}
-                                {selectedBusinessDomainCode && !hasCurrentBusinessDomainOption ? (
-                                    <option value={selectedBusinessDomainCode}>
-                                        {fileEncodingBusinessDomainLabel(selectedBusinessDomainCode, businessDomainOptions)}
-                                    </option>
-                                ) : null}
-                                {businessDomainOptions.map((option) => (
-                                    <option key={option.code} value={option.code}>
-                                        {option.code} / {option.name}
-                                    </option>
-                                ))}
-                            </select>
+                                <select
+                                    className={encodingSelectClassName}
+                                    aria-label={`修改${file.name}业务域类型 当前业务域：${selectedBusinessDomainCode || "未识别"}`}
+                                    value={selectedBusinessDomainCode}
+                                    disabled={savingEncoding || isBusinessDomainLocked}
+                                    onClick={(event) => event.stopPropagation()}
+                                    onChange={(event) => void onEncodingPartChange?.(file, { businessDomainCode: event.currentTarget.value })}
+                                >
+                                    {!selectedBusinessDomainCode ? (
+                                        <option value="" disabled>{EMPTY_FIELD_PLACEHOLDER}</option>
+                                    ) : null}
+                                    {selectedBusinessDomainCode && !hasCurrentBusinessDomainOption ? (
+                                        <option value={selectedBusinessDomainCode}>
+                                            {fileEncodingBusinessDomainLabel(selectedBusinessDomainCode, businessDomainOptions)}
+                                        </option>
+                                    ) : null}
+                                    {businessDomainOptions.map((option) => (
+                                        <option key={option.code} value={option.code}>
+                                            {option.code} / {option.name}
+                                        </option>
+                                    ))}
+                                </select>
+                            </span>
                         ) : (
                             <span className="truncate block" title={selectedBusinessDomainCode ? fileEncodingBusinessDomainLabel(selectedBusinessDomainCode, businessDomainOptions) : EMPTY_FIELD_PLACEHOLDER}>
                                 {selectedBusinessDomainCode ? fileEncodingBusinessDomainLabel(selectedBusinessDomainCode, businessDomainOptions) : EMPTY_FIELD_PLACEHOLDER}
