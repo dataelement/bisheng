@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type DragEvent, type SetStateAction } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { Loader2 } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { useRecoilValue } from "recoil";
 import {
@@ -223,7 +224,7 @@ export default function PortalKnowledgeWorkbench() {
     const confirm = useConfirm();
     const queryClient = useQueryClient();
     const currentUser = useRecoilValue(store.user);
-    const [searchParams] = useSearchParams();
+    const [searchParams, setSearchParams] = useSearchParams();
     const portalDeepLinkTarget = useMemo(
         () => resolvePortalDeepLinkTarget(searchParams),
         [searchParams],
@@ -1328,11 +1329,39 @@ export default function PortalKnowledgeWorkbench() {
             } else if (type === "shougang-portal:open-document-chat") {
                 setActivePanel(null);
                 setAiDrawerOpen(true);
+            } else if (type === "shougang-portal:open-knowledge-file") {
+                // Parent keeps iframe.src stable and asks us to open a file via Client
+                // search params so usePortalDeepLink can reuse the existing restore path.
+                const spaceId = String(event.data?.spaceId ?? "").trim();
+                const fileId = String(event.data?.fileId ?? "").trim();
+                if (!spaceId || !fileId) return;
+                const fileName = String(event.data?.fileName ?? "").trim();
+                const folderId = String(event.data?.folderId ?? "").trim();
+                const folderName = String(event.data?.folderName ?? "").trim();
+                const openNonce = String(event.data?.openNonce ?? "").trim() || String(Date.now());
+                setSearchParams((prev) => {
+                    const next = new URLSearchParams(prev);
+                    next.set("spaceId", spaceId);
+                    next.set("fileId", fileId);
+                    if (fileName) next.set("fileName", fileName);
+                    else next.delete("fileName");
+                    if (folderId) {
+                        next.set("folderId", folderId);
+                        if (folderName) next.set("folderName", folderName);
+                        else next.delete("folderName");
+                    } else {
+                        next.delete("folderId");
+                        next.delete("folderName");
+                    }
+                    // Prefer parent-provided nonce so retry bursts share one restore key.
+                    next.set("openNonce", openNonce);
+                    return next;
+                }, { replace: true });
             }
         };
         window.addEventListener("message", handlePortalMessage);
         return () => window.removeEventListener("message", handlePortalMessage);
-    }, []);
+    }, [setSearchParams]);
 
     const {
         uploadInputRef,
@@ -1447,6 +1476,9 @@ export default function PortalKnowledgeWorkbench() {
 
     useEffect(() => {
         if (!selectedFile) return;
+        // Deep-link restore may select a file before search results / tree rows catch up;
+        // clearing here races with usePortalDeepLink and drops the preview.
+        if (isDeepLinkRestoring) return;
         // #4 收藏原地预览：selectedFile 是来自其它源空间的合成文件（不属于当前 activeSpace，
         // 自然不在其 displayedFiles 中），不应被此“列表中已不存在则关闭预览”的守卫清空。
         if (selectedFile.spaceId && selectedFile.spaceId !== activeSpace?.id) return;
@@ -1454,7 +1486,7 @@ export default function PortalKnowledgeWorkbench() {
         if (!exists) {
             setSelectedFile(null);
         }
-    }, [displayedFiles, selectedFile, activeSpace?.id]);
+    }, [displayedFiles, selectedFile, activeSpace?.id, isDeepLinkRestoring]);
 
     useEffect(() => {
         if (!permissionTarget) return;
@@ -2555,8 +2587,11 @@ export default function PortalKnowledgeWorkbench() {
                         <main className={s.portalNativeWorkspace} data-testid="portal-file-workspace">
                             {activeSpace ? (
                                 isDeepLinkRestoring ? (
-                                    <div className={s.stateBox}>
-                                        <div className={s.stateTitle}>正在恢复知识库位置...</div>
+                                    <div className={s.stateBox} role="status" aria-live="polite">
+                                        <div className={s.stateLoading}>
+                                            <Loader2 className={`${s.stateLoadingIcon} animate-spin`} size={16} aria-hidden="true" />
+                                            <span>加载中...</span>
+                                        </div>
                                     </div>
                                 ) : isActiveSpaceFavorite ? (
                                     <PortalFavoritesPanel

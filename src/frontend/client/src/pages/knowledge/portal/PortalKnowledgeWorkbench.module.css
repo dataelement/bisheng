@@ -1420,6 +1420,22 @@
   font-weight: 600;
 }
 
+/* Ant Design Spin tip style: grey regular text + thin spinner */
+.stateLoading {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #8c8c8c;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 22px;
+}
+
+.stateLoadingIcon {
+  flex-shrink: 0;
+  color: #8c8c8c;
+}
+
 .toolRail {
   width: 44px;
   min-width: 44px;

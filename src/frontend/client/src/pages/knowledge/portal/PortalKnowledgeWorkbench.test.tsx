@@ -83,6 +83,19 @@ const mockHandleDirectDuplicateOverwrite = jest.fn();
 const mockUseFileUpload = jest.fn();
 const mockUpdateFileTagsApi = jest.fn();
 let mockSearchParams = "";
+const mockSearchParamsListeners = new Set<() => void>();
+const mockSetSearchParams = jest.fn((nextInit: unknown) => {
+    const prev = new URLSearchParams(mockSearchParams);
+    const next = typeof nextInit === "function"
+        ? (nextInit as (prev: URLSearchParams) => URLSearchParams | Record<string, string> | string)(prev)
+        : nextInit;
+    mockSearchParams = (
+        next instanceof URLSearchParams
+            ? next
+            : new URLSearchParams(next as string | Record<string, string>)
+    ).toString();
+    mockSearchParamsListeners.forEach((listener) => listener());
+});
 let mockCreateSpaceConfirmResult: any;
 
 function createMockFileUpload(overrides: Record<string, any> = {}) {
@@ -104,10 +117,22 @@ function createMockFileUpload(overrides: Record<string, any> = {}) {
     };
 }
 
-jest.mock("react-router-dom", () => ({
-    ...jest.requireActual("react-router-dom"),
-    useSearchParams: () => [new URLSearchParams(mockSearchParams), jest.fn()],
-}));
+jest.mock("react-router-dom", () => {
+    const React = jest.requireActual("react") as typeof import("react");
+    return {
+        ...jest.requireActual("react-router-dom"),
+        useSearchParams: () => {
+            const [, bump] = React.useReducer((value: number) => value + 1, 0);
+            React.useEffect(() => {
+                mockSearchParamsListeners.add(bump);
+                return () => {
+                    mockSearchParamsListeners.delete(bump);
+                };
+            }, []);
+            return [new URLSearchParams(mockSearchParams), mockSetSearchParams];
+        },
+    };
+});
 
 jest.mock("~/Providers", () => ({
     useToastContext: () => ({
@@ -613,6 +638,22 @@ function openMyUploadsFromPortalShell() {
     });
 }
 
+function openKnowledgeFileFromPortalShell(payload: {
+    spaceId: string;
+    fileId: string;
+    fileName?: string;
+    openNonce?: string;
+}) {
+    act(() => {
+        window.dispatchEvent(new MessageEvent("message", {
+            data: {
+                type: "shougang-portal:open-knowledge-file",
+                ...payload,
+            },
+        }));
+    });
+}
+
 function getPortalCategoryButton(scope: HTMLElement, label: string, selectedText: string) {
     return within(scope).getByRole("button", {
         name: `${label} 当前选择：${selectedText}`,
@@ -636,6 +677,8 @@ function selectPortalSubcategory(
 describe("PortalKnowledgeWorkbench", () => {
     beforeEach(() => {
         jest.clearAllMocks();
+        mockSearchParams = "";
+        mockSearchParamsListeners.clear();
         mockUseFileUpload.mockReturnValue(createMockFileUpload());
         mockUpdateFileTagsApi.mockResolvedValue(undefined);
         localStorage.removeItem("knowledge-view-mode");
@@ -2335,6 +2378,45 @@ describe("PortalKnowledgeWorkbench", () => {
         } as any);
 
         renderWorkbench("/knowledge-portal?spaceId=personal-1&fileId=201");
+
+        const preview = await screen.findByTestId("portal-preview-page");
+        expect(preview).toHaveTextContent("后端开发.md");
+        await waitFor(() => {
+            expect(getFilePreviewApi).toHaveBeenCalledWith("personal-1", "201");
+        });
+    });
+
+    test("opens a portal file from parent open-knowledge-file postMessage", async () => {
+        const personalSpace = makeSpace("personal-1", "信息", {
+            role: SpaceRole.ADMIN,
+        });
+        const file = makeFile("201", "后端开发.md", {
+            type: FileType.MD,
+        });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [],
+            personalSpaces: [personalSpace],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({
+            data: [file],
+            total: 1,
+        } as any);
+        jest.mocked(searchSpaceChildrenApi).mockResolvedValue({
+            data: [file],
+            total: 1,
+        } as any);
+
+        renderWorkbench("/knowledge-portal");
+        await screen.findByTestId("portal-file-workspace");
+
+        openKnowledgeFileFromPortalShell({
+            spaceId: "personal-1",
+            fileId: "201",
+            fileName: "后端开发.md",
+            openNonce: "msg-1",
+        });
 
         const preview = await screen.findByTestId("portal-preview-page");
         expect(preview).toHaveTextContent("后端开发.md");
