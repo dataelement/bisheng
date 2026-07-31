@@ -68,6 +68,7 @@ export function isKnowledgeItemPending(file: KnowledgeFile): boolean {
 // ─── File upload constants ──────────────────────────────────────────
 export const AUDIO_FILE_EXTENSIONS = ["mp3", "wav", "m4a", "aac", "flac", "ogg"] as const;
 export const VIDEO_FILE_EXTENSIONS = ["mp4", "mov", "avi", "mkv", "webm"] as const;
+export const IMAGE_FILE_EXTENSIONS = ["png", "jpg", "jpeg", "bmp", "gif", "webp"] as const;
 export const MEDIA_FILE_EXTENSIONS = [
     ...AUDIO_FILE_EXTENSIONS,
     ...VIDEO_FILE_EXTENSIONS,

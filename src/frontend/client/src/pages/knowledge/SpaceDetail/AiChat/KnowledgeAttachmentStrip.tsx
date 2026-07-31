@@ -19,9 +19,32 @@ import {
     type ReactNode,
 } from "react";
 import { Outlined } from "bisheng-icons";
-import { AttachmentChip, AttachmentFileIcon } from "~/components/Chat/Input/AttachmentBar";
+import { AttachmentChip } from "~/components/Chat/Input/AttachmentBar";
 import { cn } from "~/utils";
+import {
+    AUDIO_FILE_EXTENSIONS,
+    IMAGE_FILE_EXTENSIONS,
+    VIDEO_FILE_EXTENSIONS,
+} from "../../knowledgeUtils";
 import type { KnowledgeAiReference } from "./KnowledgeAiInput";
+
+/** File icon mirroring the file list exactly (FileTable.renderRowFileIcon):
+ *  audio / video / image get their media icons, everything else the generic
+ *  file glyph — NOT the home-chat per-format mapping (W/P/T…), so a chip always
+ *  shows the same icon as the row it was ticked from. */
+export const KnowledgeChipFileIcon = ({ name }: { name: string }) => {
+    const ext = name.split(".").pop()?.toLowerCase() || "";
+    if ((AUDIO_FILE_EXTENSIONS as readonly string[]).includes(ext)) {
+        return <Outlined.FileAudio size={16} />;
+    }
+    if ((VIDEO_FILE_EXTENSIONS as readonly string[]).includes(ext)) {
+        return <Outlined.FileVideo size={16} />;
+    }
+    if ((IMAGE_FILE_EXTENSIONS as readonly string[]).includes(ext)) {
+        return <Outlined.FileImage size={16} />;
+    }
+    return <Outlined.File size={16} />;
+};
 
 /** Shared by this strip and the expanded-state reference row (KnowledgeAiInput). */
 export const PagerButton = ({
@@ -131,7 +154,7 @@ export function KnowledgeAttachmentStrip({
                                     item.isFolder ? (
                                         <Outlined.FolderClose size={16} />
                                     ) : (
-                                        <AttachmentFileIcon name={item.name} />
+                                        <KnowledgeChipFileIcon name={item.name} />
                                     )
                                 }
                                 label={item.name}

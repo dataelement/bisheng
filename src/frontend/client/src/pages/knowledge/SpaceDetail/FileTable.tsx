@@ -23,7 +23,7 @@ import { SortType, SortDirection, FileStatus, FileType, KnowledgeFile, SpaceRole
 import { formatBytes } from "~/utils";
 import { useInlineRename } from "../hooks/useInlineRename";
 import { useKnowledgeMoveDrag } from "../hooks/useKnowledgeMoveDrag";
-import { AUDIO_FILE_EXTENSIONS, VIDEO_FILE_EXTENSIONS, formatTime, getKnowledgeApprovalStatusLabel, isKnowledgeApprovalRejected, isKnowledgeItemPreviewable, isKnowledgeItemUploading } from "../knowledgeUtils";
+import { AUDIO_FILE_EXTENSIONS, IMAGE_FILE_EXTENSIONS, VIDEO_FILE_EXTENSIONS, formatTime, getKnowledgeApprovalStatusLabel, isKnowledgeApprovalRejected, isKnowledgeItemPreviewable, isKnowledgeItemUploading } from "../knowledgeUtils";
 import { useLocalize, useScrollRevealRef } from "~/hooks";
 import { useGetBsConfig } from "~/hooks/queries/endpoints/queries";
 import { useToastContext } from "~/Providers";
@@ -45,8 +45,6 @@ const renderHighlightedName = (text: string, keyword?: string) => {
     );
 };
 
-const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "bmp", "gif", "webp"];
-
 /** Line-art icon for the name cell in table mode; folders are handled by the caller. */
 const renderRowFileIcon = (file: KnowledgeFile) => {
     const ext = file.name.split(".").pop()?.toLowerCase() || "";
@@ -56,7 +54,7 @@ const renderRowFileIcon = (file: KnowledgeFile) => {
     if (file.type === FileType.VIDEO || (VIDEO_FILE_EXTENSIONS as readonly string[]).includes(ext)) {
         return <Outlined.FileVideo className="size-[14px]" />;
     }
-    if (IMAGE_EXTENSIONS.includes(ext)) {
+    if ((IMAGE_FILE_EXTENSIONS as readonly string[]).includes(ext)) {
         return <Outlined.FileImage className="size-[14px]" />;
     }
     return <Outlined.File className="size-[14px]" />;

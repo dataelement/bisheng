@@ -19,8 +19,8 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { useRecoilState } from "recoil";
 import { Outlined } from "bisheng-icons";
 import { SendIcon } from "~/components/svg";
-import { AttachmentChip, AttachmentFileIcon } from "~/components/Chat/Input/AttachmentBar";
-import { PagerButton } from "./KnowledgeAttachmentStrip";
+import { AttachmentChip } from "~/components/Chat/Input/AttachmentBar";
+import { KnowledgeChipFileIcon, PagerButton } from "./KnowledgeAttachmentStrip";
 import AiModelSelect from "~/components/Chat/AiModelSelect";
 import type { BsConfig } from "~/api/chatApi";
 import { TagPicker } from "./TagPicker";
@@ -408,7 +408,7 @@ export function KnowledgeAiInput({
                                         item.isFolder ? (
                                             <Outlined.FolderClose size={16} />
                                         ) : (
-                                            <AttachmentFileIcon name={item.name} />
+                                            <KnowledgeChipFileIcon name={item.name} />
                                         )
                                     }
                                     label={item.name}
