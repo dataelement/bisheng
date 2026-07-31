@@ -85,7 +85,7 @@ class ChannelRepositoryImpl(BaseRepositoryImpl[Channel, str], ChannelRepository)
             )
             .outerjoin(subscriber_subq, subscriber_subq.c.business_id == Channel.id)
             .where(
-                col(Channel.is_released).is_(True),
+                Channel.is_released == True,  # noqa: E712 — DM8 rejects `IS 1`
                 Channel.visibility != ChannelVisibilityEnum.PRIVATE,
             )
         )
@@ -155,7 +155,7 @@ class ChannelRepositoryImpl(BaseRepositoryImpl[Channel, str], ChannelRepository)
             )
             .outerjoin(subscriber_subq, subscriber_subq.c.business_id == Channel.id)
             .where(
-                col(Channel.is_released).is_(True),
+                Channel.is_released == True,  # noqa: E712 — DM8 rejects `IS 1`
                 Channel.visibility == ChannelVisibilityEnum.PUBLIC,
             )
             .order_by(func.coalesce(Channel.update_time, Channel.create_time).desc())
@@ -171,7 +171,7 @@ class ChannelRepositoryImpl(BaseRepositoryImpl[Channel, str], ChannelRepository)
             select(func.count())
             .select_from(Channel)
             .where(
-                col(Channel.is_released).is_(True),
+                Channel.is_released == True,  # noqa: E712 — DM8 rejects `IS 1`
                 Channel.visibility != ChannelVisibilityEnum.PRIVATE,
             )
         )

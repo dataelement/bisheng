@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 
 import pytest
+from sqlalchemy.engine.default import DefaultDialect
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.pool import StaticPool
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -18,6 +19,27 @@ from bisheng.common.models.space_channel_member import (
     UserRoleEnum,
 )
 from bisheng.core.context.tenant import bypass_tenant_filter
+
+
+class _DmDialect(DefaultDialect):
+    name = "dm"
+
+
+class _EmptyResult:
+    def all(self) -> list[object]:
+        return []
+
+    def one(self) -> int:
+        return 0
+
+
+class _RecordingSession:
+    def __init__(self) -> None:
+        self.statements: list[object] = []
+
+    async def exec(self, statement):
+        self.statements.append(statement)
+        return _EmptyResult()
 
 
 def _channel(channel_id: str, update_time: datetime) -> Channel:
@@ -104,3 +126,26 @@ async def test_square_orders_unsubscribed_before_applied_then_by_unique_subscrib
     ]
     assert [row[3] for row in rows] == [2, 1, 2, 2, 1]
     assert rows[2][1] == MembershipStatusEnum.PENDING
+
+
+async def test_channel_release_filters_compile_as_dm8_compatible_equality():
+    session = _RecordingSession()
+    repository = ChannelRepositoryImpl(session)
+
+    await repository.find_square_channels(user_id=7)
+    await repository.find_public_recommend_channels(user_id=7)
+    await repository.count_square_channels()
+
+    compiled_statements = [
+        str(
+            statement.compile(
+                dialect=_DmDialect(),
+                compile_kwargs={"literal_binds": True},
+            )
+        )
+        for statement in session.statements
+    ]
+
+    assert len(compiled_statements) == 3
+    assert all("channel.is_released IS 1" not in statement for statement in compiled_statements)
+    assert all("channel.is_released = 1" in statement for statement in compiled_statements)
