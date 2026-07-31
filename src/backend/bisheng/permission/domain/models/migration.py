@@ -14,14 +14,16 @@ from sqlalchemy import (
     Index,
     Integer,
     String,
-    Text,
     UniqueConstraint,
     text,
 )
 from sqlmodel import Field
 
 from bisheng.common.models.base import SQLModelSerializable
-from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT
+from bisheng.core.database.dialect_helpers import (
+    UPDATE_TIME_SERVER_DEFAULT,
+    LargeText,
+)
 
 
 class AuthorizationModelReleaseStatus(StrEnum):
@@ -303,7 +305,7 @@ class PermissionMigrationItem(SQLModelSerializable, table=True):
     )
     message: str | None = Field(
         default=None,
-        sa_column=Column(Text, nullable=True),
+        sa_column=Column(LargeText, nullable=True),
     )
     manual_action: str | None = Field(
         default=None,

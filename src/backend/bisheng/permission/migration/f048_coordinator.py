@@ -204,12 +204,6 @@ class MigrationTargetWriterPort(Protocol):
         tuples: tuple[dict[str, str], ...],
     ) -> None: ...
 
-    async def aretire_legacy_configs(
-        self,
-        *,
-        keys: tuple[str, ...],
-    ) -> None: ...
-
 
 @dataclass(frozen=True, slots=True)
 class _MigrationPlan:
@@ -219,7 +213,6 @@ class _MigrationPlan:
     mode_mapping: ModeMappingResult
     target_tuples: tuple[dict[str, str], ...]
     legacy_tuples: tuple[dict[str, str], ...]
-    legacy_config_keys: tuple[str, ...]
     blockers: tuple[str, ...]
 
 
@@ -402,7 +395,6 @@ def _compile_plan(snapshot: SourceInventorySnapshot) -> _MigrationPlan:
             mode_mapping=map_resource_modes((), ()),
             target_tuples=(),
             legacy_tuples=(),
-            legacy_config_keys=(),
             blockers=inventory.blockers,
         )
     try:
@@ -458,7 +450,6 @@ def _compile_plan(snapshot: SourceInventorySnapshot) -> _MigrationPlan:
         mode_mapping=mode_mapping,
         target_tuples=target_tuples,
         legacy_tuples=legacy_tuples,
-        legacy_config_keys=tuple(sorted({row.key for row in snapshot.config_sources})),
         blockers=blockers,
     )
 
@@ -781,17 +772,10 @@ class F048MigrationCoordinator:
                     source_checksum=plan.inventory.checksum,
                     target_checksum=target_checksum,
                 )
-            run = await self._renew_lease(
-                run,
-                lock_token=lock_token,
-            )
-            await self._target_writer.aretire_legacy_configs(
-                keys=plan.legacy_config_keys,
-            )
             run = await self._advance(
                 run,
                 phase="VERIFYING",
-                checkpoint="legacy-retired",
+                checkpoint="legacy-tuples-retired",
                 source_checksum=plan.inventory.checksum,
                 target_checksum=target_checksum,
             )

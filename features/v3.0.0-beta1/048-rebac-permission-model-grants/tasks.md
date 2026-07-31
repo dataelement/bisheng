@@ -970,7 +970,8 @@
 - [x] **T121：正式数据迁移 coordinator 测试**
   - **文件**：`src/backend/test/permission/test_f048_migration_coordinator.py`
   - **测试**：唯一 environment run/lease、同 Store 新 model、batch checkpoint、崩溃 resume、
-    target write→legacy delete、Config retire、forward-only、无并发/双 model/自动启动。
+    target write→legacy tuple delete、Config 原始行只读保留且运行路径退役、forward-only、
+    无并发/双 model/自动启动。
   - **覆盖 AC**：AC-71, AC-72, AC-73, AC-74, AC-75, AC-76, AC-93, AC-94, AC-95, AC-96, AC-97, AC-98, AC-99, AC-100, AC-101, AC-102, AC-103, AC-104, AC-105, AC-106, AC-107, AC-108, AC-109, AC-110, AC-111, AC-112, AC-113, AC-115, AC-116, AC-117, AC-143, AC-144, AC-145, AC-146, AC-147, AC-158
   - **依赖**：T014, T016, T018, T020, T110, T112, T114, T116, T118, T119, T120
 
@@ -978,14 +979,16 @@
   - **文件**：`src/backend/bisheng/permission/migration/f048_coordinator.py`
   - **逻辑**：从 D2 创建/续跑真实 run，在现有 Store 发布新 model，按 500 DB/90 FGA batch
     写控制面和 tuple、持久化 source/target checksum、发出 `permission_migration` metric-log，
-    核对后退役 legacy/Config；失败时保持应用访问门禁并前向续跑。
+    核对后退役 legacy tuple，保留 Config 原始行供排障但禁止运行时引用；失败时保持应用
+    访问门禁并前向续跑。
   - **验收**：T121 全部通过
   - **依赖**：T121
 
 - [x] **T123：D4 verifier 测试**
   - **文件**：`src/backend/test/permission/test_f048_migration_verifier.py`
   - **测试**：source/target count+checksum、blocker/manual item、跨租户/orphan/parent/owner、
-    high-risk Check/List、多来源/dashboard/download、legacy tuple/Config=0、全实例 pin。
+    high-risk Check/List、多来源/dashboard/download、legacy tuple=0、Config 保留数仅审计、
+    全实例 pin。
   - **覆盖 AC**：AC-74, AC-75, AC-76, AC-93, AC-95, AC-96, AC-97, AC-98, AC-100, AC-101, AC-102, AC-104, AC-105, AC-106, AC-107, AC-114, AC-115, AC-116, AC-117, AC-147
   - **依赖**：T122
 
@@ -1122,6 +1125,20 @@
   - **覆盖 AC**：AC-06, AC-13, AC-14, AC-16, AC-22, AC-23, AC-24, AC-28, AC-30, AC-34, AC-40, AC-44, AC-49, AC-50, AC-51, AC-53, AC-54, AC-55, AC-56, AC-57, AC-58, AC-59, AC-60, AC-61, AC-62, AC-63, AC-64, AC-65, AC-66, AC-67, AC-68, AC-69, AC-70, AC-96, AC-98, AC-100, AC-101, AC-102, AC-104, AC-105, AC-107, AC-114, AC-115, AC-117, AC-150, AC-151, AC-152, AC-153, AC-154, AC-155, AC-156, AC-157, AC-158
   - **依赖**：T093, T108, T127, T134, T136, T137, T138, T139
 
+- [x] **T141：修复大 Config 冻结载荷并保留排障原始行**
+  - **文件**：`src/backend/bisheng/permission/domain/models/migration.py`,
+    `src/backend/bisheng/core/database/alembic/versions/v3_0_0_f048_migration_item_message_longtext.py`,
+    `src/backend/bisheng/permission/migration/f048_coordinator.py`,
+    `src/backend/bisheng/permission/migration/f048_runtime_storage.py`,
+    `src/backend/bisheng/permission/migration/f048_verifier.py`
+  - **逻辑**：将 migration item 冻结载荷改为 MySQL LONGTEXT/DM8 CLOB；只删除已验证的
+    legacy tuple，不删除两份 Config 原始行；Config 保留数量只进 verify 审计证据，不作为
+    开放门禁。
+  - **测试**：单 head/DDL-only、大文本 ORM 类型、迁移不调用 Config delete、Config 保留时
+    verify 可完成。
+  - **覆盖 AC**：AC-93, AC-94, AC-95, AC-145, AC-146, AC-147
+  - **依赖**：T006, T008, T011, T123, T124
+
 ---
 
 ## 实际偏差记录
@@ -1145,3 +1162,6 @@
   heartbeat，应用自动拒绝非 health HTTP/WS；运维直接进入 backend 容器执行 migrate/verify，
   成功后重启服务并自动恢复访问。因此移除 `F048_SERVICES_STOPPED` 人工标记，不引入自动
   迁移、双 model、入口人工切换或额外运维容器。
+- 真实迁移发现 `permission_migration_item.message` 的 MySQL TEXT 无法容纳约 120 KiB 的
+  binding Config 冻结载荷；按用户 2026-07-31 指示改为 MySQL LONGTEXT/DM8 CLOB，并保留两份
+  Config 原始行供排障。verify 仍记录其数量但不阻断，旧 Config 运行时路径继续退役。

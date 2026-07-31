@@ -834,7 +834,8 @@ tuple 本身属于 Store，不属于某个 model ID：迁移器按 Store
 - 直接复用 `parent`、`shared_with` 和 system facts；
 - 按批准映射写入 Catalog、PermissionModel、Grant、assignee、mode 新关系；
 - 在对应新关系的 checksum 已持久化后，删除该批旧四档候选关系和旧模型投影关系；
-- 在本阶段结束前删除旧 Config binding/model 的运行数据，审计信息改存 migration item。
+- 旧 Config binding/model 原始行只读保留供迁移排障，完整冻结载荷同时写入
+  migration item；F048 运行时不再读取或改写这些 Config。
 
 每批记录源/目标 checksum、旧关系删除 fingerprint、数量和 checkpoint。重复执行不能重复
 授权、漏删旧关系或丢失已完成批次。
@@ -852,7 +853,8 @@ tuple 本身属于 Store，不属于某个 model ID：迁移器按 Store
 - 文件预览不做 action Check，原件/打包下载检查 `download`；
 - 模型 active、动作等级和同级授权策略；
 - SQL 与现有 Store 的来源/目标计数、checksum 和 blocker；
-- 首批已迁移资源类型的旧四档/旧模型关系及旧 Config 运行数据均为零；
+- 首批已迁移资源类型的旧四档/旧模型关系为零；旧 Config 原始行保留数仅用于审计，
+  其运行时引用必须为零；
 - 旧 model ID 没有出现在任何应用配置、heartbeat 或运行客户端中。
 
 迁移前后的 tuple 数量本来就可能不同。校验依据批准的映射规则和新 model 的期望结果，
@@ -950,7 +952,8 @@ D4 前退役，迁移来源、checksum 和映射结果保存在 migration run/it
 - Store ID 与迁移前一致，新 model/Catalog checksum 与 migration run 一致；
 - 启服后所有实例自动发现同一新 model 并绑定同一 CURRENT Catalog，
   `dual_model_mode=false` 且 `legacy_model_id` 为空；
-- 首批已迁移资源类型的旧四档/旧模型 tuple 和旧 Config 运行数据为零，旧 Config/F018 路径不可达；
+- 首批已迁移资源类型的旧四档/旧模型 tuple 为零；旧 Config 原始行只读保留，
+  旧 Config/F018 运行路径不可达；
 - checkpoint 续跑和前向故障处置验证通过；
 - MySQL、DM8、Platform、Client 和后台任务回归通过。
 

@@ -408,7 +408,7 @@
 - **AC-103** — THE SYSTEM SHALL 不提供 F048 应用级回滚窗口、新→旧数据转换或旧权限运行时
   恢复能力；旧 model ID 仅是 OpenFGA 不可删除的历史记录，旧 Config 不得保留为运行时来源。
 - **AC-104** — WHEN D3 已证明对应新关系和规范化控制面完整, THE SYSTEM SHALL 在 D4 启服
-  门禁前退役旧动作模板、旧 Config binding/model 运行数据、旧授权写入口、兼容 alias 和
+  门禁前退役旧动作模板、旧 Config binding/model 运行读写路径、旧授权写入口、兼容 alias 和
   旧 ALLOW fallback；不得留到启服后再清理。
 - **AC-105** — WHEN 正式数据迁移脚本退役旧运行数据, THE SYSTEM SHALL 先证明所有有效
   模型、Grant、主体来源、受保护授权和父级均已迁移，并把来源快照、目标 checksum 与删除
@@ -444,8 +444,8 @@ OpenFGA Authorization Model 不可原地修改；每次发布都会产生新的 
 | D0 启动新镜像并自动阻断访问 | 进程存活、F048 不就绪 | 更新镜像并正常启动 API、Celery、Linsight；旧 model 只允许进程进入 `MIGRATION_REQUIRED/NOT_READY`，不初始化 F048 权限运行时、不发布 ready heartbeat；HTTP/WS 迁移门禁除 `/health` 外统一拒绝，Celery/Linsight 暂停消费任务；记录现有 Store、旧 model ID 与源数据 watermark |
 | D1 Schema Migration | 进程存活、F048 不就绪 | 正常启动链中的 Alembic revision 只执行 MySQL/DM8 DDL并验证单 head；不创建 data migration run，不读写旧数据或 OpenFGA |
 | D2 Data Migration Script | backend 容器可进入、访问门禁生效 | 运维进入 backend 容器，从 `src/backend/` 运行专用脚本；脚本创建正式 run，在现有 Store 发布新 model，并校验/导入动作、模型、binding、Grant、assignee 和 mode |
-| D3 脚本转换并退役旧数据 | 访问门禁生效、F048 不就绪 | 同一脚本原地复用仍合法的组织/共享/parent/system tuple；写入新 Catalog/Grant/mode tuple，逐批核对后删除旧四档/废弃 tuple 和旧 Config 运行数据 |
-| D4 脚本校验 | 访问门禁生效、尚未重启 | 专用脚本 verify 核对来源/目标计数、checksum、人工项和新模型高风险动作；已迁移类型旧 tuple/Config 计数必须为零 |
+| D3 脚本转换并退役旧数据 | 访问门禁生效、F048 不就绪 | 同一脚本原地复用仍合法的组织/共享/parent/system tuple；写入新 Catalog/Grant/mode tuple，逐批核对后删除旧四档/废弃 tuple；两份旧 Config 原始行保留为只读排障证据 |
+| D4 脚本校验 | 访问门禁生效、尚未重启 | 专用脚本 verify 核对来源/目标计数、checksum、人工项和新模型高风险动作；已迁移类型旧 tuple 计数必须为零，旧 Config 保留数量仅审计、不阻断 |
 | D5 重启并自动发现 | 重启 → 新 model | 迁移成功后重启 API、Celery、Linsight 等进程；配置只保留连接信息与稳定 Store name；全部实例发现唯一同名 Store 的最新 model，并要求它与 SQL CURRENT Catalog 引用的 ACTIVE release 一致；dual/legacy model 关闭；readiness、heartbeat 与 smoke 100% 后迁移门禁自动解除 |
 | D6 前向运行 | 新 model | 异常只做前向修复；旧 model ID 仅作为 OpenFGA 不可删除的历史版本存在 |
 
@@ -474,7 +474,8 @@ OpenFGA Authorization Model 不可原地修改；每次发布都会产生新的 
 - **AC-116** — THE SYSTEM SHALL 不提供从新 model 恢复到旧 model 的应用级迁移路径；
   IF D5 后发现问题, THEN THE SYSTEM SHALL 重新维护并在新 model 上前向修复。
 - **AC-117** — WHEN D4 通过, THE SYSTEM SHALL 证明已迁移资源的旧四档/废弃 relation tuple
-  与旧 Config 运行数据已经删除；旧 model ID 因 OpenFGA 不可变而保留时，也不得出现在
+  与旧 Config 运行读写路径已经删除；旧 Config 原始行只读保留，旧 model ID 因 OpenFGA
+  不可变而保留时，也不得出现在
   runtime 配置、client、heartbeat 或 readiness 中；Store/model/Catalog ID 不要求写入配置。
 
 #### 4.8.2 旧 OpenFGA 关系迁移
@@ -569,9 +570,12 @@ MySQL/DM8 关系表是权限配置、模型定义和绑定关系的控制面真�
   `permission_relation_models_v1` 与 `permission_relation_model_bindings_v1`；两份 Config
   若暂时保留，只能作为只读迁移审计来源。
 - **AC-145** — WHEN 源/目标计数、引用和权限语义核对通过且旧数据无运行时引用,
-  THE SYSTEM SHALL 删除两份 Config 大 JSON 及其专用缓存、解析、全量读改写和第二 PDP 路径。
+  THE SYSTEM SHALL 保留两份 Config 大 JSON 原始行为只读迁移/排障证据，不得由 F048
+  数据迁移脚本删除；同时必须删除其专用缓存、运行时解析、全量读改写和第二 PDP 路径。
 - **AC-146** — THE SYSTEM SHALL 使上述规范化表、唯一性约束和迁移结果同时兼容 MySQL 与 DM8；不得使用仅 MySQL 可运行的 JSON 查询或方言特性。
-- **AC-147** — THE SYSTEM SHALL 以 `permission_migration_item` 逐条保存旧记录到新记录的映射、处理状态和失败原因，使断点恢复与审计不依赖另一份大 JSON 迁移报告。
+- **AC-147** — THE SYSTEM SHALL 以 `permission_migration_item` 逐条保存旧记录到新记录的映射、冻结源载荷、处理状态和失败原因；冻结载荷列在 MySQL 使用 LONGTEXT、DM8
+  使用 CLOB，不得因旧 Config 超过 64 KiB 而截断，使断点恢复与审计不依赖另一份大 JSON
+  迁移报告。
 
 ---
 

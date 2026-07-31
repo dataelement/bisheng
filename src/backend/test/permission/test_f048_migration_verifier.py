@@ -129,6 +129,20 @@ async def test_verifier_uses_higher_consistency_and_marks_ready():
     assert len(store.ready_checksums[0]) == 64
 
 
+async def test_verifier_allows_retained_legacy_config_audit_rows():
+    store = FakeStore()
+    verifier = F048MigrationVerifier(
+        run_store=store,
+        evidence_provider=FakeEvidenceProvider(
+            _evidence(legacy_config_count=2),
+        ),
+    )
+
+    result = await verifier.verify(run_id=3)
+
+    assert result.phase == "READY_TO_START"
+
+
 @pytest.mark.parametrize(
     ("field", "value", "reason"),
     [

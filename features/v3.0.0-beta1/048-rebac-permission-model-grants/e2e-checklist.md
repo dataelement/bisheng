@@ -159,8 +159,8 @@ knowledge_library、folder、knowledge_file 逐类执行：
   Store ID 不变。
 - [ ] D5 启服后所有进程自动发现同一 Store/latest model，且 heartbeat 与 SQL CURRENT
   Catalog 匹配；不存在 model A/B 运行时路由。
-- [ ] D6 在证明目标 tuple/control 完整后才删除已迁移旧 tuple 和旧 Config 数据；
-  删除后旧 API、模板、迁移脚本和 relation 不可达。
+- [ ] D6 在证明目标 tuple/control 完整后才删除已迁移旧 tuple；旧 Config 原始行只读保留
+  供排障，但旧 API、模板、运行时解析和 relation 均不可达。
 - [ ] 不存在预演、应用级回滚、新→旧转换或旧权限运行时恢复入口。
 
 ## 8. BENCH-01

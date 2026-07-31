@@ -21,10 +21,17 @@ from sqlmodel import SQLModel
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import tenant_filter
 from bisheng.core.database.alembic.versions import f048_permission_model_grants as revision
+from bisheng.core.database.alembic.versions import (
+    v3_0_0_f048_migration_item_message_longtext as message_revision,
+)
+from bisheng.core.database.dialect_helpers import LargeText
 from bisheng.permission.domain import models as permission_models
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 REVISION_PATH = BACKEND_ROOT / "bisheng/core/database/alembic/versions/f048_permission_model_grants.py"
+MESSAGE_REVISION_PATH = (
+    BACKEND_ROOT / "bisheng/core/database/alembic/versions/v3_0_0_f048_migration_item_message_longtext.py"
+)
 
 F048_TABLES = {
     "authorization_model_release",
@@ -81,8 +88,16 @@ def test_tenant_tables_are_non_nullable_and_discovered() -> None:
 
     migration_item = SQLModel.metadata.tables["permission_migration_item"]
     assert migration_item.c.tenant_id.nullable is True
+    assert isinstance(migration_item.c.message.type, LargeText)
     assert "permission_catalog_release" not in discovered
     assert "permission_migration_run" not in discovered
+
+
+def test_migration_item_message_compiles_to_mysql_longtext() -> None:
+    migration_item = SQLModel.metadata.tables["permission_migration_item"]
+    ddl = str(CreateTable(migration_item).compile(dialect=mysql.dialect())).upper()
+
+    assert "MESSAGE LONGTEXT" in ddl
 
 
 def test_f048_unique_and_foreign_key_contract() -> None:
@@ -124,7 +139,20 @@ def test_f048_revision_is_the_single_alembic_head() -> None:
         "script_location",
         str(BACKEND_ROOT / "bisheng/core/database/alembic"),
     )
-    assert ScriptDirectory.from_config(config).get_heads() == ["f048_permission_grants"]
+    assert ScriptDirectory.from_config(config).get_heads() == ["f048_migration_item_message_longtext"]
+
+
+def test_f048_message_revision_is_static_ddl_only() -> None:
+    source = MESSAGE_REVISION_PATH.read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    called_names = {
+        node.func.attr for node in ast.walk(tree) if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+    }
+
+    assert message_revision.down_revision == "f048_permission_grants"
+    assert message_revision.revision == "f048_migration_item_message_longtext"
+    assert "alter_column" in called_names
+    assert not {"execute", "bulk_insert"} & called_names
 
 
 def test_f048_revision_is_static_ddl_only() -> None:

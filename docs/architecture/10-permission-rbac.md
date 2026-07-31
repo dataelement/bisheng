@@ -493,7 +493,8 @@ src/backend/scripts/migrate_f048_permission_data.py
 3. D2：运维进入 backend 容器执行脚本；脚本确认 ready F048 heartbeat=0，
    两次稳定源扫描并冻结 run/item/checksum；
 4. D3：在同一 Store 发布一个 F048 model，分批写 SQL/FGA；
-5. D4：higher-consistency 验证后，仅删除记录到 run 的 legacy tuple/Config；
+5. D4：higher-consistency 验证后，仅删除记录到 run 的 legacy tuple；两份 legacy
+   Config 原始行保留为只读排障证据，但不再参与任何运行时读写或授权判断；
 6. D5：迁移成功后重启全部 backend 进程，自动发现新 model 并绑定 SQL CURRENT Catalog；
 7. D6：smoke、全实例 heartbeat 和语义校验通过后，迁移门禁自动解除。
 
