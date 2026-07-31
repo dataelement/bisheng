@@ -1532,6 +1532,17 @@
     "volume": "音量",
     "progress": "播放进度"
   },
+  "com_deep_thinking": {
+    "running": "正在深度思考（已用 {{0}} 秒）...",
+    "running_no_time": "正在深度思考...",
+    "done": "已深度思考（用时 {{0}} 秒）",
+    "done_no_time": "已深度思考",
+    "step_analyzing": "正在分析问题",
+    "step_web_search": "正在联网搜索",
+    "step_knowledge": "正在检索知识",
+    "step_tool": "正在调用工具：{{0}}",
+    "step_continuing": "正在整理信息并继续思考"
+  },
   "com_subscription": {
     "tab_channel": "频道",
     "tab_square": "广场",

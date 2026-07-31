@@ -1605,6 +1605,17 @@
     "volume": "Volume",
     "progress": "Playback progress"
   },
+  "com_deep_thinking": {
+    "running": "Thinking deeply ({{0}}s elapsed)...",
+    "running_no_time": "Thinking deeply...",
+    "done": "Thought deeply for {{0}}s",
+    "done_no_time": "Thought deeply",
+    "step_analyzing": "Analyzing the question",
+    "step_web_search": "Searching the web",
+    "step_knowledge": "Searching knowledge",
+    "step_tool": "Calling tool: {{0}}",
+    "step_continuing": "Organizing findings and thinking on"
+  },
   "com_subscription": {
     "tab_channel": "Channels",
     "tab_square": "Square",

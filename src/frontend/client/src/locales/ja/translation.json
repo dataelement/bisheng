@@ -1528,6 +1528,17 @@
     "volume": "音量",
     "progress": "再生位置"
   },
+  "com_deep_thinking": {
+    "running": "深く思考中（{{0}} 秒経過）...",
+    "running_no_time": "深く思考中...",
+    "done": "思考完了（{{0}} 秒）",
+    "done_no_time": "思考完了",
+    "step_analyzing": "質問を分析しています",
+    "step_web_search": "ウェブ検索中",
+    "step_knowledge": "ナレッジを検索中",
+    "step_tool": "ツールを呼び出し中：{{0}}",
+    "step_continuing": "情報を整理して思考を続けています"
+  },
   "com_subscription": {
     "tab_channel": "チャンネル",
     "tab_square": "広場",

@@ -23,7 +23,7 @@ export interface ToolCallDisplayProps {
 
 // --- helpers ---------------------------------------------------------------
 
-function classifyToolType(tc: AgentToolCall): "knowledge" | "web" | "tool" {
+export function classifyToolType(tc: AgentToolCall): "knowledge" | "web" | "tool" {
     if (tc.tool_type === "knowledge") return "knowledge";
     if (tc.tool_type === "web") return "web";
     // Heuristics for legacy rows / server variants:
@@ -40,7 +40,7 @@ const BUILTIN_TOOL_I18N: Record<string, string> = {
     web_search: "com_tools_web_search",
 };
 
-function resolveToolName(
+export function resolveToolName(
     tc: AgentToolCall,
     localize: ReturnType<typeof useLocalize>,
 ): string {
