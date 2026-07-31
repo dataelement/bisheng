@@ -73,6 +73,7 @@ import {
     isFolder,
     isPreviewable,
     isRetryable,
+    mergeRootTreeNodesPreservingLoadedFolders,
     normalizePortalFileCategoryGroups,
     normalizePortalFileCategoryOptions,
     resolvePreviewUrl,
@@ -371,11 +372,19 @@ export default function PortalKnowledgeWorkbench() {
 
     useEffect(() => {
         if (!portalDeepLinkTarget || restoringDeepLinkKey !== portalDeepLinkTarget.key) return;
+        const targetSpaceExists = selectableSpaces.some(
+            (space) => String(space.id) === portalDeepLinkTarget.spaceId,
+        );
+
         if (!activeSpace && !spaceLoading) {
-            setRestoringDeepLinkKey(null);
+            // Spaces finished loading with no active space — only fail if the target is missing.
+            if (!targetSpaceExists) setRestoringDeepLinkKey(null);
             return;
         }
         if (activeSpace && String(activeSpace.id) !== portalDeepLinkTarget.spaceId && !spaceLoading) {
+            // Target space is available: keep overlay while setActiveSpace catches up.
+            // Clearing here used to flash the previous/current space file list before the file opened.
+            if (targetSpaceExists) return;
             setRestoringDeepLinkKey(null);
             return;
         }
@@ -391,7 +400,23 @@ export default function PortalKnowledgeWorkbench() {
         activeSpace,
         portalDeepLinkTarget,
         restoringDeepLinkKey,
+        selectableSpaces,
         spaceLoading,
+    ]);
+
+    // File deep links: keep 「加载中」until the preview request settles (not when the tree loads).
+    useEffect(() => {
+        if (!portalDeepLinkTarget?.fileId || restoringDeepLinkKey !== portalDeepLinkTarget.key) return;
+        if (!selectedFile || String(selectedFile.id) !== portalDeepLinkTarget.fileId) return;
+        if (preview.loading) return;
+        setRestoringDeepLinkKey(null);
+    }, [
+        portalDeepLinkTarget,
+        preview.error,
+        preview.fileUrl,
+        preview.loading,
+        restoringDeepLinkKey,
+        selectedFile,
     ]);
 
     useEffect(() => {
@@ -613,7 +638,18 @@ export default function PortalKnowledgeWorkbench() {
     );
     useEffect(() => {
         if (!activeSpace?.id) return;
-        if (isDeepLinkRestoring) return;
+        // Allow reporting the opened file while restore overlay is still up, so the portal
+        // parent can dismiss its own open-file loading mask.
+        if (
+            isDeepLinkRestoring
+            && !(
+                portalDeepLinkTarget?.fileId
+                && selectedFile
+                && String(selectedFile.id) === portalDeepLinkTarget.fileId
+            )
+        ) {
+            return;
+        }
         if (currentFolderId && !currentFolderNode) return;
         if (
             currentFolderNode?.file.spaceId
@@ -643,6 +679,7 @@ export default function PortalKnowledgeWorkbench() {
         currentFolderId,
         currentFolderNode,
         isDeepLinkRestoring,
+        portalDeepLinkTarget?.fileId,
         selectedFile?.id,
         selectedFile?.name,
         selectedFile?.spaceId,
@@ -1009,13 +1046,12 @@ export default function PortalKnowledgeWorkbench() {
                 if (append) {
                     return dedupeTreeNodesByFileId([...prev, ...nextFiles.map(createTreeNode)]);
                 }
-                const nextNodes = dedupeFilesById(nextFiles).map(createTreeNode);
-                const folderId = currentFolderIdRef.current;
-                const currentFolderNode = folderId ? findTreeNode(prev, folderId) : null;
-                if (folderId && currentFolderNode && !findTreeNode(nextNodes, folderId)) {
-                    return dedupeTreeNodesByFileId([currentFolderNode, ...nextNodes]);
-                }
-                return nextNodes;
+                // Deep-link folder navigate can finish before this root refresh; keep loaded children.
+                return mergeRootTreeNodesPreservingLoadedFolders(
+                    prev,
+                    nextFiles,
+                    currentFolderIdRef.current,
+                );
             });
             setTreeRootPage(page);
             setTreeRootTotal((prev) => (res as any).total ?? (append ? prev + nextFiles.length : nextFiles.length));
@@ -1455,16 +1491,26 @@ export default function PortalKnowledgeWorkbench() {
             return;
         }
 
-        setSelectedFile(null);
+        // Prefer deep-link target over restoringDeepLinkKey: clearing the key after preview
+        // settles must not re-run this effect and wipe the file we just opened.
+        const openingDeepLinkedFileHere = Boolean(
+            portalDeepLinkTarget?.fileId
+            && String(activeSpace.id) === portalDeepLinkTarget.spaceId,
+        );
+
+        // While a deep-linked file open targets this space, do not wipe selection/search.
+        if (!openingDeepLinkedFileHere) {
+            setSelectedFile(null);
+            setSearchText("");
+            setSearchMode(false);
+            setSearchResults([]);
+            setSearchTagIds([]);
+            setSelectedFileIds(new Set());
+            setSelectedFolderIds(new Set());
+        }
         setActivePanel(null);
         setAiDrawerOpen(false);
         setSummaryExpanded(false);
-        setSearchText("");
-        setSearchMode(false);
-        setSearchResults([]);
-        setSearchTagIds([]);
-        setSelectedFileIds(new Set());
-        setSelectedFolderIds(new Set());
 
         const spaceChanged = String(activeSpace.id) !== previousSpaceIdRef.current;
         if (spaceChanged) {
@@ -1473,11 +1519,13 @@ export default function PortalKnowledgeWorkbench() {
             setTreeRootTotal(0);
             setTreeRootHasMore(false);
             setTreeRootNextCursor(null);
-            setCurrentFolderId(undefined);
+            if (!openingDeepLinkedFileHere) {
+                setCurrentFolderId(undefined);
+            }
             setCanCreateFolder(false);
             setCanUploadFile(false);
             void loadRootTreeRef.current(1, false, activeSpace.id);
-        } else {
+        } else if (!openingDeepLinkedFileHere) {
             // Sort/filter changed: keep the current folder and reload the same view
             // with the new ordering/filter instead of jumping back to the root.
             void reloadFilesRef.current();
@@ -1488,13 +1536,29 @@ export default function PortalKnowledgeWorkbench() {
         // above): they change for unrelated reasons such as showToast being recreated
         // after a toast, which previously triggered spurious full reloads.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [activeSpace?.id, sortBy, sortDirection, statusFilterNumbers]);
+    }, [
+        activeSpace?.id,
+        portalDeepLinkTarget?.fileId,
+        portalDeepLinkTarget?.spaceId,
+        sortBy,
+        sortDirection,
+        statusFilterNumbers,
+    ]);
 
     useEffect(() => {
         if (!selectedFile) return;
         // Deep-link restore may select a file before search results / tree rows catch up;
         // clearing here races with usePortalDeepLink and drops the preview.
         if (isDeepLinkRestoring) return;
+        // Tag-review deep link opens preview before folder children land in displayedFiles.
+        // Clearing here "suddenly" drops the user onto an empty folder path.
+        if (
+            portalDeepLinkTarget?.fileId
+            && String(selectedFile.id) === portalDeepLinkTarget.fileId
+            && String(activeSpace?.id) === portalDeepLinkTarget.spaceId
+        ) {
+            return;
+        }
         // #4 收藏原地预览：selectedFile 是来自其它源空间的合成文件（不属于当前 activeSpace，
         // 自然不在其 displayedFiles 中），不应被此“列表中已不存在则关闭预览”的守卫清空。
         if (selectedFile.spaceId && selectedFile.spaceId !== activeSpace?.id) return;
@@ -1502,7 +1566,14 @@ export default function PortalKnowledgeWorkbench() {
         if (!exists) {
             setSelectedFile(null);
         }
-    }, [displayedFiles, selectedFile, activeSpace?.id, isDeepLinkRestoring]);
+    }, [
+        displayedFiles,
+        selectedFile,
+        activeSpace?.id,
+        isDeepLinkRestoring,
+        portalDeepLinkTarget?.fileId,
+        portalDeepLinkTarget?.spaceId,
+    ]);
 
     useEffect(() => {
         if (!permissionTarget) return;
@@ -2013,7 +2084,21 @@ export default function PortalKnowledgeWorkbench() {
         setAiDrawerOpen(false);
         setSummaryExpanded(false);
         setPreview({ loading: false, fileUrl: "", fileType: "", error: "", previewData: null });
-    }, []);
+        // Deep-link open used to leave searchMode with a single-file result set.
+        setSearchMode(false);
+        setSearchResults([]);
+        setSearchText("");
+        setSearchTagIds([]);
+        // Early back during tag-review deep link must not stick on the restore overlay.
+        setRestoringDeepLinkKey(null);
+        // Folder children may still be loading / wiped by a late root refresh — refetch.
+        const folderId = currentFolderIdRef.current;
+        if (!folderId) return;
+        const folderNode = findTreeNode(treeNodes, folderId);
+        if (!folderNode?.loaded || folderNode.loading) {
+            void reloadFilesRef.current();
+        }
+    }, [treeNodes]);
 
     // 从"我的收藏"只读面板打开源文件：#4 原地预览——不切换 activeSpace（不跳转到源知识空间），
     // 以携带源空间 id 的合成文件项触发预览流程。预览/下载按 selectedFile.spaceId(源空间) 定位、

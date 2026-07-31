@@ -24,6 +24,12 @@ class ReviewTagsRepositoryImpl:
         self.session = session
         self.tags_repository = tags_repository
 
+    @staticmethod
+    def _parent_folder_id_from_level_path(file_level_path: str | None) -> int | None:
+        """Return immediate parent folder id from ``file_level_path`` (empty = space root)."""
+        folder_ids = [int(part) for part in (file_level_path or "").split("/") if part.isdigit()]
+        return folder_ids[-1] if folder_ids else None
+
     def _pending_space_scope_clause(self, tenant_id: int, space_ids: set[int] | None):
         """Restrict pending review tags to associations within ``space_ids``.
 
@@ -515,6 +521,8 @@ class ReviewTagsRepositoryImpl:
                         file_info["id"] = knowledgefile.id
                         file_info["file_id"] = knowledgefile.id
                         file_info["knowledge_id"] = knowledgefile.knowledge_id
+                        # Portal deep-link opens the parent folder before previewing the file.
+                        file_info["parent_id"] = self._parent_folder_id_from_level_path(knowledgefile.file_level_path)
                         submit_time = tag_link.create_time or tag_create_time_by_id.get(tag_link.tag_id)
                         file_info["submit_time"] = submit_time.strftime("%Y-%m-%d %H:%M:%S") if submit_time else ""
                     if file_info:

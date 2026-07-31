@@ -265,10 +265,19 @@ export function usePortalSpaces({
             }
             return;
         }
-        if (preferredSpacePending) return;
+
+        // Deep-link restore: never fall back to 我的收藏 while a preferred space is requested.
+        // Clear a mismatched default so the sidebar/list do not flash the favorite space.
+        if (preferredSpaceId) {
+            if (activeSpace && String(activeSpace.id) === String(preferredSpaceId)) return;
+            if (activeSpace) {
+                setActiveSpace(null);
+            }
+            return;
+        }
+
         // 用 String() 兜底：新建返回的 space id 可能是数字，避免与列表里的字符串 id 不匹配而误重置
         if (activeSpace && selectableSpaces.some((space) => String(space.id) === String(activeSpace.id))) return;
-        if (activeSpace && preferredSpaceId && String(activeSpace.id) === String(preferredSpaceId)) return;
         if (personalSpacesQuery.isLoading) return;
         setActiveSpace(defaultPersonalSpace ?? selectableSpaces[0] ?? null);
     }, [
@@ -277,7 +286,6 @@ export function usePortalSpaces({
         personalSpacesQuery.isLoading,
         preferredSpace,
         preferredSpaceId,
-        preferredSpacePending,
         selectableSpaces,
         setActiveSpace,
     ]);
