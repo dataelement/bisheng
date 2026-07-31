@@ -49,6 +49,7 @@ const ResoucePage = lazy(() => import("@/pages/resoucePage"));
 const Dashboard = lazy(() => import("@/pages/Dashboard"));
 const TenantPage = lazy(() => import("@/pages/TenantPage"));
 const TenantSelect = lazy(() => import("@/pages/LoginPage/TenantSelect"));
+const Logout = lazy(() => import("@/pages/LogoutPage"));
 
 const baseConfig = {
   //@ts-ignore
@@ -156,6 +157,8 @@ const privateRouter = [
   { path: "/report/:id/", element: <Report />, errorElement: <RouteErrorBoundary /> },
   { path: "/diff/:id/:vid/:cid", element: <DiffFlowPage />, errorElement: <RouteErrorBoundary /> },
   { path: "/reset", element: <ResetPwdPage />, errorElement: <RouteErrorBoundary /> },
+  // zz customization: plain-link logout entry for external portals
+  { path: "/logout", element: <Logout />, errorElement: <RouteErrorBoundary /> },
   // Backdoor login: also exposed inside privateRouter so an authenticated user
   // navigating here (e.g. to switch accounts) does not fall into the * -> /404 trap.
   { path: "/admin-login", element: <LoginPage forceLocal />, errorElement: <RouteErrorBoundary /> },

@@ -30,7 +30,8 @@ type locationContextType = {
   extraComponent: any;
   setExtraComponent: (newState: any) => void;
   appConfig: any;
-  reloadConfig: () => void
+  reloadConfig: () => void;
+  isConfigLoading: boolean;
 };
 
 //initial value for location context
@@ -50,7 +51,8 @@ const initialValue = {
   extraComponent: <></>,
   setExtraComponent: () => { },
   appConfig: { libAccepts: [] },
-  reloadConfig: () => { }
+  reloadConfig: () => { },
+  isConfigLoading: true
 };
 
 export const locationContext = createContext<locationContextType>(initialValue);
@@ -63,12 +65,16 @@ export function LocationProvider({ children }: { children: ReactNode }) {
   const [showSideBar, setShowSideBar] = useState(initialValue.showSideBar);
   const [extraNavigation, setExtraNavigation] = useState({ title: "" });
   const [extraComponent, setExtraComponent] = useState(<></>);
+  const [isConfigLoading, setIsConfigLoading] = useState(true);
   const [appConfig, setAppConfig] = useState<any>({
     libAccepts: [],
     noFace: true,
+    customizationPageUrl: '',
+    administratorIds: [],
   })
 
   const loadConfig = () => {
+    setIsConfigLoading(true);
     getAppConfig()
       .then(res => {
         // Set all config values that come from getAppConfig
@@ -85,10 +91,12 @@ export function LocationProvider({ children }: { children: ReactNode }) {
           chatPrompt: !!res.application_usage_tips,
           noFace: !res.show_github_and_help,
           register: !!res.enable_registration,
-          uploadFileMaxSize: res.uploaded_files_maximum_size || 50,
+          uploadFileMaxSize: res.uploaded_files_maximum_size || 200,
           uploadMediaMaxSize: res.uploaded_media_maximum_size ?? 1024,
           enableEtl4lm: res.enable_etl4lm,
-          multiTenantEnabled: !!res.multi_tenant_enabled
+          multiTenantEnabled: !!res.multi_tenant_enabled,
+          customizationPageUrl: res.customization_page_url || '',
+          administratorIds: res.administrator_ids || [],
         }));
 
         // backend version
@@ -107,6 +115,7 @@ export function LocationProvider({ children }: { children: ReactNode }) {
               benchMenu: bench?.menuShow ?? true,
               worksapceIcon: bench?.assistantIcon?.image ?? '',
             }));
+            setIsConfigLoading(false);
           })
           .catch(error => {
             console.error('Failed to get workstation config:', error);
@@ -115,11 +124,13 @@ export function LocationProvider({ children }: { children: ReactNode }) {
               ...prev,
               benchMenu: false
             }));
+            setIsConfigLoading(false);
           });
       })
       .catch(error => {
         console.error('Failed to get app config:', error);
         // You might want to set some default values here if the main config fails
+        setIsConfigLoading(false);
       });
   }
 
@@ -143,6 +154,7 @@ export function LocationProvider({ children }: { children: ReactNode }) {
         setExtraComponent,
         appConfig,
         reloadConfig: loadConfig,
+        isConfigLoading,
       }}
     >
       {children}

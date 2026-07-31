@@ -165,6 +165,9 @@ export const LoginPage = ({ forceLocal = false }: LoginPageProps) => {
                     // After the login session expires, redirect back to the login page. After successful login, redirect back to the page before login.
                     localStorage.removeItem('LOGIN_PATHNAME')
                     location.href = pathname
+                } else if (appConfig.customizationPageUrl) {
+                    // zz customization: land every user on the customization page after login
+                    location.href = appConfig.customizationPageUrl
                 } else {
                     const entry = (res as { default_entry?: string }).default_entry
                     if (entry === 'workspace') {

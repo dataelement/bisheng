@@ -19,4 +19,8 @@ export type AppConfig = {
     uploaded_media_maximum_size?: number;
     /** 是否部署 ETL4LM  */
     enable_etl4lm: boolean;
+    /** 定制化页面 URL（zz 定制：非管理员重定向目标） */
+    customization_page_url?: string;
+    /** 管理员角色 ID 列表（zz 定制：命中即放行） */
+    administrator_ids?: string[];
 };

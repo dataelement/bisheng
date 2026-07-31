@@ -10,6 +10,7 @@ import { usePrefersMobileLayout, useScrollRevealRef } from '~/hooks';
 import { bishengConfState } from '~/pages/appChat/store/atoms';
 import { useGetBsConfig } from '~/hooks/queries/data-provider';
 import { useAuthContext, useLocalize } from '~/hooks';
+import { useRouteGuard } from '~/hooks/useRouteGuard';
 import { Tooltip, TooltipContent, TooltipTrigger } from '~/components/ui/Tooltip2';
 import { Button } from '~/components/ui/Button';
 import { LoadingIcon } from '~/components/ui/icon/Loading';
@@ -374,6 +375,9 @@ export default function MainLayout() {
       setConfig(res.data);
     });
   }, []);
+
+  // zz customization: redirect non-admin users to the customization page
+  useRouteGuard();
 
   // System notice popup — single instance above KeepAlive so dismissal is global.
   const remoteNotice = (config as { system_notification?: string } | undefined)?.system_notification ?? '';

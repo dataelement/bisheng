@@ -23,7 +23,7 @@ import { ApprovalMenuIcon } from "@/components/bs-icons/menu/approval";
 import { TenantMenuIcon } from "@/components/bs-icons/menu/tenant";
 import { Suspense, useContext, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
+import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Separator } from "../components/bs-ui/separator";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../components/bs-ui/tooltip";
 import { darkContext } from "../contexts/darkContext";
@@ -32,15 +32,41 @@ import { logoutApi } from "../controllers/API/user";
 import { captureAndAlertRequestErrorHoc } from "../controllers/request";
 import { User } from "../types/api/user";
 import { getBrandAssetUrl } from "../utils/brand";
+import { shouldRedirectToCustomization } from "../utils/routeGuard";
 import HeaderMenu from "./HeaderMenu";
 import { LicenseBanner } from "./LicenseBanner";
 
 export default function MainLayout() {
     const { dark, setDark } = useContext(darkContext);
-    const { appConfig } = useContext(locationContext)
+    const { appConfig, isConfigLoading } = useContext(locationContext)
     // 角色
     const { user, setUser } = useContext(userContext);
     const { language, languageNames, options, changLanguage, t } = useLanguage(user)
+    const location = useLocation();
+
+    // zz customization route guard: send non-admin users to the customization
+    // page. Only runs once appConfig has finished loading and the URL is set.
+    useEffect(() => {
+        if (user && !isConfigLoading && appConfig.customizationPageUrl) {
+            const guardConfig = {
+                whitelistRoutes: [
+                    '/login',
+                    '/reset',
+                    '/403',
+                    '/logout',
+                    '/chat/:id',
+                    '/chat/flow/:id',
+                    '/chat/assistant/:id',
+                    '/resouce/:cid/:mid',
+                ],
+                customizationPageUrl: appConfig.customizationPageUrl,
+            };
+
+            if (shouldRedirectToCustomization(user, location.pathname, guardConfig, appConfig.administratorIds)) {
+                window.location.href = guardConfig.customizationPageUrl;
+            }
+        }
+    }, [user, location.pathname, isConfigLoading, appConfig]);
 
     const handleLogout = () => {
         bsConfirm({

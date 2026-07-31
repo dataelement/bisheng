@@ -128,4 +128,8 @@ export type BishengConfig = {
       simhash_similarity_threshold?: number;
     };
   };
+  /** zz 定制：非管理员重定向的定制化页面 URL */
+  customization_page_url?: string;
+  /** zz 定制：管理员角色 ID 列表，命中即放行 */
+  administrator_ids?: string[];
 };
