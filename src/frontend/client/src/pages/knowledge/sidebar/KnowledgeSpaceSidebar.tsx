@@ -179,12 +179,16 @@ export function KnowledgeSpaceSidebar({
     const departmentSpaceIds = new Set(departmentSpaces.map(s => s.id));
     const filteredCreatedSpaces = createdSpaces.filter(s => !departmentSpaceIds.has(s.id));
     const filteredJoinedSpaces = joinedSpaces.filter(s => !departmentSpaceIds.has(s.id));
-    // An empty created/joined section stretches over the remaining list height
-    // and centers its empty-state text (both empty → 50/50 split). Compact
-    // dropdown keeps natural heights — it is a popover sized to content.
+    // The list fills its scroll viewport and the LAST section ("joined") absorbs all
+    // leftover height. Sections above it therefore keep a fixed empty-state height and
+    // never move when a sibling is collapsed or gains data — collapsing a section only
+    // ever pulls the content below it upwards. Compact dropdown keeps natural heights —
+    // it is a popover sized to content.
+    const departmentEmpty = !departmentSpaces.length;
     const createdEmpty = !filteredCreatedSpaces.length;
     const joinedEmpty = !filteredJoinedSpaces.length;
-    const stretchEmptySections = (createdEmpty || joinedEmpty) && !compactMode;
+    const fillListHeight = !compactMode;
+    const stretchJoined = fillListHeight && !joinedCollapsed;
     const permissionSpaceIds = useMemo(
         () => Array.from(new Set([
             ...departmentSpaces.map(s => s.id),
@@ -341,6 +345,18 @@ export function KnowledgeSpaceSidebar({
         />
     );
 
+    // Empty-state block. Sections with a fixed slot keep a constant 96px height so their
+    // neighbours never shift; the section absorbing the leftover height centers its text
+    // in whatever space is left.
+    const renderEmptyState = (stretch: boolean) => (
+        <div className={cn(
+            "flex items-center justify-center text-center text-sm text-[#999999]",
+            stretch ? "flex-1 py-6" : "h-24",
+        )}>
+            {localize("com_knowledge.no_data")}
+        </div>
+    );
+
     const handleListScroll = () => {
         setIsListScrolling(true);
         if (listScrollTimerRef.current) clearTimeout(listScrollTimerRef.current);
@@ -426,7 +442,7 @@ export function KnowledgeSpaceSidebar({
                             scroll container's visible width — that lets sticky-left/top
                             keep them pinned to the viewport edges even while items
                             horizontally overflow. */}
-                        <div className={cn("w-max min-w-full", stretchEmptySections && "flex min-h-full flex-col")}>
+                        <div className={cn("w-max min-w-full", fillListHeight && "flex min-h-full flex-col")}>
                             {compactMode ? (
                                 /* File-page title dropdown: same 3-section tree as the PC sidebar,
                                    ordered 部门 → 我创建的 → 我加入的. Per-row "..." menus stay hidden
@@ -519,17 +535,13 @@ export function KnowledgeSpaceSidebar({
                                 {!departmentCollapsed && (
                                     <div className={listRowClassName}>
                                         {departmentSpaces.map(s => renderSpaceItem(s, "department"))}
-                                        {!departmentSpaces.length && (
-                                            <div className="py-6 text-center text-sm text-[#999999]">
-                                                {localize("com_knowledge.no_data")}
-                                            </div>
-                                        )}
+                                        {departmentEmpty && renderEmptyState(false)}
                                     </div>
                                 )}
                             </div>
 
                             {/* My created */}
-                            <div className={cn("pb-4", stretchEmptySections && createdEmpty && !createdCollapsed && "flex min-h-0 flex-1 flex-col")}>
+                            <div className="pb-4">
                                 <SectionHeader
                                     title={localize("com_knowledge.created_by_me")}
                                     collapsed={createdCollapsed}
@@ -543,20 +555,17 @@ export function KnowledgeSpaceSidebar({
                                     mobile={mobilePageMode}
                                 />
                                 {!createdCollapsed && (
-                                    <div className={cn(listRowClassName, stretchEmptySections && createdEmpty && "flex min-h-0 flex-1 flex-col")}>
+                                    <div className={listRowClassName}>
                                         {filteredCreatedSpaces.map(s => renderSpaceItem(s, "created"))}
-                                        {createdEmpty && (
-                                            <div className={cn(
-                                                "py-6 text-center text-sm text-[#999999]",
-                                                stretchEmptySections && "flex flex-1 items-center justify-center",
-                                            )}>{localize("com_knowledge.no_data")}</div>
-                                        )}
+                                        {createdEmpty && renderEmptyState(false)}
                                     </div>
                                 )}
                             </div>
 
-                            {/* Joined */}
-                            <div className={cn("pb-4", stretchEmptySections && joinedEmpty && !joinedCollapsed && "flex min-h-0 flex-1 flex-col")}>
+                            {/* Joined — last section, so it absorbs the list's leftover height.
+                                `flex-1` here keeps its automatic min-height, so a long list still
+                                grows past the viewport and scrolls instead of being squeezed. */}
+                            <div className={cn("pb-4", stretchJoined && "flex flex-1 flex-col")}>
                                 <SectionHeader
                                     title={localize("com_knowledge.joined_by_me")}
                                     collapsed={joinedCollapsed}
@@ -568,14 +577,9 @@ export function KnowledgeSpaceSidebar({
                                     mobile={mobilePageMode}
                                 />
                                 {!joinedCollapsed && (
-                                    <div className={cn(listRowClassName, stretchEmptySections && joinedEmpty && "flex min-h-0 flex-1 flex-col")}>
+                                    <div className={cn(listRowClassName, stretchJoined && "flex flex-1 flex-col")}>
                                         {filteredJoinedSpaces.map(s => renderSpaceItem(s, "joined"))}
-                                        {joinedEmpty && (
-                                            <div className={cn(
-                                                "py-6 text-center text-sm text-[#999999]",
-                                                stretchEmptySections && "flex flex-1 items-center justify-center",
-                                            )}>{localize("com_knowledge.no_data")}</div>
-                                        )}
+                                        {joinedEmpty && renderEmptyState(stretchJoined)}
                                     </div>
                                 )}
                             </div>
