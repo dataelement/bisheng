@@ -45,6 +45,9 @@ from bisheng.telemetry_search.domain.services.permission_migration_source import
     DashboardPermissionMigrationSource,
     SqlDashboardMigrationRepository,
 )
+from bisheng.tenant.domain.services.permission_migration_source import (
+    LegacyIdentityPermissionMigrationSource,
+)
 from bisheng.tool.domain.services.permission_migration_source import (
     SqlToolMigrationRepository,
     ToolPermissionMigrationSource,
@@ -85,9 +88,7 @@ async def build_f048_migration_runtime(
     run_store = SqlMigrationRunStore()
     run = await run_store.aget_run(run_id) if run_id is not None else None
     if run_id is not None and run is None:
-        raise PermissionMigrationBlockedError(
-            msg="VERIFY_REQUIRES_EXISTING_FORMAL_RUN"
-        )
+        raise PermissionMigrationBlockedError(msg="VERIFY_REQUIRES_EXISTING_FORMAL_RUN")
     pin = await discover_openfga_runtime(
         config,
         expected_model=None,
@@ -116,6 +117,7 @@ async def build_f048_migration_runtime(
         source_model_id=pin.model_id,
         sources=sources,
         dashboard_repository=dashboard_repository,
+        identity_state_source=LegacyIdentityPermissionMigrationSource(),
     )
     target_writer = SqlOpenFGAMigrationTargetWriter(source_client=source_client)
     coordinator = F048MigrationCoordinator(

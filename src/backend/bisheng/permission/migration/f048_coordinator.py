@@ -29,6 +29,8 @@ from bisheng.permission.migration.f048_model_mapper import (
     map_legacy_models,
 )
 from bisheng.permission.migration.f048_source_inventory import (
+    MIGRATED_RESOURCE_TYPES,
+    LegacyTupleSource,
     PermissionMigrationResourceDTO,
     SourceInventory,
     SourceInventorySnapshot,
@@ -151,6 +153,14 @@ class MigrationRunStorePort(Protocol):
         run_id: int,
         items: tuple[object, ...],
     ) -> None: ...
+
+    async def areset_blocked_source(
+        self,
+        *,
+        run_id: int,
+        expected_version: int,
+        source_watermark: str,
+    ) -> MigrationRunState: ...
 
     async def aadvance(
         self,
@@ -398,13 +408,42 @@ def _compile_plan(snapshot: SourceInventorySnapshot) -> _MigrationPlan:
             blockers=inventory.blockers,
         )
     try:
+        resource_keys = {resource.key for resource in snapshot.resources}
+        stale_tuples = tuple(
+            row
+            for row in snapshot.tuples
+            if row.object.partition(":")[0] in MIGRATED_RESOURCE_TYPES and row.object not in resource_keys
+        )
+        stale_tuple_keys = {row.key for row in stale_tuples}
+        active_tuple_by_key = {row.key: row for row in snapshot.tuples if row.key not in stale_tuple_keys}
+        identity_tuple_deletes: set[str] = set()
+        identity_tuple_writes: list[LegacyTupleSource] = []
+        for failed in snapshot.failed_tuples:
+            if failed.resolution != "CANONICAL_IDENTITY_STATE" or failed.canonical_state is None:
+                continue
+            parts = failed.tuple_key.split("|")
+            if len(parts) != 3:
+                raise ValueError(f"invalid failed tuple identity: {failed.locator}")
+            corrected = LegacyTupleSource(
+                tenant_id=None,
+                user=parts[0],
+                relation=parts[1],
+                object=parts[2],
+            )
+            if failed.canonical_state:
+                active_tuple_by_key[corrected.key] = corrected
+                identity_tuple_writes.append(corrected)
+            else:
+                active_tuple_by_key.pop(corrected.key, None)
+                identity_tuple_deletes.add(corrected.key)
+        active_tuples = tuple(active_tuple_by_key.values())
         model_mapping = map_legacy_models(_legacy_models(snapshot))
         model_key_by_source = {
             **model_mapping.standard_references,
             **{row.legacy_source_key: row.model_key for row in model_mapping.custom_models},
         }
         tuple_mapping = map_legacy_tuples(
-            snapshot.tuples,
+            active_tuples,
             _legacy_bindings(snapshot),
             model_key_by_source=model_key_by_source,
             resources=snapshot.resources,
@@ -425,6 +464,8 @@ def _compile_plan(snapshot: SourceInventorySnapshot) -> _MigrationPlan:
         )
     )
     retired = set(tuple_mapping.retired_tuple_keys)
+    retired.update(stale_tuple_keys)
+    retired.update(identity_tuple_deletes)
     legacy_tuples = tuple(
         {
             "user": row.user,
@@ -441,6 +482,14 @@ def _compile_plan(snapshot: SourceInventorySnapshot) -> _MigrationPlan:
             mode_mapping,
             snapshot.resources,
         )
+        target_tuple_by_key = {(row["user"], row["relation"], row["object"]): row for row in target_tuples}
+        for row in identity_tuple_writes:
+            target_tuple_by_key[(row.user, row.relation, row.object)] = {
+                "user": row.user,
+                "relation": row.relation,
+                "object": row.object,
+            }
+        target_tuples = tuple(target_tuple_by_key[key] for key in sorted(target_tuple_by_key))
     except ValueError as exc:
         raise PermissionMigrationBlockedError(msg=f"Invalid preserved permission topology: {exc}") from exc
     return _MigrationPlan(
@@ -562,10 +611,19 @@ class F048MigrationCoordinator:
                 raise PermissionMigrationBlockedError(msg=f"Migration run {run_id} does not exist")
         if run.store_id != expected_store_id or run.source_model_id != environment.source_model_id:
             raise PermissionVersionConflictError(msg="Formal migration run is bound to different source facts")
-        has_frozen_source = bool(
-            run.source_checksum and _PHASE_RANK.get(run.phase, -1) >= _PHASE_RANK["SOURCE_VALIDATING"]
+        refresh_blocked_source = bool(
+            run.phase == "SOURCE_VALIDATING" and run.status == "BLOCKED" and run.target_model_id is None
         )
-        if not has_frozen_source and (run.source_watermark != environment.source_watermark):
+        has_frozen_source = bool(
+            not refresh_blocked_source
+            and run.source_checksum
+            and _PHASE_RANK.get(run.phase, -1) >= _PHASE_RANK["SOURCE_VALIDATING"]
+        )
+        if (
+            not has_frozen_source
+            and not refresh_blocked_source
+            and run.source_watermark != environment.source_watermark
+        ):
             raise PermissionVersionConflictError(msg="Formal migration source watermark changed before checkpoint")
         if run.phase not in _PHASE_RANK:
             raise PermissionMigrationBlockedError(msg=f"Unknown migration phase: {run.phase}")
@@ -577,6 +635,12 @@ class F048MigrationCoordinator:
         if leased is None:
             raise PermissionVersionConflictError(msg="Another F048 migration process holds the SQL lease")
         run = leased
+        if refresh_blocked_source:
+            run = await self._run_store.areset_blocked_source(
+                run_id=run.id,
+                expected_version=run.version,
+                source_watermark=environment.source_watermark,
+            )
 
         if has_frozen_source:
             snapshot = await self._run_store.aload_source_snapshot(run_id=run.id)

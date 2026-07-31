@@ -381,6 +381,22 @@ async def test_migration_environment_lease_item_and_checkpoint_resume(
     )
     duplicate_item = await repository.aupsert_item(item.model_copy(update={"id": None}))
     assert duplicate_item.id == item.id
+    batch_items = await repository.aupsert_items(
+        tuple(
+            PermissionMigrationItem(
+                run_id=run.id,
+                tenant_id=2,
+                source_kind="TUPLE",
+                source_locator=f"tuple:{index}",
+                source_checksum=str(index) * 64,
+                status="MIGRATED",
+                severity="INFO",
+            )
+            for index in (4, 5)
+        )
+    )
+    assert len(batch_items) == 2
+    assert all(row.id is not None for row in batch_items)
 
     items, cursor = await repository.aget_item_cursor(
         run_id=run.id,
@@ -388,5 +404,8 @@ async def test_migration_environment_lease_item_and_checkpoint_resume(
         after_id=0,
         limit=10,
     )
-    assert [row.id for row in items] == [item.id]
+    assert [row.id for row in items] == [
+        item.id,
+        *(row.id for row in batch_items),
+    ]
     assert cursor is None

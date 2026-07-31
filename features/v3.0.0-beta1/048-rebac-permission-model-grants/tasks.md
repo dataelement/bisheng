@@ -884,14 +884,18 @@
 - [x] **T109：F048 迁移 source inventory 测试**
   - **文件**：`src/backend/test/permission/test_f048_migration_inventory.py`
   - **测试**：D1 schema/ready heartbeat=0/Store/watermark 前置，旧动作/模型/binding/tuple/
-    parent/mode/owner/failed_tuple 盘点，损坏 JSON、跨租户、孤儿和 blocker 分类；不形成 dry-run。
+    parent/mode/owner/failed_tuple 盘点，损坏 JSON、跨租户、stale-resource tuple、确定性
+    failed_tuple 对账和 blocker 分类；不形成 dry-run。
   - **覆盖 AC**：AC-71, AC-72, AC-73, AC-74, AC-75, AC-76, AC-99, AC-108, AC-113, AC-141, AC-142
   - **依赖**：T011, T014, T020, T052, T054, T056, T058, T060, T062, T064, T066, T068
 
 - [x] **T110：实现迁移 source inventory**
   - **文件**：`src/backend/bisheng/permission/migration/f048_source_inventory.py`
   - **逻辑**：消费各业务 `PermissionMigrationSourcePort` DTO 和旧 Config/Store facts，生成规范化
-    source item/checksum/blocker；不在 permission domain 直接查询业务表。
+    source item/checksum/blocker；已删除资源的遗留 tuple 审计后进入删除计划；failed_tuple
+    通过 Store/模型/资源证据以及业务域提供的 tenant/department canonical member state 对账，
+    permission domain 不直接查询业务表；被阻断且尚未发布目标模型的 run 可重新冻结 source；
+    source item 按 500 条批量写入，避免大数据量盘点产生逐行 INSERT。
   - **验收**：T109 全部通过
   - **依赖**：T109
 

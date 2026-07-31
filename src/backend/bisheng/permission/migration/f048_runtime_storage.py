@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from hashlib import sha256
 from typing import Any
 
-from sqlalchemy import func, update
+from sqlalchemy import delete, func, update
 from sqlmodel import col, select
 
 from bisheng.common.errcode.permission import (
@@ -249,6 +249,49 @@ class SqlMigrationRunStore:
             )
         for index in range(0, len(rows), 500):
             await self._repository.aupsert_items(tuple(rows[index : index + 500]))
+
+    async def areset_blocked_source(
+        self,
+        *,
+        run_id: int,
+        expected_version: int,
+        source_watermark: str,
+    ) -> MigrationRunState:
+        """Replace only a pre-target source snapshot after reconciliation."""
+
+        with bypass_tenant_filter():
+            async with get_async_db_session() as session:
+                async with session.begin():
+                    result = await session.execute(
+                        update(PermissionMigrationRun)
+                        .where(
+                            PermissionMigrationRun.id == run_id,
+                            PermissionMigrationRun.version == expected_version,
+                            PermissionMigrationRun.phase == "SOURCE_VALIDATING",
+                            PermissionMigrationRun.status == "BLOCKED",
+                            PermissionMigrationRun.target_model_id.is_(None),
+                        )
+                        .values(
+                            status="RUNNING",
+                            checkpoint=None,
+                            source_watermark=source_watermark,
+                            source_checksum=None,
+                            target_checksum=None,
+                            version=expected_version + 1,
+                            update_time=func.now(),
+                        )
+                    )
+                    if not result.rowcount:
+                        raise PermissionVersionConflictError(
+                            msg="Blocked migration source cannot be refreshed",
+                        )
+                    await session.execute(
+                        delete(PermissionMigrationItem).where(
+                            PermissionMigrationItem.run_id == run_id,
+                            PermissionMigrationItem.source_kind != "TARGET_TUPLE",
+                        )
+                    )
+        return await self._require_run(run_id)
 
     async def aadvance(
         self,
