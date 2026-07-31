@@ -21,6 +21,7 @@ from bisheng.utils.threadpool import thread_pool
 
 
 def handle_http_exception(req: Request, exc: Exception) -> JSONResponse:
+    http_status = status.HTTP_200_OK
     if isinstance(exc, HTTPException):
         msg = {
             "status_code": exc.status_code,
@@ -32,8 +33,9 @@ def handle_http_exception(req: Request, exc: Exception) -> JSONResponse:
     else:
         logger.exception("Unhandled exception")
         msg = {"status_code": 500, "status_message": str(exc)}
+        http_status = status.HTTP_500_INTERNAL_SERVER_ERROR
     logger.error(f"{req.method} {req.url} {exc!s}")
-    return JSONResponse(content=msg)
+    return JSONResponse(status_code=http_status, content=msg)
 
 
 def handle_request_validation_error(req: Request, exc: RequestValidationError) -> JSONResponse:

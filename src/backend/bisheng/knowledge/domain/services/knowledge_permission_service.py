@@ -39,6 +39,7 @@ logger = logging.getLogger(__name__)
 
 _PERMISSION_SYNC_TIMEOUT_SECONDS = 60
 
+
 class KnowledgePermissionService:
     """Action-native F048 checks for business-verified knowledge libraries."""
 
@@ -90,12 +91,7 @@ class KnowledgePermissionService:
             resource_ids=normalized_ids,
             actions=normalized_actions,
         )
-        return {
-            knowledge_id: set(
-                action_map.get(str(knowledge_id), frozenset())
-            )
-            for knowledge_id in normalized_ids
-        }
+        return {knowledge_id: set(action_map.get(str(knowledge_id), frozenset())) for knowledge_id in normalized_ids}
 
     @classmethod
     def get_knowledge_action_map_sync(
@@ -129,9 +125,7 @@ class KnowledgePermissionService:
             [action],
         )
         filtered_ids = [
-            knowledge_id
-            for knowledge_id in normalized_ids
-            if action in action_map.get(knowledge_id, set())
+            knowledge_id for knowledge_id in normalized_ids if action in action_map.get(knowledge_id, set())
         ]
         logger.info(
             "[perf][knowledge.action_map] user_id=%s action=%s candidates=%s kept=%s took_ms=%.2f",

@@ -129,32 +129,31 @@ async def initialize_f048_api_runtime(
         external_scopes=external_scopes,
     )
     runtime = components.facade
-    state = components.state
 
     application = F048ApplicationPermissionAdapter(
-        loader=ApplicationDaoPermissionLoader(state),
+        loader=ApplicationDaoPermissionLoader(runtime),
         permission=runtime,
     )
     channel = F048ChannelPermissionAdapter(
-        loader=ChannelDaoPermissionLoader(state),
+        loader=ChannelDaoPermissionLoader(runtime),
         source_service=GrantSourceService(),
         permission=runtime,
     )
     knowledge_container = F048KnowledgeContainerPermissionAdapter(
-        loader=KnowledgeContainerDaoPermissionLoader(state),
+        loader=KnowledgeContainerDaoPermissionLoader(runtime),
         source_service=GrantSourceService(),
         permission=runtime,
     )
     knowledge_file = F048KnowledgeFilePermissionAdapter(
-        loader=KnowledgeFileDaoPermissionLoader(state),
+        loader=KnowledgeFileDaoPermissionLoader(runtime),
         permission=runtime,
     )
     tool = F048ToolPermissionAdapter(
-        loader=ToolDaoPermissionLoader(state),
+        loader=ToolDaoPermissionLoader(runtime),
         permission=runtime,
     )
     dashboard = F048DashboardPermissionAdapter(
-        loader=DashboardDaoPermissionLoader(state),
+        loader=DashboardDaoPermissionLoader(runtime),
         permission=runtime,
     )
     adapters: dict[str, object] = {

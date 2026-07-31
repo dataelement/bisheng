@@ -11,11 +11,30 @@ from bisheng import main
 from bisheng.api.services import f048_permission_runtime as api_runtime_module
 from bisheng.core.context import manager as context_module
 from bisheng.permission.application import process_runtime as process_module
+from bisheng.permission.domain.schemas import VerifiedPermissionTarget
 
 
 class _Manager:
     async def async_get_instance(self):
         return object()
+
+
+class _PermissionFacade:
+    async def get_permission_version(self, **kwargs):
+        return 1, "permission-context"
+
+    async def mode_for_target(self, target):
+        return SimpleNamespace(mode="CUSTOM")
+
+
+class _ModeState:
+    def __init__(self) -> None:
+        self.targets = []
+        self.mode = SimpleNamespace(mode="INHERIT")
+
+    async def mode_for_target(self, target):
+        self.targets.append(target)
+        return self.mode
 
 
 @pytest.mark.asyncio
@@ -96,6 +115,84 @@ async def test_api_process_binds_runtime_before_starting_heartbeat(
 
     await main._close_f048_api_process(app)
     assert app.state.f048_heartbeat_task.cancelled()
+
+
+@pytest.mark.asyncio
+async def test_permission_facade_exposes_mode_lookup_to_business_loaders() -> None:
+    state = _ModeState()
+    runtime = object.__new__(api_runtime_module.F048PermissionRuntime)
+    runtime._state = state
+    target = VerifiedPermissionTarget.from_business_service(
+        tenant_id=5,
+        resource_type="knowledge_file",
+        resource_id="10",
+        resource_version=4,
+        context_version="permission-context-v4",
+        parent_type="knowledge_library",
+        parent_id="11",
+    )
+
+    mode = await runtime.mode_for_target(target)
+
+    assert mode is state.mode
+    assert state.targets == [target]
+
+
+@pytest.mark.asyncio
+async def test_api_runtime_injects_facade_into_business_loaders(
+    monkeypatch,
+) -> None:
+    facade = _PermissionFacade()
+    state = object()
+    components = SimpleNamespace(
+        facade=facade,
+        state=state,
+        projection=object(),
+        marker=object(),
+    )
+
+    async def build_runtime(client, *, external_scopes):
+        assert external_scopes == {}
+        return components
+
+    monkeypatch.setattr(
+        api_runtime_module,
+        "build_f048_permission_runtime",
+        build_runtime,
+    )
+    for configure_name in (
+        "configure_catalog_api",
+        "configure_permission_decision_api",
+        "configure_resource_permission_api",
+        "configure_f048_runtime",
+        "configure_linsight_skill_owner_projection",
+    ):
+        monkeypatch.setattr(
+            api_runtime_module,
+            configure_name,
+            lambda *args, **kwargs: None,
+        )
+
+    initialized = await api_runtime_module.initialize_f048_api_runtime(
+        SimpleNamespace(store_id="store-live", model_id="model-f048"),
+        external_scopes={},
+    )
+
+    assert initialized.components is components
+    for resource_type in (
+        "workflow",
+        "assistant",
+        "channel",
+        "knowledge_space",
+        "knowledge_library",
+        "folder",
+        "knowledge_file",
+        "tool",
+        "dashboard",
+    ):
+        loader = initialized.adapters[resource_type]._loader
+        assert loader._versions is facade
+        assert loader._versions is not state
 
 
 def test_api_lifespan_does_not_run_f048_data_or_relation_backfill() -> None:

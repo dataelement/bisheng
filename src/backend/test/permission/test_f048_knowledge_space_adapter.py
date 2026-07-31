@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -10,8 +12,10 @@ from bisheng.common.errcode.permission import (
     InvalidPermissionModeError,
     PermissionInvalidResourceError,
 )
+from bisheng.knowledge.domain.services import knowledge_permission_service as permission_module
 from bisheng.knowledge.domain.services.knowledge_permission_service import (
     F048KnowledgeContainerPermissionAdapter,
+    KnowledgeContainerDaoPermissionLoader,
     KnowledgeContainerPermissionRecord,
 )
 from bisheng.permission.domain.services.permission_action_service import (
@@ -75,6 +79,15 @@ class _Permission:
         return {"status": "FINALIZED"}
 
 
+class _VersionPort:
+    def __init__(self) -> None:
+        self.calls: list[dict] = []
+
+    async def get_permission_version(self, **kwargs):
+        self.calls.append(kwargs)
+        return 3, "permission-context-v3"
+
+
 def _record(
     *,
     resource_type: str = "knowledge_library",
@@ -98,6 +111,42 @@ def _record(
 
 def _actor(tenant_id: int = 5) -> PermissionActor:
     return PermissionActor(user_id=7, current_tenant_id=tenant_id)
+
+
+@pytest.mark.asyncio
+async def test_container_loader_reads_permission_version_through_facade(
+    monkeypatch,
+) -> None:
+    knowledge_row = SimpleNamespace(
+        id=2,
+        tenant_id=5,
+        type=0,
+        state=1,
+        update_time=None,
+        user_id=7,
+    )
+    monkeypatch.setattr(
+        permission_module.KnowledgeDao,
+        "aquery_by_id",
+        AsyncMock(return_value=knowledge_row),
+    )
+    version_port = _VersionPort()
+
+    record = await KnowledgeContainerDaoPermissionLoader(version_port).load_permission_record(
+        "knowledge_library",
+        "2",
+    )
+
+    assert record is not None
+    assert record.resource_id == "2"
+    assert record.permission_version == 3
+    assert version_port.calls == [
+        {
+            "tenant_id": 5,
+            "resource_type": "knowledge_library",
+            "resource_id": "2",
+        }
+    ]
 
 
 @pytest.mark.asyncio

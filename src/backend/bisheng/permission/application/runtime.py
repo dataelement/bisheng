@@ -166,6 +166,14 @@ class F048PermissionRuntime:
     ):
         return await self._require_current_target(target)
 
+    async def mode_for_target(
+        self,
+        target: VerifiedPermissionTarget,
+    ):
+        """Read mode state while a business adapter resolves its permission snapshot."""
+
+        return await self._state.mode_for_target(target)
+
     async def list_action_objects(
         self,
         actor: PermissionActor,
