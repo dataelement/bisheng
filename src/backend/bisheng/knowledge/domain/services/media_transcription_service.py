@@ -203,8 +203,16 @@ class KnowledgeMediaTranscriptionService:
         if segments:
             return cls._normalize_segments(segments, media_duration_ms=media_duration_ms)
 
-        text = str(getattr(result, "output", {}) or result).strip()
-        return [TranscriptSegment(text=text)] if text else []
+        # No sentences recognized. Only fall back to an explicit plain-text field
+        # on the output payload; never stringify the response object itself —
+        # that would store the raw JSON envelope (status_code/request_id/...) as
+        # the transcript and make silent media look successfully transcribed.
+        output = getattr(result, "output", None)
+        if isinstance(output, dict):
+            fallback_text = str(output.get("text") or "").strip()
+            if fallback_text:
+                return [TranscriptSegment(text=fallback_text)]
+        return []
 
     @staticmethod
     def _coerce_time_value(value: Any) -> float | None:

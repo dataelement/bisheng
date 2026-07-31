@@ -30,6 +30,8 @@ export { default as useScrollToRef } from './useScrollToRef';
 export { useScrollRevealRef } from './useScrollRevealRef';
 export { useFreezePanelWidth } from './useFreezePanelWidth';
 export { useCategorizedKnowledgeSpaces } from './useCategorizedKnowledgeSpaces';
+export { useWorkbenchMenuNames } from './useWorkbenchMenuNames';
+export type { WorkbenchMenuKey } from './useWorkbenchMenuNames';
 export type { KnowledgeSpaceCategory, KnowledgeSpaceGroup } from './useCategorizedKnowledgeSpaces';
 export { default as useLocalStorage } from './useLocalStorage';
 export { default as useDelayedRender } from './useDelayedRender';

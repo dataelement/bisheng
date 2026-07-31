@@ -4,7 +4,7 @@ import { useSetRecoilState } from "recoil";
 import { Article, Channel, getArticleDetailApi } from "~/api/channels";
 import { subscriptionDetailPaneWidthState } from "~/store/subscriptionLayout";
 import NavToggle from "~/components/Nav/NavToggle";
-import { useLocalize, usePrefersMobileLayout } from "~/hooks";
+import { useLocalize, usePrefersMobileLayout, useWorkbenchMenuNames } from "~/hooks";
 import { AiAssistantPanel } from "./AiChat/AiAssistantPanel";
 import { ArticleList } from "./ArticleList/ArticleList";
 import { ArticleDetail } from "./Article/ArticleDetail";
@@ -61,6 +61,8 @@ export function ChannelLayout({
     onCreateChannel,
 }: ChannelLayoutProps) {
     const localize = useLocalize();
+    // 模块标题跟随后台配置的菜单显示名称
+    const menuNames = useWorkbenchMenuNames();
     const isH5 = usePrefersMobileLayout();
     const navigate = useNavigate();
     const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
@@ -227,7 +229,7 @@ export function ChannelLayout({
                     className="absolute inset-0 z-[35] flex flex-col bg-white"
                     role="dialog"
                     aria-modal="true"
-                    aria-label={localize("com_subscription.subscribe")}
+                    aria-label={menuNames.channel}
                 >
                     <div className="relative min-h-0 flex-1 overflow-hidden">
                         <ArticleDetail

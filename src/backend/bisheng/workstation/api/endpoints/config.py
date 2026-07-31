@@ -58,6 +58,14 @@ async def get_config(request: Request, login_user=LoginUserDep):
     sub_assistant_cfg = await WorkStationService.get_subscription_config()
     ret["knowledge_space"]["assistant_name"] = (ks_assistant_cfg.assistant_name or "") if ks_assistant_cfg else ""
     ret["subscription"] = {"assistant_name": (sub_assistant_cfg.assistant_name or "") if sub_assistant_cfg else ""}
+    # Sidebar entry names for the knowledge-space / subscription modules; the home and
+    # app-center ones ride along in the daily config dump above. Empty => client i18n default.
+    ret["knowledge_space"]["menu_display_name"] = (
+        (ks_assistant_cfg.menu_display_name or "") if ks_assistant_cfg else ""
+    )
+    ret["subscription"]["menu_display_name"] = (
+        (sub_assistant_cfg.menu_display_name or "") if sub_assistant_cfg else ""
+    )
     return resp_200(data=ret)
 
 
