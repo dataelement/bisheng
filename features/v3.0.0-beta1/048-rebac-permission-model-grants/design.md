@@ -757,7 +757,7 @@ snapshot:folder:300:assignee:891
 | `permission_projection_tuple` | `id`, `tenant_id NOT NULL`, `operation_id`, `phase`, `sequence`, `action`, `fga_user`, `relation`, `fga_object`, `tuple_fingerprint`, `inverse_action`, `status` | unique(operation, phase, tuple_fingerprint)；冗余 tenant 用于 C3 自动过滤；无大 JSON/超长联合索引 |
 | `authorization_model_release` | `id`, `environment`, `store_id`, `model_version`, `model_id`, `predecessor_model_id`, `model_checksum`, `required_relations_checksum`, `openfga_version`, `status`, `activated_at`, `retired_at` | unique(environment, store, model_id)；现有 Store 中的新 DSL 发布与唯一生产 pin；predecessor 只构成审计链，旧 model row 不构成第二 runtime |
 | `permission_migration_run` | `id`, `environment_fingerprint`, `phase`, `status`, `store_id`, `source_model_id`, `target_model_id`, `source_watermark`, `checkpoint`, 分类 count、报告 URI+checksum、lock_token/expires/version、approval fields | unique(environment_fingerprint)；每个环境唯一正式 F048 run，source/target 只描述同 Store 一次升级，重复 migrate 必须 resume |
-| `permission_migration_item` | `id`, `run_id`, `tenant_id nullable`, `source_kind`, `source_locator`, `source_checksum`, `target_kind/id`, `target_checksum`, `status`, `severity`, `difference_type`, `message`, `approved_by/at`, `retry_count` | unique(run, source_kind, source_locator)；null 仅用于全局 Config/model 项；逐项映射、目标校验、续跑与审计 |
+| `permission_migration_item` | `id`, `run_id`, `tenant_id nullable`, `source_kind`, `source_locator`, `source_checksum`, `target_kind/id`, `target_checksum`, `status`, `severity`, `difference_type`, `message LONGTEXT/CLOB`, `approved_by/at`, `retry_count` | unique(run, source_kind, source_locator)；null 仅用于全局 Config/model 项；完整冻结源载荷，避免旧 Config 超过 MySQL TEXT 64 KiB 后破坏续跑；逐项映射、目标校验、续跑与审计 |
 
 Catalog 是 PLATFORM 全局对象，因此不伪造 `tenant_id=0`：其 release 本身是 durable
 operation head，逐项状态在 `permission_catalog_projection_tuple`。tenant operation
@@ -1424,8 +1424,8 @@ protected owner transfer 不再是开放项：F048 启服构建必须退役 F018
 | D0 启动新镜像并自动阻断访问 | 进程存活、F048 不就绪 | 执行既有镜像更新与 `docker compose up -d`；API、Celery、Linsight 发现旧 model 后只进入 `MIGRATION_REQUIRED/NOT_READY`，不初始化 F048 runtime、不发布 ready heartbeat；HTTP/WS 门禁除 `/health` 外统一拒绝，Celery/Linsight 暂停消费任务；记录现有 Store ID、旧 model ID、Config/业务表 watermark 与 environment fingerprint |
 | D1 Schema Migration | 进程存活、F048 不就绪 | 正常启动链只执行 `alembic upgrade head` 的 MySQL/DM8 DDL；验证单 head 与新表/索引/约束存在；revision 不创建 run、不读取或写入业务数据、不访问 OpenFGA |
 | D2 Data Migration Script 初始化与控制面转换 | backend 容器可进入、访问门禁生效 | 运维进入 backend 容器，从 `src/backend/` 以 live `config` 执行 `scripts/migrate_f048_permission_data.py migrate ... --apply`；脚本验证 D1/schema fingerprint 与 ready heartbeat=0，创建唯一正式 run，在**同一 Store**发布新 model 并跑 model tests，再导入 Action/Catalog/标准及自定义 Model、binding→Grant/assignee、mode 和人工项 |
-| D3 迁移并退役旧数据 | 访问门禁生效、F048 不就绪 | 原地复用仍合法的 tenant/department/user_group/system/shared/parent tuple；按 item/checkpoint 写新 Catalog/Grant/mode tuple，逐批核对后删除已迁移资源的旧四档/废弃 relation tuple；全部目标落稳后删除旧 Config 大 JSON 运行数据 |
-| D4 数据脚本 verify | 访问门禁生效、尚未重启 | 执行同一脚本的 `verify --run-id`；blocker=0；来源/目标计数和 checksum 一致；已迁移类型 legacy tuple/Config 计数为零；新 model 高风险 Check/List、owner、mode、多来源、dashboard、download 语义通过；run 转 `READY_TO_START` |
+| D3 迁移并退役旧数据 | 访问门禁生效、F048 不就绪 | 原地复用仍合法的 tenant/department/user_group/system/shared/parent tuple；按 item/checkpoint 写新 Catalog/Grant/mode tuple，逐批核对后删除已迁移资源的旧四档/废弃 relation tuple；旧 Config 大 JSON 原始行只读保留供排障，不再参与运行时 |
+| D4 数据脚本 verify | 访问门禁生效、尚未重启 | 执行同一脚本的 `verify --run-id`；blocker=0；来源/目标计数和 checksum 一致；已迁移类型 legacy tuple 计数为零；旧 Config 保留数只作为审计证据；新 model 高风险 Check/List、owner、mode、多来源、dashboard、download 语义通过；run 转 `READY_TO_START` |
 | D5 重启并自动发现 | 重启→新 model | 数据迁移成功后重启 API、Celery、Linsight 等服务；配置只保留 OpenFGA 连接信息、稳定 Store name，`dual_model_mode=false` 且无 `legacy_model_id`；全部实例发现唯一同名 Store/latest model，并要求它与 SQL CURRENT Catalog 的 ACTIVE release 一致；readiness/heartbeat 100% 且 smoke 通过后访问门禁自动解除 |
 | D6 前向运行 | 新 model | 正常读写只走新 model + projection ledger；问题只做前向修复；旧 model ID 仅作为 OpenFGA 不可删除的历史版本存在 |
 
@@ -1509,7 +1509,8 @@ D5 必须同时满足：
   并允许 0..N 个 ordinary owner；knowledge_space/channel 的 CREATOR/`user_id` 差异已
   preservation-first 映射或人工批准；每个 system-owned exception 命中显式 allowlist；
 - SQL/OpenFGA count、source/target checksum、Catalog/model checksum 全部一致；
-- 已迁移资源类型的旧四档/废弃 relation tuple=0；两份旧 Config 大 JSON 运行记录=0；
+- 已迁移资源类型的旧四档/废弃 relation tuple=0；两份旧 Config 大 JSON 原始行只读保留，
+  且旧 Config 运行时读取/写入/授权引用=0；
   仍合法的 system/shared/parent/组织 tuple fingerprint 与 D0 source snapshot 一致；
 - 新 model 的批准映射语义测试无未批准扩权/撤权；不要求运行旧/新 model 影子或线上双版本比较；
 - BENCH-01、MySQL、DM8、Platform、Client、频道、worker、故障注入与新 runtime
@@ -1532,7 +1533,8 @@ D5 必须同时满足：
 
 禁止重新 pin 旧 model、恢复 Config 第二 PDP、把新授权 down-convert 成四档 tuple、
 逐请求询问旧 model，或只回退应用代码。旧 model 无法从 OpenFGA 删除，保留它只是产品
-能力决定的不可变历史事实；应用不维护旧 model release、client、tuple、Config 或恢复材料。
+能力决定的不可变历史事实；应用不维护旧 model release、client、tuple、Config 运行路径或
+恢复材料。两份 Config 原始行只作为数据库内只读排障证据保留。
 
 D3 已完成全部旧运行数据退役，D6 没有延后的 cleanup 窗口。迁移 run 达到
 `READY_TO_START/COMPLETED` 且目标 Authorization Model release 为 `ACTIVE` 后仍需：
@@ -1579,13 +1581,14 @@ D3 已完成全部旧运行数据退役，D6 没有延后的 cleanup 窗口。�
 
 | 日期 | 改动 | 触发原因 |
 |---|---|---|
+| 2026-07-31 | `permission_migration_item.message` 改为 MySQL LONGTEXT/DM8 CLOB，完整冻结旧 Config 源载荷以支持断点续跑；数据脚本不再删除两份旧 Config 原始行，verify 仅审计其保留数，但旧 Config 运行路径仍必须不可达 | 真实迁移遇到 MySQL TEXT 64 KiB 上限；用户要求保留 Config 方便故障排查 |
 | 2026-07-31 | 简化升级顺序为“更新镜像并启动→进入 backend 容器执行 migrate/verify→迁移成功后重启服务”；旧 model 下 API/Worker 进程允许存活但 F048 runtime 不初始化、readiness=503、ready heartbeat=0，应用自动拒绝非 health HTTP/WS；重启就绪后自动恢复访问；移除 `F048_SERVICES_STOPPED` 人工标记 | 用户明确要求沿用之前版本的简单升级流程，只额外增加迁移后重启 |
 | 2026-07-30 | 运行时不再配置 Store/model/Catalog ID；沿用按 Store name 查询唯一 Store 与 latest model 的方式，并增加 F048 checksum + SQL CURRENT Catalog 一致性门禁；迁移 CLI 移除 `--expected-store-id` | 用户明确纠正易变 ID 不应写入配置 |
 | 2026-07-30 | 将手工、SSO/F015 与组织 reconcile 的部门 create/move/archive 统一为业务状态与 projection operation 同 SQL 事务绑定；补充归档恢复到同一 parent 仍重建 mirror 的规则 | T066 实现期崩溃窗口审计 |
 | 2026-07-29 | 用户明确确认 Design ★，允许进入 `tasks.md` 编写与评审；尚未授权编码 | 用户回复“确认design” |
 | 2026-07-29 | Alembic/scripts 职责纠正后的 24 项 Design 接手测试与 Constitution Check 复审 LGTM；停在 Design ★ 门禁 | `/sdd-review ... design` |
 | 2026-07-29 | 明确 Alembic revision 只做数据库结构 DDL；旧权限数据转换、OpenFGA tuple 更新、checkpoint 与验证全部由 `src/backend/scripts/migrate_f048_permission_data.py` 执行，禁止 startup/API/Celery 自动迁移 | 用户纠正“migration 只负责结构变更，数据迁移放 scripts” |
-| 2026-07-29 | 纠正迁移拓扑：沿用现有 Store；只发布并运行一个新 model ID；旧 model 仅为 OpenFGA 不可删除历史；旧 tuple/Config 在停服 run 内退役 | 用户纠正“无需切 Store，也不维护两套运行模型” |
+| 2026-07-29 | 纠正迁移拓扑：沿用现有 Store；只发布并运行一个新 model ID；旧 model 仅为 OpenFGA 不可删除历史；旧 tuple 与 Config 运行路径在迁移 run 内退役 | 用户纠正“无需切 Store，也不维护两套运行模型” |
 | 2026-07-29 | 同 Store、单运行 model 纠正后的 24 项 Design 接手测试与 Constitution Check 复审 LGTM；停在 Design ★ 门禁 | `/sdd-review ... design` |
 | 2026-07-29 | OQ-07 选择 A，F048 退役 F018；迁移改为停服直迁、校验后启服，删除迁移预演、旧/新观察、新→旧回滚与 journal 合同 | 用户决策（后续 Store 拓扑按上一行纠正） |
 | 2026-07-29 | 纳入 dashboard；预览无动作/下载校验；业务 Service 持有资源边界；全模型重算；补 Catalog 性能和 F018 owner 现状 | 用户 Design 反馈 |

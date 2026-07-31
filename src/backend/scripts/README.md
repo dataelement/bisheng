@@ -84,7 +84,9 @@ restart.
    PYTHONPATH=./ .venv/bin/alembic heads
    ```
 
-   Both commands must identify `f048_permission_grants` as the head.
+   Both commands must identify `f048_migration_item_message_longtext` as the
+   head. This follow-up DDL widens the frozen source payload column before the
+   data script records large legacy Config values.
 4. Do not proceed if Redis is unavailable, a ready F048 runtime heartbeat
    remains, dashboard tenant attribution is ambiguous, an unresolved failed
    tuple exists, or the source watermark changes between scans.
@@ -108,8 +110,9 @@ PYTHONPATH=./ .venv/bin/python scripts/migrate_f048_permission_data.py \
 The command creates one durable run, publishes one new immutable model in the
 same Store, writes SQL rows in batches of at most 500 and OpenFGA tuples in
 batches of at most 90, verifies target tuples with higher consistency, then
-removes only the recorded legacy tuples and Config keys. It prints the run ID;
-record it in the change ticket.
+removes only the recorded legacy tuples. The two legacy Config rows remain
+read-only as migration/debug evidence and are never used by the F048 runtime.
+The script prints the run ID; record it in the change ticket.
 
 If the process exits before `VERIFYING`, leave the automatic migration gate in
 place, fix the forward path, and resume the same run:
@@ -141,10 +144,11 @@ PYTHONPATH=./ .venv/bin/python scripts/migrate_f048_permission_data.py \
 Verification independently rebuilds source and target checksums, requires exact
 target tuple counts, checks high-risk dashboard/download semantics, preserves
 allowed Store facts, requires the run target release to be the one referenced
-by the SQL CURRENT Catalog, and requires legacy Config/tuple and blocker counts
-to be zero. Success moves the run to `READY_TO_START`; restart API and Worker
-processes so they discover the new F048 model and automatically remove the
-migration gate.
+by the SQL CURRENT Catalog, and requires legacy tuple and blocker counts to be
+zero. The report still records the retained legacy Config count for audit, but
+that count does not block verification. Success moves the run to
+`READY_TO_START`; restart API and Worker processes so they discover the new
+F048 model and automatically remove the migration gate.
 
 At D5 each process resolves the unique Store by stable `store_name`, selects
 its latest model, and requires the discovered Store/model/checksum to equal the

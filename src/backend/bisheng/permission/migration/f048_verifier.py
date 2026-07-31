@@ -121,7 +121,6 @@ def _block_reasons(
         ("INVALID_OWNER_FACTS", evidence.invalid_owner_count),
         ("FAILED_TUPLES_REMAIN", evidence.failed_tuple_count),
         ("LEGACY_TUPLES_REMAIN", evidence.legacy_tuple_count),
-        ("LEGACY_CONFIG_REMAINS", evidence.legacy_config_count),
     )
     reasons.extend(reason for reason, count in count_gates if count)
     if not evidence.preserved_tuple_checksum_matches:

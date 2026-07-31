@@ -245,9 +245,6 @@ class FakeTargetWriter:
         assert len(tuples) <= 90
         self.events.append(("delete", len(tuples), store_id))
 
-    async def aretire_legacy_configs(self, *, keys):
-        self.events.append(("retire_config", tuple(keys)))
-
 
 async def test_formal_migration_uses_same_store_batches_and_delete_after_verify():
     store = FakeRunStore()
@@ -271,7 +268,7 @@ async def test_formal_migration_uses_same_store_batches_and_delete_after_verify(
     assert publisher.calls[0][0] == "store-live"
     event_names = [event[0] for event in writer.events]
     assert event_names.index("verify") < event_names.index("delete")
-    assert event_names[-1] == "retire_config"
+    assert event_names[-1] == "delete"
     assert all(event[2] == "store-live" for event in writer.events if event[0] in {"write", "verify"})
     assert store.items
 
@@ -348,10 +345,7 @@ async def test_resume_from_retire_phase_does_not_publish_or_rewrite_target():
 
     assert result.phase == "VERIFYING"
     assert publisher.calls == []
-    assert [event[0] for event in writer.events] == [
-        "delete",
-        "retire_config",
-    ]
+    assert [event[0] for event in writer.events] == ["delete"]
     assert result.target_checksum == "t" * 64
 
 

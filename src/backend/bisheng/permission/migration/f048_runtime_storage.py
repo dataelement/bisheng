@@ -7,14 +7,13 @@ from datetime import datetime, timedelta
 from hashlib import sha256
 from typing import Any
 
-from sqlalchemy import delete, func, update
+from sqlalchemy import func, update
 from sqlmodel import col, select
 
 from bisheng.common.errcode.permission import (
     PermissionMigrationBlockedError,
     PermissionVersionConflictError,
 )
-from bisheng.common.models.config import Config
 from bisheng.core.context.tenant import bypass_tenant_filter
 from bisheng.core.database import get_async_db_session
 from bisheng.core.openfga.authorization_model_f048 import (
@@ -1062,17 +1061,6 @@ class SqlOpenFGAMigrationTargetWriter:
         if present:
             await self._source_client.delete_tuples_store_scoped(present)
             existing.difference_update(self._tuple_identity(row) for row in present)
-
-    async def aretire_legacy_configs(
-        self,
-        *,
-        keys: tuple[str, ...],
-    ) -> None:
-        if not keys:
-            return
-        async with get_async_db_session() as session:
-            async with session.begin():
-                await session.execute(delete(Config).where(col(Config.key).in_(keys)))
 
     async def aclose(self) -> None:
         for client in self._target_clients.values():
