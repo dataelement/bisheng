@@ -15,6 +15,8 @@ export interface PortalDeepLinkTarget {
     folderName: string;
     fileId: string;
     fileName: string;
+    /** Forces re-apply when the same file is opened again via postMessage. */
+    openNonce: string;
     key: string;
 }
 
@@ -53,13 +55,16 @@ export const resolvePortalDeepLinkTarget = (searchParams: URLSearchParams): Port
     const folderName = getQueryValue(searchParams, ["folderName", "folder_name"]);
     const fileId = getQueryValue(searchParams, ["fileId", "documentId", "document_id"]);
     const fileName = getQueryValue(searchParams, ["name", "fileName", "documentName", "document_name"]);
+    const openNonce = getQueryValue(searchParams, ["openNonce", "open_nonce"]);
     return {
         spaceId,
         folderId,
         folderName,
         fileId,
         fileName,
-        key: `${spaceId}:${folderId}:${folderName}:${fileId}:${fileName}`,
+        openNonce,
+        // openNonce lets postMessage re-open the same file after the preview was closed.
+        key: `${spaceId}:${folderId}:${folderName}:${fileId}:${fileName}:${openNonce}`,
     };
 };
 
@@ -77,6 +82,8 @@ const createDeepLinkedFile = (target: PortalDeepLinkTarget, fileId: string): Kno
         id: fileId,
         name,
         type: resolveFileTypeFromName(name),
+        // Preview APIs expect a successful parse status; omit/waiting can block the viewer.
+        status: FileStatus.SUCCESS,
         tags: [],
         path: name,
         spaceId: target.spaceId,
