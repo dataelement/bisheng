@@ -572,7 +572,7 @@ export default function MainLayout() {
                   </button>
                   {/* Centered title — same style as the chat / knowledge / subscription headers. */}
                   <span className="pointer-events-none absolute left-1/2 -translate-x-1/2 truncate text-[16px] font-medium leading-6 text-[#212121]">
-                    {localize('com_app_center_title')}
+                    {menuNames.apps}
                   </span>
                   <div className="min-w-0 flex-1" aria-hidden />
                 </div>

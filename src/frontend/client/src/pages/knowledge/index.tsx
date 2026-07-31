@@ -41,7 +41,7 @@ import { KnowledgeSpacePreviewDrawer } from "./KnowledgeSpacePreviewDrawer";
 import KnowledgeSquare from "./KnowledgeSquare";
 import { useFileManager } from "./hooks/useFileManager";
 import { useFileUpload } from "./hooks/useFileUpload";
-import { useLocalize, useMediaQuery, usePrefersMobileLayout } from "~/hooks";
+import { useLocalize, useMediaQuery, usePrefersMobileLayout, useWorkbenchMenuNames } from "~/hooks";
 import { useEffectiveQuota } from "~/hooks/useEffectiveQuota";
 import { useAuthContext } from "~/hooks/AuthContext";
 import { cn } from "~/utils";
@@ -53,6 +53,8 @@ import { knowledgeUploadCapabilities } from "./knowledgeUploadCapabilities";
 
 export default function Knowledge() {
     const localize = useLocalize();
+    // 模块标题跟随后台配置的菜单显示名称
+    const menuNames = useWorkbenchMenuNames();
     const bishengConfig = useRecoilValue(bishengConfState);
     const uploadSizeLimits = useMemo(
         () => resolveUploadSizeLimits(bishengConfig),
@@ -771,7 +773,7 @@ export default function Knowledge() {
                         role="dialog"
                         aria-modal="true"
                         aria-hidden={!spaceListDrawerOpen}
-                        aria-label={localize("com_knowledge.knowledge_space")}
+                        aria-label={menuNames.knowledge}
                     >
                         <div className="min-h-0 flex-1 overflow-hidden">
                             <KnowledgeSpaceSidebar
@@ -922,7 +924,7 @@ export default function Knowledge() {
                                 <Outlined.SidebarMenu className="size-5" />
                             </button>
                             <span className="min-w-0 flex-1 truncate text-center text-[16px] font-medium leading-6 text-[#212121]">
-                                {localize("com_knowledge.knowledge_space")}
+                                {menuNames.knowledge}
                             </span>
                             <span className="size-5 shrink-0" aria-hidden />
                         </div>

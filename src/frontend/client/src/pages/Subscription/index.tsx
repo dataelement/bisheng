@@ -1,4 +1,4 @@
-import { useLocalize, usePrefersMobileLayout } from "~/hooks";
+import { useLocalize, usePrefersMobileLayout, useWorkbenchMenuNames } from "~/hooks";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { EmptyStateIllustration } from "~/components/illustrations";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -54,6 +54,8 @@ const extractDetailChannelIdFromPath = (pathname: string): string | undefined =>
 
 export default function Subscription() {
     const localize = useLocalize();
+    // 模块标题跟随后台配置的菜单显示名称
+    const menuNames = useWorkbenchMenuNames();
     const { user, isUserLoading } = useAuthContext();
     const navigate = useNavigate();
     const location = useLocation();
@@ -538,7 +540,7 @@ export default function Subscription() {
                             className="fixed inset-0 z-[70] flex"
                             role="dialog"
                             aria-modal="true"
-                            aria-label={localize("com_subscription.subscribe")}
+                            aria-label={menuNames.channel}
                         >
                             <div className="flex h-full w-[240px] max-w-[240px] shrink-0 flex-col overflow-hidden bg-white shadow-[4px_0_24px_rgba(0,0,0,0.06)] pt-[env(safe-area-inset-top,0px)]">
                                 <ChannelSidebar
@@ -633,7 +635,7 @@ export default function Subscription() {
                                                 <Outlined.SidebarMenu className="size-5" />
                                             </button>
                                             <h1 className="pointer-events-none absolute left-1/2 -translate-x-1/2 text-[16px] font-medium leading-6 text-[#212121]">
-                                                {localize("com_subscription.subscribe")}
+                                                {menuNames.channel}
                                             </h1>
                                         </div>
                                     </div>

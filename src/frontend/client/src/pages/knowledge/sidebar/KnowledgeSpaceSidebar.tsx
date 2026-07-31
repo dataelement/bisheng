@@ -12,7 +12,7 @@ import KnowledgeSpaceItem from "./KnowledgeSpaceItem";
 import KnowledgeSpaceCardItem from "./KnowledgeSpaceCardItem";
 import { SectionHeader } from "./SectionHeader";
 import { useSpaceActions } from "../hooks/useSpaceActions";
-import { useLocalize } from "~/hooks";
+import { useLocalize, useWorkbenchMenuNames } from "~/hooks";
 import { Outlined } from "bisheng-icons";
 import { cn } from "~/utils";
 import { useGetBsConfig } from "~/hooks/queries/data-provider";
@@ -66,6 +66,8 @@ export function KnowledgeSpaceSidebar({
     onNavigateAway,
 }: KnowledgeSpaceSidebarProps) {
     const localize = useLocalize();
+    // 模块标题跟随后台配置的菜单显示名称
+    const menuNames = useWorkbenchMenuNames();
     // Drawer and full-page list both occupy the full parent width (no resize/toggle).
     const fullWidthMode = mobileDrawerMode || mobilePageMode;
     const { data: bsConfig } = useGetBsConfig();
@@ -396,7 +398,7 @@ export function KnowledgeSpaceSidebar({
                         mobileDrawerMode && "hidden"
                     )}>
                         {!collapsed && !mobileDrawerMode && <div className="flex justify-between items-center pl-3">
-                            <span className="text-base font-bold leading-8 text-[#1A1A1A]">{localize("com_knowledge.knowledge_space")}</span>
+                            <span className="text-base font-bold leading-8 text-[#1A1A1A]">{menuNames.knowledge}</span>
                         </div>}
                     </div>
                 </div>

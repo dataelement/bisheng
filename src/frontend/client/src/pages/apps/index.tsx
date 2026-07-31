@@ -6,12 +6,14 @@ import { AgentCard } from './components/AgentCard';
 import { AppEmptyState } from './components/AppEmptyState';
 import { AppSearchBar } from './components/AppSearchBar';
 import { useAppCenter } from './hooks/useAppCenter';
-import { useLocalize, usePrefersMobileLayout } from '~/hooks';
+import { useLocalize, usePrefersMobileLayout, useWorkbenchMenuNames } from '~/hooks';
 import { ChannelBlocksArrowsIcon } from '~/components/icons/channels';
 import { cn } from '~/utils';
 
 export default function AppCenter() {
     const localize = useLocalize();
+    // 页面标题跟随后台配置的菜单显示名称
+    const menuNames = useWorkbenchMenuNames();
     const recentAppsHint = localize('com_app.recent_apps_hint');
     const {
         apps,
@@ -148,7 +150,7 @@ export default function AppCenter() {
                 <>
                     <header className="relative flex w-full max-w-[1000px] shrink-0 items-center leading-8">
                         <h1 className="font-['PingFang_SC'] font-semibold leading-[32px] text-blue-500 text-[24px]">
-                            {localize('com_app.center_title')}
+                            {menuNames.apps}
                         </h1>
                     </header>
 
