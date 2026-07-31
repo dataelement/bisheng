@@ -1687,7 +1687,16 @@
   border-color: #165dff;
 }
 
+.detailSelectLocked {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  cursor: not-allowed;
+}
+
 .detailSelect:disabled {
+  /* pointer-events:none so the wrapper title tooltip still appears on hover */
+  pointer-events: none;
   cursor: not-allowed;
   background: #f7f8fa;
   color: #86909c;
@@ -2062,6 +2071,21 @@
   background: #fff;
   color: #273142;
   font-size: 12px;
+}
+
+.uploadRecordSelectLocked {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  cursor: not-allowed;
+}
+
+.uploadRecordSelect:disabled {
+  /* pointer-events:none so the wrapper title tooltip still appears on hover */
+  pointer-events: none;
+  cursor: not-allowed;
+  background: #f7f8fa;
+  color: #86909c;
 }
 
 .uploadRecordReadonlyText {

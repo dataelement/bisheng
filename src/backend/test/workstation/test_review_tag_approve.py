@@ -32,7 +32,13 @@ def _build_tags_service() -> WorkStationTagsService:
     return WorkStationTagsService(
         request=MagicMock(),
         session=session,
-        login_user=SimpleNamespace(user_id=1, tenant_id=1),
+        login_user=SimpleNamespace(
+            user_id=1,
+            tenant_id=1,
+            is_global_super=True,
+            is_admin=lambda: True,
+            user_name="admin",
+        ),
         review_tags_repository=AsyncMock(),
     )
 
@@ -106,6 +112,7 @@ async def test_approve_review_tag_imports_to_selected_library():
         TagResourceTypeEnum.AI_AUTO_TAG,
         1,
         skip_library_add=True,
+        space_ids=None,
     )
     service.review_tags_repository.approve_review_tag.assert_awaited_once()
     service.session.commit.assert_awaited_once()
@@ -164,6 +171,9 @@ async def test_reject_review_tag_notifies_submitters():
         resource_type=TagResourceTypeEnum.MANUAL_TAG,
     )
     service.review_tags_repository.reject_review_tag = AsyncMock()
+    service.review_tags_repository.get_review_tag_list_by_tag_name = AsyncMock(
+        return_value=[SimpleNamespace(id=1, business_type="knowledge_space", business_id="137")],
+    )
     service.review_tags_repository.list_submitter_notification_targets = AsyncMock(
         return_value=[
             ReviewTagSubmitterTarget(

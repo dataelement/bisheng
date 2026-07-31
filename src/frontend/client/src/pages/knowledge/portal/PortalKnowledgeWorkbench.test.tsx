@@ -2225,6 +2225,34 @@ describe("PortalKnowledgeWorkbench", () => {
         });
     });
 
+    test("disables business domain select while file is processing in the portal file list", async () => {
+        const personalSpace = makeSpace("personal-1", "设备部", {
+            role: SpaceRole.ADMIN,
+        });
+        const file = makeFile("201", "解析中文档.pdf", {
+            type: FileType.PDF,
+            status: FileStatus.PROCESSING,
+            fileEncoding: "SGGF-STD-EM-20260600000001",
+        });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [],
+            personalSpaces: [personalSpace],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({
+            data: [file],
+            total: 1,
+        } as any);
+
+        renderWorkbench();
+
+        const fileRow = await screen.findByTestId("file-tree-row-201");
+        const businessDomainSelect = within(fileRow).getByLabelText("修改解析中文档.pdf业务域类型 当前业务域：EM") as HTMLSelectElement;
+        expect(businessDomainSelect).toHaveDisplayValue("EM / 能源");
+        expect(businessDomainSelect).toBeDisabled();
+    });
+
     test("uses the main work area as a full file list and covers it with preview until back", async () => {
         const personalSpace = makeSpace("personal-1", "信息", {
             role: SpaceRole.ADMIN,
@@ -4883,7 +4911,9 @@ describe("PortalKnowledgeWorkbench", () => {
 
         expect(within(drawer).getByText("解析中")).toHaveClass("uploadRecordStatusInfo");
         expect(getPortalCategoryButton(drawer, "修改解析中文档.pdf文件分类", "标准规范 / 标准规范")).toBeInTheDocument();
-        expect(within(drawer).getByLabelText("修改解析中文档.pdf业务域类型 当前业务域：EM")).toHaveDisplayValue("EM / 能源");
+        const businessDomainSelect = within(drawer).getByLabelText("修改解析中文档.pdf业务域类型 当前业务域：EM") as HTMLSelectElement;
+        expect(businessDomainSelect).toHaveDisplayValue("EM / 能源");
+        expect(businessDomainSelect).toBeDisabled();
     });
 
     test("shows double dash placeholders for empty uploaded record fields", async () => {

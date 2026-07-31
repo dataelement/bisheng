@@ -379,6 +379,9 @@ export function PortalUploadedFilesDrawer({
         nextDraft: EncodingDraft,
         fileSubcategoryCode?: string | null,
     ) => {
+        // Domain is part of the composed encoding; reject edits while parse is in flight.
+        if (nextDraft.businessDomainCode !== undefined && record.status === FileStatus.PROCESSING) return;
+
         const parsed = parseFileEncoding(record.fileEncoding, encodingPrefix);
         const currentDraft = encodingDrafts[record.id] ?? {};
         const fileCategoryCode = normalizeEncodingCode(
@@ -526,6 +529,8 @@ export function PortalUploadedFilesDrawer({
                                 ?? parsedEncoding.businessDomainCode,
                             );
                             const selectedBusinessDomainText = selectedBusinessDomainCode || EMPTY_FIELD_PLACEHOLDER;
+                            // Encoding is rewritten during parse; keep domain read-only until it finishes.
+                            const isBusinessDomainLocked = record.status === FileStatus.PROCESSING;
                             const recordBusinessDomainOptions = filterBusinessDomainOptionsByCodes(
                                 businessDomainOptions,
                                 record.businessDomainCodes,
@@ -576,12 +581,16 @@ export function PortalUploadedFilesDrawer({
                                             }}
                                         />
                                     </span>
-                                    <span>
+                                    <span
+                                        // Wrap disabled select so hover tooltip still works (native title on :disabled is unreliable).
+                                        className={isBusinessDomainLocked ? s.uploadRecordSelectLocked : undefined}
+                                        title={isBusinessDomainLocked ? "文档解析中无法更改" : undefined}
+                                    >
                                         <select
                                             className={s.uploadRecordSelect}
                                             aria-label={`修改${recordName}业务域类型 当前业务域：${selectedBusinessDomainText}`}
                                             value={selectedBusinessDomainCode}
-                                            disabled={savingEncodingFileId === record.id}
+                                            disabled={savingEncodingFileId === record.id || isBusinessDomainLocked}
                                             onChange={(event) => void handleEncodingPartChange(record, { businessDomainCode: event.currentTarget.value })}
                                         >
                                             <option value="">{EMPTY_FIELD_PLACEHOLDER}</option>
