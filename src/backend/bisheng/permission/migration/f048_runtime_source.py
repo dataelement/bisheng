@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 from dataclasses import asdict
 from hashlib import sha256
 from typing import Any, Protocol
@@ -45,14 +44,6 @@ def _canonical_checksum(value: object) -> str:
     return sha256(payload.encode("utf-8")).hexdigest()
 
 
-def _maintenance_acknowledged() -> bool:
-    return os.getenv("F048_SERVICES_STOPPED", "").strip().casefold() in {
-        "1",
-        "true",
-        "yes",
-    }
-
-
 class DashboardMigrationMaintenancePort(Protocol):
     """Business-owned pre-migration maintenance used by the script layer."""
 
@@ -84,7 +75,7 @@ class LiveMigrationSourceProvider:
     ) -> SourceInventorySnapshot:
         schema_ready = await self._schema_ready()
         active_heartbeats = await self._active_heartbeats()
-        services_stopped = _maintenance_acknowledged() and active_heartbeats == 0
+        services_stopped = active_heartbeats == 0
         preconditions_ready = (
             schema_ready
             and services_stopped
@@ -116,7 +107,7 @@ class LiveMigrationSourceProvider:
         return SourceInventorySnapshot(
             environment=MigrationEnvironmentFacts(
                 schema_ready=True,
-                services_stopped=(_maintenance_acknowledged() and active_heartbeats == 0),
+                services_stopped=active_heartbeats == 0,
                 active_heartbeats=active_heartbeats,
                 expected_store_id=expected_store_id,
                 actual_store_id=self._actual_store_id,

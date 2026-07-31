@@ -1,7 +1,7 @@
 """Run the one forward-only F048 permission data migration.
 
 Run from ``src/backend`` with the same ``config`` environment value as the
-stopped service:
+started backend container while its automatic F048 migration gate is active:
 
     python scripts/migrate_f048_permission_data.py migrate \
       --apply

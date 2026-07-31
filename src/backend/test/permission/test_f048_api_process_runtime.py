@@ -4,19 +4,30 @@ from __future__ import annotations
 
 import asyncio
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
 from bisheng import main
 from bisheng.api.services import f048_permission_runtime as api_runtime_module
+from bisheng.common.errcode.permission import PermissionPublishNotReadyError
 from bisheng.core.context import manager as context_module
 from bisheng.permission.application import process_runtime as process_module
 from bisheng.permission.domain.schemas import VerifiedPermissionTarget
 
 
 class _Manager:
+    def __init__(self, *, migration_required: bool = False) -> None:
+        self._migration_required = migration_required
+
     async def async_get_instance(self):
         return object()
+
+    async def mark_migration_required(self):
+        self._migration_required = True
+
+    def readiness(self):
+        return {"migration_required": self._migration_required}
 
 
 class _PermissionFacade:
@@ -115,6 +126,158 @@ async def test_api_process_binds_runtime_before_starting_heartbeat(
 
     await main._close_f048_api_process(app)
     assert app.state.f048_heartbeat_task.cancelled()
+
+
+@pytest.mark.asyncio
+async def test_api_process_starts_not_ready_before_f048_migration(
+    monkeypatch,
+) -> None:
+    manager = _Manager(migration_required=True)
+
+    monkeypatch.setattr(main.settings.openfga, "enabled", True)
+    monkeypatch.setattr(
+        context_module.app_context,
+        "get_context",
+        lambda name: manager,
+    )
+    initialize = AsyncMock()
+    monkeypatch.setattr(
+        api_runtime_module,
+        "initialize_f048_api_runtime",
+        initialize,
+    )
+    app = SimpleNamespace(state=SimpleNamespace())
+
+    await main._initialize_f048_api_process(app)
+
+    assert app.state.f048_manager is manager
+    assert not hasattr(app.state, "f048_runtime")
+    assert not hasattr(app.state, "f048_heartbeat_task")
+    initialize.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_api_process_starts_not_ready_when_f048_catalog_is_incomplete(
+    monkeypatch,
+) -> None:
+    manager = _Manager()
+
+    monkeypatch.setattr(main.settings.openfga, "enabled", True)
+    monkeypatch.setattr(
+        context_module.app_context,
+        "get_context",
+        lambda name: manager,
+    )
+    initialize = AsyncMock(
+        side_effect=PermissionPublishNotReadyError(msg="Permission Catalog must have exactly one CURRENT release")
+    )
+    monkeypatch.setattr(
+        api_runtime_module,
+        "initialize_f048_api_runtime",
+        initialize,
+    )
+    app = SimpleNamespace(state=SimpleNamespace())
+
+    await main._initialize_f048_api_process(app)
+
+    assert app.state.f048_manager is manager
+    assert manager.readiness()["migration_required"] is True
+    assert not hasattr(app.state, "f048_runtime")
+    assert not hasattr(app.state, "f048_heartbeat_task")
+    initialize.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_migration_gate_rejects_user_http_but_allows_health() -> None:
+    manager = _Manager(migration_required=True)
+    downstream_scopes = []
+    sent = []
+
+    async def downstream(scope, receive, send):
+        downstream_scopes.append(scope)
+
+    async def receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def send(message):
+        sent.append(message)
+
+    gate = main.F048MigrationGateMiddleware(downstream)
+    app = SimpleNamespace(
+        state=SimpleNamespace(f048_manager=manager),
+    )
+    await gate(
+        {
+            "type": "http",
+            "asgi": {"version": "3.0"},
+            "http_version": "1.1",
+            "method": "GET",
+            "scheme": "http",
+            "path": "/api/v1/env",
+            "raw_path": b"/api/v1/env",
+            "query_string": b"",
+            "root_path": "",
+            "headers": [],
+            "client": ("127.0.0.1", 1),
+            "server": ("test", 80),
+            "app": app,
+        },
+        receive,
+        send,
+    )
+
+    assert downstream_scopes == []
+    assert sent[0]["status"] == 503
+
+    await gate(
+        {
+            "type": "http",
+            "path": "/health",
+            "app": app,
+        },
+        receive,
+        send,
+    )
+    assert len(downstream_scopes) == 1
+    assert downstream_scopes[0]["path"] == "/health"
+
+
+@pytest.mark.asyncio
+async def test_migration_gate_rejects_websocket_connections() -> None:
+    manager = _Manager(migration_required=True)
+    downstream_scopes = []
+    sent = []
+
+    async def downstream(scope, receive, send):
+        downstream_scopes.append(scope)
+
+    async def receive():
+        return {"type": "websocket.connect"}
+
+    async def send(message):
+        sent.append(message)
+
+    gate = main.F048MigrationGateMiddleware(downstream)
+    await gate(
+        {
+            "type": "websocket",
+            "path": "/api/v1/workflow/chat/1",
+            "app": SimpleNamespace(
+                state=SimpleNamespace(f048_manager=manager),
+            ),
+        },
+        receive,
+        send,
+    )
+
+    assert downstream_scopes == []
+    assert sent == [
+        {
+            "type": "websocket.close",
+            "code": 1013,
+            "reason": "F048 permission data migration is required",
+        }
+    ]
 
 
 @pytest.mark.asyncio

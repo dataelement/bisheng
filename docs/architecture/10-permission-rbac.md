@@ -297,7 +297,10 @@ Store/model/Catalog ID。API、Celery、Beat、Linsight 等每个进程启动时
 5. 构造单一 `FGAClient`，后续每个 Check/List/Write 显式携带已发现的 model ID。
 
 进程通过 Redis heartbeat 上报实际 Store/model/Catalog。任一不一致即 readiness
-失败。禁止：
+失败且不初始化 F048 权限 runtime。为了保持既有容器内升级方式，发现 predecessor
+model 或迁移中尚未形成完整 CURRENT Catalog 时，进程本身可以保持存活并暴露 503
+健康状态，但不发布 ready heartbeat、不处理生产授权请求，也不会自动执行数据迁移。
+禁止：
 
 - 在生产自动创建 Store 或写 authorization model；
 - `dual_model_mode=true`；
@@ -481,21 +484,24 @@ dashboard `tenant_id` DDL，不扫描或转换业务数据。
 src/backend/scripts/migrate_f048_permission_data.py
 ```
 
-迁移是停服、同 Store、单向前进流程：
+迁移是应用自动阻断业务访问、同 Store、单向前进流程：
 
-1. D0：停止 API/Worker/Beat/Linsight/同步写入者，等待 heartbeat 过期；
-2. D1：Alembic upgrade，确认单 head；
-3. D2：两次稳定源扫描，冻结 run/item/checksum；
+1. D0：更新镜像并正常启动 Compose 服务；predecessor model 下 API/Worker/Linsight
+   只进入 `MIGRATION_REQUIRED/NOT_READY`，API 除 `/health` 外自动拒绝 HTTP/WS，
+   Celery/Linsight 暂停任务消费；
+2. D1：API 正常启动链执行 Alembic upgrade，确认单 head；
+3. D2：运维进入 backend 容器执行脚本；脚本确认 ready F048 heartbeat=0，
+   两次稳定源扫描并冻结 run/item/checksum；
 4. D3：在同一 Store 发布一个 F048 model，分批写 SQL/FGA；
 5. D4：higher-consistency 验证后，仅删除记录到 run 的 legacy tuple/Config；
-6. D5：启动全部进程，自动发现新 model 并绑定 SQL CURRENT Catalog；
-7. D6：smoke、全实例 heartbeat 和语义校验。
+6. D5：迁移成功后重启全部 backend 进程，自动发现新 model 并绑定 SQL CURRENT Catalog；
+7. D6：smoke、全实例 heartbeat 和语义校验通过后，迁移门禁自动解除。
 
 脚本 DB scan batch=500，FGA write batch≤90，每批写 checkpoint。崩溃后
 必须携带同一个 `run-id` 从 frozen items 前向恢复。
 
 没有 preview、dry-run、rollback、cleanup、Store switch 或 model A/B
-并行窗口。迁移失败时保持停服，修复同一 run 的前向路径。
+并行窗口。迁移失败时保持应用迁移门禁和 F048 runtime 不就绪，修复同一 run 的前向路径。
 
 ---
 
@@ -600,6 +606,6 @@ OpenFGA 使用 JSON log，并暴露 `:2112/metrics`。RPC histogram 在部署中
 - pinned digest 的真实 OpenFGA v1.15.1 集成；
 - disposable MySQL 与 Linux DM8 schema/resume/verify；
 - 生产脱敏分布 BENCH-01；
-- 停服窗口中的 D0～D6 全实例 pin 与 heartbeat。
+- 升级窗口中的 D0～D6 全实例 pin、HTTP/WS 自动门禁、not-ready/ready heartbeat 与重启证据。
 
 缺少其中任一项时可以完成代码实现，但不能把正式发布门禁标绿。

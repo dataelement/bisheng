@@ -320,6 +320,7 @@ async def test_single_model_client_readiness_and_heartbeat() -> None:
     assert initialized is fake_client
     discover.assert_awaited_once()
     assert discover.await_args.kwargs["allow_bootstrap"] is False
+    assert discover.await_args.kwargs["expected_model"] is None
     client_class.assert_called_once_with(
         api_url="http://openfga:8080",
         store_id="store-existing",
@@ -342,6 +343,76 @@ async def test_single_model_client_readiness_and_heartbeat() -> None:
     _, _, payload = heartbeat_store.published[0]
     assert payload["store_id"] == "store-existing"
     assert payload["model_id"] == "model-f048"
+
+
+@pytest.mark.asyncio
+async def test_predecessor_model_allows_process_start_without_runtime_readiness() -> None:
+    heartbeat_store = _HeartbeatStore()
+    manager = FGAManager(
+        _config(),
+        environment="production",
+        instance_role="api",
+        heartbeat_store=heartbeat_store,
+    )
+    pin = OpenFGARuntimePin(
+        store_id="store-existing",
+        model_id="model-predecessor",
+        model_checksum="0" * 64,
+    )
+    fake_client = MagicMock()
+    fake_client.store_id = pin.store_id
+    fake_client.model_id = pin.model_id
+    fake_client.health = AsyncMock(return_value=True)
+    fake_client.close = AsyncMock()
+    with (
+        patch(
+            "bisheng.core.openfga.manager.discover_openfga_runtime",
+            new=AsyncMock(return_value=pin),
+        ),
+        patch(
+            "bisheng.core.openfga.manager.FGAClient",
+            return_value=fake_client,
+        ),
+    ):
+        initialized = await manager._async_initialize()
+
+    assert initialized is fake_client
+    readiness = manager.readiness()
+    assert readiness["ready"] is False
+    assert readiness["error"] == "authorization_model_migration_required"
+    assert readiness["migration_required"] is True
+    assert readiness["model_id"] == "model-predecessor"
+    assert readiness["expected_model_checksum"] == authorization_model_checksum(build_authorization_model_f048())
+
+    manager._instance = fake_client
+    assert await manager.heartbeat() is False
+    fake_client.health.assert_not_awaited()
+    assert heartbeat_store.published == []
+    assert len(heartbeat_store.removed) == 1
+
+
+@pytest.mark.asyncio
+async def test_incomplete_catalog_can_defer_runtime_for_operator_migration() -> None:
+    heartbeat_store = _HeartbeatStore()
+    manager = FGAManager(
+        _config(),
+        environment="production",
+        instance_role="api",
+        heartbeat_store=heartbeat_store,
+    )
+    manager._ready = True
+    manager._runtime_catalog_release_id = 7
+    manager._runtime_catalog_checksum = "catalog-checksum"
+
+    await manager.mark_migration_required()
+
+    readiness = manager.readiness()
+    assert readiness["ready"] is False
+    assert readiness["migration_required"] is True
+    assert readiness["error"] == "permission_data_migration_required"
+    assert readiness["catalog_release_id"] is None
+    assert readiness["catalog_checksum"] is None
+    assert len(heartbeat_store.removed) == 1
 
 
 @pytest.mark.asyncio

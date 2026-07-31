@@ -12,6 +12,7 @@ from bisheng.common.errcode.permission import AuthorizationModelMismatchError
 from bisheng.core.config.openfga import OpenFGAConf
 from bisheng.core.context.base import BaseContextManager
 from bisheng.core.openfga.authorization_model_f048 import (
+    authorization_model_checksum,
     build_authorization_model_f048,
 )
 from bisheng.core.openfga.client import FGAClient
@@ -41,9 +42,7 @@ class FGAManager(BaseContextManager[FGAClient]):
         self._config = openfga_config
         self._environment = environment
         self._instance_role = instance_role
-        self._heartbeat_store = (
-            heartbeat_store or RedisRuntimeHeartbeatStore()
-        )
+        self._heartbeat_store = heartbeat_store or RedisRuntimeHeartbeatStore()
         self._instance_id = uuid4().hex
         self._started_at = datetime.now(UTC)
         self._last_heartbeat_at: datetime | None = None
@@ -52,6 +51,9 @@ class FGAManager(BaseContextManager[FGAClient]):
         self._runtime_store_id: str | None = None
         self._runtime_model_id: str | None = None
         self._runtime_model_checksum: str | None = None
+        self._expected_model_checksum: str | None = None
+        self._migration_required = False
+        self._migration_reason: str | None = None
         self._runtime_catalog_release_id: int | None = None
         self._runtime_catalog_checksum: str | None = None
         self._catalog_resolver: Callable[[], Awaitable[Any]] | None = None
@@ -62,14 +64,31 @@ class FGAManager(BaseContextManager[FGAClient]):
             raise ValueError("OpenFGA runtime does not support legacy or dual-model clients")
 
         expected_model = build_authorization_model_f048()
+        expected_model_checksum = authorization_model_checksum(expected_model)
         production = self._is_production()
         if production:
             config.validate_production_runtime()
-        pin = await discover_openfga_runtime(
-            config,
-            expected_model=expected_model,
-            allow_bootstrap=not production,
-        )
+        if not production and config.force_write_model:
+            pin = await discover_openfga_runtime(
+                config,
+                expected_model=expected_model,
+                allow_bootstrap=True,
+            )
+        else:
+            try:
+                pin = await discover_openfga_runtime(
+                    config,
+                    expected_model=None,
+                    allow_bootstrap=False,
+                )
+            except AuthorizationModelMismatchError:
+                if production:
+                    raise
+                pin = await discover_openfga_runtime(
+                    config,
+                    expected_model=expected_model,
+                    allow_bootstrap=True,
+                )
 
         client = FGAClient(
             api_url=config.api_url,
@@ -80,8 +99,21 @@ class FGAManager(BaseContextManager[FGAClient]):
         self._runtime_store_id = pin.store_id
         self._runtime_model_id = pin.model_id
         self._runtime_model_checksum = pin.model_checksum
-        self._ready = True
-        self._readiness_error = None
+        self._expected_model_checksum = expected_model_checksum
+        self._migration_required = pin.model_checksum != expected_model_checksum
+        self._migration_reason = "authorization_model_migration_required" if self._migration_required else None
+        self._ready = not self._migration_required
+        self._readiness_error = self._migration_reason
+        if self._migration_required:
+            logger.warning(
+                "OpenFGA predecessor model discovered; API/worker may start for "
+                "operator migration but permission runtime remains unavailable: "
+                "store=%s source_model=%s role=%s",
+                pin.store_id,
+                pin.model_id,
+                self._instance_role,
+            )
+            return client
         logger.info(
             "FGAClient initialized from discovered runtime: store=%s model=%s role=%s",
             pin.store_id,
@@ -101,17 +133,11 @@ class FGAManager(BaseContextManager[FGAClient]):
                 environment = "dev"
         if isinstance(environment, dict):
             environment = next(
-                (
-                    environment[key]
-                    for key in ("name", "environment", "env", "mode")
-                    if environment.get(key)
-                ),
+                (environment[key] for key in ("name", "environment", "env", "mode") if environment.get(key)),
                 "dev",
             )
         normalized = str(environment).strip().casefold()
-        return normalized in {"prod", "production"} or normalized.startswith(
-            "production-"
-        )
+        return normalized in {"prod", "production"} or normalized.startswith("production-")
 
     def readiness(self) -> dict[str, Any]:
         """Return process-local pin and heartbeat evidence."""
@@ -122,20 +148,32 @@ class FGAManager(BaseContextManager[FGAClient]):
             "store_id": self._runtime_store_id,
             "model_id": self._runtime_model_id,
             "model_checksum": self._runtime_model_checksum,
+            "expected_model_checksum": self._expected_model_checksum,
+            "migration_required": self._migration_required,
             "catalog_release_id": self._runtime_catalog_release_id,
             "catalog_checksum": self._runtime_catalog_checksum,
-            "consistency_window_seconds": (
-                self._config.recent_consistency_window_seconds
-            ),
+            "consistency_window_seconds": (self._config.recent_consistency_window_seconds),
             "instance_id": self._instance_id,
             "instance_role": self._instance_role,
             "started_at": self._started_at.isoformat(),
-            "last_heartbeat_at": (
-                self._last_heartbeat_at.isoformat()
-                if self._last_heartbeat_at
-                else None
-            ),
+            "last_heartbeat_at": (self._last_heartbeat_at.isoformat() if self._last_heartbeat_at else None),
         }
+
+    async def mark_migration_required(
+        self,
+        *,
+        reason: str = "permission_data_migration_required",
+    ) -> None:
+        """Keep the process alive but unavailable for an explicit data migration."""
+
+        self._migration_required = True
+        self._migration_reason = reason
+        self._ready = False
+        self._readiness_error = reason
+        self._catalog_resolver = None
+        self._runtime_catalog_release_id = None
+        self._runtime_catalog_checksum = None
+        await self._remove_heartbeat()
 
     async def bind_catalog_runtime(
         self,
@@ -149,6 +187,10 @@ class FGAManager(BaseContextManager[FGAClient]):
         OpenFGA client.
         """
 
+        if self._migration_required:
+            raise AuthorizationModelMismatchError(
+                msg="F048 data migration must complete before binding the CURRENT Catalog"
+            )
         self._catalog_resolver = resolver
         try:
             await self._refresh_catalog_runtime()
@@ -166,23 +208,14 @@ class FGAManager(BaseContextManager[FGAClient]):
         store_id = getattr(catalog, "store_id", None)
         model_id = getattr(catalog, "model_id", None)
         model_checksum = getattr(catalog, "model_checksum", None)
-        if (
-            not isinstance(release_id, int)
-            or release_id <= 0
-            or not isinstance(checksum, str)
-            or not checksum
-        ):
-            raise AuthorizationModelMismatchError(
-                msg="CURRENT Catalog runtime pin is incomplete"
-            )
+        if not isinstance(release_id, int) or release_id <= 0 or not isinstance(checksum, str) or not checksum:
+            raise AuthorizationModelMismatchError(msg="CURRENT Catalog runtime pin is incomplete")
         if (
             store_id != self._runtime_store_id
             or model_id != self._runtime_model_id
             or model_checksum != self._runtime_model_checksum
         ):
-            raise AuthorizationModelMismatchError(
-                msg="CURRENT Catalog does not match the OpenFGA runtime pin"
-            )
+            raise AuthorizationModelMismatchError(msg="CURRENT Catalog does not match the OpenFGA runtime pin")
         self._runtime_catalog_release_id = release_id
         self._runtime_catalog_checksum = checksum
 
@@ -191,6 +224,11 @@ class FGAManager(BaseContextManager[FGAClient]):
         if instance is None:
             self._ready = False
             self._readiness_error = "client_not_initialized"
+            return False
+        if self._migration_required:
+            self._ready = False
+            self._readiness_error = self._migration_reason or "authorization_model_migration_required"
+            await self._remove_heartbeat()
             return False
         try:
             await self._refresh_catalog_runtime()
@@ -267,6 +305,9 @@ class FGAManager(BaseContextManager[FGAClient]):
         self._runtime_store_id = None
         self._runtime_model_id = None
         self._runtime_model_checksum = None
+        self._expected_model_checksum = None
+        self._migration_required = False
+        self._migration_reason = None
         self._runtime_catalog_release_id = None
         self._runtime_catalog_checksum = None
         self._catalog_resolver = None

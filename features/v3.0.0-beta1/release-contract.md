@@ -58,7 +58,7 @@
 | INV-15 | 同一主体对同一资源的直接授权、部门授权和其他主体来源独立存在并取权限并集；撤销一个来源不得删除或抵消其他仍有效来源 | PermissionGrant | F048 |
 | INV-16 | 权限继承复用资源既有的直接 `parent` 语义，不建立第二套 `permission_parent` 层级；`CUSTOM` 只切断权限继承，不能改变业务结构父子关系 | ResourcePermissionMode | F048 |
 | INV-17 | 任一有效 Grant 可以产生资源列表/基础元数据可见性，但可见性不能替代下载、搜索、RAG 或业务变更动作的具体鉴权。文件预览不设置 PermissionAction；只有原件/打包下载必须检查 `download`，不得由“可预览”推导下载能力 | PermissionAction, PermissionGrant | F048 |
-| INV-18 | 权限升级采用停服后的单向正式数据迁移：全部权限读写进程停止且 schema upgrade 成功后，由 `src/backend/scripts/` 专用脚本沿用现有 Store 发布一个新 model ID，原地转换 tuple 并退役旧运行数据，校验通过才启服。F048 不提供独立迁移预演、旧/新 model 影子运行、应用级回滚、新→旧转换、dual/legacy model client、长期双写、旧动作别名、Config 第二 PDP 或逐请求旧系统 ALLOW fallback；失败保持维护并前向修复 | PermissionMigrationRun | F048 |
+| INV-18 | 权限升级采用应用自动阻断业务访问后的单向正式数据迁移：更新镜像并启动进程后，旧 model 只能进入 `MIGRATION_REQUIRED/NOT_READY` 运维态，不初始化 F048 权限运行时、不发布 ready heartbeat，HTTP/WS 迁移门禁除 `/health` 外统一拒绝访问，Celery/Linsight 暂停消费任务；schema upgrade 成功后，由 `src/backend/scripts/` 专用脚本沿用现有 Store 发布一个新 model ID，原地转换 tuple 并退役旧运行数据，校验通过后重启全部进程并自动恢复访问/任务消费。F048 不提供独立迁移预演、旧/新 model 影子运行、应用级回滚、新→旧转换、dual/legacy model client、长期双写、旧动作别名、Config 第二 PDP 或逐请求旧系统 ALLOW fallback；失败保持维护并前向修复 | PermissionMigrationRun | F048 |
 | INV-19 | 对需要进入资源 ReBAC 的请求，权限服务不可用、模型未生效、动作未分级、迁移记录不明确或授权状态不可判定时必须 fail closed | PermissionAction, PermissionModel, PermissionGrant | F048 |
 | INV-20 | 动作、模型、模型动作、资源 Grant、Grant 主体和权限模式的运行时事实必须存于规范化关系表；`permission_relation_models_v1`、`permission_relation_model_bindings_v1` 及任何新的大 JSON 不得继续作为运行时真相 | PermissionAction, PermissionModel, PermissionGrant, ResourcePermissionMode | F048 |
 | INV-21 | 所有生产 OpenFGA Check、List 和 Write 必须显式指定经发布门禁确认的 Authorization Model ID；发布新模型不得依赖“自动使用最新模型”完成切换 | AuthorizationModelRelease | F048 |
@@ -66,7 +66,7 @@
 | INV-23 | Authorization Model ID 是 OpenFGA 请求的校验与解释上下文，不是 tuple 的版本标签。F048 必须保持现有 Store ID 不变：仍合法的 system/组织/shared/parent tuple 原地复用；新 tuple 写入同一 Store；已迁移资源的旧四档/废弃 relation tuple 在启服前删除。启服后所有实例只固定新 model ID，旧 model ID 仅为 OpenFGA 不可删除历史；不得启用 auto latest、dual/legacy client 或创建第二 Store | AuthorizationModelRelease, PermissionMigrationRun | F048 |
 | INV-24 | 标准模型按等级累计动作；自定义模型只产生其显式选择的动作，派生等级只用于分类和可授予边界，不能自动补齐该等级及以下的其他动作。本不变量替代 v2.5.0 INV-7 在 F048 资源权限范围内的旧四档金字塔语义 | PermissionAction, PermissionModel | F048 |
 | INV-25 | user-owned 资源创建仍必须通过 `PermissionService.authorize()` 为创建者建立受保护 owner Grant 并遵守失败补偿；一个资源可以同时有多个 owner，其他 owner 作为独立普通来源存在。F048 启服后不再要求继续写旧资源 `owner` tuple。只有经资源 adapter 代码 allowlist 与 canonical business predicate 双重确认的 platform system-owned 资源可以不伪造用户 owner，并继续只由 C4 system identity 管理。OQ-07 已选择 A：F048 启服时退役既有 F018 owner 交接 API，本期不实现 protected owner transfer；创建者 protected owner 不可通过普通成员接口删除或转让 | ProtectedPermissionAssignment, PermissionGrant | F048 |
-| INV-26 | F048 的 Alembic revision 只允许 MySQL/DM8 schema DDL，不得读取、转换、回填、去重、清理或 seed 旧权限数据，也不得访问 OpenFGA。所有旧 Config、业务事实和 tuple 数据迁移必须由 `src/backend/scripts/` 下的专用脚本在停服窗口、schema upgrade 成功后显式执行；不得由 API、Celery 或应用启动钩子自动触发 | PermissionMigrationRun, PermissionMigrationItem | F048 |
+| INV-26 | F048 的 Alembic revision 只允许 MySQL/DM8 schema DDL，不得读取、转换、回填、去重、清理或 seed 旧权限数据，也不得访问 OpenFGA。所有旧 Config、业务事实和 tuple 数据迁移必须由运维人员在已启动但 F048 未就绪的 backend 容器内，通过 `src/backend/scripts/` 下的专用脚本于 schema upgrade 成功后显式执行；不得由 API、Celery 或应用启动钩子自动触发 | PermissionMigrationRun, PermissionMigrationItem | F048 |
 
 （INV-1~7 为 v2.6.0 存量不变量，继续有效，见 `features/v2.6.0/release-contract.md`。）
 
@@ -128,3 +128,4 @@
 | 2026-07-29 | F048 OQ-07 选择 A，启服时退役 F018；INV-18 固化停服直迁、无独立预演/回滚和失败前向修复合同 | F048 / F018 |
 | 2026-07-29 | 纠正 INV-18/23 迁移拓扑：沿用现有 Store、只运行新 model；同 Store 原地转换并在启服前退役旧 tuple/Config，不创建或维护第二 Store/model runtime | F048 |
 | 2026-07-29 | 新增 INV-26 并修订 INV-18：Alembic revision 仅负责 MySQL/DM8 schema DDL；F048 旧权限数据和 OpenFGA tuple 迁移由 `src/backend/scripts/` 专用脚本执行，禁止 migration/lifespan/API/Celery 混入数据迁移 | F048 |
+| 2026-07-31 | 简化 F048 升级顺序：沿用既有“更新镜像并启动→容器内执行数据脚本”流程；旧 model 下进程只进入不就绪运维态并由应用门禁自动拒绝 HTTP/WS，脚本通过后重启一次即自动恢复访问，不再要求先停止容器、人工切换入口或设置停服变量 | F048 |
