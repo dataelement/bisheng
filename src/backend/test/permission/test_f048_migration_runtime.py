@@ -25,6 +25,7 @@ from bisheng.permission.domain.models import (
     PermissionCatalogRelease,
     PermissionGrant,
     PermissionGrantAssignee,
+    PermissionMigrationItem,
     PermissionMigrationRun,
     PermissionModel,
     PermissionModelAction,
@@ -222,6 +223,80 @@ async def test_live_source_provider_needs_no_manual_stop_ack_without_ready_heart
     assert snapshot.environment.active_heartbeats == 0
     assert snapshot.environment.source_watermark == snapshot.environment.observed_watermark
     assert dashboard.backfill_calls == 1
+
+
+def test_failed_tuple_reconciliation_uses_final_store_state():
+    identity = ("user:11", "owner", "workflow:wf-1")
+    resource_keys = {"workflow:wf-1"}
+
+    assert (
+        LiveMigrationSourceProvider._failed_tuple_resolution(
+            status="dead",
+            action="write",
+            tuple_identity=identity,
+            error_category="TRANSIENT_TRANSPORT_FAILURE",
+            canonical_state=None,
+            resource_keys=resource_keys,
+            store_tuples={identity},
+        )
+        == "STORE_STATE_MATCHES"
+    )
+    assert (
+        LiveMigrationSourceProvider._failed_tuple_resolution(
+            status="dead",
+            action="delete",
+            tuple_identity=identity,
+            error_category="TRANSIENT_TRANSPORT_FAILURE",
+            canonical_state=None,
+            resource_keys=resource_keys,
+            store_tuples=set(),
+        )
+        == "STORE_STATE_MATCHES"
+    )
+
+
+def test_failed_tuple_reconciliation_only_auto_resolves_proven_outcomes():
+    identity = ("user:11", "owner", "linsight_skill:skill-1")
+    values = {
+        "status": "dead",
+        "action": "write",
+        "tuple_identity": identity,
+        "canonical_state": None,
+        "resource_keys": set(),
+        "store_tuples": set(),
+    }
+
+    assert (
+        LiveMigrationSourceProvider._failed_tuple_resolution(
+            **values,
+            error_category="MODEL_VALIDATION_REJECTED",
+        )
+        == "SOURCE_MODEL_REJECTED"
+    )
+    assert (
+        LiveMigrationSourceProvider._failed_tuple_resolution(
+            **values,
+            error_category="TRANSIENT_TRANSPORT_FAILURE",
+        )
+        is None
+    )
+    assert (
+        LiveMigrationSourceProvider._failed_tuple_resolution(
+            **{
+                **values,
+                "tuple_identity": ("user:11", "owner", "workflow:deleted"),
+            },
+            error_category="TRANSIENT_TRANSPORT_FAILURE",
+        )
+        == "RESOURCE_ABSENT"
+    )
+    assert (
+        LiveMigrationSourceProvider._failed_tuple_resolution(
+            **{**values, "canonical_state": True},
+            error_category="TRANSIENT_TRANSPORT_FAILURE",
+        )
+        == "CANONICAL_IDENTITY_STATE"
+    )
 
 
 class _PublisherSourceClient:
@@ -700,4 +775,92 @@ async def test_d4_ready_transition_activates_only_target_release(
         ("legacy-model", "RETIRED"),
         ("new-model", "ACTIVE"),
     ]
+    await engine.dispose()
+
+
+async def test_blocked_source_reset_replaces_only_pre_target_snapshot(
+    monkeypatch,
+):
+    engine = create_async_engine(
+        "sqlite+aiosqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    metadata = sa.MetaData()
+    for name in (
+        "permission_migration_run",
+        "permission_migration_item",
+    ):
+        table = SQLModel.metadata.tables[name].to_metadata(metadata)
+        table.c.id.type = sa.Integer()
+    async with engine.begin() as connection:
+        await connection.run_sync(metadata.create_all)
+
+    @asynccontextmanager
+    async def session_factory() -> AsyncIterator[AsyncSession]:
+        async with AsyncSession(
+            engine,
+            expire_on_commit=False,
+        ) as session:
+            yield session
+
+    monkeypatch.setattr(
+        f048_runtime_storage,
+        "get_async_db_session",
+        session_factory,
+    )
+    async with session_factory() as session:
+        async with session.begin():
+            session.add(
+                PermissionMigrationRun(
+                    id=8,
+                    environment_fingerprint="f" * 64,
+                    phase="SOURCE_VALIDATING",
+                    status="BLOCKED",
+                    store_id="store-live",
+                    source_model_id="legacy-model",
+                    source_watermark="old-watermark",
+                    source_checksum="s" * 64,
+                    version=4,
+                )
+            )
+            session.add(
+                PermissionMigrationItem(
+                    run_id=8,
+                    source_kind="TUPLE",
+                    source_locator="tuple:stale",
+                    source_checksum="t" * 64,
+                    status="READY",
+                    severity="BLOCKER",
+                    difference_type="ORPHAN_TUPLE",
+                )
+            )
+
+    store = SqlMigrationRunStore(repository=MigrationRepository(session_factory))
+    reset = await store.areset_blocked_source(
+        run_id=8,
+        expected_version=4,
+        source_watermark="new-watermark",
+    )
+
+    assert (
+        reset.status,
+        reset.checkpoint,
+        reset.source_watermark,
+        reset.source_checksum,
+        reset.version,
+    ) == (
+        "RUNNING",
+        None,
+        "new-watermark",
+        None,
+        5,
+    )
+    async with session_factory() as session:
+        remaining = list(
+            (await session.execute(sa.select(PermissionMigrationItem).where(PermissionMigrationItem.run_id == 8)))
+            .scalars()
+            .all()
+        )
+    assert remaining == []
     await engine.dispose()

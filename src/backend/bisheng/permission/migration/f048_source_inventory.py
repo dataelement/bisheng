@@ -90,6 +90,9 @@ class LegacyFailedTupleSource:
     status: str
     tuple_key: str
     resolution: str | None = None
+    action: str = "write"
+    error_category: str | None = None
+    canonical_state: bool | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -308,8 +311,10 @@ def _tuple_items(
         if source.key in seen:
             difference_type = "DUPLICATE_TUPLE"
         elif separator and object_type in MIGRATED_RESOURCE_TYPES and resource is None:
-            difference_type = "ORPHAN_TUPLE"
-            severity = "BLOCKER"
+            # The Store can retain tuples after their canonical business
+            # resource has been deleted. They grant no live resource and are
+            # retired during the forward migration instead of inventing one.
+            difference_type = "STALE_RESOURCE_TUPLE"
         elif resource is not None and source.tenant_id is not None and source.tenant_id != resource.tenant_id:
             difference_type = "CROSS_TENANT_TUPLE"
             severity = "BLOCKER"

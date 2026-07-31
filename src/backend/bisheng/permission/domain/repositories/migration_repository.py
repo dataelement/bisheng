@@ -6,7 +6,7 @@ import json
 from datetime import datetime
 from hashlib import sha256
 
-from sqlalchemy import func, or_, update
+from sqlalchemy import func, insert, or_, update
 from sqlmodel import col, select
 
 from bisheng.common.errcode.permission import PermissionVersionConflictError
@@ -229,7 +229,7 @@ class MigrationRepository(
                     ): row
                     for row in existing_rows
                 }
-                result: list[PermissionMigrationItem] = []
+                new_items: list[PermissionMigrationItem] = []
                 for item in items:
                     key = (
                         item.run_id,
@@ -240,12 +240,42 @@ class MigrationRepository(
                     if existing is not None:
                         if existing.source_checksum != item.source_checksum:
                             raise PermissionVersionConflictError(msg=("Migration source changed after checkpoint"))
-                        result.append(existing)
                         continue
-                    session.add(item)
-                    result.append(item)
-                await session.flush()
-                return result
+                    new_items.append(item)
+                if len(items) == 1 and new_items:
+                    session.add(new_items[0])
+                    await session.flush()
+                    return new_items
+                if new_items:
+                    values = [
+                        {
+                            column.name: value
+                            for column in PermissionMigrationItem.__table__.columns
+                            if column.name != "id" and (value := getattr(item, column.name)) is not None
+                        }
+                        for item in new_items
+                    ]
+                    await session.execute(
+                        insert(PermissionMigrationItem),
+                        values,
+                    )
+                    await session.flush()
+
+                persisted_rows: list[PermissionMigrationItem] = []
+                for run_id, source_kind in sorted({(item.run_id, item.source_kind) for item in items}):
+                    locators = [
+                        item.source_locator
+                        for item in items
+                        if item.run_id == run_id and item.source_kind == source_kind
+                    ]
+                    statement = select(PermissionMigrationItem).where(
+                        PermissionMigrationItem.run_id == run_id,
+                        PermissionMigrationItem.source_kind == source_kind,
+                        col(PermissionMigrationItem.source_locator).in_(locators),
+                    )
+                    persisted_rows.extend((await session.execute(statement)).scalars().all())
+                persisted_by_key = {(row.run_id, row.source_kind, row.source_locator): row for row in persisted_rows}
+                return [persisted_by_key[(item.run_id, item.source_kind, item.source_locator)] for item in items]
 
     async def aget_item_cursor(
         self,

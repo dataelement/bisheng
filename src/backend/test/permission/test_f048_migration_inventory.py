@@ -104,7 +104,7 @@ def test_inventory_blocks_before_scanning_when_d1_freeze_or_store_is_invalid():
     assert inventory.items == ()
 
 
-def test_inventory_classifies_corrupt_config_orphan_cross_tenant_and_failed_tuple():
+def test_inventory_classifies_corrupt_config_stale_cross_tenant_and_failed_tuple():
     snapshot = SourceInventorySnapshot(
         environment=_environment(),
         config_sources=(
@@ -144,10 +144,32 @@ def test_inventory_classifies_corrupt_config_orphan_cross_tenant_and_failed_tupl
     assert {
         "CORRUPT_CONFIG_JSON",
         "CROSS_TENANT_TUPLE",
-        "ORPHAN_TUPLE",
+        "STALE_RESOURCE_TUPLE",
         "UNRESOLVED_FAILED_TUPLE",
     } <= difference_types
-    assert inventory.blocker_count == 4
+    assert inventory.blocker_count == 3
+    stale = next(item for item in inventory.items if item.difference_type == "STALE_RESOURCE_TUPLE")
+    assert stale.severity == "INFO"
+
+
+def test_inventory_accepts_evidence_reconciled_failed_tuple():
+    snapshot = SourceInventorySnapshot(
+        environment=_environment(),
+        failed_tuples=(
+            LegacyFailedTupleSource(
+                locator="failed_tuple:9",
+                status="dead",
+                tuple_key="user:11|owner|workflow:wf-1",
+                resolution="SOURCE_MODEL_REJECTED",
+                error_category="MODEL_VALIDATION_REJECTED",
+            ),
+        ),
+    )
+
+    inventory = build_source_inventory(snapshot)
+
+    assert inventory.blockers == ()
+    assert inventory.items[0].difference_type is None
 
 
 def test_inventory_rejects_invalid_owner_and_parent_facts_without_guessing():

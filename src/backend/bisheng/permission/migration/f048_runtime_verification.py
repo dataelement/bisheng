@@ -18,7 +18,6 @@ from bisheng.core.openfga.authorization_model_f048 import (
 )
 from bisheng.core.openfga.client import FGAClient
 from bisheng.core.openfga.discovery import normalize_authorization_model
-from bisheng.database.models.failed_tuple import FailedTuple
 from bisheng.permission.domain.models import (
     AuthorizationModelRelease,
     PermissionCatalogRelease,
@@ -166,7 +165,9 @@ class LiveMigrationEvidenceProvider:
                 for value in difference_types
             )
             + await self._invalid_owner_count(resource_items),
-            failed_tuple_count=await self._failed_tuple_count(),
+            failed_tuple_count=sum(
+                row.source_kind == "FAILED_TUPLE" and row.difference_type == "UNRESOLVED_FAILED_TUPLE" for row in items
+            ),
             legacy_tuple_count=self._legacy_tuple_count(actual_rows),
             legacy_config_count=await self._legacy_config_count(),
             preserved_tuple_checksum_matches=(preserved_expected <= actual_identities),
@@ -400,17 +401,6 @@ class LiveMigrationEvidenceProvider:
                     if count != 1:
                         invalid += 1
         return invalid
-
-    @staticmethod
-    async def _failed_tuple_count() -> int:
-        with bypass_tenant_filter():
-            async with get_async_db_session() as session:
-                statement = (
-                    select(func.count())
-                    .select_from(FailedTuple)
-                    .where(col(FailedTuple.status).in_(("pending", "dead", "failed", "retrying")))
-                )
-                return int((await session.execute(statement)).scalar_one())
 
     @staticmethod
     async def _legacy_config_count() -> int:

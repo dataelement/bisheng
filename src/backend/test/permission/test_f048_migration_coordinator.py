@@ -18,6 +18,7 @@ from bisheng.permission.migration.f048_coordinator import (
 )
 from bisheng.permission.migration.f048_source_inventory import (
     LegacyConfigSource,
+    LegacyFailedTupleSource,
     LegacyTupleSource,
     MigrationEnvironmentFacts,
     PermissionMigrationResourceDTO,
@@ -93,15 +94,18 @@ class FakeRunStore:
         self,
         *,
         phase: str = "CREATED",
+        status: str = "RUNNING",
         acquire: bool = True,
         frozen_snapshot: SourceInventorySnapshot | None = None,
     ):
         self.run = None
         self.initial_phase = phase
+        self.initial_status = status
         self.acquire = acquire
         self.frozen_snapshot = frozen_snapshot or _snapshot()
         self.items = []
         self.advances = []
+        self.source_resets = 0
 
     async def aget_run(self, run_id: int):
         assert run_id == 1
@@ -116,10 +120,10 @@ class FakeRunStore:
                 id=1,
                 environment_fingerprint=request.environment_fingerprint,
                 phase=self.initial_phase,
-                status="RUNNING",
+                status=self.initial_status,
                 store_id=request.store_id,
                 source_model_id=request.source_model_id,
-                target_model_id=("new-model" if self.initial_phase != "CREATED" else None),
+                target_model_id=(None if self.initial_phase in {"CREATED", "SOURCE_VALIDATING"} else "new-model"),
                 source_watermark=request.source_watermark,
                 version=1,
                 source_checksum=frozen_checksum,
@@ -172,6 +176,30 @@ class FakeRunStore:
         assert run_id == 1
         self.items.extend(items)
 
+    async def areset_blocked_source(
+        self,
+        *,
+        run_id,
+        expected_version,
+        source_watermark,
+    ):
+        assert run_id == 1
+        assert expected_version == self.run.version
+        assert self.run.phase == "SOURCE_VALIDATING"
+        assert self.run.status == "BLOCKED"
+        assert self.run.target_model_id is None
+        self.items.clear()
+        self.source_resets += 1
+        self.run = replace(
+            self.run,
+            status="RUNNING",
+            checkpoint=None,
+            source_watermark=source_watermark,
+            source_checksum=None,
+            version=self.run.version + 1,
+        )
+        return self.run
+
     async def aadvance(
         self,
         *,
@@ -211,6 +239,7 @@ class FakeTargetWriter:
     def __init__(self):
         self.events = []
         self.written_tuples = []
+        self.deleted_tuples = []
 
     async def aapply_control_plane(self, **kwargs):
         self.events.append(("control", kwargs["run_id"]))
@@ -243,6 +272,7 @@ class FakeTargetWriter:
 
     async def adelete_legacy_tuples(self, *, store_id, tuples):
         assert len(tuples) <= 90
+        self.deleted_tuples.extend(tuples)
         self.events.append(("delete", len(tuples), store_id))
 
 
@@ -305,6 +335,112 @@ async def test_formal_migration_writes_department_child_mirror() -> None:
         "relation": "child",
         "object": "department:10",
     } in writer.written_tuples
+
+
+async def test_formal_migration_retires_tuple_for_deleted_resource() -> None:
+    base = _snapshot()
+    stale_tuple = LegacyTupleSource(
+        tenant_id=None,
+        user="user:12",
+        relation="viewer",
+        object="workflow:deleted",
+    )
+    snapshot = replace(base, tuples=(*base.tuples, stale_tuple))
+    writer = FakeTargetWriter()
+    coordinator = F048MigrationCoordinator(
+        source_provider=FakeSourceProvider(snapshot),
+        run_store=FakeRunStore(frozen_snapshot=snapshot),
+        model_publisher=FakeModelPublisher(),
+        target_writer=writer,
+    )
+
+    await coordinator.migrate(
+        expected_store_id="store-live",
+        lock_token="operator-1",
+    )
+
+    assert {
+        "user": stale_tuple.user,
+        "relation": stale_tuple.relation,
+        "object": stale_tuple.object,
+    } in writer.deleted_tuples
+    assert all(row["object"] != stale_tuple.object for row in writer.written_tuples)
+
+
+async def test_formal_migration_applies_canonical_identity_corrections() -> None:
+    base = _snapshot()
+    obsolete = LegacyTupleSource(
+        tenant_id=None,
+        user="user:20",
+        relation="member",
+        object="department:8",
+    )
+    snapshot = replace(
+        base,
+        tuples=(*base.tuples, obsolete),
+        failed_tuples=(
+            LegacyFailedTupleSource(
+                locator="failed_tuple:1",
+                status="dead",
+                tuple_key="user:19|member|department:7",
+                resolution="CANONICAL_IDENTITY_STATE",
+                action="write",
+                canonical_state=True,
+            ),
+            LegacyFailedTupleSource(
+                locator="failed_tuple:2",
+                status="dead",
+                tuple_key="user:20|member|department:8",
+                resolution="CANONICAL_IDENTITY_STATE",
+                action="delete",
+                canonical_state=False,
+            ),
+        ),
+    )
+    writer = FakeTargetWriter()
+    coordinator = F048MigrationCoordinator(
+        source_provider=FakeSourceProvider(snapshot),
+        run_store=FakeRunStore(frozen_snapshot=snapshot),
+        model_publisher=FakeModelPublisher(),
+        target_writer=writer,
+    )
+
+    await coordinator.migrate(
+        expected_store_id="store-live",
+        lock_token="operator-1",
+    )
+
+    assert {
+        "user": "user:19",
+        "relation": "member",
+        "object": "department:7",
+    } in writer.written_tuples
+    assert {
+        "user": obsolete.user,
+        "relation": obsolete.relation,
+        "object": obsolete.object,
+    } in writer.deleted_tuples
+
+
+async def test_blocked_pre_target_run_refreshes_source_before_retry() -> None:
+    store = FakeRunStore(
+        phase="SOURCE_VALIDATING",
+        status="BLOCKED",
+    )
+    coordinator = F048MigrationCoordinator(
+        source_provider=FakeSourceProvider(_snapshot()),
+        run_store=store,
+        model_publisher=FakeModelPublisher(),
+        target_writer=FakeTargetWriter(),
+    )
+
+    result = await coordinator.migrate(
+        expected_store_id="store-live",
+        lock_token="operator-retry",
+    )
+
+    assert result.phase == "VERIFYING"
+    assert store.source_resets == 1
 
 
 async def test_source_blocker_stops_before_model_or_target_writes():

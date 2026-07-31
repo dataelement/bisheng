@@ -1381,7 +1381,8 @@ direct member、department member 和无权限用户；文档/日志不保存固
 | 损坏/重复/冲突 Config | migration blocker item | 保留 config key、row version 与字段 locator；不采用默认值/空数组 |
 | include_children root binding + child tuples | 一个 root assignee + `department#subtree_member` | child tuple 只核对；新模型新增对称 child mirror |
 | current business owner/creator field + owner tuples | 一个 protected source + 0..N ordinary owner sources | 按 §3 决策9；多 owner 本身不阻断 |
-| legacy `failed_tuple` pending/dead | migration blocker/reconciliation item | 先核对旧执行面的最终 tuple；未解决前不建立新映射 |
+| legacy `failed_tuple` pending/dead | evidence-based reconciliation item | 依次核对 Store 最终状态、资源是否仍存在、旧模型明确拒绝、资源新事实重建结果；tenant/department member 由对应业务域 adapter 给出 canonical state 并进入目标 tuple 写/删计划；只有无法取得上述证据的记录才阻断 |
+| tuple 指向已删除的 canonical resource | stale-resource audit item | 不创建虚构资源或 Grant；目标 tuple 校验通过后，与其他 legacy tuple 一起删除 |
 | folder/file 本级 ordinary | CUSTOM + 有效来源快照 | canonical parent tuple 仍保留，但普通权限不读取它 |
 | folder/file 无本级 ordinary | INHERIT + canonical parent | parent 缺失/跨 tenant/循环则阻断 |
 | shared_with / public / system identity | 新 system relations | 不进普通 Grant |
@@ -1503,8 +1504,11 @@ D5 必须同时满足：
   client、heartbeat 或 readiness 中，`dual_model_mode=false`、`legacy_model_id` 为空；
 - blocker=0，人工项全部有 approver/time/comment；
 - migration item 中持久化的 Config source snapshot 可解析且 model/binding 引用唯一；
-- legacy `failed_tuple` pending/dead=0，或每条已有签署且不产生遗漏授权的处置结果；
-- tenant/resource/subject/model orphan=0，跨 tenant=0，canonical parent 缺失/循环=0；
+- legacy `failed_tuple` pending/dead 可以保留作历史审计，但每条必须已有确定性处置结果；
+  Store 状态一致、旧模型明确拒绝、资源已删除或由当前资源事实重建可自动签署；
+  tenant/department member 必须由业务域 canonical adapter 决定目标写/删，其他记录继续阻断；
+- tenant/subject/model orphan=0，指向已删除 canonical resource 的 stale tuple 已审计并删除，
+  跨 tenant=0，canonical parent 缺失/循环=0；
 - 每个 user-owned 首批资源按 §3 决策9/本节 adapter 规则恰好有一个 protected owner，
   并允许 0..N 个 ordinary owner；knowledge_space/channel 的 CREATOR/`user_id` 差异已
   preservation-first 映射或人工批准；每个 system-owned exception 命中显式 allowlist；

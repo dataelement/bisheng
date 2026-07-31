@@ -19,6 +19,7 @@ from bisheng.core.openfga.runtime_heartbeat import list_runtime_heartbeats
 from bisheng.database.models.failed_tuple import FailedTuple
 from bisheng.permission.domain.models import PermissionMigrationRun
 from bisheng.permission.migration.f048_source_inventory import (
+    MIGRATED_RESOURCE_TYPES,
     LegacyConfigSource,
     LegacyFailedTupleSource,
     LegacyTupleSource,
@@ -50,6 +51,15 @@ class DashboardMigrationMaintenancePort(Protocol):
     async def abackfill_custom_dashboard_tenants(self) -> int: ...
 
 
+class LegacyIdentityStatePort(Protocol):
+    """Resolve canonical business state for legacy identity tuples."""
+
+    async def aresolve_expected_states(
+        self,
+        tuple_identities: tuple[tuple[str, str, str], ...],
+    ) -> dict[tuple[str, str, str], bool]: ...
+
+
 class LiveMigrationSourceProvider:
     """Acquire frozen business DTOs and Store facts without domain leakage."""
 
@@ -61,12 +71,14 @@ class LiveMigrationSourceProvider:
         source_model_id: str,
         sources: tuple[PermissionMigrationSourcePort, ...],
         dashboard_repository: DashboardMigrationMaintenancePort,
+        identity_state_source: LegacyIdentityStatePort | None = None,
     ) -> None:
         self._source_client = source_client
         self._actual_store_id = actual_store_id
         self._source_model_id = source_model_id
         self._dashboard_repository = dashboard_repository
         self._sources = sources
+        self._identity_state_source = identity_state_source
 
     async def aload_snapshot(
         self,
@@ -167,7 +179,10 @@ class LiveMigrationSourceProvider:
 
         configs = await self._load_configs()
         tuples = await self._load_tuples(tuple(resources))
-        failed_tuples = await self._load_failed_tuples()
+        failed_tuples = await self._load_failed_tuples(
+            resources=tuple(resources),
+            tuples=tuples,
+        )
         return {
             "configs": configs,
             "resources": tuple(resources),
@@ -215,20 +230,94 @@ class LiveMigrationSourceProvider:
         return str(value) if value else None
 
     @staticmethod
-    async def _load_failed_tuples() -> tuple[LegacyFailedTupleSource, ...]:
+    def _failed_tuple_error_category(error_message: str | None) -> str | None:
+        normalized = (error_message or "").casefold()
+        if "validation_error" in normalized and "invalid tuple" in normalized:
+            return "MODEL_VALIDATION_REJECTED"
+        if "deadline_exceeded" in normalized or "timed out" in normalized:
+            return "TRANSIENT_TRANSPORT_FAILURE"
+        return "OTHER" if normalized else None
+
+    @staticmethod
+    def _failed_tuple_resolution(
+        *,
+        status: str,
+        action: str,
+        tuple_identity: tuple[str, str, str],
+        error_category: str | None,
+        canonical_state: bool | None,
+        resource_keys: set[str],
+        store_tuples: set[tuple[str, str, str]],
+    ) -> str | None:
+        if status.casefold() == "succeeded":
+            return "SUCCEEDED"
+
+        normalized_action = action.casefold()
+        store_state_matches = (normalized_action == "write" and tuple_identity in store_tuples) or (
+            normalized_action == "delete" and tuple_identity not in store_tuples
+        )
+        if store_state_matches:
+            return "STORE_STATE_MATCHES"
+
+        object_key = tuple_identity[2]
+        object_type, separator, _ = object_key.partition(":")
+        if separator and object_type in MIGRATED_RESOURCE_TYPES and object_key not in resource_keys:
+            return "RESOURCE_ABSENT"
+        if canonical_state is not None:
+            return "CANONICAL_IDENTITY_STATE"
+        if error_category == "MODEL_VALIDATION_REJECTED":
+            return "SOURCE_MODEL_REJECTED"
+        if separator and object_type in MIGRATED_RESOURCE_TYPES and object_key in resource_keys:
+            return "RESOURCE_STATE_REBUILT"
+        return None
+
+    async def _canonical_identity_states(
+        self,
+        rows: list[FailedTuple],
+    ) -> dict[tuple[str, str, str], bool]:
+        if self._identity_state_source is None:
+            return {}
+        identities = tuple(sorted({(row.fga_user, row.relation, row.object) for row in rows}))
+        return await self._identity_state_source.aresolve_expected_states(identities)
+
+    async def _load_failed_tuples(
+        self,
+        *,
+        resources: tuple[PermissionMigrationResourceDTO, ...],
+        tuples: tuple[LegacyTupleSource, ...],
+    ) -> tuple[LegacyFailedTupleSource, ...]:
         with bypass_tenant_filter():
             async with get_async_db_session() as session:
                 statement = select(FailedTuple).order_by(FailedTuple.id)
                 rows = list((await session.execute(statement)).scalars().all())
-        return tuple(
-            LegacyFailedTupleSource(
-                locator=f"failed_tuple:{row.id}",
-                status=row.status,
-                tuple_key="|".join((row.fga_user, row.relation, row.object)),
-                resolution=("succeeded" if row.status.casefold() == "succeeded" else None),
+        canonical_states = await self._canonical_identity_states(rows)
+        resource_keys = {resource.key for resource in resources}
+        store_tuples = {(row.user, row.relation, row.object) for row in tuples}
+        result: list[LegacyFailedTupleSource] = []
+        for row in rows:
+            tuple_identity = (row.fga_user, row.relation, row.object)
+            error_category = self._failed_tuple_error_category(row.error_message)
+            canonical_state = canonical_states.get(tuple_identity)
+            result.append(
+                LegacyFailedTupleSource(
+                    locator=f"failed_tuple:{row.id}",
+                    status=row.status,
+                    tuple_key="|".join(tuple_identity),
+                    resolution=self._failed_tuple_resolution(
+                        status=row.status,
+                        action=row.action,
+                        tuple_identity=tuple_identity,
+                        error_category=error_category,
+                        canonical_state=canonical_state,
+                        resource_keys=resource_keys,
+                        store_tuples=store_tuples,
+                    ),
+                    action=row.action,
+                    error_category=error_category,
+                    canonical_state=canonical_state,
+                )
             )
-            for row in rows
-        )
+        return tuple(result)
 
     @staticmethod
     def _watermark(
