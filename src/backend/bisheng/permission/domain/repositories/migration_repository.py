@@ -165,6 +165,7 @@ class MigrationRepository(
         source_checksum: str | None,
         target_checksum: str | None,
         report_checksum: str | None = None,
+        blocker_count: int | None = None,
     ) -> bool:
         values: dict[str, object] = {
             "phase": phase,
@@ -177,6 +178,8 @@ class MigrationRepository(
         }
         if report_checksum is not None:
             values["report_checksum"] = report_checksum
+        if blocker_count is not None:
+            values["blocker_count"] = blocker_count
         async with self._session(write=True) as session:
             statement = (
                 update(PermissionMigrationRun)
@@ -356,7 +359,7 @@ class MigrationRepository(
                     "difference_type": item.difference_type,
                 }
                 for item in items
-                if item.source_kind != "TARGET_TUPLE"
+                if item.source_kind in {"CONFIG", "RESOURCE", "TUPLE", "FAILED_TUPLE"}
             ],
         }
         canonical = json.dumps(

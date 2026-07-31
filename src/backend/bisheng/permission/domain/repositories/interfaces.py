@@ -298,6 +298,7 @@ class PermissionMigrationRepositoryPort(PermissionRepositoryTransactionPort):
         source_checksum: str | None,
         target_checksum: str | None,
         report_checksum: str | None = None,
+        blocker_count: int | None = None,
     ) -> bool:
         """Advance the formal run phase/status through one version CAS."""
 

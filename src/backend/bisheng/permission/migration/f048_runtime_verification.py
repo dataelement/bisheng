@@ -113,7 +113,11 @@ class LiveMigrationEvidenceProvider:
         if source_checksum is None:
             source_checksum = ""
 
-        resource_items = [row for row in items if row.source_kind == "RESOURCE"]
+        resource_items = [
+            row
+            for row in items
+            if row.source_kind == "RESOURCE" and json.loads(row.message or "{}").get("migratable", True)
+        ]
         semantic_results = await self._semantic_results(
             run=run,
             resources=resource_items,

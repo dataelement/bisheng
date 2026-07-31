@@ -163,8 +163,6 @@ def _custom_model(
         raise ValueError(f"custom model {model_key} same-level policy must be boolean")
 
     selected = tuple(selection.action_codes)
-    if not selected:
-        raise ValueError(f"custom model {model_key} action selection is empty")
     if len(set(selected)) != len(selected):
         raise ValueError(f"custom model {model_key} has duplicate actions")
 
@@ -200,7 +198,7 @@ def _custom_model(
         raise ValueError(f"custom model {model_key} cannot allow same level without manage_permission")
 
     blockers: list[str] = []
-    if model.active:
+    if model.active and selected:
         if not model.action_codes:
             blockers.append(f"active custom model {model_key} has no effective actions")
         if unavailable:

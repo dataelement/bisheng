@@ -127,18 +127,23 @@ def test_custom_level_uses_only_explicit_effective_actions() -> None:
     assert "download" not in model.action_codes
 
 
-def test_empty_unknown_and_unavailable_custom_models_fail_closed() -> None:
-    with pytest.raises(ValueError, match="empty"):
-        derive_permission_models(
-            _action_release(),
-            custom_models=(
-                CustomModelSelection(
-                    model_key="empty",
-                    name="空模型",
-                    action_codes=(),
-                ),
+def test_visibility_only_unknown_and_unavailable_custom_models_are_distinguished() -> None:
+    release = derive_permission_models(
+        _action_release(),
+        custom_models=(
+            CustomModelSelection(
+                model_key="visibility-only",
+                name="仅可见",
+                action_codes=(),
             ),
-        )
+        ),
+    )
+    visibility_only = _by_key(release)["visibility-only"]
+    assert visibility_only.active is True
+    assert visibility_only.action_codes == ()
+    assert visibility_only.derived_level is None
+    assert release.blockers == ()
+
     with pytest.raises(ValueError, match="unknown"):
         derive_permission_models(
             _action_release(),

@@ -502,7 +502,7 @@ OpenFGA Authorization Model 不可原地修改；每次发布都会产生新的 
 - **AC-121** — WHEN 旧主体为 `department:{id}#member`、`user_group:{id}#member` 或 `user_group:{id}#admin`, THE SYSTEM SHALL 原样保留主体类型与 userset 语义，不展开为用户。
 - **AC-122** — WHEN 旧部门 binding 标记 `include_children=true`, THE SYSTEM SHALL 以 binding 中的根部门和范围作为唯一业务授权来源；历史上为子部门展开出的多个 tuple 不得被误迁为多个独立授权。
 - **AC-123** — WHEN 旧 tuple 找不到资源、主体或合法租户，或者一个 tuple 匹配多个互相冲突的 binding, THE SYSTEM SHALL 将其列为阻断项，不得猜测目标模型。
-- **AC-124** — WHEN binding 存在但对应直接 tuple 不存在, THE SYSTEM SHALL 把它标记为孤儿 binding，不创建有效 Grant。
+- **AC-124** — WHEN binding 存在但对应直接 tuple 不存在, THE SYSTEM SHALL 把它标记为孤儿 binding 审计项，不创建有效 Grant，也不得仅凭 Config 恢复已不存在的授权；该项本身不阻断迁移。
 - **AC-125** — WHEN 迁移 `parent` 关系, THE SYSTEM SHALL 根据目标 ResourcePermissionMode 决定其是否参与权限继承，不得复制出第二套 `permission_parent`。
 - **AC-126** — WHEN 迁移 `shared_with`、系统管理员、租户成员、部门成员或用户组成员关系, THE SYSTEM SHALL 保持其原系统用途，不得因为其能产生可见性而把它伪装成普通 PermissionGrant。
 
@@ -521,7 +521,7 @@ OpenFGA Authorization Model 不可原地修改；每次发布都会产生新的 
 | 系统模型被编辑且 `permissions_explicit=true`，映射后与新标准模型完全一致 | 仍映射到对应新标准模型；可无损表达的旧 `manage_*` 范围迁入该标准模型的同级策略 |
 | 系统模型被编辑且映射后与新标准模型不一致 | 生成带历史来源标记的自定义模型快照；仅原 binding 指向该快照，不能把新标准模型改成旧动作集合 |
 | 普通自定义模型 | 保留稳定 ID 与名称；旧动作逐项映射、去重，等级由最高新动作等级重新计算 |
-| 自定义模型仅剩 `view_*` | 不自动映射；进入人工选择目标模型的切换阻断清单 |
+| 自定义模型仅剩 `view_*` | 保留为 active 的“仅可见”自定义模型；Grant 仍产生 visible，但不授予 download/use/edit 等具体动作 |
 | 自定义模型包含 `manage_*` | 映射为 `manage_permission`；根据旧目标档位与新模型等级推导同级策略，不能无损表达时人工确认 |
 
 旧 `relation` 与 `grant_tier` 只作为迁移线索和审计信息，不能继续充当新模型等级或可授权范围；
@@ -533,9 +533,9 @@ OpenFGA Authorization Model 不可原地修改；每次发布都会产生新的 
 - **AC-130** — WHEN 旧系统模型的显式动作经映射后与新标准模型完全一致, THE SYSTEM SHALL 直接使用新标准模型，不创建无意义的历史快照，并按 AC-134～AC-135 迁移或阻断其同级授权策略。
 - **AC-131** — WHEN 迁移普通自定义模型, THE SYSTEM SHALL 保留其稳定 ID、名称和配置范围，把每个旧 permission ID 映射到零个或一个统一动作并去重，再由最高动作等级派生新等级。
 - **AC-132** — WHEN 旧自定义模型没有 active 字段且其数据合法, THE SYSTEM SHALL 以 active 状态导入；已被明确停用、删除或判定非法的模型不得因缺省值重新生效。
-- **AC-133** — WHEN 旧自定义模型引用未知 permission ID、不适用于任何目标资源或映射后为空, THE SYSTEM SHALL 阻断自动生效并进入人工清单。
+- **AC-133** — WHEN 旧自定义模型引用未知 permission ID 或选择的具体动作在目标 Catalog 不可用, THE SYSTEM SHALL 阻断自动生效。WHEN 模型仅含已退役的 `view_*` 且无未知动作, THE SYSTEM SHALL 保留为 active 的仅可见模型，不得用 Viewer 标准模型补入 download/use 等动作。
 - **AC-134** — WHEN 旧 `manage_*` 目标集合恰好对应“低于新模型等级的全部模型”或“同级及以下全部模型”, THE SYSTEM SHALL 分别迁为“禁止同级”或“允许同级”。
-- **AC-135** — WHEN 旧 `manage_*` 目标集合包含更高级模型、缺少中间低级模型或不能形成连续等级边界, THE SYSTEM SHALL 禁止自动推导 `manage_permission` 策略并要求人工确认，不能取更宽权限近似。
+- **AC-135** — WHEN 旧 `manage_*` 目标集合缺少新模型等级以内的中间低级模型或不能形成连续等级边界, THE SYSTEM SHALL 禁止自动推导 `manage_permission` 策略并要求人工确认，不能取更宽权限近似。WHEN 集合只额外包含高于重新计算后模型等级的目标档位, THE SYSTEM SHALL 删除该不可达高档范围并记录收窄审计，不能因此扩大模型动作或授权边界。
 - **AC-136** — WHEN 一个旧自定义模型被多个资源和主体引用, THE SYSTEM SHALL 只创建一个新 PermissionModel，并让所有目标 Grant 引用它；不得按资源或主体复制模型定义。
 
 #### 4.8.4 Config 大 JSON → 规范化关系表
@@ -563,7 +563,7 @@ MySQL/DM8 关系表是权限配置、模型定义和绑定关系的控制面真�
 - **AC-138** — THE SYSTEM SHALL 把 `permission_relation_model_bindings_v1` 中每个合法 binding 迁为对应 `permission_grant` 与 `permission_grant_assignee`，多个相同“资源 + 模型”binding 共享一个 Grant。
 - **AC-139** — THE SYSTEM SHALL 为动作适用资源范围建立规范化关联，不得在 `permission_action` 或 `permission_model` 中使用大 JSON 保存资源类型数组或动作数组。
 - **AC-140** — THE SYSTEM SHALL 为 Grant assignee 保留主体类型、主体 ID、userset relation、include_children、来源和受保护属性；旧 binding 的拼接 `key` 仅用于迁移核对，不作为新系统主键或业务真相。
-- **AC-141** — WHEN 从不带 tenant_id 的旧 Config binding 迁移, THE SYSTEM SHALL 从 canonical 业务资源解析 tenant_id 并验证主体范围；无法唯一解析、跨租户或资源不存在的 binding 必须阻断。
+- **AC-141** — WHEN 从不带 tenant_id 的旧 Config binding 迁移, THE SYSTEM SHALL 从 canonical 业务资源解析 tenant_id 并验证主体范围；有对应直接 tuple 但无法唯一解析或跨租户时必须阻断。binding 对应直接 tuple 已不存在时按 AC-124 只记审计项，不得把 Config 当作当前授权事实。
 - **AC-142** — WHEN `permission_relation_models_v1` 或 `permission_relation_model_bindings_v1` JSON 无法解析、字段缺失、ID 重复、引用不存在模型或 binding relation 与模型 relation 冲突, THE SYSTEM SHALL 报告原始记录定位并阻断相关数据迁移，不得像旧运行时一样静默回退默认值或空数组。
 - **AC-143** — WHEN SQL 控制面变更需要发布到 OpenFGA, THE SYSTEM SHALL 保留可审计的发布状态并确保失败可重试、可对账；SQL 记录存在但 OpenFGA 未生效时不得报告权限已生效。
 - **AC-144** — WHEN 新系统完成启服, THE SYSTEM SHALL 停止读取和写入

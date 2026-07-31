@@ -590,6 +590,7 @@ def map_legacy_tuples(
                 tuple_key=f"binding:{binding.binding_key}",
                 difference_type="ORPHAN_BINDING",
                 message="legacy binding has no matching direct root tuple",
+                severity="INFO",
             )
         )
 

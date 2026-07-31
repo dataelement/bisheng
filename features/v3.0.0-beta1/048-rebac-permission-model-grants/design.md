@@ -1376,7 +1376,9 @@ direct member、department member 和无权限用户；文档/日志不保存固
 | 直接 owner/manager/editor/viewer tuple，无 binding | standard model Grant assignee | 只迁直接 tuple，不迁 computed/parent 蕴含 |
 | tuple 唯一匹配 binding | binding 映射后的 model Grant assignee | 不额外创建 standard Grant |
 | 编辑过的旧 system model | `legacy-system-<relation>-<hash>` historical custom | 不污染新标准模型 |
-| Config custom model | custom model snapshot | 去 `view_*` 后为空则 blocker |
+| Config custom model | custom model snapshot | 仅含 `view_*` 时保留 active visibility-only 模型，action 为空但 Grant 仍可见；不得映射到带 level-1 动作的 Viewer 标准模型 |
+| legacy `manage_*` tier | `manage_permission` + level boundary | `viewer/user/editor` 按旧 usage tier 展开为 level 1～2，manager/owner/relation 按旧蕴含边界展开；高于重新计算后模型等级的部分只收窄并记录 `MANAGE_SCOPE_CLAMPED_TO_MODEL_LEVEL`，缺少低级连续边界仍阻断 |
+| binding 无对应直接 tuple | orphan-binding audit item | Config 只作迁移线索，不恢复当前 Store 已不存在的授权，不创建 Grant且不阻断 |
 | Config custom 缺少 active | active custom snapshot | 仅在 JSON/引用/动作全部合法时采用 active；显式 inactive/delete 不复活 |
 | 损坏/重复/冲突 Config | migration blocker item | 保留 config key、row version 与字段 locator；不采用默认值/空数组 |
 | include_children root binding + child tuples | 一个 root assignee + `department#subtree_member` | child tuple 只核对；新模型新增对称 child mirror |
@@ -1398,7 +1400,7 @@ migration coordinator 只接收规范化事实，不 import 这些业务 ORM/Rep
 |---|---|---|
 | knowledge_space | `Knowledge.user_id` + active `SpaceChannelMember.CREATOR` | 唯一 CREATOR→protected；若 `user_id` 不同则作为 ordinary owner 保留；缺 CREATOR 可按有效 `user_id` 修复，多个 CREATOR 阻断 |
 | knowledge_library | `Knowledge.user_id/type` | 当前 `user_id`→protected；其他 direct owner→ordinary |
-| folder / knowledge_file | `KnowledgeFile.user_id/file_type/path` + parent tenant | 当前 `user_id`→protected；其他 direct owner→ordinary |
+| folder / knowledge_file | `KnowledgeFile.user_id/file_type/path` + 所属 `Knowledge.tenant_id` | 当前 `user_id`→protected；其他 direct owner→ordinary；tenant 以根知识库/空间为 canonical，修正历史 child tenant 漂移；父目录已删除的 FAILED 文件由 knowledge adapter 标为 `STALE_FAILED_RESOURCE`，只审计并退休遗留 tuple，不创建资源权限图 |
 | workflow / assistant | `Flow.user_id` / `Assistant.user_id` | 当前 `user_id`→protected；其他 direct owner→ordinary；builtin 走 system allowlist |
 | tool | `GptsTools.user_id/is_preset` | 普通工具当前 `user_id`→protected；其他 owner→ordinary；preset 可为 system-owned |
 | channel | `Channel.user_id` + active channel CREATOR membership | 唯一 CREATOR→protected；若 `user_id` 不同则作为 ordinary owner 保留；缺 CREATOR 可按有效 `user_id` 修复，多个 CREATOR 阻断 |
@@ -1484,6 +1486,8 @@ CSV/NDJSON + checksum，artifact 只用于审计，不成为运行时真相。
 - 同一 Store 中 target tuple 与待删除 legacy tuple 的 fingerprint 集及实际核对结果；
 - created/reused/legacy-deleted/skipped/deduplicated/blocked 数；
 - checkpoint 的最后 source locator、累计 checksum 与 lease version。
+- model/tuple/mode mapper 的 INFO/BLOCKER 差异明细；`mapping-blocked` 必须先持久化具体 source key、
+  message、severity 与 difference type，并同步 run.blocker_count，不能只在 CLI 输出聚合错误码。
 
 删除旧 tuple 前，migration item 必须先持久化完整 source snapshot 和目标 checksum。
 进程在 SQL commit、目标 tuple Write 或 legacy delete 后崩溃时，resume 读取 SQL 与同一
@@ -1507,7 +1511,8 @@ D5 必须同时满足：
 - legacy `failed_tuple` pending/dead 可以保留作历史审计，但每条必须已有确定性处置结果；
   Store 状态一致、旧模型明确拒绝、资源已删除或由当前资源事实重建可自动签署；
   tenant/department member 必须由业务域 canonical adapter 决定目标写/删，其他记录继续阻断；
-- tenant/subject/model orphan=0，指向已删除 canonical resource 的 stale tuple 已审计并删除，
+- tenant/subject/model orphan=0；无直接 tuple 的 stale Config binding 已审计且未创建 Grant；
+  指向已删除或业务 adapter 判定不可迁移资源的 stale tuple 已审计并删除，
   跨 tenant=0，canonical parent 缺失/循环=0；
 - 每个 user-owned 首批资源按 §3 决策9/本节 adapter 规则恰好有一个 protected owner，
   并允许 0..N 个 ordinary owner；knowledge_space/channel 的 CREATOR/`user_id` 差异已

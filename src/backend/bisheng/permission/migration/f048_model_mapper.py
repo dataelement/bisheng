@@ -38,6 +38,14 @@ STANDARD_RELATION_LEVELS = {
     "manager": 3,
     "owner": 4,
 }
+LEGACY_MANAGE_TIER_LEVELS = {
+    "viewer": frozenset({1, 2}),
+    "user": frozenset({1, 2}),
+    "editor": frozenset({1, 2}),
+    "manager": frozenset({1, 2, 3}),
+    "owner": frozenset({1, 2, 3, 4}),
+    "relation": frozenset({1, 2, 3, 4}),
+}
 _MODEL_KEY_PATTERN = re.compile(r"[^a-z0-9_-]+")
 
 
@@ -152,33 +160,36 @@ def _stable_model_key(model: LegacyPermissionModel) -> str:
 
 
 def _manage_target_levels(model: LegacyPermissionModel) -> set[int]:
-    relations = set(model.grantable_relations)
-    if not relations:
-        for permission_id in model.permissions:
-            normalized = permission_id.strip().casefold()
-            if not normalized.startswith("manage_"):
-                continue
-            suffix = normalized.rsplit("_", 1)[-1]
-            if suffix in STANDARD_RELATION_LEVELS:
-                relations.add(suffix)
-    try:
-        return {STANDARD_RELATION_LEVELS[row] for row in relations}
-    except KeyError as exc:
-        raise ValueError(f"unknown grantable relation: {exc.args[0]}") from exc
+    if model.grantable_relations:
+        try:
+            return {STANDARD_RELATION_LEVELS[row] for row in model.grantable_relations}
+        except KeyError as exc:
+            raise ValueError(f"unknown grantable relation: {exc.args[0]}") from exc
+
+    levels: set[int] = set()
+    for permission_id in model.permissions:
+        normalized = permission_id.strip().casefold()
+        if not normalized.startswith("manage_"):
+            continue
+        suffix = normalized.rsplit("_", 1)[-1]
+        levels.update(LEGACY_MANAGE_TIER_LEVELS.get(suffix, ()))
+    return levels
 
 
 def _infer_same_level(
     model: LegacyPermissionModel,
     *,
     derived_level: int,
-) -> bool:
-    target_levels = _manage_target_levels(model)
+) -> tuple[bool, bool]:
+    source_levels = _manage_target_levels(model)
+    target_levels = {level for level in source_levels if level <= derived_level}
+    clamped = target_levels != source_levels
     lower = set(range(1, derived_level))
     lower_and_same = set(range(1, derived_level + 1))
     if target_levels == lower:
-        return False
+        return False, clamped
     if target_levels == lower_and_same:
-        return True
+        return True, clamped
     raise ValueError("NON_CONTIGUOUS_MANAGE_BOUNDARY")
 
 
@@ -239,7 +250,11 @@ def map_legacy_models(
                 )
             )
             continue
-        if not action_codes:
+        if not action_codes and not any(
+            permission_id.strip().casefold().startswith("view_")
+            or permission_id.strip().casefold() == "accesstype.dashboard"
+            for permission_id in model.permissions
+        ):
             differences.append(
                 ModelMappingDifference(
                     source_key=model.source_key,
@@ -248,15 +263,29 @@ def map_legacy_models(
                 )
             )
             continue
+        if not action_codes:
+            differences.append(
+                ModelMappingDifference(
+                    source_key=model.source_key,
+                    difference_type="VISIBILITY_ONLY_MODEL_PRESERVED",
+                    message="legacy view-only model is preserved without business actions",
+                    severity="INFO",
+                )
+            )
         if model.is_system and relation in STANDARD_RELATION_LEVELS and action_codes == standard_actions[relation]:
             standard_references[model.source_key] = relation
             continue
 
-        derived_level = max(INITIAL_ACTION_LEVELS[code] for code in action_codes)
+        derived_level = max(
+            (INITIAL_ACTION_LEVELS[code] for code in action_codes),
+            default=None,
+        )
         allow_same_level = False
         if "manage_permission" in action_codes:
+            if derived_level is None:
+                raise AssertionError("manage_permission must have a configured level")
             try:
-                allow_same_level = _infer_same_level(
+                allow_same_level, clamped = _infer_same_level(
                     model,
                     derived_level=derived_level,
                 )
@@ -269,6 +298,15 @@ def map_legacy_models(
                     )
                 )
                 continue
+            if clamped:
+                differences.append(
+                    ModelMappingDifference(
+                        source_key=model.source_key,
+                        difference_type="MANAGE_SCOPE_CLAMPED_TO_MODEL_LEVEL",
+                        message="legacy higher-tier grant scope was removed at the derived model level",
+                        severity="INFO",
+                    )
+                )
         model_key = _stable_model_key(model)
         candidates.append(
             (
@@ -320,7 +358,7 @@ def map_legacy_models(
             key=lambda row: (row.source_key, row.difference_type),
         )
     )
-    blockers = tuple(row.difference_type for row in ordered_differences)
+    blockers = tuple(row.difference_type for row in ordered_differences if row.severity == "BLOCKER")
     return LegacyModelMappingResult(
         action_release=action_release,
         standard_references=standard_references,

@@ -409,3 +409,32 @@ async def test_migration_environment_lease_item_and_checkpoint_resume(
         *(row.id for row in batch_items),
     ]
     assert cursor is None
+
+    source_checksum = await repository.aget_run_checksum(run.id)
+    await repository.aupsert_item(
+        PermissionMigrationItem(
+            run_id=run.id,
+            tenant_id=None,
+            source_kind="MODEL_MAPPING",
+            source_locator="mapping:model_mapping:visibility-only",
+            source_checksum="6" * 64,
+            status="READY",
+            severity="INFO",
+            difference_type="VISIBILITY_ONLY_MODEL_PRESERVED",
+        )
+    )
+    assert await repository.aget_run_checksum(run.id) == source_checksum
+
+    assert await repository.aupdate_run_state_cas(
+        run_id=run.id,
+        expected_version=3,
+        phase="SOURCE_VALIDATING",
+        status="BLOCKED",
+        checkpoint="mapping-blocked",
+        source_checksum=source_checksum,
+        target_checksum=None,
+        blocker_count=7,
+    )
+    updated_run = await repository.aget_run(run.id)
+    assert updated_run is not None
+    assert updated_run.blocker_count == 7
