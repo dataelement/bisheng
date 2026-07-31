@@ -16,6 +16,7 @@ from typing import Protocol
 from loguru import logger
 
 from bisheng.common.errcode.linsight import (
+    SkillBundleTooLargeError,
     SkillFileTooLargeError,
     SkillNameDuplicateError,
     SkillNotFoundError,
@@ -41,6 +42,7 @@ from bisheng.linsight.domain.services.skill_store import (
     MAX_BUNDLE_SIZE,
     MAX_DESCRIPTION_LEN,
     MAX_DISPLAY_NAME_LEN,
+    MAX_UNPACKED_SIZE,
     SKILL_MD,
     SkillStore,
     compose_skill_md,
@@ -232,8 +234,8 @@ class SkillService:
                 files = unpack_zip_bytes(data)
             except ValueError as exc:
                 raise SkillValidationError(msg=str(exc))
-            if sum(len(c) for c in files.values()) > MAX_BUNDLE_SIZE:
-                raise SkillFileTooLargeError()
+            if sum(len(c) for c in files.values()) > MAX_UNPACKED_SIZE:
+                raise SkillBundleTooLargeError()
         elif lower.endswith(".md"):
             files = {SKILL_MD: data}
         else:
