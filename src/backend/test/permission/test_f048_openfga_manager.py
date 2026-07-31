@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -41,6 +42,21 @@ def _config(**updates) -> OpenFGAConf:
     }
     values.update(updates)
     return OpenFGAConf(**values)
+
+
+def _with_openfga_response_defaults(model: dict) -> dict:
+    response_model = deepcopy(model)
+    system_metadata = response_model["type_definitions"][1]["metadata"]
+    system_metadata.update(module="", source_info=None)
+    super_admin_metadata = system_metadata["relations"]["super_admin"]
+    super_admin_metadata.update(module="", source_info=None)
+    super_admin_metadata["directly_related_user_types"][0]["condition"] = ""
+
+    department_relations = response_model["type_definitions"][3]["relations"]
+    parent_rewrite = department_relations["admin"]["union"]["child"][1]["tupleToUserset"]
+    parent_rewrite["tupleset"]["object"] = ""
+    parent_rewrite["computedUserset"]["object"] = ""
+    return response_model
 
 
 @pytest.mark.asyncio
@@ -93,6 +109,42 @@ async def test_discovery_selects_unique_named_store_and_latest_model() -> None:
     assert all(request.startswith("http://openfga:8080/") for request in requests)
     store_requests = [request for request in requests if "/stores?" in request]
     assert store_requests == ["http://openfga:8080/stores?name=bisheng&page_size=2"]
+
+
+@pytest.mark.asyncio
+async def test_discovery_accepts_empty_defaults_added_by_openfga() -> None:
+    model = build_authorization_model_f048()
+    response_model = _with_openfga_response_defaults(model)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/stores":
+            return httpx.Response(
+                200,
+                json={"stores": [{"id": "store-live", "name": "bisheng"}]},
+            )
+        if request.url.path == "/stores/store-live/authorization-models":
+            return httpx.Response(
+                200,
+                json={"authorization_model_ids": ["model-f048"]},
+            )
+        return httpx.Response(
+            200,
+            json={"authorization_model": response_model},
+        )
+
+    async with httpx.AsyncClient(
+        base_url="http://openfga:8080",
+        transport=httpx.MockTransport(handler),
+    ) as client:
+        pin = await discover_openfga_runtime(
+            _config(),
+            expected_model=model,
+            allow_bootstrap=False,
+            http_client=client,
+        )
+
+    assert response_model != model
+    assert pin.model_checksum == authorization_model_checksum(model)
 
 
 @pytest.mark.asyncio

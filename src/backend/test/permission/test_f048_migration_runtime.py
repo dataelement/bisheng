@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from copy import deepcopy
 from types import SimpleNamespace
 
 import sqlalchemy as sa
@@ -40,6 +41,9 @@ from bisheng.permission.migration.f048_runtime_storage import (
     OpenFGAMigrationModelPublisher,
     SqlMigrationRunStore,
     SqlOpenFGAMigrationTargetWriter,
+)
+from bisheng.permission.migration.f048_runtime_verification import (
+    LiveMigrationEvidenceProvider,
 )
 from bisheng.permission.migration.f048_source_inventory import (
     LegacyConfigSource,
@@ -223,6 +227,30 @@ async def test_model_publisher_reuses_matching_same_store_model(monkeypatch):
     assert model_id == "remote-model"
     assert source_client.write_calls == 0
     assert persisted[0]["model_id"] == "remote-model"
+
+
+class _EvidenceModelClient:
+    def __init__(self, model: dict) -> None:
+        self.model = model
+
+    async def list_authorization_models(self):
+        return [{"id": "remote-model", **self.model}]
+
+
+async def test_evidence_provider_checks_canonical_remote_model() -> None:
+    model = build_authorization_model_f048()
+    response_model = deepcopy(model)
+    response_model["type_definitions"][1]["metadata"].update(
+        module="",
+        source_info=None,
+    )
+    provider = LiveMigrationEvidenceProvider(
+        source_client=_EvidenceModelClient(response_model),
+        target_writer=SimpleNamespace(),
+    )
+
+    assert await provider._remote_model_checksum("remote-model") == authorization_model_checksum(model)
+    assert await provider._remote_model_checksum("missing-model") is None
 
 
 class _TargetClient:

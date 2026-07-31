@@ -17,6 +17,7 @@ from bisheng.core.openfga.authorization_model_f048 import (
     build_authorization_model_f048,
 )
 from bisheng.core.openfga.client import FGAClient
+from bisheng.core.openfga.discovery import normalize_authorization_model
 from bisheng.database.models.failed_tuple import FailedTuple
 from bisheng.permission.domain.models import (
     AuthorizationModelRelease,
@@ -125,6 +126,8 @@ class LiveMigrationEvidenceProvider:
             run.store_id,
             run.target_model_id,
         )
+        expected_model_checksum = authorization_model_checksum(build_authorization_model_f048())
+        remote_model_checksum = await self._remote_model_checksum(run.target_model_id)
         preserved_expected = self._preserved_tuple_identities(items)
         return MigrationVerificationEvidence(
             source_checksum=source_checksum,
@@ -169,8 +172,9 @@ class LiveMigrationEvidenceProvider:
             preserved_tuple_checksum_matches=(preserved_expected <= actual_identities),
             model_checksum_matches=(
                 model_release is not None
-                and model_release.model_checksum == authorization_model_checksum(build_authorization_model_f048())
+                and model_release.model_checksum == expected_model_checksum
                 and model_release.model_id == run.target_model_id
+                and remote_model_checksum == expected_model_checksum
             ),
             semantic_results=semantic_results,
             instance_pins=(
@@ -181,6 +185,16 @@ class LiveMigrationEvidenceProvider:
                 ),
             ),
         )
+
+    async def _remote_model_checksum(self, model_id: str) -> str | None:
+        for raw_model in await self._source_client.list_authorization_models():
+            if not isinstance(raw_model, dict):
+                continue
+            remote_model_id = raw_model.get("id") or raw_model.get("authorization_model_id")
+            if str(remote_model_id or "") != model_id:
+                continue
+            return authorization_model_checksum(normalize_authorization_model(raw_model))
+        return None
 
     @staticmethod
     async def _items(run_id: int) -> list[PermissionMigrationItem]:

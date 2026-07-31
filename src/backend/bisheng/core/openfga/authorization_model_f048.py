@@ -10,6 +10,7 @@ from __future__ import annotations
 import copy
 import json
 from hashlib import sha256
+from typing import Any
 
 MODEL_VERSION = "f048-v1"
 
@@ -43,6 +44,13 @@ MIGRATED_RESOURCE_TYPES: tuple[str, ...] = (
 OWNER_PROJECTION_RESOURCE_TYPES: tuple[str, ...] = ("linsight_skill",)
 
 LEGACY_RESOURCE_TYPES: tuple[str, ...] = ("llm_server", "llm_model")
+
+_OPENFGA_EMPTY_DEFAULTS: dict[str, object] = {
+    "condition": "",
+    "module": "",
+    "object": "",
+    "source_info": None,
+}
 
 RESOURCE_ACTION_SCOPES: dict[str, frozenset[str]] = {
     "manage_permission": frozenset(MIGRATED_RESOURCE_TYPES),
@@ -526,11 +534,28 @@ def build_authorization_model_f048(
     }
 
 
-def authorization_model_checksum(model: dict) -> str:
+def canonicalize_authorization_model(model: dict[str, Any]) -> dict[str, Any]:
+    """Remove empty protobuf defaults added by OpenFGA model responses."""
+
+    def canonicalize(value: Any) -> Any:
+        if isinstance(value, list):
+            return [canonicalize(item) for item in value]
+        if not isinstance(value, dict):
+            return value
+        return {
+            key: canonicalize(item)
+            for key, item in value.items()
+            if key not in _OPENFGA_EMPTY_DEFAULTS or item != _OPENFGA_EMPTY_DEFAULTS[key]
+        }
+
+    return canonicalize(model)
+
+
+def authorization_model_checksum(model: dict[str, Any]) -> str:
     """Return the lowercase SHA-256 of canonical model JSON."""
 
     canonical = json.dumps(
-        model,
+        canonicalize_authorization_model(model),
         ensure_ascii=False,
         sort_keys=True,
         separators=(",", ":"),

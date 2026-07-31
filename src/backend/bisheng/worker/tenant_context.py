@@ -17,6 +17,12 @@ from bisheng.core.context.tenant import (
 )
 
 F048_PERMISSION_TASK_PREFIX = "bisheng.worker.permission."
+# The pre-F048 failed_tuple queue is Store-scoped and has no tenant column.
+TENANT_AGNOSTIC_LEGACY_PERMISSION_TASKS = frozenset(
+    {
+        "bisheng.worker.permission.retry_failed_tuples.retry_failed_tuples",
+    }
+)
 
 
 class PermissionTaskTenantContextError(RuntimeError):
@@ -31,27 +37,25 @@ def _task_name(sender) -> str:
 
 
 def _is_permission_task(sender, headers: dict | None) -> bool:
+    task_name = _task_name(sender)
     return bool(
         (headers or {}).get("f048_permission_task")
-        or _task_name(sender).startswith(F048_PERMISSION_TASK_PREFIX)
+        or (
+            task_name.startswith(F048_PERMISSION_TASK_PREFIX)
+            and task_name not in TENANT_AGNOSTIC_LEGACY_PERMISSION_TASKS
+        )
     )
 
 
 def _parse_tenant_id(value) -> int:
     if isinstance(value, bool):
-        raise PermissionTaskTenantContextError(
-            "permission task tenant_id must be a positive integer"
-        )
+        raise PermissionTaskTenantContextError("permission task tenant_id must be a positive integer")
     try:
         tenant_id = int(value)
     except (TypeError, ValueError) as exc:
-        raise PermissionTaskTenantContextError(
-            "permission task tenant_id must be a positive integer"
-        ) from exc
+        raise PermissionTaskTenantContextError("permission task tenant_id must be a positive integer") from exc
     if tenant_id <= 0:
-        raise PermissionTaskTenantContextError(
-            "permission task tenant_id must be a positive integer"
-        )
+        raise PermissionTaskTenantContextError("permission task tenant_id must be a positive integer")
     return tenant_id
 
 
@@ -60,9 +64,7 @@ def inject_tenant_header(sender=None, headers=None, **kwargs):
     tid = get_current_tenant_id()
     permission_task = _is_permission_task(sender, headers)
     if permission_task and (tid is None or headers is None):
-        raise PermissionTaskTenantContextError(
-            "permission task publish requires an explicit tenant context"
-        )
+        raise PermissionTaskTenantContextError("permission task publish requires an explicit tenant context")
     if tid is not None and headers is not None:
         headers["tenant_id"] = _parse_tenant_id(tid)
         if permission_task:
@@ -78,9 +80,7 @@ def restore_tenant_context(sender=None, **kwargs):
     if permission_task:
         current_tenant_id.set(None)
         if tenant_id is None:
-            raise PermissionTaskTenantContextError(
-                "permission task execution requires tenant_id header"
-            )
+            raise PermissionTaskTenantContextError("permission task execution requires tenant_id header")
         token = set_current_tenant_id(_parse_tenant_id(tenant_id))
     elif tenant_id is not None:
         token = set_current_tenant_id(_parse_tenant_id(tenant_id))

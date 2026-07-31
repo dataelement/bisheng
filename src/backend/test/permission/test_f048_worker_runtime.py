@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 from bisheng.core.context.tenant import (
+    DEFAULT_TENANT_ID,
     current_tenant_id,
     get_current_tenant_id,
     set_current_tenant_id,
@@ -165,6 +166,26 @@ def test_permission_publish_without_tenant_fails_closed() -> None:
                 sender="bisheng.worker.permission.reconcile",
                 headers={},
             )
+    finally:
+        current_tenant_id.reset(token)
+
+
+def test_legacy_failed_tuple_retry_remains_tenant_agnostic() -> None:
+    task_name = "bisheng.worker.permission.retry_failed_tuples.retry_failed_tuples"
+    token = current_tenant_id.set(None)
+    try:
+        headers = {}
+        inject_tenant_header(sender=task_name, headers=headers)
+        assert headers == {}
+
+        sender = SimpleNamespace(
+            name=task_name,
+            request=SimpleNamespace(headers={}),
+        )
+        restore_tenant_context(sender=sender)
+        assert get_current_tenant_id() == DEFAULT_TENANT_ID
+        reset_tenant_context(sender=sender)
+        assert get_current_tenant_id() is None
     finally:
         current_tenant_id.reset(token)
 
