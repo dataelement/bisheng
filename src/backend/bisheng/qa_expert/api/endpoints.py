@@ -2,56 +2,52 @@
 Expert QA API Endpoints - HTTP 路由处理层
 """
 
-from typing import Literal, Optional
-from fastapi import APIRouter, Body, Depends, File, HTTPException, Path, UploadFile, status, Query
+from typing import Literal
+
+from fastapi import APIRouter, Depends, File, HTTPException, Path, Query, UploadFile, status
 from loguru import logger
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from bisheng.api.v1.schemas import UploadFileResponse
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import ServerError
+from bisheng.common.schemas.api import resp_200, resp_500
 from bisheng.core.cache.utils import save_uploaded_file
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
-from bisheng.common.dependencies.user_deps import UserPayload
-from bisheng.common.schemas.api import resp_200, resp_500
-
-from bisheng.sensitive_word.domain.schemas import SensitiveWordBusinessType
-from bisheng.sensitive_word.domain.services.exceptions import ContentSafetyViolation
-from bisheng.sensitive_word.domain.services.sensitive_word_policy_service import (
-    SensitiveWordPolicyService,
-)
 from bisheng.qa_expert.domain.rich_text import question_description_to_plain_text
 from bisheng.qa_expert.domain.schemas import (
-    ExpertCreateRequest,
-    ExpertUpdateRequest,
-    ExpertResponse,
-    GetCommentsRequest,
-    QuestionCreateRequest,
-    QuestionDetailResponse,
-    QuestionSimpleResponse,
+    AdoptAnswerRequest,
     AnswerCreateRequest,
     AnswerDetailResponse,
     CommentCreateRequest,
     CommentDetailResponse,
     CommentPageData,
-    QuestionUpdateRequest,
-    VoteRequest,
-    AdoptAnswerRequest,
+    ExpertCreateRequest,
+    ExpertResponse,
+    ExpertUpdateRequest,
+    GetCommentsRequest,
+    QAExpertStatsResponse,
     QANotificationResponse,
+    QuestionCheckRequest,
+    QuestionCreateRequest,
+    QuestionDetailResponse,
     QuestionListQuery,
     QuestionPageData,
-    QuestionStatsResponse,
-    QAExpertStatsResponse,
-    QuestionCheckRequest,
+    QuestionUpdateRequest,
+    VoteRequest,
 )
 from bisheng.qa_expert.domain.services import (
-    ExpertService,
-    QuestionService,
     AnswerService,
     CommentService,
-    VoteService,
+    ExpertService,
     QAExpertStatsService,
+    QuestionService,
+    VoteService,
 )
-from bisheng.user_group.domain.services.user_group_service import UserGroupService
+from bisheng.sensitive_word.domain.schemas import SensitiveWordBusinessType
+from bisheng.sensitive_word.domain.services.exceptions import ContentSafetyViolation
+from bisheng.sensitive_word.domain.services.sensitive_word_policy_service import (
+    SensitiveWordPolicyService,
+)
 
 router = APIRouter(prefix="/qa_experts", tags=["Expert QA"])
 
@@ -83,12 +79,12 @@ async def get_expert_service() -> ExpertService:
 
 @router.get("/experts", response_model=list[ExpertResponse])
 async def list_experts(
-    keyword: Optional[str] = Query(None, description="搜索关键词"),
-    department_id: Optional[str] = Query(None, description="部门 ID"),
-    job_family: Optional[str] = Query(None, description="职位族"),
-    job_category: Optional[str] = Query(None, description="职位类"),
-    position: Optional[str] = Query(None, description="职务"),
-    major: Optional[str] = Query(None, description="岗位"),
+    keyword: str | None = Query(None, description="搜索关键词"),
+    department_id: str | None = Query(None, description="部门 ID"),
+    job_family: str | None = Query(None, description="职位族"),
+    job_category: str | None = Query(None, description="职位类"),
+    position: str | None = Query(None, description="职务"),
+    major: str | None = Query(None, description="岗位"),
     sort_by: Literal[
         "expert_name",
         "department",
@@ -100,9 +96,9 @@ async def list_experts(
         "created_at",
     ] = Query("created_at", description="排序字段"),
     sort_order: Literal["asc", "desc"] = Query("desc", description="排序方向"),
-    answer_desc: Optional[bool] = Query(None, description="回答数排序"),
-    adoption_desc: Optional[bool] = Query(None, description="采纳数排序"),
-    vote_desc: Optional[bool] = Query(None, description="点赞数排序"),
+    answer_desc: bool | None = Query(None, description="回答数排序"),
+    adoption_desc: bool | None = Query(None, description="采纳数排序"),
+    vote_desc: bool | None = Query(None, description="点赞数排序"),
     page: int = Query(1, ge=1, description="页码"),
     limit: int = Query(20, ge=1, le=500, description="每页数量"),
     service: ExpertService = Depends(get_expert_service),
@@ -378,7 +374,7 @@ async def get_answers(
     question_id: int = Path(..., ge=1),
     page: int = Query(1, ge=1),
     page_size: int = Query(100, ge=1, le=1000),
-    sort_by: Optional[str] = Query(None),
+    sort_by: str | None = Query(None),
     user: UserPayload = Depends(UserPayload.get_login_user),
     service: AnswerService = Depends(get_answer_service),
 ):
@@ -390,7 +386,7 @@ async def get_answers(
 @router.get("/questions/{question_id}/answers")
 async def get_answersbyname(
     question_id: int = Path(..., ge=1),
-    expert_name: Optional[str] = Query(None),
+    expert_name: str | None = Query(None),
     user: UserPayload = Depends(UserPayload.get_login_user),
     service: AnswerService = Depends(get_answer_service),
 ):
