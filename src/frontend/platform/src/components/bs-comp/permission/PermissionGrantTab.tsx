@@ -30,6 +30,10 @@ interface PermissionGrantTabProps {
   context: ResourcePermissionContext
   assignees?: PermissionGrantAssignee[]
   fixedSubjectType?: SubjectType
+  includeChildren?: boolean
+  onIncludeChildrenChange?: (value: boolean) => void
+  hideDepartmentIncludeChildrenControl?: boolean
+  legacyAddLayout?: boolean
   showExistingAssignees?: boolean
   onSuccess: (result: MutateResourceGrantsResult) => void
 }
@@ -149,6 +153,10 @@ export function PermissionGrantTab({
   context,
   assignees = [],
   fixedSubjectType,
+  includeChildren: includeChildrenProp,
+  onIncludeChildrenChange,
+  hideDepartmentIncludeChildrenControl = false,
+  legacyAddLayout = false,
   showExistingAssignees = true,
   onSuccess,
 }: PermissionGrantTabProps) {
@@ -161,10 +169,13 @@ export function PermissionGrantTab({
     [],
   )
   const [selectedModelKey, setSelectedModelKey] = useState("")
-  const [includeChildren, setIncludeChildren] = useState(false)
+  const [internalIncludeChildren, setInternalIncludeChildren] = useState(false)
   const [loadingModels, setLoadingModels] = useState(false)
   const [pendingKey, setPendingKey] = useState<string | null>(null)
   const [conflict, setConflict] = useState(false)
+  const includeChildren = includeChildrenProp ?? internalIncludeChildren
+  const handleIncludeChildrenChange =
+    onIncludeChildrenChange ?? setInternalIncludeChildren
 
   useEffect(() => {
     let cancelled = false
@@ -282,6 +293,126 @@ export function PermissionGrantTab({
     ])
   }
 
+  const subjectLabel = t(
+    `subject.${subjectType === "user_group" ? "userGroup" : subjectType}`,
+  )
+  const selectedSummaryText = selectedSubjects
+    .map((subject) => subject.name)
+    .join("、")
+  const subjectPicker = (
+    <>
+      {subjectType === "user" && (
+        <SubjectSearchUser
+          value={selectedSubjects}
+          onChange={setSelectedSubjects}
+          resourceType={resourceType}
+          resourceId={resourceId}
+          disabledIds={disabledSubjectIds}
+        />
+      )}
+      {subjectType === "department" && (
+        <SubjectSearchDepartment
+          value={selectedSubjects}
+          onChange={setSelectedSubjects}
+          resourceType={resourceType}
+          resourceId={resourceId}
+          includeChildren={includeChildren}
+          onIncludeChildrenChange={handleIncludeChildrenChange}
+          disabledIds={disabledSubjectIds}
+          showIncludeChildrenToggle={false}
+        />
+      )}
+      {subjectType === "user_group" && (
+        <SubjectSearchUserGroup
+          value={selectedSubjects}
+          onChange={setSelectedSubjects}
+          resourceType={resourceType}
+          resourceId={resourceId}
+          disabledIds={disabledSubjectIds}
+        />
+      )}
+    </>
+  )
+
+  if (legacyAddLayout) {
+    return (
+      <div
+        className="flex h-full min-h-0 flex-col overflow-hidden"
+        data-testid="legacy-permission-grant-layout"
+      >
+        {conflict && (
+          <p
+            className="mb-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-medium text-red-900"
+            role="alert"
+          >
+            {t("grant.conflict")}
+          </p>
+        )}
+
+        <div className="min-h-0 flex-1 overflow-hidden">
+          {subjectPicker}
+        </div>
+
+        {subjectType === "department" &&
+          !hideDepartmentIncludeChildrenControl && (
+            <label className="mt-3 flex h-10 shrink-0 items-center gap-2 text-sm">
+              <Checkbox
+                checked={includeChildren}
+                onCheckedChange={(checked) =>
+                  handleIncludeChildrenChange(checked === true)
+                }
+              />
+              {t("source.includeChildren")}
+            </label>
+          )}
+
+        <div className="mt-4 flex h-10 shrink-0 items-center gap-4 overflow-hidden">
+          <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
+            <span className="shrink-0 text-[14px] font-normal leading-[22px] text-[#999999]">
+              {`${t("action.grant")}${subjectLabel}:`}
+            </span>
+            <span className="truncate text-[14px] leading-[22px] text-[#4E5969]">
+              {selectedSummaryText}
+            </span>
+          </div>
+
+          <div className="flex shrink-0 items-center gap-2">
+            <span className="shrink-0 text-[14px] font-normal leading-[22px] text-[#999999]">
+              {t("action.grant")}
+            </span>
+            <select
+              aria-label={t("grant.addModel")}
+              value={selectedModelKey}
+              disabled={loadingModels || models.length === 0}
+              onChange={(event) => setSelectedModelKey(event.target.value)}
+              className="h-8 w-[132px] rounded-[6px] border-0 bg-white px-1 text-[14px] leading-[22px] text-[#212121] outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
+            >
+              {models.map((model) => (
+                <option key={model.key} value={model.key}>
+                  {model.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="mt-4 flex shrink-0 justify-end border-t pt-4">
+          <Button
+            type="button"
+            disabled={
+              pendingKey !== null ||
+              selectedSubjects.length === 0 ||
+              !selectedModelKey
+            }
+            onClick={handleAdd}
+          >
+            {t("grant.submit")}
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="flex min-h-0 flex-col gap-4">
       {!canEdit && (
@@ -342,36 +473,7 @@ export function PermissionGrantTab({
           )}
 
           <div className="min-h-48">
-            {subjectType === "user" && (
-              <SubjectSearchUser
-                value={selectedSubjects}
-                onChange={setSelectedSubjects}
-                resourceType={resourceType}
-                resourceId={resourceId}
-                disabledIds={disabledSubjectIds}
-              />
-            )}
-            {subjectType === "department" && (
-              <SubjectSearchDepartment
-                value={selectedSubjects}
-                onChange={setSelectedSubjects}
-                resourceType={resourceType}
-                resourceId={resourceId}
-                includeChildren={includeChildren}
-                onIncludeChildrenChange={setIncludeChildren}
-                disabledIds={disabledSubjectIds}
-                showIncludeChildrenToggle={false}
-              />
-            )}
-            {subjectType === "user_group" && (
-              <SubjectSearchUserGroup
-                value={selectedSubjects}
-                onChange={setSelectedSubjects}
-                resourceType={resourceType}
-                resourceId={resourceId}
-                disabledIds={disabledSubjectIds}
-              />
-            )}
+            {subjectPicker}
           </div>
 
           {subjectType === "department" && (
@@ -379,7 +481,7 @@ export function PermissionGrantTab({
               <Checkbox
                 checked={includeChildren}
                 onCheckedChange={(checked) =>
-                  setIncludeChildren(checked === true)
+                  handleIncludeChildrenChange(checked === true)
                 }
               />
               {t("source.includeChildren")}

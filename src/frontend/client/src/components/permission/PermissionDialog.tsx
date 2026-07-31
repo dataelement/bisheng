@@ -11,6 +11,7 @@ import type {
 } from "~/api/permission";
 import {
   Button,
+  Checkbox,
   Dialog,
   DialogContent,
   DialogDescription,
@@ -58,6 +59,9 @@ export function PermissionDialog({
     useState<ResourcePermissionContext | null>(null);
   const [assignees, setAssignees] = useState<PermissionGrantAssignee[]>([]);
   const [subjectType, setSubjectType] = useState<SubjectType>("user");
+  const [grantSubjectType, setGrantSubjectType] =
+    useState<SubjectType>("user");
+  const [grantIncludeChildren, setGrantIncludeChildren] = useState(false);
   const [grantDialogOpen, setGrantDialogOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -86,8 +90,16 @@ export function PermissionDialog({
       return;
     }
     setSubjectType("user");
+    setGrantSubjectType("user");
+    setGrantIncludeChildren(false);
     void loadContext();
   }, [loadContext, open]);
+
+  useEffect(() => {
+    if (grantSubjectType !== "department") {
+      setGrantIncludeChildren(false);
+    }
+  }, [grantSubjectType]);
 
   const handleGrantSuccess = (result: MutateResourceGrantsResult) => {
     setContext((current) =>
@@ -184,7 +196,11 @@ export function PermissionDialog({
                     <Button
                       type="button"
                       className="h-8 shrink-0 rounded-md px-3 text-sm leading-[22px]"
-                      onClick={() => setGrantDialogOpen(true)}
+                      onClick={() => {
+                        setGrantSubjectType(subjectType);
+                        setGrantIncludeChildren(false);
+                        setGrantDialogOpen(true);
+                      }}
                     >
                       {localize("com_permission.tab_grant")}
                     </Button>
@@ -213,8 +229,10 @@ export function PermissionDialog({
 
       {context && canAddPermission && (
         <Dialog open={grantDialogOpen} onOpenChange={setGrantDialogOpen}>
-          <DialogContent className={dialogClassName}>
-            <DialogHeader className="shrink-0 px-5 pb-4 pt-5 text-left max-[768px]:px-4">
+          <DialogContent
+            className={`${dialogClassName} !p-5 max-[768px]:!p-4`}
+          >
+            <DialogHeader className="shrink-0 text-left">
               <DialogTitle className="text-left">
                 {localize("com_permission.tab_grant")} - {resourceName}
               </DialogTitle>
@@ -222,16 +240,57 @@ export function PermissionDialog({
                 {localize("com_permission.tab_grant")} - {resourceName}
               </DialogDescription>
             </DialogHeader>
-            <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5 max-[768px]:px-4">
-              <PermissionGrantTab
-                resourceType={resourceType}
-                resourceId={resourceId}
-                context={context}
-                assignees={assignees}
-                fixedSubjectType={subjectType}
-                showExistingAssignees={false}
-                onSuccess={handleGrantSuccess}
-              />
+
+            <div className="mt-4 flex min-h-0 flex-1 flex-col overflow-hidden">
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="inline-flex w-fit shrink-0 items-center justify-center rounded-md border border-[#ECECEC] bg-white p-[3px]">
+                  {SUBJECT_TABS.map((tab) => (
+                    <button
+                      key={tab.value}
+                      type="button"
+                      aria-pressed={grantSubjectType === tab.value}
+                      className={`min-w-0 rounded px-3 py-0.5 text-sm leading-[22px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 ${
+                        grantSubjectType === tab.value
+                          ? "bg-blue-500/[0.07] font-medium text-blue-500"
+                          : "font-normal text-[#818181]"
+                      }`}
+                      onClick={() => setGrantSubjectType(tab.value)}
+                    >
+                      {localize(tab.labelKey)}
+                    </button>
+                  ))}
+                </div>
+
+                {grantSubjectType === "department" && (
+                  <label className="flex shrink-0 cursor-pointer items-center gap-2 text-sm leading-[22px] text-[#212121]">
+                    <Checkbox
+                      checked={grantIncludeChildren}
+                      onCheckedChange={(checked) =>
+                        setGrantIncludeChildren(checked === true)
+                      }
+                    />
+                    {localize(
+                      "f048_permission.source.include_children",
+                    )}
+                  </label>
+                )}
+              </div>
+
+              <div className="mt-4 min-h-0 flex-1 overflow-hidden">
+                <PermissionGrantTab
+                  resourceType={resourceType}
+                  resourceId={resourceId}
+                  context={context}
+                  assignees={assignees}
+                  fixedSubjectType={grantSubjectType}
+                  includeChildren={grantIncludeChildren}
+                  onIncludeChildrenChange={setGrantIncludeChildren}
+                  hideDepartmentIncludeChildrenControl
+                  legacyAddLayout
+                  showExistingAssignees={false}
+                  onSuccess={handleGrantSuccess}
+                />
+              </div>
             </div>
           </DialogContent>
         </Dialog>

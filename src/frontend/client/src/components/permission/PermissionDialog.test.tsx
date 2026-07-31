@@ -34,13 +34,15 @@ jest.mock("./PermissionListTab", () => ({
 jest.mock("./PermissionGrantTab", () => ({
   PermissionGrantTab: ({
     onSuccess,
+    legacyAddLayout,
   }: {
     onSuccess: (result: {
       resource_version: number;
       items: [];
     }) => void;
+    legacyAddLayout?: boolean;
   }) => (
-    <div>
+    <div data-layout={legacyAddLayout ? "legacy-add" : "default"}>
       grant editor
       <button
         type="button"
@@ -124,6 +126,25 @@ describe("F048 Client PermissionDialog", () => {
       screen.getByRole("button", { name: "com_permission.tab_grant" }),
     );
     expect(await screen.findByText("grant editor")).toBeInTheDocument();
+    expect(screen.getByText("grant editor")).toHaveAttribute(
+      "data-layout",
+      "legacy-add",
+    );
+    expect(
+      screen.getByRole("button", {
+        name: "f048_permission.subject.user",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", {
+        name: "f048_permission.subject.department",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", {
+        name: "f048_permission.subject.user_group",
+      }),
+    ).toBeInTheDocument();
   });
 
   it("closes the add dialog after a successful grant mutation", async () => {

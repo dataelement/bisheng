@@ -111,6 +111,22 @@ describe("F048 PermissionDialog", () => {
     expect(screen.getByLabelText("roster.protected")).toBeInTheDocument()
     expect(getResourcePermissionGrantsApi).toHaveBeenCalled()
     expect(getMyResourcePermissionsApi).not.toHaveBeenCalled()
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "dialog.tabGrant" }),
+    )
+    expect(
+      await screen.findByTestId("legacy-permission-grant-layout"),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole("button", { name: "subject.user" }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole("button", { name: "subject.department" }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole("button", { name: "subject.userGroup" }),
+    ).toBeInTheDocument()
   })
 
   it("does not add a permission mode control for a resource without a parent", async () => {
