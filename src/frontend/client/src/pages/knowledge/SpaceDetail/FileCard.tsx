@@ -549,7 +549,7 @@ export function FileCard({
                 !mobileListMode && "h-[160px]",
                 cardOpensPreviewOrFolder ? "cursor-pointer" : "cursor-default",
                 isSelected
-                    ? "bg-blue-500/[0.07]"
+                    ? "bg-blue-50"
                     : isNotParsed
                         ? "bg-[#fbfbfb]"
                         : "bg-white",
