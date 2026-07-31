@@ -1,4 +1,4 @@
-import { ALargeSmall, Check, ChevronRight } from "lucide-react";
+import { Check, ChevronRight } from "lucide-react";
 import { Outlined } from "bisheng-icons";
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type MouseEvent } from "react";
 import { useRecoilState } from "recoil";
@@ -519,7 +519,7 @@ function UserPopMenuRail() {
                         menu can still render below the breakpoint, so gate it here. */}
                     {fontSizeAvailable && <DropdownMenuSub>
                         <DropdownMenuSubTrigger className={cn(actionMenuItemClassName, "font-normal data-[state=open]:bg-[#f2f3f5]")}>
-                            <ALargeSmall className={actionMenuItemIconClassName} />
+                            <Outlined.FontSize className={actionMenuItemIconClassName} />
                             <span className={cn(actionMenuLabelClassName, "flex-1")}>{localize('com_nav_page_font_size')}</span>
                         </DropdownMenuSubTrigger>
                         <DropdownMenuSubContent className={cn(actionMenuSurfaceClassName, "z-[100] ml-2 min-w-[140px] gap-0 p-2")}>
