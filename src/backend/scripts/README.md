@@ -383,6 +383,21 @@ apply 干净后再手动加约束：
 ALTER TABLE t_gpts_tools ADD CONSTRAINT uk_gpts_tools_key_tenant UNIQUE (tool_key, tenant_id);
 ```
 
+### `converge_media_no_asr_transcript.py`
+
+收敛"识别为空却入库成功"的音视频知识文件。历史 bug：ASR 返回 200 但没有识别出任何句子（`output: null`）时，`str(RecognitionResult)` 整个 JSON 信封（`{"status_code": 200, "request_id": ...}`）被当作识别文本入库，文件被标记为解析成功、可点开预览，识别文本显示这串 JSON 垃圾。服务端已修复（`_call_aliyun_asr` 不再回退到 `str(result)`，无识别文本时抛 10956）；本脚本把存量脏数据统一收敛为与其他"未检测到可识别音频"一致的失败态。
+
+行为：扫描媒体后缀且 `status=SUCCESS` 的 `knowledgefile`，下载其 MinIO 转写预览（`preview/{id}.md`）判断入库文本；若为空或为原始 JSON 信封 → 删除该文件的 Milvus/ES 向量（保留 MinIO 源文件，可重新解析/下载），并置 `status=FAILED`、`remark=10956 错误 JSON`（前端据此显示"失败"徽标 + 悬浮原因，且不可点开）。无预览文件的 SUCCESS 行只报告不动。幂等：收敛后的行不再命中 `status=SUCCESS` 条件，可重复运行。
+
+Usage (from `src/backend/`，需 MinIO/Milvus/ES 可达):
+
+```bash
+config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/converge_media_no_asr_transcript.py                    # dry-run（默认，不写库）
+config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/converge_media_no_asr_transcript.py --apply            # 执行收敛
+config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/converge_media_no_asr_transcript.py --knowledge-id 123 # 限定单个知识库/空间
+config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/converge_media_no_asr_transcript.py --file-id 456 --apply
+```
+
 ### `backfill_knowledge_space_user_pin.py`
 
 F037：知识空间置顶从 `space_channel_member.is_pinned` 解耦到独立的 `knowledge_space_user_pin` 表（置顶是纯个人偏好，不再寄生在成员关系上）。本脚本把历史置顶迁移到新表，让升级后用户保留已置顶的空间。
