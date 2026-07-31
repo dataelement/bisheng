@@ -6,7 +6,7 @@ import tempfile
 from loguru import logger
 
 from bisheng.core.logger import trace_id_var
-from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao, KnowledgeFileStatus
+from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
 from bisheng.knowledge.domain.services.file_alias_name_generator import (
     FileAliasNameGeneratorService,
 )
@@ -77,7 +77,7 @@ def extract_and_generate_alias(file_id: int) -> str | None:
                 db_file.file_name,
                 alias_name,
             )
-            if alias_name and alias_name != db_file.alias_name:
+            if alias_name and alias_name != db_file.file_name and alias_name != db_file.alias_name:
                 db_file.alias_name = alias_name
                 KnowledgeFileDao.update(db_file)
                 logger.info(
@@ -88,9 +88,10 @@ def extract_and_generate_alias(file_id: int) -> str | None:
                 )
             else:
                 logger.info(
-                    "no alias generated file_id={} file_name={} title={}",
+                    "no alias generated file_id={} file_name={} alias_name={} title={}",
                     file_id,
                     db_file.file_name,
+                    alias_name,
                     raw_title,
                 )
             return alias_name
