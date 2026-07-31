@@ -874,7 +874,7 @@ function FileRow({
     const rowBg = isFolderDragOver
         ? "bg-blue-100 transition-colors duration-150"
         : isSelected
-            ? "bg-blue-500/[0.07] transition-colors duration-150 group-hover:bg-[#F8F8F8]"
+            ? "bg-blue-50 transition-colors duration-150 group-hover:bg-[#F8F8F8]"
             : "bg-white transition-colors duration-150 group-hover:bg-[#f7f7f7]";
     const {
         isRenaming,
