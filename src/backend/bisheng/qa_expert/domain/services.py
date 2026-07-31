@@ -252,9 +252,33 @@ class ExpertService:
             "majors": await _build_dict_options(options.get("majors", []), field_to_type["majors"]),
         }
 
+    async def _build_dict_key_maps(self, keys_by_field: dict[str, set[str]]) -> dict[str, dict[str, str]]:
+        """查询系统字典表,按字段构建 dict_key -> dict_value 映射。"""
+        field_to_type = {
+            "job_family": "expert_job_family",
+            "job_category": "expert_job_category",
+            "position": "expert_position",
+            "major": "expert_major",
+        }
+        result: dict[str, dict[str, str]] = {}
+        async with get_async_db_session() as session:
+            dict_repository = SystemDictionaryRepositoryImpl(session)
+            for field, keys in keys_by_field.items():
+                dict_type = field_to_type.get(field)
+                if not dict_type or not keys:
+                    result[field] = {}
+                    continue
+                dict_items = await dict_repository.find_all_for_export(dict_type=dict_type, is_enabled=True)
+                result[field] = {item.dict_key: item.dict_value for item in dict_items}
+        return result
+
     async def _build_expert_rows(self, experts: list[Expert]) -> list[dict]:
         department_ids: set[int] = set()
         user_ids: list[int] = []
+        job_family_keys: set[str] = set()
+        job_category_keys: set[str] = set()
+        position_keys: set[str] = set()
+        major_keys: set[str] = set()
         for expert in experts:
             try:
                 if expert.depart_ment:
@@ -263,6 +287,14 @@ class ExpertService:
                 pass
             if expert.user_id:
                 user_ids.append(expert.user_id)
+            if expert.job_family:
+                job_family_keys.add(expert.job_family)
+            if expert.job_category:
+                job_category_keys.add(expert.job_category)
+            if expert.position:
+                position_keys.add(expert.position)
+            if expert.major:
+                major_keys.add(expert.major)
 
         departments = await DepartmentDao.aget_by_ids(sorted(department_ids))
         department_names = {
@@ -271,6 +303,15 @@ class ExpertService:
 
         users = await UserDao.aget_user_by_ids(list(set(user_ids))) or []
         wechat_user_ids = {user.user_id: user.wechat_user_id for user in users if user.user_id is not None}
+
+        dict_key_maps = await self._build_dict_key_maps(
+            {
+                "job_family": job_family_keys,
+                "job_category": job_category_keys,
+                "position": position_keys,
+                "major": major_keys,
+            }
+        )
 
         experts_all = []
         for expert in experts:
@@ -281,6 +322,10 @@ class ExpertService:
             except (TypeError, ValueError):
                 department_id = None
             expert_dict["depart_ment"] = department_names.get(department_id)
+            expert_dict["job_family"] = dict_key_maps["job_family"].get(expert.job_family, expert.job_family)
+            expert_dict["job_category"] = dict_key_maps["job_category"].get(expert.job_category, expert.job_category)
+            expert_dict["position"] = dict_key_maps["position"].get(expert.position, expert.position)
+            expert_dict["major"] = dict_key_maps["major"].get(expert.major, expert.major)
             expert_dict["expert_score"] = (
                 int(expert.answer_count or 0) + int(expert.adoption_count or 0) * 5 + int(expert.vote_count or 0) * 2
             )
