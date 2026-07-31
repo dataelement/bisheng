@@ -118,11 +118,14 @@ export function usePortalDeepLink({
     const deepLinkSpaceAppliedRef = useRef<string | null>(null);
     const deepLinkFolderAppliedRef = useRef<string | null>(null);
     const deepLinkHandledRef = useRef<string | null>(null);
+    /** Prevents restarting search when displayedFiles churns during tree load. */
+    const deepLinkFileSearchKeyRef = useRef<string | null>(null);
 
     useEffect(() => {
         deepLinkSpaceAppliedRef.current = null;
         deepLinkFolderAppliedRef.current = null;
         deepLinkHandledRef.current = null;
+        deepLinkFileSearchKeyRef.current = null;
     }, [deepLinkTarget?.key]);
 
     useEffect(() => {
@@ -138,7 +141,6 @@ export function usePortalDeepLink({
     useEffect(() => {
         if (!deepLinkTarget?.folderId || !activeSpace || String(activeSpace.id) !== deepLinkTarget.spaceId) return;
         if (deepLinkFolderAppliedRef.current === deepLinkTarget.key) return;
-        let cancelled = false;
         deepLinkFolderAppliedRef.current = deepLinkTarget.key;
         setSelectedFile(null);
         setSelectedFileIds(new Set());
@@ -149,13 +151,12 @@ export function usePortalDeepLink({
         setSearchResults([]);
         void Promise.resolve(onNavigateFolder(deepLinkTarget.folderId, deepLinkTarget.folderName))
             .finally(() => {
-                if (!cancelled && !deepLinkTarget.fileId) {
+                // Folder-only links must clear the restore overlay even if this effect
+                // was cleaned up (onNavigateFolder identity often churns after tree load).
+                if (!deepLinkTarget.fileId) {
                     onRestoreComplete?.(deepLinkTarget.key);
                 }
             });
-        return () => {
-            cancelled = true;
-        };
     }, [
         activeSpace,
         deepLinkTarget,
@@ -170,73 +171,42 @@ export function usePortalDeepLink({
         setSelectedFolderIds,
     ]);
 
+    /** Select preview without entering searchMode — return-to-list must show the folder tree. */
+    const openDeepLinkedFile = (
+        target: PortalDeepLinkTarget,
+        spaceId: string,
+        file: KnowledgeFile,
+    ) => {
+        if (String(activeSpaceIdRef.current) !== String(spaceId)) return false;
+        if (deepLinkHandledRef.current === target.key) return true;
+        setCurrentFolderId(target.folderId || undefined);
+        setSelectedFileIds(new Set());
+        setSelectedFolderIds(new Set());
+        setSearchText("");
+        setSearchLoading(false);
+        setSearchMode(false);
+        setSearchResults([]);
+        setSelectedFile(file);
+        deepLinkHandledRef.current = target.key;
+        // Workbench clears the loading overlay after selectedFile matches (and preview settles).
+        return true;
+    };
+
+    // Fast path: open when the target row is already in the current list.
     useEffect(() => {
         if (!deepLinkTarget?.fileId || !activeSpace || String(activeSpace.id) !== deepLinkTarget.spaceId) return;
         if (deepLinkTarget.folderId && deepLinkFolderAppliedRef.current !== deepLinkTarget.key) return;
         if (deepLinkHandledRef.current === deepLinkTarget.key) return;
-
-        let cancelled = false;
-
-        const openDeepLinkedFile = (file: KnowledgeFile, searchResults?: KnowledgeFile[]) => {
-            if (cancelled || String(activeSpaceIdRef.current) !== String(activeSpace.id)) return false;
-            setCurrentFolderId(deepLinkTarget.folderId || undefined);
-            setSelectedFileIds(new Set());
-            setSelectedFolderIds(new Set());
-            setSearchText(deepLinkTarget.fileName || file.name);
-            setSearchLoading(false);
-            if (searchResults) {
-                setSearchMode(true);
-                setSearchResults(searchResults);
-            }
-            setSelectedFile(file);
-            deepLinkHandledRef.current = deepLinkTarget.key;
-            onRestoreComplete?.(deepLinkTarget.key);
-            return true;
-        };
 
         const existingFile = displayedFiles.find((file) => (
             String(file.id) === deepLinkTarget.fileId
             && String(file.spaceId || activeSpace.id) === deepLinkTarget.spaceId
             && !isFolder(file)
         ));
-        if (existingFile) {
-            openDeepLinkedFile(existingFile);
-            return () => {
-                cancelled = true;
-            };
-        }
-
-        const fallbackFile = createDeepLinkedFile(deepLinkTarget, deepLinkTarget.fileId);
-        const keyword = deepLinkTarget.fileName || deepLinkTarget.fileId;
-        setSearchLoading(true);
-        searchSpaceChildrenApi({
-            space_id: deepLinkTarget.spaceId,
-            parent_id: deepLinkTarget.folderId || undefined,
-            keyword,
-            page: 1,
-            page_size: TREE_PAGE_SIZE,
-            file_status: statusFilterNumbers,
-        }).then((res) => {
-            const matchedFile = res.data.find((file) => (
-                String(file.id) === deepLinkTarget.fileId
-                && !isFolder(file)
-            ));
-            const nextResults = matchedFile ? res.data : [fallbackFile];
-            openDeepLinkedFile(matchedFile ?? fallbackFile, nextResults);
-        }).catch(() => {
-            openDeepLinkedFile(fallbackFile, [fallbackFile]);
-        }).finally(() => {
-            if (!cancelled && String(activeSpaceIdRef.current) === String(activeSpace.id)) {
-                setSearchLoading(false);
-            }
-        });
-
-        return () => {
-            cancelled = true;
-        };
+        if (!existingFile) return;
+        openDeepLinkedFile(deepLinkTarget, String(activeSpace.id), existingFile);
     }, [
         activeSpace,
-        activeSpaceIdRef,
         deepLinkTarget,
         displayedFiles,
         setCurrentFolderId,
@@ -247,7 +217,71 @@ export function usePortalDeepLink({
         setSelectedFile,
         setSelectedFileIds,
         setSelectedFolderIds,
-        onRestoreComplete,
+        activeSpaceIdRef,
+    ]);
+
+    // Slow path: search once per deep-link key. Do NOT depend on displayedFiles — tree
+    // updates used to cancel in-flight search and leave the space list visible without a file.
+    useEffect(() => {
+        if (!deepLinkTarget?.fileId || !activeSpace || String(activeSpace.id) !== deepLinkTarget.spaceId) return;
+        if (deepLinkTarget.folderId && deepLinkFolderAppliedRef.current !== deepLinkTarget.key) return;
+        if (deepLinkHandledRef.current === deepLinkTarget.key) return;
+        if (deepLinkFileSearchKeyRef.current === deepLinkTarget.key) return;
+
+        deepLinkFileSearchKeyRef.current = deepLinkTarget.key;
+        const target = deepLinkTarget;
+        const spaceId = String(activeSpace.id);
+        const fallbackFile = createDeepLinkedFile(target, target.fileId);
+        const keyword = target.fileName || target.fileId;
+        let cancelled = false;
+        setSearchLoading(true);
+        searchSpaceChildrenApi({
+            space_id: target.spaceId,
+            parent_id: target.folderId || undefined,
+            keyword,
+            page: 1,
+            page_size: TREE_PAGE_SIZE,
+            file_status: statusFilterNumbers,
+        }).then((res) => {
+            if (cancelled) return;
+            const matchedFile = res.data.find((file) => (
+                String(file.id) === target.fileId
+                && !isFolder(file)
+            ));
+            // Search is metadata lookup only — do not leave the workbench in searchMode.
+            openDeepLinkedFile(target, spaceId, matchedFile ?? fallbackFile);
+        }).catch(() => {
+            if (cancelled) return;
+            openDeepLinkedFile(target, spaceId, fallbackFile);
+        }).finally(() => {
+            if (!cancelled && String(activeSpaceIdRef.current) === spaceId) {
+                setSearchLoading(false);
+            }
+        });
+
+        return () => {
+            // Cancel only when this effect re-runs for a new key/space/filters (deps below).
+            cancelled = true;
+            if (deepLinkFileSearchKeyRef.current === target.key) {
+                deepLinkFileSearchKeyRef.current = null;
+            }
+        };
+    }, [
+        activeSpace?.id,
+        deepLinkTarget?.key,
+        deepLinkTarget?.fileId,
+        deepLinkTarget?.folderId,
+        deepLinkTarget?.fileName,
+        deepLinkTarget?.spaceId,
         statusFilterNumbers,
+        activeSpaceIdRef,
+        setCurrentFolderId,
+        setSearchLoading,
+        setSearchMode,
+        setSearchResults,
+        setSearchText,
+        setSelectedFile,
+        setSelectedFileIds,
+        setSelectedFolderIds,
     ]);
 }

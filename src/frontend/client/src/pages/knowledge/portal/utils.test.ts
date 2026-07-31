@@ -5,6 +5,7 @@ import {
     dedupeFilesById,
     dedupeTreeNodesByFileId,
     extractExt,
+    mergeRootTreeNodesPreservingLoadedFolders,
     normalizePortalFileCategoryGroups,
     normalizePortalFileCategoryOptions,
 } from "./utils";
@@ -49,6 +50,52 @@ describe("portal preview utils", () => {
 
         it("falls back to the display name extension when no preview URL is available", () => {
             expect(extractExt("VCU告警操作文档.docx")).toBe("docx");
+        });
+    });
+
+    describe("mergeRootTreeNodesPreservingLoadedFolders", () => {
+        it("keeps loaded folder children when the folder also appears in the root listing", () => {
+            const child = createTreeNode(makeFile({ id: "201", name: "child.md", type: FileType.MD }));
+            const loadedFolder = {
+                ...createTreeNode(makeFile({ id: "101", name: "folder" })),
+                children: [child],
+                expanded: true,
+                loaded: true,
+                total: 1,
+            };
+            const rootFolder = makeFile({ id: "101", name: "folder (root meta)" });
+            const sibling = makeFile({ id: "102", name: "other.md", type: FileType.MD });
+
+            const merged = mergeRootTreeNodesPreservingLoadedFolders(
+                [loadedFolder],
+                [rootFolder, sibling],
+                "101",
+            );
+
+            expect(merged).toHaveLength(2);
+            expect(merged[0].file.name).toBe("folder (root meta)");
+            expect(merged[0].loaded).toBe(true);
+            expect(merged[0].children).toEqual([child]);
+            expect(merged[1].file.id).toBe("102");
+        });
+
+        it("keeps the current folder node when it is missing from the root page", () => {
+            const child = createTreeNode(makeFile({ id: "201", name: "child.md", type: FileType.MD }));
+            const deepFolder = {
+                ...createTreeNode(makeFile({ id: "101", name: "deep" })),
+                children: [child],
+                loaded: true,
+            };
+            const rootFile = makeFile({ id: "102", name: "root.md", type: FileType.MD });
+
+            const merged = mergeRootTreeNodesPreservingLoadedFolders(
+                [deepFolder],
+                [rootFile],
+                "101",
+            );
+
+            expect(merged.map((node) => node.file.id)).toEqual(["101", "102"]);
+            expect(merged[0].children).toEqual([child]);
         });
     });
 

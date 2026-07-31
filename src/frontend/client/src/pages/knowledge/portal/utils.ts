@@ -162,6 +162,40 @@ export function createTreeNode(file: KnowledgeFile): PortalFileTreeNode {
     };
 }
 
+/**
+ * Merge a fresh root listing with the previous tree so already-loaded folder
+ * children survive a late root refresh (deep-link navigate vs loadRootTree race).
+ */
+export function mergeRootTreeNodesPreservingLoadedFolders(
+    previous: PortalFileTreeNode[],
+    rootFiles: KnowledgeFile[],
+    currentFolderId?: string,
+): PortalFileTreeNode[] {
+    const nextNodes = dedupeFilesById(rootFiles).map((file) => {
+        const next = createTreeNode(file);
+        if (!isFolder(file)) return next;
+        const prevNode = findTreeNode(previous, String(file.id));
+        // Keep expanded folder contents; refresh folder row metadata from root.
+        if (!prevNode?.loaded) return next;
+        return {
+            ...next,
+            children: prevNode.children,
+            expanded: prevNode.expanded,
+            loaded: prevNode.loaded,
+            loading: prevNode.loading,
+            page: prevNode.page,
+            total: prevNode.total,
+            hasMore: prevNode.hasMore,
+            nextCursor: prevNode.nextCursor,
+        };
+    });
+    if (!currentFolderId) return nextNodes;
+    if (findTreeNode(nextNodes, currentFolderId)) return nextNodes;
+    const currentFolderNode = findTreeNode(previous, currentFolderId);
+    if (!currentFolderNode) return nextNodes;
+    return dedupeTreeNodesByFileId([currentFolderNode, ...nextNodes]);
+}
+
 export function dedupeFilesById(files: KnowledgeFile[]): KnowledgeFile[] {
     const seen = new Set<string>();
     return files.filter((file) => {
