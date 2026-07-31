@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from bisheng.common.errcode.linsight import (
+    SkillBundleTooLargeError,
     SkillFileTooLargeError,
     SkillNameDuplicateError,
     SkillNotFoundError,
@@ -18,7 +19,12 @@ from bisheng.linsight.domain.models.linsight_skill import LinsightSkill
 from bisheng.linsight.domain.schemas.skill_schema import SkillCreateForm
 from bisheng.linsight.domain.services import skill_service as service_module
 from bisheng.linsight.domain.services.skill_service import SkillService
-from bisheng.linsight.domain.services.skill_store import MAX_BUNDLE_SIZE, SKILL_MD, SkillStore
+from bisheng.linsight.domain.services.skill_store import (
+    MAX_BUNDLE_SIZE,
+    MAX_UNPACKED_SIZE,
+    SKILL_MD,
+    SkillStore,
+)
 
 TENANT = 1
 USER = 7
@@ -104,9 +110,9 @@ def _md_bytes(name="demo-skill", description="demo desc", display_name="演示�
     ).encode()
 
 
-def _zip_bytes(entries: dict[str, bytes]) -> bytes:
+def _zip_bytes(entries: dict[str, bytes], compression: int = zipfile.ZIP_STORED) -> bytes:
     buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w") as zf:
+    with zipfile.ZipFile(buf, "w", compression=compression) as zf:
         for path, content in entries.items():
             zf.writestr(path, content)
     return buf.getvalue()
@@ -160,6 +166,32 @@ class TestCreate:
     async def test_oversize_rejected(self, service):
         with pytest.raises(SkillFileTooLargeError):
             await service.create_from_upload(TENANT, USER, "big.md", b"x" * (MAX_BUNDLE_SIZE + 1))
+
+    async def test_well_compressing_bundle_over_upload_limit_when_unpacked_accepted(self, service):
+        """Regression: an archive under the upload limit whose contents expand past it.
+
+        A pptx/font/image bundle compresses well — the .zip stays at a few MB while the
+        extracted files exceed 10MB. That used to be rejected as "file exceeds 10MB",
+        which reads as a bug on a 7MB file. Only the unpacked limit may reject it now.
+        """
+        asset = b"x" * (MAX_BUNDLE_SIZE + 1)  # deflates to a few KB
+        data = _zip_bytes(
+            {"demo-skill/SKILL.md": _md_bytes(), "demo-skill/assets/template.bin": asset},
+            compression=zipfile.ZIP_DEFLATED,
+        )
+        assert len(data) < MAX_BUNDLE_SIZE
+        detail = await service.create_from_upload(TENANT, USER, "demo-skill.zip", data)
+        assert {f.path for f in detail.files} == {SKILL_MD, "assets/template.bin"}
+
+    async def test_unpacked_oversize_rejected(self, service):
+        asset = b"x" * (MAX_UNPACKED_SIZE + 1)
+        data = _zip_bytes(
+            {"demo-skill/SKILL.md": _md_bytes(), "demo-skill/assets/bomb.bin": asset},
+            compression=zipfile.ZIP_DEFLATED,
+        )
+        assert len(data) < MAX_BUNDLE_SIZE  # passes the upload gate, must trip the unpacked one
+        with pytest.raises(SkillBundleTooLargeError):
+            await service.create_from_upload(TENANT, USER, "demo-skill.zip", data)
 
     async def test_unsupported_extension_rejected(self, service):
         with pytest.raises(SkillValidationError, match="unsupported"):

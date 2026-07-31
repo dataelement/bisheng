@@ -76,7 +76,7 @@ class SkillValidationError(BaseErrorCode):
     Msg: str = "Skill validation failed: invalid frontmatter or name"
 
 
-# Skill file exceeds the 10MB size limit
+# Uploaded skill file (the .md / .zip / .skill payload itself) exceeds the 10MB limit
 class SkillFileTooLargeError(BaseErrorCode):
     Code: int = 11052
     Msg: str = "Skill file exceeds the 10MB size limit"
@@ -126,3 +126,13 @@ class SkillGitHubFetchError(BaseErrorCode):
 class SkillGitHubRateLimitError(BaseErrorCode):
     Code: int = 11058
     Msg: str = "GitHub API rate limit exceeded, please retry later"
+
+
+# Bundle contents exceed the unpacked-size limit: sum of the extracted files (upload)
+# or of the downloaded files (GitHub import). Distinct from 11052 — that one is about
+# the uploaded payload itself, and a 7MB archive can still expand past this line, so
+# the two must not share one message ("file exceeds 10MB" on a 7MB file reads as a bug).
+# Numbered after the GitHub block to keep this file in ascending code order.
+class SkillBundleTooLargeError(BaseErrorCode):
+    Code: int = 11059
+    Msg: str = "Skill bundle contents exceed the 100MB unpacked size limit"

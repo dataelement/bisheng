@@ -620,7 +620,7 @@ SKILLS_ROOT/                          # 配置项 linsight_conf.skills_root（v2
 
 ### 7.4 上传校验链
 
-1. 整包 ≤10MB（multipart 先于解包校验）；`.zip`/`.skill`/文件夹须在根目录找到 `SKILL.md`（缺失 → 11051）；
+1. 上传体积 ≤10MB（multipart 先于解包校验 → 11052），解包后所有文件合计 ≤100MB（→ 11059，同时是 GitHub 导入的累计下载上限）；`.zip`/`.skill`/文件夹须在根目录找到 `SKILL.md`（缺失 → 11051）；
 2. 解析 frontmatter（缺 `name`/`description` → 拒绝）；`name` 正则 `^[a-z0-9]+(-[a-z0-9]+)*$` ≤64 且须 = 目录名；`description` ≤1024；`metadata.display-name` 缺省回退 `name`、≤255；
 3. 同租户重名校验：`name`（DB 唯一约束）与 `display_name`（应用层）任一重复 → 11055（管理端**拒绝**，与迁移脚本的「自动加后缀」策略不同——管理端用户可自行改名）；
 4. bundle 文件相对路径防穿越（拒绝 `..`/绝对路径/符号链接）后写入 `data/skills/{tenant_id}/<name>/`，目录结构原样保留；
