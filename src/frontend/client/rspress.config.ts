@@ -113,7 +113,7 @@ export default defineConfig({
             { text: '色彩 Color', link: '/基础-色彩规范' },
             { text: '图标 Icon', link: '/基础-图标规范' },
             { text: '插画 Illustration', link: '/基础-插画规范' },
-            { text: '阴影与圆角 Elevation', link: '/基础-阴影与圆角规范' },
+            { text: '圆角与阴影 Radius & Shadow', link: '/基础-圆角与阴影规范' },
           ],
         },
         {
