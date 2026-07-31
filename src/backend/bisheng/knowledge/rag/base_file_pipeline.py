@@ -151,15 +151,24 @@ class BaseFilePipeline(BasePipeline):
         """
         return None
 
+    def _excel_header_row_indices(self) -> list[int]:
+        """Convert 1-based Excel header rows from the UI/API to 0-based DataFrame indices."""
+        excel_rule = self.file_split_rule.excel_rule
+        if not excel_rule:
+            return [0, 0]
+        start = max((excel_rule.header_start_row or 1) - 1, 0)
+        end = max((excel_rule.header_end_row or 1) - 1, 0)
+        if end < start:
+            end = start
+        return [start, end]
+
     def _init_excel_loader(self) -> BaseBishengLoader:
+        excel_rule = self.file_split_rule.excel_rule
         return ExcelLoader(
             **self._get_loader_common_params(),
-            header_rows=[
-                self.file_split_rule.excel_rule.header_start_row,
-                self.file_split_rule.excel_rule.header_end_row,
-            ],
-            data_rows=self.file_split_rule.excel_rule.slice_length,
-            append_header=self.file_split_rule.excel_rule.append_header,
+            header_rows=self._excel_header_row_indices(),
+            data_rows=excel_rule.slice_length,
+            append_header=excel_rule.append_header,
         )
 
     def _init_txt_loader(self) -> BaseBishengLoader:
@@ -193,15 +202,13 @@ class BaseFilePipeline(BasePipeline):
         )
 
     def _init_xcreate_loader(self) -> BaseBishengLoader:
+        excel_rule = self.file_split_rule.excel_rule
         return XinChuangFormatterLoader(
             **self._get_loader_common_params(),
             retain_images=self.file_split_rule.retain_images == 1,
-            header_rows=[
-                self.file_split_rule.excel_rule.header_start_row,
-                self.file_split_rule.excel_rule.header_end_row,
-            ],
-            data_rows=self.file_split_rule.excel_rule.slice_length,
-            append_header=self.file_split_rule.excel_rule.append_header,
+            header_rows=self._excel_header_row_indices(),
+            data_rows=excel_rule.slice_length,
+            append_header=excel_rule.append_header,
         )
 
     def _build_pdf_loader(self, file_path: str, file_extension: str) -> BaseBishengLoader:

@@ -91,11 +91,11 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
 from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import (
     KnowledgeAuditTelemetryService,
 )
-from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.knowledge.domain.services.knowledge_permission_service import (
     KnowledgeContainerPermissionRecord,
     KnowledgeFilePermissionRecord,
 )
+from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.knowledge.domain.services.knowledge_space_tag_library_service import (
     KnowledgeSpaceTagLibraryService,
 )
@@ -438,10 +438,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         normal_spaces = []
         for space in spaces:
             effective_actions = action_map.get(str(space.id), frozenset())
-            if (
-                "visible" not in effective_actions
-                or required_action not in effective_actions
-            ):
+            if "visible" not in effective_actions or required_action not in effective_actions:
                 continue
             member_conf = membership_map.get(space.id)
             result = KnowledgeSpaceInfoResp(
@@ -1610,10 +1607,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             users = await UserDao.aget_user_by_ids(list(user_ids)) or []
             user_name_map = {u.user_id: u.user_name for u in users}
             action_lists = await asyncio.gather(
-                *[
-                    self._get_effective_actions("knowledge_space", sp.id)
-                    for sp in page_items
-                ]
+                *[self._get_effective_actions("knowledge_space", sp.id) for sp in page_items]
             )
             for sp, actions in zip(page_items, action_lists, strict=True):
                 sp.user_name = user_name_map.get(sp.user_id, str(sp.user_id))
@@ -2046,9 +2040,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             )
             for resource_id in resource_ids:
                 permissions[(resource_type, str(resource_id))] = (
-                    {"visible"}
-                    if "visible" in action_map.get(str(resource_id), frozenset())
-                    else set()
+                    {"visible"} if "visible" in action_map.get(str(resource_id), frozenset()) else set()
                 )
         return [
             item
@@ -3018,7 +3010,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
                             v_session.add(v_doc)
                             await v_session.commit()
                     # Get a preview cache of this filekey
-                    cache_key = self.get_preview_cache_key(knowledge_id, one)
+                    cache_key = self.preview_cache_key_for_split_rule(
+                        knowledge_id,
+                        one,
+                        {**file_split_rule.model_dump(), "excel_rule": ExcelRule().model_dump()},
+                    )
                     preview_cache_keys.append(cache_key)
                     process_files.append(db_file)
                     current_user_total += db_file.file_size
@@ -3394,9 +3390,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             # blocks direct API calls into a no-permission target (decision-8
             # reversal, see 测试反馈修复-R1.md #5).
             if target_folder_id:
-                target_actions = await self._get_effective_actions(
-                    "folder", target_folder_id, space_id=target_space_id
-                )
+                target_actions = await self._get_effective_actions("folder", target_folder_id, space_id=target_space_id)
             else:
                 target_actions = await self._get_effective_actions(
                     "knowledge_space", target_space_id, space_id=target_space_id

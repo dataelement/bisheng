@@ -490,11 +490,7 @@ class KnowledgeService(KnowledgeUtils):
                     _KNOWLEDGE_LIST_ACTIONS,
                 )
                 action_map.update(batch_action_map)
-                authorized.extend(
-                    one
-                    for one in batch
-                    if action in batch_action_map.get(int(one.id), set())
-                )
+                authorized.extend(one for one in batch if action in batch_action_map.get(int(one.id), set()))
                 if len(batch) < _KNOWLEDGE_PERMISSION_SCAN_BATCH_SIZE:
                     break
                 candidate_page += 1
@@ -518,11 +514,7 @@ class KnowledgeService(KnowledgeUtils):
                     _KNOWLEDGE_LIST_ACTIONS,
                 )
                 action_map.update(batch_action_map)
-                res.extend(
-                    one
-                    for one in batch
-                    if action in batch_action_map.get(int(one.id), set())
-                )
+                res.extend(one for one in batch if action in batch_action_map.get(int(one.id), set()))
                 if len(res) >= fetch_limit or len(batch) < _KNOWLEDGE_PERMISSION_SCAN_BATCH_SIZE:
                     break
                 last_db = batch[-1]
@@ -531,8 +523,7 @@ class KnowledgeService(KnowledgeUtils):
                     last_db.id,
                 ]
         logger.info(
-            "[perf][knowledge.list.filter] user_id={} action={} type={} "
-            "sort_by={} page_size={} rows={} took_ms={:.2f}",
+            "[perf][knowledge.list.filter] user_id={} action={} type={} sort_by={} page_size={} rows={} took_ms={:.2f}",
             login_user.user_id,
             action,
             knowledge_type.value,
@@ -660,11 +651,7 @@ class KnowledgeService(KnowledgeUtils):
             [int(one.id) for one in db_knowledge],
             ["visible"],
         )
-        filter_knowledge = [
-            one
-            for one in db_knowledge
-            if "visible" in action_map.get(int(one.id), set())
-        ]
+        filter_knowledge = [one for one in db_knowledge if "visible" in action_map.get(int(one.id), set())]
         if not filter_knowledge:
             return []
 
@@ -1030,33 +1017,6 @@ class KnowledgeService(KnowledgeUtils):
 
         file_path = req_data.file_list[0].file_path
         excel_rule = req_data.file_list[0].excel_rule
-        cache_key = cls.get_preview_cache_key(req_data.knowledge_id, file_path)
-
-        redis_client = await get_redis_client()
-
-        # Attempt to fetch from cache
-        if req_data.cache:
-            if cache_value := await cls.async_get_preview_cache(cache_key):
-                parse_type = await redis_client.aget(f"{cache_key}_parse_type")
-                file_share_url = await redis_client.aget(f"{cache_key}_file_path")
-                partitions = await redis_client.aget(f"{cache_key}_partitions")
-                res = []
-
-                # Sort by segment order
-                cache_value = dict(sorted(cache_value.items(), key=lambda x: int(x[0])))
-
-                for key, val in cache_value.items():
-                    res.append(FileChunk(text=val["text"], metadata=val["metadata"]))
-                return parse_type, file_share_url, res, partitions
-
-        filepath, file_name = await async_file_download(file_path)
-        file_ext = file_name.split(".")[-1].lower()
-        file_name = cls.get_upload_file_original_name(file_name)
-
-        # Split text using PreviewFilePipeline
-        from bisheng.api.v1.schemas import FileProcessBase
-        from bisheng.knowledge.rag.preview_file_pipeline import PreviewFilePipeline
-
         file_rule = FileProcessBase(
             knowledge_id=req_data.knowledge_id,
             split_mode=req_data.split_mode,
@@ -1073,6 +1033,39 @@ class KnowledgeService(KnowledgeUtils):
             retain_images=req_data.retain_images,
             excel_rule=excel_rule,
         )
+        cache_key = cls.preview_cache_key_for_split_rule(req_data.knowledge_id, file_path, file_rule)
+        legacy_cache_key = cls.legacy_preview_cache_key(req_data.knowledge_id, file_path)
+
+        redis_client = await get_redis_client()
+
+        # Attempt to fetch from cache
+        if req_data.cache:
+            used_cache_key = cache_key
+            cache_value = await cls.async_get_preview_cache(cache_key)
+            if not cache_value and legacy_cache_key != cache_key:
+                cache_value = await cls.async_get_preview_cache(legacy_cache_key)
+                if cache_value:
+                    used_cache_key = legacy_cache_key
+            if cache_value:
+                parse_type = await redis_client.aget(f"{used_cache_key}_parse_type")
+                file_share_url = await redis_client.aget(f"{used_cache_key}_file_path")
+                partitions = await redis_client.aget(f"{used_cache_key}_partitions")
+                res = []
+
+                # Sort by segment order
+                cache_value = dict(sorted(cache_value.items(), key=lambda x: int(x[0])))
+
+                for key, val in cache_value.items():
+                    res.append(FileChunk(text=val["text"], metadata=val["metadata"]))
+                return parse_type, file_share_url, res, partitions
+
+        filepath, file_name = await async_file_download(file_path)
+        file_ext = file_name.split(".")[-1].lower()
+        file_name = cls.get_upload_file_original_name(file_name)
+
+        # Split text using PreviewFilePipeline
+        from bisheng.knowledge.rag.preview_file_pipeline import PreviewFilePipeline
+
         pipeline = PreviewFilePipeline(
             invoke_user_id=login_user.user_id,
             local_file_path=filepath,
@@ -1128,6 +1121,7 @@ class KnowledgeService(KnowledgeUtils):
 
         # Deposit Cache
         await cls.async_save_preview_cache(cache_key, mapping=cache_map)
+        await cls.async_bind_preview_cache_key(req_data.knowledge_id, file_path, cache_key)
         await redis_client.aset(f"{cache_key}_parse_type", parse_type)
         await redis_client.aset(f"{cache_key}_file_path", file_share_url)
         await redis_client.aset(f"{cache_key}_partitions", partitions)
@@ -1144,7 +1138,7 @@ class KnowledgeService(KnowledgeUtils):
             knowledge_id=knowledge.id,
         )
 
-        cache_key = cls.get_preview_cache_key(req_data.knowledge_id, req_data.file_path)
+        cache_key = await cls.async_resolve_preview_cache_key(req_data.knowledge_id, req_data.file_path)
         chunk_info = await cls.async_get_preview_cache(cache_key, req_data.chunk_index)
         if not chunk_info:
             raise NotFoundError.http_exception()
@@ -1164,7 +1158,7 @@ class KnowledgeService(KnowledgeUtils):
         except UnAuthorizedError:
             raise UnAuthorizedError.http_exception()
 
-        cache_key = cls.get_preview_cache_key(req_data.knowledge_id, req_data.file_path)
+        cache_key = cls.resolve_preview_cache_key_sync(req_data.knowledge_id, req_data.file_path)
         cls.delete_preview_cache(cache_key, chunk_index=req_data.chunk_index)
 
     @classmethod
@@ -1216,7 +1210,11 @@ class KnowledgeService(KnowledgeUtils):
                     if limit_bytes is not None and current_total_file_size > limit_bytes:
                         raise SpaceFileSizeLimitError()
                     # Get a preview cache of this filekey
-                    cache_key = cls.get_preview_cache_key(req_data.knowledge_id, one.file_path)
+                    cache_key = cls.preview_cache_key_for_split_rule(
+                        req_data.knowledge_id,
+                        one.file_path,
+                        {**split_rule_dict, "excel_rule": (one.excel_rule or ExcelRule()).model_dump()},
+                    )
                     preview_cache_keys.append(cache_key)
                     process_files.append(db_file)
                 else:
@@ -1277,7 +1275,11 @@ class KnowledgeService(KnowledgeUtils):
                     current_total_file_size += int(db_file.file_size or 0)
                     if limit_bytes is not None and current_total_file_size > limit_bytes:
                         raise SpaceFileSizeLimitError()
-                    cache_key = cls.get_preview_cache_key(req_data.knowledge_id, one.file_path)
+                    cache_key = cls.preview_cache_key_for_split_rule(
+                        req_data.knowledge_id,
+                        one.file_path,
+                        {**split_rule_dict, "excel_rule": (one.excel_rule or ExcelRule()).model_dump()},
+                    )
                     preview_cache_keys.append(cache_key)
                     process_files.append(db_file)
                 else:

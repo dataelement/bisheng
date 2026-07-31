@@ -1428,7 +1428,7 @@ protected owner transfer 不再是开放项：F048 启服构建必须退役 F018
 | D1 Schema Migration | 进程存活、F048 不就绪 | 正常启动链只执行 `alembic upgrade head` 的 MySQL/DM8 DDL；验证单 head 与新表/索引/约束存在；revision 不创建 run、不读取或写入业务数据、不访问 OpenFGA |
 | D2 Data Migration Script 初始化与控制面转换 | backend 容器可进入、访问门禁生效 | 运维进入 backend 容器，从 `src/backend/` 以 live `config` 执行 `scripts/migrate_f048_permission_data.py migrate ... --apply`；脚本验证 D1/schema fingerprint 与 ready heartbeat=0，创建唯一正式 run，在**同一 Store**发布新 model 并跑 model tests，再导入 Action/Catalog/标准及自定义 Model、binding→Grant/assignee、mode 和人工项 |
 | D3 迁移并退役旧数据 | 访问门禁生效、F048 不就绪 | 原地复用仍合法的 tenant/department/user_group/system/shared/parent tuple；按 item/checkpoint 写新 Catalog/Grant/mode tuple，逐批核对后删除已迁移资源的旧四档/废弃 relation tuple；旧 Config 大 JSON 原始行只读保留供排障，不再参与运行时 |
-| D4 数据脚本 verify | 访问门禁生效、尚未重启 | 执行同一脚本的 `verify --run-id`；blocker=0；来源/目标计数和 checksum 一致；已迁移类型 legacy tuple 计数为零；旧 Config 保留数只作为审计证据；新 model 高风险 Check/List、owner、mode、多来源、dashboard、download 语义通过；run 转 `READY_TO_START` |
+| D4 数据脚本 verify | 访问门禁生效、尚未重启 | 执行同一脚本的 `verify --run-id`；blocker=0；来源/目标计数和 checksum 一致；source item 必须在应用层按 `(source_kind, source_locator)` 排序，不能依赖 MySQL/DM8 collation；已迁移类型 legacy tuple 计数为零；preserved 核对排除已审计的 stale tuple 与 canonical identity=false tuple；旧 Config 保留数只作为审计证据；新 model 高风险 Check/List、owner、mode、多来源、dashboard、download 语义通过；run 转 `READY_TO_START` |
 | D5 重启并自动发现 | 重启→新 model | 数据迁移成功后重启 API、Celery、Linsight 等服务；配置只保留 OpenFGA 连接信息、稳定 Store name，`dual_model_mode=false` 且无 `legacy_model_id`；全部实例发现唯一同名 Store/latest model，并要求它与 SQL CURRENT Catalog 的 ACTIVE release 一致；readiness/heartbeat 100% 且 smoke 通过后访问门禁自动解除 |
 | D6 前向运行 | 新 model | 正常读写只走新 model + projection ledger；问题只做前向修复；旧 model ID 仅作为 OpenFGA 不可删除的历史版本存在 |
 

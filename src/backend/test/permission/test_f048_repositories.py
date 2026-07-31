@@ -31,7 +31,10 @@ from bisheng.permission.domain.models import (
 )
 from bisheng.permission.domain.repositories.catalog_repository import CatalogRepository
 from bisheng.permission.domain.repositories.grant_repository import GrantRepository
-from bisheng.permission.domain.repositories.migration_repository import MigrationRepository
+from bisheng.permission.domain.repositories.migration_repository import (
+    MigrationRepository,
+    _migration_source_checksum,
+)
 from bisheng.permission.domain.repositories.projection_repository import ProjectionRepository
 
 SessionFactory = Callable[[], AbstractAsyncContextManager[AsyncSession]]
@@ -438,3 +441,36 @@ async def test_migration_environment_lease_item_and_checkpoint_resume(
     updated_run = await repository.aget_run(run.id)
     assert updated_run is not None
     assert updated_run.blocker_count == 7
+
+
+def test_migration_source_checksum_is_independent_of_database_collation_order() -> None:
+    run = PermissionMigrationRun(
+        environment_fingerprint="f" * 64,
+        phase="VERIFYING",
+        store_id="store",
+        source_model_id="legacy",
+        source_watermark="watermark",
+    )
+    items = (
+        PermissionMigrationItem(
+            run_id=1,
+            source_kind="TUPLE",
+            source_locator="tuple:department:2|parent|department:5|",
+            source_checksum="2" * 64,
+            status="READY",
+            severity="INFO",
+        ),
+        PermissionMigrationItem(
+            run_id=1,
+            source_kind="TUPLE",
+            source_locator="tuple:department:200#member|viewer|workflow:1|",
+            source_checksum="3" * 64,
+            status="READY",
+            severity="INFO",
+        ),
+    )
+
+    assert _migration_source_checksum(run, items) == _migration_source_checksum(
+        run,
+        reversed(items),
+    )

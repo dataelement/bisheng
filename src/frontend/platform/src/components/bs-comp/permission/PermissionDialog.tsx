@@ -1,4 +1,5 @@
 import { Button } from "@/components/bs-ui/button"
+import { Checkbox } from "@/components/bs-ui/checkBox"
 import {
   Dialog,
   DialogContent,
@@ -49,6 +50,9 @@ export function PermissionDialog({
   )
   const [assignees, setAssignees] = useState<PermissionGrantAssignee[]>([])
   const [subjectType, setSubjectType] = useState<SubjectType>("user")
+  const [grantSubjectType, setGrantSubjectType] =
+    useState<SubjectType>("user")
+  const [grantIncludeChildren, setGrantIncludeChildren] = useState(false)
   const [grantDialogOpen, setGrantDialogOpen] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
   const [loading, setLoading] = useState(false)
@@ -77,8 +81,16 @@ export function PermissionDialog({
       return
     }
     setSubjectType("user")
+    setGrantSubjectType("user")
+    setGrantIncludeChildren(false)
     void loadContext()
   }, [loadContext, open])
+
+  useEffect(() => {
+    if (grantSubjectType !== "department") {
+      setGrantIncludeChildren(false)
+    }
+  }, [grantSubjectType])
 
   const handleModeApplied = (result: ApplyPermissionModeDraftResult) => {
     setContext((current) =>
@@ -173,7 +185,11 @@ export function PermissionDialog({
                     <Button
                       type="button"
                       className="h-8 shrink-0 rounded-[6px] px-3 text-[14px] leading-[22px]"
-                      onClick={() => setGrantDialogOpen(true)}
+                      onClick={() => {
+                        setGrantSubjectType(subjectType)
+                        setGrantIncludeChildren(false)
+                        setGrantDialogOpen(true)
+                      }}
                     >
                       {t("dialog.tabGrant")}
                     </Button>
@@ -211,16 +227,56 @@ export function PermissionDialog({
                 {t("dialog.tabGrant")} - {resourceName}
               </DialogDescription>
             </DialogHeader>
-            <div className="mt-4 min-h-0 flex-1 overflow-y-auto">
-              <PermissionGrantTab
-                resourceType={resourceType}
-                resourceId={resourceId}
-                context={context}
-                assignees={assignees}
-                fixedSubjectType={subjectType}
-                showExistingAssignees={false}
-                onSuccess={handleGrantSuccess}
-              />
+
+            <div className="mt-4 flex min-h-0 flex-1 flex-col overflow-hidden">
+              <div className="flex items-center gap-3">
+                <div className="inline-flex w-fit shrink-0 items-center justify-center rounded-[6px] border border-[#ECECEC] bg-white p-[3px]">
+                  {SUBJECT_TABS.map((tab) => (
+                    <button
+                      key={tab.value}
+                      type="button"
+                      aria-pressed={grantSubjectType === tab.value}
+                      className={[
+                        "min-w-0 rounded-[4px] px-3 py-0.5 text-[14px] leading-[22px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+                        grantSubjectType === tab.value
+                          ? "bg-primary/10 font-medium text-primary"
+                          : "font-normal text-[#818181]",
+                      ].join(" ")}
+                      onClick={() => setGrantSubjectType(tab.value)}
+                    >
+                      {t(tab.labelKey)}
+                    </button>
+                  ))}
+                </div>
+
+                {grantSubjectType === "department" && (
+                  <label className="flex shrink-0 cursor-pointer items-center gap-2 text-[14px] leading-[22px] text-[#212121]">
+                    <Checkbox
+                      checked={grantIncludeChildren}
+                      onCheckedChange={(checked) =>
+                        setGrantIncludeChildren(checked === true)
+                      }
+                    />
+                    {t("source.includeChildren")}
+                  </label>
+                )}
+              </div>
+
+              <div className="mt-4 min-h-0 flex-1 overflow-hidden">
+                <PermissionGrantTab
+                  resourceType={resourceType}
+                  resourceId={resourceId}
+                  context={context}
+                  assignees={assignees}
+                  fixedSubjectType={grantSubjectType}
+                  includeChildren={grantIncludeChildren}
+                  onIncludeChildrenChange={setGrantIncludeChildren}
+                  hideDepartmentIncludeChildrenControl
+                  legacyAddLayout
+                  showExistingAssignees={false}
+                  onSuccess={handleGrantSuccess}
+                />
+              </div>
             </div>
           </DialogContent>
         </Dialog>

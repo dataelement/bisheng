@@ -22,17 +22,17 @@ class XinChuangFormatterLoader(BaseBishengLoader):
     }
 
     def __init__(
-            self,
-            retain_images: bool = True,
-            header_rows: list[int] | None = None,
-            data_rows: int = 12,
-            append_header: bool = True,
-            *args,
-            **kwargs,
+        self,
+        retain_images: bool = True,
+        header_rows: list[int] | None = None,
+        data_rows: int = 12,
+        append_header: bool = True,
+        *args,
+        **kwargs,
     ):
         super().__init__(*args, **kwargs)
         self.retain_images = retain_images
-        self.header_rows = header_rows or [0, 1]
+        self.header_rows = header_rows or [0, 0]
         self.data_rows = data_rows
         self.append_header = append_header
 
@@ -64,9 +64,7 @@ class XinChuangFormatterLoader(BaseBishengLoader):
             raise RuntimeError(f"failed to convert {self.file_name} to {target_ext}")
         return converted_path
 
-    def _build_delegate_loader(
-            self, file_path: str, file_extension: str, loader_type: str
-    ) -> BaseBishengLoader:
+    def _build_delegate_loader(self, file_path: str, file_extension: str, loader_type: str) -> BaseBishengLoader:
         params = {
             "file_path": file_path,
             "file_metadata": self.file_metadata,

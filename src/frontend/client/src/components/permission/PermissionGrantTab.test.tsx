@@ -106,6 +106,49 @@ describe("F048 Client PermissionGrantTab", () => {
     mockedMutate.mockResolvedValue({ resource_version: 8, items: [] });
   });
 
+  it("keeps the legacy add-dialog layout while submitting an F048 mutation", async () => {
+    render(
+      <PermissionGrantTab
+        resourceType="channel"
+        resourceId="channel-1"
+        context={context}
+        fixedSubjectType="user"
+        legacyAddLayout
+        showExistingAssignees={false}
+        onSuccess={jest.fn()}
+      />,
+    );
+
+    expect(
+      await screen.findByTestId("legacy-permission-grant-layout"),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "select new user" }));
+    fireEvent.change(
+      screen.getByLabelText("f048_permission.grant.add_model"),
+      { target: { value: "editor" } },
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "f048_permission.grant.submit" }),
+    );
+
+    await waitFor(() => expect(mockedMutate).toHaveBeenCalledTimes(1));
+    expect(mockedMutate).toHaveBeenCalledWith(
+      "channel",
+      "channel-1",
+      expect.objectContaining({
+        expected_resource_version: 7,
+        expected_catalog_release_id: 11,
+        changes: [
+          {
+            op: "ADD",
+            model_key: "editor",
+            subject: { type: "user", id: "99" },
+          },
+        ],
+      }),
+    );
+  });
+
   it("submits exact ADD, MOVE, and REMOVE changes with IDs and versions", async () => {
     render(
       <PermissionGrantTab

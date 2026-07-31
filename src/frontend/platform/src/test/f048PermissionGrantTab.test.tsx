@@ -84,6 +84,47 @@ describe("F048 PermissionGrantTab", () => {
     })
   })
 
+  it("keeps the legacy add-dialog layout while submitting an F048 mutation", async () => {
+    render(
+      <PermissionGrantTab
+        resourceType="workflow"
+        resourceId="flow-1"
+        context={context}
+        fixedSubjectType="user"
+        legacyAddLayout
+        showExistingAssignees={false}
+        onSuccess={vi.fn()}
+      />,
+    )
+
+    expect(
+      await screen.findByTestId("legacy-permission-grant-layout"),
+    ).toBeInTheDocument()
+    fireEvent.click(screen.getByRole("button", { name: "select-alice" }))
+    fireEvent.change(screen.getByLabelText("grant.addModel"), {
+      target: { value: "editor" },
+    })
+    fireEvent.click(screen.getByRole("button", { name: "grant.submit" }))
+
+    await waitFor(() => {
+      expect(mutateResourceGrantsApi).toHaveBeenCalledWith(
+        "workflow",
+        "flow-1",
+        expect.objectContaining({
+          expected_resource_version: 8,
+          expected_catalog_release_id: 14,
+          changes: [
+            {
+              op: "ADD",
+              model_key: "editor",
+              subject: { type: "user", id: "9" },
+            },
+          ],
+        }),
+      )
+    })
+  })
+
   it("submits ADD with only a stable model key and subject contract", async () => {
     render(
       <PermissionGrantTab
