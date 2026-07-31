@@ -243,7 +243,13 @@ export const AttachmentBar = ({
         const all: Entry[] = [
             ...uploadingFiles.map((f) => ({ kind: "uploading" as const, key: `up-${f.id}`, data: f })),
             ...files.map((f) => ({ kind: "file" as const, key: `file-${f.file_id || f.filepath || f.name}`, data: f })),
-            ...kbs.map((k) => ({ kind: "kb" as const, key: `kb-${k.id}`, data: k })),
+            // Knowledge selections are stored newest-first (the picker prepends),
+            // the opposite of the file arrays. Feed them in oldest-first so the
+            // sequence below means the same thing for every source: without this,
+            // a set that first appears all at once — restoring a conversation from
+            // localStorage — hands the newest item the lowest sequence and the row
+            // comes back reversed, even though picking them one by one is correct.
+            ...[...kbs].reverse().map((k) => ({ kind: "kb" as const, key: `kb-${k.id}`, data: k })),
             ...skills.map((s) => ({ kind: "skill" as const, key: `skill-${s.name}`, data: s })),
         ];
         const { map } = seqRef.current;
