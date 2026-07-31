@@ -34,6 +34,7 @@ import {
 import AiChatMessages from "~/components/Chat/AiChatMessages";
 import { ArticleQAIllustration } from "~/components/illustrations";
 import { KnowledgeAiInput } from "./KnowledgeAiInput";
+import { KnowledgeAttachmentStrip } from "./KnowledgeAttachmentStrip";
 import { ConversationHistory } from "./ConversationHistory";
 import useFolderChat from "~/hooks/useFolderChat";
 import type { FolderChatTag } from "~/hooks/useFolderChat";
@@ -56,6 +57,54 @@ interface KnowledgeAiBottomDockProps {
     onRestoreSelection?: () => void;
     /** Empty the input without forgetting the location's pick (resuming history). */
     onClearSelectionKeepingMemory?: () => void;
+}
+
+/** History + expand icon pair, shared by the floating corner buttons (bordered
+ *  white pills above the input) and the reference strip's right end (bare icons
+ *  on the grey strip — Figma 13022:47623/47629 drop the fill and border). */
+function DockControls({
+    bare = false,
+    onHistory,
+    onExpand,
+    historyLabel,
+    expandLabel,
+}: {
+    bare?: boolean;
+    onHistory: () => void;
+    onExpand: () => void;
+    historyLabel: string;
+    expandLabel: string;
+}) {
+    const buttonClass = cn(
+        "flex size-8 items-center justify-center rounded-[20px] text-[#86909c] transition-colors hover:text-[#4e5969]",
+        !bare && "border border-[#EBEBEB] bg-white drop-shadow-[0_0_8px_rgba(3,7,117,0.05)]",
+    );
+    return (
+        <TooltipProvider>
+            <div className="flex shrink-0 items-center gap-2">
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <button type="button" onClick={onHistory} aria-label={historyLabel} className={buttonClass}>
+                            <Outlined.History className="size-4" />
+                        </button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                        <p>{historyLabel}</p>
+                    </TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <button type="button" onClick={onExpand} aria-label={expandLabel} className={buttonClass}>
+                            <Outlined.DoubleDown className="size-4 rotate-180" />
+                        </button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                        <p>{expandLabel}</p>
+                    </TooltipContent>
+                </Tooltip>
+            </div>
+        </TooltipProvider>
+    );
 }
 
 export function KnowledgeAiBottomDock({
@@ -250,6 +299,13 @@ export function KnowledgeAiBottomDock({
         if (!historyDirect) setOpen(false);
     };
 
+    // Collapsed dock with content ticked: the grey reference strip stacked above
+    // the input (Figma 13022:46625) shows the chips AND hosts the history/expand
+    // controls; without it they float above the input's top-right corner.
+    const hasReferenceStrip = !open && selectedContent.length > 0;
+    const showDockControls =
+        !(showHistory && historyDirect) && (sessions.length > 0 || messages.length > 0);
+
     // ─── Mobile + expanded: take over the full visual viewport ─────────────
     if (isH5 && open) {
         const messageHeader = (
@@ -423,42 +479,17 @@ export function KnowledgeAiBottomDock({
                         exists. Gate on `sessions`, not `messages`: starting a new chat clears
                         `messages` but the session history is still there, so the controls must
                         persist. Left = history (opens the history list), right = expand (opens a
-                        fresh conversation). 12px gap. Shared by desktop + mobile-collapsed docks. */}
-                    {!open && !(showHistory && historyDirect) && (sessions.length > 0 || messages.length > 0) && (
-                        <TooltipProvider>
-                            <div className="absolute bottom-full right-0 z-10 mb-2 mr-2 flex items-center justify-end gap-2">
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
-                                        <button
-                                            type="button"
-                                            onClick={handleOpenHistory}
-                                            aria-label={localize("com_knowledge.history_chat")}
-                                            className="flex size-8 items-center justify-center rounded-[20px] border border-[#EBEBEB] bg-white text-[#86909c] drop-shadow-[0_0_8px_rgba(3,7,117,0.05)] transition-colors hover:text-[#4e5969]"
-                                        >
-                                            <Outlined.History className="size-4" />
-                                        </button>
-                                    </TooltipTrigger>
-                                    <TooltipContent>
-                                        <p>{localize("com_knowledge.history_chat")}</p>
-                                    </TooltipContent>
-                                </Tooltip>
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
-                                        <button
-                                            type="button"
-                                            onClick={handleExpandNew}
-                                            aria-label={localize("com_ui_expand")}
-                                            className="flex size-8 items-center justify-center rounded-[20px] border border-[#EBEBEB] bg-white text-[#86909c] drop-shadow-[0_0_8px_rgba(3,7,117,0.05)] transition-colors hover:text-[#4e5969]"
-                                        >
-                                            <Outlined.DoubleDown className="size-4 rotate-180" />
-                                        </button>
-                                    </TooltipTrigger>
-                                    <TooltipContent>
-                                        <p>{localize("com_ui_expand")}</p>
-                                    </TooltipContent>
-                                </Tooltip>
-                            </div>
-                        </TooltipProvider>
+                        fresh conversation). 12px gap. Shared by desktop + mobile-collapsed docks.
+                        With content ticked they dock into the reference strip instead. */}
+                    {!open && !hasReferenceStrip && showDockControls && (
+                        <div className="absolute bottom-full right-0 z-10 mb-2 mr-3 flex items-center justify-end">
+                            <DockControls
+                                onHistory={handleOpenHistory}
+                                onExpand={handleExpandNew}
+                                historyLabel={localize("com_knowledge.history_chat")}
+                                expandLabel={localize("com_ui_expand")}
+                            />
+                        </div>
                     )}
 
                     {/* Direct-entry history — its own rounded card floating above the
@@ -584,6 +615,27 @@ export function KnowledgeAiBottomDock({
                         </div>
                     </div>
 
+                    {/* Reference strip — ticked content as white chips on a grey bar
+                        overlapping the input card (Figma 13022:46625). The floating
+                        history/expand controls dock into its right end. */}
+                    {hasReferenceStrip && (
+                        <KnowledgeAttachmentStrip
+                            items={selectedContent}
+                            onRemove={handleUnselectContent}
+                            trailing={
+                                showDockControls ? (
+                                    <DockControls
+                                        bare
+                                        onHistory={handleOpenHistory}
+                                        onExpand={handleExpandNew}
+                                        historyLabel={localize("com_knowledge.history_chat")}
+                                        expandLabel={localize("com_ui_expand")}
+                                    />
+                                ) : undefined
+                            }
+                        />
+                    )}
+
                     {/* Input bar — `box` collapsed, `line` expanded. */}
                     <KnowledgeAiInput
                         key={spaceId}
@@ -598,6 +650,7 @@ export function KnowledgeAiBottomDock({
                         onFocusChange={handleInputFocusChange}
                         selectedContent={selectedContent}
                         onUnselectContent={handleUnselectContent}
+                        hideReferenceRow={!open}
                     />
 
                     {/* Standard-entry history — overlays the expanded card. */}

@@ -20,6 +20,7 @@ import { useRecoilState } from "recoil";
 import { Outlined } from "bisheng-icons";
 import { SendIcon } from "~/components/svg";
 import { AttachmentChip, AttachmentFileIcon } from "~/components/Chat/Input/AttachmentBar";
+import { PagerButton } from "./KnowledgeAttachmentStrip";
 import AiModelSelect from "~/components/Chat/AiModelSelect";
 import type { BsConfig } from "~/api/chatApi";
 import { TagPicker } from "./TagPicker";
@@ -54,6 +55,11 @@ interface KnowledgeAiInputProps {
     selectedContent?: KnowledgeAiReference[];
     /** Removing a chip unticks that row in the file list. */
     onUnselectContent?: (id: string) => void;
+    /** The dock renders the ticked content as a grey strip ABOVE this card
+     *  (KnowledgeAttachmentStrip, Figma 13022:46625) — suppress the in-card
+     *  reference row so the chips don't show twice. `selectedContent` still
+     *  drives the placeholder copy. */
+    hideReferenceRow?: boolean;
 }
 
 const TAG_TEXT_GAP_PX = 4;
@@ -74,6 +80,7 @@ export function KnowledgeAiInput({
     onFocusChange,
     selectedContent = [],
     onUnselectContent,
+    hideReferenceRow = false,
 }: KnowledgeAiInputProps) {
     const outerScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
     const localize = useLocalize();
@@ -143,6 +150,32 @@ export function KnowledgeAiInput({
     useEffect(() => {
         if (inputText.trim()) setTagDeleteHighlight(false);
     }, [inputText]);
+
+    // Reference-row scroll affordance: white edge fades appear only while content
+    // is actually scrolled out of view on that side (mirrors the grey strip).
+    const referenceRowRef = useRef<HTMLDivElement>(null);
+    const [refCanLeft, setRefCanLeft] = useState(false);
+    const [refCanRight, setRefCanRight] = useState(false);
+    const updateReferenceEdges = useCallback(() => {
+        const el = referenceRowRef.current;
+        if (!el) return;
+        const maxScroll = el.scrollWidth - el.clientWidth;
+        setRefCanLeft(el.scrollLeft > 1);
+        setRefCanRight(el.scrollLeft < maxScroll - 1);
+    }, []);
+    useLayoutEffect(() => {
+        updateReferenceEdges();
+        const el = referenceRowRef.current;
+        if (!el || typeof ResizeObserver === "undefined") return;
+        const ro = new ResizeObserver(() => updateReferenceEdges());
+        ro.observe(el);
+        return () => ro.disconnect();
+    }, [updateReferenceEdges, selectedContent.length, hideReferenceRow]);
+    const pageReferenceRow = useCallback((dir: "left" | "right") => {
+        const el = referenceRowRef.current;
+        if (!el) return;
+        el.scrollBy({ left: dir === "left" ? -el.clientWidth : el.clientWidth, behavior: "smooth" });
+    }, []);
 
     // 底纹词三档：已选 tag 时仅用短文案（"输入 #" 的提示已无意义）；否则由勾选状态
     // 决定问答范围的说法。部分浏览器不会随 React placeholder 属性刷新，需同步到 DOM
@@ -359,23 +392,46 @@ export function KnowledgeAiInput({
                 Always one line: it scrolls sideways rather than wrapping, so the
                 input never grows taller as more content is picked. Nothing ticked →
                 the row is absent, not empty, so no height is reserved for it. */}
-            {selectedContent.length > 0 && (
-                <div className="mb-2 flex w-full shrink-0 gap-2 overflow-x-auto pb-1 scrollbar-on-scroll">
-                    {selectedContent.map((item) => (
-                        <AttachmentChip
-                            key={item.id}
-                            icon={
-                                item.isFolder ? (
-                                    <Outlined.FolderClose size={16} />
-                                ) : (
-                                    <AttachmentFileIcon name={item.name} />
-                                )
-                            }
-                            label={item.name}
-                            className="bg-fill-2"
-                            onRemove={onUnselectContent ? () => onUnselectContent(item.id) : undefined}
+            {!hideReferenceRow && selectedContent.length > 0 && (
+                <div className="mb-2 flex w-full shrink-0 items-center gap-2">
+                    {refCanLeft && <PagerButton direction="left" onClick={() => pageReferenceRow("left")} />}
+                    <div className="relative min-w-0 flex-1">
+                        <div
+                            ref={referenceRowRef}
+                            onScroll={updateReferenceEdges}
+                            className="flex w-full gap-2 overflow-x-auto pb-1 scrollbar-on-scroll"
+                        >
+                            {selectedContent.map((item) => (
+                                <AttachmentChip
+                                    key={item.id}
+                                    icon={
+                                        item.isFolder ? (
+                                            <Outlined.FolderClose size={16} />
+                                        ) : (
+                                            <AttachmentFileIcon name={item.name} />
+                                        )
+                                    }
+                                    label={item.name}
+                                    className="h-8 bg-[#F8F8F8]"
+                                    onRemove={onUnselectContent ? () => onUnselectContent(item.id) : undefined}
+                                />
+                            ))}
+                        </div>
+                        {/* Edge fades hinting at chips scrolled out of view (white surface). */}
+                        <div
+                            className={cn(
+                                "pointer-events-none absolute left-0 top-0 h-full w-6 bg-gradient-to-r from-white from-[49%] to-transparent transition-opacity",
+                                refCanLeft ? "opacity-100" : "opacity-0",
+                            )}
                         />
-                    ))}
+                        <div
+                            className={cn(
+                                "pointer-events-none absolute right-0 top-0 h-full w-6 bg-gradient-to-l from-white from-[49%] to-transparent transition-opacity",
+                                refCanRight ? "opacity-100" : "opacity-0",
+                            )}
+                        />
+                    </div>
+                    {refCanRight && <PagerButton direction="right" onClick={() => pageReferenceRow("right")} />}
                 </div>
             )}
 
