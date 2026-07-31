@@ -186,9 +186,9 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     KnowledgeSpaceInfoResp,
     RemoveSpaceMemberRequest,
     ShougangPortalAdvancedFileSearchReq,
+    ShougangPortalCategoryFileCountItem,
     ShougangPortalDomainBindableSpaceResp,
     ShougangPortalDomainFileCountItem,
-    ShougangPortalCategoryFileCountItem,
     ShougangPortalFavoriteCreateReq,
     ShougangPortalFavoriteCreateResp,
     ShougangPortalFavoriteFileItem,
@@ -921,9 +921,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         required_capability: str,
     ):
         resolved = await self._resolve_document_entry(file_record)
-        if resolved is None or bool(
-            getattr(resolved.capabilities, required_capability, False)
-        ):
+        if resolved is None or bool(getattr(resolved.capabilities, required_capability, False)):
             return resolved
         if required_capability not in {"can_view", "can_preview"}:
             raise SpacePermissionDeniedError()
@@ -1329,9 +1327,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 object_type = "folder"
                 object_id = folder_id
         upload_permission_id = (
-            _UPLOAD_FILE_TO_FOLDER_PERMISSION_ID
-            if object_type == "folder"
-            else _UPLOAD_FILE_TO_SPACE_PERMISSION_ID
+            _UPLOAD_FILE_TO_FOLDER_PERMISSION_ID if object_type == "folder" else _UPLOAD_FILE_TO_SPACE_PERMISSION_ID
         )
         allowed = await PermissionService.check(
             int(login_user.user_id),
@@ -4863,6 +4859,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         self,
         categories: list[ShougangPortalCategoryFileCountItem],
     ) -> dict[str, int]:
+        """Count SUCCESS files in each category card's visible bound spaces (list-aligned)."""
         visible_scopes: dict[str, set[int]] = {}
         for category in categories:
             spaces = await self._get_shougang_portal_visible_search_spaces(category.space_ids, None)
@@ -6544,9 +6541,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         if decision.status == DepartmentFileAccessStatus.ALLOWED:
             self._portal_file_access_decision_map[int(file.id)] = decision
-            self._portal_file_download_map[int(file.id)] = bool(
-                decision.can_download
-            )
+            self._portal_file_download_map[int(file.id)] = bool(decision.can_download)
             spaces = await self._get_shougang_portal_request_spaces(
                 requested_space_ids=[space_id],
                 space_level=None,
@@ -6726,11 +6721,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         cls,
         spaces: list[Knowledge],
     ) -> tuple[list[Knowledge], int, int]:
-        space_ids = [
-            int(space.id)
-            for space in spaces
-            if getattr(space, "id", None) is not None
-        ]
+        space_ids = [int(space.id) for space in spaces if getattr(space, "id", None) is not None]
         scopes = await KnowledgeSpaceScopeDao.aget_map_by_space_ids(space_ids)
         retained: list[Knowledge] = []
         personal_count = 0
@@ -6771,9 +6762,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                             2,
                         ),
                         "empty_reason": (
-                            "only_personal_spaces"
-                            if personal_space_excluded_count
-                            else "space_scope_unknown"
+                            "only_personal_spaces" if personal_space_excluded_count else "space_scope_unknown"
                         ),
                         "personal_space_excluded_count": personal_space_excluded_count,
                         "requested_space_count": requested_space_count,

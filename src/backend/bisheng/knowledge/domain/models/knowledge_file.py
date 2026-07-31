@@ -12,7 +12,6 @@ from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT, JsonType
 from bisheng.database.base import async_get_count, get_count
-from bisheng.knowledge.domain.constants import parse_shougang_file_encoding_codes
 
 
 class KnowledgeFileStatus(int, Enum):
@@ -587,11 +586,12 @@ class KnowledgeFileDao(KnowledgeFileBase):
 
     @classmethod
     async def async_count_files_by_category_scopes(cls, category_space_ids: dict[str, set[int]]) -> dict[str, int]:
-        """Count successful files for each document-type and knowledge-space scope.
+        """Count SUCCESS files in each category card's bound spaces.
 
-        Document type comes from ``parse_shougang_file_encoding_codes`` (category segment),
-        matching portal/search filtering. LIKE prefilters may over-fetch; Python exact match
-        rejects rows whose category segment is not the requested code.
+        Aligns with portal category landing list (``aget_file_by_space_filters*``):
+        ``file_type=FILE``, ``status=SUCCESS``, ``deleted_at IS NULL``. Does **not** apply
+        ``active_inventory_predicate`` (which would hide non-primary historical rows the
+        list still shows). Category ``code`` is only the aggregation key, not an encoding filter.
         """
         normalized_scopes = {
             code.strip().upper(): {int(space_id) for space_id in space_ids if int(space_id) > 0}
@@ -599,38 +599,25 @@ class KnowledgeFileDao(KnowledgeFileBase):
             if code and code.strip()
         }
         counts = dict.fromkeys(normalized_scopes, 0)
-        conditions = [
-            and_(
-                KnowledgeFile.knowledge_id.in_(space_ids),
-                col(KnowledgeFile.file_encoding).like(f"%-{code}-%"),
-            )
-            for code, space_ids in normalized_scopes.items()
-            if space_ids
-        ]
-        if not conditions:
+        all_space_ids = sorted({space_id for space_ids in normalized_scopes.values() for space_id in space_ids})
+        if not all_space_ids:
             return counts
-        statement = select(
-            KnowledgeFile.id,
-            KnowledgeFile.reference_document_id,
-            KnowledgeFile.knowledge_id,
-            KnowledgeFile.file_encoding,
-        ).where(
-            KnowledgeFile.file_type == FileType.FILE.value,
-            KnowledgeFile.status == KnowledgeFileStatus.SUCCESS.value,
-            col(KnowledgeFile.file_encoding).is_not(None),
-            or_(*conditions),
-            cls.active_inventory_predicate(),
+        statement = (
+            select(KnowledgeFile.knowledge_id, func.count().label("cnt"))
+            .where(
+                KnowledgeFile.knowledge_id.in_(all_space_ids),
+                KnowledgeFile.file_type == FileType.FILE.value,
+                KnowledgeFile.status == KnowledgeFileStatus.SUCCESS.value,
+                col(KnowledgeFile.deleted_at).is_(None),
+            )
+            .group_by(KnowledgeFile.knowledge_id)
         )
         async with get_async_db_session() as session:
             rows = (await session.exec(statement)).all()
-        canonical_ids_by_code = {code: set() for code in normalized_scopes}
-        for file_id, document_id, knowledge_id, encoding in rows:
-            document_type, _ = parse_shougang_file_encoding_codes({"file_encoding": encoding})
-            if not document_type:
-                continue
-            if knowledge_id in normalized_scopes.get(document_type, set()):
-                canonical_ids_by_code[document_type].add(int(document_id or file_id))
-        return {code: len(canonical_ids_by_code[code]) for code in counts}
+        file_count_map = {int(row[0]): int(row[1] or 0) for row in rows}
+        for code, space_ids in normalized_scopes.items():
+            counts[code] = sum(int(file_count_map.get(space_id, 0) or 0) for space_id in space_ids)
+        return counts
 
     @classmethod
     def delete_batch(cls, file_ids: list[int]) -> bool:
