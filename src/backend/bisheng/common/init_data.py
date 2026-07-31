@@ -169,13 +169,13 @@ async def init_default_data():
                     await session.exec(update(GptsTools).where(GptsTools.id.in_(jr_types)).values(type=8))
                     await session.commit()
 
-            _bypass_tenant_filter.reset(_bypass_token)
-
-            # Initialize Databaseconfig
+            # Initialize Databaseconfig while init bypass is still active.
             await settings.init_config()
 
-            # init dashboard data
+            # init dashboard data — dashboard is tenant-scoped since F048
             await init_dashboard_datasets()
+
+            _bypass_tenant_filter.reset(_bypass_token)
 
         except Exception as exc:
             # if the exception involves tables already existing
