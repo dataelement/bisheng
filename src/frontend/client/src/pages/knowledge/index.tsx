@@ -4,7 +4,7 @@ import { createPortal } from "react-dom";
 import { Plus } from "lucide-react";
 import { EmptyStateIllustration } from "~/components/illustrations";
 import { Outlined } from "bisheng-icons";
-import { useSetRecoilState, useRecoilValue } from "recoil";
+import { useRecoilState, useSetRecoilState, useRecoilValue } from "recoil";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import store from "~/store";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
@@ -36,6 +36,12 @@ import { useConfirm, useToastContext } from "~/Providers";
 import { CreateKnowledgeSpaceDrawer, type CreateKnowledgeSpaceFormData } from "./CreateKnowledgeSpaceDrawer";
 import { KnowledgeSpaceSidebar } from "./sidebar/KnowledgeSpaceSidebar";
 import { KnowledgeSpaceContent, type SelectedContentItem } from "./SpaceDetail";
+import { knowledgeSelectedFilesState } from "./selectionStore";
+import {
+    quickQaLocationKey,
+    readQuickQaSelection,
+    writeQuickQaSelection,
+} from "./quickQaSelectionMemory";
 import { KnowledgeAiBottomDock } from "./SpaceDetail/AiChat/KnowledgeAiBottomDock";
 import { KnowledgeSpacePreviewDrawer } from "./KnowledgeSpacePreviewDrawer";
 import KnowledgeSquare from "./KnowledgeSquare";
@@ -79,6 +85,14 @@ export default function Knowledge() {
     // Content ticked in the file list — the AI dock restricts its answers to it.
     // Lives here because the dock is a sibling of the list, not a descendant.
     const [selectedContent, setSelectedContent] = useState<SelectedContentItem[]>([]);
+    const [selectedFiles, setSelectedFiles] = useRecoilState(knowledgeSelectedFilesState);
+    // Which location the selection currently on screen was restored for. Nothing
+    // is written back until a restore for the live location has run, so an
+    // in-flight navigation can never save one folder's pick under another's key.
+    const restoredSelectionKeyRef = useRef("");
+    // Set for a clear the user did not ask for (resuming a past conversation), so
+    // that clear empties the input without also forgetting the location's pick.
+    const skipSelectionPersistRef = useRef(false);
     // Mobile: full-page file search (opened from the file-page top-bar search icon).
     const [knowledgeSearchMode, setKnowledgeSearchMode] = useState(false);
     const mobileHeadIconBtnClassName = "inline-flex size-5 shrink-0 items-center justify-center text-[#212121]";
@@ -628,6 +642,50 @@ export default function Knowledge() {
     };
 
     const locationKey = fileManager.currentFolderId || activeSpace?.id || "";
+
+    // ─── Quick-Q&A selection memory (per space + folder, 7-day life) ────────
+    // The pick belongs to the location, so re-entering a folder finds it ticked
+    // again. This effect is the authority on the selection for a location: the
+    // file list only clears on a space switch, so restoring (even to nothing)
+    // is also what stops one folder's pick bleeding into the next.
+    const selectionMemoryKey = activeSpace
+        ? quickQaLocationKey(String(activeSpace.id), fileManager.currentFolderId)
+        : "";
+    const restoreRememberedSelection = useCallback(() => {
+        if (!selectionMemoryKey) return;
+        setSelectedFiles(new Set(readQuickQaSelection(user?.id, selectionMemoryKey)));
+    }, [selectionMemoryKey, user?.id, setSelectedFiles]);
+
+    useEffect(() => {
+        if (!selectionMemoryKey) return;
+        restoreRememberedSelection();
+        restoredSelectionKeyRef.current = selectionMemoryKey;
+    }, [selectionMemoryKey, restoreRememberedSelection]);
+
+    // Every change the user makes updates the memory; emptying the selection
+    // removes the entry, which is what makes "cleared stays cleared" true.
+    const selectedFileSignature = Array.from(selectedFiles).join(",");
+    useEffect(() => {
+        if (!selectionMemoryKey || restoredSelectionKeyRef.current !== selectionMemoryKey) return;
+        if (skipSelectionPersistRef.current) {
+            skipSelectionPersistRef.current = false;
+            return;
+        }
+        writeQuickQaSelection(
+            user?.id,
+            selectionMemoryKey,
+            selectedFileSignature ? selectedFileSignature.split(",") : [],
+        );
+    }, [selectedFileSignature, selectionMemoryKey, user?.id]);
+
+    /** Resuming a past conversation empties the input but must not forget the pick. */
+    const clearSelectionKeepingMemory = useCallback(() => {
+        // Only suppress a write this clear will actually cause; arming the flag on an
+        // already-empty selection would swallow the user's next real change.
+        if (selectedFiles.size === 0) return;
+        skipSelectionPersistRef.current = true;
+        setSelectedFiles(new Set<string>());
+    }, [selectedFiles, setSelectedFiles]);
     const contextLabel = fileManager.currentFolderId ? localize("com_knowledge.folder") : localize("com_knowledge.knowledge_space");
 
     if (knowledgePluginGate === "disabled") {
@@ -902,6 +960,8 @@ export default function Knowledge() {
                                 folderId={fileManager.currentFolderId}
                                 contextLabel={contextLabel}
                                 selectedContent={selectedContent}
+                                onRestoreSelection={restoreRememberedSelection}
+                                onClearSelectionKeepingMemory={clearSelectionKeepingMemory}
                             />
                         )}
                     </div>

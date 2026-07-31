@@ -22,7 +22,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Outlined } from "bisheng-icons";
 import { useQuery } from "@tanstack/react-query";
-import { useRecoilState, useRecoilValue, useResetRecoilState } from "recoil";
+import { useRecoilState, useRecoilValue } from "recoil";
 import { knowledgeSelectedFilesState } from "../../selectionStore";
 import type { SelectedContentItem } from "../index";
 import {
@@ -52,12 +52,18 @@ interface KnowledgeAiBottomDockProps {
     contextLabel?: string;
     /** Content ticked in the file list, in tick order. Empty = ask the whole folder. */
     selectedContent?: SelectedContentItem[];
+    /** Re-tick what this location remembers — a fresh conversation starts from it. */
+    onRestoreSelection?: () => void;
+    /** Empty the input without forgetting the location's pick (resuming history). */
+    onClearSelectionKeepingMemory?: () => void;
 }
 
 export function KnowledgeAiBottomDock({
     spaceId,
     folderId,
     selectedContent = [],
+    onRestoreSelection,
+    onClearSelectionKeepingMemory,
 }: KnowledgeAiBottomDockProps) {
     const localize = useLocalize();
     const isH5 = usePrefersMobileLayout();
@@ -85,10 +91,10 @@ export function KnowledgeAiBottomDock({
     const [isActive, setIsActive] = useState(false);
 
     // The file-list selection (shared atom) IS the Q&A scope: tick a few rows and the
-    // assistant answers only from them. It therefore survives focus and send — it is
-    // cleared only when the user starts a new conversation, or leaves this folder.
+    // assistant answers only from them. It survives focus and send, and is remembered
+    // per folder by the page above — so a fresh conversation starts from what this
+    // location remembers, while resuming a past one starts from the folder instead.
     const [, setFileSelection] = useRecoilState(knowledgeSelectedFilesState);
-    const resetFileSelection = useResetRecoilState(knowledgeSelectedFilesState);
     const selectedIds = selectedContent.map((item) => item.id);
 
     /** Input focus/blur — marks the dock active and drives the mobile keyboard overlay. */
@@ -187,9 +193,10 @@ export function KnowledgeAiBottomDock({
         }
     };
 
-    // A new conversation starts from the folder again — drop the carried-over selection.
+    // A new conversation starts from what this folder remembers, not from a blank
+    // slate: the pick belongs to the location, not to the conversation.
     const handleNewChat = async () => {
-        resetFileSelection();
+        onRestoreSelection?.();
         await createSession();
     };
 
@@ -215,9 +222,10 @@ export function KnowledgeAiBottomDock({
     };
 
     // Resuming a past conversation answers against the current folder (spec §2.3):
-    // a selection left over from the previous one must not silently narrow it.
+    // a selection left over from the previous one must not silently narrow it. The
+    // location's memory is kept, so a new conversation can still start from it.
     const handleHistorySelect = (chatId: string) => {
-        resetFileSelection();
+        onClearSelectionKeepingMemory?.();
         switchSession(chatId);
         setShowHistory(false);
         // Direct entry: the dock is still collapsed — expand it to show the conversation.
@@ -230,7 +238,7 @@ export function KnowledgeAiBottomDock({
 
     const handleHistoryNewChat = async () => {
         setShowHistory(false);
-        resetFileSelection();
+        onRestoreSelection?.();
         await createSession();
     };
 
