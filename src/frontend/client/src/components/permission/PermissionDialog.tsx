@@ -2,12 +2,15 @@ import { AlertTriangle, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { getResourcePermissionContext } from "~/api/permission";
 import type {
+  ApplyPermissionModeDraftResult,
   MutateResourceGrantsResult,
   PermissionGrantAssignee,
   ResourcePermissionContext,
   ResourceType,
+  SubjectType,
 } from "~/api/permission";
 import {
+  Button,
   Dialog,
   DialogContent,
   DialogDescription,
@@ -31,6 +34,18 @@ interface PermissionDialogProps {
   resourceName: string;
 }
 
+const SUBJECT_TABS: Array<{ value: SubjectType; labelKey: string }> = [
+  { value: "user", labelKey: "f048_permission.subject.user" },
+  {
+    value: "department",
+    labelKey: "f048_permission.subject.department",
+  },
+  {
+    value: "user_group",
+    labelKey: "f048_permission.subject.user_group",
+  },
+];
+
 export function PermissionDialog({
   open,
   onOpenChange,
@@ -42,8 +57,9 @@ export function PermissionDialog({
   const [context, setContext] =
     useState<ResourcePermissionContext | null>(null);
   const [assignees, setAssignees] = useState<PermissionGrantAssignee[]>([]);
+  const [subjectType, setSubjectType] = useState<SubjectType>("user");
+  const [grantDialogOpen, setGrantDialogOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [activeTab, setActiveTab] = useState("roster");
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
 
@@ -66,10 +82,10 @@ export function PermissionDialog({
     if (!open) {
       setContext(null);
       setAssignees([]);
-      setActiveTab("roster");
+      setGrantDialogOpen(false);
       return;
     }
-    setActiveTab("roster");
+    setSubjectType("user");
     void loadContext();
   }, [loadContext, open]);
 
@@ -81,34 +97,45 @@ export function PermissionDialog({
     );
     setAssignees(result.items);
     setRefreshKey((current) => current + 1);
-    setActiveTab("roster");
+    setGrantDialogOpen(false);
   };
 
-  const handleModeApplied = async () => {
-    setAssignees([]);
+  const handleModeApplied = (result: ApplyPermissionModeDraftResult) => {
+    setContext((current) =>
+      current
+        ? {
+            ...current,
+            mode: result.mode,
+            resource_version: result.resource_version,
+          }
+        : current,
+    );
     setRefreshKey((current) => current + 1);
-    setActiveTab("roster");
-    await loadContext();
   };
 
-  const canEditGrants =
+  const canAddPermission =
     context?.mode === "CUSTOM" && context.can_manage_permission;
+  const dialogClassName =
+    "!flex h-[80vh] max-h-[800px] w-[calc(100vw-80px)] max-w-[800px] min-w-0 flex-col gap-0 overflow-hidden p-0 max-[768px]:fixed max-[768px]:inset-0 max-[768px]:h-[100dvh] max-[768px]:max-h-[100dvh] max-[768px]:w-full max-[768px]:max-w-none max-[768px]:translate-x-0 max-[768px]:translate-y-0 max-[768px]:rounded-none";
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="!flex h-[80vh] max-h-[800px] w-[calc(100vw-32px)] max-w-[800px] min-w-0 flex-col gap-0 overflow-hidden p-5">
-        <DialogHeader className="shrink-0 text-left">
-          <DialogTitle className="text-left">
-            {localize("f048_permission.dialog.title")} - {resourceName}
-          </DialogTitle>
-          <DialogDescription>
-            {localize("f048_permission.dialog.description")}
-          </DialogDescription>
-        </DialogHeader>
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className={dialogClassName}>
+          <DialogHeader className="shrink-0 px-5 pb-4 pt-5 text-left max-[768px]:px-4">
+            <DialogTitle className="text-left">
+              {localize("f048_permission.dialog.title")} - {resourceName}
+            </DialogTitle>
+            <DialogDescription className="sr-only">
+              {localize("f048_permission.dialog.description")}
+            </DialogDescription>
+          </DialogHeader>
 
-        <div className="mt-4 min-h-0 flex-1 overflow-y-auto">
           {loading && (
-            <div className="flex min-h-56 items-center justify-center gap-2 text-sm text-[#818181]">
+            <div
+              className="flex min-h-56 flex-1 items-center justify-center gap-2 text-sm text-[#818181]"
+              role="status"
+            >
               <Loader2 aria-hidden="true" className="size-4 animate-spin" />
               {localize("f048_permission.dialog.loading")}
             </div>
@@ -116,7 +143,7 @@ export function PermissionDialog({
 
           {!loading && failed && (
             <div
-              className="flex min-h-56 items-center justify-center gap-2 rounded-lg border border-red-200 bg-red-50 p-5 text-sm text-red-700"
+              className="mx-5 flex min-h-32 items-center justify-center gap-2 rounded-lg border border-red-200 bg-red-50 p-5 text-sm text-red-700 max-[768px]:mx-4"
               role="alert"
             >
               <AlertTriangle aria-hidden="true" className="size-4" />
@@ -125,7 +152,7 @@ export function PermissionDialog({
           )}
 
           {!loading && context && (
-            <div className="flex min-h-0 flex-col gap-4">
+            <div className="flex min-h-0 flex-1 flex-col">
               <ModeHeader
                 resourceType={resourceType}
                 resourceId={resourceId}
@@ -134,46 +161,81 @@ export function PermissionDialog({
               />
 
               <Tabs
-                value={activeTab}
-                onValueChange={setActiveTab}
-                className="min-h-0"
+                value={subjectType}
+                onValueChange={(value) =>
+                  setSubjectType(value as SubjectType)
+                }
+                className="flex min-h-0 flex-1 flex-col px-5 pb-5 pt-4 max-[768px]:px-4"
               >
-                <TabsList>
-                  <TabsTrigger value="roster">
-                    {localize("f048_permission.dialog.roster")}
-                  </TabsTrigger>
-                  {canEditGrants && (
-                    <TabsTrigger value="grants">
-                      {localize("f048_permission.dialog.manage_grants")}
-                    </TabsTrigger>
+                <div className="flex items-center justify-between gap-3">
+                  <TabsList className="w-fit shrink-0 rounded-md border border-[#ECECEC] bg-white p-[3px] shadow-none">
+                    {SUBJECT_TABS.map((tab) => (
+                      <TabsTrigger
+                        key={tab.value}
+                        value={tab.value}
+                        className="min-w-0 rounded px-3 py-0.5 text-sm font-normal leading-[22px] text-[#818181] shadow-none data-[state=active]:bg-blue-500/[0.07] data-[state=active]:font-medium data-[state=active]:text-blue-500 data-[state=active]:shadow-none"
+                      >
+                        {localize(tab.labelKey)}
+                      </TabsTrigger>
+                    ))}
+                  </TabsList>
+
+                  {canAddPermission && (
+                    <Button
+                      type="button"
+                      className="h-8 shrink-0 rounded-md px-3 text-sm leading-[22px]"
+                      onClick={() => setGrantDialogOpen(true)}
+                    >
+                      {localize("com_permission.tab_grant")}
+                    </Button>
                   )}
-                </TabsList>
-                <TabsContent value="roster" className="mt-3">
+                </div>
+
+                <TabsContent
+                  value={subjectType}
+                  className="mt-3 min-h-0 flex-1 overflow-hidden p-0"
+                >
                   <PermissionListTab
                     resourceType={resourceType}
                     resourceId={resourceId}
                     context={context}
                     refreshKey={refreshKey}
-                    showContextHeader={false}
+                    fixedSubjectType={subjectType}
                     onRosterChange={setAssignees}
+                    onMutationSuccess={handleGrantSuccess}
                   />
                 </TabsContent>
-                {canEditGrants && (
-                  <TabsContent value="grants" className="mt-3">
-                    <PermissionGrantTab
-                      resourceType={resourceType}
-                      resourceId={resourceId}
-                      context={context}
-                      assignees={assignees}
-                      onSuccess={handleGrantSuccess}
-                    />
-                  </TabsContent>
-                )}
               </Tabs>
             </div>
           )}
-        </div>
-      </DialogContent>
-    </Dialog>
+        </DialogContent>
+      </Dialog>
+
+      {context && canAddPermission && (
+        <Dialog open={grantDialogOpen} onOpenChange={setGrantDialogOpen}>
+          <DialogContent className={dialogClassName}>
+            <DialogHeader className="shrink-0 px-5 pb-4 pt-5 text-left max-[768px]:px-4">
+              <DialogTitle className="text-left">
+                {localize("com_permission.tab_grant")} - {resourceName}
+              </DialogTitle>
+              <DialogDescription className="sr-only">
+                {localize("com_permission.tab_grant")} - {resourceName}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5 max-[768px]:px-4">
+              <PermissionGrantTab
+                resourceType={resourceType}
+                resourceId={resourceId}
+                context={context}
+                assignees={assignees}
+                fixedSubjectType={subjectType}
+                showExistingAssignees={false}
+                onSuccess={handleGrantSuccess}
+              />
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+    </>
   );
 }

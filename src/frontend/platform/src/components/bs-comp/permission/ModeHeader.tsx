@@ -15,7 +15,7 @@ import {
   type ResourcePermissionContext,
   type ResourcePermissionMode,
 } from "@/controllers/API/permission"
-import { AlertTriangle, GitBranch, Loader2 } from "lucide-react"
+import { AlertTriangle, Loader2, ShieldCheck } from "lucide-react"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import type { ResourceType } from "./types"
@@ -27,6 +27,8 @@ interface ModeHeaderProps {
   onApplied: (result: ApplyPermissionModeDraftResult) => void
   now?: Date
 }
+
+const MODES: ResourcePermissionMode[] = ["INHERIT", "CUSTOM"]
 
 function createModeIdempotencyKey(): string {
   return `mode-apply-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
@@ -45,19 +47,16 @@ export function ModeHeader({
   const [previewing, setPreviewing] = useState(false)
   const [applying, setApplying] = useState(false)
   const [conflict, setConflict] = useState(false)
-  const targetMode: ResourcePermissionMode =
-    context.mode === "CUSTOM" ? "INHERIT" : "CUSTOM"
-  const parent =
-    context.parent_type && context.parent_id
-      ? `${context.parent_type}:${context.parent_id}`
-      : null
+  const hasParent = Boolean(context.parent_type && context.parent_id)
   const expired =
     draft !== null && new Date(draft.expires_at).getTime() <= now.getTime()
   const canSwitch =
-    context.can_manage_permission && parent !== null && !previewing && !applying
+    hasParent && context.can_manage_permission && !previewing && !applying
 
-  const handlePreview = async () => {
-    if (!canSwitch) return
+  if (!hasParent) return null
+
+  const handlePreview = async (targetMode: ResourcePermissionMode) => {
+    if (!canSwitch || targetMode === context.mode) return
     setPreviewing(true)
     setConflict(false)
     try {
@@ -107,54 +106,70 @@ export function ModeHeader({
 
   return (
     <>
-      <section className="rounded-xl border bg-muted/20 p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
-                {t(`mode.${context.mode.toLowerCase()}`)}
-              </span>
-              <span className="text-xs text-muted-foreground">
-                {t("mode.projection")}: {context.projection_state}
-              </span>
-            </div>
-            {parent && (
-              <p className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
-                <GitBranch aria-hidden="true" className="size-3" />
-                {t("mode.parent")}: <span>{parent}</span>
-              </p>
-            )}
+      <section
+        className="border-y border-[#EBECF0] bg-[#F7F8FA] px-5 py-3"
+        data-testid="permission-mode-switch"
+      >
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <span className="text-sm font-medium text-[#212121]">
+            {t("mode.label")}
+          </span>
+          <div
+            className="inline-flex rounded-[6px] border border-[#D9DDE7] bg-white p-[2px]"
+            role="group"
+            aria-label={t("mode.label")}
+          >
+            {MODES.map((mode) => {
+              const active = context.mode === mode
+              const key = mode.toLowerCase()
+              return (
+                <button
+                  key={mode}
+                  type="button"
+                  aria-pressed={active}
+                  aria-label={
+                    active
+                      ? t(`mode.${key}`)
+                      : t(
+                          mode === "INHERIT"
+                            ? "mode.switchToInherit"
+                            : "mode.switchToCustom",
+                        )
+                  }
+                  disabled={!active && !canSwitch}
+                  className="min-h-8 rounded-[4px] px-3 text-sm text-[#4E5969] transition-colors hover:bg-[#F2F3F5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-50 aria-pressed:bg-primary/10 aria-pressed:font-medium aria-pressed:text-primary aria-pressed:hover:bg-primary/10"
+                  onClick={() => void handlePreview(mode)}
+                >
+                  {previewing && !active && draft?.target_mode !== mode ? (
+                    <Loader2
+                      aria-hidden="true"
+                      className="mr-1 inline size-3.5 animate-spin"
+                    />
+                  ) : null}
+                  {t(`mode.${key}`)}
+                </button>
+              )
+            })}
           </div>
-          {context.can_manage_permission && parent && (
-            <Button
-              type="button"
-              variant="outline"
-              className="min-h-11"
-              aria-label={t(
-                targetMode === "INHERIT"
-                  ? "mode.switchToInherit"
-                  : "mode.switchToCustom",
-              )}
-              disabled={!canSwitch}
-              onClick={() => void handlePreview()}
-            >
-              {previewing && (
-                <Loader2
-                  aria-hidden="true"
-                  className="mr-2 size-4 animate-spin"
-                />
-              )}
-              {t(
-                targetMode === "INHERIT"
-                  ? "mode.switchToInherit"
-                  : "mode.switchToCustom",
-              )}
-            </Button>
-          )}
+          <p className="flex min-w-0 items-center gap-1.5 text-sm text-[#4E5969]">
+            <ShieldCheck aria-hidden="true" className="size-4 shrink-0" />
+            {t(
+              context.mode === "INHERIT"
+                ? "mode.inheritDescription"
+                : "mode.customDescription",
+            )}
+          </p>
         </div>
+        <p className="mt-2 pl-0 text-xs leading-5 text-[#86909C] sm:pl-[88px]">
+          {t(
+            context.mode === "INHERIT"
+              ? "mode.inheritHelper"
+              : "mode.customHelper",
+          )}
+        </p>
         {conflict && !confirmOpen && (
           <p
-            className="mt-3 flex items-center gap-2 text-sm font-medium text-red-700"
+            className="mt-2 flex items-center gap-2 text-sm font-medium text-red-700"
             role="alert"
           >
             <AlertTriangle aria-hidden="true" className="size-4" />

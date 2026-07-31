@@ -3,21 +3,37 @@ import {
   Building2,
   Loader2,
   LockKeyhole,
+  Search,
+  Trash2,
   User,
   Users,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  getGrantablePermissionModels,
   getMyResourcePermissions,
   getResourcePermissionGrants,
+  mutateResourceGrants,
 } from "~/api/permission";
 import type {
+  GrantablePermissionModel,
+  MutateResourceGrantsResult,
   MyResourcePermissions,
   PermissionGrantAssignee,
   ResourcePermissionContext,
   ResourceType,
+  SubjectType,
 } from "~/api/permission";
-import { Button } from "~/components/ui";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  Button,
+} from "~/components/ui";
 import { useLocalize } from "~/hooks";
 import { SourceBadge } from "./SourceBadge";
 
@@ -27,8 +43,9 @@ interface PermissionListTabProps {
   context: ResourcePermissionContext;
   refreshKey?: number;
   pageSize?: number;
-  showContextHeader?: boolean;
+  fixedSubjectType?: SubjectType;
   onRosterChange?: (assignees: PermissionGrantAssignee[]) => void;
+  onMutationSuccess?: (result: MutateResourceGrantsResult) => void;
 }
 
 const SUBJECT_ICONS = {
@@ -37,97 +54,145 @@ const SUBJECT_ICONS = {
   user_group: Users,
 };
 
+function createMutationIdempotencyKey(): string {
+  return `grant-mutate-${Date.now()}-${Math.random()
+    .toString(36)
+    .slice(2, 10)}`;
+}
+
 function canEditAssignee(
   assignee: PermissionGrantAssignee,
   context: ResourcePermissionContext,
 ): boolean {
   return (
     context.mode === "CUSTOM" &&
+    context.can_manage_permission &&
     assignee.scope === "LOCAL" &&
     assignee.editable &&
     !assignee.protected
   );
 }
 
+function getAvatarLabel(assignee: PermissionGrantAssignee): string {
+  const name = assignee.subject.name?.trim() || assignee.subject.id;
+  return (name.charAt(0) || "U").toUpperCase();
+}
+
 interface RosterRowProps {
   assignee: PermissionGrantAssignee;
   context: ResourcePermissionContext;
+  models: GrantablePermissionModel[];
+  pending: boolean;
+  onMove: (assignee: PermissionGrantAssignee, modelKey: string) => void;
+  onRemove: (assignee: PermissionGrantAssignee) => void;
 }
 
-function RosterRow({ assignee, context }: RosterRowProps) {
+function RosterRow({
+  assignee,
+  context,
+  models,
+  pending,
+  onMove,
+  onRemove,
+}: RosterRowProps) {
   const localize = useLocalize();
   const SubjectIcon = SUBJECT_ICONS[assignee.subject.type];
   const editable = canEditAssignee(assignee, context);
+  const displayName =
+    assignee.subject.name ||
+    `${assignee.subject.type}:${assignee.subject.id}`;
+  const currentIsGrantable = models.some(
+    (model) => model.key === assignee.model.key,
+  );
 
   return (
     <article
       data-testid={`permission-assignee-${assignee.assignee_id}`}
       data-editable={String(editable)}
-      className="grid gap-3 rounded-lg border border-[#EBECF0] bg-white p-4 md:grid-cols-[minmax(0,1fr)_minmax(9rem,0.6fr)_auto]"
+      className="flex min-h-[58px] items-center gap-4 border-b border-[#F2F3F5] py-3 last:border-b-0"
     >
-      <div className="flex min-w-0 items-start gap-3">
-        <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-black/[0.04]">
-          <SubjectIcon aria-hidden="true" className="size-4 text-[#818181]" />
-        </span>
+      <div className="flex min-w-0 flex-1 items-center gap-3">
+        {assignee.subject.type === "user" ? (
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[#C9CDD4] text-sm font-semibold text-white">
+            {getAvatarLabel(assignee)}
+          </span>
+        ) : (
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-blue-500/[0.07] text-blue-500">
+            <SubjectIcon aria-hidden="true" className="size-4" />
+          </span>
+        )}
         <div className="min-w-0">
           <p className="truncate text-sm font-medium text-[#212121]">
-            {assignee.subject.name ||
-              `${assignee.subject.type}:${assignee.subject.id}`}
+            {displayName}
           </p>
-          <p className="truncate text-xs text-[#818181]">
-            {assignee.subject.type}:{assignee.subject.id}
-          </p>
-          <div className="mt-2 flex flex-wrap gap-1.5">
+          <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-1 text-xs text-[#86909C]">
             <SourceBadge source={assignee.source} />
-            <span className="rounded-full bg-black/[0.04] px-2 py-0.5 text-xs text-[#818181]">
+            <span>
               {localize(
                 `f048_permission.scope.${assignee.scope.toLowerCase()}`,
               )}
             </span>
-            {assignee.protected && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800">
-                <LockKeyhole aria-hidden="true" className="size-3" />
-                {localize("f048_permission.roster.protected")}
+            {assignee.inherited_from && (
+              <span className="truncate">
+                · {localize("f048_permission.roster.inherited_from")}: {" "}
+                {assignee.inherited_from}
               </span>
             )}
           </div>
-          {assignee.inherited_from && (
-            <p className="mt-2 text-xs text-[#818181]">
-              {localize("f048_permission.roster.inherited_from")}:{" "}
-              {assignee.inherited_from}
-            </p>
-          )}
         </div>
       </div>
 
-      <div className="min-w-0">
-        <p className="truncate text-sm font-medium text-[#212121]">
-          {assignee.model.name}
-        </p>
-        <p className="mt-1 text-xs text-[#818181]">
-          {localize("f048_permission.model.level")}:{" "}
-          {assignee.model.level ??
-            localize("f048_permission.action_level.unassigned")}
-        </p>
-        {!assignee.model.active && (
-          <p className="mt-1 text-xs font-medium text-red-600">
-            {localize("f048_permission.model.inactive")}
-          </p>
+      <div className="flex w-[176px] shrink-0 items-center justify-end gap-1 max-[560px]:w-[132px]">
+        {editable ? (
+          <>
+            <select
+              aria-label={`grant.model.${assignee.assignee_id}`}
+              value={assignee.model.key}
+              disabled={pending}
+              onChange={(event) => onMove(assignee, event.target.value)}
+              className="h-8 min-w-0 flex-1 cursor-pointer rounded-md border-0 bg-transparent px-2 text-right text-sm text-[#4E5969] outline-none hover:bg-black/[0.03] focus-visible:ring-2 focus-visible:ring-blue-500/40 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {!currentIsGrantable && (
+                <option value={assignee.model.key}>
+                  {assignee.model.name}
+                </option>
+              )}
+              {models.map((model) => (
+                <option key={model.key} value={model.key}>
+                  {model.name}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              aria-label={`${localize("f048_permission.grant.remove")}.${
+                assignee.assignee_id
+              }`}
+              disabled={pending}
+              className="flex size-8 shrink-0 items-center justify-center rounded-md text-[#86909C] transition-colors hover:bg-red-50 hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300 disabled:cursor-not-allowed disabled:opacity-50"
+              onClick={() => onRemove(assignee)}
+            >
+              <Trash2 aria-hidden="true" className="size-4" />
+            </button>
+          </>
+        ) : (
+          <span className="inline-flex items-center gap-1 truncate text-sm text-[#86909C]">
+            {assignee.model.name}
+            {assignee.protected && (
+              <LockKeyhole
+                aria-label={localize("f048_permission.roster.protected")}
+                className="size-3.5 shrink-0"
+              />
+            )}
+          </span>
         )}
       </div>
-
-      {!editable && (
-        <span className="self-start rounded-full border px-2 py-1 text-xs text-[#818181]">
-          {localize("f048_permission.roster.read_only")}
-        </span>
-      )}
     </article>
   );
 }
 
 function SummaryView({ summary }: { summary: MyResourcePermissions }) {
   const localize = useLocalize();
-
   return (
     <section className="rounded-lg border border-[#EBECF0] bg-black/[0.02] p-4">
       <p className="text-sm font-medium text-[#212121]">
@@ -143,14 +208,6 @@ function SummaryView({ summary }: { summary: MyResourcePermissions }) {
           </span>
         ))}
       </div>
-      <div className="mt-3 flex flex-wrap gap-2">
-        {summary.sources.map((source, index) => (
-          <SourceBadge
-            key={`${source.type}-${String(source.include_children)}-${index}`}
-            source={source}
-          />
-        ))}
-      </div>
     </section>
   );
 }
@@ -161,21 +218,51 @@ export function PermissionListTab({
   context,
   refreshKey = 0,
   pageSize = 50,
-  showContextHeader = true,
+  fixedSubjectType = "user",
   onRosterChange,
+  onMutationSuccess,
 }: PermissionListTabProps) {
   const localize = useLocalize();
   const [assignees, setAssignees] = useState<PermissionGrantAssignee[]>([]);
+  const [models, setModels] = useState<GrantablePermissionModel[]>([]);
   const [summary, setSummary] = useState<MyResourcePermissions | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [pendingAssigneeId, setPendingAssigneeId] = useState<number | null>(
+    null,
+  );
+  const [removeTarget, setRemoveTarget] =
+    useState<PermissionGrantAssignee | null>(null);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     onRosterChange?.(assignees);
   }, [assignees, onRosterChange]);
+
+  useEffect(() => {
+    setSearchQuery("");
+  }, [fixedSubjectType, resourceId]);
+
+  useEffect(() => {
+    if (!context.can_manage_permission || context.mode !== "CUSTOM") {
+      setModels([]);
+      return;
+    }
+    let cancelled = false;
+    void getGrantablePermissionModels(resourceType, resourceId)
+      .then((result) => {
+        if (!cancelled) setModels(result.filter((model) => model.active));
+      })
+      .catch(() => {
+        if (!cancelled) setModels([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [context.can_manage_permission, context.mode, resourceId, resourceType]);
 
   const loadPage = useCallback(
     async (cursor: string | null) => {
@@ -241,6 +328,64 @@ export function PermissionListTab({
     resourceType,
   ]);
 
+  const visibleAssignees = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    return assignees.filter((assignee) => {
+      if (assignee.subject.type !== fixedSubjectType) return false;
+      if (!query) return true;
+      return [
+        assignee.subject.name,
+        assignee.subject.id,
+        assignee.model.name,
+        assignee.source.type,
+        assignee.inherited_from,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(query);
+    });
+  }, [assignees, fixedSubjectType, searchQuery]);
+
+  const mutateAssignee = async (
+    assignee: PermissionGrantAssignee,
+    change:
+      | { op: "MOVE"; target_model_key: string }
+      | { op: "REMOVE" },
+  ) => {
+    if (pendingAssigneeId !== null) return;
+    setPendingAssigneeId(assignee.assignee_id);
+    setFailed(false);
+    try {
+      const result = await mutateResourceGrants(resourceType, resourceId, {
+        idempotency_key: createMutationIdempotencyKey(),
+        expected_resource_version: context.resource_version,
+        expected_catalog_release_id: context.catalog_release_id,
+        changes: [
+          change.op === "MOVE"
+            ? {
+                op: "MOVE",
+                assignee_id: assignee.assignee_id,
+                expected_assignee_version: assignee.assignee_version,
+                target_model_key: change.target_model_key,
+              }
+            : {
+                op: "REMOVE",
+                assignee_id: assignee.assignee_id,
+                expected_assignee_version: assignee.assignee_version,
+              },
+        ],
+      });
+      setAssignees(result.items);
+      onMutationSuccess?.(result);
+    } catch {
+      setFailed(true);
+    } finally {
+      setPendingAssigneeId(null);
+      setRemoveTarget(null);
+    }
+  };
+
   const handleLoadMore = async () => {
     if (!nextCursor || loadingMore) return;
     setLoadingMore(true);
@@ -253,59 +398,73 @@ export function PermissionListTab({
     }
   };
 
-  const parent =
-    context.parent_type && context.parent_id
-      ? `${context.parent_type}:${context.parent_id}`
-      : null;
+  const searchPlaceholder = localize(
+    fixedSubjectType === "user_group"
+      ? "com_permission.search_user_group"
+      : `com_permission.search_${fixedSubjectType}`,
+  );
+
+  if (loading) {
+    return (
+      <div
+        className="flex min-h-40 items-center justify-center gap-2 text-sm text-[#818181]"
+        role="status"
+      >
+        <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+        {localize("f048_permission.roster.loading")}
+      </div>
+    );
+  }
+
+  if (summary) return <SummaryView summary={summary} />;
 
   return (
-    <div className="flex min-h-0 flex-col gap-4">
-      {showContextHeader && (
-        <header className="flex flex-wrap items-center gap-2 rounded-lg border border-[#EBECF0] bg-black/[0.02] px-4 py-3">
-          <span className="rounded-full bg-blue-500/[0.07] px-2.5 py-1 text-xs font-medium text-blue-500">
-            {localize(
-              `f048_permission.mode.${context.mode.toLowerCase()}`,
-            )}
-          </span>
-          {parent && (
-            <p className="text-xs text-[#818181]">
-              {localize("f048_permission.mode.parent")}: {parent}
-            </p>
-          )}
-        </header>
-      )}
-
-      {loading && (
-        <div className="flex min-h-32 items-center justify-center gap-2 text-sm text-[#818181]">
-          <Loader2 aria-hidden="true" className="size-4 animate-spin" />
-          {localize("f048_permission.roster.loading")}
+    <>
+      <div className="flex h-full min-h-0 flex-col">
+        <div className="relative shrink-0">
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#999999]" />
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder={searchPlaceholder}
+            aria-label={searchPlaceholder}
+            className="h-9 w-full rounded-md border border-[#EBECF0] bg-white pl-9 pr-3 text-sm text-[#212121] outline-none transition-colors placeholder:text-[#999999] focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10"
+          />
         </div>
-      )}
 
-      {!loading && failed && (
-        <div
-          className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700"
-          role="alert"
-        >
-          <AlertTriangle aria-hidden="true" className="size-4" />
-          {localize("f048_permission.roster.load_failed")}
-        </div>
-      )}
+        {failed && (
+          <div
+            className="mt-3 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700"
+            role="alert"
+          >
+            <AlertTriangle aria-hidden="true" className="size-4" />
+            {localize("f048_permission.roster.load_failed")}
+          </div>
+        )}
 
-      {!loading && !failed && summary && <SummaryView summary={summary} />}
-
-      {!loading && !failed && !summary && (
-        <div className="flex min-h-0 flex-col gap-3">
-          {assignees.map((assignee) => (
+        <div className="mt-3 min-h-0 flex-1 overflow-y-auto">
+          {visibleAssignees.map((assignee) => (
             <RosterRow
               key={assignee.assignee_id}
               assignee={assignee}
               context={context}
+              models={models}
+              pending={pendingAssigneeId === assignee.assignee_id}
+              onMove={(item, modelKey) =>
+                void mutateAssignee(item, {
+                  op: "MOVE",
+                  target_model_key: modelKey,
+                })
+              }
+              onRemove={setRemoveTarget}
             />
           ))}
-          {assignees.length === 0 && (
-            <p className="rounded-lg border border-dashed p-8 text-center text-sm text-[#818181]">
-              {localize("f048_permission.roster.empty")}
+          {visibleAssignees.length === 0 && (
+            <p className="py-10 text-center text-sm text-[#818181]">
+              {searchQuery.trim()
+                ? localize("com_permission.empty_search")
+                : localize("com_permission.list_empty_for_subject")}
             </p>
           )}
           {hasMore && (
@@ -314,6 +473,7 @@ export function PermissionListTab({
               color="default"
               variant="outlined"
               size="medium"
+              className="mx-auto mt-3 flex"
               disabled={loadingMore}
               onClick={() => void handleLoadMore()}
             >
@@ -323,7 +483,34 @@ export function PermissionListTab({
             </Button>
           )}
         </div>
-      )}
-    </div>
+      </div>
+
+      <AlertDialog
+        open={removeTarget !== null}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) setRemoveTarget(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {localize("com_permission.confirm_revoke")}
+            </AlertDialogTitle>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{localize("cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (removeTarget) {
+                  void mutateAssignee(removeTarget, { op: "REMOVE" });
+                }
+              }}
+            >
+              {localize("confirm")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }

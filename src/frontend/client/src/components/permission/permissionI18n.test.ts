@@ -14,6 +14,9 @@ const COMPONENTS = [
 const REQUIRED_KEYS = [
   "mode.custom",
   "mode.inherit",
+  "mode.label",
+  "mode.inherit_description",
+  "mode.custom_description",
   "mode.confirm",
   "source.direct",
   "source.department",

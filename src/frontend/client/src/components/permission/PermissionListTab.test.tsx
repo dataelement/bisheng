@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import {
+  getGrantablePermissionModels,
   getMyResourcePermissions,
   getResourcePermissionGrants,
 } from "~/api/permission";
@@ -10,8 +11,10 @@ import type {
 import { PermissionListTab } from "./PermissionListTab";
 
 jest.mock("~/api/permission", () => ({
+  getGrantablePermissionModels: jest.fn(),
   getMyResourcePermissions: jest.fn(),
   getResourcePermissionGrants: jest.fn(),
+  mutateResourceGrants: jest.fn(),
 }));
 
 jest.mock("~/hooks", () => ({
@@ -29,6 +32,9 @@ const mockedGetGrants = getResourcePermissionGrants as jest.MockedFunction<
 >;
 const mockedGetSummary = getMyResourcePermissions as jest.MockedFunction<
   typeof getMyResourcePermissions
+>;
+const mockedGetModels = getGrantablePermissionModels as jest.MockedFunction<
+  typeof getGrantablePermissionModels
 >;
 
 const context: ResourcePermissionContext = {
@@ -62,6 +68,9 @@ function assignee(
 
 describe("F048 Client PermissionListTab", () => {
   beforeEach(() => {
+    mockedGetModels.mockResolvedValue([
+      { key: "standard-viewer", name: "Viewer", level: 1, active: true },
+    ]);
     mockedGetGrants.mockResolvedValue({
       data: [assignee(1, "DIRECT"), assignee(2, "DEPARTMENT")],
       page_size: 2,
@@ -76,7 +85,7 @@ describe("F048 Client PermissionListTab", () => {
     });
   });
 
-  it("keeps direct and department sources as separate rows with mode metadata", async () => {
+  it("keeps direct and department sources as separate rows in the legacy list layout", async () => {
     render(
       <PermissionListTab
         resourceType="knowledge_file"
@@ -89,8 +98,7 @@ describe("F048 Client PermissionListTab", () => {
     await waitFor(() =>
       expect(screen.getAllByText("Alice")).toHaveLength(2),
     );
-    expect(screen.getByText("f048_permission.mode.custom")).toBeInTheDocument();
-    expect(screen.getByText(/space-1/)).toBeInTheDocument();
+    expect(screen.getByRole("searchbox")).toBeInTheDocument();
     expect(screen.getByText("f048_permission.source.direct")).toBeInTheDocument();
     expect(
       screen.getByText("f048_permission.source.department"),
@@ -131,8 +139,11 @@ describe("F048 Client PermissionListTab", () => {
       />,
     );
 
-    expect(await screen.findByText("f048_permission.roster.protected")).toBeInTheDocument();
-    expect(screen.getByText("f048_permission.roster.read_only")).toBeInTheDocument();
+    const protectedRow = await screen.findByTestId("permission-assignee-3");
+    expect(protectedRow).toHaveAttribute("data-editable", "false");
+    expect(
+      screen.getByLabelText("f048_permission.roster.protected"),
+    ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "f048_permission.roster.load_more" }));
 
     expect(await screen.findByText("Bob")).toBeInTheDocument();

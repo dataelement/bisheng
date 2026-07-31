@@ -91,7 +91,7 @@ describe("F048 Client PermissionDialog", () => {
     });
   });
 
-  it("loads context first and exposes grant editing only for local manageable mode", async () => {
+  it("keeps the legacy subject tabs and opens add permission in a separate dialog", async () => {
     render(
       <PermissionDialog
         open
@@ -107,14 +107,26 @@ describe("F048 Client PermissionDialog", () => {
       "knowledge_file",
       "file-1",
     );
-    const grantsTab = screen.getByRole("tab", {
-      name: "f048_permission.dialog.manage_grants",
-    });
-    await userEvent.click(grantsTab);
+    expect(
+      screen.getByRole("tab", { name: "f048_permission.subject.user" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("tab", {
+        name: "f048_permission.subject.department",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("tab", {
+        name: "f048_permission.subject.user_group",
+      }),
+    ).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: "com_permission.tab_grant" }),
+    );
     expect(await screen.findByText("grant editor")).toBeInTheDocument();
   });
 
-  it("returns to the roster after a successful grant mutation", async () => {
+  it("closes the add dialog after a successful grant mutation", async () => {
     render(
       <PermissionDialog
         open
@@ -126,17 +138,13 @@ describe("F048 Client PermissionDialog", () => {
     );
 
     await userEvent.click(
-      await screen.findByRole("tab", {
-        name: "f048_permission.dialog.manage_grants",
+      await screen.findByRole("button", {
+        name: "com_permission.tab_grant",
       }),
     );
     await userEvent.click(screen.getByRole("button", { name: "save grants" }));
 
-    expect(
-      screen.getByRole("tab", {
-        name: "f048_permission.dialog.roster",
-      }),
-    ).toHaveAttribute("data-state", "active");
+    expect(screen.queryByText("grant editor")).not.toBeInTheDocument();
     expect(await screen.findByText("roster:CUSTOM")).toBeInTheDocument();
   });
 
@@ -158,10 +166,31 @@ describe("F048 Client PermissionDialog", () => {
 
     expect(await screen.findByText("roster:INHERIT")).toBeInTheDocument();
     expect(
-      screen.queryByRole("tab", {
-        name: "f048_permission.dialog.manage_grants",
+      screen.queryByRole("button", {
+        name: "com_permission.tab_grant",
       }),
     ).not.toBeInTheDocument();
+  });
+
+  it("does not show the permission mode control without a parent", async () => {
+    mockedGetContext.mockResolvedValueOnce({
+      ...context,
+      parent_type: null,
+      parent_id: null,
+    });
+
+    render(
+      <PermissionDialog
+        open
+        onOpenChange={jest.fn()}
+        resourceType="knowledge_space"
+        resourceId="space-1"
+        resourceName="Space"
+      />,
+    );
+
+    expect(await screen.findByText("roster:CUSTOM")).toBeInTheDocument();
+    expect(screen.queryByTestId("permission-mode-switch")).toBeNull();
   });
 });
 

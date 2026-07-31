@@ -114,8 +114,15 @@
     "publishFailed": "发布失败，请刷新后重试"
   },
   "mode": {
+    "label": "权限模式",
     "custom": "本级权限",
     "inherit": "继承上级",
+    "switchToInherit": "切换为继承上级",
+    "switchToCustom": "切换为本级权限",
+    "inheritDescription": "当前资源继承上级成员权限",
+    "customDescription": "当前资源使用独立成员列表，上级成员变更不会同步",
+    "inheritHelper": "切换为本级权限后，将以当前有效成员为基础创建独立授权。",
+    "customHelper": "恢复继承时，本级自定义授权将由上级权限替代。",
     "parent": "上级资源",
     "affectedAssignees": "预计影响 {{count}} 个授权对象",
     "projection": "投影状态：{{state}}",

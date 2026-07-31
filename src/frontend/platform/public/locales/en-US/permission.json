@@ -114,8 +114,15 @@
     "publishFailed": "Publish failed. Refresh and try again."
   },
   "mode": {
+    "label": "Permission Mode",
     "custom": "Local Permissions",
     "inherit": "Inherit from Parent",
+    "switchToInherit": "Switch to Inherited Permissions",
+    "switchToCustom": "Switch to Local Permissions",
+    "inheritDescription": "This resource inherits its members from the parent",
+    "customDescription": "This resource uses an independent member list; parent changes do not sync",
+    "inheritHelper": "Switching to local permissions creates an independent grant list from the currently effective members.",
+    "customHelper": "Restoring inheritance replaces local custom grants with the parent permissions.",
     "parent": "Parent Resource",
     "affectedAssignees": "Estimated impact: {{count}} assignees",
     "projection": "Projection status: {{state}}",

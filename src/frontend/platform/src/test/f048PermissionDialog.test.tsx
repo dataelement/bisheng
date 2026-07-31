@@ -2,6 +2,7 @@ import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDial
 import {
   applyResourcePermissionModeDraftApi,
   createResourcePermissionModeDraftApi,
+  getGrantablePermissionModelsApi,
   getMyResourcePermissionsApi,
   getResourcePermissionContextApi,
   getResourcePermissionGrantsApi,
@@ -50,6 +51,9 @@ describe("F048 PermissionDialog", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(getResourcePermissionContextApi).mockResolvedValue(customContext)
+    vi.mocked(getGrantablePermissionModelsApi).mockResolvedValue([
+      { key: "owner", name: "Owner", level: 4, active: true },
+    ])
     vi.mocked(getResourcePermissionGrantsApi).mockResolvedValue({
       data: [protectedAssignee],
       page_size: 50,
@@ -76,7 +80,7 @@ describe("F048 PermissionDialog", () => {
     })
   })
 
-  it("loads context first, then shows roster and protected state", async () => {
+  it("keeps the legacy subject tabs, search, add action, and roster layout", async () => {
     render(
       <PermissionDialog
         open
@@ -92,14 +96,45 @@ describe("F048 PermissionDialog", () => {
       "file-1",
     )
     expect(await screen.findByText("mode.custom")).toBeInTheDocument()
-    expect(screen.getAllByText("knowledge_space:space-1").length).toBeGreaterThan(
-      0,
-    )
-    expect(screen.getByTestId("permission-assignee-81")).toHaveTextContent(
-      "roster.protected",
-    )
+    expect(screen.getByTestId("permission-mode-switch")).toBeInTheDocument()
+    expect(screen.getByRole("tab", { name: "subject.user" })).toBeInTheDocument()
+    expect(
+      screen.getByRole("tab", { name: "subject.department" }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole("tab", { name: "subject.userGroup" }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole("button", { name: "dialog.tabGrant" }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole("searchbox")).toBeInTheDocument()
+    expect(screen.getByLabelText("roster.protected")).toBeInTheDocument()
     expect(getResourcePermissionGrantsApi).toHaveBeenCalled()
     expect(getMyResourcePermissionsApi).not.toHaveBeenCalled()
+  })
+
+  it("does not add a permission mode control for a resource without a parent", async () => {
+    vi.mocked(getResourcePermissionContextApi).mockResolvedValue({
+      ...customContext,
+      parent_type: null,
+      parent_id: null,
+    })
+
+    render(
+      <PermissionDialog
+        open
+        onOpenChange={vi.fn()}
+        resourceType="workflow"
+        resourceId="flow-1"
+        resourceName="Flow"
+      />,
+    )
+
+    expect(await screen.findByRole("searchbox")).toBeInTheDocument()
+    expect(screen.queryByTestId("permission-mode-switch")).toBeNull()
+    expect(
+      screen.getByRole("button", { name: "dialog.tabGrant" }),
+    ).toBeInTheDocument()
   })
 
   it("uses only the current-user summary when roster access is absent", async () => {
