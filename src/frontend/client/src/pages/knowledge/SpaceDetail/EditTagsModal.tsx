@@ -120,19 +120,32 @@ function resolveSpaceTag(
     return tagMetaRef.current.get(id) ?? spaceTags.find((item) => item.id === id);
 }
 
+function fileTagToSpaceTag(tag: FileTag): SpaceTag {
+    return {
+        id: tag.id,
+        name: tag.name,
+        resource_type: tag.resource_type,
+        review_status: tag.review_status,
+        business_type: tag.business_type,
+    };
+}
+
 function mergeSpaceTagsWithInitial(tags: SpaceTag[], initialTags: FileTag[]): SpaceTag[] {
     const merged = [...tags];
-    const seenIds = new Set(merged.map((tag) => tag.id));
+    const indexById = new Map<number, number>(merged.map((tag, index) => [tag.id, index]));
     for (const tag of initialTags) {
-        if (seenIds.has(tag.id)) continue;
-        seenIds.add(tag.id);
-        merged.push({
-            id: tag.id,
-            name: tag.name,
-            resource_type: tag.resource_type,
-            review_status: tag.review_status,
-            business_type: tag.business_type,
-        });
+        const initial = fileTagToSpaceTag(tag);
+        const existingIndex = indexById.get(initial.id);
+        if (existingIndex !== undefined) {
+            // Pending review tags use ReviewTag ids; approved library tags use Tag ids.
+            // The two namespaces can collide, so file-bound pending metadata wins.
+            if (isPendingReviewSpaceTag(initial)) {
+                merged[existingIndex] = initial;
+            }
+            continue;
+        }
+        merged.push(initial);
+        indexById.set(initial.id, merged.length - 1);
     }
     return merged;
 }
@@ -297,6 +310,10 @@ export function EditTagsModal({
     const nextDraftTagIdRef = useRef(-1);
 
     const rememberSpaceTag = (tag: SpaceTag) => {
+        const existing = tagMetaRef.current.get(tag.id);
+        if (existing && isPendingReviewSpaceTag(existing) && !isPendingReviewSpaceTag(tag)) {
+            return;
+        }
         tagMetaRef.current.set(tag.id, tag);
     };
 
@@ -326,13 +343,7 @@ export function EditTagsModal({
         tagMetaRef.current = new Map();
         nextDraftTagIdRef.current = -1;
         initialTags.forEach((tag) => {
-            rememberSpaceTag({
-                id: tag.id,
-                name: tag.name,
-                resource_type: tag.resource_type,
-                review_status: tag.review_status,
-                business_type: tag.business_type,
-            });
+            rememberSpaceTag(fileTagToSpaceTag(tag));
         });
         setSpaceTagsLoading(true);
         setReviewTagConfigLoading(true);
