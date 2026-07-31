@@ -17,6 +17,10 @@ from bisheng.core.context.tenant import DEFAULT_TENANT_ID, get_current_tenant_id
 from bisheng.core.database import get_async_db_session
 from bisheng.database.models.department import UserDepartmentDao
 from bisheng.database.models.tenant import TenantDao
+from bisheng.knowledge.domain.models.knowledge_space_scope import (
+    KnowledgeSpaceLevelEnum,
+    KnowledgeSpaceScopeDao,
+)
 from bisheng.knowledge.domain.repositories.implementations.portal_recommendation_redis_repository import (
     PortalRecommendationRedisRepositoryImpl,
 )
@@ -429,6 +433,17 @@ def _candidate_from_projection(record, *, hot_score: float, now: datetime) -> Po
     )
 
 
+def _exclude_personal_space_projections(
+    projections: list[Any],
+    personal_space_ids: set[int],
+) -> list[Any]:
+    return [
+        record
+        for record in projections
+        if int(record.space_id) not in personal_space_ids
+    ]
+
+
 def _assemble_rotated_pool(
     source: list[PortalRecommendationCandidate],
     *,
@@ -526,11 +541,22 @@ async def _rebuild_shared_pools_async(
         return False
 
     async with get_async_db_session() as session:
-        projections = [
+        recommendable_projections = [
             record
             for record in await _load_all_projections(PortalRecommendationRepositoryImpl(session))
             if record.recommendable
         ]
+    personal_space_ids = {
+        int(space_id)
+        for space_id in await KnowledgeSpaceScopeDao.aget_space_ids_by_level(
+            KnowledgeSpaceLevelEnum.PERSONAL
+        )
+    }
+    projections = _exclude_personal_space_projections(
+        recommendable_projections,
+        personal_space_ids,
+    )
+    personal_projection_excluded_count = len(recommendable_projections) - len(projections)
     telemetry = PortalRecommendationTelemetryRepositoryImpl()
     now = datetime.now(timezone.utc)
     views = await telemetry.list_recent_document_views(
@@ -718,6 +744,7 @@ async def _rebuild_shared_pools_async(
         candidate_count=len(candidates),
         domain_count=len(domain_codes),
         pool_entry_count=sum(built_counts.values()),
+        personal_projection_excluded_count=personal_projection_excluded_count,
         projection_count=len(projections),
         recent_view_count=len(views),
     )

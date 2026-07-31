@@ -28,6 +28,7 @@ from bisheng.worker.knowledge.portal_recommendation import (
     _assemble_rotated_pool,
     _delete_orphan_projection_page,
     _dispatch_task_for_tenants,
+    _exclude_personal_space_projections,
     _pool_counts_match,
     _projection_version_for_event,
     _rebuild_user_interest_async,
@@ -46,6 +47,7 @@ def test_acl_event_version_advances_projection_even_when_file_time_is_unchanged(
         file_level_path=None,
         source_update_time=datetime(2026, 7, 1, tzinfo=timezone.utc),
         is_primary=True,
+        space_level="public",
     )
     service = SimpleNamespace(
         projection_version_for=PortalRecommendationProjectionService.projection_version_for
@@ -101,6 +103,21 @@ def test_heat_config_fingerprint_is_canonical_and_changes_with_heat_parameters()
 
     assert first == same
     assert first != changed
+
+
+def test_shared_pool_excludes_personal_space_projections():
+    projections = [
+        SimpleNamespace(file_id=1, space_id=10),
+        SimpleNamespace(file_id=2, space_id=20),
+        SimpleNamespace(file_id=3, space_id=30),
+    ]
+
+    filtered = _exclude_personal_space_projections(
+        projections,
+        personal_space_ids={20},
+    )
+
+    assert [record.file_id for record in filtered] == [1, 3]
 
 
 @pytest.mark.asyncio

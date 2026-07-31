@@ -6721,6 +6721,32 @@ class KnowledgeSpaceService(KnowledgeUtils):
             trusted_public_scope=trusted_public_scope,
         )
 
+    @classmethod
+    async def _filter_non_personal_recommendation_spaces(
+        cls,
+        spaces: list[Knowledge],
+    ) -> tuple[list[Knowledge], int, int]:
+        space_ids = [
+            int(space.id)
+            for space in spaces
+            if getattr(space, "id", None) is not None
+        ]
+        scopes = await KnowledgeSpaceScopeDao.aget_map_by_space_ids(space_ids)
+        retained: list[Knowledge] = []
+        personal_count = 0
+        unknown_scope_count = 0
+        for space in spaces:
+            space_id = int(getattr(space, "id", 0) or 0)
+            scope = scopes.get(space_id)
+            if scope is None:
+                unknown_scope_count += 1
+                continue
+            if cls._space_level_value(scope.level) == KnowledgeSpaceLevelEnum.PERSONAL.value:
+                personal_count += 1
+                continue
+            retained.append(space)
+        return retained, personal_count, unknown_scope_count
+
     async def _recommend_shougang_portal_files(
         self,
         *,
@@ -6729,6 +6755,39 @@ class KnowledgeSpaceService(KnowledgeUtils):
     ) -> dict:
         diagnostic_started_at = time.monotonic()
         tenant_id = int(get_current_tenant_id() or DEFAULT_TENANT_ID)
+        requested_space_count = len(spaces)
+        (
+            spaces,
+            personal_space_excluded_count,
+            space_scope_unknown_count,
+        ) = await self._filter_non_personal_recommendation_spaces(spaces)
+        if not spaces:
+            logger.info(
+                "[diag][portal.recommendation] {}",
+                json.dumps(
+                    {
+                        "duration_ms": round(
+                            (time.monotonic() - diagnostic_started_at) * 1000,
+                            2,
+                        ),
+                        "empty_reason": (
+                            "only_personal_spaces"
+                            if personal_space_excluded_count
+                            else "space_scope_unknown"
+                        ),
+                        "personal_space_excluded_count": personal_space_excluded_count,
+                        "requested_space_count": requested_space_count,
+                        "result_count": 0,
+                        "space_scope_unknown_count": space_scope_unknown_count,
+                        "stage": "filter_space_scope",
+                        "tenant_id": tenant_id,
+                        "user_id": int(self.login_user.user_id),
+                        "visible_space_count": 0,
+                    },
+                    sort_keys=True,
+                ),
+            )
+            return self._build_shougang_portal_search_response([])
         space_ids = [int(space.id) for space in spaces]
         visible_space_ids = set(space_ids)
         config = await ShougangPortalConfigService.get_config(tenant_id=tenant_id)
@@ -7319,10 +7378,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     "permission_time_budget_reached": authorization_state.time_budget_reached,
                     "pool_ready": pool_ready,
                     "pool_source": "redis" if active_pool_version else "projection",
+                    "personal_space_excluded_count": personal_space_excluded_count,
                     "redis_state_available": redis_state_available,
+                    "requested_space_count": requested_space_count,
                     "result_count": len(items),
                     "selected_count": len(selected),
                     "stage": "complete",
+                    "space_scope_unknown_count": space_scope_unknown_count,
                     "target_count": target_count,
                     "tenant_id": tenant_id,
                     "user_domain_count": len(user_domains),

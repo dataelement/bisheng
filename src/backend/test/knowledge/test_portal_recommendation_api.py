@@ -12,6 +12,40 @@ from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeS
 
 
 @pytest.mark.asyncio
+async def test_personalized_recommendation_excludes_personal_spaces_before_cache_or_pool_reads(
+    monkeypatch,
+):
+    service = object.__new__(KnowledgeSpaceService)
+    service.login_user = SimpleNamespace(user_id=1001)
+    payloads: list[dict] = []
+
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.services.knowledge_space_service."
+        "KnowledgeSpaceScopeDao.aget_map_by_space_ids",
+        AsyncMock(return_value={10: SimpleNamespace(level="personal")}),
+    )
+
+    def capture_log(message, payload):
+        if message == "[diag][portal.recommendation] {}":
+            payloads.append(json.loads(payload))
+
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.services.knowledge_space_service.logger.info",
+        capture_log,
+    )
+
+    result = await service._recommend_shougang_portal_files(
+        req=ShougangPortalFileBrowseReq(recommendation="personalized_v1"),
+        spaces=[SimpleNamespace(id=10)],
+    )
+
+    assert result["data"] == []
+    assert payloads[0]["empty_reason"] == "only_personal_spaces"
+    assert payloads[0]["personal_space_excluded_count"] == 1
+    assert payloads[0]["stage"] == "filter_space_scope"
+
+
+@pytest.mark.asyncio
 async def test_personalized_empty_visible_scope_emits_diagnostic_reason(monkeypatch):
     service = object.__new__(KnowledgeSpaceService)
     service.login_user = SimpleNamespace(user_id=1001)
