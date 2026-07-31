@@ -172,6 +172,39 @@ def test_inventory_accepts_evidence_reconciled_failed_tuple():
     assert inventory.items[0].difference_type is None
 
 
+def test_business_skipped_resource_is_audited_and_its_tuple_becomes_stale():
+    resource = _resource(
+        resource_type="knowledge_file",
+        resource_id="file-1",
+        source_locator="knowledge:knowledge_file:file-1",
+        parent_type="folder",
+        parent_id="missing",
+        migratable=False,
+        skip_reason="STALE_FAILED_RESOURCE",
+    )
+    snapshot = SourceInventorySnapshot(
+        environment=_environment(),
+        resources=(resource,),
+        tuples=(
+            LegacyTupleSource(
+                tenant_id=7,
+                user="user:11",
+                relation="owner",
+                object="knowledge_file:file-1",
+            ),
+        ),
+    )
+
+    inventory = build_source_inventory(snapshot)
+
+    assert inventory.blockers == ()
+    assert {item.difference_type for item in inventory.items} == {
+        "STALE_FAILED_RESOURCE",
+        "STALE_RESOURCE_TUPLE",
+    }
+    assert all(item.severity == "INFO" for item in inventory.items)
+
+
 def test_inventory_rejects_invalid_owner_and_parent_facts_without_guessing():
     snapshot = SourceInventorySnapshot(
         environment=_environment(),

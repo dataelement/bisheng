@@ -1118,10 +1118,8 @@ class OpenFGACatalogProjector:
         missing = expected - present
         if missing:
             raise PermissionProjectionFailedError(msg=f"Catalog staged tuple verification failed: {len(missing)}")
-        if draft.model_release is None or any(
-            model.active and not model.action_codes for model in draft.model_release.models
-        ):
-            raise PermissionPublishNotReadyError(msg="Catalog contains an empty active model")
+        if draft.model_release is None:
+            raise PermissionPublishNotReadyError(msg="Catalog model release is missing")
 
     async def arm_recent_marker(
         self,

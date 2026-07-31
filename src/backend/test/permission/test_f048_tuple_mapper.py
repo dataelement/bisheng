@@ -343,7 +343,7 @@ def test_conflicting_or_missing_binding_model_blocks_without_fallback():
     assert result.blockers == ("CONFLICTING_BINDINGS",)
 
 
-def test_binding_without_direct_root_tuple_is_an_orphan_blocker():
+def test_binding_without_direct_root_tuple_is_an_audited_noop():
     binding = LegacyGrantBinding(
         binding_key="orphan-binding",
         tenant_id=7,
@@ -363,8 +363,9 @@ def test_binding_without_direct_root_tuple_is_an_orphan_blocker():
     )
 
     assert result.grants == ()
-    assert result.blockers == ("ORPHAN_BINDING",)
+    assert result.blockers == ()
     assert result.differences[0].tuple_key == "binding:orphan-binding"
+    assert result.differences[0].severity == "INFO"
 
 
 def test_business_creator_becomes_protected_owner_and_divergent_owner_is_retained():

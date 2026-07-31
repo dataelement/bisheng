@@ -30,6 +30,7 @@ interface PermissionGrantTabProps {
   context: ResourcePermissionContext
   assignees?: PermissionGrantAssignee[]
   fixedSubjectType?: SubjectType
+  showExistingAssignees?: boolean
   onSuccess: (result: MutateResourceGrantsResult) => void
 }
 
@@ -148,6 +149,7 @@ export function PermissionGrantTab({
   context,
   assignees = [],
   fixedSubjectType,
+  showExistingAssignees = true,
   onSuccess,
 }: PermissionGrantTabProps) {
   const { t } = useTranslation("permission")
@@ -296,7 +298,7 @@ export function PermissionGrantTab({
         </p>
       )}
 
-      {assignees.length > 0 && (
+      {showExistingAssignees && assignees.length > 0 && (
         <section aria-label={t("grant.existing")} className="space-y-2">
           <h3 className="text-sm font-semibold text-foreground">
             {t("grant.existing")}

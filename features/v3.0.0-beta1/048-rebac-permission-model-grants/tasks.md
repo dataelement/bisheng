@@ -1143,6 +1143,17 @@
   - **覆盖 AC**：AC-93, AC-94, AC-95, AC-145, AC-146, AC-147
   - **依赖**：T006, T008, T011, T123, T124
 
+- [x] **T142：修复真实历史数据的 mapping-blocked 兼容与明细账本**
+  - **文件**：`f048_model_mapper.py`, `f048_tuple_mapper.py`, `f048_coordinator.py`,
+    `f048_runtime_storage.py`, `permission_migration_source.py`（knowledge domain）及对应测试
+  - **逻辑**：保留 visibility-only 自定义模型；按旧 usage/manager/owner/relation tier 推导并在
+    新模型等级处安全收窄 manage boundary；孤儿 binding 只审计不恢复授权；知识子资源 tenant
+    以根 Knowledge 为 canonical，父目录已删除的 FAILED 文件由业务 adapter 标为 stale；
+    model/tuple/mode mapping 差异批量写入 migration item 并同步 blocker_count。
+  - **测试**：覆盖仅可见模型不附加动作、旧 tier 蕴含与收窄、孤儿 binding no-op、跨租户
+    child 修正、stale failed resource 退休、mapping blocker 明细持久化与 resume 忽略审计项。
+  - **依赖**：T112～T127, T141
+
 ---
 
 ## 实际偏差记录
@@ -1169,3 +1180,8 @@
 - 真实迁移发现 `permission_migration_item.message` 的 MySQL TEXT 无法容纳约 120 KiB 的
   binding Config 冻结载荷；按用户 2026-07-31 指示改为 MySQL LONGTEXT/DM8 CLOB，并保留两份
   Config 原始行供排障。verify 仍记录其数量但不阻断，旧 Config 运行时路径继续退役。
+- 116 真实迁移在 source reconciliation 后继续暴露 model/binding/parent mapping blocker；按用户
+  2026-07-31“修复”确认，T142 将可由当前 Store 与业务 canonical 事实确定的数据改为无扩权的
+  自动兼容：仅可见模型不补动作、超出新等级的 manage scope 只收窄、无 tuple 的 binding 不复活、
+  child tenant 取根 Knowledge、父目录已删除的 FAILED 文件不进入权限图。仍无法形成连续低级边界、
+  未知动作、真实跨租户主体或冲突 tuple 继续 fail closed。

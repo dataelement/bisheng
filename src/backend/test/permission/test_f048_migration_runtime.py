@@ -50,6 +50,7 @@ from bisheng.permission.migration.f048_source_inventory import (
     LegacyConfigSource,
     LegacyTupleSource,
     MigrationEnvironmentFacts,
+    MigrationSourceItem,
     PermissionMigrationResourceDTO,
     SourceInventorySnapshot,
     build_source_inventory,
@@ -133,6 +134,21 @@ async def test_sql_run_store_rebuilds_complete_frozen_source_payload():
     inventory = build_source_inventory(_snapshot())
 
     await store.aput_source_items(run_id=1, items=inventory.items)
+    await store.aput_source_items(
+        run_id=1,
+        items=(
+            MigrationSourceItem(
+                source_kind="MODEL_MAPPING",
+                source_locator="mapping:model:1",
+                tenant_id=None,
+                source_checksum="f" * 64,
+                status="READY",
+                severity="INFO",
+                difference_type="VISIBILITY_ONLY_MODEL_PRESERVED",
+                payload={"source_key": "legacy-owner"},
+            ),
+        ),
+    )
     restored = await store.aload_source_snapshot(run_id=1)
 
     assert build_source_inventory(restored).checksum == inventory.checksum

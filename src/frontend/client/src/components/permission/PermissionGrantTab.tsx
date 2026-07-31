@@ -28,6 +28,7 @@ interface PermissionGrantTabProps {
   context: ResourcePermissionContext;
   assignees?: PermissionGrantAssignee[];
   fixedSubjectType?: SubjectType;
+  showExistingAssignees?: boolean;
   onSuccess: (result: MutateResourceGrantsResult) => void;
 }
 
@@ -56,6 +57,7 @@ export function PermissionGrantTab({
   context,
   assignees = [],
   fixedSubjectType,
+  showExistingAssignees = true,
   onSuccess,
 }: PermissionGrantTabProps) {
   const localize = useLocalize();
@@ -227,83 +229,85 @@ export function PermissionGrantTab({
         </p>
       )}
 
-      <section className="space-y-3">
-        <h3 className="text-sm font-medium text-[#212121]">
-          {localize("f048_permission.grant.existing")}
-        </h3>
-        {assignees.map((assignee) => {
-          const editable = isEditable(assignee, context);
-          const removed = removedIds.has(assignee.assignee_id);
-          return (
-            <div
-              key={assignee.assignee_id}
-              className="grid items-center gap-2 rounded-lg border border-[#EBECF0] p-3 sm:grid-cols-[minmax(0,1fr)_minmax(10rem,0.6fr)_auto]"
-            >
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-[#212121]">
-                  {assignee.subject.name ||
-                    `${assignee.subject.type}:${assignee.subject.id}`}
-                </p>
-                <p className="mt-1 text-xs text-[#818181]">
-                  {assignee.source.type}
-                  {assignee.protected && (
-                    <span className="ml-2 inline-flex items-center gap-1">
-                      <LockKeyhole aria-hidden="true" className="size-3" />
-                      {localize("f048_permission.roster.protected")}
-                    </span>
-                  )}
-                </p>
+      {showExistingAssignees && (
+        <section className="space-y-3">
+          <h3 className="text-sm font-medium text-[#212121]">
+            {localize("f048_permission.grant.existing")}
+          </h3>
+          {assignees.map((assignee) => {
+            const editable = isEditable(assignee, context);
+            const removed = removedIds.has(assignee.assignee_id);
+            return (
+              <div
+                key={assignee.assignee_id}
+                className="grid items-center gap-2 rounded-lg border border-[#EBECF0] p-3 sm:grid-cols-[minmax(0,1fr)_minmax(10rem,0.6fr)_auto]"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-[#212121]">
+                    {assignee.subject.name ||
+                      `${assignee.subject.type}:${assignee.subject.id}`}
+                  </p>
+                  <p className="mt-1 text-xs text-[#818181]">
+                    {assignee.source.type}
+                    {assignee.protected && (
+                      <span className="ml-2 inline-flex items-center gap-1">
+                        <LockKeyhole aria-hidden="true" className="size-3" />
+                        {localize("f048_permission.roster.protected")}
+                      </span>
+                    )}
+                  </p>
+                </div>
+                <select
+                  aria-label={`${localize(
+                    "f048_permission.grant.model",
+                  )}.${assignee.assignee_id}`}
+                  value={
+                    targetModels[assignee.assignee_id] ?? assignee.model.key
+                  }
+                  disabled={!editable || removed || modelsLoading}
+                  onChange={(event) =>
+                    setTargetModels((current) => ({
+                      ...current,
+                      [assignee.assignee_id]: event.target.value,
+                    }))
+                  }
+                  className="h-10 rounded-md border border-[#D9D9D9] bg-white px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
+                >
+                  {models.map((model) => (
+                    <option key={model.key} value={model.key}>
+                      {model.name}
+                    </option>
+                  ))}
+                </select>
+                <Button
+                  type="button"
+                  color="danger"
+                  variant="text"
+                  size="medium"
+                  iconOnly
+                  aria-label={`${localize(
+                    "f048_permission.grant.remove",
+                  )}.${assignee.assignee_id}`}
+                  disabled={!editable}
+                  onClick={() =>
+                    setRemovedIds((current) => {
+                      const next = new Set(current);
+                      if (next.has(assignee.assignee_id)) {
+                        next.delete(assignee.assignee_id);
+                      } else {
+                        next.add(assignee.assignee_id);
+                      }
+                      return next;
+                    })
+                  }
+                >
+                  <Trash2 aria-hidden="true" />
+                </Button>
               </div>
-              <select
-                aria-label={`${localize(
-                  "f048_permission.grant.model",
-                )}.${assignee.assignee_id}`}
-                value={
-                  targetModels[assignee.assignee_id] ?? assignee.model.key
-                }
-                disabled={!editable || removed || modelsLoading}
-                onChange={(event) =>
-                  setTargetModels((current) => ({
-                    ...current,
-                    [assignee.assignee_id]: event.target.value,
-                  }))
-                }
-                className="h-10 rounded-md border border-[#D9D9D9] bg-white px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
-              >
-                {models.map((model) => (
-                  <option key={model.key} value={model.key}>
-                    {model.name}
-                  </option>
-                ))}
-              </select>
-              <Button
-                type="button"
-                color="danger"
-                variant="text"
-                size="medium"
-                iconOnly
-                aria-label={`${localize(
-                  "f048_permission.grant.remove",
-                )}.${assignee.assignee_id}`}
-                disabled={!editable}
-                onClick={() =>
-                  setRemovedIds((current) => {
-                    const next = new Set(current);
-                    if (next.has(assignee.assignee_id)) {
-                      next.delete(assignee.assignee_id);
-                    } else {
-                      next.add(assignee.assignee_id);
-                    }
-                    return next;
-                  })
-                }
-              >
-                <Trash2 aria-hidden="true" />
-              </Button>
-            </div>
-          );
-        })}
-      </section>
+            );
+          })}
+        </section>
+      )}
 
       {canEdit && (
         <section className="space-y-3 rounded-lg border border-[#EBECF0] p-3">

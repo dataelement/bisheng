@@ -1,4 +1,5 @@
 import {
+  getGrantablePermissionModelsApi,
   getMyResourcePermissionsApi,
   getResourcePermissionGrantsApi,
   type ResourcePermissionContext,
@@ -8,8 +9,10 @@ import { fireEvent, render, screen, waitFor } from "@/test/test-utils"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("@/controllers/API/permission", () => ({
+  getGrantablePermissionModelsApi: vi.fn(),
   getMyResourcePermissionsApi: vi.fn(),
   getResourcePermissionGrantsApi: vi.fn(),
+  mutateResourceGrantsApi: vi.fn(),
 }))
 
 const customContext: ResourcePermissionContext = {
@@ -59,6 +62,20 @@ const departmentAssignee = {
 describe("F048 PermissionListTab", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(getGrantablePermissionModelsApi).mockResolvedValue([
+      {
+        key: "manager",
+        name: "Manager",
+        level: 3,
+        active: true,
+      },
+      {
+        key: "editor",
+        name: "Editor",
+        level: 2,
+        active: true,
+      },
+    ])
     vi.mocked(getResourcePermissionGrantsApi).mockResolvedValue({
       data: [directAssignee, departmentAssignee],
       page_size: 50,
@@ -101,12 +118,10 @@ describe("F048 PermissionListTab", () => {
       "source.includeChildren",
     )
     expect(screen.getAllByText("Alice")).toHaveLength(2)
-    expect(screen.getByTestId("permission-assignee-101")).toHaveTextContent(
-      "roster.protected",
-    )
+    expect(screen.getByLabelText("roster.protected")).toBeInTheDocument()
   })
 
-  it("renders inherited parent and forces inherited rows read-only", async () => {
+  it("shows inherited source and forces inherited rows read-only", async () => {
     vi.mocked(getResourcePermissionGrantsApi).mockResolvedValue({
       data: [
         {
@@ -129,9 +144,7 @@ describe("F048 PermissionListTab", () => {
       />,
     )
 
-    expect(await screen.findByText("mode.inherit")).toBeInTheDocument()
-    expect(screen.getAllByText("knowledge_space:space-1")).toHaveLength(2)
-    const row = screen.getByTestId("permission-assignee-102")
+    const row = await screen.findByTestId("permission-assignee-102")
     expect(row).toHaveTextContent("scope.inherited")
     expect(row).toHaveTextContent("knowledge_space:space-1")
     expect(row).toHaveAttribute("data-editable", "false")

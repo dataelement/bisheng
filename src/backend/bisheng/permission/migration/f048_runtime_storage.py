@@ -87,6 +87,7 @@ def _run_state(row: PermissionMigrationRun) -> MigrationRunState:
         source_checksum=row.source_checksum,
         target_checksum=row.target_checksum,
         lock_token=row.lock_token,
+        blocker_count=row.blocker_count,
     )
 
 
@@ -164,6 +165,8 @@ class SqlMigrationRunStore:
                 tuples.append(LegacyTupleSource(**payload))
             elif item.source_kind == "FAILED_TUPLE":
                 failed_tuples.append(LegacyFailedTupleSource(**payload))
+            elif item.source_kind in {"MODEL_MAPPING", "TUPLE_MAPPING", "MODE_MAPPING"}:
+                continue
             else:
                 raise PermissionMigrationBlockedError(msg=f"Unknown frozen source kind: {item.source_kind}")
         snapshot = SourceInventorySnapshot(
@@ -277,6 +280,7 @@ class SqlMigrationRunStore:
                             source_watermark=source_watermark,
                             source_checksum=None,
                             target_checksum=None,
+                            blocker_count=0,
                             version=expected_version + 1,
                             update_time=func.now(),
                         )
@@ -303,6 +307,7 @@ class SqlMigrationRunStore:
         checkpoint: str | None,
         source_checksum: str | None,
         target_checksum: str | None,
+        blocker_count: int | None = None,
     ) -> MigrationRunState:
         updated = await self._repository.aupdate_run_state_cas(
             run_id=run_id,
@@ -312,6 +317,7 @@ class SqlMigrationRunStore:
             checkpoint=checkpoint,
             source_checksum=source_checksum,
             target_checksum=target_checksum,
+            blocker_count=blocker_count,
         )
         if not updated:
             raise PermissionVersionConflictError(msg="Migration phase changed concurrently")

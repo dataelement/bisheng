@@ -90,7 +90,7 @@ def test_edited_system_model_equal_to_standard_reuses_fixed_identity():
     assert result.blockers == ()
 
 
-def test_view_only_and_unknown_actions_are_blockers_not_silent_defaults():
+def test_view_only_model_preserves_visibility_without_granting_actions():
     result = map_legacy_models(
         (
             LegacyPermissionModel(
@@ -108,12 +108,36 @@ def test_view_only_and_unknown_actions_are_blockers_not_silent_defaults():
         )
     )
 
-    assert result.custom_models == ()
+    view_only = next(row for row in result.custom_models if row.legacy_source_key == "view-only")
+    assert view_only.action_codes == ()
+    assert view_only.derived_level is None
     assert {item.difference_type for item in result.differences} == {
-        "EMPTY_MODEL_AFTER_VIEW_REMOVAL",
+        "VISIBILITY_ONLY_MODEL_PRESERVED",
         "UNKNOWN_LEGACY_ACTION",
     }
-    assert len(result.blockers) == 2
+    assert result.blockers == ("UNKNOWN_LEGACY_ACTION",)
+
+
+def test_legacy_manage_tiers_expand_implications_and_clamp_above_model_level():
+    source = LegacyPermissionModel(
+        source_key="legacy-manager",
+        name="Legacy manager",
+        relation="manager",
+        permissions=(
+            "edit_app",
+            "manage_app_owner",
+            "manage_app_manager",
+            "manage_app_viewer",
+        ),
+    )
+
+    result = map_legacy_models((source,))
+
+    mapped = result.custom_models[0]
+    assert mapped.derived_level == 3
+    assert mapped.allow_same_level is True
+    assert result.blockers == ()
+    assert [row.difference_type for row in result.differences] == ["MANAGE_SCOPE_CLAMPED_TO_MODEL_LEVEL"]
 
 
 def test_manage_boundary_is_inferred_only_for_a_contiguous_non_expanding_set():

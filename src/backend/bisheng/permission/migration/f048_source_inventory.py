@@ -112,6 +112,8 @@ class PermissionMigrationResourceDTO:
     system_allowlisted: bool = False
     permission_mode: str | None = None
     source_version: str = "1"
+    migratable: bool = True
+    skip_reason: str | None = None
 
     @property
     def key(self) -> str:
@@ -244,6 +246,8 @@ def _config_items(
 def _resource_difference(
     resource: PermissionMigrationResourceDTO,
 ) -> tuple[str | None, str]:
+    if not resource.migratable:
+        return resource.skip_reason or "BUSINESS_RESOURCE_NOT_MIGRATABLE", "INFO"
     if (
         resource.tenant_id <= 0
         or resource.resource_type not in MIGRATED_RESOURCE_TYPES
@@ -276,13 +280,16 @@ def _resource_items(
 ) -> tuple[list[MigrationSourceItem], dict[str, PermissionMigrationResourceDTO]]:
     items: list[MigrationSourceItem] = []
     by_key: dict[str, PermissionMigrationResourceDTO] = {}
+    seen_keys: set[str] = set()
     locators: set[str] = set()
     for resource in sorted(resources, key=lambda row: row.source_locator):
         difference_type, severity = _resource_difference(resource)
-        if resource.key in by_key or resource.source_locator in locators:
+        if resource.key in seen_keys or resource.source_locator in locators:
             difference_type = "DUPLICATE_RESOURCE_SOURCE"
             severity = "BLOCKER"
-        by_key.setdefault(resource.key, resource)
+        if resource.migratable:
+            by_key.setdefault(resource.key, resource)
+        seen_keys.add(resource.key)
         locators.add(resource.source_locator)
         items.append(
             _source_item(

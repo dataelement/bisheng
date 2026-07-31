@@ -1,5 +1,7 @@
 // F035: import a skill from a local file (.md or .zip/.skill bundle, archive root
-// must contain SKILL.md; whole bundle <= 10MB) or from a public GitHub directory URL.
+// must contain SKILL.md) or from a public GitHub directory URL. The size check here
+// covers the uploaded bytes only (<= 10MB); the backend separately caps the unpacked
+// contents at 100MB and reports that as its own error code — do not merge the two.
 import { Button } from "@/components/bs-ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { Input } from "@/components/bs-ui/input";

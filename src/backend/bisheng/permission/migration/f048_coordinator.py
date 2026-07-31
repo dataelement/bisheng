@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from hashlib import sha256
 from typing import Any, Protocol
 
@@ -31,6 +31,7 @@ from bisheng.permission.migration.f048_model_mapper import (
 from bisheng.permission.migration.f048_source_inventory import (
     MIGRATED_RESOURCE_TYPES,
     LegacyTupleSource,
+    MigrationSourceItem,
     PermissionMigrationResourceDTO,
     SourceInventory,
     SourceInventorySnapshot,
@@ -92,6 +93,7 @@ class MigrationRunState:
     source_checksum: str | None = None
     target_checksum: str | None = None
     lock_token: str | None = None
+    blocker_count: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -172,6 +174,7 @@ class MigrationRunStorePort(Protocol):
         checkpoint: str | None,
         source_checksum: str | None,
         target_checksum: str | None,
+        blocker_count: int | None = None,
     ) -> MigrationRunState: ...
 
 
@@ -224,6 +227,47 @@ class _MigrationPlan:
     target_tuples: tuple[dict[str, str], ...]
     legacy_tuples: tuple[dict[str, str], ...]
     blockers: tuple[str, ...]
+
+
+def _mapping_source_items(plan: _MigrationPlan) -> tuple[MigrationSourceItem, ...]:
+    resources = {
+        f"{row.payload['resource_type']}:{row.payload['resource_id']}": row
+        for row in plan.inventory.items
+        if row.source_kind == "RESOURCE"
+    }
+    items: list[MigrationSourceItem] = []
+    groups = (
+        ("MODEL_MAPPING", plan.model_mapping.differences, "source_key"),
+        ("TUPLE_MAPPING", plan.tuple_mapping.differences, "tuple_key"),
+        ("MODE_MAPPING", plan.mode_mapping.differences, "resource_key"),
+    )
+    for source_kind, differences, key_field in groups:
+        for difference in differences:
+            payload = asdict(difference)
+            source_key = str(payload[key_field])
+            tenant_id = None
+            if source_kind == "MODE_MAPPING":
+                resource_item = resources.get(source_key)
+                tenant_id = resource_item.tenant_id if resource_item is not None else None
+            digest = _checksum(
+                {
+                    "difference_type": difference.difference_type,
+                    "source_key": source_key,
+                }
+            )
+            items.append(
+                MigrationSourceItem(
+                    source_kind=source_kind,
+                    source_locator=f"mapping:{source_kind.casefold()}:{digest[:32]}",
+                    tenant_id=tenant_id,
+                    source_checksum=_checksum(payload),
+                    status=("BLOCKED" if difference.severity == "BLOCKER" else "READY"),
+                    severity=difference.severity,
+                    difference_type=difference.difference_type,
+                    payload=payload,
+                )
+            )
+    return tuple(sorted(items, key=lambda row: (row.source_kind, row.source_locator)))
 
 
 def _config_rows(
@@ -408,7 +452,8 @@ def _compile_plan(snapshot: SourceInventorySnapshot) -> _MigrationPlan:
             blockers=inventory.blockers,
         )
     try:
-        resource_keys = {resource.key for resource in snapshot.resources}
+        resources = tuple(resource for resource in snapshot.resources if resource.migratable)
+        resource_keys = {resource.key for resource in resources}
         stale_tuples = tuple(
             row
             for row in snapshot.tuples
@@ -446,10 +491,10 @@ def _compile_plan(snapshot: SourceInventorySnapshot) -> _MigrationPlan:
             active_tuples,
             _legacy_bindings(snapshot),
             model_key_by_source=model_key_by_source,
-            resources=snapshot.resources,
+            resources=resources,
         )
         mode_mapping = map_resource_modes(
-            snapshot.resources,
+            resources,
             tuple_mapping.grants,
         )
     except (TypeError, ValueError, json.JSONDecodeError) as exc:
@@ -480,7 +525,7 @@ def _compile_plan(snapshot: SourceInventorySnapshot) -> _MigrationPlan:
             model_mapping,
             tuple_mapping,
             mode_mapping,
-            snapshot.resources,
+            resources,
         )
         target_tuple_by_key = {(row["user"], row["relation"], row["object"]): row for row in target_tuples}
         for row in identity_tuple_writes:
@@ -535,6 +580,7 @@ class F048MigrationCoordinator:
         checkpoint: str | None,
         source_checksum: str | None,
         target_checksum: str | None,
+        blocker_count: int | None = None,
     ) -> MigrationRunState:
         return await self._run_store.aadvance(
             run_id=run.id,
@@ -544,6 +590,7 @@ class F048MigrationCoordinator:
             checkpoint=checkpoint,
             source_checksum=source_checksum,
             target_checksum=target_checksum,
+            blocker_count=blocker_count,
         )
 
     async def _renew_lease(
@@ -675,9 +722,20 @@ class F048MigrationCoordinator:
                     checkpoint="source-blocked",
                     source_checksum=inventory.checksum,
                     target_checksum=None,
+                    blocker_count=inventory.blocker_count,
                 )
                 raise PermissionMigrationBlockedError(msg=";".join(inventory.blockers))
             plan = _compile_plan(snapshot)
+            mapping_items = _mapping_source_items(plan)
+            for index in range(0, len(mapping_items), DB_BATCH_SIZE):
+                run = await self._renew_lease(
+                    run,
+                    lock_token=lock_token,
+                )
+                await self._run_store.aput_source_items(
+                    run_id=run.id,
+                    items=mapping_items[index : index + DB_BATCH_SIZE],
+                )
             if plan.blockers:
                 await self._advance(
                     run,
@@ -686,6 +744,7 @@ class F048MigrationCoordinator:
                     checkpoint="mapping-blocked",
                     source_checksum=plan.inventory.checksum,
                     target_checksum=None,
+                    blocker_count=sum(item.severity == "BLOCKER" for item in mapping_items),
                 )
                 raise PermissionMigrationBlockedError(msg=";".join(plan.blockers))
             run = await self._advance(
@@ -694,6 +753,7 @@ class F048MigrationCoordinator:
                 checkpoint="source-frozen",
                 source_checksum=plan.inventory.checksum,
                 target_checksum=None,
+                blocker_count=0,
             )
 
         if plan.blockers:

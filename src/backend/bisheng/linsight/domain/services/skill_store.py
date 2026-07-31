@@ -30,7 +30,14 @@ SKILL_MD = "SKILL.md"
 BUILTIN_DIR = "built-in"
 TENANT_SKILLS_DIR = "data/skills"
 
-MAX_BUNDLE_SIZE = 10 * 1024 * 1024  # whole bundle, aligned with deepagents MAX_SKILL_FILE_SIZE
+# Upload payload limit: the .md / .zip / .skill bytes that arrive over HTTP.
+MAX_BUNDLE_SIZE = 10 * 1024 * 1024
+# Unpacked limit: sum of every extracted file's contents (also the GitHub import's
+# total download size). Deliberately larger than the upload limit — an archive of
+# pptx templates/fonts/images compresses well and expands past 10MB while the .zip
+# itself is far below it. This line is the zip-bomb guard, not a second copy of the
+# upload limit. (deepagents' MAX_SKILL_FILE_SIZE is a per-SKILL.md cap, unrelated.)
+MAX_UNPACKED_SIZE = 100 * 1024 * 1024
 MAX_NAME_LEN = 64
 MAX_DESCRIPTION_LEN = 1024
 MAX_DISPLAY_NAME_LEN = 255

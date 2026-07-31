@@ -114,8 +114,15 @@
     "publishFailed": "公開に失敗しました。再読み込みしてお試しください。"
   },
   "mode": {
+    "label": "権限モード",
     "custom": "ローカル権限",
     "inherit": "親から継承",
+    "switchToInherit": "親からの継承に切り替える",
+    "switchToCustom": "ローカル権限に切り替える",
+    "inheritDescription": "このリソースは親のメンバー権限を継承します",
+    "customDescription": "このリソースは独立したメンバー一覧を使用し、親の変更は同期されません",
+    "inheritHelper": "ローカル権限に切り替えると、現在有効なメンバーを基に独立した付与一覧を作成します。",
+    "customHelper": "継承に戻すと、ローカルのカスタム付与は親の権限に置き換えられます。",
     "parent": "親リソース",
     "affectedAssignees": "{{count}} 件の付与対象に影響する見込みです",
     "projection": "投影状態：{{state}}",

@@ -54,6 +54,8 @@ class KnowledgeMigrationRow:
     parent_id: str | None = None
     creator_user_ids: tuple[int, ...] = ()
     source_version: str = "1"
+    migratable: bool = True
+    skip_reason: str | None = None
 
 
 class KnowledgeMigrationRepositoryPort(Protocol):
@@ -82,6 +84,36 @@ def _enum_status(enum_type, value: object) -> str:
 
 def _version(value: object) -> str:
     return value.isoformat() if hasattr(value, "isoformat") else "0"
+
+
+def _build_file_migration_row(
+    file_row: KnowledgeFile,
+    *,
+    knowledge_type: int,
+    knowledge_tenant_id: int | None,
+    existing_parent_ids: set[str],
+) -> KnowledgeMigrationRow:
+    ancestors = [part for part in (file_row.file_level_path or "").split("/") if part]
+    parent_type = (
+        "folder"
+        if ancestors
+        else ("knowledge_space" if knowledge_type == KnowledgeTypeEnum.SPACE.value else "knowledge_library")
+    )
+    parent_id = ancestors[-1] if ancestors else str(file_row.knowledge_id)
+    status = _enum_status(KnowledgeFileStatus, file_row.status)
+    stale_failed_resource = bool(ancestors) and parent_id not in existing_parent_ids and status == "FAILED"
+    return KnowledgeMigrationRow(
+        tenant_id=int(knowledge_tenant_id or file_row.tenant_id or 0),
+        resource_type=("folder" if file_row.file_type == FileType.DIR.value else "knowledge_file"),
+        resource_id=str(file_row.id),
+        status=status,
+        owner_user_id=file_row.user_id,
+        parent_type=parent_type,
+        parent_id=parent_id,
+        source_version=_version(file_row.update_time),
+        migratable=not stale_failed_resource,
+        skip_reason=("STALE_FAILED_RESOURCE" if stale_failed_resource else None),
+    )
 
 
 class SqlKnowledgeMigrationRepository:
@@ -190,7 +222,7 @@ class SqlKnowledgeMigrationRepository:
         if limit <= 0:
             return [], "file:0"
         statement = (
-            select(KnowledgeFile, Knowledge.type)
+            select(KnowledgeFile, Knowledge.type, Knowledge.tenant_id)
             .join(Knowledge, Knowledge.id == KnowledgeFile.knowledge_id)
             .where(
                 col(KnowledgeFile.id) > after_id,
@@ -201,30 +233,36 @@ class SqlKnowledgeMigrationRepository:
         )
         raw_rows = list((await session.execute(statement)).all())
         selected = raw_rows[:limit]
-        rows: list[KnowledgeMigrationRow] = []
-        for file_row, knowledge_type in selected:
-            ancestors = [part for part in (file_row.file_level_path or "").split("/") if part]
-            parent_type = (
-                "folder"
-                if ancestors
-                else ("knowledge_space" if knowledge_type == KnowledgeTypeEnum.SPACE.value else "knowledge_library")
+        immediate_parent_ids = {
+            ancestors[-1]
+            for file_row, _, _ in selected
+            if (ancestors := [part for part in (file_row.file_level_path or "").split("/") if part])
+        }
+        numeric_parent_ids = [int(parent_id) for parent_id in immediate_parent_ids if parent_id.isdigit()]
+        existing_parent_ids = (
+            {
+                str(parent_id)
+                for parent_id in (
+                    await session.execute(
+                        select(KnowledgeFile.id).where(
+                            col(KnowledgeFile.id).in_(numeric_parent_ids),
+                            KnowledgeFile.file_type == FileType.DIR.value,
+                        )
+                    )
+                ).scalars()
+            }
+            if numeric_parent_ids
+            else set()
+        )
+        rows = [
+            _build_file_migration_row(
+                file_row,
+                knowledge_type=knowledge_type,
+                knowledge_tenant_id=knowledge_tenant_id,
+                existing_parent_ids=existing_parent_ids,
             )
-            parent_id = ancestors[-1] if ancestors else str(file_row.knowledge_id)
-            rows.append(
-                KnowledgeMigrationRow(
-                    tenant_id=int(file_row.tenant_id or 0),
-                    resource_type=("folder" if file_row.file_type == FileType.DIR.value else "knowledge_file"),
-                    resource_id=str(file_row.id),
-                    status=_enum_status(
-                        KnowledgeFileStatus,
-                        file_row.status,
-                    ),
-                    owner_user_id=file_row.user_id,
-                    parent_type=parent_type,
-                    parent_id=parent_id,
-                    source_version=_version(file_row.update_time),
-                )
-            )
+            for file_row, knowledge_type, knowledge_tenant_id in selected
+        ]
         next_cursor = f"file:{selected[-1][0].id}" if len(raw_rows) > limit and selected else None
         return rows, next_cursor
 
@@ -264,6 +302,8 @@ class KnowledgePermissionMigrationSource:
                     parent_id=row.parent_id,
                     creator_user_ids=row.creator_user_ids,
                     source_version=row.source_version,
+                    migratable=row.migratable,
+                    skip_reason=row.skip_reason,
                 )
             )
         return PermissionMigrationSourcePage(

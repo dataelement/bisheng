@@ -196,6 +196,7 @@ class FakeRunStore:
             checkpoint=None,
             source_watermark=source_watermark,
             source_checksum=None,
+            blocker_count=0,
             version=self.run.version + 1,
         )
         return self.run
@@ -210,6 +211,7 @@ class FakeRunStore:
         checkpoint,
         source_checksum,
         target_checksum,
+        blocker_count=None,
     ):
         assert run_id == 1
         assert expected_version == self.run.version
@@ -221,6 +223,7 @@ class FakeRunStore:
             checkpoint=checkpoint,
             source_checksum=source_checksum,
             target_checksum=target_checksum,
+            blocker_count=(self.run.blocker_count if blocker_count is None else blocker_count),
             version=self.run.version + 1,
         )
         return self.run
@@ -461,6 +464,90 @@ async def test_source_blocker_stops_before_model_or_target_writes():
 
     assert publisher.calls == []
     assert writer.events == []
+
+
+async def test_mapping_blocker_persists_detailed_items_and_run_count():
+    base = _snapshot()
+    snapshot = replace(
+        base,
+        config_sources=(
+            LegacyConfigSource(
+                key="permission_relation_models_v1",
+                row_version="2",
+                raw_value=(
+                    '[{"id":"broken-model","name":"Broken","permissions":["unknown_action"],'
+                    '"permissions_explicit":true,"is_system":false}]'
+                ),
+            ),
+            base.config_sources[1],
+        ),
+    )
+    store = FakeRunStore()
+    coordinator = F048MigrationCoordinator(
+        source_provider=FakeSourceProvider(snapshot),
+        run_store=store,
+        model_publisher=FakeModelPublisher(),
+        target_writer=FakeTargetWriter(),
+    )
+
+    with pytest.raises(PermissionMigrationBlockedError, match="UNKNOWN_LEGACY_ACTION"):
+        await coordinator.migrate(
+            expected_store_id="store-live",
+            lock_token="operator-mapping-blocked",
+        )
+
+    details = [item for item in store.items if item.source_kind == "MODEL_MAPPING"]
+    assert len(details) == 1
+    assert details[0].difference_type == "UNKNOWN_LEGACY_ACTION"
+    assert details[0].payload["source_key"] == "broken-model"
+    assert store.run.blocker_count == 1
+
+
+async def test_business_skipped_resource_is_not_materialized_and_legacy_tuple_is_retired():
+    base = _snapshot()
+    stale = PermissionMigrationResourceDTO(
+        tenant_id=7,
+        resource_type="knowledge_file",
+        resource_id="stale-1",
+        status="FAILED",
+        owner_user_id=11,
+        ownership_kind="USER",
+        source_locator="knowledge:knowledge_file:stale-1",
+        parent_type="folder",
+        parent_id="missing",
+        migratable=False,
+        skip_reason="STALE_FAILED_RESOURCE",
+    )
+    stale_tuple = LegacyTupleSource(
+        tenant_id=7,
+        user="user:11",
+        relation="owner",
+        object="knowledge_file:stale-1",
+    )
+    snapshot = replace(
+        base,
+        resources=(*base.resources, stale),
+        tuples=(*base.tuples, stale_tuple),
+    )
+    writer = FakeTargetWriter()
+    coordinator = F048MigrationCoordinator(
+        source_provider=FakeSourceProvider(snapshot),
+        run_store=FakeRunStore(),
+        model_publisher=FakeModelPublisher(),
+        target_writer=writer,
+    )
+
+    await coordinator.migrate(
+        expected_store_id="store-live",
+        lock_token="operator-stale-resource",
+    )
+
+    assert not any(row["object"] == "knowledge_file:stale-1" for row in writer.written_tuples)
+    assert {
+        "user": "user:11",
+        "relation": "owner",
+        "object": "knowledge_file:stale-1",
+    } in writer.deleted_tuples
 
 
 async def test_resume_from_retire_phase_does_not_publish_or_rewrite_target():

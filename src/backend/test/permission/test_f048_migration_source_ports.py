@@ -10,9 +10,16 @@ from bisheng.channel.domain.services.permission_migration_source import (
     ChannelMigrationRow,
     ChannelPermissionMigrationSource,
 )
+from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum
+from bisheng.knowledge.domain.models.knowledge_file import (
+    FileType,
+    KnowledgeFile,
+    KnowledgeFileStatus,
+)
 from bisheng.knowledge.domain.services.permission_migration_source import (
     KnowledgeMigrationRow,
     KnowledgePermissionMigrationSource,
+    _build_file_migration_row,
 )
 from bisheng.telemetry_search.domain.services.permission_migration_source import (
     DashboardMigrationRow,
@@ -55,6 +62,17 @@ async def test_knowledge_source_keeps_creator_divergence_and_canonical_parent():
                 parent_type="knowledge_space",
                 parent_id="1",
             ),
+            KnowledgeMigrationRow(
+                tenant_id=7,
+                resource_type="knowledge_file",
+                resource_id="3",
+                status="FAILED",
+                owner_user_id=11,
+                parent_type="folder",
+                parent_id="missing",
+                migratable=False,
+                skip_reason="STALE_FAILED_RESOURCE",
+            ),
         ),
         "knowledge:2",
     )
@@ -70,6 +88,33 @@ async def test_knowledge_source_keeps_creator_divergence_and_canonical_parent():
     assert page.items[0].owner_user_id == 11
     assert page.items[1].parent_type == "knowledge_space"
     assert page.items[1].parent_id == "1"
+    assert page.items[2].migratable is False
+    assert page.items[2].skip_reason == "STALE_FAILED_RESOURCE"
+
+
+def test_knowledge_file_source_uses_root_tenant_and_marks_orphan_failed_rows_stale():
+    source = KnowledgeFile(
+        id=91,
+        tenant_id=18,
+        user_id=11,
+        knowledge_id=7,
+        file_name="failed.txt",
+        file_type=FileType.FILE.value,
+        file_level_path="81/82",
+        status=KnowledgeFileStatus.FAILED.value,
+    )
+
+    row = _build_file_migration_row(
+        source,
+        knowledge_type=KnowledgeTypeEnum.NORMAL.value,
+        knowledge_tenant_id=13,
+        existing_parent_ids={"81"},
+    )
+
+    assert row.tenant_id == 13
+    assert row.parent_id == "82"
+    assert row.migratable is False
+    assert row.skip_reason == "STALE_FAILED_RESOURCE"
 
 
 async def test_channel_source_keeps_creator_and_user_id_as_separate_facts():
