@@ -5791,7 +5791,7 @@ describe("PortalKnowledgeWorkbench", () => {
 
         expect(await screen.findByText("后端开发.md")).toBeInTheDocument();
 
-        const input = await screen.findByPlaceholderText("Search in current knowledge space");
+        const input = await screen.findByPlaceholderText("com_knowledge.search_in_current_space");
         fireEvent.change(input, { target: { value: "搜索" } });
         fireEvent.keyDown(input, { key: "Enter" });
 
@@ -5801,7 +5801,7 @@ describe("PortalKnowledgeWorkbench", () => {
         jest.mocked(getSpaceChildrenApi).mockClear();
         jest.mocked(searchSpaceChildrenApi).mockClear();
 
-        fireEvent.click(screen.getByTitle("编辑标签"));
+        fireEvent.click(screen.getByTitle("com_knowledge.edit_tags"));
         fireEvent.click(await screen.findByRole("button", { name: "保存标签" }));
 
         await waitFor(() => {
@@ -5813,7 +5813,10 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(screen.queryByText("后端开发.md")).not.toBeInTheDocument();
         expect(getSpaceChildrenApi).not.toHaveBeenCalled();
         expect(searchSpaceChildrenApi).not.toHaveBeenCalled();
-        expect(screen.getByText("新标签")).toBeInTheDocument();
+
+        fireEvent.click(screen.getByTitle("com_knowledge.edit_tags"));
+        const reopened = await screen.findByTestId("edit-tags-modal");
+        expect(within(reopened).getByTestId("edit-tags-initial-ids")).toHaveTextContent("3");
     });
 
     test("deletes a file from search results through the backend", async () => {
