@@ -280,6 +280,8 @@ export default function PortalKnowledgeWorkbench() {
     const [treeRootLoadingMore, setTreeRootLoadingMore] = useState(false);
     const [searchMode, setSearchMode] = useState(false);
     const [searchResults, setSearchResults] = useState<KnowledgeFile[]>([]);
+    const searchModeRef = useRef(searchMode);
+    searchModeRef.current = searchMode;
     const [searchTagIds, setSearchTagIds] = useState<number[]>([]);
     const [searchLoading, setSearchLoading] = useState(false);
     const [statusFilter, setStatusFilter] = useState<FileStatus[]>([]);
@@ -904,6 +906,18 @@ export default function PortalKnowledgeWorkbench() {
             };
         }));
     }, [currentFolderId, setRootFiles]);
+
+    /** Keep search results in sync when tags/metadata are patched in place during search mode. */
+    const setDisplayFiles = useCallback<Dispatch<SetStateAction<KnowledgeFile[]>>>((value) => {
+        setCurrentFolderFiles(value);
+        if (searchModeRef.current) {
+            setSearchResults((prev) => (
+                typeof value === "function"
+                    ? (value as (prev: KnowledgeFile[]) => KnowledgeFile[])(prev)
+                    : value
+            ));
+        }
+    }, [setCurrentFolderFiles]);
 
     const setCurrentFileListTotal = useCallback<Dispatch<SetStateAction<number>>>((value) => {
         const folderId = currentFolderId;
@@ -2794,7 +2808,7 @@ export default function PortalKnowledgeWorkbench() {
                                                     onFileEncodingUpdated={handleFileEncodingUpdated}
                                                     markPendingDeletion={markPendingDeletion}
                                                     clearPendingDeletion={clearPendingDeletion}
-                                                    setFiles={setCurrentFolderFiles}
+                                                    setFiles={setDisplayFiles}
                                                     setTotal={setCurrentFileListTotal}
                                                 />
                                             </div>
