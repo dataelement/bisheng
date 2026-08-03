@@ -300,6 +300,7 @@
   "com_endpoint_top_p": "Top P",
   "com_endpoint_use_active_assistant": "アクティブなアシスタントを使用",
   "com_error_expired_user_key": "提供された {{0}} キーは {{1}} に有効期限が切れました。新しいキーを提供して再試行してください。",
+  "com_error_file_upload_incomplete": "「{{0}}」のアップロードが完了していません。削除して再アップロードしてから送信してください。",
   "com_error_files_dupe": "重複ファイルを検出しました",
   "com_error_files_empty": "空のファイルのアップロードは許可されていません",
   "com_error_files_process": "ファイル処理中にエラーが発生しました",

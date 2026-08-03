@@ -52,11 +52,15 @@ const KNOWN_TYPES = new Set([
 // they get the calm neutral ServiceBusyNotice (+ optional retry) rather than the red
 // failure card — a rate limit is the model vendor's availability blip, not a fault.
 // Mirrors the classifier's RETRYABLE bucket.
+//
+// `file_parse_busy` is deliberately NOT here despite being recoverable: the turn is
+// already lost (the attachment never made it into the prompt), so a Retry button
+// would re-run against the same throttled service. It keeps its own "busy" wording
+// but renders as the red card, and the user re-sends from the input box.
 const TRANSIENT_TYPES = new Set([
     'rate_limit',
     'network_timeout',
     'service_unavailable',
-    'file_parse_busy',
 ]);
 
 /** Would this failure render as the calm busy notice rather than the red card?

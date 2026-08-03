@@ -303,6 +303,7 @@
   "com_endpoint_top_p": "Top P",
   "com_endpoint_use_active_assistant": "使用激活的助手",
   "com_error_expired_user_key": "您提供的 {{0}} 密钥已于 {{1}} 过期。请提供新的密钥并重试。",
+  "com_error_file_upload_incomplete": "「{{0}}」尚未上传完成，请移除后重新上传再发送",
   "com_error_files_dupe": "检测到重复文件",
   "com_error_files_empty": "不允许上传空文件",
   "com_error_files_process": "处理文件时发生错误",
