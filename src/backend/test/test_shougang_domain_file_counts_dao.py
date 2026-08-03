@@ -158,9 +158,9 @@ async def test_count_files_by_category_scopes_filters_by_document_type_in_bound_
     class FakeResult:
         def all(self):
             return [
-                (10, "GF-RPT-PP-001"),
-                (10, "GF-CAS-PP-002"),
-                (20, "GF-RPT-QM-003"),
+                (10, "GF-STD-PP-001"),
+                (10, "GF-POL-PP-002"),
+                (20, "GF-STD-QM-003"),
                 (10, "GF-PP-QM-004"),
             ]
 
@@ -172,25 +172,26 @@ async def test_count_files_by_category_scopes_filters_by_document_type_in_bound_
     session = FakeSession()
     with _patch_session_factory(session):
         result = await KnowledgeFileDao.async_count_files_by_category_scopes(
-            {"RPT": {10, 20}, "CAS": {10}},
+            {"POL": {10}, "STD": {10, 20}, "QM": {10}},
         )
 
-    assert result == {"RPT": 2, "CAS": 1}
+    # Last row's document type is QM, but space 10 is not in QM scope.
+    assert result == {"POL": 1, "STD": 2, "QM": 0}
 
 
 @pytest.mark.asyncio
 async def test_count_files_by_category_scopes_rejects_like_overfetch_on_non_document_segment(async_db_session):
-    # LIKE '%-STD-%' fetches the first row, but its document-type segment is RPT.
-    await _insert(async_db_session, knowledge_id=10, file_name="a", file_encoding="GF-RPT-STD-001")
-    await _insert(async_db_session, knowledge_id=10, file_name="b", file_encoding="GF-RPT-PP-002")
-    await _insert(async_db_session, knowledge_id=20, file_name="c", file_encoding="GF-RPT-QM-003")
+    # LIKE '%-POL-%' prefilter fetches this row, but the document-type segment is STD.
+    await _insert(async_db_session, knowledge_id=10, file_name="a", file_encoding="GF-STD-POL-001")
+    await _insert(async_db_session, knowledge_id=10, file_name="b", file_encoding="GF-POL-PP-002")
+    await _insert(async_db_session, knowledge_id=20, file_name="c", file_encoding="GF-STD-QM-003")
 
     with _patch_session_factory(async_db_session):
         result = await KnowledgeFileDao.async_count_files_by_category_scopes(
-            {"RPT": {10, 20}, "STD": {10}},
+            {"POL": {10}, "STD": {10, 20}},
         )
 
-    assert result == {"RPT": 3, "STD": 0}
+    assert result == {"POL": 1, "STD": 2}
 
 
 @pytest.mark.asyncio
