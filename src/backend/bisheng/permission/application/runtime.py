@@ -61,7 +61,6 @@ from bisheng.permission.domain.services.permission_action_service import (
     PermissionActor,
 )
 from bisheng.permission.domain.services.permission_explain_service import (
-    InheritedGrantSet,
     PermissionExplainContext,
     PermissionExplainService,
     PermissionExplanation,
@@ -896,7 +895,7 @@ class F048PermissionRuntime:
             target=target,
             models=models,
         )
-        inherited_grants = await self._state.inherited_grants(
+        inherited = await self._state.inherited_grant_set(
             target=target,
             models=models,
         )
@@ -906,13 +905,6 @@ class F048PermissionRuntime:
                 actor,
                 target,
                 "manage_permission",
-            )
-        inherited = None
-        if target.parent_type and target.parent_id:
-            inherited = InheritedGrantSet(
-                resource_type=target.parent_type,
-                resource_id=target.parent_id,
-                grants=inherited_grants,
             )
         return await self._explain.explain(
             PermissionExplainContext(

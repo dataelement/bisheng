@@ -17,6 +17,7 @@ from bisheng.permission.domain.models import (
 MAX_CHANGE_ITEMS = 50
 MAX_ATOMIC_TUPLES = 90
 HIGHER_CONSISTENCY = "HIGHER_CONSISTENCY"
+_PHASE_ORDER = {"STAGE": 0, "COMMIT": 1}
 
 
 class ProjectionCommitUnknownError(RuntimeError):
@@ -63,6 +64,39 @@ class ProjectionOutcome:
     reconciled: bool = False
 
 
+def projection_state_expectations(
+    deltas: tuple[ProjectionTupleDelta, ...],
+    *,
+    after: bool,
+) -> dict[tuple[str, str, str], bool]:
+    """Resolve one observable tuple state from a multi-phase projection plan.
+
+    A tuple may be changed in both phases, for example resource moves temporarily
+    delete ``permission_enabled`` during STAGE and restore it during COMMIT. The
+    state before the operation is therefore defined by the first action for each
+    tuple key, while the state after the operation is defined by its final action.
+    """
+
+    ordered = sorted(
+        deltas,
+        key=lambda row: (
+            _PHASE_ORDER.get(row.phase.upper(), len(_PHASE_ORDER)),
+            row.sequence,
+            row.user,
+            row.relation,
+            row.object,
+            row.action,
+        ),
+    )
+    expected: dict[tuple[str, str, str], bool] = {}
+    for delta in ordered:
+        if after:
+            expected[delta.key] = delta.action.upper() == "WRITE"
+        elif delta.key not in expected:
+            expected[delta.key] = delta.action.upper() == "DELETE"
+    return dict(sorted(expected.items()))
+
+
 def _checksum(payload: object) -> str:
     serialized = json.dumps(
         payload,
@@ -106,12 +140,11 @@ def normalize_projection_plan(plan: ProjectionPlan) -> ProjectionPlan:
         if previous is None or normalized.sequence < previous.sequence:
             by_phase_key[identity] = normalized
 
-    phase_order = {"STAGE": 0, "COMMIT": 1}
     deltas = tuple(
         sorted(
             by_phase_key.values(),
             key=lambda row: (
-                phase_order[row.phase],
+                _PHASE_ORDER[row.phase],
                 row.sequence,
                 row.user,
                 row.relation,
@@ -162,13 +195,14 @@ def _state_checksum(
     *,
     after: bool,
 ) -> str:
+    expected = projection_state_expectations(deltas, after=after)
     return _checksum(
         [
             {
-                "key": delta.key,
-                "present": (delta.action == "WRITE" if after else delta.action == "DELETE"),
+                "key": key,
+                "present": present,
             }
-            for delta in deltas
+            for key, present in expected.items()
         ]
     )
 

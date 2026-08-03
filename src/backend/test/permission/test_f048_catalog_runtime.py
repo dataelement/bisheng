@@ -45,6 +45,7 @@ from bisheng.permission.domain.models import (
     PermissionGrantAssignee,
     PermissionModel,
     PermissionModelAction,
+    ResourcePermissionMode,
 )
 from bisheng.permission.domain.schemas import (
     CatalogChangeRequest,
@@ -604,3 +605,145 @@ async def test_permission_roster_sql_cursor_reads_only_one_bounded_page(
     assert first_has_more is True
     assert [row.source_id for row in second] == [30]
     assert second_has_more is False
+
+
+async def test_inherited_roster_uses_nearest_custom_ancestor(
+    session_factory: SessionFactory,
+    monkeypatch,
+) -> None:
+    source_service = GrantSourceService()
+    root_source = source_service.canonicalize_source(
+        source_id=10,
+        subject_type="user",
+        subject_id="100",
+        source_type="DIRECT",
+    )
+    middle_creator = source_service.canonicalize_source(
+        source_id=20,
+        subject_type="user",
+        subject_id="200",
+        source_type="CREATOR",
+        source_ref="folder:97333",
+        protected=True,
+    )
+    leaf_creator = source_service.canonicalize_source(
+        source_id=30,
+        subject_type="user",
+        subject_id="300",
+        source_type="CREATOR",
+        source_ref="folder:12345",
+        protected=True,
+    )
+    with bypass_tenant_filter():
+        async with session_factory() as session:
+            async with session.begin():
+                session.add_all(
+                    [
+                        ResourcePermissionMode(
+                            tenant_id=5,
+                            resource_type="knowledge_space",
+                            resource_id="3733",
+                            mode="CUSTOM",
+                            projection_state="CURRENT",
+                        ),
+                        ResourcePermissionMode(
+                            tenant_id=5,
+                            resource_type="folder",
+                            resource_id="97333",
+                            mode="INHERIT",
+                            parent_type="knowledge_space",
+                            parent_id="3733",
+                            projection_state="CURRENT",
+                        ),
+                        ResourcePermissionMode(
+                            tenant_id=5,
+                            resource_type="folder",
+                            resource_id="12345",
+                            mode="INHERIT",
+                            parent_type="folder",
+                            parent_id="97333",
+                            projection_state="CURRENT",
+                        ),
+                    ]
+                )
+                for resource_type, resource_id, source in (
+                    ("knowledge_space", "3733", root_source),
+                    ("folder", "97333", middle_creator),
+                    ("folder", "12345", leaf_creator),
+                ):
+                    grant = PermissionGrant(
+                        tenant_id=5,
+                        resource_type=resource_type,
+                        resource_id=resource_id,
+                        model_key="viewer",
+                        state="ACTIVE",
+                        projection_state="CURRENT",
+                    )
+                    session.add(grant)
+                    await session.flush()
+                    session.add(
+                        PermissionGrantAssignee(
+                            id=source.source_id,
+                            tenant_id=5,
+                            grant_id=int(grant.id),
+                            subject_type=source.subject_type,
+                            subject_id=source.subject_id,
+                            userset_relation=source.userset_relation,
+                            include_children=source.include_children,
+                            source_type=source.source_type,
+                            source_ref=source.source_ref,
+                            source_locator=source.source_locator,
+                            source_fingerprint=source.source_fingerprint,
+                            projected_subject=source.projected_subject,
+                            protected=source.protected,
+                            state="ACTIVE",
+                        )
+                    )
+    monkeypatch.setattr(
+        control_state_module,
+        "get_async_db_session",
+        session_factory,
+    )
+    state = SqlPermissionControlState()
+    target = VerifiedPermissionTarget.from_business_service(
+        tenant_id=5,
+        resource_type="folder",
+        resource_id="12345",
+        resource_version=1,
+        context_version="folder:12345:v1",
+        parent_type="folder",
+        parent_id="97333",
+    )
+    models = (
+        GrantModelSnapshot(
+            model_key="viewer",
+            active=True,
+            action_codes=("visible",),
+            derived_level=1,
+        ),
+    )
+
+    with bypass_tenant_filter():
+        inherited = await state.inherited_grant_set(
+            target=target,
+            models=models,
+        )
+        page, has_more = await state.load_source_page(
+            target=target,
+            mode="INHERIT",
+            models=models,
+            after_id=0,
+            limit=10,
+        )
+
+    assert inherited is not None
+    assert (inherited.resource_type, inherited.resource_id) == (
+        "knowledge_space",
+        "3733",
+    )
+    assert [source.subject_id for grant in inherited.grants for source in grant.sources] == ["100"]
+    assert [(row.source_id, row.scope, row.inherited_from) for row in page] == [
+        (10, "INHERITED", "knowledge_space:3733"),
+        (30, "LOCAL", None),
+    ]
+    assert has_more is False
