@@ -21,7 +21,7 @@ import { TaskTurnPanel } from "~/components/Linsight/Execution/TaskTurnPanel";
 import type { ArtifactFile } from "~/components/Linsight/Artifacts/artifactUtils";
 import { Avatar, AvatarImage, AvatarName } from "~/components/ui/Avatar";
 import { TextToSpeechButton } from "~/components/Voice/TextToSpeechButton";
-import { ServiceBusyNotice } from "~/components/ServiceBusyNotice";
+import { ChatErrorCard, isTransientErrorType } from "~/components/ChatErrorCard";
 import { MessageFeedbackButtons } from "~/components/Chat/MessageFeedbackButtons";
 import { likeChatApi, disLikeCommentApi } from "~/api/apps";
 import { useGetBsConfig } from "~/hooks/queries/data-provider";
@@ -38,8 +38,9 @@ import { MessageImage } from "~/components/Chat/Messages/Content/MessageImage";
 
 // Transient/retryable backend error codes surfaced by daily-mode chat — LLM rate
 // limit (12046), generic busy (429/503), thread-pool full (10540), dept concurrency
-// (12045). These get the calm ServiceBusyNotice + Retry; every other error keeps the
-// red error bubble. Mirrors the classifier's RETRYABLE intent on the status-code side.
+// (12045). Only consulted when the envelope carried no `error_type` (an older
+// backend, or a domain error that doesn't classify itself): a retryable code still
+// has to reach the calm "busy" card rather than the red failure one.
 const RETRYABLE_ERROR_CODES = new Set([12046, 429, 503, 10540, 12045]);
 
 // Map an uploaded file's extension to a bisheng outlined file-type icon.
@@ -178,6 +179,7 @@ interface AiMessageBubbleProps {
 
 // --- Copy button with feedback ---
 function CopyButton({ text }: { text: string }) {
+    const localize = useLocalize();
     const [copied, setCopied] = useState(false);
     const handleCopy = useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
         event.preventDefault();
@@ -192,8 +194,8 @@ function CopyButton({ text }: { text: string }) {
             type="button"
             onClick={handleCopy}
             className="flex size-6 items-center justify-center rounded-md backdrop-blur-[4px] transition-colors hover:bg-[#F7F7F7]"
-            title="复制"
-            aria-label="复制"
+            title={localize('com_ui_copy')}
+            aria-label={localize('com_ui_copy')}
         >
             {copied ? <Outlined.Copied size={14} className="text-blue-500" /> : <Outlined.Copy size={14} className="text-[#818181]" />}
         </button>
@@ -541,10 +543,17 @@ function AssistantBubble({
 }) {
     const localize = useLocalize();
 
+    // Prefer the backend's own classification; fall back to the status code so
+    // pre-classification backends still split busy-vs-failed correctly, and land
+    // on the chat-flavoured generic copy when neither says anything.
+    const resolvedErrorType = message.errorType
+        || (message.errorCode !== undefined && RETRYABLE_ERROR_CODES.has(message.errorCode)
+            ? "rate_limit"
+            : "chat_unknown");
+
     // A transient/retryable failure (rate limit / busy) renders as the calm neutral
-    // notice + Retry instead of the red error bubble.
-    const isTransientError = !!message.error && message.errorCode !== undefined
-        && RETRYABLE_ERROR_CODES.has(message.errorCode);
+    // notice + Retry instead of the red error card.
+    const isTransientError = !!message.error && isTransientErrorType(resolvedErrorType);
 
     // v2.5 Agent-native detection — when a message has structured fields set
     // (populated by useAiChatSSE.onAgentUpdate or by getAgentMessages history
@@ -699,33 +708,23 @@ function AssistantBubble({
                     thinking block so that once "思考内容" appears it sits below that node
                     (answer-pending), not above it. */}
                 {showWaiting && (
-                    <div className="flex items-center py-0.5" aria-label="AI 正在思考">
+                    <div className="flex items-center py-0.5" aria-label={localize('com_ui_ai_thinking')}>
                         <span className="inline-block w-3 h-3 rounded-full bg-black animate-pulse-scale" />
                     </div>
                 )}
 
                 {/* Error state */}
                 {showWaiting ? null : message.error ? (
-                    isTransientError ? (
-                        // Transient upstream hiccup (rate limit / busy): calm neutral
-                        // notice + Retry (re-sends the last user message via regenerate),
-                        // never the red error bubble.
-                        <ServiceBusyNotice
-                            desc={regularContent || localize("api_errors.12046")}
-                            onRetry={onRegenerate}
-                        />
-                    ) : (
-                        <div
-                            className={cn(
-                                "text-red-500 bg-red-50 px-3 py-2",
-                                knowledgeChatLayout
-                                    ? "rounded-[2px] text-[14px] leading-[22px]"
-                                    : "text-sm rounded-[10px]"
-                            )}
-                        >
-                            {regularContent || "发生错误，请重试"}
-                        </div>
-                    )
+                    // Same card as task mode: localized title + explanation + hint,
+                    // with the upstream text (which file, which service, what it
+                    // actually said) behind "view details". Transient hiccups render
+                    // as the calm notice + Retry; terminal ones as the red card.
+                    <ChatErrorCard
+                        errorType={resolvedErrorType}
+                        detail={message.errorDetail}
+                        fallbackMessage={regularContent}
+                        onRetry={isTransientError ? onRegenerate : undefined}
+                    />
                 ) : (
                     /* Main content — uses existing Markdown with citation support */
                     <div
@@ -738,7 +737,7 @@ function AssistantBubble({
                     >
 
                         {isWaitingFirstToken ? (
-                            <div className="flex items-center py-0.5" aria-label="AI 正在思考">
+                            <div className="flex items-center py-0.5" aria-label={localize('com_ui_ai_thinking')}>
                                 <span className="inline-block w-3 h-3 rounded-full bg-black animate-pulse-scale" />
                             </div>
                         ) : (

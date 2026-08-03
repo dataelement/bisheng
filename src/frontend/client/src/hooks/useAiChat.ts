@@ -593,7 +593,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                         }
                     }
                 },
-                onError: (error, errorCode) => {
+                onError: (error, errorCode, meta) => {
                     setMessages((prev) => {
                         const msgs = [...prev];
                         const lastMsg = msgs[msgs.length - 1];
@@ -603,6 +603,8 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                                 text: error || "发生错误，请重试",
                                 error: true,
                                 errorCode,
+                                errorType: meta?.errorType,
+                                errorDetail: meta?.errorDetail,
                             };
                         }
                         return msgs;
@@ -761,7 +763,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                         setConversationId(data.conversation.conversationId);
                     }
                 },
-                onError: (error, errorCode) => {
+                onError: (error, errorCode, meta) => {
                     setMessages((prev) => {
                         const msgs = [...prev];
                         const idx = msgs.findIndex(
@@ -773,6 +775,8 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                                 text: error || "发生错误，请重试",
                                 error: true,
                                 errorCode,
+                                errorType: meta?.errorType,
+                                errorDetail: meta?.errorDetail,
                             };
                         }
                         return msgs;

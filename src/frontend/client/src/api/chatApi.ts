@@ -128,6 +128,12 @@ export interface ChatMessage {
         ServiceBusyNotice + Retry for transient codes (rate limit / busy) vs the red
         error bubble for terminal ones. */
     errorCode?: number;
+    /** stable failure classification from the backend (`data.error_type` on the SSE
+        error envelope) — picks the card's title/explanation/hint copy. */
+    errorType?: string;
+    /** raw upstream text (provider message, parser error, offending filename) kept
+        behind the card's "view details" disclosure. */
+    errorDetail?: string;
     unfinished?: boolean;
     isCreatedByUser?: boolean;
     createdAt?: string;

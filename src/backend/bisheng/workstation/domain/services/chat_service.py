@@ -20,6 +20,7 @@ from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import ServerError
 from bisheng.common.errcode.knowledge import KnowledgeFileNotSupportedError
 from bisheng.common.errcode.workstation import (
+    ChatFileParseError,
     ConversationNotFoundError,
     DepartmentDailyChatConcurrentLimitError,
     LLMRateLimitError,
@@ -1239,6 +1240,36 @@ async def _agent_initialize_chat(data: APIChatCompletion, login_user: UserPayloa
     return ws_config, conversation, message, bisheng_llm, model_info, is_new_conversation
 
 
+# Parser failures that recover on their own (the OCR service is throttled or
+# briefly unreachable) read as "busy, try again"; everything else is a hard
+# parse failure. Mirrors the task-mode failure card's transient/terminal split.
+_TRANSIENT_PARSE_ERRORS = frozenset({ErrorType.RATE_LIMIT, ErrorType.NETWORK_TIMEOUT, ErrorType.SERVICE_UNAVAILABLE})
+
+
+async def _extract_doc_text(filepath: str, filename: str, invoke_user_id: int) -> str:
+    """Extract one attachment's text, turning a parser failure into a domain error.
+
+    Without this the raw ``EtlException`` reached the generic handler and the user
+    got an opaque 500. Re-raising as ``ChatFileParseError`` carries the offending
+    filename plus the parser's own message to the chat bubble, and lets a throttled
+    OCR service be told apart from a genuinely unparseable file.
+    """
+    try:
+        return await get_file_content(
+            filepath_local=filepath,
+            file_name=filename,
+            invoke_user_id=invoke_user_id,
+        )
+    except Exception as exc:
+        logger.exception(f"[process_agent_files] parse failed for {filename}")
+        transient = label_error(unwrap(exc)) in _TRANSIENT_PARSE_ERRORS
+        raise ChatFileParseError(
+            error_type="file_parse_busy" if transient else "file_parse_failed",
+            detail=f"{filename}: {exc}",
+            filename=filename,
+        ) from exc
+
+
 async def _process_agent_files(data: APIChatCompletion, model_info, login_user, ws_config):
     """Split uploaded files into visual (image base64 data URLs) and doc
     (extracted text chunks concatenated up to maxTokens)."""
@@ -1259,13 +1290,7 @@ async def _process_agent_files(data: APIChatCompletion, model_info, login_user, 
         if model_info.visual and ext in VISUAL_MODEL_FILE_TYPES:
             visual_tasks.append(read_image_as_data_url(filepath=filepath, filename=filename))
         else:
-            doc_tasks.append(
-                get_file_content(
-                    filepath_local=filepath,
-                    file_name=filename,
-                    invoke_user_id=login_user.user_id,
-                )
-            )
+            doc_tasks.append(_extract_doc_text(filepath, filename, login_user.user_id))
     visual_results, doc_results = await asyncio.gather(
         asyncio.gather(*visual_tasks),
         asyncio.gather(*doc_tasks),
@@ -1789,12 +1814,22 @@ async def _agent_stream_chat_completion(
             error_flag = True
             error_msg = str(exc)
             logger.exception("Agent chat execution error")
+            # The classified type + the raw provider text ride along in `data`
+            # so the bubble can render the same title/explanation/"view details"
+            # card task mode uses, instead of a bare "服务器错误".
+            error_type = label_error(unwrap(exc))
+            # `unknown` is deliberately renamed for this surface: the shared card's
+            # generic copy talks about a "task", which reads wrong on a chat turn.
+            classified = {
+                "error_type": "chat_unknown" if error_type == ErrorType.UNKNOWN else error_type.value,
+                "detail": str(exc),
+            }
             # Upstream LLM throttling (RPM/TPM/burst) → friendly "service busy"
             # copy instead of dumping the raw provider 500 on the user.
-            if label_error(unwrap(exc)) == ErrorType.RATE_LIMIT:
-                yield LLMRateLimitError().to_sse_event_instance_str()
+            if error_type == ErrorType.RATE_LIMIT:
+                yield LLMRateLimitError(**classified).to_sse_event_instance_str()
             else:
-                yield ServerError(exception=exc).to_sse_event_instance_str()
+                yield ServerError(exception=exc, **classified).to_sse_event_instance_str()
 
         # Finalise any dangling thinking event (e.g. stream interrupted mid-reasoning).
         close_thinking()
