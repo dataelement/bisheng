@@ -16,11 +16,18 @@ from bisheng.common.errcode.permission import (
     PermissionVersionConflictError,
 )
 from bisheng.permission.domain.models import ProjectionOperationStatus
+from bisheng.permission.domain.schemas import VerifiedPermissionTarget
+from bisheng.permission.domain.services.projection_plan import (
+    projection_state_expectations,
+)
 from bisheng.permission.domain.services.projection_service import (
     ProjectionCommitUnknownError,
     ProjectionPlan,
     ProjectionService,
     ProjectionTupleDelta,
+)
+from bisheng.permission.domain.services.resource_lifecycle_policy import (
+    build_move_plan,
 )
 
 
@@ -139,13 +146,14 @@ class FakeFGAProjection:
         self.calls: list[tuple[tuple, tuple]] = []
         self.fail_call: int | None = None
         self.timeout_mode: str | None = None
+        self.timeout_call: int | None = None
 
     async def write_atomic(self, *, writes: tuple, deletes: tuple) -> str:
         self.calls.append((writes, deletes))
         call_number = len(self.calls)
         if self.fail_call == call_number:
             raise RuntimeError("definite stage failure")
-        if self.timeout_mode is not None:
+        if self.timeout_mode is not None and (self.timeout_call is None or self.timeout_call == call_number):
             mode = self.timeout_mode
             self.timeout_mode = None
             if mode == "after":
@@ -223,6 +231,28 @@ def _plan(
     )
 
 
+def _move_plan() -> ProjectionPlan:
+    target = VerifiedPermissionTarget.from_business_service(
+        tenant_id=7,
+        resource_type="knowledge_file",
+        resource_id="42",
+        resource_version=3,
+        parent_type="folder",
+        parent_id="20",
+        context_version="ctx-3",
+    )
+    return build_move_plan(
+        target,
+        old_parent=("knowledge_space", "10"),
+        new_parent=("folder", "20"),
+        mode="INHERIT",
+        store_id="store",
+        model_id="model",
+        operator_id=9,
+        idempotency_key="move-42",
+    )
+
+
 def _service(plan: ProjectionPlan):
     initial = {_key(delta) for delta in plan.deltas if delta.action == "DELETE"}
     repository = FakeProjectionRepository()
@@ -261,6 +291,31 @@ async def test_prepare_stage_recent_commit_verify_and_finalize_order() -> None:
     assert finalizer.calls == 1
     assert scope.fenced is False
     assert events.rows[-1][0] == "permission_projection"
+
+
+@pytest.mark.asyncio
+async def test_move_plan_verifies_final_state_when_enabled_is_restored() -> None:
+    plan = _move_plan()
+    service, repository, _, scope, fga, finalizer, _ = _service(plan)
+
+    outcome = await service.execute(plan)
+
+    enabled = ("user:*", "permission_enabled", "knowledge_file:42")
+    old_parent = ("knowledge_space:10", "parent", "knowledge_file:42")
+    new_parent = ("folder:20", "parent", "knowledge_file:42")
+    before = projection_state_expectations(plan.deltas, after=False)
+    after = projection_state_expectations(plan.deltas, after=True)
+    assert before[enabled] is True
+    assert after[enabled] is True
+    assert before[old_parent] is True
+    assert after[old_parent] is False
+    assert before[new_parent] is False
+    assert after[new_parent] is True
+    assert fga.present == {enabled, new_parent}
+    assert outcome.status == ProjectionOperationStatus.FINALIZED
+    assert repository.operation.status == ProjectionOperationStatus.FINALIZED
+    assert finalizer.calls == 1
+    assert scope.fenced is False
 
 
 @pytest.mark.asyncio
@@ -348,6 +403,22 @@ async def test_commit_timeout_after_write_is_confirmed_and_finalized() -> None:
 
 
 @pytest.mark.asyncio
+async def test_move_commit_timeout_after_write_observes_terminal_state() -> None:
+    plan = _move_plan()
+    service, repository, _, scope, fga, finalizer, _ = _service(plan)
+    fga.timeout_mode = "after"
+    fga.timeout_call = 2
+
+    outcome = await service.execute(plan)
+
+    assert outcome.reconciled is True
+    assert repository.operation.status == ProjectionOperationStatus.FINALIZED
+    assert finalizer.calls == 1
+    assert len(fga.calls) == 2
+    assert scope.fenced is False
+
+
+@pytest.mark.asyncio
 async def test_commit_timeout_before_write_retries_only_when_version_is_current() -> None:
     plan = _plan(_delta(1))
     service, repository, _, _scope, fga, _, _ = _service(plan)
@@ -364,6 +435,23 @@ async def test_commit_timeout_before_write_retries_only_when_version_is_current(
         await service2.execute(plan)
     assert repository2.operation.status == ProjectionOperationStatus.FAILED_CLOSED
     assert scope2.fenced is True
+
+
+@pytest.mark.asyncio
+async def test_move_commit_timeout_before_write_retries_from_staged_state() -> None:
+    plan = _move_plan()
+    service, repository, marker, scope, fga, finalizer, _ = _service(plan)
+    fga.timeout_mode = "before"
+    fga.timeout_call = 2
+
+    outcome = await service.execute(plan)
+
+    assert outcome.reconciled is True
+    assert repository.operation.status == ProjectionOperationStatus.FINALIZED
+    assert finalizer.calls == 1
+    assert len(fga.calls) == 3
+    assert marker.log == ["recent", "recent"]
+    assert scope.fenced is False
 
 
 @pytest.mark.asyncio

@@ -29,6 +29,7 @@ from bisheng.permission.domain.services.projection_plan import (
     build_projection_operation,
     normalize_projection_plan,
     projection_request_checksum,
+    projection_state_expectations,
 )
 
 ProjectionCommitUnknownError = projection_plan_types.ProjectionCommitUnknownError
@@ -393,15 +394,14 @@ class ProjectionService:
     ) -> ProjectionOutcome:
         stage_deltas = tuple(delta for delta in plan.deltas if delta.phase == "STAGE")
         commit_deltas = tuple(delta for delta in plan.deltas if delta.phase == "COMMIT")
-        if stage_deltas and not await self._is_after(stage_deltas):
-            await self._mark_failed_closed(
-                plan,
-                operation,
-                reason="staged tuple set is partial during reconciliation",
-            )
-
         commit_state = await self._classify(commit_deltas)
         if commit_state == "AFTER":
+            if not await self._is_after(plan.deltas):
+                await self._mark_failed_closed(
+                    plan,
+                    operation,
+                    reason="projection commit after state is incomplete",
+                )
             await self._transition(
                 operation,
                 expected=str(operation.status),
@@ -416,6 +416,12 @@ class ProjectionService:
             )
 
         if commit_state == "BEFORE" and allow_retry:
+            if stage_deltas and not await self._is_after(stage_deltas):
+                await self._mark_failed_closed(
+                    plan,
+                    operation,
+                    reason="staged tuple set is partial during reconciliation",
+                )
             if not await self._scope_guard.is_expected_version(
                 plan,
                 int(operation.id),
@@ -474,14 +480,19 @@ class ProjectionService:
         self,
         deltas: tuple[ProjectionTupleDelta, ...],
     ) -> str:
+        representatives: dict[tuple[str, str, str], ProjectionTupleDelta] = {}
+        for delta in deltas:
+            representatives.setdefault(delta.key, delta)
         present = await self._fga.read_present(
-            deltas,
+            tuple(representatives.values()),
             consistency=HIGHER_CONSISTENCY,
         )
-        after = all((delta.key in present) == (delta.action == "WRITE") for delta in deltas)
+        after_state = projection_state_expectations(deltas, after=True)
+        after = all((key in present) == expected for key, expected in after_state.items())
         if after:
             return "AFTER"
-        before = all((delta.key in present) == (delta.action == "DELETE") for delta in deltas)
+        before_state = projection_state_expectations(deltas, after=False)
+        before = all((key in present) == expected for key, expected in before_state.items())
         return "BEFORE" if before else "MIXED"
 
     async def _is_after(
