@@ -1965,6 +1965,7 @@
     "confirm_revoke": "この対象の権限を解除しますか？",
     "dialog_title": "メンバー管理",
     "empty_departments": "部署データがありません",
+    "empty_department_users": "この部署にはユーザーがいません",
     "empty_permissions": "権限設定はまだありません",
     "empty_search": "一致するユーザーがいません",
     "empty_user_groups": "ユーザーグループがありません",
@@ -1974,6 +1975,9 @@
     "error_last_owner": "少なくとも 1 人の所有者を残す必要があります。最後の所有者は削除できません。",
     "error_permission_denied": "権限一覧の読み込みに失敗しました",
     "error_revoke_failed": "操作に失敗しました。再試行してください",
+    "load_failed": "読み込みに失敗しました",
+    "load_more": "さらに読み込む",
+    "retry": "再試行",
     "include_children": "子部署を含む",
     "level_editor": "編集者",
     "level_manager": "管理者",
@@ -2022,6 +2026,7 @@
     "success_revoke": "権限を解除しました",
     "tab_grant": "権限付与",
     "uniform_grant": "一括付与：",
+    "unassigned_department": "未所属",
     "remove": "削除"
   },
   "com_approval": {

@@ -1973,6 +1973,7 @@
     "confirm_revoke": "确认撤销该主体的访问权限吗？",
     "dialog_title": "成员管理",
     "empty_departments": "暂无部门数据",
+    "empty_department_users": "该部门暂无用户",
     "empty_permissions": "当前还没有权限记录",
     "empty_search": "暂无匹配用户",
     "empty_user_groups": "暂无用户组",
@@ -1982,6 +1983,9 @@
     "error_last_owner": "至少保留一个所有者，无法移除最后一个所有者",
     "error_permission_denied": "权限记录加载失败",
     "error_revoke_failed": "操作失败，请重试",
+    "load_failed": "加载失败",
+    "load_more": "加载更多",
+    "retry": "重试",
     "include_children": "包含子部门",
     "level_editor": "编辑者",
     "level_manager": "管理者",
@@ -2030,6 +2034,7 @@
     "success_revoke": "权限撤销成功",
     "tab_grant": "新增授权",
     "uniform_grant": "统一授权：",
+    "unassigned_department": "未归属部门",
     "remove": "移除"
   },
   "com_approval": {

@@ -115,6 +115,50 @@ describe("PermissionGrantTab", () => {
     mockedGetKnowledgeSpaceGrantUserGroups.mockResolvedValue([]);
   });
 
+  it.each([
+    "knowledge_space",
+    "knowledge_library",
+    "folder",
+    "knowledge_file",
+  ] as const)("uses the department user tree for %s grants", async (resourceType) => {
+    render(
+      <PermissionGrantTab
+        resourceType={resourceType}
+        resourceId="resource-1"
+        grantSubjectScopeSpaceId="space-1"
+        onSuccess={jest.fn()}
+      />,
+    );
+
+    expect(await screen.findByTestId("permission-user-tree-department-7")).toBeInTheDocument();
+    expect(mockedGetKnowledgeSpaceGrantDepartments).toHaveBeenCalledWith(
+      "space-1",
+      { signal: expect.any(AbortSignal) },
+    );
+    expect(mockedGetResourceGrantUsers).not.toHaveBeenCalled();
+  });
+
+  it("keeps channel user grants on the flat user list", async () => {
+    render(
+      <PermissionGrantTab
+        resourceType="channel"
+        resourceId="channel-1"
+        onSuccess={jest.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(mockedGetResourceGrantUsers).toHaveBeenCalledWith(
+        "channel",
+        "channel-1",
+        { keyword: "", page: 1, page_size: 50 },
+        { signal: expect.any(AbortSignal) },
+      );
+    });
+    expect(screen.queryByTestId("permission-user-tree-unassigned")).not.toBeInTheDocument();
+    expect(mockedGetKnowledgeSpaceGrantDepartments).not.toHaveBeenCalled();
+  });
+
   it("hides owner from knowledge space uniform grant options for every subject type", async () => {
     mockedGetGrantableRelationModels.mockResolvedValue([
       {
@@ -355,7 +399,19 @@ describe("PermissionGrantTab", () => {
       },
     ] as any);
     mockedGetResourceGrantUsers.mockResolvedValue([
-      { user_id: 8, user_name: "Alice" },
+      {
+        user_id: 8,
+        user_name: "Alice",
+        department_memberships: [
+          {
+            department_id: 7,
+            dept_id: "dept-7",
+            name: "测试部门",
+            path: "测试部门",
+            is_primary: true,
+          },
+        ],
+      },
     ]);
 
     render(
@@ -366,8 +422,9 @@ describe("PermissionGrantTab", () => {
       />,
     );
 
+    fireEvent.click(await screen.findByTestId("permission-user-tree-department-7"));
     const userLabel = await screen.findByText("Alice");
-    const row = screen.getByTestId("permission-user-row-8");
+    const row = screen.getByTestId("permission-user-tree-row-7-8");
     const checkbox = row.querySelector('[role="checkbox"]');
 
     await waitFor(() => {
@@ -383,12 +440,30 @@ describe("PermissionGrantTab", () => {
   });
 
   it("shows user grant candidates with account and department details", async () => {
+    mockedGetKnowledgeSpaceGrantDepartments.mockResolvedValue([
+      {
+        id: 7,
+        dept_id: "dept-7",
+        name: "炼铁部",
+        parent_id: null,
+        children: [],
+      },
+    ]);
     mockedGetResourceGrantUsers.mockResolvedValue([
       {
         user_id: 8,
         user_name: "张伟",
         external_id: "EMP001",
         department_paths: ["总部/炼铁部", "技术中心/AI组"],
+        department_memberships: [
+          {
+            department_id: 7,
+            dept_id: "dept-7",
+            name: "炼铁部",
+            path: "总部/炼铁部",
+            is_primary: true,
+          },
+        ],
       },
     ]);
 
@@ -400,9 +475,10 @@ describe("PermissionGrantTab", () => {
       />,
     );
 
+    fireEvent.click(await screen.findByTestId("permission-user-tree-department-7"));
     await screen.findByText("张伟");
     expect(screen.getByText(/EMP001/)).toBeInTheDocument();
-    expect(screen.getByText(/总部\/炼铁部/)).toBeInTheDocument();
+    expect(screen.getByText("炼铁部")).toBeInTheDocument();
 
     fireEvent.change(
       screen.getByPlaceholderText("com_permission.search_user_by_name_or_account"),

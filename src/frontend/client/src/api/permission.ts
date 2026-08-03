@@ -61,6 +61,23 @@ export interface PermissionUserRow {
   external_id?: string | null;
   primary_department_path?: string | null;
   department_paths?: string[] | null;
+  department_memberships?: PermissionUserDepartmentMembership[];
+}
+
+export interface PermissionUserDepartmentMembership {
+  department_id: number;
+  dept_id: string;
+  name: string;
+  path: string;
+  is_primary: boolean;
+}
+
+export interface ResourceGrantUserParams {
+  keyword?: string;
+  page?: number;
+  page_size?: number;
+  department_id?: number;
+  unassigned?: boolean;
 }
 
 interface PermissionRequestConfig {
@@ -320,7 +337,7 @@ export async function searchUsers(
 export async function getResourceGrantUsers(
   resourceType: ResourceType,
   resourceId: string,
-  params?: { keyword?: string; page?: number; page_size?: number },
+  params?: ResourceGrantUserParams,
   config?: { signal?: AbortSignal }
 ): Promise<PermissionUserRow[]> {
   const res = await request.get(
@@ -330,6 +347,10 @@ export async function getResourceGrantUsers(
         keyword: params?.keyword ?? "",
         page: params?.page ?? 1,
         page_size: params?.page_size ?? 2000,
+        ...(params?.department_id !== undefined
+          ? { department_id: params.department_id }
+          : {}),
+        ...(params?.unassigned ? { unassigned: true } : {}),
       },
       ...withPermissionRequestOptions(config),
     }
@@ -339,7 +360,7 @@ export async function getResourceGrantUsers(
 
 export async function getKnowledgeSpaceGrantUsers(
   resourceId: string,
-  params?: { keyword?: string; page?: number; page_size?: number },
+  params?: ResourceGrantUserParams,
   config?: { signal?: AbortSignal }
 ): Promise<PermissionUserRow[]> {
   return getResourceGrantUsers("knowledge_space", resourceId, params, config);

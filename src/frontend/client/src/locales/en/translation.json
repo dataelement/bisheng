@@ -2041,6 +2041,7 @@
     "confirm_revoke": "Are you sure you want to revoke access for this subject?",
     "dialog_title": "Member Management",
     "empty_departments": "No departments found",
+    "empty_department_users": "No users in this department",
     "empty_permissions": "No permission entries yet",
     "empty_search": "No matching users",
     "empty_user_groups": "No user groups found",
@@ -2050,6 +2051,9 @@
     "error_last_owner": "At least one owner must remain. You cannot remove the last owner.",
     "error_permission_denied": "Failed to load permission entries",
     "error_revoke_failed": "Operation failed. Please try again.",
+    "load_failed": "Failed to load",
+    "load_more": "Load more",
+    "retry": "Retry",
     "include_children": "Include child departments",
     "level_editor": "Editor",
     "level_manager": "Manager",
@@ -2098,6 +2102,7 @@
     "success_revoke": "Access revoked",
     "tab_grant": "Grant Access",
     "uniform_grant": "Apply role:",
+    "unassigned_department": "Unassigned",
     "remove": "Remove"
   },
   "com_approval": {
