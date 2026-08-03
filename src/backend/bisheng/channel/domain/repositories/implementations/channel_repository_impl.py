@@ -91,7 +91,7 @@ class ChannelRepositoryImpl(BaseRepositoryImpl[Channel, str], ChannelRepository)
         )
         query = query.order_by(
             subscription_order.asc(),
-            subscriber_subq.c.subscriber_count.desc().nulls_last(),
+            subscriber_subq.c.subscriber_count.desc(),
             func.coalesce(Channel.update_time, Channel.create_time).desc(),
             Channel.id.asc(),
         )

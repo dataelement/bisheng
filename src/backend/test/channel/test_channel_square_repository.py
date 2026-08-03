@@ -126,4 +126,4 @@ async def test_square_subscriber_sort_uses_subquery_column_without_parameterized
 
     subscriber_order = str(list(session.statement._order_by_clauses)[1])
     assert "coalesce" not in subscriber_order.lower()
-    assert subscriber_order.endswith("subscriber_count DESC NULLS LAST")
+    assert subscriber_order.endswith("subscriber_count DESC")
