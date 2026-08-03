@@ -23,7 +23,7 @@ from bisheng.core.cache.utils import async_file_download, save_download_file
 from bisheng.core.database import get_async_db_session
 from bisheng.core.logger import trace_id_var
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
-from bisheng.developer_token.api.dependencies import get_developer_token_user
+from bisheng.developer_token.domain.schemas import DeveloperTokenPrincipal
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum, KnowledgeUpdate
 from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion
@@ -35,9 +35,21 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     QAKnoweldgeDao,
     QAKnowledgeUpsert,
 )
+from bisheng.knowledge.domain.repositories.interfaces.knowledge_document_repository import (
+    KnowledgeDocumentRepository,
+)
+from bisheng.knowledge.domain.repositories.interfaces.knowledge_document_version_repository import (
+    KnowledgeDocumentVersionRepository,
+)
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
-from bisheng.knowledge.domain.services.knowledge_space_chat_service import KnowledgeSpaceChatService
-from bisheng.open_endpoints.api.dependencies import get_knowledge_space_chat_service_for_openapi
+from bisheng.open_endpoints.api.dependencies import (
+    build_knowledge_space_chat_service_for_openapi,
+    get_filelib_developer_token_principal,
+    get_filelib_knowledge_document_repository,
+    get_filelib_knowledge_document_version_repository,
+    get_filelib_request_user,
+    get_filelib_user_context_service,
+)
 from bisheng.open_endpoints.domain.schemas.filelib import (
     APIAddQAParam,
     APIAppendQAParam,
@@ -48,6 +60,7 @@ from bisheng.open_endpoints.domain.schemas.filelib import (
     RetrieveReq,
     RetrieveResp,
 )
+from bisheng.open_endpoints.domain.services.filelib_user_context_service import FilelibUserContextService
 from bisheng.open_endpoints.domain.utils import get_default_operator, get_default_operator_async
 from bisheng.role.domain.services.quota_service import QuotaService
 from bisheng.utils.util import sync_func_to_async
@@ -316,7 +329,7 @@ async def get_knowledge(*,
                         name: str = None,
                         page_size: Optional[int] = 10,
                         cursor: Optional[str] = None,
-                        login_user: UserPayload = Depends(get_developer_token_user)):
+                        login_user: UserPayload = Depends(get_filelib_request_user)):
     """ Read all knowledge base information. """
     knowledge_type = KnowledgeTypeEnum(knowledge_type)
     result = await KnowledgeService.get_knowledge(
@@ -426,7 +439,7 @@ def delete_file_batch_api(request: Request, file_ids: List[int]):
 @router.get('/file/list', status_code=200)
 async def get_filelist(request: Request,
                        knowledge_id: int,
-                       login_user: UserPayload = Depends(get_developer_token_user),
+                       login_user: UserPayload = Depends(get_filelib_request_user),
                        keyword: str = None,
                        status: List[int] = Query(default=None),
                        page_size: int = 10,
@@ -455,7 +468,7 @@ async def get_file_detail(
         file_encoding: str = Query(..., description='File encoding'),
         knowledge_id: Optional[int] = Query(default=None, description='Knowledge resource id'),
         content_format: Literal['text', 'markdown'] = Query(default='text', description='Content format'),
-        login_user: UserPayload = Depends(get_developer_token_user),
+        login_user: UserPayload = Depends(get_filelib_request_user),
 ):
     """Query one file by file encoding and return metadata plus full parsed content."""
     cleaned_file_encoding = file_encoding.strip()
@@ -698,53 +711,66 @@ def detail_qa(*, id: int):
 
 @router.post('/retrieve')
 async def retrieve_chunks(
+        request: Request,
         req: RetrieveReq,
-        chat_svc: KnowledgeSpaceChatService = Depends(get_knowledge_space_chat_service_for_openapi),
+        principal: DeveloperTokenPrincipal = Depends(get_filelib_developer_token_principal),
+        user_context_service: FilelibUserContextService = Depends(get_filelib_user_context_service),
+        version_repo: KnowledgeDocumentVersionRepository = Depends(
+            get_filelib_knowledge_document_version_repository
+        ),
+        doc_repo: KnowledgeDocumentRepository = Depends(get_filelib_knowledge_document_repository),
 ):
     """Retrieve top-k chunks across one or more knowledge bases (no LLM generation).
 
     Designed for external retrieval-tool integrations (e.g. agents that bring
-    their own LLM). Authentication runs as the configured default operator.
+    their own LLM). The resolved request user controls permissions and scope.
     """
-    kb_filters = None
-    if req.filters and req.filters.knowledge_base_filters:
-        kb_filters = {
-            f.knowledge_base_id: {"tags": f.tags, "tag_match_mode": f.tag_match_mode}
-            for f in req.filters.knowledge_base_filters
-        }
-
-    try:
-        results = await chat_svc.aretrieve_chunks(
-            query=req.query,
-            knowledge_base_ids=req.knowledge_base_ids,
-            kb_filters=kb_filters,
-            top_k=req.top_k,
-            max_content=req.max_content,
+    async with user_context_service.use_user(principal, req.external_id) as login_user:
+        chat_svc = build_knowledge_space_chat_service_for_openapi(
+            request=request,
+            request_user=login_user,
+            version_repo=version_repo,
+            doc_repo=doc_repo,
         )
-    except BaseErrorCode as e:
-        return e.return_resp_instance()
+        kb_filters = None
+        if req.filters and req.filters.knowledge_base_filters:
+            kb_filters = {
+                f.knowledge_base_id: {"tags": f.tags, "tag_match_mode": f.tag_match_mode}
+                for f in req.filters.knowledge_base_filters
+            }
 
-    shougang_conf = await settings.aget_shougang_conf()
-    portal_base_url = shougang_conf.portal_base_url
-    chunks = []
-    for kb_id, doc in results:
-        document_id = int(doc.metadata.get("document_id", 0))
-        document_name = str(doc.metadata.get("document_name", ""))
-        source_url, source_full_url = _build_portal_source_urls(
-            portal_base_url=portal_base_url,
-            knowledge_id=kb_id,
-            document_id=document_id,
-        )
-        chunks.append(RetrieveChunk(
-            content=doc.page_content,
-            knowledge_id=kb_id,
-            document_id=document_id,
-            document_name=document_name,
-            chunk_index=int(doc.metadata.get("chunk_index", 0)),
-            source_url=source_url,
-            source_full_url=source_full_url,
-        ))
-    return resp_200(data=RetrieveResp(chunks=chunks, total=len(chunks)))
+        try:
+            results = await chat_svc.aretrieve_chunks(
+                query=req.query,
+                knowledge_base_ids=req.knowledge_base_ids,
+                kb_filters=kb_filters,
+                top_k=req.top_k,
+                max_content=req.max_content,
+            )
+        except BaseErrorCode as e:
+            return e.return_resp_instance()
+
+        shougang_conf = await settings.aget_shougang_conf()
+        portal_base_url = shougang_conf.portal_base_url
+        chunks = []
+        for kb_id, doc in results:
+            document_id = int(doc.metadata.get("document_id", 0))
+            document_name = str(doc.metadata.get("document_name", ""))
+            source_url, source_full_url = _build_portal_source_urls(
+                portal_base_url=portal_base_url,
+                knowledge_id=kb_id,
+                document_id=document_id,
+            )
+            chunks.append(RetrieveChunk(
+                content=doc.page_content,
+                knowledge_id=kb_id,
+                document_id=document_id,
+                document_name=document_name,
+                chunk_index=int(doc.metadata.get("chunk_index", 0)),
+                source_url=source_url,
+                source_full_url=source_full_url,
+            ))
+        return resp_200(data=RetrieveResp(chunks=chunks, total=len(chunks)))
 
 
 @router.post('/query_qa', status_code=200)

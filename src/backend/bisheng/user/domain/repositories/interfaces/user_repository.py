@@ -16,3 +16,7 @@ class UserRepository(BaseRepository[User, int], ABC):
 
     async def get_primary_department_name(self, user_id: int) -> str | None:
         pass
+
+    async def list_active_by_external_id(self, external_id: str) -> list[User]:
+        """Return every active user matching the external ID across sources."""
+        pass

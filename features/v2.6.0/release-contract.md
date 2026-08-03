@@ -46,6 +46,7 @@
 | INV-7 | `DeveloperToken.file_sync_rule` 只决定文件分类、业务域和目标知识空间/目录的解析方式，不授予任何资源权限；管理选项、保存和统一同步运行时均按 Token 绑定用户校验最终空间根目录或目录的 `upload_file` 权限，且请求仍须先通过 Token 状态、IP、路由白名单和限流 | DeveloperToken, Knowledge, KnowledgeFile | F066 |
 | INV-8 | 动态业务域只读取当前租户首钢门户聚合配置中的 `domains[].department_ids`；Token 仅保存业务域编码引用，不复制部门与业务域映射，不建立第二配置事实源 | DeveloperToken.file_sync_rule, ShougangPortalAdminConfig | F066 |
 | INV-9 | 文件同步配置缺失、不完整、空间/目录引用失效、跨租户、目录不属于所选空间、绑定用户无目标节点上传权限、动态来源参数缺失、动态解析无唯一结果或业务域与目标空间未绑定时必须失败关闭；不得回退到根目录、请求中的其他 ID、调用人默认值、任意知识空间或旧接口固定规则 | DeveloperToken.file_sync_rule, Department, Knowledge, KnowledgeFile | F066 |
+| INV-10 | F069 的四个 Filelib 查询接口必须先通过 Developer Token 调用资格校验；可选 `external_id` 只在 Token 校验成功后决定业务用户、权限和全局数据作用域，缺失时回退 Token 绑定用户。显式值必须全局唯一匹配有效用户，不存在、禁用或重复均统一失败关闭；目标用户完整继承角色、ReBAC/RBAC 和全局超级管理员权限。该不变量仅适用于未启用租户功能的部署，启用多租户前必须重新评审，禁止直接沿用全局作用域。 | DeveloperToken, User, Knowledge | F069 |
 
 **规则**：
 - 新增不变量：先在此表追加，再写 AC
@@ -66,6 +67,7 @@
 | F063-unified-pdf-artifact | F017, F056 | 依赖租户共享存储路径与 Celery 单循环运行时基线；新增独立 PDF Artifact，不修改知识解析、预览或下载契约 |
 | F064-portal-watermarked-pdf-download | F063 | 只读 F063 提供的当前有效 `KnowledgeFilePdfArtifact` 引用；不创建、更新或删除统一 PDF 产物，不取得其写所有权 |
 | F066-token-configured-filelib-sync | F044, F047, F060 | 扩展开发者 Token 配置，收口 F047 的 11 个固定规则接口，复用 F060 动态空间解析器、Knowledge 目录只读契约与 PermissionService；不复制门户业务域配置或授权事实 |
+| F069-filelib-external-user-context | F004, F044 | 复用统一 PermissionService 与 Developer Token 认证；不新增身份或授权事实，只为四个 Filelib 查询接口组合调用资格与可选业务用户上下文；仅允许在未启用租户功能的部署发布 |
 
 ---
 
@@ -97,3 +99,4 @@
 | 2026-07-21 | 登记 F064 门户带水印 PDF 下载依赖 F063；明确仅通过 accessor 读取统一 PDF 产物，不取得 `KnowledgeFilePdfArtifact` 写所有权 | F064, F063 |
 | 2026-07-22 | 登记 F066 的 `DeveloperToken.file_sync_rule` 扩展所有权、F044/F047/F060 依赖、199 错误码边界及权限不扩张、门户配置单一事实源和失败关闭不变量 | F066, F044, F047, F060 |
 | 2026-07-22 | 扩展 F066 固定目标到知识空间根目录或目录；明确选项、保存和运行时按 Token 绑定用户过滤/复核 `upload_file`，目录失效或无权不得回退根目录 | F066, Knowledge, Permission |
+| 2026-08-02 | 登记 F069 Filelib 外部用户上下文：新增 INV-10 与 F004/F044 依赖，明确 Token 资格优先、可选目标用户完整权限、全局唯一匹配失败关闭及无租户部署边界 | F069, F004, F044, User, Knowledge |
