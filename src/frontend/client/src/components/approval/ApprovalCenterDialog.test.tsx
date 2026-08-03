@@ -29,6 +29,7 @@ jest.mock("~/hooks/useLocalize", () => ({
       com_approval_field_department_name: "文件所属部门",
       com_approval_field_file_extension: "文件类型",
       com_approval_node_mode_or: "任意一人通过",
+      com_approval_node_not_started: "未开始",
       com_approval_business_type_knowledge_space_create: "新建知识库",
       com_approval_business_type_knowledge_space_file_publish: "发布文件",
       com_approval_space_level_team: "团队/科室知识库",
@@ -309,6 +310,83 @@ describe("ApprovalCenterDialog", () => {
     expect(screen.getByText("任意一人通过")).toBeInTheDocument();
     expect(screen.queryByText("file_id")).not.toBeInTheDocument();
     expect(screen.queryByText("department_id")).not.toBeInTheDocument();
+  });
+
+  it("shows every future approver in my approvals before the node starts", async () => {
+    jest.mocked(listMyApprovalTasksApi).mockResolvedValue({
+      data: [{ task_id: 71, instance_id: 171, business_name: "发布文件", status: "pending" }],
+      total: 1,
+    });
+    jest.mocked(getMyApprovalTaskDetailApi).mockResolvedValue({
+      task_id: 71,
+      instance_id: 171,
+      business_name: "发布文件",
+      status: "pending",
+      flow_nodes: [
+        { node_code: "source", node_name: "来源库", node_order: 1, node_mode: "or" },
+        {
+          node_code: "target",
+          node_name: "目标库",
+          node_order: 2,
+          node_mode: "or",
+          approvers: [{ user_id: 102, user_name: "李四" }],
+        },
+      ],
+      tasks: [
+        {
+          task_id: 71,
+          node_name: "来源库",
+          node_order: 1,
+          node_mode: "or",
+          status: "pending",
+          approver_user_name: "张三",
+        },
+      ],
+    } as any);
+
+    render(
+      <ApprovalCenterDialog
+        open
+        onOpenChange={jest.fn()}
+        target={{ tab: "my_tasks", taskId: 71 }}
+      />,
+    );
+
+    expect(await screen.findByText("李四")).toBeInTheDocument();
+    expect(screen.getByText("目标库")).toBeInTheDocument();
+  });
+
+  it("shows every future approver in my requests before the node starts", async () => {
+    jest.mocked(listMyApprovalRequestsApi).mockResolvedValue({
+      data: [{ instance_id: 181, business_name: "发布文件", status: "pending" }],
+      total: 1,
+    });
+    jest.mocked(getApprovalInstanceDetailApi).mockResolvedValue({
+      instance_id: 181,
+      business_name: "发布文件",
+      status: "pending",
+      flow_nodes: [
+        {
+          node_code: "department",
+          node_name: "申请人部门",
+          node_order: 1,
+          node_mode: "or",
+          approvers: [{ user_id: 103, user_name: "王五" }],
+        },
+      ],
+      tasks: [],
+    } as any);
+
+    render(
+      <ApprovalCenterDialog
+        open
+        onOpenChange={jest.fn()}
+        target={{ tab: "my_requests", instanceId: 181 }}
+      />,
+    );
+
+    expect(await screen.findByText("王五")).toBeInTheDocument();
+    expect(screen.getByText("申请人部门")).toBeInTheDocument();
   });
 
   it("lets an approver revoke an executed department-file grant", async () => {

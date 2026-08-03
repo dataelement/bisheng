@@ -349,7 +349,7 @@ class PortalPdfDownloadService:
             watermark_date = self.now_provider().strftime("%Y/%m/%d")
             spec = PdfWatermarkSpec(
                 lines=(
-                    f"{identity_prefix}--{account}-{watermark_date}",
+                    f"{identity_prefix}-{account}-{watermark_date}",
                     "首钢股份内部资料，严禁外传，违者必究",  # noqa: RUF001
                 )
             )

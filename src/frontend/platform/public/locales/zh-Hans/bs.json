@@ -362,6 +362,8 @@
       "share_space": "分享空间",
       "unpublish_app": "下线应用",
       "upload_file": "上传文件",
+      "upload_file_to_folder": "上传文件",
+      "upload_file_to_space": "上传文件",
       "use_app": "使用应用",
       "use_kb": "使用知识库",
       "use_tool": "使用工具",

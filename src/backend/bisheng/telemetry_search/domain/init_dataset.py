@@ -736,7 +736,7 @@ DASHBOARD_DATASET = [
                     aggregations=[
                         AggregationExpression(
                             name="file_count",
-                            type=AggsTypeEnum.CARDINALITY,
+                            type=AggsTypeEnum.VALUE_COUNT,
                             field="file_id"
                         ),
                         AggregationExpression(
@@ -746,7 +746,8 @@ DASHBOARD_DATASET = [
                         )
                     ],
                     index=1,
-                    sum_field="file_id"
+                    sum_field="file_id",
+                    sum_type=AggsTypeEnum.VALUE_COUNT,
                 ),
                 MetricConfig(
                     field="new_file_count",
@@ -763,7 +764,7 @@ DASHBOARD_DATASET = [
                     aggregations=[
                         AggregationExpression(
                             name="new_file_count",
-                            type=AggsTypeEnum.CARDINALITY,
+                            type=AggsTypeEnum.VALUE_COUNT,
                             field="file_id"
                         )
                     ]
@@ -792,14 +793,13 @@ DASHBOARD_DATASET = [
                     name="预览次数",
                     is_virtual=True,
                     filter=FilterExpression(bool_operator="must", filters=[
-                        TermOp(field="record_type", value="preview"),
-                        TermOp(field="action_result", value="success"),
+                        TermOp(field="record_type", value="preview_daily"),
                     ]),
                     aggregations=[
                         AggregationExpression(
                             name="preview_count",
-                            type=AggsTypeEnum.VALUE_COUNT,
-                            field="event_id"
+                            type=AggsTypeEnum.SUM,
+                            field="preview_count"
                         )
                     ]
                 ),
@@ -852,11 +852,19 @@ DASHBOARD_DATASET = [
                     field="business_domain_name"
                 ),
                 DimensionConfig(
-                    name="上传人主部门ID",
+                    name="所属部门ID",
+                    field="space_department_id"
+                ),
+                DimensionConfig(
+                    name="所属部门",
+                    field="space_department_name"
+                ),
+                DimensionConfig(
+                    name="上传人所在部门ID",
                     field="primary_department_id"
                 ),
                 DimensionConfig(
-                    name="上传人主部门",
+                    name="上传人所在部门",
                     field="primary_department_name"
                 ),
                 DimensionConfig(

@@ -549,7 +549,7 @@ describe("Relation model regressions", () => {
     });
   });
 
-  it("renders create folder, upload file, and publish file under the space-level knowledge-space column", async () => {
+  it("renders upload file under both space and folder container columns", async () => {
     mockedGetRelationModelsApi.mockResolvedValue([
       {
         id: "owner",
@@ -569,7 +569,7 @@ describe("Relation model regressions", () => {
           items: [
             { id: "view_space", label: "查看空间", relation: "can_read" },
             { id: "create_folder", label: "创建文件夹", relation: "can_edit" },
-            { id: "upload_file", label: "上传文件", relation: "can_edit" },
+            { id: "upload_file_to_space", label: "上传文件", relation: "can_edit" },
             { id: "publish_file", label: "发布文件", relation: "can_edit" },
           ],
         },
@@ -577,6 +577,7 @@ describe("Relation model regressions", () => {
           title: "文件夹级",
           items: [
             { id: "view_folder", label: "查看文件夹", relation: "can_read" },
+            { id: "upload_file_to_folder", label: "上传文件", relation: "can_edit" },
           ],
         },
         {
@@ -596,18 +597,10 @@ describe("Relation model regressions", () => {
     );
     expectTextBefore(
       "system.permissionTemplate.columnSpaceLevel",
-      "system.permissionTemplate.upload_file",
-    );
-    expectTextBefore(
-      "system.permissionTemplate.columnSpaceLevel",
       "system.permissionTemplate.publish_file",
     );
     expectTextBefore(
       "system.permissionTemplate.create_folder",
-      "system.permissionTemplate.columnFolderLevel",
-    );
-    expectTextBefore(
-      "system.permissionTemplate.upload_file",
       "system.permissionTemplate.columnFolderLevel",
     );
     expectTextBefore(
@@ -618,6 +611,37 @@ describe("Relation model regressions", () => {
       "system.permissionTemplate.columnFolderLevel",
       "system.permissionTemplate.view_folder",
     );
+    const spaceUploadLabel = screen.getByText(
+      "system.permissionTemplate.upload_file_to_space",
+    );
+    const folderUploadLabel = screen.getByText(
+      "system.permissionTemplate.upload_file_to_folder",
+    );
+    const spaceLevelLabel = screen.getByText("system.permissionTemplate.columnSpaceLevel");
+    const folderLevelLabel = screen.getByText("system.permissionTemplate.columnFolderLevel");
+    expect(
+      Boolean(
+        spaceLevelLabel.compareDocumentPosition(spaceUploadLabel) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ),
+    ).toBe(true);
+    expect(
+      Boolean(
+        folderLevelLabel.compareDocumentPosition(folderUploadLabel) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ),
+    ).toBe(true);
+    const spaceUploadCheckbox = getPermissionCheckbox(
+      "system.permissionTemplate.upload_file_to_space",
+    );
+    const folderUploadCheckbox = getPermissionCheckbox(
+      "system.permissionTemplate.upload_file_to_folder",
+    );
+    expect(spaceUploadCheckbox).toBeChecked();
+    expect(folderUploadCheckbox).toBeChecked();
+    fireEvent.click(folderUploadCheckbox);
+    expect(spaceUploadCheckbox).toBeChecked();
+    expect(folderUploadCheckbox).not.toBeChecked();
     expectTextBefore(
       "system.permissionTemplate.columnFileLevel",
       "system.permissionTemplate.view_file",

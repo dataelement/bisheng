@@ -585,6 +585,42 @@ class KnowledgeFileDao(KnowledgeFileBase):
         return {code: len(canonical_ids_by_code[code]) for code in counts}
 
     @classmethod
+    async def async_count_files_by_category_scopes(cls, category_space_ids: dict[str, set[int]]) -> dict[str, int]:
+        """Count SUCCESS files in each category card's bound spaces.
+
+        Aligns with portal category landing list (``aget_file_by_space_filters*``):
+        ``file_type=FILE``, ``status=SUCCESS``, ``deleted_at IS NULL``. Does **not** apply
+        ``active_inventory_predicate`` (non-primary historical rows stay visible in the list).
+        Category ``code`` is only the aggregation key — unlike domain scopes, encoding is
+        not used as a filter. Domain counting stays in ``async_count_files_by_domain_scopes``.
+        """
+        normalized_scopes = {
+            code.strip().upper(): {int(space_id) for space_id in space_ids if int(space_id) > 0}
+            for code, space_ids in category_space_ids.items()
+            if code and code.strip()
+        }
+        counts = dict.fromkeys(normalized_scopes, 0)
+        all_space_ids = sorted({space_id for space_ids in normalized_scopes.values() for space_id in space_ids})
+        if not all_space_ids:
+            return counts
+        statement = (
+            select(KnowledgeFile.knowledge_id, func.count().label("cnt"))
+            .where(
+                KnowledgeFile.knowledge_id.in_(all_space_ids),
+                KnowledgeFile.file_type == FileType.FILE.value,
+                KnowledgeFile.status == KnowledgeFileStatus.SUCCESS.value,
+                col(KnowledgeFile.deleted_at).is_(None),
+            )
+            .group_by(KnowledgeFile.knowledge_id)
+        )
+        async with get_async_db_session() as session:
+            rows = (await session.exec(statement)).all()
+        file_count_map = {int(row[0]): int(row[1] or 0) for row in rows}
+        for code, space_ids in normalized_scopes.items():
+            counts[code] = sum(int(file_count_map.get(space_id, 0) or 0) for space_id in space_ids)
+        return counts
+
+    @classmethod
     def delete_batch(cls, file_ids: list[int]) -> bool:
         with get_sync_db_session() as session:
             session.exec(delete(KnowledgeFile).where(KnowledgeFile.id.in_(file_ids)))

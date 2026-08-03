@@ -15,6 +15,11 @@ from bisheng.worker.knowledge.document_projection import (
 from bisheng.worker.knowledge.favorite_notification import (
     send_favorite_change_notifications,
 )
+from bisheng.worker.knowledge.file_migration import (
+    execute_knowledge_migration,
+    preflight_knowledge_migration,
+    reconcile_knowledge_migrations,
+)
 from bisheng.worker.knowledge.file_title_worker import (
     extract_knowledge_file_title_celery,
 )

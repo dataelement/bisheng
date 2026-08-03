@@ -186,6 +186,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     KnowledgeSpaceInfoResp,
     RemoveSpaceMemberRequest,
     ShougangPortalAdvancedFileSearchReq,
+    ShougangPortalCategoryFileCountItem,
     ShougangPortalDomainBindableSpaceResp,
     ShougangPortalDomainFileCountItem,
     ShougangPortalFavoriteCreateReq,
@@ -402,6 +403,8 @@ _PERMISSION_LEVEL_TO_RELATION = {
 
 _CHILD_PERMISSION_SCAN_BATCH_SIZE = 100
 _CHILD_PERMISSION_CHECK_CONCURRENCY = 8
+_UPLOAD_FILE_TO_SPACE_PERMISSION_ID = "upload_file_to_space"
+_UPLOAD_FILE_TO_FOLDER_PERMISSION_ID = "upload_file_to_folder"
 
 PORTAL_SEARCH_ES_RECALL_LIMIT = 80
 PORTAL_SEARCH_VECTOR_RECALL_LIMIT = 24
@@ -911,6 +914,36 @@ class KnowledgeSpaceService(KnowledgeUtils):
             raise SpacePermissionDeniedError()
         return resolved
 
+    async def _resolve_shougang_portal_content_entry(
+        self,
+        file_record: KnowledgeFile,
+        *,
+        required_capability: str,
+    ):
+        resolved = await self._resolve_document_entry(file_record)
+        if resolved is None or bool(getattr(resolved.capabilities, required_capability, False)):
+            return resolved
+        if required_capability not in {"can_view", "can_preview"}:
+            raise SpacePermissionDeniedError()
+
+        access_service = self.department_file_view_access_service
+        if access_service is None:
+            raise RuntimeError("DepartmentFileViewAccessService 未注入")
+        decision = await access_service.evaluate_file(
+            login_user=self.login_user,
+            file=file_record,
+        )
+        if not decision.allowed:
+            raise SpacePermissionDeniedError()
+
+        capabilities = resolved.capabilities.model_copy(
+            update={
+                "can_view": True,
+                "can_preview": True,
+            }
+        )
+        return resolved.model_copy(update={"capabilities": capabilities})
+
     async def _require_document_content_manager(
         self,
         file_record: KnowledgeFile,
@@ -1077,13 +1110,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
         root_values, folder_values = await asyncio.gather(
             PermissionService.list_accessible_ids(
                 int(login_user.user_id),
-                "upload_file",
+                _UPLOAD_FILE_TO_SPACE_PERMISSION_ID,
                 "knowledge_space",
                 login_user=login_user,
             ),
             PermissionService.list_accessible_ids(
                 int(login_user.user_id),
-                "upload_file",
+                _UPLOAD_FILE_TO_FOLDER_PERMISSION_ID,
                 "folder",
                 login_user=login_user,
             ),
@@ -1293,9 +1326,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     raise SpaceFolderNotFoundError()
                 object_type = "folder"
                 object_id = folder_id
+        upload_permission_id = (
+            _UPLOAD_FILE_TO_FOLDER_PERMISSION_ID if object_type == "folder" else _UPLOAD_FILE_TO_SPACE_PERMISSION_ID
+        )
         allowed = await PermissionService.check(
             int(login_user.user_id),
-            "upload_file",
+            upload_permission_id,
             object_type,
             str(object_id),
             login_user=login_user,
@@ -3232,7 +3268,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
     async def require_root_upload_permission(self, space_id: int) -> None:
         """Require upload permission on a knowledge-space root."""
-        await self._require_permission_id("knowledge_space", space_id, "upload_file")
+        await self._require_permission_id(
+            "knowledge_space",
+            space_id,
+            _UPLOAD_FILE_TO_SPACE_PERMISSION_ID,
+        )
 
     async def _list_space_child_resources(self, space_id: int) -> list[tuple[str, int]]:
         async with get_async_db_session() as session:
@@ -3771,7 +3811,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 fav_space_id is not None and int(space.id) == fav_space_id
             )
             permission_ids = await self._get_effective_permission_ids("knowledge_space", int(space.id))
-            if "upload_file" not in permission_ids and not is_fav:
+            if _UPLOAD_FILE_TO_SPACE_PERMISSION_ID not in permission_ids and not is_fav:
                 continue
             items.append(
                 ShougangPortalPersonalSpaceItemResp(
@@ -4814,6 +4854,19 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 int(space.id) for space in spaces if space.id is not None
             )
         return await KnowledgeFileDao.async_count_files_by_domain_scopes(visible_scopes)
+
+    async def count_shougang_portal_category_files(
+        self,
+        categories: list[ShougangPortalCategoryFileCountItem],
+    ) -> dict[str, int]:
+        """Count SUCCESS files in each category card's visible bound spaces (list-aligned)."""
+        visible_scopes: dict[str, set[int]] = {}
+        for category in categories:
+            spaces = await self._get_shougang_portal_visible_search_spaces(category.space_ids, None)
+            visible_scopes.setdefault(category.code, set()).update(
+                int(space.id) for space in spaces if space.id is not None
+            )
+        return await KnowledgeFileDao.async_count_files_by_category_scopes(visible_scopes)
 
     async def get_shougang_portal_home(self, req: ShougangPortalHomeReq) -> dict:
         result = await self._get_shougang_portal_home_sections(req)
@@ -6221,7 +6274,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if file is None:
             return {}
         asyncio.create_task(self._log_file_preview_success(file))  # noqa: RUF006
-        resolved = await self._resolve_document_entry(
+        resolved = await self._resolve_shougang_portal_content_entry(
             file,
             required_capability="can_preview",
         )
@@ -6271,7 +6324,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         )
         if file is None or not spaces:
             return {"data": [], "total": 0}
-        resolved = await self._resolve_document_entry(
+        resolved = await self._resolve_shougang_portal_content_entry(
             file,
             required_capability="can_view",
         )
@@ -6487,6 +6540,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
             raise KnowledgeDepartmentFileUnavailableError()
 
         if decision.status == DepartmentFileAccessStatus.ALLOWED:
+            self._portal_file_access_decision_map[int(file.id)] = decision
+            self._portal_file_download_map[int(file.id)] = bool(decision.can_download)
             spaces = await self._get_shougang_portal_request_spaces(
                 requested_space_ids=[space_id],
                 space_level=None,
@@ -6661,6 +6716,28 @@ class KnowledgeSpaceService(KnowledgeUtils):
             trusted_public_scope=trusted_public_scope,
         )
 
+    @classmethod
+    async def _filter_non_personal_recommendation_spaces(
+        cls,
+        spaces: list[Knowledge],
+    ) -> tuple[list[Knowledge], int, int]:
+        space_ids = [int(space.id) for space in spaces if getattr(space, "id", None) is not None]
+        scopes = await KnowledgeSpaceScopeDao.aget_map_by_space_ids(space_ids)
+        retained: list[Knowledge] = []
+        personal_count = 0
+        unknown_scope_count = 0
+        for space in spaces:
+            space_id = int(getattr(space, "id", 0) or 0)
+            scope = scopes.get(space_id)
+            if scope is None:
+                unknown_scope_count += 1
+                continue
+            if cls._space_level_value(scope.level) == KnowledgeSpaceLevelEnum.PERSONAL.value:
+                personal_count += 1
+                continue
+            retained.append(space)
+        return retained, personal_count, unknown_scope_count
+
     async def _recommend_shougang_portal_files(
         self,
         *,
@@ -6669,6 +6746,37 @@ class KnowledgeSpaceService(KnowledgeUtils):
     ) -> dict:
         diagnostic_started_at = time.monotonic()
         tenant_id = int(get_current_tenant_id() or DEFAULT_TENANT_ID)
+        requested_space_count = len(spaces)
+        (
+            spaces,
+            personal_space_excluded_count,
+            space_scope_unknown_count,
+        ) = await self._filter_non_personal_recommendation_spaces(spaces)
+        if not spaces:
+            logger.info(
+                "[diag][portal.recommendation] {}",
+                json.dumps(
+                    {
+                        "duration_ms": round(
+                            (time.monotonic() - diagnostic_started_at) * 1000,
+                            2,
+                        ),
+                        "empty_reason": (
+                            "only_personal_spaces" if personal_space_excluded_count else "space_scope_unknown"
+                        ),
+                        "personal_space_excluded_count": personal_space_excluded_count,
+                        "requested_space_count": requested_space_count,
+                        "result_count": 0,
+                        "space_scope_unknown_count": space_scope_unknown_count,
+                        "stage": "filter_space_scope",
+                        "tenant_id": tenant_id,
+                        "user_id": int(self.login_user.user_id),
+                        "visible_space_count": 0,
+                    },
+                    sort_keys=True,
+                ),
+            )
+            return self._build_shougang_portal_search_response([])
         space_ids = [int(space.id) for space in spaces]
         visible_space_ids = set(space_ids)
         config = await ShougangPortalConfigService.get_config(tenant_id=tenant_id)
@@ -7259,10 +7367,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     "permission_time_budget_reached": authorization_state.time_budget_reached,
                     "pool_ready": pool_ready,
                     "pool_source": "redis" if active_pool_version else "projection",
+                    "personal_space_excluded_count": personal_space_excluded_count,
                     "redis_state_available": redis_state_available,
+                    "requested_space_count": requested_space_count,
                     "result_count": len(items),
                     "selected_count": len(selected),
                     "stage": "complete",
+                    "space_scope_unknown_count": space_scope_unknown_count,
                     "target_count": target_count,
                     "tenant_id": tenant_id,
                     "user_domain_count": len(user_domains),
@@ -10382,6 +10493,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 if int(clinic_binding.department_id) != int(department_id):
                     clinic_binding.department_id = int(department_id)
                     await DepartmentKnowledgeSpaceDao.aupdate(clinic_binding)
+                await KnowledgeSpaceContentStat.enqueue_space_rename_stat_async(space_id)
                 return space
 
             old_admin_rows = await DepartmentService.aget_admins(old_department.dept_id, self.login_user)
@@ -10473,7 +10585,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                         )
                         raise
                 raise
-        if name_changed:
+        if name_changed or department_id is not None:
             await KnowledgeSpaceContentStat.enqueue_space_rename_stat_async(space_id)
         new_auth_type = space.auth_type
 
@@ -13171,6 +13283,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
         folder.file_name = new_name
         updated_folder = await KnowledgeFileDao.async_update(folder)
         await KnowledgeDao.async_update_knowledge_update_time_by_id(folder.knowledge_id)
+        descendant_prefix = f"{folder.file_level_path}/{folder.id}"
+        descendants = await SpaceFileDao.get_children_by_prefix(
+            folder.knowledge_id,
+            descendant_prefix,
+        )
+        await KnowledgeSpaceContentStat.enqueue_file_stat_async(
+            [item.id for item in descendants if item.file_type == FileType.FILE.value]
+        )
         return updated_folder
 
     async def delete_folder(self, space_id: int, folder_id: int):
@@ -13338,7 +13458,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 continue
             try:
                 await self._require_permission_id("folder", int(folder_id), "view_folder", space_id=space_id)
-                await self._require_permission_id("folder", int(folder_id), "upload_file", space_id=space_id)
+                await self._require_permission_id(
+                    "folder",
+                    int(folder_id),
+                    _UPLOAD_FILE_TO_FOLDER_PERMISSION_ID,
+                    space_id=space_id,
+                )
             except SpacePermissionDeniedError:
                 continue
             recommendable_folders.append(folder)
@@ -13373,7 +13498,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
         space_id: int,
         files: list[UploadFolderRecommendFileReq],
     ) -> UploadFolderRecommendationResp:
-        await self._require_permission_id("knowledge_space", space_id, "upload_file")
+        await self._require_permission_id(
+            "knowledge_space",
+            space_id,
+            _UPLOAD_FILE_TO_SPACE_PERMISSION_ID,
+        )
         if not files:
             return UploadFolderRecommendationResp(items=[])
 
@@ -13620,7 +13749,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
         )
         old_parent_type, old_parent_id = self._parent_tuple_ref_from_level_path(old_file_level_path, space_id)
         if target_folder_id is None:
-            await self._require_permission_id("knowledge_space", space_id, "upload_file")
+            await self._require_permission_id(
+                "knowledge_space",
+                space_id,
+                _UPLOAD_FILE_TO_SPACE_PERMISSION_ID,
+            )
             next_file_level_path = ""
             next_level = 0
             new_parent_type = "knowledge_space"
@@ -13628,7 +13761,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
         else:
             target_folder = await KnowledgeFileDao.query_by_id(target_folder_id)
             target_folder = self._ensure_space_folder(target_folder, space_id)
-            await self._require_permission_id("folder", target_folder_id, "upload_file", space_id=space_id)
+            await self._require_permission_id(
+                "folder",
+                target_folder_id,
+                _UPLOAD_FILE_TO_FOLDER_PERMISSION_ID,
+                space_id=space_id,
+            )
             next_file_level_path = f"{target_folder.file_level_path or ''}/{target_folder_id}"
             next_level = (target_folder.level or 0) + 1
             new_parent_type = "folder"
@@ -13682,6 +13820,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 before_value=old_location,
                 after_value=new_location,
             )
+        await KnowledgeSpaceContentStat.enqueue_file_stat_async([file_id])
         self._enqueue_recommendation_file_refresh(file_id)
         return KnowledgeSpaceFileResponse(**updated_file.model_dump())
 
@@ -13704,7 +13843,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
         old_parent_type, old_parent_id = self._parent_tuple_ref_from_level_path(old_folder_path, space_id)
 
         if target_folder_id is None:
-            await self._require_permission_id("knowledge_space", space_id, "upload_file")
+            await self._require_permission_id(
+                "knowledge_space",
+                space_id,
+                _UPLOAD_FILE_TO_SPACE_PERMISSION_ID,
+            )
             new_parent_path = ""
             new_level = 0
             new_parent_type = "knowledge_space"
@@ -13714,7 +13857,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 raise SpaceFolderCircularMoveError()
             target = await KnowledgeFileDao.query_by_id(target_folder_id)
             target = self._ensure_space_folder(target, space_id)
-            await self._require_permission_id("folder", target_folder_id, "upload_file", space_id=space_id)
+            await self._require_permission_id(
+                "folder",
+                target_folder_id,
+                _UPLOAD_FILE_TO_FOLDER_PERMISSION_ID,
+                space_id=space_id,
+            )
 
             # Reject moves into the folder's own subtree.
             target_path = target.file_level_path or ""
@@ -13771,6 +13919,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if new_parent_path != old_folder_path:
             await self.update_folder_update_time(new_parent_path)
         await KnowledgeDao.async_update_knowledge_update_time_by_id(space_id)
+        descendants = await SpaceFileDao.get_children_by_prefix(space_id, new_prefix)
+        await KnowledgeSpaceContentStat.enqueue_file_stat_async(
+            [item.id for item in descendants if item.file_type == FileType.FILE.value]
+        )
         self._enqueue_recommendation_resource_refresh("folder", folder_id)
         return KnowledgeSpaceFileResponse(**updated_folder.model_dump())
 
@@ -13790,9 +13942,18 @@ class KnowledgeSpaceService(KnowledgeUtils):
         )
 
         if parent_id:
-            await self._require_permission_id("folder", parent_id, "upload_file", space_id=knowledge_id)
+            await self._require_permission_id(
+                "folder",
+                parent_id,
+                _UPLOAD_FILE_TO_FOLDER_PERMISSION_ID,
+                space_id=knowledge_id,
+            )
         else:
-            await self._require_permission_id("knowledge_space", knowledge_id, "upload_file")
+            await self._require_permission_id(
+                "knowledge_space",
+                knowledge_id,
+                _UPLOAD_FILE_TO_SPACE_PERMISSION_ID,
+            )
 
         db_knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
         if not db_knowledge:
@@ -14150,9 +14311,18 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if file_source is None:
             file_source = FileSource.SPACE_UPLOAD
         if parent_id:
-            await self._require_permission_id("folder", parent_id, "upload_file", space_id=knowledge_id)
+            await self._require_permission_id(
+                "folder",
+                parent_id,
+                _UPLOAD_FILE_TO_FOLDER_PERMISSION_ID,
+                space_id=knowledge_id,
+            )
         else:
-            await self._require_permission_id("knowledge_space", knowledge_id, "upload_file")
+            await self._require_permission_id(
+                "knowledge_space",
+                knowledge_id,
+                _UPLOAD_FILE_TO_SPACE_PERMISSION_ID,
+            )
 
         db_knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
         if not db_knowledge:
@@ -14606,14 +14776,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
             await self._require_permission_id(
                 "folder",
                 parent_folder_id,
-                "upload_file",
+                _UPLOAD_FILE_TO_FOLDER_PERMISSION_ID,
                 space_id=file_record.knowledge_id,
             )
         else:
             await self._require_permission_id(
                 "knowledge_space",
                 file_record.knowledge_id,
-                "upload_file",
+                _UPLOAD_FILE_TO_SPACE_PERMISSION_ID,
             )
 
         cleaned = encoding.strip()
@@ -14689,6 +14859,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 ),
             )
         if encoding_changed or subcategory_changed:
+            await KnowledgeSpaceContentStat.enqueue_file_stat_async([file_id])
             self._enqueue_recommendation_file_refresh(file_id)
             if resolved is not None:
                 await self._mark_document_content_changed(updated_file)
@@ -15510,6 +15681,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         )
         if resolved is not None:
             await self._mark_document_content_changed(file_record)
+        await KnowledgeSpaceContentStat.enqueue_file_stat_async([file_id])
 
     async def batch_add_file_tags(
         self, space_id: int, file_ids: list[int], tag_ids: list[int], review_tag_ids: list[int]
@@ -15571,6 +15743,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             )
             if resolved_by_file_id[notified_file_id] is not None:
                 await self._mark_document_content_changed(notified_file)
+        await KnowledgeSpaceContentStat.enqueue_file_stat_async([int(file_record.id) for file_record in files])
 
     async def retry_space_files(self, space_id: int, req_data: dict) -> list:
         """

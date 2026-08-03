@@ -83,6 +83,19 @@ const mockHandleDirectDuplicateOverwrite = jest.fn();
 const mockUseFileUpload = jest.fn();
 const mockUpdateFileTagsApi = jest.fn();
 let mockSearchParams = "";
+const mockSearchParamsListeners = new Set<() => void>();
+const mockSetSearchParams = jest.fn((nextInit: unknown) => {
+    const prev = new URLSearchParams(mockSearchParams);
+    const next = typeof nextInit === "function"
+        ? (nextInit as (prev: URLSearchParams) => URLSearchParams | Record<string, string> | string)(prev)
+        : nextInit;
+    mockSearchParams = (
+        next instanceof URLSearchParams
+            ? next
+            : new URLSearchParams(next as string | Record<string, string>)
+    ).toString();
+    mockSearchParamsListeners.forEach((listener) => listener());
+});
 let mockCreateSpaceConfirmResult: any;
 
 function createMockFileUpload(overrides: Record<string, any> = {}) {
@@ -104,10 +117,22 @@ function createMockFileUpload(overrides: Record<string, any> = {}) {
     };
 }
 
-jest.mock("react-router-dom", () => ({
-    ...jest.requireActual("react-router-dom"),
-    useSearchParams: () => [new URLSearchParams(mockSearchParams), jest.fn()],
-}));
+jest.mock("react-router-dom", () => {
+    const React = jest.requireActual("react") as typeof import("react");
+    return {
+        ...jest.requireActual("react-router-dom"),
+        useSearchParams: () => {
+            const [, bump] = React.useReducer((value: number) => value + 1, 0);
+            React.useEffect(() => {
+                mockSearchParamsListeners.add(bump);
+                return () => {
+                    mockSearchParamsListeners.delete(bump);
+                };
+            }, []);
+            return [new URLSearchParams(mockSearchParams), mockSetSearchParams];
+        },
+    };
+});
 
 jest.mock("~/Providers", () => ({
     useToastContext: () => ({
@@ -613,6 +638,22 @@ function openMyUploadsFromPortalShell() {
     });
 }
 
+function openKnowledgeFileFromPortalShell(payload: {
+    spaceId: string;
+    fileId: string;
+    fileName?: string;
+    openNonce?: string;
+}) {
+    act(() => {
+        window.dispatchEvent(new MessageEvent("message", {
+            data: {
+                type: "shougang-portal:open-knowledge-file",
+                ...payload,
+            },
+        }));
+    });
+}
+
 function getPortalCategoryButton(scope: HTMLElement, label: string, selectedText: string) {
     return within(scope).getByRole("button", {
         name: `${label} 当前选择：${selectedText}`,
@@ -636,6 +677,8 @@ function selectPortalSubcategory(
 describe("PortalKnowledgeWorkbench", () => {
     beforeEach(() => {
         jest.clearAllMocks();
+        mockSearchParams = "";
+        mockSearchParamsListeners.clear();
         mockUseFileUpload.mockReturnValue(createMockFileUpload());
         mockUpdateFileTagsApi.mockResolvedValue(undefined);
         localStorage.removeItem("knowledge-view-mode");
@@ -2225,6 +2268,34 @@ describe("PortalKnowledgeWorkbench", () => {
         });
     });
 
+    test("disables business domain select while file is processing in the portal file list", async () => {
+        const personalSpace = makeSpace("personal-1", "设备部", {
+            role: SpaceRole.ADMIN,
+        });
+        const file = makeFile("201", "解析中文档.pdf", {
+            type: FileType.PDF,
+            status: FileStatus.PROCESSING,
+            fileEncoding: "SGGF-STD-EM-20260600000001",
+        });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [],
+            personalSpaces: [personalSpace],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({
+            data: [file],
+            total: 1,
+        } as any);
+
+        renderWorkbench();
+
+        const fileRow = await screen.findByTestId("file-tree-row-201");
+        const businessDomainSelect = within(fileRow).getByLabelText("修改解析中文档.pdf业务域类型 当前业务域：EM") as HTMLSelectElement;
+        expect(businessDomainSelect).toHaveDisplayValue("EM / 能源");
+        expect(businessDomainSelect).toBeDisabled();
+    });
+
     test("uses the main work area as a full file list and covers it with preview until back", async () => {
         const personalSpace = makeSpace("personal-1", "信息", {
             role: SpaceRole.ADMIN,
@@ -2315,6 +2386,45 @@ describe("PortalKnowledgeWorkbench", () => {
         });
     });
 
+    test("opens a portal file from parent open-knowledge-file postMessage", async () => {
+        const personalSpace = makeSpace("personal-1", "信息", {
+            role: SpaceRole.ADMIN,
+        });
+        const file = makeFile("201", "后端开发.md", {
+            type: FileType.MD,
+        });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [],
+            personalSpaces: [personalSpace],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({
+            data: [file],
+            total: 1,
+        } as any);
+        jest.mocked(searchSpaceChildrenApi).mockResolvedValue({
+            data: [file],
+            total: 1,
+        } as any);
+
+        renderWorkbench("/knowledge-portal");
+        await screen.findByTestId("portal-file-workspace");
+
+        openKnowledgeFileFromPortalShell({
+            spaceId: "personal-1",
+            fileId: "201",
+            fileName: "后端开发.md",
+            openNonce: "msg-1",
+        });
+
+        const preview = await screen.findByTestId("portal-preview-page");
+        expect(preview).toHaveTextContent("后端开发.md");
+        await waitFor(() => {
+            expect(getFilePreviewApi).toHaveBeenCalledWith("personal-1", "201");
+        });
+    });
+
     test("opens a deep-linked portal file after the file list finishes loading", async () => {
         const personalSpace = makeSpace("118", "GR00011", {
             role: SpaceRole.ADMIN,
@@ -2344,6 +2454,50 @@ describe("PortalKnowledgeWorkbench", () => {
         });
     });
 
+    test("uses the portal content gate for a deep-linked department file granted by approval", async () => {
+        const departmentSpace = makeSpace("department-approval", "审批部门库", {
+            role: SpaceRole.MEMBER,
+            spaceLevel: SpaceLevel.DEPARTMENT,
+        });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [departmentSpace],
+            teamSpaces: [],
+            personalSpaces: [],
+        } as any);
+        jest.mocked(getSpaceInfoApi).mockResolvedValue(departmentSpace as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({
+            data: [],
+            total: 0,
+        } as any);
+        jest.mocked(searchSpaceChildrenApi).mockRejectedValue(new Error("generic permission denied"));
+        jest.mocked(getPortalFilePreviewApi).mockResolvedValue({
+            preview_url: "/approved-preview.pdf",
+            original_url: "/approved-origin.pdf",
+            can_download: false,
+        } as any);
+
+        renderWorkbench(
+            "/knowledge-portal?spaceId=department-approval&fileId=approved-file&fileName=%E5%AE%A1%E6%89%B9%E9%80%9A%E8%BF%87%E6%96%87%E4%BB%B6.pdf",
+        );
+
+        const preview = await screen.findByTestId("portal-preview-page");
+        expect(preview).toHaveTextContent("审批通过文件.pdf");
+        await waitFor(() => {
+            expect(getPortalFilePreviewApi).toHaveBeenCalledWith(
+                "department-approval",
+                "approved-file",
+            );
+        });
+        expect(getFilePreviewApi).not.toHaveBeenCalledWith(
+            "department-approval",
+            "approved-file",
+        );
+        expect(within(await screen.findByTestId("portal-document-actions"))
+            .queryByRole("button", { name: "下载" }))
+            .not.toBeInTheDocument();
+    });
+
     test("does not expose the default favorite space while restoring a deep-linked public file", async () => {
         const originalParent = window.parent;
         const parentWindow = { postMessage: jest.fn() };
@@ -2361,12 +2515,18 @@ describe("PortalKnowledgeWorkbench", () => {
                 type: FileType.MD,
                 spaceId: "public-1",
             });
+            let resolveSpaceInfo: (value: typeof publicSpace) => void = () => undefined;
+            const spaceInfoPending = new Promise<typeof publicSpace>((resolve) => {
+                resolveSpaceInfo = resolve;
+            });
             jest.mocked(getGroupedSpacesApi).mockResolvedValue({
                 publicSpaces: [publicSpace],
                 departmentSpaces: [],
                 teamSpaces: [],
                 personalSpaces: [favoriteSpace],
             } as any);
+            // Delay preferred-space lookup: personal list must not fall back to 我的收藏 first.
+            jest.mocked(getSpaceInfoApi).mockImplementation(() => spaceInfoPending as any);
             jest.mocked(getSpaceChildrenApi).mockImplementation(async (params: any) => (
                 params.space_id === "public-1"
                     ? { data: [file], total: 1 }
@@ -2378,6 +2538,26 @@ describe("PortalKnowledgeWorkbench", () => {
             } as any);
 
             renderWorkbench("/knowledge-portal?spaceId=public-1&fileId=201&fileName=%E5%85%AC%E5%85%B1%E6%96%87%E4%BB%B6.md");
+
+            // Personal list resolves first; preferred getSpaceInfo is still pending.
+            await waitFor(() => {
+                expect(getSpacesByLevelApi).toHaveBeenCalledWith(
+                    SpaceLevel.PERSONAL,
+                    { order_by: SpaceSortType.UPDATE_TIME },
+                );
+            });
+            await act(async () => {
+                await Promise.resolve();
+            });
+            // Must not fall back to 我的收藏 while the deep-link preferred space is unresolved.
+            expect(getSpaceChildrenApi).not.toHaveBeenCalledWith(expect.objectContaining({
+                space_id: "favorite-space",
+            }));
+            expect(screen.queryByTestId("portal-favorites-panel")).not.toBeInTheDocument();
+
+            await act(async () => {
+                resolveSpaceInfo(publicSpace);
+            });
 
             const preview = await screen.findByTestId("portal-preview-page");
             expect(preview).toHaveTextContent("公共文件.md");
@@ -2446,6 +2626,130 @@ describe("PortalKnowledgeWorkbench", () => {
             }));
         });
         expect(await screen.findByText("文件夹文档.md")).toBeInTheDocument();
+    });
+
+    test("deep-link open with folderId returns to the full folder list (not search single-file)", async () => {
+        const personalSpace = makeSpace("personal-1", "信息", {
+            role: SpaceRole.ADMIN,
+        });
+        const folder = makeFile("101", "制度文件", {
+            type: FileType.FOLDER,
+            spaceId: "personal-1",
+        });
+        const targetFile = makeFile("201", "目标文档.md", {
+            type: FileType.MD,
+            spaceId: "personal-1",
+            parentId: "101",
+        });
+        const siblingFile = makeFile("202", "同目录其它.md", {
+            type: FileType.MD,
+            spaceId: "personal-1",
+            parentId: "101",
+        });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [],
+            personalSpaces: [personalSpace],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockImplementation(async (params: any) => (
+            params.parent_id === "101"
+                ? { data: [targetFile, siblingFile], total: 2 }
+                : { data: [folder], total: 1 }
+        ) as any);
+        // Slow-path search must not leave the UI stuck showing only the matched file.
+        jest.mocked(searchSpaceChildrenApi).mockResolvedValue({
+            data: [targetFile],
+            total: 1,
+        } as any);
+
+        renderWorkbench(
+            "/knowledge-portal?spaceId=personal-1&folderId=101&fileId=201&fileName=%E7%9B%AE%E6%A0%87%E6%96%87%E6%A1%A3.md",
+        );
+
+        const preview = await screen.findByTestId("portal-preview-page");
+        expect(preview).toHaveTextContent("目标文档.md");
+        await waitFor(() => {
+            expect(getSpaceChildrenApi).toHaveBeenCalledWith(expect.objectContaining({
+                space_id: "personal-1",
+                parent_id: "101",
+            }));
+        });
+
+        fireEvent.click(within(preview).getByRole("button", { name: "返回文件列表" }));
+
+        const restoredWorkspace = await screen.findByTestId("portal-file-workspace");
+        expect(within(restoredWorkspace).getByTestId("portal-file-table")).toBeInTheDocument();
+        expect(within(restoredWorkspace).getByText("目标文档.md")).toBeInTheDocument();
+        expect(within(restoredWorkspace).getByText("同目录其它.md")).toBeInTheDocument();
+        expect(screen.queryByTestId("portal-preview-page")).not.toBeInTheDocument();
+    });
+
+    test("tag-review deep-link keeps folder children when a late root refresh finishes during preview", async () => {
+        const personalSpace = makeSpace("personal-1", "信息", {
+            role: SpaceRole.ADMIN,
+        });
+        const folder = makeFile("101", "制度文件", {
+            type: FileType.FOLDER,
+            spaceId: "personal-1",
+        });
+        const targetFile = makeFile("201", "目标文档.md", {
+            type: FileType.MD,
+            spaceId: "personal-1",
+            parentId: "101",
+        });
+        const siblingFile = makeFile("202", "同目录其它.md", {
+            type: FileType.MD,
+            spaceId: "personal-1",
+            parentId: "101",
+        });
+        let resolveRoot: (value: { data: typeof folder[]; total: number }) => void = () => undefined;
+        const rootPending = new Promise<{ data: typeof folder[]; total: number }>((resolve) => {
+            resolveRoot = resolve;
+        });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [],
+            personalSpaces: [personalSpace],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockImplementation(async (params: any) => {
+            if (params.parent_id === "101") {
+                return { data: [targetFile, siblingFile], total: 2 };
+            }
+            // First root load hangs so folder navigate wins; late resolve used to wipe children.
+            return rootPending;
+        });
+        jest.mocked(searchSpaceChildrenApi).mockResolvedValue({
+            data: [targetFile],
+            total: 1,
+        } as any);
+
+        renderWorkbench(
+            "/knowledge-portal?spaceId=personal-1&folderId=101&fileId=201&fileName=%E7%9B%AE%E6%A0%87%E6%96%87%E6%A1%A3.md",
+        );
+
+        const preview = await screen.findByTestId("portal-preview-page");
+        expect(preview).toHaveTextContent("目标文档.md");
+        await waitFor(() => {
+            expect(getSpaceChildrenApi).toHaveBeenCalledWith(expect.objectContaining({
+                space_id: "personal-1",
+                parent_id: "101",
+            }));
+        });
+
+        await act(async () => {
+            resolveRoot({ data: [folder], total: 1 });
+        });
+
+        // Preview must not be auto-dismissed just because the row is not in the root listing yet.
+        expect(screen.getByTestId("portal-preview-page")).toBeInTheDocument();
+
+        fireEvent.click(within(preview).getByRole("button", { name: "返回文件列表" }));
+
+        const restoredWorkspace = await screen.findByTestId("portal-file-workspace");
+        expect(within(restoredWorkspace).getByText("目标文档.md")).toBeInTheDocument();
+        expect(within(restoredWorkspace).getByText("同目录其它.md")).toBeInTheDocument();
     });
 
     test("formats table update times as full date time without relative labels", async () => {
@@ -2904,7 +3208,7 @@ describe("PortalKnowledgeWorkbench", () => {
             if (objectType === "knowledge_space" && permissionId === "publish_file") {
                 return Promise.resolve({ allowed: false });
             }
-            if (objectType === "knowledge_file" && permissionId === "upload_file") {
+            if (objectType === "knowledge_space" && permissionId === "upload_file_to_space") {
                 return Promise.resolve({ allowed: true });
             }
             return Promise.resolve({ allowed: true });
@@ -4839,7 +5143,9 @@ describe("PortalKnowledgeWorkbench", () => {
 
         expect(within(drawer).getByText("解析中")).toHaveClass("uploadRecordStatusInfo");
         expect(getPortalCategoryButton(drawer, "修改解析中文档.pdf文件分类", "标准规范 / 标准规范")).toBeInTheDocument();
-        expect(within(drawer).getByLabelText("修改解析中文档.pdf业务域类型 当前业务域：EM")).toHaveDisplayValue("EM / 能源");
+        const businessDomainSelect = within(drawer).getByLabelText("修改解析中文档.pdf业务域类型 当前业务域：EM") as HTMLSelectElement;
+        expect(businessDomainSelect).toHaveDisplayValue("EM / 能源");
+        expect(businessDomainSelect).toBeDisabled();
     });
 
     test("shows double dash placeholders for empty uploaded record fields", async () => {
@@ -5456,6 +5762,61 @@ describe("PortalKnowledgeWorkbench", () => {
 
         expect(await screen.findByText("后端开发.md")).toBeInTheDocument();
         expect(screen.queryByText("搜索结果.md")).not.toBeInTheDocument();
+    });
+
+    test("keeps search keyword and results after editing tags in search results", async () => {
+        const personalSpace = makeSpace("personal-1", "我的技术文档", {
+            role: SpaceRole.ADMIN,
+        });
+        const rootFile = makeFile("201", "后端开发.md");
+        const matchedFile = makeFile("401", "搜索结果.md", {
+            tags: [{ id: 1, name: "旧标签" }],
+        });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [],
+            personalSpaces: [personalSpace],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({
+            data: [rootFile],
+            total: 1,
+        } as any);
+        jest.mocked(searchSpaceChildrenApi).mockResolvedValue({
+            data: [matchedFile],
+            total: 1,
+        } as any);
+
+        renderWorkbench();
+
+        expect(await screen.findByText("后端开发.md")).toBeInTheDocument();
+
+        const input = await screen.findByPlaceholderText("com_knowledge.search_in_current_space");
+        fireEvent.change(input, { target: { value: "搜索" } });
+        fireEvent.keyDown(input, { key: "Enter" });
+
+        expect(await screen.findByText("搜索结果.md")).toBeInTheDocument();
+        expect(screen.queryByText("后端开发.md")).not.toBeInTheDocument();
+
+        jest.mocked(getSpaceChildrenApi).mockClear();
+        jest.mocked(searchSpaceChildrenApi).mockClear();
+
+        fireEvent.click(screen.getByTitle("com_knowledge.edit_tags"));
+        fireEvent.click(await screen.findByRole("button", { name: "保存标签" }));
+
+        await waitFor(() => {
+            expect(mockUpdateFileTagsApi).toHaveBeenCalledWith("personal-1", "401", [3]);
+        });
+
+        expect(input).toHaveValue("搜索");
+        expect(screen.getByText("搜索结果.md")).toBeInTheDocument();
+        expect(screen.queryByText("后端开发.md")).not.toBeInTheDocument();
+        expect(getSpaceChildrenApi).not.toHaveBeenCalled();
+        expect(searchSpaceChildrenApi).not.toHaveBeenCalled();
+
+        fireEvent.click(screen.getByTitle("com_knowledge.edit_tags"));
+        const reopened = await screen.findByTestId("edit-tags-modal");
+        expect(within(reopened).getByTestId("edit-tags-initial-ids")).toHaveTextContent("3");
     });
 
     test("deletes a file from search results through the backend", async () => {

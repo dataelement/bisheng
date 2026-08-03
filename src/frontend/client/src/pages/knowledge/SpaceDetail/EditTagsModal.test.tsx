@@ -788,6 +788,38 @@ describe("EditTagsModal recommended tags", () => {
         });
     });
 
+    it("preserves pending review tag names when ReviewTag id collides with a library Tag id", async () => {
+        jest.mocked(getSpaceTagsApi).mockResolvedValue([
+            {
+                id: 99,
+                name: "税务管理",
+                review_status: 1,
+                resource_type: "manual_tag",
+                business_type: "tag_library",
+            },
+            { id: 1, name: "标准规范", business_type: "tag_library", resource_type: "system_tag" },
+        ]);
+
+        render(
+            <EditTagsModal
+                isOpen
+                onClose={jest.fn()}
+                spaceId="100"
+                fileId="1"
+                initialTagIds={[1, 99]}
+                initialTags={[
+                    { id: 1, name: "标准规范", resource_type: "system_tag", review_status: 1 },
+                    { id: 99, name: "22222", resource_type: "manual_tag", review_status: 0 },
+                ]}
+            />,
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText("22222")).toBeInTheDocument();
+            expect(screen.queryByText("税务管理")).not.toBeInTheDocument();
+        });
+    });
+
     it("shows duplicate hint when Enter repeats an already selected draft tag", async () => {
         const user = userEvent.setup();
         jest.mocked(getSpaceTagsApi).mockResolvedValue([]);

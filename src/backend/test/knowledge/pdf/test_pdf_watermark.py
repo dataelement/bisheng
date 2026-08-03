@@ -57,7 +57,7 @@ def _create_zero_page_pdf(path: Path) -> None:
 def _spec() -> PdfWatermarkSpec:
     return PdfWatermarkSpec(
         lines=(
-            "设备管理部-张三--SG001-2026/07/21",
+            "设备管理部-张三-SG001-2026/07/21",
             "首钢股份内部资料，严禁外传，违者必究",  # noqa: RUF001
         )
     )
@@ -84,7 +84,7 @@ def test_watermark_preserves_source_and_pages_while_tiling_each_page(tmp_path: P
             assert watermarked_page.rect == original_page.rect
             text = watermarked_page.get_text()
             assert original_page.get_text().strip() in text
-            assert text.count("设备管理部-张三--SG001-2026/07/21") >= 2
+            assert text.count("设备管理部-张三-SG001-2026/07/21") >= 2
             assert text.count("首钢股份内部资料，严禁外传，违者必究") >= 2  # noqa: RUF001
 
 
@@ -101,7 +101,7 @@ def test_watermark_uses_chinese_text_opacity_and_arbitrary_angle(tmp_path: Path)
         watermark_traces = [
             trace
             for trace in traces
-            if "设备管理部-张三--SG001-2026/07/21" in "".join(chr(char[0]) for char in trace["chars"])
+            if "设备管理部-张三-SG001-2026/07/21" in "".join(chr(char[0]) for char in trace["chars"])
         ]
         assert watermark_traces
         assert all(trace["dir"][0] > 0 and trace["dir"][1] < 0 for trace in watermark_traces)
@@ -158,7 +158,7 @@ def test_watermark_layout_expands_for_long_identity_without_shrinking_text() -> 
     normal = _calculate_watermark_layout(page_rect, _spec(), font)
     long_spec = PdfWatermarkSpec(
         lines=(
-            f"{'超长部门名称' * 8}-张三--{'SG-VERY-LONG-ACCOUNT-' * 5}-2026/07/21",
+            f"{'超长部门名称' * 8}-张三-{'SG-VERY-LONG-ACCOUNT-' * 5}-2026/07/21",
             "首钢股份内部资料，严禁外传，违者必究",  # noqa: RUF001
         )
     )

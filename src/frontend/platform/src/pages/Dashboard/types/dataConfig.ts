@@ -205,6 +205,11 @@ export interface MetricField {
   }
 }
 
+export interface PivotColumnAliases {
+  fieldId: string
+  aliases: Record<string, string>
+}
+
 export interface FilterCondition {
   id: string                           // 筛选条件唯一ID
   fieldId: string                      // 字段ID
@@ -249,6 +254,7 @@ export interface DataConfig {
     limitType: ResultLimitType     // 全部、仅前 X、前 X + 其他
     limit?: number                // 具体条数（非 all 时有效）
   },
+  pivotColumnAliases?: PivotColumnAliases
   isConfigured: boolean // 配置完成
 }
 

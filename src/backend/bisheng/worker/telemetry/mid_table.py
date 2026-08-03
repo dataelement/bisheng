@@ -4,7 +4,7 @@ from typing import Any, List
 from elasticsearch import helpers
 from loguru import logger
 from sqlalchemy import exists, or_
-from sqlmodel import select
+from sqlmodel import col, select
 
 from bisheng.api.services.workflow import WorkFlowService
 from bisheng.common.constants.enums.telemetry import (
@@ -20,13 +20,18 @@ from bisheng.core.logger import trace_id_var
 from bisheng.core.search.elasticsearch.manager import (
     get_statistics_es_connection_sync,
 )
-from bisheng.database.models.department import UserDepartmentDao
+from bisheng.database.models.department import Department, UserDepartmentDao
 from bisheng.database.models.tenant import Tenant, UserTenant
 from bisheng.database.models.flow import FlowType
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion
+from bisheng.knowledge.domain.models.department_knowledge_space import (
+    DepartmentKnowledgeSpace,
+)
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile, KnowledgeFileStatus, FileType
 from bisheng.knowledge.domain.models.knowledge_space_scope import (
+    KnowledgeSpaceLevelEnum,
+    KnowledgeSpaceOwnerTypeEnum,
     KnowledgeSpaceScopeDao,
 )
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
@@ -52,8 +57,9 @@ from bisheng.utils import generate_uuid
 from bisheng.worker.main import bisheng_celery
 
 
-def get_yesterday_date_range(mid_table: BaseMidTable, start_date: str = None, end_date: str = None) -> (datetime,
-                                                                                                        datetime):
+def get_yesterday_date_range(
+    mid_table: BaseMidTable, start_date: str = None, end_date: str = None
+) -> (datetime, datetime):
     if start_date is None or end_date is None:
         # default to yesterday's date
         now = datetime.now()
@@ -94,25 +100,33 @@ def sync_mid_user_increment(start_date: str = None, end_date: str = None):
     page, page_size = 1, 1000
 
     while True:
-        user_list = UserService.get_user_all_info(start_time=start_date, end_time=end_date,
-                                                  page=page, page_size=page_size)
+        user_list = UserService.get_user_all_info(
+            start_time=start_date, end_time=end_date, page=page, page_size=page_size
+        )
         page += 1
         if not user_list:
             break
         records = []
         for user in user_list:
-            records.append(UserIncrementRecord(
-                es_id=f"user_{user.user_id}",
-                user_id=user.user_id,
-                user_name=user.user_name,
-                user_group_infos=[UserGroupInfo(user_group_id=group.id, user_group_name=group.group_name)
-                                  for group in user.groups],
-                user_role_infos=[UserRoleInfo(role_id=role.id, role_name=role.role_name, group_id=role.group_id)
-                                 for role in user.roles],
-                user_department_infos=[UserDepartmentInfo(department_id=dept.id, department_name=dept.name)
-                                       for dept in getattr(user, 'departments', []) or []],
-                timestamp=int(user.create_time.timestamp())
-            ))
+            records.append(
+                UserIncrementRecord(
+                    es_id=f"user_{user.user_id}",
+                    user_id=user.user_id,
+                    user_name=user.user_name,
+                    user_group_infos=[
+                        UserGroupInfo(user_group_id=group.id, user_group_name=group.group_name) for group in user.groups
+                    ],
+                    user_role_infos=[
+                        UserRoleInfo(role_id=role.id, role_name=role.role_name, group_id=role.group_id)
+                        for role in user.roles
+                    ],
+                    user_department_infos=[
+                        UserDepartmentInfo(department_id=dept.id, department_name=dept.name)
+                        for dept in getattr(user, "departments", []) or []
+                    ],
+                    timestamp=int(user.create_time.timestamp()),
+                )
+            )
         mid_table.insert_records_sync(records)
 
     # This is a placeholder for the actual data synchronization logic
@@ -144,18 +158,9 @@ def _get_active_participation_users(
                     .offset(offset)
                     .limit(limit)
                 )
-                return [
-                    (user, int(tenant_id))
-                    for user, tenant_id in session.exec(statement).all()
-                ]
+                return [(user, int(tenant_id)) for user, tenant_id in session.exec(statement).all()]
 
-            statement = (
-                select(User)
-                .where(User.delete == 0)
-                .order_by(User.user_id.asc())
-                .offset(offset)
-                .limit(limit)
-            )
+            statement = select(User).where(User.delete == 0).order_by(User.user_id.asc()).offset(offset).limit(limit)
             return [(user, 1) for user in session.exec(statement).all()]
 
 
@@ -176,19 +181,15 @@ def _reconcile_participation_roster_for_day(
         if not roster_rows:
             break
         offset += len(roster_rows)
-        primary_department_map = (
-            UserDepartmentDao.get_primary_department_map_by_user_ids(
-                [int(user.user_id) for user, _ in roster_rows]
-            )
+        primary_department_map = UserDepartmentDao.get_primary_department_map_by_user_ids(
+            [int(user.user_id) for user, _ in roster_rows]
         )
         records = []
         for user, tenant_id in roster_rows:
             department = primary_department_map.get(int(user.user_id))
             records.append(
                 DailyParticipationRecord(
-                    es_id=DailyParticipationFact.build_es_id(
-                        tenant_id, local_date, int(user.user_id)
-                    ),
+                    es_id=DailyParticipationFact.build_es_id(tenant_id, local_date, int(user.user_id)),
                     tenant_id=tenant_id,
                     timestamp=day_timestamp,
                     user_id=int(user.user_id),
@@ -198,12 +199,8 @@ def _reconcile_participation_roster_for_day(
                     user_department_infos=[],
                     local_date=local_date,
                     active_employee=1,
-                    primary_department_id=(
-                        int(department.id) if department else None
-                    ),
-                    primary_department_name=(
-                        department.name if department else None
-                    ),
+                    primary_department_id=(int(department.id) if department else None),
+                    primary_department_name=(department.name if department else None),
                     department_source=department_source,
                     sync_run_id=sync_run_id,
                     projection_updated_at=sync_started_at,
@@ -228,9 +225,7 @@ def _reconcile_participation_roster_for_day(
 def sync_mid_user_daily_participation_fact():
     """Reconcile today's denominator while preserving real-time login counters."""
     DailyParticipationFact.clear_roster_reconcile_scheduled()
-    trace_id_var.set(
-        f"sync_mid_user_daily_participation_fact_task_{generate_uuid()}"
-    )
+    trace_id_var.set(f"sync_mid_user_daily_participation_fact_task_{generate_uuid()}")
     today = datetime.now(CHINA_STANDARD_TIME).date()
     result = _reconcile_participation_roster_for_day(
         today,
@@ -266,13 +261,7 @@ def _scan_historical_login_events(
             "query": {
                 "bool": {
                     "filter": [
-                        {
-                            "term": {
-                                "event_type": (
-                                    BaseTelemetryTypeEnum.USER_LOGIN.value
-                                )
-                            }
-                        },
+                        {"term": {"event_type": (BaseTelemetryTypeEnum.USER_LOGIN.value)}},
                         {
                             "range": {
                                 "timestamp": {
@@ -296,9 +285,7 @@ def backfill_mid_user_daily_participation_fact(
     lookback_days: int = 30,
 ) -> dict[str, int]:
     """Best-effort history using current roster and durable login telemetry."""
-    trace_id_var.set(
-        f"backfill_mid_user_daily_participation_fact_task_{generate_uuid()}"
-    )
+    trace_id_var.set(f"backfill_mid_user_daily_participation_fact_task_{generate_uuid()}")
     normalized_days = max(1, min(int(lookback_days), 365))
     today = datetime.now(CHINA_STANDARD_TIME).date()
     start_date = today - timedelta(days=normalized_days)
@@ -309,9 +296,7 @@ def backfill_mid_user_daily_participation_fact(
         end_timestamp=end_timestamp,
     )
     if aggregates is None:
-        logger.info(
-            "Skipped participation history backfill because telemetry index is absent."
-        )
+        logger.info("Skipped participation history backfill because telemetry index is absent.")
         return {"days": 0, "roster": 0, "login_facts": 0}
 
     roster_count = 0
@@ -327,9 +312,7 @@ def backfill_mid_user_daily_participation_fact(
     with bypass_tenant_filter():
         for offset in range(0, len(user_ids), 1000):
             departments.update(
-                UserDepartmentDao.get_primary_department_map_by_user_ids(
-                    user_ids[offset:offset + 1000]
-                )
+                UserDepartmentDao.get_primary_department_map_by_user_ids(user_ids[offset : offset + 1000])
             )
     projection_updated_at = int(datetime.now().timestamp())
     records = []
@@ -343,9 +326,7 @@ def backfill_mid_user_daily_participation_fact(
                     aggregate["user_id"],
                 ),
                 tenant_id=aggregate["tenant_id"],
-                timestamp=participation_day(
-                    date.fromisoformat(aggregate["local_date"])
-                )[1],
+                timestamp=participation_day(date.fromisoformat(aggregate["local_date"]))[1],
                 user_id=aggregate["user_id"],
                 user_name=aggregate["user_name"],
                 user_group_infos=[],
@@ -357,19 +338,15 @@ def backfill_mid_user_daily_participation_fact(
                 login_count=aggregate["login_count"],
                 first_login_at=aggregate["first_login_at"],
                 last_login_at=aggregate["last_login_at"],
-                primary_department_id=(
-                    int(department.id) if department else None
-                ),
-                primary_department_name=(
-                    department.name if department else None
-                ),
+                primary_department_id=(int(department.id) if department else None),
+                primary_department_name=(department.name if department else None),
                 department_source="current_primary_backfill",
                 projection_updated_at=projection_updated_at,
             )
         )
     fact = DailyParticipationFact()
     for offset in range(0, len(records), 1000):
-        fact.upsert_login_backfill_records_sync(records[offset:offset + 1000])
+        fact.upsert_login_backfill_records_sync(records[offset : offset + 1000])
 
     logger.info(
         "Backfilled participation history. days={}, roster={}, login_facts={}",
@@ -411,6 +388,7 @@ def _get_success_space_file_rows(page: int, page_size: int):
             Knowledge.type == KnowledgeTypeEnum.SPACE.value,
             KnowledgeFile.file_type == FileType.FILE.value,
             KnowledgeFile.status == KnowledgeFileStatus.SUCCESS.value,
+            col(KnowledgeFile.deleted_at).is_(None),
             _current_primary_file_predicate(),
         )
         .order_by(KnowledgeFile.id.asc())
@@ -431,6 +409,7 @@ def _get_success_space_file_rows_by_space_id(space_id: int, page: int, page_size
             Knowledge.type == KnowledgeTypeEnum.SPACE.value,
             KnowledgeFile.file_type == FileType.FILE.value,
             KnowledgeFile.status == KnowledgeFileStatus.SUCCESS.value,
+            col(KnowledgeFile.deleted_at).is_(None),
             _current_primary_file_predicate(),
         )
         .order_by(KnowledgeFile.id.asc())
@@ -450,6 +429,7 @@ def _get_knowledge_space_content_rows_by_file_ids(file_ids: List[int]):
         .join(Knowledge, KnowledgeFile.knowledge_id == Knowledge.id)
         .where(
             KnowledgeFile.id.in_(file_ids),
+            col(KnowledgeFile.deleted_at).is_(None),
             _current_primary_file_predicate(),
         )
     )
@@ -458,24 +438,91 @@ def _get_knowledge_space_content_rows_by_file_ids(file_ids: List[int]):
             return session.exec(statement).all()
 
 
+def _is_department_bound_space_scope(scope) -> bool:
+    if scope is None:
+        return False
+    level = str(getattr(scope.level, "value", scope.level))
+    return level in {
+        KnowledgeSpaceLevelEnum.DEPARTMENT.value,
+        KnowledgeSpaceLevelEnum.TEAM_KS.value,
+    }
+
+
+def _get_knowledge_space_department_map(
+    space_ids: list[int],
+    space_scope_map: dict,
+) -> dict[int, Department | None]:
+    """Resolve departments only for department and clinic knowledge spaces."""
+    normalized_space_ids = sorted({int(space_id) for space_id in space_ids if space_id})
+    result: dict[int, Department | None] = dict.fromkeys(normalized_space_ids)
+    if not normalized_space_ids:
+        return result
+    eligible_space_ids = [
+        space_id for space_id in normalized_space_ids if _is_department_bound_space_scope(space_scope_map.get(space_id))
+    ]
+    if not eligible_space_ids:
+        return result
+
+    with bypass_tenant_filter():
+        with get_sync_db_session() as session:
+            binding_rows = session.exec(
+                select(DepartmentKnowledgeSpace.space_id, Department)
+                .join(
+                    Department,
+                    Department.id == DepartmentKnowledgeSpace.department_id,
+                )
+                .where(
+                    DepartmentKnowledgeSpace.space_id.in_(eligible_space_ids),
+                )
+            ).all()
+            for space_id, department in binding_rows:
+                result[int(space_id)] = department
+
+            scope_department_ids = set()
+            for space_id in eligible_space_ids:
+                if result[space_id] is not None:
+                    continue
+                scope = space_scope_map.get(space_id)
+                if (
+                    scope is not None
+                    and str(getattr(scope.level, "value", scope.level)) == KnowledgeSpaceLevelEnum.DEPARTMENT.value
+                    and str(getattr(scope.owner_type, "value", scope.owner_type))
+                    == KnowledgeSpaceOwnerTypeEnum.DEPARTMENT.value
+                ):
+                    scope_department_ids.add(int(scope.owner_id))
+
+            if scope_department_ids:
+                departments = session.exec(
+                    select(Department).where(
+                        Department.id.in_(scope_department_ids),
+                    )
+                ).all()
+                department_map = {int(department.id): department for department in departments}
+                for space_id in eligible_space_ids:
+                    if result[space_id] is not None:
+                        continue
+                    scope = space_scope_map.get(space_id)
+                    if scope is not None:
+                        result[space_id] = department_map.get(int(scope.owner_id))
+    return result
+
+
 def _build_knowledge_space_content_records(
     rows,
     user_map: dict,
     *,
     sync_run_id: str = None,
     space_scope_map: dict | None = None,
+    space_department_map: dict | None = None,
     primary_department_map: dict | None = None,
     category_label_cache: dict | None = None,
 ):
     if not rows:
         return [], user_map
     space_scope_map = space_scope_map if space_scope_map is not None else {}
-    primary_department_map = (
-        primary_department_map if primary_department_map is not None else {}
-    )
-    category_label_cache = (
-        category_label_cache if category_label_cache is not None else {}
-    )
+    space_department_map = space_department_map if space_department_map is not None else {}
+    primary_department_map = primary_department_map if primary_department_map is not None else {}
+    category_label_cache = category_label_cache if category_label_cache is not None else {}
     user_ids = {
         int(file_record.user_id)
         for file_record, _ in rows
@@ -487,34 +534,28 @@ def _build_knowledge_space_content_records(
     missing_space_ids = [space_id for space_id in space_ids if space_id not in space_scope_map]
     if missing_space_ids:
         space_scope_map.update(KnowledgeSpaceScopeDao.get_map_by_space_ids(missing_space_ids))
+    missing_space_department_ids = [space_id for space_id in space_ids if space_id not in space_department_map]
+    if missing_space_department_ids:
+        space_department_map.update(
+            _get_knowledge_space_department_map(
+                missing_space_department_ids,
+                space_scope_map,
+            )
+        )
 
-    all_user_ids = sorted(
-        {int(file_record.user_id) for file_record, _ in rows if file_record.user_id}
-    )
-    missing_primary_user_ids = [
-        user_id for user_id in all_user_ids if user_id not in primary_department_map
-    ]
+    all_user_ids = sorted({int(file_record.user_id) for file_record, _ in rows if file_record.user_id})
+    missing_primary_user_ids = [user_id for user_id in all_user_ids if user_id not in primary_department_map]
     if missing_primary_user_ids:
         primary_department_map.update(
-            UserDepartmentDao.get_primary_department_map_by_user_ids(
-                missing_primary_user_ids
-            )
+            UserDepartmentDao.get_primary_department_map_by_user_ids(missing_primary_user_ids)
         )
 
     records = []
     for file_record, space in rows:
         uploader = user_map.get(int(file_record.user_id or 0))
-        tenant_id = int(
-            getattr(file_record, "tenant_id", None)
-            or getattr(space, "tenant_id", None)
-            or 1
-        )
+        tenant_id = int(getattr(file_record, "tenant_id", None) or getattr(space, "tenant_id", None) or 1)
         if tenant_id not in category_label_cache:
-            category_label_cache[tenant_id] = (
-                FileClassificationLabelService.get_label_lookup_for_tenant(
-                    tenant_id
-                )
-            )
+            category_label_cache[tenant_id] = FileClassificationLabelService.get_label_lookup_for_tenant(tenant_id)
         category_labels, subcategory_labels = category_label_cache[tenant_id]
         scope = space_scope_map.get(int(space.id))
         records.append(
@@ -523,9 +564,8 @@ def _build_knowledge_space_content_records(
                 space=space,
                 uploader=uploader,
                 space_level=getattr(scope, "level", None),
-                primary_department=primary_department_map.get(
-                    int(file_record.user_id or 0)
-                ),
+                space_department=space_department_map.get(int(space.id)),
+                primary_department=primary_department_map.get(int(file_record.user_id or 0)),
                 file_category_labels=category_labels,
                 file_subcategory_labels=subcategory_labels,
                 sync_run_id=sync_run_id,
@@ -539,24 +579,26 @@ def _is_file_content_stat_visible(file_record: KnowledgeFile, space: Knowledge) 
         space.type == KnowledgeTypeEnum.SPACE.value
         and file_record.file_type == FileType.FILE.value
         and file_record.status == KnowledgeFileStatus.SUCCESS.value
+        and getattr(file_record, "deleted_at", None) is None
     )
 
 
-@bisheng_celery.task()
-def sync_mid_knowledge_space_content_stat(start_date: str = None, end_date: str = None):
-    trace_id_var.set(f"sync_mid_knowledge_space_content_stat_task_{generate_uuid()}")
-    logger.info("Syncing mid_knowledge_space_content_stat file records...")
-
+def rebuild_knowledge_space_content_file_projection(owner_token: str) -> dict[str, Any]:
+    """Rebuild current file snapshots while the caller owns the projection lock."""
+    sync_started_ms = KnowledgeSpaceContentStat._now_ms()
     mid_table = KnowledgeSpaceContentStat()
     sync_run_id = generate_uuid()
     page, page_size = 1, 1000
     user_map = {}
     space_scope_map = {}
+    space_department_map = {}
     primary_department_map = {}
     category_label_cache = {}
     synced_count = 0
 
     while True:
+        if not KnowledgeSpaceContentStat.renew_lock_sync(owner_token):
+            raise RuntimeError("Knowledge space content full projection owner lock lost")
         rows = _get_success_space_file_rows(page, page_size)
         page += 1
         if not rows:
@@ -567,43 +609,118 @@ def sync_mid_knowledge_space_content_stat(start_date: str = None, end_date: str 
             user_map,
             sync_run_id=sync_run_id,
             space_scope_map=space_scope_map,
+            space_department_map=space_department_map,
             primary_department_map=primary_department_map,
             category_label_cache=category_label_cache,
         )
-
+        if not KnowledgeSpaceContentStat.renew_lock_sync(owner_token):
+            raise RuntimeError("Knowledge space content full projection owner lock lost before write")
         mid_table.insert_records_sync(records)
         synced_count += len(records)
 
+    if not KnowledgeSpaceContentStat.renew_lock_sync(owner_token):
+        raise RuntimeError("Knowledge space content full projection owner lock lost before cleanup")
     deleted_count = mid_table.delete_stale_file_records_sync(sync_run_id)
-    logger.info(
-        "Successfully synced mid_knowledge_space_content_stat file records. "
-        "synced={}, deleted_stale={}",
-        synced_count,
-        deleted_count,
-    )
+    queue_status = KnowledgeSpaceContentStat.queue_status_sync()
+    return {
+        **queue_status,
+        "synced": synced_count,
+        "deleted_stale": deleted_count,
+        "reclaimed_count": 0,
+        "batch_duration_ms": KnowledgeSpaceContentStat._now_ms() - sync_started_ms,
+        "projection_lag_ms": queue_status["oldest_pending_age_ms"],
+        "last_success_at": int(datetime.now().timestamp()),
+        "failure_stage": None,
+        "degraded": False,
+    }
+
+
+@bisheng_celery.task()
+def sync_mid_knowledge_space_content_stat(start_date: str = None, end_date: str = None):
+    del start_date, end_date
+    trace_id_var.set(f"sync_mid_knowledge_space_content_stat_task_{generate_uuid()}")
+    logger.info("Syncing mid_knowledge_space_content_stat file records...")
+
+    owner_token = KnowledgeSpaceContentStat.acquire_lock_sync()
+    if owner_token is None:
+        logger.warning("Knowledge space content full projection skipped. degraded=true failure_stage=owner_lock")
+        status = KnowledgeSpaceContentStat.queue_status_sync()
+        return {
+            **status,
+            "reclaimed_count": 0,
+            "batch_duration_ms": 0,
+            "projection_lag_ms": status["oldest_pending_age_ms"],
+            "last_success_at": None,
+            "degraded": True,
+            "failure_stage": "owner_lock",
+        }
+
+    try:
+        result = rebuild_knowledge_space_content_file_projection(owner_token)
+        logger.info("Knowledge space content full projection completed. {}", result)
+        return result
+    except Exception:
+        logger.exception("Knowledge space content full projection failed. degraded=true failure_stage=full_projection")
+        raise
+    finally:
+        KnowledgeSpaceContentStat.release_lock_sync(owner_token)
+        if KnowledgeSpaceContentStat.has_pending_sync():
+            KnowledgeSpaceContentStat.schedule_pending_sync_now()
 
 
 @bisheng_celery.task()
 def sync_pending_knowledge_space_content_stat():
     trace_id_var.set(f"sync_pending_knowledge_space_content_stat_task_{generate_uuid()}")
     KnowledgeSpaceContentStat.clear_scheduled_sync()
-    if not KnowledgeSpaceContentStat.acquire_lock_sync():
-        KnowledgeSpaceContentStat._schedule_pending_sync(
-            countdown=KnowledgeSpaceContentStat.SCHEDULE_DELAY_SECONDS
+    owner_token = KnowledgeSpaceContentStat.acquire_lock_sync()
+    if owner_token is None:
+        KnowledgeSpaceContentStat._schedule_pending_sync(countdown=KnowledgeSpaceContentStat.SCHEDULE_DELAY_SECONDS)
+        logger.warning(
+            "Knowledge space content incremental projection deferred. degraded=true failure_stage=owner_lock"
         )
-        return
+        return {"degraded": True, "failure_stage": "owner_lock"}
 
+    batch_started_ms = KnowledgeSpaceContentStat._now_ms()
+    failure_stage = None
     try:
         mid_table = KnowledgeSpaceContentStat()
         user_map = {}
         space_scope_map = {}
+        space_department_map = {}
         primary_department_map = {}
         category_label_cache = {}
 
-        file_ids = KnowledgeSpaceContentStat.peek_pending_file_ids_sync(
-            KnowledgeSpaceContentStat.FILE_BATCH_SIZE
+        claimed = KnowledgeSpaceContentStat.claim_pending_sync(
+            owner_token,
+            KnowledgeSpaceContentStat.FILE_BATCH_SIZE,
         )
+        members = [item.member for item in claimed]
+        file_items = [item for item in claimed if item.kind == "file"]
+        space_items = [item for item in claimed if item.kind == "space"]
+        invalid_items = [item for item in claimed if item.kind not in {"file", "space"}]
+
+        if invalid_items:
+            failure_stage = "invalid_work_item"
+            logger.error(
+                "Knowledge space content projection has invalid work items. items={}",
+                [item.member for item in invalid_items],
+            )
+            if not KnowledgeSpaceContentStat.ack_claimed_sync(
+                owner_token,
+                [item.member for item in invalid_items],
+            ):
+                raise RuntimeError("Failed to acknowledge invalid knowledge space content work items")
+
+        file_ids = [item.resource_id for item in file_items]
         if file_ids:
+            failure_stage = "file_projection"
+            if not KnowledgeSpaceContentStat.renew_lock_sync(
+                owner_token
+            ) or not KnowledgeSpaceContentStat.renew_claims_sync(
+                owner_token,
+                [item.member for item in file_items],
+            ):
+                raise RuntimeError("Knowledge space content projection lease lost before file projection")
             rows = _get_knowledge_space_content_rows_by_file_ids(file_ids)
             row_by_file_id = {int(file_record.id): (file_record, space) for file_record, space in rows}
             visible_rows = []
@@ -623,6 +740,7 @@ def sync_pending_knowledge_space_content_stat():
                 visible_rows,
                 user_map,
                 space_scope_map=space_scope_map,
+                space_department_map=space_department_map,
                 primary_department_map=primary_department_map,
                 category_label_cache=category_label_cache,
             )
@@ -630,7 +748,13 @@ def sync_pending_knowledge_space_content_stat():
                 mid_table.insert_records_sync(records)
             if stale_file_ids:
                 mid_table.delete_file_records_sync(stale_file_ids)
-            KnowledgeSpaceContentStat.ack_pending_file_ids_sync(file_ids)
+            if not KnowledgeSpaceContentStat.renew_lock_sync(owner_token):
+                raise RuntimeError("Knowledge space content projection owner lock lost before file ack")
+            if not KnowledgeSpaceContentStat.ack_claimed_sync(
+                owner_token,
+                [item.member for item in file_items],
+            ):
+                raise RuntimeError("Failed to acknowledge knowledge space content file projection")
 
             logger.info(
                 "Synced pending knowledge space content file stats. upserted={}, deleted={}",
@@ -638,36 +762,28 @@ def sync_pending_knowledge_space_content_stat():
                 len(stale_file_ids),
             )
 
-        preview_payloads = KnowledgeSpaceContentStat.peek_pending_preview_payloads_sync(
-            KnowledgeSpaceContentStat.PREVIEW_BATCH_SIZE
-        )
-        if preview_payloads:
-            preview_records = []
-            valid_payloads = []
-            invalid_payloads = []
-            for payload in preview_payloads:
-                record = KnowledgeSpaceContentStat.deserialize_preview_payload(payload)
-                if record is None:
-                    invalid_payloads.append(payload)
-                    continue
-                preview_records.append(record)
-                valid_payloads.append(payload)
-            if invalid_payloads:
-                KnowledgeSpaceContentStat.ack_pending_preview_payloads_sync(invalid_payloads)
-            if preview_records:
-                mid_table.insert_records_sync(preview_records)
-                KnowledgeSpaceContentStat.ack_pending_preview_payloads_sync(valid_payloads)
-            logger.info(
-                "Synced pending knowledge space preview stats. upserted={}, invalid={}",
-                len(preview_records),
-                len(invalid_payloads),
-            )
-
-        space_rename_ids = KnowledgeSpaceContentStat.peek_pending_space_rename_ids_sync()
-        for space_id in space_rename_ids:
+        for item in space_items:
+            failure_stage = "space_projection"
+            if not KnowledgeSpaceContentStat.renew_lock_sync(
+                owner_token
+            ) or not KnowledgeSpaceContentStat.renew_claims_sync(
+                owner_token,
+                [item.member],
+            ):
+                raise RuntimeError("Knowledge space content projection lease lost before space projection")
+            space_id = item.resource_id
             page, page_size = 1, 500
             space_synced_count = 0
             while True:
+                if not KnowledgeSpaceContentStat.renew_lock_sync(
+                    owner_token
+                ) or not KnowledgeSpaceContentStat.renew_claims_sync(
+                    owner_token,
+                    [item.member],
+                ):
+                    raise RuntimeError(
+                        "Knowledge space content projection lease lost during space projection"
+                    )
                 rows = _get_success_space_file_rows_by_space_id(space_id, page, page_size)
                 page += 1
                 if not rows:
@@ -676,34 +792,75 @@ def sync_pending_knowledge_space_content_stat():
                     rows,
                     user_map,
                     space_scope_map=space_scope_map,
+                    space_department_map=space_department_map,
                     primary_department_map=primary_department_map,
                     category_label_cache=category_label_cache,
                 )
                 if records:
                     mid_table.insert_records_sync(records)
                     space_synced_count += len(records)
-            KnowledgeSpaceContentStat.ack_pending_space_rename_ids_sync([space_id])
+            if space_synced_count == 0:
+                mid_table.delete_space_file_records_sync([space_id])
+            if not KnowledgeSpaceContentStat.renew_lock_sync(owner_token):
+                raise RuntimeError("Knowledge space content projection owner lock lost before space ack")
+            if not KnowledgeSpaceContentStat.ack_claimed_sync(owner_token, [item.member]):
+                raise RuntimeError("Failed to acknowledge knowledge space content space projection")
             logger.info(
-                "Synced pending knowledge space rename content stats. space_id={}, upserted={}",
+                "Synced pending knowledge space content stats. space_id={}, upserted={}",
                 space_id,
                 space_synced_count,
             )
 
-        space_delete_ids = KnowledgeSpaceContentStat.peek_pending_space_delete_ids_sync()
-        if space_delete_ids:
-            deleted_count = mid_table.delete_space_file_records_sync(space_delete_ids)
-            KnowledgeSpaceContentStat.ack_pending_space_delete_ids_sync(space_delete_ids)
-            logger.info(
-                "Deleted pending knowledge space content stats. space_ids={}, deleted={}",
-                space_delete_ids,
-                deleted_count,
-            )
+        status = KnowledgeSpaceContentStat.queue_status_sync()
+        projection_lag_ms = (
+            max(0, KnowledgeSpaceContentStat._now_ms() - min(item.enqueued_at_ms for item in claimed)) if claimed else 0
+        )
+        result = {
+            **status,
+            "reclaimed_count": 0,
+            "batch_duration_ms": KnowledgeSpaceContentStat._now_ms() - batch_started_ms,
+            "projection_lag_ms": projection_lag_ms,
+            "last_success_at": int(datetime.now().timestamp()),
+            "failure_stage": None,
+            "degraded": status["pending_count"] > KnowledgeSpaceContentStat.FILE_BATCH_SIZE,
+            "processed_count": len(members),
+        }
+        logger.info("Knowledge space content incremental projection completed. {}", result)
+        return result
     except Exception:
-        logger.exception("Failed to sync pending knowledge space content stats.")
+        logger.exception(
+            "Knowledge space content incremental projection failed. degraded=true failure_stage={}",
+            failure_stage or "unknown",
+        )
+        raise
     finally:
-        KnowledgeSpaceContentStat.release_lock_sync()
+        KnowledgeSpaceContentStat.release_lock_sync(owner_token)
         if KnowledgeSpaceContentStat.has_pending_sync():
             KnowledgeSpaceContentStat.schedule_pending_sync_now()
+
+
+@bisheng_celery.task()
+def recover_knowledge_space_content_stat_leases():
+    trace_id_var.set(f"recover_knowledge_space_content_stat_leases_task_{generate_uuid()}")
+    try:
+        reclaimed_count = KnowledgeSpaceContentStat.reclaim_expired_sync()
+        status = KnowledgeSpaceContentStat.queue_status_sync()
+        result = {
+            **status,
+            "reclaimed_count": reclaimed_count,
+            "batch_duration_ms": 0,
+            "projection_lag_ms": status["oldest_pending_age_ms"],
+            "last_success_at": int(datetime.now().timestamp()),
+            "failure_stage": None,
+            "degraded": status["pending_count"] > KnowledgeSpaceContentStat.FILE_BATCH_SIZE,
+        }
+        if reclaimed_count or status["pending_count"]:
+            KnowledgeSpaceContentStat.schedule_pending_sync_now()
+        logger.info("Knowledge space content lease recovery completed. {}", result)
+        return result
+    except Exception:
+        logger.exception("Knowledge space content lease recovery failed. degraded=true failure_stage=lease_recovery")
+        raise
 
 
 @bisheng_celery.task()
@@ -722,35 +879,49 @@ def sync_mid_app_increment(start_date: str = None, end_date: str = None):
     page, page_size = 1, 1000
     user_map = {}
     while True:
-        app_list = WorkFlowService.get_all_apps_by_time_range_sync(start_time=start_date, end_time=end_date, page=page,
-                                                                   page_size=page_size)
+        app_list = WorkFlowService.get_all_apps_by_time_range_sync(
+            start_time=start_date, end_time=end_date, page=page, page_size=page_size
+        )
         page += 1
         if not app_list:
             break
         records = []
         user_ids = set()
         for app in app_list:
-            if app['user_id'] not in user_map:
-                user_ids.add(app['user_id'])
+            if app["user_id"] not in user_map:
+                user_ids.add(app["user_id"])
         user_map = get_user_from_ids_with_cache(list(user_ids), user_map)
 
         for app in app_list:
-            user = user_map.get(app['user_id'], None)
-            records.append(AppIncrementRecord(
-                es_id=f"app_{app['id']}",
-                user_id=app['user_id'],
-                user_name=user.user_name if user else "",
-                user_group_infos=[UserGroupInfo(user_group_id=group.id, user_group_name=group.group_name)
-                                  for group in user.groups] if user else [],
-                user_role_infos=[UserRoleInfo(role_id=role.id, role_name=role.role_name, group_id=role.group_id)
-                                 for role in user.roles] if user else [],
-                user_department_infos=[UserDepartmentInfo(department_id=dept.id, department_name=dept.name)
-                                       for dept in getattr(user, 'departments', []) or []] if user else [],
-                app_id=app['id'],
-                app_name=app['name'],
-                app_type=convert_flow_type(app['flow_type']),
-                timestamp=int(app['create_time'].timestamp())
-            ))
+            user = user_map.get(app["user_id"], None)
+            records.append(
+                AppIncrementRecord(
+                    es_id=f"app_{app['id']}",
+                    user_id=app["user_id"],
+                    user_name=user.user_name if user else "",
+                    user_group_infos=[
+                        UserGroupInfo(user_group_id=group.id, user_group_name=group.group_name) for group in user.groups
+                    ]
+                    if user
+                    else [],
+                    user_role_infos=[
+                        UserRoleInfo(role_id=role.id, role_name=role.role_name, group_id=role.group_id)
+                        for role in user.roles
+                    ]
+                    if user
+                    else [],
+                    user_department_infos=[
+                        UserDepartmentInfo(department_id=dept.id, department_name=dept.name)
+                        for dept in getattr(user, "departments", []) or []
+                    ]
+                    if user
+                    else [],
+                    app_id=app["id"],
+                    app_name=app["name"],
+                    app_type=convert_flow_type(app["flow_type"]),
+                    timestamp=int(app["create_time"].timestamp()),
+                )
+            )
         mid_table.insert_records_sync(records)
 
     # Implement the actual logic here
@@ -771,8 +942,9 @@ def sync_mid_knowledge_increment(start_date: str = None, end_date: str = None):
     page, page_size = 1, 1000
     user_map = {}
     while True:
-        knowledge_list = KnowledgeService.get_all_knowledge_by_time_range(start_date, end_date, page=page,
-                                                                          page_size=page_size)
+        knowledge_list = KnowledgeService.get_all_knowledge_by_time_range(
+            start_date, end_date, page=page, page_size=page_size
+        )
         page += 1
         if not knowledge_list:
             break
@@ -785,21 +957,34 @@ def sync_mid_knowledge_increment(start_date: str = None, end_date: str = None):
         records = []
         for knowledge in knowledge_list:
             user = user_map.get(knowledge.user_id, None)
-            records.append(KnowledgeIncrementRecord(
-                es_id=f"knowledge_{knowledge.id}",
-                user_id=knowledge.user_id,
-                user_name=user.user_name if user else "",
-                user_group_infos=[UserGroupInfo(user_group_id=group.id, user_group_name=group.group_name)
-                                  for group in user.groups] if user else [],
-                user_role_infos=[UserRoleInfo(role_id=role.id, role_name=role.role_name, group_id=role.group_id)
-                                 for role in user.roles] if user else [],
-                user_department_infos=[UserDepartmentInfo(department_id=dept.id, department_name=dept.name)
-                                       for dept in getattr(user, 'departments', []) or []] if user else [],
-                knowledge_id=knowledge.id,
-                knowledge_name=knowledge.name,
-                knowledge_type=knowledge.type,
-                timestamp=int(knowledge.create_time.timestamp())
-            ))
+            records.append(
+                KnowledgeIncrementRecord(
+                    es_id=f"knowledge_{knowledge.id}",
+                    user_id=knowledge.user_id,
+                    user_name=user.user_name if user else "",
+                    user_group_infos=[
+                        UserGroupInfo(user_group_id=group.id, user_group_name=group.group_name) for group in user.groups
+                    ]
+                    if user
+                    else [],
+                    user_role_infos=[
+                        UserRoleInfo(role_id=role.id, role_name=role.role_name, group_id=role.group_id)
+                        for role in user.roles
+                    ]
+                    if user
+                    else [],
+                    user_department_infos=[
+                        UserDepartmentInfo(department_id=dept.id, department_name=dept.name)
+                        for dept in getattr(user, "departments", []) or []
+                    ]
+                    if user
+                    else [],
+                    knowledge_id=knowledge.id,
+                    knowledge_name=knowledge.name,
+                    knowledge_type=knowledge.type,
+                    timestamp=int(knowledge.create_time.timestamp()),
+                )
+            )
         mid_table.insert_records_sync(records)
     # Implement the actual logic here
     logger.info("Successfully synced mid_knowledge_increment table.")
@@ -817,39 +1002,43 @@ def sync_mid_user_interact_dtl(start_date: str = None, end_date: str = None):
 
     page, page_size = 1, 1000
     while True:
-        result = mid_table.get_records_by_time_range_sync(start_time=int(start_date.timestamp()),
-                                                          end_time=int(end_date.timestamp()),
-                                                          page=page,
-                                                          page_size=page_size)
+        result = mid_table.get_records_by_time_range_sync(
+            start_time=int(start_date.timestamp()), end_time=int(end_date.timestamp()), page=page, page_size=page_size
+        )
         page += 1
         if not result:
             break
         records = []
         for record in result:
-            es_id = record['_id']
-            record = record['_source']
-            records.append(UserInteractRecord(
-                es_id=es_id,
-                user_id=record['user_context']['user_id'],
-                user_name=record['user_context']['user_name'],
-                user_group_infos=[UserGroupInfo(user_group_id=group['user_group_id'],
-                                                user_group_name=group['user_group_name'])
-                                  for group in record['user_context'].get('user_group_infos', [])],
-                user_role_infos=[UserRoleInfo(role_id=role['role_id'],
-                                              role_name=role['role_name'],
-                                              group_id=role.get('group_id', 0))
-                                 for role in record['user_context'].get('user_role_infos', [])],
-                user_department_infos=[UserDepartmentInfo(department_id=d['department_id'],
-                                                          department_name=d['department_name'])
-                                       for d in record['user_context'].get('user_department_infos', [])],
-                event_id=record['event_id'],
-                timestamp=record['timestamp'],
-
-                message_id=record['event_data']['message_feedback_message_id'],
-                interact_type=record['event_data']['message_feedback_operation_type'],
-                app_id=record['event_data']['message_feedback_app_id'],
-                app_name=record['event_data']['message_feedback_app_name'],
-            ))
+            es_id = record["_id"]
+            record = record["_source"]
+            records.append(
+                UserInteractRecord(
+                    es_id=es_id,
+                    user_id=record["user_context"]["user_id"],
+                    user_name=record["user_context"]["user_name"],
+                    user_group_infos=[
+                        UserGroupInfo(user_group_id=group["user_group_id"], user_group_name=group["user_group_name"])
+                        for group in record["user_context"].get("user_group_infos", [])
+                    ],
+                    user_role_infos=[
+                        UserRoleInfo(
+                            role_id=role["role_id"], role_name=role["role_name"], group_id=role.get("group_id", 0)
+                        )
+                        for role in record["user_context"].get("user_role_infos", [])
+                    ],
+                    user_department_infos=[
+                        UserDepartmentInfo(department_id=d["department_id"], department_name=d["department_name"])
+                        for d in record["user_context"].get("user_department_infos", [])
+                    ],
+                    event_id=record["event_id"],
+                    timestamp=record["timestamp"],
+                    message_id=record["event_data"]["message_feedback_message_id"],
+                    interact_type=record["event_data"]["message_feedback_operation_type"],
+                    app_id=record["event_data"]["message_feedback_app_id"],
+                    app_name=record["event_data"]["message_feedback_app_name"],
+                )
+            )
         mid_table.insert_records_sync(records)
     # Implement the actual logic here
     logger.info("Successfully synced mid_user_interact_dtl table.")

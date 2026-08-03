@@ -63,15 +63,22 @@ export const PivotTable = memo(function PivotTable({
                 {header}
               </th>
             ))}
-            {data.columns.map(column => (
-              <th
-                key={column}
-                className="min-w-24 border-b border-r border-border bg-emerald-600 px-3 py-2 text-right font-semibold text-white"
-                title={`${data.columnHeader}：${column}`}
-              >
-                {column}
-              </th>
-            ))}
+            {data.columns.map((column, columnIndex) => {
+              const originalColumn = data.originalColumns?.[columnIndex] || column
+              return (
+                <th
+                  key={`${originalColumn}-${columnIndex}`}
+                  className="min-w-24 border-b border-r border-border bg-emerald-600 px-3 py-2 text-right font-semibold text-white"
+                  title={
+                    originalColumn === column
+                      ? `${data.columnHeader}：${column}`
+                      : `${data.columnHeader}：${originalColumn} → ${column}`
+                  }
+                >
+                  {column}
+                </th>
+              )
+            })}
             <th className="min-w-24 border-b border-border bg-amber-500 px-3 py-2 text-right font-semibold text-white">
               合计
             </th>
@@ -103,7 +110,7 @@ export const PivotTable = memo(function PivotTable({
               ))}
               {row.values.map((value, columnIndex) => (
                 <td
-                  key={`${rowIndex}-${data.columns[columnIndex]}`}
+                  key={`${rowIndex}-${data.originalColumns?.[columnIndex] || data.columns[columnIndex]}`}
                   className="border-b border-r border-border px-3 py-2 text-right tabular-nums text-foreground"
                   style={{ backgroundColor: cellBackground(value) }}
                   title={`${row.key.join(" / ")} · ${data.columns[columnIndex]}：${formatValue(value, dataConfig)}`}
@@ -127,7 +134,7 @@ export const PivotTable = memo(function PivotTable({
             </th>
             {data.columnTotals.map((value, index) => (
               <td
-                key={`total-${data.columns[index]}`}
+                key={`total-${data.originalColumns?.[index] || data.columns[index]}`}
                 className="border-r border-t border-border bg-slate-100 px-3 py-2 text-right font-semibold tabular-nums text-slate-700 dark:bg-slate-800 dark:text-slate-100"
               >
                 {formatValue(value, dataConfig)}

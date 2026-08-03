@@ -17,10 +17,16 @@ from fastapi import HTTPException
 from langchain_core.documents import Document
 
 from bisheng.common.errcode.knowledge_space import SpacePermissionDeniedError
-from bisheng.developer_token.api.dependencies import get_developer_token_user
 from bisheng.knowledge.domain.services import knowledge_space_chat_service as svc_mod
 from bisheng.knowledge.domain.services.knowledge_space_chat_service import KnowledgeSpaceChatService
-from bisheng.open_endpoints.api.dependencies import get_knowledge_space_chat_service_for_openapi
+from bisheng.open_endpoints.api.dependencies import (
+    build_knowledge_space_chat_service_for_openapi,
+    get_filelib_developer_token_principal,
+    get_filelib_knowledge_document_repository,
+    get_filelib_knowledge_document_version_repository,
+    get_filelib_request_user,
+    get_filelib_user_context_service,
+)
 from bisheng.open_endpoints.api.endpoints import filelib as filelib_mod
 from bisheng.open_endpoints.api.endpoints.filelib import (
     _build_portal_source_urls,
@@ -76,43 +82,49 @@ def test_build_portal_source_urls_encodes_portal_deep_link():
     assert source_full_url == "https://portal.example.com/knowledge-spaces?spaceId=7&fileId=9"
 
 
-async def test_openapi_chat_service_depends_on_developer_token_user():
-    params = signature(get_knowledge_space_chat_service_for_openapi).parameters
-    assert params["developer_user"].default.dependency is get_developer_token_user
-
+def test_openapi_chat_service_builder_uses_resolved_request_user():
     request = MagicMock()
-    developer_user = MagicMock()
+    request_user = MagicMock()
     version_repo = MagicMock()
     doc_repo = MagicMock()
 
-    service = await get_knowledge_space_chat_service_for_openapi(
+    service = build_knowledge_space_chat_service_for_openapi(
         request=request,
-        developer_user=developer_user,
+        request_user=request_user,
         version_repo=version_repo,
         doc_repo=doc_repo,
     )
 
     assert service.request is request
-    assert service.login_user is developer_user
+    assert service.login_user is request_user
     assert service.version_repo is version_repo
     assert service.doc_repo is doc_repo
 
 
-def test_openapi_file_list_depends_on_developer_token_user():
+def test_openapi_file_list_depends_on_filelib_request_user():
     params = signature(filelib_mod.get_filelist).parameters
-    assert params["login_user"].default.dependency is get_developer_token_user
+    assert params["login_user"].default.dependency is get_filelib_request_user
 
 
-def test_openapi_file_detail_depends_on_developer_token_user():
+def test_openapi_file_detail_depends_on_filelib_request_user():
     params = signature(filelib_mod.get_file_detail).parameters
-    assert params["login_user"].default.dependency is get_developer_token_user
+    assert params["login_user"].default.dependency is get_filelib_request_user
 
 
-def test_openapi_knowledge_list_depends_on_developer_token_user():
+def test_openapi_knowledge_list_depends_on_filelib_request_user():
     params = signature(filelib_mod.get_knowledge).parameters
-    assert params["login_user"].default.dependency is get_developer_token_user
+    assert params["login_user"].default.dependency is get_filelib_request_user
     assert "cursor" in params
     assert "page_num" not in params
+
+
+def test_openapi_retrieve_depends_on_token_and_user_context_service():
+    params = signature(filelib_mod.retrieve_chunks).parameters
+
+    assert params["principal"].default.dependency is get_filelib_developer_token_principal
+    assert params["user_context_service"].default.dependency is get_filelib_user_context_service
+    assert params["version_repo"].default.dependency is get_filelib_knowledge_document_version_repository
+    assert params["doc_repo"].default.dependency is get_filelib_knowledge_document_repository
 
 
 def test_parse_document_type_code_from_file_encoding():
@@ -594,9 +606,7 @@ async def test_filter_projection_documents_rejects_stale_generation(monkeypatch)
         "aget_file_by_ids",
         AsyncMock(return_value=[file_record]),
     )
-    svc.doc_repo.find_by_ids = AsyncMock(
-        return_value=[SimpleNamespace(id=100, primary_version_id=900)]
-    )
+    svc.doc_repo.find_by_ids = AsyncMock(return_value=[SimpleNamespace(id=100, primary_version_id=900)])
     valid = Document(
         page_content="valid",
         metadata={
@@ -645,9 +655,7 @@ async def test_aretrieve_chunks_dedupes_same_canonical_chunk_across_spaces():
             "chunk_index": 1,
         },
     )
-    svc._aretrieve_chunks_for_kb = AsyncMock(
-        side_effect=[[(1, first)], [(2, second)]]
-    )
+    svc._aretrieve_chunks_for_kb = AsyncMock(side_effect=[[(1, first)], [(2, second)]])
 
     result = await svc.aretrieve_chunks(
         query="hello",

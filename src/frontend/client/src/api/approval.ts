@@ -83,6 +83,12 @@ export interface ApprovalFlowNode {
   node_name?: string;
   node_order?: number;
   node_mode?: string;
+  approvers?: ApprovalFlowNodeApprover[];
+}
+
+export interface ApprovalFlowNodeApprover {
+  user_id: number;
+  user_name?: string | null;
 }
 
 export interface ApprovalInstanceDetail extends ApprovalInstanceItem {

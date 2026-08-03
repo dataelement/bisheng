@@ -5,7 +5,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from bisheng.common.models.space_channel_member import UserRoleEnum
-from bisheng.knowledge.domain.constants import normalize_business_domain_code
+from bisheng.knowledge.domain.constants import normalize_business_domain_code, normalize_file_category_code
 from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum, KnowledgeBase
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileRead
 from bisheng.knowledge.domain.models.knowledge_space_scope import (
@@ -379,6 +379,29 @@ class ShougangPortalDomainFileCountReq(BaseModel):
 
 
 class ShougangPortalDomainFileCountResp(BaseModel):
+    counts: dict[str, int] = Field(default_factory=dict)
+
+
+class ShougangPortalCategoryFileCountItem(BaseModel):
+    code: str = Field(..., max_length=16, description="Primary document-type / file-category code")
+    space_ids: list[int] = Field(
+        default_factory=list, max_length=200, description="Visible candidate knowledge space IDs"
+    )
+
+    @field_validator("code", mode="before")
+    @classmethod
+    def normalize_code(cls, value: Any):
+        normalized = normalize_file_category_code(value)
+        if not normalized:
+            raise ValueError("file category code is invalid")
+        return normalized
+
+
+class ShougangPortalCategoryFileCountReq(BaseModel):
+    categories: list[ShougangPortalCategoryFileCountItem] = Field(default_factory=list, max_length=200)
+
+
+class ShougangPortalCategoryFileCountResp(BaseModel):
     counts: dict[str, int] = Field(default_factory=dict)
 
 

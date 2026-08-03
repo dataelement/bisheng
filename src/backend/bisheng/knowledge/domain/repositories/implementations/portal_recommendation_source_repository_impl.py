@@ -10,6 +10,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from bisheng.core.context.tenant import strict_tenant_filter
 from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
+from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceScope
 from bisheng.knowledge.domain.repositories.interfaces.portal_recommendation_source_repository import (
     PortalRecommendationSourceRepository,
 )
@@ -24,7 +25,7 @@ class PortalRecommendationSourceRepositoryImpl(PortalRecommendationSourceReposit
 
     @staticmethod
     def _to_source(row) -> PortalRecommendationSourceFile:
-        file, is_primary = row
+        file, is_primary, space_level = row
         return PortalRecommendationSourceFile(
             file_id=int(file.id),
             space_id=int(file.knowledge_id),
@@ -35,13 +36,29 @@ class PortalRecommendationSourceRepositoryImpl(PortalRecommendationSourceReposit
             file_level_path=file.file_level_path,
             source_update_time=file.update_time or file.create_time,
             is_primary=bool(is_primary) if is_primary is not None else None,
+            space_level=(
+                str(getattr(space_level, "value", space_level))
+                if space_level is not None
+                else None
+            ),
         )
 
     @staticmethod
     def _statement():
-        return select(KnowledgeFile, KnowledgeDocumentVersion.is_primary).outerjoin(
-            KnowledgeDocumentVersion,
-            KnowledgeDocumentVersion.knowledge_file_id == KnowledgeFile.id,
+        return (
+            select(
+                KnowledgeFile,
+                KnowledgeDocumentVersion.is_primary,
+                KnowledgeSpaceScope.level,
+            )
+            .outerjoin(
+                KnowledgeDocumentVersion,
+                KnowledgeDocumentVersion.knowledge_file_id == KnowledgeFile.id,
+            )
+            .outerjoin(
+                KnowledgeSpaceScope,
+                KnowledgeSpaceScope.space_id == KnowledgeFile.knowledge_id,
+            )
         )
 
     @staticmethod

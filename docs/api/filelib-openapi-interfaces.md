@@ -20,7 +20,22 @@ http://{bisheng-host}:7860/api/v2
 |---|---:|---|
 | `Content-Type` | 是 | 固定为 `application/json`。 |
 
-### 1.3 通用成功响应
+### 1.3 调用资格、业务用户与数据作用域
+
+四个查询接口使用双重身份：
+
+- `X-Developer-Token` 始终必填，只用于验证调用方是否具备调用资格，包括 Token 状态、绑定关系、IP、路由白名单和限流。
+- `external_id` 可选，用于确定本次请求的业务用户、资源权限和数据作用域。
+- 未传 `external_id` 时，业务用户回退为 Token 绑定用户，保持原有行为。
+- 传入 `external_id` 时，系统按去除首尾空白后的值全局精确匹配唯一有效用户，并完整继承该用户权限；目标用户为全局超级管理员时同样继承其完整权限。
+- 找不到有效用户、用户已禁用或存在多个有效匹配时统一返回 HTTP `403`，不会披露具体原因，也不会回退到 Token 绑定用户。
+- 空字符串、纯空白或超过 255 个字符的 `external_id` 返回 HTTP `422`。
+
+Token 校验优先于外部用户解析。Token 校验失败时返回既有 Developer Token 错误，不查询 `external_id` 对应用户，也不进入 Filelib 业务。
+
+> 安全与部署限制：传入 `external_id` 会在本次请求内使用目标用户的完整权限和全局数据作用域。该能力仅适用于当前未启用租户功能的部署；若启用多租户，必须先重新设计和评审作用域边界，不能直接沿用本接口语义。
+
+### 1.4 通用成功响应
 
 ```json
 {
@@ -36,7 +51,7 @@ http://{bisheng-host}:7860/api/v2
 | `status_message` | string | 业务状态说明。成功通常为 `SUCCESS`。 |
 | `data` | any | 接口返回数据。 |
 
-### 1.4 通用认证错误
+### 1.5 通用认证与用户上下文错误
 
 | 业务码 | message | 说明 |
 |---:|---|---|
@@ -46,6 +61,13 @@ http://{bisheng-host}:7860/api/v2
 | `19804` | `developer_token_ip_forbidden` | 请求 IP 不允许。 |
 | `19805` | `developer_token_rate_limited` | 超过限流。 |
 | `19806` | `developer_token_limiter_unavailable` | 限流存储不可用。 |
+
+除上述业务码外：
+
+| HTTP 状态 | 场景 |
+|---:|---|
+| `403` | `external_id` 未匹配到唯一有效用户。响应不区分不存在、禁用或重复。 |
+| `422` | `external_id` 为空、纯空白、超过 255 个字符或其他参数校验失败。 |
 
 ---
 
@@ -65,6 +87,7 @@ GET /api/v2/filelib/
 | `name` | string | 否 | `null` | 知识资源名称，模糊匹配。 |
 | `page_size` | integer | 否 | `10` | 每页数量。 |
 | `cursor` | string | 否 | `null` | 游标分页令牌。首次请求不传；下一页传上次响应的 `next_cursor`。 |
+| `external_id` | string | 否 | `null` | 业务用户外部标识。最大 255 个字符；未传时使用 Token 绑定用户。 |
 
 `type` 枚举：
 
@@ -78,8 +101,8 @@ GET /api/v2/filelib/
 ### 2.3 请求示例
 
 ```bash
-curl -X GET 'http://127.0.0.1:7860/api/v2/filelib/?type=3&page_size=10' \
-  -H 'X-Developer-Token: bst_xxx'
+curl -X GET 'http://127.0.0.1:7860/api/v2/filelib/?type=3&page_size=10&external_id=EMP001' \
+  -H 'X-Developer-Token: bst_{REDACTED}'
 ```
 
 ### 2.4 响应示例
@@ -154,6 +177,7 @@ curl -X GET 'http://127.0.0.1:7860/api/v2/filelib/?type=3&page_size=10' \
 
 | HTTP 状态 | 场景 |
 |---:|---|
+| `403` | `external_id` 未匹配到唯一有效用户，或目标用户无知识资源读取权限。 |
 | `422` | Query 参数校验失败。 |
 
 ---
@@ -175,6 +199,7 @@ GET /api/v2/filelib/file/list
 | `status` | integer[] | 否 | `null` | 文件状态。多值传参格式：`status=2&status=3`。 |
 | `page_size` | integer | 否 | `10` | 每页数量。 |
 | `page_num` | integer | 否 | `1` | 页码，从 `1` 开始。 |
+| `external_id` | string | 否 | `null` | 业务用户外部标识。最大 255 个字符；未传时使用 Token 绑定用户。 |
 
 `status` 枚举：
 
@@ -191,8 +216,8 @@ GET /api/v2/filelib/file/list
 ### 3.3 请求示例
 
 ```bash
-curl -X GET 'http://127.0.0.1:7860/api/v2/filelib/file/list?knowledge_id=118&page_size=10&page_num=1' \
-  -H 'X-Developer-Token: bst_xxx'
+curl -X GET 'http://127.0.0.1:7860/api/v2/filelib/file/list?knowledge_id=118&page_size=10&page_num=1&external_id=EMP001' \
+  -H 'X-Developer-Token: bst_{REDACTED}'
 ```
 
 ### 3.4 响应示例
@@ -263,7 +288,7 @@ curl -X GET 'http://127.0.0.1:7860/api/v2/filelib/file/list?knowledge_id=118&pag
 
 | HTTP 状态 | 场景 |
 |---:|---|
-| `403` | 无知识资源读取权限。 |
+| `403` | `external_id` 未匹配到唯一有效用户，或目标用户无知识资源读取权限。 |
 | `422` | Query 参数校验失败。 |
 
 ---
@@ -283,12 +308,13 @@ GET /api/v2/filelib/file/detail
 | `file_encoding` | string | 是 | - | 文件编码。 |
 | `knowledge_id` | integer | 否 | `null` | 知识资源 ID。 |
 | `content_format` | string | 否 | `text` | 正文格式。可选值：`text`、`markdown`。 |
+| `external_id` | string | 否 | `null` | 业务用户外部标识。最大 255 个字符；未传时使用 Token 绑定用户。 |
 
 ### 4.3 请求示例
 
 ```bash
-curl -X GET 'http://127.0.0.1:7860/api/v2/filelib/file/detail?file_encoding=SGGF-RPT-QM-20260400000007&knowledge_id=118&content_format=text' \
-  -H 'X-Developer-Token: bst_xxx'
+curl -X GET 'http://127.0.0.1:7860/api/v2/filelib/file/detail?file_encoding=SGGF-RPT-QM-20260400000007&knowledge_id=118&content_format=text&external_id=EMP001' \
+  -H 'X-Developer-Token: bst_{REDACTED}'
 ```
 
 ### 4.4 响应示例
@@ -362,7 +388,7 @@ curl -X GET 'http://127.0.0.1:7860/api/v2/filelib/file/detail?file_encoding=SGGF
 | HTTP 状态 | detail | 场景 |
 |---:|---|---|
 | `400` | `file_encoding must not be empty` | `file_encoding` 为空字符串。 |
-| `403` | - | 无知识资源读取权限。 |
+| `403` | - | `external_id` 未匹配到唯一有效用户，或目标用户无知识资源读取权限。 |
 | `404` | `file not found` | 文件不存在。 |
 | `404` | `knowledge not found` | 知识资源不存在。 |
 | `409` | `duplicate file_encoding found` | 文件编码匹配到多个文件。 |
@@ -382,6 +408,7 @@ POST /api/v2/filelib/retrieve
 
 | 字段 | 类型 | 必填 | 默认值 | 说明 |
 |---|---|---:|---|---|
+| `external_id` | string | 否 | `null` | 业务用户外部标识。最大 255 个字符；未传时使用 Token 绑定用户。 |
 | `query` | string | 是 | - | 检索问题。最小长度 `1`。 |
 | `knowledge_base_ids` | integer[] | 是 | - | 知识资源 ID 列表。至少 1 个。 |
 | `filters` | object | 否 | `null` | 过滤条件。 |
@@ -397,8 +424,9 @@ POST /api/v2/filelib/retrieve
 ```bash
 curl -X POST 'http://127.0.0.1:7860/api/v2/filelib/retrieve' \
   -H 'Content-Type: application/json' \
-  -H 'X-Developer-Token: bst_xxx' \
+  -H 'X-Developer-Token: bst_{REDACTED}' \
   -d '{
+    "external_id": "EMP001",
     "query": "安全管理要求",
     "knowledge_base_ids": [118],
     "filters": {
@@ -463,5 +491,5 @@ curl -X POST 'http://127.0.0.1:7860/api/v2/filelib/retrieve' \
 |---:|---|---|
 | `400` | `filter references kb_id ... not present in knowledge_base_ids` | 过滤条件引用了未在 `knowledge_base_ids` 中的知识资源。 |
 | `400` | `tag_match_mode=ALL is not yet supported` | `tag_match_mode` 传入 `ALL`。 |
-| `403` | - | 无知识资源读取权限。 |
+| `403` | - | `external_id` 未匹配到唯一有效用户，或目标用户无知识资源读取权限。 |
 | `422` | - | Body 参数校验失败。 |

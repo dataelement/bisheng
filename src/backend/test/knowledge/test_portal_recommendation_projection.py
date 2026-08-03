@@ -50,6 +50,7 @@ def _source(**overrides):
         "file_level_path": "/11/12",
         "source_update_time": datetime(2026, 7, 15, tzinfo=timezone.utc),
         "is_primary": True,
+        "space_level": "public",
     }
     values.update(overrides)
     return PortalRecommendationSourceFile(**values)
@@ -98,6 +99,8 @@ async def test_projection_falls_back_to_existing_file_encoding_parser():
         ({"file_type": 0}, "not_file"),
         ({"status": 3}, "not_success"),
         ({"is_primary": False}, "not_primary"),
+        ({"space_level": "personal"}, "personal_space"),
+        ({"space_level": None}, "space_scope_unknown"),
     ],
 )
 async def test_projection_fails_closed_for_ineligible_source(overrides, reason):

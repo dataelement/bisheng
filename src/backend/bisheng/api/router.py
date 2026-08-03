@@ -30,6 +30,7 @@ from bisheng.dictionary.api.router import router as dictionary_router
 from bisheng.finetune.api.finetune import router as finetune_router
 from bisheng.finetune.api.server import router as server_router
 from bisheng.knowledge.api.router import (
+    knowledge_migration_router,
     knowledge_recycle_router,
     knowledge_router,
     knowledge_space_router,
@@ -77,6 +78,7 @@ router.include_router(knowledge_space_router)
 router.include_router(shougang_portal_router)
 router.include_router(knowledge_version_router)
 router.include_router(knowledge_recycle_router)
+router.include_router(knowledge_migration_router)
 router.include_router(server_router)
 router.include_router(user_router)
 router.include_router(qa_router)
@@ -123,8 +125,8 @@ router_rpc = APIRouter(
     prefix="/api/v2",
 )
 router_rpc.include_router(knowledge_router_rpc)
-router_rpc.include_router(filelib_router_rpc)
 router_rpc.include_router(filelib_sync_router_rpc)
+router_rpc.include_router(filelib_router_rpc)
 router_rpc.include_router(chat_router_rpc)
 router_rpc.include_router(assistant_router_rpc)
 router_rpc.include_router(workflow_router_rpc)

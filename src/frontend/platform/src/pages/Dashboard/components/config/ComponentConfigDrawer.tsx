@@ -273,6 +273,7 @@ export function ComponentConfigDrawer() {
         const newDimension = {
           id: `${safeFieldId}-${Date.now()}`,
           fieldId: safeFieldId,
+          name: field.fieldCode,
           displayName: field.displayName || field.fieldName,
           originalName: field.displayName || field.fieldName,
           fieldType: field.role,
@@ -301,6 +302,7 @@ export function ComponentConfigDrawer() {
         const newDimension = {
           id: `${safeFieldId}-${Date.now()}`,
           fieldId: safeFieldId,
+          name: field.fieldCode,
           displayName: field.displayName || field.fieldName,
           originalName: field.displayName || field.fieldName,
           fieldType: field.role,
@@ -1062,21 +1064,23 @@ export function ComponentConfigDrawer() {
                                     collapsed={configCollapsed.stack}
                                     onCollapse={() => toggleCollapse('stack')}
                                   >
-                                    <DimensionBlock
-                                      invalidIds={invalidFieldIds}
-                                      isDimension={true}
-                                      isStack={'stack'}
-                                      dimensions={stackDimensions}
-                                      isDragOver={dragOverSection === 'stack'}
-                                      onDragOver={(e) => handleDragOver(e, 'stack')}
-                                      onDragLeave={handleDragLeave}
-                                      onDrop={(e) => handleDrop(e, 'stack', isMetricCard)}
-                                      onDelete={(dimensionId) => handleDeleteDimension('stack', dimensionId)}
-                                      onSortChange={(dimensionId, sortValue) => handleSortChange('stack', dimensionId, sortValue)}
-                                      onEditDisplayName={(dimensionId, originalName, displayName) =>
-                                        openEditDialog('stack', dimensionId, originalName, displayName)
-                                      }
-                                    />
+                                    <>
+                                      <DimensionBlock
+                                        invalidIds={invalidFieldIds}
+                                        isDimension={true}
+                                        isStack={'stack'}
+                                        dimensions={stackDimensions}
+                                        isDragOver={dragOverSection === 'stack'}
+                                        onDragOver={(e) => handleDragOver(e, 'stack')}
+                                        onDragLeave={handleDragLeave}
+                                        onDrop={(e) => handleDrop(e, 'stack', isMetricCard)}
+                                        onDelete={(dimensionId) => handleDeleteDimension('stack', dimensionId)}
+                                        onSortChange={(dimensionId, sortValue) => handleSortChange('stack', dimensionId, sortValue)}
+                                        onEditDisplayName={(dimensionId, originalName, displayName) =>
+                                          openEditDialog('stack', dimensionId, originalName, displayName)
+                                        }
+                                      />
+                                    </>
                                   </CollapsibleBlock>
                                 )}
                               </>

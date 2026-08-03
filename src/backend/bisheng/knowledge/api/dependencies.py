@@ -23,6 +23,12 @@ from bisheng.knowledge.domain.repositories.implementations.knowledge_file_reposi
 from bisheng.knowledge.domain.repositories.implementations.knowledge_file_similarity_candidate_repository_impl import (
     KnowledgeFileSimilarityCandidateRepositoryImpl,
 )
+from bisheng.knowledge.domain.repositories.implementations.knowledge_migration_repository_impl import (
+    KnowledgeMigrationRepositoryImpl,
+)
+from bisheng.knowledge.domain.repositories.implementations.knowledge_migration_source_repository_impl import (
+    KnowledgeMigrationSourceRepositoryImpl,
+)
 from bisheng.knowledge.domain.repositories.implementations.knowledge_repository_impl import KnowledgeRepositoryImpl
 from bisheng.knowledge.domain.repositories.interfaces.department_file_view_grant_repository import (
     DepartmentFileViewGrantRepository,
@@ -36,6 +42,12 @@ from bisheng.knowledge.domain.repositories.interfaces.knowledge_document_version
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository import KnowledgeFileRepository
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_similarity_candidate_repository import (
     KnowledgeFileSimilarityCandidateRepository,
+)
+from bisheng.knowledge.domain.repositories.interfaces.knowledge_migration_repository import (
+    KnowledgeMigrationRepository,
+)
+from bisheng.knowledge.domain.repositories.interfaces.knowledge_migration_source_repository import (
+    KnowledgeMigrationSourceRepository,
 )
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_repository import KnowledgeRepository
 from bisheng.knowledge.domain.services.department_file_view_access_service import (
@@ -109,6 +121,36 @@ async def get_knowledge_file_similarity_candidate_repository(
     session: AsyncSession = Depends(get_db_session),
 ) -> KnowledgeFileSimilarityCandidateRepository:
     return KnowledgeFileSimilarityCandidateRepositoryImpl(session)
+
+
+async def get_knowledge_migration_repository(
+    session: AsyncSession = Depends(get_db_session),
+) -> KnowledgeMigrationRepository:
+    return KnowledgeMigrationRepositoryImpl(session)
+
+
+async def get_knowledge_migration_source_repository(
+    session: AsyncSession = Depends(get_db_session),
+) -> KnowledgeMigrationSourceRepository:
+    return KnowledgeMigrationSourceRepositoryImpl(session)
+
+
+async def get_knowledge_migration_service(
+    repository: KnowledgeMigrationRepository = Depends(
+        get_knowledge_migration_repository
+    ),
+    source_repository: KnowledgeMigrationSourceRepository = Depends(
+        get_knowledge_migration_source_repository
+    ),
+):
+    from bisheng.knowledge.domain.services.knowledge_migration_service import (
+        KnowledgeMigrationService,
+    )
+
+    return KnowledgeMigrationService(
+        repository=repository,
+        source_repository=source_repository,
+    )
 
 
 async def get_knowledge_metadata_service(

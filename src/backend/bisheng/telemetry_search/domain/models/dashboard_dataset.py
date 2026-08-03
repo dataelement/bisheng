@@ -7,7 +7,11 @@ from bisheng.core.database.dialect_helpers import JsonType
 from sqlmodel import Field
 
 from bisheng.common.models.base import SQLModelSerializable
-from bisheng.telemetry_search.domain.schemas.query_builder import FilterExpression, AggregationExpression
+from bisheng.telemetry_search.domain.schemas.query_builder import (
+    AggsTypeEnum,
+    FilterExpression,
+    AggregationExpression,
+)
 
 
 class FormulaEnum(str, Enum):
@@ -42,6 +46,7 @@ class MetricConfig(BaseModel):
 
     index: Optional[int] = None
     sum_field: Optional[str] = None
+    sum_type: AggsTypeEnum = AggsTypeEnum.CARDINALITY
 
     is_virtual: Optional[bool] = False
 

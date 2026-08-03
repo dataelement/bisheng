@@ -65,6 +65,46 @@ def test_realtime_dashboard_seed_contains_three_target_datasets():
         for dimension in qa_dataset.schema_config["dimensions"]
     }
 
+    knowledge_dataset = datasets["mid_knowledge_space_content_stat"]
+    knowledge_metrics = {
+        metric["field"]: metric
+        for metric in knowledge_dataset.schema_config["metrics"]
+    }
+    assert knowledge_metrics["total_file_count"]["sum_type"] == "value_count"
+    assert knowledge_metrics["new_file_count"]["aggregations"][0]["type"] == "value_count"
+    assert knowledge_metrics["preview_count"]["filter"]["filters"] == [
+        {"operator": "term", "field": "record_type", "value": "preview_daily"}
+    ]
+    assert knowledge_metrics["preview_count"]["aggregations"][0]["type"] == "sum"
+    knowledge_dimensions = {
+        dimension["field"]: dimension["name"]
+        for dimension in knowledge_dataset.schema_config["dimensions"]
+    }
+    assert knowledge_dimensions["space_department_name"] == "所属部门"
+    assert knowledge_dimensions["primary_department_name"] == "上传人所在部门"
+
+
+def test_component_data_config_preserves_pivot_column_aliases():
+    from bisheng.telemetry_search.domain.schemas.component import ComponentDataConfig
+
+    config = ComponentDataConfig.model_validate(
+        {
+            "pivotColumnAliases": {
+                "fieldId": "space_department_name",
+                "aliases": {
+                    "首钢股份钢铁板块生产部": "生产部",
+                },
+            },
+        }
+    )
+
+    assert config.model_dump(by_alias=True)["pivotColumnAliases"] == {
+        "fieldId": "space_department_name",
+        "aliases": {
+            "首钢股份钢铁板块生产部": "生产部",
+        },
+    }
+
 
 def test_participation_day_uses_china_local_midnight():
     from bisheng.telemetry.domain.mid_table.daily_participation import (
@@ -337,7 +377,7 @@ async def test_realtime_temporal_datasets_default_to_today_and_include_today():
 
 
 @pytest.mark.asyncio
-async def test_realtime_admin_scope_always_contains_current_tenant(monkeypatch):
+async def test_knowledge_space_admin_scope_has_no_tenant_filter(monkeypatch):
     from bisheng.telemetry_search.domain.services import dashboard as module
 
     monkeypatch.setattr(module, "get_current_tenant_id", lambda: 7)
@@ -349,9 +389,7 @@ async def test_realtime_admin_scope_always_contains_current_tenant(monkeypatch):
         "mid_knowledge_space_content_stat"
     )
 
-    assert [item.model_dump(by_alias=True) for item in filters] == [
-        {"fieldId": "tenant_id", "values": [7]}
-    ]
+    assert filters == []
 
 
 @pytest.mark.asyncio
@@ -391,7 +429,6 @@ async def test_department_admin_file_scope_uses_manageable_spaces(monkeypatch):
     )
 
     assert [item.model_dump(by_alias=True) for item in filters] == [
-        {"fieldId": "tenant_id", "values": [7]},
         {"fieldId": "space_id", "values": [12, 13]},
     ]
 

@@ -2,7 +2,7 @@
 "use client"
 
 import { useState, useMemo, useEffect, useCallback, useRef } from "react"
-import { ChartType, ComponentStyleConfig, DashboardComponent, DataConfig, MAX_METRIC_CARD_METRICS } from "../../types/dataConfig"
+import { ChartType, ComponentStyleConfig, DashboardComponent, DataConfig, MAX_METRIC_CARD_METRICS, PivotColumnAliases } from "../../types/dataConfig"
 import { generateUUID } from "@/components/bs-ui/utils"
 import { useToast } from "@/components/bs-ui/toast/use-toast"
 import { useComponentEditorStore, useEditorDashboardStore } from "@/store/dashboardStore"
@@ -29,6 +29,7 @@ export function useChartState(
   const [draggingId, setDraggingId] = useState<string | null>(null)
   const [sortPriorityOrder, setSortPriorityOrder] = useState<string[]>([])
   const [filterGroup, setFilterGroup] = useState<any>(null)
+  const [pivotColumnAliases, setPivotColumnAliases] = useState<PivotColumnAliases>()
   const { toast } = useToast()
   const { updateEditingComponent } = useComponentEditorStore();
   const { refreshChart } = useEditorDashboardStore();
@@ -60,6 +61,7 @@ export function useChartState(
       setStackDimensions([])
       setValueDimensions([])
       setFilterGroup(null)
+      setPivotColumnAliases(undefined)
       // 清空排序顺序
       setSortPriorityOrder([])
 
@@ -72,6 +74,7 @@ export function useChartState(
 
       // 初始化维度数据
       if (dc) {
+        setPivotColumnAliases(dc.pivotColumnAliases)
         // console.log('数据配置:', dc)
 
         const newCategoryDimensions: any[] = []
@@ -751,10 +754,18 @@ export function useChartState(
             : "all" as const,
         ...(limitType !== "all" && { limit: Number(limitValue) })
       },
+      pivotColumnAliases: (
+        chartType === ChartType.PivotTable
+        && stackDimension
+        && pivotColumnAliases?.fieldId === stackDimension.fieldId
+        && Object.keys(pivotColumnAliases.aliases).length > 0
+      )
+        ? pivotColumnAliases
+        : undefined,
       filtersLogic: filterGroup?.logic || 'and',
       isConfigured: true,
     }
-  }, [categoryDimensions, stackDimensions, valueDimensions, filterGroup, sortPriorityOrder])
+  }, [categoryDimensions, chartType, filterGroup, pivotColumnAliases, sortPriorityOrder, stackDimensions, valueDimensions])
 
   // 返回对象
   return {
@@ -767,6 +778,7 @@ export function useChartState(
     valueDimensions,
     dragOverSection,
     filterGroup,
+    pivotColumnAliases,
     draggingId,
     sortPriorityOrder,
     sortPriorityFields,
@@ -781,6 +793,7 @@ export function useChartState(
     setValueDimensions,
     setDragOverSection,
     setFilterGroup,
+    setPivotColumnAliases,
     setDraggingId,
     setSortPriorityOrder,
 

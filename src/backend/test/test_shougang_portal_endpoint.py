@@ -188,6 +188,10 @@ class _FakeKnowledgeSpaceService:
         self.requested_codes = domains
         return {"PP": 5, "QM": 2}
 
+    async def count_shougang_portal_category_files(self, categories):
+        self.requested_categories = categories
+        return {"STD": 7, "RPT": 3}
+
     async def get_shougang_portal_home(self, req):
         return {
             "sections": {
@@ -597,6 +601,35 @@ async def test_shougang_portal_domain_file_counts_delegates_to_service(monkeypat
         {"code": "QM", "space_ids": [13]},
     ]
     assert response.data["counts"] == {"PP": 5, "QM": 2}
+
+
+@pytest.mark.asyncio
+async def test_shougang_portal_category_file_counts_delegates_to_service(monkeypatch: pytest.MonkeyPatch):
+    endpoint_module_name = 'bisheng.knowledge.api.endpoints.shougang_portal'
+    previous_endpoint_module = sys.modules.get(endpoint_module_name)
+    sys.modules.pop(endpoint_module_name, None)
+    try:
+        endpoint = _load_shougang_portal_endpoint(monkeypatch)
+        fake_service = _FakeKnowledgeSpaceService()
+        req = endpoint.ShougangPortalCategoryFileCountReq(
+            categories=[
+                {"code": "STD", "space_ids": [11, 12]},
+                {"code": "RPT", "space_ids": [13]},
+            ]
+        )
+        response = await endpoint.count_shougang_portal_category_files(req, svc=fake_service)
+    finally:
+        if previous_endpoint_module is None:
+            sys.modules.pop(endpoint_module_name, None)
+        else:
+            sys.modules[endpoint_module_name] = previous_endpoint_module
+
+    assert response.status_code == 200
+    assert [item.model_dump() for item in fake_service.requested_categories] == [
+        {"code": "STD", "space_ids": [11, 12]},
+        {"code": "RPT", "space_ids": [13]},
+    ]
+    assert response.data["counts"] == {"STD": 7, "RPT": 3}
 
 
 @pytest.mark.asyncio

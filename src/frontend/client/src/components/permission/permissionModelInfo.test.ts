@@ -1,5 +1,6 @@
 import {
   filterPermissionModelsWithScopeItems,
+  getPermissionModelScopeGroups,
   getPermissionModelScopeItems,
   hasPermissionModelScopeItems,
 } from "./permissionModelInfo";
@@ -10,9 +11,16 @@ function itemIds(resourceType: ResourceType, model: RelationModelOption) {
   return getPermissionModelScopeItems(resourceType, model)?.map((item) => item.id) ?? [];
 }
 
+function groupedItemIds(resourceType: ResourceType, model: RelationModelOption) {
+  return (getPermissionModelScopeGroups(resourceType, model) ?? []).map((group) => ({
+    scope: group.scope,
+    ids: group.items.map((item) => item.id),
+  }));
+}
+
 describe("permission model scope info", () => {
-  it("derives system model permissions for knowledge space scope only", () => {
-    expect(itemIds("knowledge_space", {
+  it("shows space grants across space, folder, and file scopes", () => {
+    expect(groupedItemIds("knowledge_space", {
       id: "manager",
       name: "Manager",
       relation: "manager",
@@ -20,18 +28,44 @@ describe("permission model scope info", () => {
       permissions_explicit: false,
       is_system: true,
     })).toEqual([
-      "view_space",
-      "edit_space",
-      "create_folder",
-      "upload_file",
-      "publish_file",
-      "share_space",
-      "manage_space_relation",
+      {
+        scope: "space",
+        ids: [
+          "view_space",
+          "edit_space",
+          "create_folder",
+          "upload_file_to_space",
+          "publish_file",
+          "manage_space_relation",
+        ],
+      },
+      {
+        scope: "folder",
+        ids: [
+          "view_folder",
+          "upload_file_to_folder",
+          "rename_folder",
+          "download_folder",
+          "move_folder",
+          "manage_folder_relation",
+        ],
+      },
+      {
+        scope: "file",
+        ids: [
+          "view_file",
+          "rename_file",
+          "download_file",
+          "move_file",
+          "share_file",
+          "manage_file_relation",
+        ],
+      },
     ]);
   });
 
-  it("derives system model permissions for folder scope only", () => {
-    expect(itemIds("folder", {
+  it("shows folder grants across folder and descendant file scopes", () => {
+    expect(groupedItemIds("folder", {
       id: "editor",
       name: "Editor",
       relation: "editor",
@@ -39,10 +73,25 @@ describe("permission model scope info", () => {
       permissions_explicit: false,
       is_system: true,
     })).toEqual([
-      "view_folder",
-      "rename_folder",
-      "download_folder",
-      "move_folder",
+      {
+        scope: "folder",
+        ids: [
+          "view_folder",
+          "upload_file_to_folder",
+          "rename_folder",
+          "download_folder",
+          "move_folder",
+        ],
+      },
+      {
+        scope: "file",
+        ids: [
+          "view_file",
+          "rename_file",
+          "download_file",
+          "move_file",
+        ],
+      },
     ]);
   });
 
@@ -54,10 +103,56 @@ describe("permission model scope info", () => {
       permissions: ["view_file", "delete_file", "view_folder", "share_file"],
       permissions_explicit: true,
       is_system: false,
-    })).toEqual(["view_file", "share_file", "delete_file"]);
+    })).toEqual(["view_file", "delete_file", "share_file"]);
   });
 
-  it("identifies and filters models without current resource permission items", () => {
+  it("defaults file sharing to managers and owners only", () => {
+    const systemModel = (relation: RelationModelOption["relation"]): RelationModelOption => ({
+      id: relation,
+      name: relation,
+      relation,
+      permissions: [],
+      permissions_explicit: false,
+      is_system: true,
+    });
+
+    expect(itemIds("knowledge_file", systemModel("viewer"))).not.toContain("share_file");
+    expect(itemIds("knowledge_file", systemModel("editor"))).not.toContain("share_file");
+    expect(itemIds("knowledge_file", systemModel("manager"))).toContain("share_file");
+    expect(itemIds("knowledge_file", systemModel("owner"))).toContain("share_file");
+  });
+
+  it("keeps space and folder upload permissions independently configurable", () => {
+    expect(groupedItemIds("knowledge_space", {
+      id: "space_upload_only",
+      name: "Space upload only",
+      relation: "editor",
+      permissions: ["upload_file_to_space"],
+      permissions_explicit: true,
+      is_system: false,
+    })).toEqual([
+      {
+        scope: "space",
+        ids: ["upload_file_to_space"],
+      },
+    ]);
+
+    expect(groupedItemIds("knowledge_space", {
+      id: "folder_upload_only",
+      name: "Folder upload only",
+      relation: "editor",
+      permissions: ["upload_file_to_folder"],
+      permissions_explicit: true,
+      is_system: false,
+    })).toEqual([
+      {
+        scope: "folder",
+        ids: ["upload_file_to_folder"],
+      },
+    ]);
+  });
+
+  it("keeps descendant-only models available for parent resource grants", () => {
     const emptyFileModel: RelationModelOption = {
       id: "folder_only",
       name: "Folder Only",
@@ -81,5 +176,7 @@ describe("permission model scope info", () => {
       emptyFileModel,
       fileModel,
     ])).toEqual([fileModel]);
+    expect(hasPermissionModelScopeItems("folder", fileModel)).toBe(true);
+    expect(filterPermissionModelsWithScopeItems("folder", [fileModel])).toEqual([fileModel]);
   });
 });

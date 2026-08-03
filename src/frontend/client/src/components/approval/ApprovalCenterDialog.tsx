@@ -15,9 +15,10 @@ import {
   withdrawApprovalInstanceApi,
 } from "~/api/approval";
 import { useToastContext } from "~/Providers";
-import { NotificationSeverity } from "~/common";
-import { useLocalize } from "~/hooks";
+import { NotificationSeverity } from "~/common/types";
+import useLocalize from "~/hooks/useLocalize";
 import { cn } from "~/utils";
+import { FutureApproverList } from "./FutureApproverList";
 import { Dialog, DialogContent } from "../ui/Dialog";
 
 type ApprovalCenterTarget = {
@@ -847,6 +848,7 @@ function TaskDetailPanel({ detail, localize }: { detail: ApprovalTaskDetail; loc
               const matchedTasks = (detail.tasks || []).filter(
                 (t) => t.node_order === node.node_order || t.node_name === node.node_name
               );
+              const futureApprovers = node.approvers || [];
               const isNotStarted = matchedTasks.length === 0 && !node.task_id;
               const aggStatus = matchedTasks.length === 0
                 ? (node.task_id ? (node.status ?? "pending") : "not_started")
@@ -928,7 +930,7 @@ function TaskDetailPanel({ detail, localize }: { detail: ApprovalTaskDetail; loc
                       </div>
                     )}
                     {isNotStarted && (
-                      <div className="mt-0.5 text-[12px] text-[#86909c]">{localize("com_approval_node_not_started")}</div>
+                      <FutureApproverList approvers={futureApprovers} localize={localize} />
                     )}
                   </div>
                 </div>
@@ -997,7 +999,9 @@ function RequestDetailPanel({ detail, localize }: { detail: ApprovalInstanceDeta
         </div>
       )}
 
-      {((detail.action_logs && detail.action_logs.length > 0) || (detail.tasks && detail.tasks.length > 0)) && (
+      {((detail.action_logs && detail.action_logs.length > 0)
+        || (detail.tasks && detail.tasks.length > 0)
+        || (detail.flow_nodes && detail.flow_nodes.length > 0)) && (
         <div>
           <div className="mb-3 flex items-center gap-1.5 text-[14px] font-medium text-[#1d2129]">
             <span className="text-[16px]">⊙</span>
@@ -1023,6 +1027,7 @@ function RequestDetailPanel({ detail, localize }: { detail: ApprovalInstanceDeta
               const matchedTasks = (detail.tasks || []).filter(
                 (t) => t.node_order === node.node_order || t.node_name === node.node_name
               );
+              const futureApprovers = node.approvers || [];
               const isNotStarted = matchedTasks.length === 0 && !node.task_id;
               // Aggregate node status: rejected > approved > pending > others
               const aggStatus = matchedTasks.length === 0
@@ -1107,7 +1112,7 @@ function RequestDetailPanel({ detail, localize }: { detail: ApprovalInstanceDeta
                     )}
                     {/* Not-started placeholder */}
                     {isNotStarted && (
-                      <div className="mt-0.5 text-[12px] text-[#86909c]">{localize("com_approval_node_not_started")}</div>
+                      <FutureApproverList approvers={futureApprovers} localize={localize} />
                     )}
                     {/* flow_nodes-only entry with no matched tasks */}
                     {!isNotStarted && matchedTasks.length === 0 && (

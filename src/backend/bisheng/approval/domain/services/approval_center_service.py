@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import asyncio
+import logging
 from datetime import datetime
+from types import SimpleNamespace
 
 from bisheng.approval.domain.models.approval_instance import (
     ApprovalActionLog,
@@ -31,6 +34,8 @@ from bisheng.user.domain.services.auth import LoginUser
 
 # Comment recorded on a task auto-approved because its approver is the applicant.
 SELF_APPROVAL_COMMENT = '发起人与审批人为同一人，自动通过'
+
+logger = logging.getLogger(__name__)
 
 
 class _SystemLoginUser:
@@ -105,6 +110,119 @@ class ApprovalCenterService:
         return {'data': data, 'total': len(data)}
 
     @classmethod
+    async def _build_flow_nodes_with_approvers(
+        cls,
+        *,
+        instance: ApprovalInstance,
+        tasks: list[ApprovalTask],
+        task_user_name_map: dict[int, str],
+    ) -> list[dict]:
+        if not instance.flow_version_id:
+            return []
+
+        from bisheng.approval.domain.repositories.approval_scenario_repository import ApprovalScenarioRepository
+        node_defs = await ApprovalScenarioRepository.list_node_definitions(
+            instance.tenant_id, instance.flow_version_id
+        )
+        if not node_defs:
+            return []
+
+        task_approvers_by_node: dict[str, list[int]] = {}
+        for task in tasks:
+            node_key = task.node_code or f'order:{task.node_order}'
+            task_approvers_by_node.setdefault(node_key, []).append(task.approver_user_id)
+
+        resolved_by_node: dict[str, list[int]] = {}
+        future_nodes = []
+        for node in node_defs:
+            node_key = node.node_code or f'order:{node.node_order}'
+            existing_approvers = task_approvers_by_node.get(node_key)
+            if existing_approvers:
+                resolved_by_node[node_key] = list(dict.fromkeys(existing_approvers))
+            else:
+                future_nodes.append(node)
+
+        if future_nodes:
+            from bisheng.approval.domain.services.approval_runtime_handler_factory import build_runtime_handler
+            try:
+                handler = await build_runtime_handler(instance.handler_key or instance.scenario_code)
+            except KeyError:
+                logger.warning(
+                    'approval detail cannot resolve future approvers: unknown handler_key=%s',
+                    instance.handler_key or instance.scenario_code,
+                )
+            else:
+                request = SimpleNamespace(
+                    tenant_id=instance.tenant_id,
+                    applicant_user_id=instance.applicant_user_id,
+                    applicant_user_name=instance.applicant_user_name,
+                    applicant_department_id=instance.applicant_department_id,
+                    payload_snapshot=instance.payload_snapshot or {},
+                    business_resource_id=instance.business_resource_id,
+                    business_resource_type=instance.business_resource_type,
+                    business_key=instance.business_key,
+                    business_name=instance.business_name,
+                    reason=instance.reason,
+                    scenario_code=instance.scenario_code,
+                )
+
+                async def resolve_node_approvers(node) -> tuple[str, list[int]]:
+                    node_key = node.node_code or f'order:{node.node_order}'
+                    try:
+                        approver_ids = await handler.resolve_approvers(
+                            node.approver_config or {}, request
+                        )
+                    except Exception:
+                        # Future-node enrichment must not make the approval detail unavailable.
+                        logger.exception(
+                            'approval detail failed to resolve future approvers: '
+                            'instance_id=%s node_code=%s',
+                            instance.id,
+                            node.node_code,
+                        )
+                        return node_key, []
+                    return node_key, list(dict.fromkeys(int(one) for one in approver_ids))
+
+                resolved_results = await asyncio.gather(
+                    *(resolve_node_approvers(node) for node in future_nodes)
+                )
+                resolved_by_node.update(dict(resolved_results))
+
+        all_approver_ids = list({
+            approver_id
+            for approver_ids in resolved_by_node.values()
+            for approver_id in approver_ids
+        })
+        approver_name_map = dict(task_user_name_map)
+        missing_user_ids = [
+            user_id for user_id in all_approver_ids if user_id not in approver_name_map
+        ]
+        if missing_user_ids:
+            users = await UserDao.aget_user_by_ids(missing_user_ids)
+            approver_name_map.update(
+                {user.user_id: user.user_name for user in (users or [])}
+            )
+
+        return [
+            {
+                'node_code': node.node_code,
+                'node_name': node.node_name,
+                'node_order': node.node_order,
+                'node_mode': node.node_mode,
+                'approvers': [
+                    {
+                        'user_id': user_id,
+                        'user_name': approver_name_map.get(user_id),
+                    }
+                    for user_id in resolved_by_node.get(
+                        node.node_code or f'order:{node.node_order}', []
+                    )
+                ],
+            }
+            for node in node_defs
+        ]
+
+    @classmethod
     async def get_task_detail(cls, *, task_id: int, login_user):
         task = await ApprovalInstanceRepository.get_task(task_id)
         if task is None:
@@ -134,21 +252,11 @@ class ApprovalCenterService:
             task_users = await UserDao.aget_user_by_ids(all_task_uids)
             task_user_name_map = {u.user_id: u.user_name for u in (task_users or [])}
 
-        flow_nodes: list = []
-        if instance.flow_version_id:
-            from bisheng.approval.domain.repositories.approval_scenario_repository import ApprovalScenarioRepository
-            node_defs = await ApprovalScenarioRepository.list_node_definitions(
-                instance.tenant_id, instance.flow_version_id
-            )
-            flow_nodes = [
-                {
-                    'node_code': nd.node_code,
-                    'node_name': nd.node_name,
-                    'node_order': nd.node_order,
-                    'node_mode': nd.node_mode,
-                }
-                for nd in node_defs
-            ]
+        flow_nodes = await cls._build_flow_nodes_with_approvers(
+            instance=instance,
+            tasks=all_tasks,
+            task_user_name_map=task_user_name_map,
+        )
 
         grant_revoked = False
         if instance.scenario_code == 'menu_access_request' and instance.status == 'executed':
@@ -363,23 +471,12 @@ class ApprovalCenterService:
             if pending_names:
                 current_approver_names = '、'.join(pending_names)
 
-        # Fetch full flow node definitions so the frontend can show all nodes,
-        # not just tasks that have already been created.
-        flow_nodes: list = []
-        if instance.flow_version_id:
-            from bisheng.approval.domain.repositories.approval_scenario_repository import ApprovalScenarioRepository
-            node_defs = await ApprovalScenarioRepository.list_node_definitions(
-                instance.tenant_id, instance.flow_version_id
-            )
-            flow_nodes = [
-                {
-                    'node_code': nd.node_code,
-                    'node_name': nd.node_name,
-                    'node_order': nd.node_order,
-                    'node_mode': nd.node_mode,
-                }
-                for nd in node_defs
-            ]
+        # Include all flow nodes and resolve future approvers before their tasks exist.
+        flow_nodes = await cls._build_flow_nodes_with_approvers(
+            instance=instance,
+            tasks=tasks,
+            task_user_name_map=task_user_name_map,
+        )
 
         grant_revoked = (
             instance.scenario_code == 'department_file_view_request'

@@ -1,15 +1,18 @@
-import json
+from __future__ import annotations
+
+import time
 from collections.abc import Iterable
-from datetime import datetime
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from typing import Any, ClassVar
 
+from elasticsearch import exceptions as es_exceptions
 from elasticsearch import helpers
 from loguru import logger
-from pydantic import Field
+from pydantic import BaseModel, Field
 
-from bisheng.common.schemas.telemetry.base_telemetry_schema import UserDepartmentInfo, UserGroupInfo, UserRoleInfo
+from bisheng.common.schemas.telemetry.base_telemetry_schema import UserDepartmentInfo
 from bisheng.core.cache.redis_manager import get_redis_client, get_redis_client_sync
-from bisheng.core.database import get_async_db_session
 from bisheng.knowledge.domain.constants import (
     BUSINESS_DOMAIN_OPTIONS,
     get_business_domain_code_from_file,
@@ -18,10 +21,10 @@ from bisheng.knowledge.domain.constants import (
 )
 from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
-from bisheng.telemetry.domain.mid_table.base import BaseMidTable, BaseRecord
-from bisheng.user.domain.repositories.implementations.user_repository_impl import UserRepositoryImpl
+from bisheng.telemetry.domain.mid_table.base import BaseMidTable
 from bisheng.utils import generate_uuid
 
+CHINA_STANDARD_TIME = timezone(timedelta(hours=8))
 
 SPACE_LEVEL_LABELS = {
     "public": "公共库",
@@ -33,11 +36,13 @@ SPACE_LEVEL_LABELS = {
 }
 
 
-class KnowledgeSpaceContentRecord(BaseRecord):
-    record_type: str
-    sync_run_id: str | None = None
-    tenant_id: int = 1
+class KnowledgeSpaceContentRecord(BaseModel):
+    """Current file projection stored in the dashboard statistics index."""
 
+    es_id: str | None = Field(default=None)
+    record_type: str = "file"
+    sync_run_id: str | None = None
+    timestamp: int
     space_id: int
     space_name: str
     space_level: str = "unknown"
@@ -51,40 +56,136 @@ class KnowledgeSpaceContentRecord(BaseRecord):
     file_subcategory_name: str | None = None
     business_domain_code: str | None = None
     business_domain_name: str | None = None
+    space_department_id: int | None = None
+    space_department_name: str | None = None
     primary_department_id: int | None = None
     primary_department_name: str | None = None
     projection_updated_at: int | None = None
-
     uploader_user_id: int
     uploader_user_name: str
     uploader_department_infos: list[UserDepartmentInfo] = Field(default_factory=list)
 
-    event_id: str | None = None
-    viewer_user_id: int | None = None
-    viewer_user_name: str | None = None
-    action_result: str | None = None
+
+@dataclass(frozen=True)
+class ProjectionWorkItem:
+    member: str
+    enqueued_at_ms: int
+
+    @property
+    def kind(self) -> str:
+        return self.member.partition(":")[0]
+
+    @property
+    def resource_id(self) -> int:
+        return int(self.member.partition(":")[2])
 
 
 class KnowledgeSpaceContentStat(BaseMidTable):
+    INDEX_NAME: ClassVar[str] = "mid_knowledge_space_content_stat"
     _index_name: str = "mid_knowledge_space_content_stat"
     _update_mappings_on_existing: bool = True
-    FILE_PENDING_KEY: ClassVar[str] = "telemetry:knowledge_space_content:file_pending"
-    PREVIEW_PENDING_KEY: ClassVar[str] = "telemetry:knowledge_space_content:preview_pending"
-    SPACE_RENAME_PENDING_KEY: ClassVar[str] = "telemetry:knowledge_space_content:space_rename_pending"
-    SPACE_DELETE_PENDING_KEY: ClassVar[str] = "telemetry:knowledge_space_content:space_delete_pending"
-    SCHEDULED_KEY: ClassVar[str] = "telemetry:knowledge_space_content:scheduled"
-    LOCK_KEY: ClassVar[str] = "telemetry:knowledge_space_content:lock"
+    _include_common_mappings: bool = False
+    _refresh_settings_applied: ClassVar[set[str]] = set()
+
+    REDIS_HASH_TAG: ClassVar[str] = "{knowledge_space_content}"
+    PENDING_KEY: ClassVar[str] = f"telemetry:{REDIS_HASH_TAG}:pending"
+    PROCESSING_KEY: ClassVar[str] = f"telemetry:{REDIS_HASH_TAG}:processing"
+    PROCESSING_META_KEY: ClassVar[str] = f"telemetry:{REDIS_HASH_TAG}:processing_meta"
+    SCHEDULED_KEY: ClassVar[str] = f"telemetry:{REDIS_HASH_TAG}:scheduled"
+    LOCK_KEY: ClassVar[str] = f"telemetry:{REDIS_HASH_TAG}:owner_lock"
+
+    # Exact legacy keys are retained only for rebuild preflight and cleanup reporting.
+    LEGACY_FILE_PENDING_KEY: ClassVar[str] = "telemetry:knowledge_space_content:file_pending"
+    LEGACY_PREVIEW_PENDING_KEY: ClassVar[str] = "telemetry:knowledge_space_content:preview_pending"
+    LEGACY_SPACE_RENAME_PENDING_KEY: ClassVar[str] = "telemetry:knowledge_space_content:space_rename_pending"
+    LEGACY_SPACE_DELETE_PENDING_KEY: ClassVar[str] = "telemetry:knowledge_space_content:space_delete_pending"
+    LEGACY_SCHEDULED_KEY: ClassVar[str] = "telemetry:knowledge_space_content:scheduled"
+    LEGACY_LOCK_KEY: ClassVar[str] = "telemetry:knowledge_space_content:lock"
+
     SCHEDULE_DELAY_SECONDS: ClassVar[int] = 2
     SCHEDULE_TTL_SECONDS: ClassVar[int] = 5
-    LOCK_TTL_SECONDS: ClassVar[int] = 60
+    LOCK_TTL_SECONDS: ClassVar[int] = 300
+    PROCESSING_LEASE_SECONDS: ClassVar[int] = 240
     FILE_BATCH_SIZE: ClassVar[int] = 500
-    PREVIEW_BATCH_SIZE: ClassVar[int] = 500
+
+    CLAIM_SCRIPT: ClassVar[str] = """
+if redis.call('get', KEYS[4]) ~= ARGV[1] then
+  return {}
+end
+local values = redis.call('zrange', KEYS[1], 0, tonumber(ARGV[4]) - 1, 'withscores')
+local claimed = {}
+for index = 1, #values, 2 do
+  local member = values[index]
+  local enqueued_at = values[index + 1]
+  if redis.call('zrem', KEYS[1], member) == 1 then
+    redis.call('zadd', KEYS[2], ARGV[3], member)
+    redis.call('hset', KEYS[3], member, enqueued_at)
+    table.insert(claimed, member)
+    table.insert(claimed, enqueued_at)
+  end
+end
+return claimed
+"""
+    ACK_SCRIPT: ClassVar[str] = """
+if redis.call('get', KEYS[3]) ~= ARGV[1] then
+  return 0
+end
+local removed = 0
+for index = 2, #ARGV do
+  removed = removed + redis.call('zrem', KEYS[1], ARGV[index])
+  redis.call('hdel', KEYS[2], ARGV[index])
+end
+return removed
+"""
+    RENEW_CLAIMS_SCRIPT: ClassVar[str] = """
+if redis.call('get', KEYS[2]) ~= ARGV[1] then
+  return 0
+end
+local renewed = 0
+for index = 3, #ARGV do
+  if redis.call('zscore', KEYS[1], ARGV[index]) then
+    redis.call('zadd', KEYS[1], ARGV[2], ARGV[index])
+    renewed = renewed + 1
+  end
+end
+return renewed
+"""
+    RECLAIM_SCRIPT: ClassVar[str] = """
+local expired = redis.call('zrangebyscore', KEYS[2], '-inf', ARGV[1])
+local reclaimed = 0
+for _, member in ipairs(expired) do
+  local enqueued_at = redis.call('hget', KEYS[3], member) or ARGV[1]
+  redis.call('zadd', KEYS[1], 'NX', enqueued_at, member)
+  redis.call('zrem', KEYS[2], member)
+  redis.call('hdel', KEYS[3], member)
+  reclaimed = reclaimed + 1
+end
+return reclaimed
+"""
+    RENEW_LOCK_SCRIPT: ClassVar[str] = """
+if redis.call('get', KEYS[1]) == ARGV[1] then
+  return redis.call('expire', KEYS[1], ARGV[2])
+end
+return 0
+"""
+    RELEASE_LOCK_SCRIPT: ClassVar[str] = """
+if redis.call('get', KEYS[1]) == ARGV[1] then
+  return redis.call('del', KEYS[1])
+end
+return 0
+"""
+
     _mappings: dict[str, Any] = {
         "record_type": {"type": "keyword"},
         "sync_run_id": {"type": "keyword"},
+        "timestamp": {
+            "type": "date",
+            "format": "strict_date_optional_time||epoch_second",
+        },
+        "local_date": {"type": "keyword"},
+        "preview_count": {"type": "long"},
         "space_id": {"type": "keyword", "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}}},
         "space_name": {"type": "keyword", "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}}},
-        "tenant_id": {"type": "keyword"},
         "space_level": {"type": "keyword"},
         "space_level_name": {
             "type": "keyword",
@@ -108,6 +209,11 @@ class KnowledgeSpaceContentStat(BaseMidTable):
             "type": "keyword",
             "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}},
         },
+        "space_department_id": {"type": "keyword"},
+        "space_department_name": {
+            "type": "keyword",
+            "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}},
+        },
         "primary_department_id": {"type": "keyword"},
         "primary_department_name": {
             "type": "keyword",
@@ -125,26 +231,46 @@ class KnowledgeSpaceContentStat(BaseMidTable):
         "uploader_department_infos": {
             "type": "nested",
             "properties": {
-                "department_id": {
-                    "type": "keyword",
-                    "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}},
-                },
+                "department_id": {"type": "keyword"},
                 "department_name": {
                     "type": "keyword",
                     "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}},
                 },
             },
         },
-        "event_id": {"type": "keyword"},
-        "viewer_user_id": {"type": "keyword"},
-        "viewer_user_name": {"type": "keyword"},
-        "action_result": {"type": "keyword"},
     }
+
+    PREVIEW_DIMENSION_FIELDS: ClassVar[tuple[str, ...]] = (
+        "space_id",
+        "space_name",
+        "space_level",
+        "space_level_name",
+        "file_id",
+        "file_name",
+        "file_type",
+        "file_category_code",
+        "file_category_name",
+        "file_subcategory_code",
+        "file_subcategory_name",
+        "business_domain_code",
+        "business_domain_name",
+        "space_department_id",
+        "space_department_name",
+        "primary_department_id",
+        "primary_department_name",
+        "uploader_user_id",
+        "uploader_user_name",
+        "uploader_department_infos",
+    )
+
+    @staticmethod
+    def _now_ms() -> int:
+        return int(time.time() * 1000)
 
     @staticmethod
     def _normalize_ids(ids: Iterable[int]) -> list[int]:
         normalized: list[int] = []
-        seen = set()
+        seen: set[int] = set()
         for raw_id in ids or []:
             if raw_id is None:
                 continue
@@ -158,111 +284,60 @@ class KnowledgeSpaceContentStat(BaseMidTable):
             normalized.append(item_id)
         return normalized
 
-    @classmethod
-    def _sadd_sync(cls, redis_client, key: str, ids: Iterable[int]) -> None:
-        values = [str(item_id) for item_id in cls._normalize_ids(ids)]
-        if not values:
-            return
-        redis_client.cluster_nodes(key)
-        redis_client.connection.sadd(key, *values)
-
-    @classmethod
-    async def _sadd_async(cls, redis_client, key: str, ids: Iterable[int]) -> None:
-        values = [str(item_id) for item_id in cls._normalize_ids(ids)]
-        if not values:
-            return
-        await redis_client.acluster_nodes(key)
-        await redis_client.async_connection.sadd(key, *values)
-
-    @classmethod
-    async def _sadd_values_async(cls, redis_client, key: str, values: Iterable[str]) -> None:
-        values = [value for value in values if value]
-        if not values:
-            return
-        await redis_client.acluster_nodes(key)
-        await redis_client.async_connection.sadd(key, *values)
-
     @staticmethod
-    def _decode_redis_member(value) -> int | None:
+    def _decode_text(value: Any) -> str | None:
         if value is None:
             return None
-        if isinstance(value, bytes):
-            value = value.decode("utf-8")
-        try:
-            return int(value)
-        except (TypeError, ValueError):
-            return None
+        return value.decode("utf-8") if isinstance(value, bytes) else str(value)
 
     @classmethod
-    def _spop_ids_sync(cls, redis_client, key: str, count: int | None = None) -> list[int]:
-        redis_client.cluster_nodes(key)
-        if count is None:
-            raw_values = redis_client.connection.spop(key)
-        else:
-            raw_values = redis_client.connection.spop(key, count)
-        if raw_values is None:
-            return []
-        if isinstance(raw_values, (bytes, str, int)):
-            raw_values = [raw_values]
-        ids = []
-        for raw_value in raw_values:
-            item_id = cls._decode_redis_member(raw_value)
-            if item_id is not None:
-                ids.append(item_id)
-        return ids
-
-    @staticmethod
-    def _decode_redis_text(value) -> str | None:
-        if value is None:
-            return None
-        if isinstance(value, bytes):
-            return value.decode("utf-8")
-        return str(value)
+    def _work_members(cls, kind: str, ids: Iterable[int]) -> list[str]:
+        return [f"{kind}:{item_id}" for item_id in cls._normalize_ids(ids)]
 
     @classmethod
-    def _srandmember_sync(cls, redis_client, key: str, count: int | None = None) -> list[str]:
-        redis_client.cluster_nodes(key)
-        if count is None:
-            raw_values = redis_client.connection.srandmember(key)
-        else:
-            raw_values = redis_client.connection.srandmember(key, count)
-        if raw_values is None:
-            return []
-        if isinstance(raw_values, (bytes, str, int)):
-            raw_values = [raw_values]
-        values = []
-        for raw_value in raw_values:
-            value = cls._decode_redis_text(raw_value)
-            if value is not None:
-                values.append(value)
-        return values
-
-    @classmethod
-    def _srandmember_ids_sync(cls, redis_client, key: str, count: int | None = None) -> list[int]:
-        ids = []
-        for value in cls._srandmember_sync(redis_client, key, count):
-            item_id = cls._decode_redis_member(value)
-            if item_id is not None:
-                ids.append(item_id)
-        return ids
-
-    @classmethod
-    def _srem_values_sync(cls, redis_client, key: str, values: Iterable[str]) -> None:
-        values = [str(value) for value in values if value is not None]
-        if not values:
+    def _apply_refresh_setting_sync(cls, instance: KnowledgeSpaceContentStat) -> None:
+        if cls.INDEX_NAME in cls._refresh_settings_applied:
             return
-        redis_client.cluster_nodes(key)
-        redis_client.connection.srem(key, *values)
+        instance._es_client_sync.indices.put_settings(
+            index=cls.INDEX_NAME,
+            settings={"index": {"refresh_interval": "1s"}},
+        )
+        cls._refresh_settings_applied.add(cls.INDEX_NAME)
 
     @classmethod
-    def _srem_ids_sync(cls, redis_client, key: str, ids: Iterable[int]) -> None:
-        values = [str(item_id) for item_id in cls._normalize_ids(ids)]
-        cls._srem_values_sync(redis_client, key, values)
+    def reset_index_bootstrap_state(cls) -> None:
+        """Forget process-local index bootstrap caches after an explicit delete."""
+        cls._refresh_settings_applied.discard(cls.INDEX_NAME)
+        cls._mapping_updates_applied.discard(cls.INDEX_NAME)
+
+    async def ensure_index_exists(self) -> None:
+        await super().ensure_index_exists()
+        if self.INDEX_NAME not in self._refresh_settings_applied:
+            await self._es_client.indices.put_settings(
+                index=self.INDEX_NAME,
+                settings={"index": {"refresh_interval": "1s"}},
+            )
+            self._refresh_settings_applied.add(self.INDEX_NAME)
+
+    def ensure_index_exists_sync(self) -> None:
+        super().ensure_index_exists_sync()
+        self._apply_refresh_setting_sync(self)
 
     @classmethod
-    def _scard_sync(cls, redis_client, key: str) -> int:
-        redis_client.cluster_nodes(key)
-        return int(redis_client.connection.scard(key) or 0)
+    def _zadd_pending_sync(cls, redis_client, members: Iterable[str], *, now_ms: int | None = None) -> None:
+        mapping = {member: now_ms or cls._now_ms() for member in members if member}
+        if not mapping:
+            return
+        redis_client.cluster_nodes(cls.PENDING_KEY)
+        redis_client.connection.zadd(cls.PENDING_KEY, mapping, nx=True)
+
+    @classmethod
+    async def _zadd_pending_async(cls, redis_client, members: Iterable[str], *, now_ms: int | None = None) -> None:
+        mapping = {member: now_ms or cls._now_ms() for member in members if member}
+        if not mapping:
+            return
+        await redis_client.acluster_nodes(cls.PENDING_KEY)
+        await redis_client.async_connection.zadd(cls.PENDING_KEY, mapping, nx=True)
 
     @classmethod
     def _schedule_pending_sync(cls, redis_client=None, *, countdown: int = SCHEDULE_DELAY_SECONDS) -> None:
@@ -283,171 +358,244 @@ class KnowledgeSpaceContentStat(BaseMidTable):
         sync_pending_knowledge_space_content_stat.apply_async(countdown=countdown)
 
     @classmethod
-    def enqueue_file_stat_sync(cls, file_ids: Iterable[int]) -> None:
-        ids = cls._normalize_ids(file_ids)
-        if not ids:
-            return
+    def enqueue_file_stat_sync(cls, file_ids: Iterable[int]) -> bool:
+        members = cls._work_members("file", file_ids)
+        if not members:
+            return True
         try:
             redis_client = get_redis_client_sync()
-            cls._sadd_sync(redis_client, cls.FILE_PENDING_KEY, ids)
+            cls._zadd_pending_sync(redis_client, members)
             cls._schedule_pending_sync(redis_client)
+            return True
         except Exception:
-            logger.exception("Failed to enqueue knowledge space content file telemetry sync.")
+            logger.exception(
+                "Knowledge space content projection enqueue failed. degraded=true failure_stage=enqueue operation=file ids={}",
+                file_ids,
+            )
+            return False
 
     @classmethod
-    async def enqueue_file_stat_async(cls, file_ids: Iterable[int]) -> None:
-        ids = cls._normalize_ids(file_ids)
-        if not ids:
-            return
+    async def enqueue_file_stat_async(cls, file_ids: Iterable[int]) -> bool:
+        normalized_ids = cls._normalize_ids(file_ids)
+        members = cls._work_members("file", normalized_ids)
+        if not members:
+            return True
         try:
             redis_client = await get_redis_client()
-            await cls._sadd_async(redis_client, cls.FILE_PENDING_KEY, ids)
+            await cls._zadd_pending_async(redis_client, members)
             await cls._schedule_pending_async(redis_client)
+            return True
         except Exception:
-            logger.exception("Failed to enqueue knowledge space content file telemetry sync.")
+            logger.exception(
+                "Knowledge space content projection enqueue failed. degraded=true failure_stage=enqueue operation=file ids={}",
+                normalized_ids,
+            )
+            return False
 
     @classmethod
-    async def enqueue_preview_record_async(cls, record: KnowledgeSpaceContentRecord) -> None:
-        try:
-            redis_client = await get_redis_client()
-            await cls._sadd_values_async(redis_client, cls.PREVIEW_PENDING_KEY, [cls._serialize_preview_record(record)])
-            await cls._schedule_pending_async(redis_client)
-        except Exception:
-            logger.exception("Failed to enqueue knowledge space content preview telemetry sync.")
-
-    @classmethod
-    async def enqueue_space_rename_stat_async(cls, space_id: int) -> None:
+    async def _enqueue_space_stat_async(cls, space_id: int) -> bool:
         ids = cls._normalize_ids([space_id])
         if not ids:
-            return
+            return True
         try:
             redis_client = await get_redis_client()
-            await cls._sadd_async(redis_client, cls.SPACE_RENAME_PENDING_KEY, ids)
+            await cls._zadd_pending_async(redis_client, cls._work_members("space", ids))
             await cls._schedule_pending_async(redis_client)
+            return True
         except Exception:
-            logger.exception("Failed to enqueue knowledge space content space rename telemetry sync.")
+            logger.exception(
+                "Knowledge space content projection enqueue failed. degraded=true failure_stage=enqueue operation=space ids={}",
+                ids,
+            )
+            return False
 
     @classmethod
-    async def enqueue_space_delete_stat_async(cls, space_id: int) -> None:
-        ids = cls._normalize_ids([space_id])
-        if not ids:
-            return
-        try:
-            redis_client = await get_redis_client()
-            await cls._sadd_async(redis_client, cls.SPACE_DELETE_PENDING_KEY, ids)
-            await cls._schedule_pending_async(redis_client)
-        except Exception:
-            logger.exception("Failed to enqueue knowledge space content space delete telemetry sync.")
+    async def enqueue_space_rename_stat_async(cls, space_id: int) -> bool:
+        return await cls._enqueue_space_stat_async(space_id)
 
     @classmethod
-    def pop_pending_file_ids_sync(cls, batch_size: int = FILE_BATCH_SIZE) -> list[int]:
-        return cls._spop_ids_sync(get_redis_client_sync(), cls.FILE_PENDING_KEY, batch_size)
-
-    @classmethod
-    def peek_pending_file_ids_sync(cls, batch_size: int = FILE_BATCH_SIZE) -> list[int]:
-        return cls._srandmember_ids_sync(get_redis_client_sync(), cls.FILE_PENDING_KEY, batch_size)
-
-    @classmethod
-    def ack_pending_file_ids_sync(cls, file_ids: Iterable[int]) -> None:
-        cls._srem_ids_sync(get_redis_client_sync(), cls.FILE_PENDING_KEY, file_ids)
-
-    @classmethod
-    def peek_pending_preview_payloads_sync(cls, batch_size: int = PREVIEW_BATCH_SIZE) -> list[str]:
-        return cls._srandmember_sync(get_redis_client_sync(), cls.PREVIEW_PENDING_KEY, batch_size)
-
-    @classmethod
-    def ack_pending_preview_payloads_sync(cls, payloads: Iterable[str]) -> None:
-        cls._srem_values_sync(get_redis_client_sync(), cls.PREVIEW_PENDING_KEY, payloads)
-
-    @classmethod
-    def pop_pending_space_rename_ids_sync(cls) -> list[int]:
-        redis_client = get_redis_client_sync()
-        count = cls._scard_sync(redis_client, cls.SPACE_RENAME_PENDING_KEY)
-        return cls._spop_ids_sync(redis_client, cls.SPACE_RENAME_PENDING_KEY, count) if count else []
-
-    @classmethod
-    def peek_pending_space_rename_ids_sync(cls) -> list[int]:
-        redis_client = get_redis_client_sync()
-        count = cls._scard_sync(redis_client, cls.SPACE_RENAME_PENDING_KEY)
-        return cls._srandmember_ids_sync(redis_client, cls.SPACE_RENAME_PENDING_KEY, count) if count else []
-
-    @classmethod
-    def ack_pending_space_rename_ids_sync(cls, space_ids: Iterable[int]) -> None:
-        cls._srem_ids_sync(get_redis_client_sync(), cls.SPACE_RENAME_PENDING_KEY, space_ids)
-
-    @classmethod
-    def pop_pending_space_delete_ids_sync(cls) -> list[int]:
-        redis_client = get_redis_client_sync()
-        count = cls._scard_sync(redis_client, cls.SPACE_DELETE_PENDING_KEY)
-        return cls._spop_ids_sync(redis_client, cls.SPACE_DELETE_PENDING_KEY, count) if count else []
-
-    @classmethod
-    def peek_pending_space_delete_ids_sync(cls) -> list[int]:
-        redis_client = get_redis_client_sync()
-        count = cls._scard_sync(redis_client, cls.SPACE_DELETE_PENDING_KEY)
-        return cls._srandmember_ids_sync(redis_client, cls.SPACE_DELETE_PENDING_KEY, count) if count else []
-
-    @classmethod
-    def ack_pending_space_delete_ids_sync(cls, space_ids: Iterable[int]) -> None:
-        cls._srem_ids_sync(get_redis_client_sync(), cls.SPACE_DELETE_PENDING_KEY, space_ids)
+    async def enqueue_space_delete_stat_async(cls, space_id: int) -> bool:
+        return await cls._enqueue_space_stat_async(space_id)
 
     @classmethod
     def clear_scheduled_sync(cls) -> None:
         try:
             get_redis_client_sync().delete(cls.SCHEDULED_KEY)
         except Exception:
-            logger.exception("Failed to clear knowledge space content telemetry schedule flag.")
+            logger.exception("Failed to clear knowledge space content projection schedule flag.")
 
     @classmethod
-    def acquire_lock_sync(cls) -> bool:
+    def acquire_lock_sync(cls, owner_token: str | None = None) -> str | None:
+        token = owner_token or generate_uuid()
         try:
-            return bool(get_redis_client_sync().setNx(cls.LOCK_KEY, 1, expiration=cls.LOCK_TTL_SECONDS))
+            redis_client = get_redis_client_sync()
+            redis_client.cluster_nodes(cls.LOCK_KEY)
+            acquired = redis_client.connection.set(
+                cls.LOCK_KEY,
+                token,
+                nx=True,
+                ex=cls.LOCK_TTL_SECONDS,
+            )
+            return token if acquired else None
         except Exception:
-            logger.exception("Failed to acquire knowledge space content telemetry sync lock.")
+            logger.exception("Failed to acquire knowledge space content projection owner lock.")
+            return None
+
+    @classmethod
+    def renew_lock_sync(cls, owner_token: str) -> bool:
+        try:
+            redis_client = get_redis_client_sync()
+            redis_client.cluster_nodes(cls.LOCK_KEY)
+            return bool(
+                redis_client.connection.eval(
+                    cls.RENEW_LOCK_SCRIPT,
+                    1,
+                    cls.LOCK_KEY,
+                    owner_token,
+                    cls.LOCK_TTL_SECONDS,
+                )
+            )
+        except Exception:
+            logger.exception("Failed to renew knowledge space content projection owner lock. owner={}", owner_token)
             return False
 
     @classmethod
-    def release_lock_sync(cls) -> None:
+    def release_lock_sync(cls, owner_token: str) -> bool:
         try:
-            get_redis_client_sync().delete(cls.LOCK_KEY)
+            redis_client = get_redis_client_sync()
+            redis_client.cluster_nodes(cls.LOCK_KEY)
+            return bool(
+                redis_client.connection.eval(
+                    cls.RELEASE_LOCK_SCRIPT,
+                    1,
+                    cls.LOCK_KEY,
+                    owner_token,
+                )
+            )
         except Exception:
-            logger.exception("Failed to release knowledge space content telemetry sync lock.")
+            logger.exception("Failed to release knowledge space content projection owner lock. owner={}", owner_token)
+            return False
+
+    @classmethod
+    def claim_pending_sync(
+        cls,
+        owner_token: str,
+        batch_size: int = FILE_BATCH_SIZE,
+        *,
+        now_ms: int | None = None,
+    ) -> list[ProjectionWorkItem]:
+        redis_client = get_redis_client_sync()
+        redis_client.cluster_nodes(cls.PENDING_KEY)
+        claimed_at_ms = now_ms or cls._now_ms()
+        lease_deadline_ms = claimed_at_ms + cls.PROCESSING_LEASE_SECONDS * 1000
+        values = redis_client.connection.eval(
+            cls.CLAIM_SCRIPT,
+            4,
+            cls.PENDING_KEY,
+            cls.PROCESSING_KEY,
+            cls.PROCESSING_META_KEY,
+            cls.LOCK_KEY,
+            owner_token,
+            claimed_at_ms,
+            lease_deadline_ms,
+            min(max(int(batch_size), 1), cls.FILE_BATCH_SIZE),
+        )
+        result: list[ProjectionWorkItem] = []
+        for index in range(0, len(values or []), 2):
+            member = cls._decode_text(values[index])
+            if member is None:
+                continue
+            result.append(ProjectionWorkItem(member=member, enqueued_at_ms=int(float(values[index + 1]))))
+        return result
+
+    @classmethod
+    def renew_claims_sync(
+        cls,
+        owner_token: str,
+        members: Iterable[str],
+        *,
+        now_ms: int | None = None,
+    ) -> bool:
+        values = [member for member in members if member]
+        if not values:
+            return True
+        redis_client = get_redis_client_sync()
+        redis_client.cluster_nodes(cls.PROCESSING_KEY)
+        deadline_ms = (now_ms or cls._now_ms()) + cls.PROCESSING_LEASE_SECONDS * 1000
+        renewed = redis_client.connection.eval(
+            cls.RENEW_CLAIMS_SCRIPT,
+            2,
+            cls.PROCESSING_KEY,
+            cls.LOCK_KEY,
+            owner_token,
+            deadline_ms,
+            *values,
+        )
+        return int(renewed or 0) == len(values)
+
+    @classmethod
+    def ack_claimed_sync(cls, owner_token: str, members: Iterable[str]) -> bool:
+        values = [member for member in members if member]
+        if not values:
+            return True
+        redis_client = get_redis_client_sync()
+        redis_client.cluster_nodes(cls.PROCESSING_KEY)
+        removed = redis_client.connection.eval(
+            cls.ACK_SCRIPT,
+            3,
+            cls.PROCESSING_KEY,
+            cls.PROCESSING_META_KEY,
+            cls.LOCK_KEY,
+            owner_token,
+            *values,
+        )
+        return int(removed or 0) == len(values)
+
+    @classmethod
+    def reclaim_expired_sync(cls, *, now_ms: int | None = None) -> int:
+        redis_client = get_redis_client_sync()
+        redis_client.cluster_nodes(cls.PENDING_KEY)
+        reclaimed = redis_client.connection.eval(
+            cls.RECLAIM_SCRIPT,
+            3,
+            cls.PENDING_KEY,
+            cls.PROCESSING_KEY,
+            cls.PROCESSING_META_KEY,
+            now_ms or cls._now_ms(),
+        )
+        return int(reclaimed or 0)
 
     @classmethod
     def has_pending_sync(cls) -> bool:
         try:
             redis_client = get_redis_client_sync()
-            return any(
-                cls._scard_sync(redis_client, key) > 0
-                for key in (
-                    cls.FILE_PENDING_KEY,
-                    cls.PREVIEW_PENDING_KEY,
-                    cls.SPACE_RENAME_PENDING_KEY,
-                    cls.SPACE_DELETE_PENDING_KEY,
-                )
-            )
+            redis_client.cluster_nodes(cls.PENDING_KEY)
+            return int(redis_client.connection.zcard(cls.PENDING_KEY) or 0) > 0
         except Exception:
-            logger.exception("Failed to inspect knowledge space content telemetry pending sets.")
+            logger.exception("Failed to inspect knowledge space content projection pending queue.")
             return False
+
+    @classmethod
+    def queue_status_sync(cls, *, now_ms: int | None = None) -> dict[str, int]:
+        redis_client = get_redis_client_sync()
+        redis_client.cluster_nodes(cls.PENDING_KEY)
+        pending_count = int(redis_client.connection.zcard(cls.PENDING_KEY) or 0)
+        processing_count = int(redis_client.connection.zcard(cls.PROCESSING_KEY) or 0)
+        oldest = redis_client.connection.zrange(cls.PENDING_KEY, 0, 0, withscores=True)
+        current_ms = now_ms or cls._now_ms()
+        oldest_pending_age_ms = max(0, current_ms - int(oldest[0][1])) if oldest else 0
+        return {
+            "pending_count": pending_count,
+            "processing_count": processing_count,
+            "oldest_pending_age_ms": oldest_pending_age_ms,
+        }
 
     @classmethod
     def schedule_pending_sync_now(cls) -> None:
         try:
             cls._schedule_pending_sync(countdown=0)
         except Exception:
-            logger.exception("Failed to reschedule knowledge space content telemetry sync.")
-
-    @staticmethod
-    def _serialize_preview_record(record: KnowledgeSpaceContentRecord) -> str:
-        return json.dumps(record.model_dump(mode="json"), ensure_ascii=False, sort_keys=True)
-
-    @staticmethod
-    def deserialize_preview_payload(payload: str) -> KnowledgeSpaceContentRecord | None:
-        try:
-            return KnowledgeSpaceContentRecord.model_validate(json.loads(payload))
-        except Exception:
-            logger.exception("Failed to deserialize knowledge space preview telemetry payload.")
-            return None
+            logger.exception("Failed to reschedule knowledge space content projection sync.")
 
     @staticmethod
     def build_file_record(
@@ -456,6 +604,7 @@ class KnowledgeSpaceContentStat(BaseMidTable):
         space: Knowledge,
         uploader=None,
         space_level: str | None = None,
+        space_department=None,
         primary_department=None,
         file_category_labels: dict[str, str] | None = None,
         file_subcategory_labels: dict[str, str] | None = None,
@@ -490,34 +639,15 @@ class KnowledgeSpaceContentStat(BaseMidTable):
             normalized_space_level = "unknown"
 
         file_category_code = get_file_category_code_from_file(file_record)
-        file_subcategory_code = normalize_file_category_code(
-            getattr(file_record, "file_subcategory_code", None)
-        )
+        file_subcategory_code = normalize_file_category_code(getattr(file_record, "file_subcategory_code", None))
         business_domain_code = get_business_domain_code_from_file(file_record)
         file_category_labels = file_category_labels or {}
         file_subcategory_labels = file_subcategory_labels or {}
-        projection_updated_at = int(datetime.now().timestamp())
 
         return KnowledgeSpaceContentRecord(
-            es_id=f"file_{file_record.id}",
+            es_id=str(file_record.id),
             record_type="file",
             sync_run_id=sync_run_id,
-            tenant_id=int(getattr(file_record, "tenant_id", None) or getattr(space, "tenant_id", None) or 1),
-            user_id=uploader_user_id,
-            user_name=uploader_user_name,
-            user_group_infos=[
-                UserGroupInfo(user_group_id=group.id, user_group_name=group.group_name)
-                for group in getattr(uploader, "groups", []) or []
-            ]
-            if uploader
-            else [],
-            user_role_infos=[
-                UserRoleInfo(role_id=role.id, role_name=role.role_name, group_id=role.group_id)
-                for role in getattr(uploader, "roles", []) or []
-            ]
-            if uploader
-            else [],
-            user_department_infos=uploader_departments,
             timestamp=int((file_record.create_time or datetime.now()).timestamp()),
             space_id=int(space.id),
             space_name=space.name,
@@ -529,39 +659,22 @@ class KnowledgeSpaceContentStat(BaseMidTable):
             file_category_code=file_category_code,
             file_category_name=file_category_labels.get(file_category_code, file_category_code),
             file_subcategory_code=file_subcategory_code,
-            file_subcategory_name=file_subcategory_labels.get(
-                file_subcategory_code,
-                file_subcategory_code,
-            ),
+            file_subcategory_name=file_subcategory_labels.get(file_subcategory_code, file_subcategory_code),
             business_domain_code=business_domain_code,
-            business_domain_name=BUSINESS_DOMAIN_OPTIONS.get(
-                business_domain_code,
-                business_domain_code,
+            business_domain_name=BUSINESS_DOMAIN_OPTIONS.get(business_domain_code, business_domain_code),
+            space_department_id=(
+                int(getattr(space_department, "id", None) or getattr(space_department, "department_id", 0)) or None
             ),
+            space_department_name=getattr(space_department, "name", None),
             primary_department_id=(
-                int(getattr(primary_department, "id", None) or getattr(primary_department, "department_id", 0))
-                or None
+                int(getattr(primary_department, "id", None) or getattr(primary_department, "department_id", 0)) or None
             ),
             primary_department_name=getattr(primary_department, "name", None),
-            projection_updated_at=projection_updated_at,
+            projection_updated_at=int(datetime.now().timestamp()),
             uploader_user_id=uploader_user_id,
             uploader_user_name=uploader_user_name,
             uploader_department_infos=uploader_departments,
         )
-
-    @staticmethod
-    async def _get_user_departments(user_id: int | None) -> list[UserDepartmentInfo]:
-        if not user_id:
-            return []
-        async with get_async_db_session() as session:
-            user_repository = UserRepositoryImpl(session)
-            user = await user_repository.get_user_with_groups_and_roles_by_user_id(user_id)
-        if not user:
-            return []
-        return [
-            UserDepartmentInfo(department_id=dept.id, department_name=dept.name)
-            for dept in getattr(user, "departments", []) or []
-        ]
 
     @classmethod
     async def log_preview_success(
@@ -571,37 +684,58 @@ class KnowledgeSpaceContentStat(BaseMidTable):
         space: Knowledge,
         viewer_user_id: int,
         viewer_user_name: str,
+        occurred_at: datetime | None = None,
     ) -> None:
-        event_id = generate_uuid()
-        uploader_user_id = int(file_record.user_id or 0)
-        uploader_user_name = file_record.user_name or str(uploader_user_id or "")
-        record = KnowledgeSpaceContentRecord(
-            es_id=f"preview_{event_id}",
-            record_type="preview",
-            timestamp=int(datetime.now().timestamp()),
-            user_id=int(viewer_user_id or 0),
-            user_name=viewer_user_name or str(viewer_user_id or ""),
-            user_group_infos=[],
-            user_role_infos=[],
-            user_department_infos=[],
-            space_id=int(space.id),
-            space_name=space.name,
-            file_id=int(file_record.id),
-            file_name=file_record.file_name,
-            file_type=int(file_record.file_type),
-            uploader_user_id=uploader_user_id,
-            uploader_user_name=uploader_user_name,
-            uploader_department_infos=await cls._get_user_departments(uploader_user_id),
-            event_id=event_id,
-            viewer_user_id=int(viewer_user_id or 0),
-            viewer_user_name=viewer_user_name or str(viewer_user_id or ""),
-            action_result="success",
-        )
+        del space, viewer_user_id, viewer_user_name
+        file_id = int(file_record.id)
+        mid_table = cls(ensure_sync_index=False)
         try:
-            await cls(ensure_sync_index=False).insert_record(record)
+            await mid_table.ensure_index_exists()
+            snapshot = await mid_table._es_client.get(index=cls.INDEX_NAME, id=str(file_id))
+            source = snapshot.get("_source") or {}
+            if source.get("record_type") != "file":
+                logger.error(
+                    "Knowledge space preview projection skipped. index={} file_id={} failure_stage=snapshot_invalid",
+                    cls.INDEX_NAME,
+                    file_id,
+                )
+                return
+
+            local_time = (occurred_at or datetime.now(CHINA_STANDARD_TIME)).astimezone(CHINA_STANDARD_TIME)
+            local_date = local_time.date().isoformat()
+            day_start = datetime.combine(local_time.date(), datetime.min.time(), tzinfo=CHINA_STANDARD_TIME)
+            upsert = {field: source.get(field) for field in cls.PREVIEW_DIMENSION_FIELDS}
+            upsert.update(
+                {
+                    "record_type": "preview_daily",
+                    "local_date": local_date,
+                    "timestamp": int(day_start.timestamp()),
+                    "preview_count": 1,
+                }
+            )
+            await mid_table._es_client.update(
+                index=cls.INDEX_NAME,
+                id=f"preview_{file_id}_{local_date}",
+                retry_on_conflict=5,
+                script={
+                    "lang": "painless",
+                    "source": "ctx._source.preview_count += params.increment",
+                    "params": {"increment": 1},
+                },
+                upsert=upsert,
+            )
+        except es_exceptions.NotFoundError:
+            logger.error(
+                "Knowledge space preview projection skipped. index={} file_id={} failure_stage=snapshot_missing",
+                cls.INDEX_NAME,
+                file_id,
+            )
         except Exception:
-            logger.exception("Failed to write knowledge space preview telemetry, enqueueing retry.")
-            await cls.enqueue_preview_record_async(record)
+            logger.exception(
+                "Knowledge space preview projection failed. index={} file_id={} failure_stage=preview_update",
+                cls.INDEX_NAME,
+                file_id,
+            )
 
     def delete_file_records_sync(self, file_ids: Iterable[int]) -> int:
         ids = self._normalize_ids(file_ids)
@@ -612,13 +746,12 @@ class KnowledgeSpaceContentStat(BaseMidTable):
             {
                 "_op_type": "delete",
                 "_index": self._index_name,
-                "_id": f"file_{file_id}",
+                "_id": str(file_id),
             }
             for file_id in ids
         ]
         success, errors = helpers.bulk(self._es_client_sync, actions, raise_on_error=False)
-        # 404 on delete means the document was already absent — treat as success
-        real_errors = [e for e in errors if e.get("delete", {}).get("status") != 404]
+        real_errors = [error for error in errors if error.get("delete", {}).get("status") != 404]
         if real_errors:
             raise RuntimeError(f"Failed to delete {len(real_errors)} knowledge space content file telemetry records.")
         return int(success or 0)

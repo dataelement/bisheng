@@ -205,6 +205,11 @@ class CeleryConf(BaseModel):
                 "task": "bisheng.worker.telemetry.mid_table.sync_mid_knowledge_space_content_stat",
                 "schedule": crontab.from_string("30 0 * * *"),  # 00:30 exec every day
             }
+        if "telemetry_recover_knowledge_space_content_stat_leases" not in self.beat_schedule:
+            self.beat_schedule["telemetry_recover_knowledge_space_content_stat_leases"] = {
+                "task": "bisheng.worker.telemetry.mid_table.recover_knowledge_space_content_stat_leases",
+                "schedule": crontab.from_string("* * * * *"),
+            }
         if "telemetry_sync_mid_user_daily_participation_fact" not in self.beat_schedule:
             self.beat_schedule["telemetry_sync_mid_user_daily_participation_fact"] = {
                 "task": (
@@ -285,6 +290,14 @@ class CeleryConf(BaseModel):
                 "task": (
                     "bisheng.worker.knowledge.document_projection."
                     "fanout_document_projection_scan"
+                ),
+                "schedule": 60.0,
+            }
+        if "reconcile_knowledge_migrations" not in self.beat_schedule:
+            self.beat_schedule["reconcile_knowledge_migrations"] = {
+                "task": (
+                    "bisheng.worker.knowledge.file_migration."
+                    "reconcile"
                 ),
                 "schedule": 60.0,
             }

@@ -7,34 +7,35 @@ Expert QA Services - 业务逻辑层
 - 互动流程：评论、投票、通知
 """
 
-from typing import Optional, List
 from datetime import datetime
-from sqlalchemy.ext.asyncio import AsyncSession
+
 from loguru import logger
 
-from bisheng.database.models.qa_expert import Expert, Question, Answer, Comment, QANotification
-from bisheng.tenant.domain.services.inbox_helper import send_inbox_notice
+from bisheng.common.errcode.base import BaseErrorCode
+from bisheng.core.database import get_async_db_session
+from bisheng.database.models.department import DepartmentDao
+from bisheng.database.models.qa_expert import Answer, Comment, Expert, QANotification, Question
+from bisheng.dictionary.domain.repositories.implementations.system_dictionary_repository_impl import (
+    SystemDictionaryRepositoryImpl,
+)
+from bisheng.qa_expert.domain.repositories import (
+    AnswerRepository,
+    CommentRepository,
+    ExpertRepository,
+    NotificationRepository,
+    QAExpertStatsRepository,
+    QuestionRepository,
+    VoteRepository,
+)
 from bisheng.qa_expert.domain.rich_text import question_description_to_plain_text
 from bisheng.qa_expert.domain.schemas import (
+    AnswerCreateRequest,
+    CommentCreateRequest,
     ExpertCreateRequest,
     ExpertUpdateRequest,
     QuestionCreateRequest,
-    AnswerCreateRequest,
-    CommentCreateRequest,
-    AdoptAnswerRequest,
     QuestionUpdateRequest,
 )
-from bisheng.qa_expert.domain.repositories import (
-    ExpertRepository,
-    QuestionRepository,
-    AnswerRepository,
-    CommentRepository,
-    VoteRepository,
-    NotificationRepository,
-    QAExpertStatsRepository,
-)
-from bisheng.common.errcode.base import BaseErrorCode
-from bisheng.database.models.department import DepartmentDao
 from bisheng.telemetry.domain.mid_table.realtime_qa_question import (
     RealtimeQaQuestionFact,
 )
@@ -96,7 +97,7 @@ class ExpertService:
         self.repository = ExpertRepository()
 
     @staticmethod
-    async def _sync_wechat_user_id(user_id: Optional[int], wechat_user_id: Optional[str]) -> None:
+    async def _sync_wechat_user_id(user_id: int | None, wechat_user_id: str | None) -> None:
         """将企业微信用户ID同步到关联的user表。"""
         if user_id is None:
             return
@@ -158,20 +159,20 @@ class ExpertService:
 
     async def list_experts(
         self,
-        keyword: Optional[str] = None,
-        department_id: Optional[str] = None,
-        job_family: Optional[str] = None,
-        job_category: Optional[str] = None,
-        position: Optional[str] = None,
-        major: Optional[str] = None,
+        keyword: str | None = None,
+        department_id: str | None = None,
+        job_family: str | None = None,
+        job_category: str | None = None,
+        position: str | None = None,
+        major: str | None = None,
         sort_by: str = "created_at",
         sort_order: str = "desc",
         skip: int = 0,
         limit: int = 20,
-        answer_desc: Optional[bool] = None,
-        adoption_desc: Optional[bool] = None,
-        vote_desc: Optional[bool] = None,
-    ) -> tuple[List[dict], int]:
+        answer_desc: bool | None = None,
+        adoption_desc: bool | None = None,
+        vote_desc: bool | None = None,
+    ) -> tuple[list[dict], int]:
         """列表查询专家"""
         sort_by_department = sort_by == "department"
         experts, total = await self.repository.list_all(
@@ -223,17 +224,61 @@ class ExpertService:
             ),
             key=lambda item: (str(item["name"]).casefold(), str(item["id"])),
         )
-        return {
-            "departments": department_options,
-            "job_families": options.get("job_families", []),
-            "job_categories": options.get("job_categories", []),
-            "positions": options.get("positions", []),
-            "majors": options.get("majors", []),
+        # 职业维度字段对应系统字典表中的 type code
+        field_to_type = {
+            "job_families": "expert_job_family",
+            "job_categories": "expert_job_category",
+            "positions": "expert_position",
+            "majors": "expert_major",
         }
 
-    async def _build_expert_rows(self, experts: List[Expert]) -> List[dict]:
+        async def _build_dict_options(keys: list[str], dict_type: str) -> list[dict[str, str]]:
+            """将字典键列表转换为 dict_key / dict_value 键值对列表。"""
+            if not keys:
+                return []
+            async with get_async_db_session() as session:
+                dict_repository = SystemDictionaryRepositoryImpl(session)
+                dict_items = await dict_repository.find_all_for_export(dict_type=dict_type, is_enabled=True)
+            key_to_value = {item.dict_key: item.dict_value for item in dict_items}
+            return [{"dict_key": key, "dict_value": key_to_value.get(key, key)} for key in keys]
+
+        return {
+            "departments": department_options,
+            "job_families": await _build_dict_options(options.get("job_families", []), field_to_type["job_families"]),
+            "job_categories": await _build_dict_options(
+                options.get("job_categories", []), field_to_type["job_categories"]
+            ),
+            "positions": await _build_dict_options(options.get("positions", []), field_to_type["positions"]),
+            "majors": await _build_dict_options(options.get("majors", []), field_to_type["majors"]),
+        }
+
+    async def _build_dict_key_maps(self, keys_by_field: dict[str, set[str]]) -> dict[str, dict[str, str]]:
+        """查询系统字典表,按字段构建 dict_key -> dict_value 映射。"""
+        field_to_type = {
+            "job_family": "expert_job_family",
+            "job_category": "expert_job_category",
+            "position": "expert_position",
+            "major": "expert_major",
+        }
+        result: dict[str, dict[str, str]] = {}
+        async with get_async_db_session() as session:
+            dict_repository = SystemDictionaryRepositoryImpl(session)
+            for field, keys in keys_by_field.items():
+                dict_type = field_to_type.get(field)
+                if not dict_type or not keys:
+                    result[field] = {}
+                    continue
+                dict_items = await dict_repository.find_all_for_export(dict_type=dict_type, is_enabled=True)
+                result[field] = {item.dict_key: item.dict_value for item in dict_items}
+        return result
+
+    async def _build_expert_rows(self, experts: list[Expert]) -> list[dict]:
         department_ids: set[int] = set()
         user_ids: list[int] = []
+        job_family_keys: set[str] = set()
+        job_category_keys: set[str] = set()
+        position_keys: set[str] = set()
+        major_keys: set[str] = set()
         for expert in experts:
             try:
                 if expert.depart_ment:
@@ -242,6 +287,14 @@ class ExpertService:
                 pass
             if expert.user_id:
                 user_ids.append(expert.user_id)
+            if expert.job_family:
+                job_family_keys.add(expert.job_family)
+            if expert.job_category:
+                job_category_keys.add(expert.job_category)
+            if expert.position:
+                position_keys.add(expert.position)
+            if expert.major:
+                major_keys.add(expert.major)
 
         departments = await DepartmentDao.aget_by_ids(sorted(department_ids))
         department_names = {
@@ -250,6 +303,15 @@ class ExpertService:
 
         users = await UserDao.aget_user_by_ids(list(set(user_ids))) or []
         wechat_user_ids = {user.user_id: user.wechat_user_id for user in users if user.user_id is not None}
+
+        dict_key_maps = await self._build_dict_key_maps(
+            {
+                "job_family": job_family_keys,
+                "job_category": job_category_keys,
+                "position": position_keys,
+                "major": major_keys,
+            }
+        )
 
         experts_all = []
         for expert in experts:
@@ -260,6 +322,10 @@ class ExpertService:
             except (TypeError, ValueError):
                 department_id = None
             expert_dict["depart_ment"] = department_names.get(department_id)
+            expert_dict["job_family"] = dict_key_maps["job_family"].get(expert.job_family, expert.job_family)
+            expert_dict["job_category"] = dict_key_maps["job_category"].get(expert.job_category, expert.job_category)
+            expert_dict["position"] = dict_key_maps["position"].get(expert.position, expert.position)
+            expert_dict["major"] = dict_key_maps["major"].get(expert.major, expert.major)
             expert_dict["expert_score"] = (
                 int(expert.answer_count or 0) + int(expert.adoption_count or 0) * 5 + int(expert.vote_count or 0) * 2
             )
@@ -271,7 +337,7 @@ class ExpertService:
         """删除专家"""
         return await self.repository.delete(expert_id)
 
-    async def get_expertinfo(self, expert_name: str) -> Optional[Expert]:
+    async def get_expertinfo(self, expert_name: str) -> Expert | None:
         """获取专家信息"""
         expert = await self.repository.get_expertinfo(expert_name)
         if expert:
@@ -347,13 +413,13 @@ class QuestionService:
 
     async def list_questions(
         self,
-        business_domain: Optional[str] = None,
-        status: Optional[int] = 0,
+        business_domain: str | None = None,
+        status: int | None = 0,
         sort_by: str = "latest",
-        user_id: Optional[int] = None,
+        user_id: int | None = None,
         skip: int = 0,
         limit: int = 20,
-    ) -> tuple[List[Question], int]:
+    ) -> tuple[list[Question], int]:
         """列表查询问题"""
         expert_id = None
         if status == 4:
@@ -378,7 +444,7 @@ class QuestionService:
                 question.vote_count = vote_count
         return questions, total
 
-    async def get_question_detail(self, question_id: int, user_id: Optional[int] = None) -> Question:
+    async def get_question_detail(self, question_id: int, user_id: int | None = None) -> Question:
         """获取问题详情"""
         question = await self.repository.get_by_id(question_id)
         if not question:
@@ -423,7 +489,7 @@ class QuestionService:
         logger.info(f"Answer {answer_id} adopted for question {question_id}")
         return question
 
-    async def get_business_domains(self) -> List[str]:
+    async def get_business_domains(self) -> list[str]:
         """获取所有业务域"""
         # 修复了原代码中的错误引用 (self -> self.repository)
         return await self.repository.get_business_domains()
@@ -436,7 +502,7 @@ class QuestionService:
         self,
         question_id: int,
         sender_id: int,
-        expert_ids: List[int],
+        expert_ids: list[int],
     ):
         """发送邀请通知给专家"""
         for expert_id in expert_ids:
@@ -445,7 +511,7 @@ class QuestionService:
                 sender_id=sender_id,
                 notification_type="invited",
                 question_id=question_id,
-                content=f"You are invited to answer a question",
+                content="You are invited to answer a question",
                 # tenant_id=tenant_id
             )
             await self.notification_repo.create(notification)
@@ -665,8 +731,8 @@ class AnswerService:
         return answer
 
     async def get_answers(
-        self, question_id: int, skip: int = 0, limit: int = 100, sort_by: Optional[str] = None
-    ) -> tuple[List[Answer], int]:
+        self, question_id: int, skip: int = 0, limit: int = 100, sort_by: str | None = None
+    ) -> tuple[list[Answer], int]:
         """获取问题的回答列表"""
         return await self.repository.get_by_question_id(question_id, skip=skip, limit=limit, sort_by=sort_by)
 
@@ -674,7 +740,7 @@ class AnswerService:
         self,
         expert_name: str,
         question_id: int,
-    ) -> Optional[Answer]:
+    ) -> Answer | None:
         """获取问题的回答列表"""
         return await self.repository.get_by_expertname(expert_name, question_id)
 
@@ -682,9 +748,9 @@ class AnswerService:
         self,
         answer_id: int,
         operator_id: int,
-        content: Optional[str] = None,
-        attachments: Optional[List[str]] = None,
-        related_docs: Optional[List[int]] = None,
+        content: str | None = None,
+        attachments: list[str] | None = None,
+        related_docs: list[int] | None = None,
     ) -> Answer:
         """更新回答"""
         answer = await self.repository.get_by_id(answer_id)
@@ -829,8 +895,8 @@ class CommentService:
         return comment
 
     async def get_comments(
-        self, answer_id: Optional[int] = None, question_id: Optional[int] = None, skip: int = 0, limit: int = 100
-    ) -> tuple[List[Comment], int]:
+        self, answer_id: int | None = None, question_id: int | None = None, skip: int = 0, limit: int = 100
+    ) -> tuple[list[Comment], int]:
         """获取回答的评论"""
         return await self.repository.get_by_answer_id(answer_id, question_id=question_id, skip=skip, limit=limit)
 

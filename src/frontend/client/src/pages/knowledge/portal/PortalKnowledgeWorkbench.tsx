@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type DragEvent, type SetStateAction } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { Loader2 } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { useRecoilValue } from "recoil";
 import {
@@ -17,6 +18,7 @@ import {
     deleteSpaceApi,
     downloadWatermarkedKnowledgeFileApi,
     getFilePreviewApi,
+    getPortalFilePreviewApi,
     getPublicSpaceFilePermissionsApi,
     getSpaceChildrenApi,
     getSpaceFolderStatsApi,
@@ -71,6 +73,7 @@ import {
     isFolder,
     isPreviewable,
     isRetryable,
+    mergeRootTreeNodesPreservingLoadedFolders,
     normalizePortalFileCategoryGroups,
     normalizePortalFileCategoryOptions,
     resolvePreviewUrl,
@@ -91,7 +94,7 @@ import { PortalUploadedFilesDrawer } from "./components/PortalUploadedFilesDrawe
 import { SpaceSidebar } from "./components/SpaceSidebar";
 import { usePortalApprovalBridge } from "./hooks/usePortalApprovalBridge";
 import { resolvePortalDeepLinkTarget, usePortalDeepLink } from "./hooks/usePortalDeepLink";
-import { usePortalSpaces } from "./hooks/usePortalSpaces";
+import { getSpacesLevelQueryKey, usePortalSpaces } from "./hooks/usePortalSpaces";
 import { usePortalUploadDialog } from "./hooks/usePortalUploadDialog";
 import {
     BUSINESS_DOMAIN_OPTIONS,
@@ -223,7 +226,7 @@ export default function PortalKnowledgeWorkbench() {
     const confirm = useConfirm();
     const queryClient = useQueryClient();
     const currentUser = useRecoilValue(store.user);
-    const [searchParams] = useSearchParams();
+    const [searchParams, setSearchParams] = useSearchParams();
     const portalDeepLinkTarget = useMemo(
         () => resolvePortalDeepLinkTarget(searchParams),
         [searchParams],
@@ -277,6 +280,8 @@ export default function PortalKnowledgeWorkbench() {
     const [treeRootLoadingMore, setTreeRootLoadingMore] = useState(false);
     const [searchMode, setSearchMode] = useState(false);
     const [searchResults, setSearchResults] = useState<KnowledgeFile[]>([]);
+    const searchModeRef = useRef(searchMode);
+    searchModeRef.current = searchMode;
     const [searchTagIds, setSearchTagIds] = useState<number[]>([]);
     const [searchLoading, setSearchLoading] = useState(false);
     const [statusFilter, setStatusFilter] = useState<FileStatus[]>([]);
@@ -318,6 +323,13 @@ export default function PortalKnowledgeWorkbench() {
     const lastPortalLocationKeyRef = useRef("");
     const isDeepLinkRestoring = Boolean(
         portalDeepLinkTarget && restoringDeepLinkKey === portalDeepLinkTarget.key,
+    );
+    const selectedFileUsesPortalContentGate = Boolean(
+        activeSpace
+        && selectedFile
+        && getPortalSpaceLevel(activeSpace) === SpaceLevel.DEPARTMENT
+        && portalDeepLinkTarget?.spaceId === String(activeSpace.id)
+        && portalDeepLinkTarget.fileId === String(selectedFile.id)
     );
 
     useEffect(() => {
@@ -362,11 +374,19 @@ export default function PortalKnowledgeWorkbench() {
 
     useEffect(() => {
         if (!portalDeepLinkTarget || restoringDeepLinkKey !== portalDeepLinkTarget.key) return;
+        const targetSpaceExists = selectableSpaces.some(
+            (space) => String(space.id) === portalDeepLinkTarget.spaceId,
+        );
+
         if (!activeSpace && !spaceLoading) {
-            setRestoringDeepLinkKey(null);
+            // Spaces finished loading with no active space — only fail if the target is missing.
+            if (!targetSpaceExists) setRestoringDeepLinkKey(null);
             return;
         }
         if (activeSpace && String(activeSpace.id) !== portalDeepLinkTarget.spaceId && !spaceLoading) {
+            // Target space is available: keep overlay while setActiveSpace catches up.
+            // Clearing here used to flash the previous/current space file list before the file opened.
+            if (targetSpaceExists) return;
             setRestoringDeepLinkKey(null);
             return;
         }
@@ -382,7 +402,23 @@ export default function PortalKnowledgeWorkbench() {
         activeSpace,
         portalDeepLinkTarget,
         restoringDeepLinkKey,
+        selectableSpaces,
         spaceLoading,
+    ]);
+
+    // File deep links: keep 「加载中」until the preview request settles (not when the tree loads).
+    useEffect(() => {
+        if (!portalDeepLinkTarget?.fileId || restoringDeepLinkKey !== portalDeepLinkTarget.key) return;
+        if (!selectedFile || String(selectedFile.id) !== portalDeepLinkTarget.fileId) return;
+        if (preview.loading) return;
+        setRestoringDeepLinkKey(null);
+    }, [
+        portalDeepLinkTarget,
+        preview.error,
+        preview.fileUrl,
+        preview.loading,
+        restoringDeepLinkKey,
+        selectedFile,
     ]);
 
     useEffect(() => {
@@ -559,7 +595,10 @@ export default function PortalKnowledgeWorkbench() {
             if (activeSpace?.id === space.id) {
                 setActiveSpace(getNextActiveSpace(space.id));
             }
-            await queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
+            // Only refresh the current category list — other levels are unchanged.
+            await queryClient.invalidateQueries({
+                queryKey: getSpacesLevelQueryKey(space.spaceLevel),
+            });
             showToast({ message: "知识库已删除", severity: NotificationSeverity.SUCCESS });
         } catch (error) {
             showToast({
@@ -601,7 +640,18 @@ export default function PortalKnowledgeWorkbench() {
     );
     useEffect(() => {
         if (!activeSpace?.id) return;
-        if (isDeepLinkRestoring) return;
+        // Allow reporting the opened file while restore overlay is still up, so the portal
+        // parent can dismiss its own open-file loading mask.
+        if (
+            isDeepLinkRestoring
+            && !(
+                portalDeepLinkTarget?.fileId
+                && selectedFile
+                && String(selectedFile.id) === portalDeepLinkTarget.fileId
+            )
+        ) {
+            return;
+        }
         if (currentFolderId && !currentFolderNode) return;
         if (
             currentFolderNode?.file.spaceId
@@ -631,6 +681,7 @@ export default function PortalKnowledgeWorkbench() {
         currentFolderId,
         currentFolderNode,
         isDeepLinkRestoring,
+        portalDeepLinkTarget?.fileId,
         selectedFile?.id,
         selectedFile?.name,
         selectedFile?.spaceId,
@@ -789,11 +840,14 @@ export default function PortalKnowledgeWorkbench() {
         const parentFolderId = resolveFileParentFolderId(file);
         const objectType = parentFolderId ? "folder" : "knowledge_space";
         const objectId = parentFolderId || activeSpace.id;
+        const uploadPermissionId = parentFolderId
+            ? "upload_file_to_folder"
+            : "upload_file_to_space";
         checkPermission(
             objectType,
             objectId,
             "can_edit",
-            "upload_file",
+            uploadPermissionId,
             { signal: controller.signal },
         ).then((result) => {
             if (!cancelled) {
@@ -852,6 +906,18 @@ export default function PortalKnowledgeWorkbench() {
             };
         }));
     }, [currentFolderId, setRootFiles]);
+
+    /** Keep search results in sync when tags/metadata are patched in place during search mode. */
+    const setDisplayFiles = useCallback<Dispatch<SetStateAction<KnowledgeFile[]>>>((value) => {
+        setCurrentFolderFiles(value);
+        if (searchModeRef.current) {
+            setSearchResults((prev) => (
+                typeof value === "function"
+                    ? (value as (prev: KnowledgeFile[]) => KnowledgeFile[])(prev)
+                    : value
+            ));
+        }
+    }, [setCurrentFolderFiles]);
 
     const setCurrentFileListTotal = useCallback<Dispatch<SetStateAction<number>>>((value) => {
         const folderId = currentFolderId;
@@ -994,13 +1060,12 @@ export default function PortalKnowledgeWorkbench() {
                 if (append) {
                     return dedupeTreeNodesByFileId([...prev, ...nextFiles.map(createTreeNode)]);
                 }
-                const nextNodes = dedupeFilesById(nextFiles).map(createTreeNode);
-                const folderId = currentFolderIdRef.current;
-                const currentFolderNode = folderId ? findTreeNode(prev, folderId) : null;
-                if (folderId && currentFolderNode && !findTreeNode(nextNodes, folderId)) {
-                    return dedupeTreeNodesByFileId([currentFolderNode, ...nextNodes]);
-                }
-                return nextNodes;
+                // Deep-link folder navigate can finish before this root refresh; keep loaded children.
+                return mergeRootTreeNodesPreservingLoadedFolders(
+                    prev,
+                    nextFiles,
+                    currentFolderIdRef.current,
+                );
             });
             setTreeRootPage(page);
             setTreeRootTotal((prev) => (res as any).total ?? (append ? prev + nextFiles.length : nextFiles.length));
@@ -1234,7 +1299,9 @@ export default function PortalKnowledgeWorkbench() {
                 containerType === "folder" ? "folder" : "knowledge_space",
                 containerId,
                 "can_edit",
-                "upload_file",
+                containerType === "folder"
+                    ? "upload_file_to_folder"
+                    : "upload_file_to_space",
                 { signal: controller.signal },
             ).catch(() => ({ allowed: false }));
             return [key, Boolean(result?.allowed)] as const;
@@ -1328,11 +1395,39 @@ export default function PortalKnowledgeWorkbench() {
             } else if (type === "shougang-portal:open-document-chat") {
                 setActivePanel(null);
                 setAiDrawerOpen(true);
+            } else if (type === "shougang-portal:open-knowledge-file") {
+                // Parent keeps iframe.src stable and asks us to open a file via Client
+                // search params so usePortalDeepLink can reuse the existing restore path.
+                const spaceId = String(event.data?.spaceId ?? "").trim();
+                const fileId = String(event.data?.fileId ?? "").trim();
+                if (!spaceId || !fileId) return;
+                const fileName = String(event.data?.fileName ?? "").trim();
+                const folderId = String(event.data?.folderId ?? "").trim();
+                const folderName = String(event.data?.folderName ?? "").trim();
+                const openNonce = String(event.data?.openNonce ?? "").trim() || String(Date.now());
+                setSearchParams((prev) => {
+                    const next = new URLSearchParams(prev);
+                    next.set("spaceId", spaceId);
+                    next.set("fileId", fileId);
+                    if (fileName) next.set("fileName", fileName);
+                    else next.delete("fileName");
+                    if (folderId) {
+                        next.set("folderId", folderId);
+                        if (folderName) next.set("folderName", folderName);
+                        else next.delete("folderName");
+                    } else {
+                        next.delete("folderId");
+                        next.delete("folderName");
+                    }
+                    // Prefer parent-provided nonce so retry bursts share one restore key.
+                    next.set("openNonce", openNonce);
+                    return next;
+                }, { replace: true });
             }
         };
         window.addEventListener("message", handlePortalMessage);
         return () => window.removeEventListener("message", handlePortalMessage);
-    }, []);
+    }, [setSearchParams]);
 
     const {
         uploadInputRef,
@@ -1410,16 +1505,26 @@ export default function PortalKnowledgeWorkbench() {
             return;
         }
 
-        setSelectedFile(null);
+        // Prefer deep-link target over restoringDeepLinkKey: clearing the key after preview
+        // settles must not re-run this effect and wipe the file we just opened.
+        const openingDeepLinkedFileHere = Boolean(
+            portalDeepLinkTarget?.fileId
+            && String(activeSpace.id) === portalDeepLinkTarget.spaceId,
+        );
+
+        // While a deep-linked file open targets this space, do not wipe selection/search.
+        if (!openingDeepLinkedFileHere) {
+            setSelectedFile(null);
+            setSearchText("");
+            setSearchMode(false);
+            setSearchResults([]);
+            setSearchTagIds([]);
+            setSelectedFileIds(new Set());
+            setSelectedFolderIds(new Set());
+        }
         setActivePanel(null);
         setAiDrawerOpen(false);
         setSummaryExpanded(false);
-        setSearchText("");
-        setSearchMode(false);
-        setSearchResults([]);
-        setSearchTagIds([]);
-        setSelectedFileIds(new Set());
-        setSelectedFolderIds(new Set());
 
         const spaceChanged = String(activeSpace.id) !== previousSpaceIdRef.current;
         if (spaceChanged) {
@@ -1428,11 +1533,13 @@ export default function PortalKnowledgeWorkbench() {
             setTreeRootTotal(0);
             setTreeRootHasMore(false);
             setTreeRootNextCursor(null);
-            setCurrentFolderId(undefined);
+            if (!openingDeepLinkedFileHere) {
+                setCurrentFolderId(undefined);
+            }
             setCanCreateFolder(false);
             setCanUploadFile(false);
             void loadRootTreeRef.current(1, false, activeSpace.id);
-        } else {
+        } else if (!openingDeepLinkedFileHere) {
             // Sort/filter changed: keep the current folder and reload the same view
             // with the new ordering/filter instead of jumping back to the root.
             void reloadFilesRef.current();
@@ -1443,10 +1550,29 @@ export default function PortalKnowledgeWorkbench() {
         // above): they change for unrelated reasons such as showToast being recreated
         // after a toast, which previously triggered spurious full reloads.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [activeSpace?.id, sortBy, sortDirection, statusFilterNumbers]);
+    }, [
+        activeSpace?.id,
+        portalDeepLinkTarget?.fileId,
+        portalDeepLinkTarget?.spaceId,
+        sortBy,
+        sortDirection,
+        statusFilterNumbers,
+    ]);
 
     useEffect(() => {
         if (!selectedFile) return;
+        // Deep-link restore may select a file before search results / tree rows catch up;
+        // clearing here races with usePortalDeepLink and drops the preview.
+        if (isDeepLinkRestoring) return;
+        // Tag-review deep link opens preview before folder children land in displayedFiles.
+        // Clearing here "suddenly" drops the user onto an empty folder path.
+        if (
+            portalDeepLinkTarget?.fileId
+            && String(selectedFile.id) === portalDeepLinkTarget.fileId
+            && String(activeSpace?.id) === portalDeepLinkTarget.spaceId
+        ) {
+            return;
+        }
         // #4 收藏原地预览：selectedFile 是来自其它源空间的合成文件（不属于当前 activeSpace，
         // 自然不在其 displayedFiles 中），不应被此“列表中已不存在则关闭预览”的守卫清空。
         if (selectedFile.spaceId && selectedFile.spaceId !== activeSpace?.id) return;
@@ -1454,7 +1580,14 @@ export default function PortalKnowledgeWorkbench() {
         if (!exists) {
             setSelectedFile(null);
         }
-    }, [displayedFiles, selectedFile, activeSpace?.id]);
+    }, [
+        displayedFiles,
+        selectedFile,
+        activeSpace?.id,
+        isDeepLinkRestoring,
+        portalDeepLinkTarget?.fileId,
+        portalDeepLinkTarget?.spaceId,
+    ]);
 
     useEffect(() => {
         if (!permissionTarget) return;
@@ -1491,11 +1624,14 @@ export default function PortalKnowledgeWorkbench() {
         const targetFolderId = currentFolderId;
         const objectType = targetFolderId ? "folder" : "knowledge_space";
         const objectId = targetFolderId || spaceId;
+        const uploadPermissionId = targetFolderId
+            ? "upload_file_to_folder"
+            : "upload_file_to_space";
         let cancelled = false;
         const controller = new AbortController();
         Promise.allSettled([
             checkPermission(objectType, objectId, "can_edit", "create_folder", { signal: controller.signal }),
-            checkPermission(objectType, objectId, "can_edit", "upload_file", { signal: controller.signal }),
+            checkPermission(objectType, objectId, "can_edit", uploadPermissionId, { signal: controller.signal }),
         ]).then(([createFolderResult, uploadFileResult]) => {
             if (cancelled || activeSpace?.id !== spaceId || currentFolderId !== targetFolderId) return;
             setCanCreateFolder(createFolderResult.status === "fulfilled" && Boolean(createFolderResult.value?.allowed));
@@ -1671,7 +1807,10 @@ export default function PortalKnowledgeWorkbench() {
             previewData: null,
         });
 
-        getFilePreviewApi(
+        const loadPreview = selectedFileUsesPortalContentGate
+            ? getPortalFilePreviewApi
+            : getFilePreviewApi;
+        loadPreview(
             selectedFile.spaceId || activeSpace.id,
             selectedFile.id,
         )
@@ -1723,7 +1862,7 @@ export default function PortalKnowledgeWorkbench() {
         return () => {
             cancelled = true;
         };
-    }, [activeSpace, selectedFile]);
+    }, [activeSpace, selectedFile, selectedFileUsesPortalContentGate]);
 
     const showUnavailable = useCallback(() => {
         showToast({ message: "暂未开放", severity: NotificationSeverity.INFO });
@@ -1959,7 +2098,21 @@ export default function PortalKnowledgeWorkbench() {
         setAiDrawerOpen(false);
         setSummaryExpanded(false);
         setPreview({ loading: false, fileUrl: "", fileType: "", error: "", previewData: null });
-    }, []);
+        // Deep-link open used to leave searchMode with a single-file result set.
+        setSearchMode(false);
+        setSearchResults([]);
+        setSearchText("");
+        setSearchTagIds([]);
+        // Early back during tag-review deep link must not stick on the restore overlay.
+        setRestoringDeepLinkKey(null);
+        // Folder children may still be loading / wiped by a late root refresh — refetch.
+        const folderId = currentFolderIdRef.current;
+        if (!folderId) return;
+        const folderNode = findTreeNode(treeNodes, folderId);
+        if (!folderNode?.loaded || folderNode.loading) {
+            void reloadFilesRef.current();
+        }
+    }, [treeNodes]);
 
     // 从"我的收藏"只读面板打开源文件：#4 原地预览——不切换 activeSpace（不跳转到源知识空间），
     // 以携带源空间 id 的合成文件项触发预览流程。预览/下载按 selectedFile.spaceId(源空间) 定位、
@@ -2476,15 +2629,17 @@ export default function PortalKnowledgeWorkbench() {
             const result = await submitKnowledgeSpaceCreate(form);
 
             if (result.created && result.space) {
-                // 先等空间列表刷新（新空间进入 selectableSpaces），再切换当前空间；否则默认空间
-                // 守卫会在刷新完成前把 activeSpace 重置回默认库，导致“前往知识库”跳不到新空间。
-                await queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
+                // Wait for this category's list to include the new space before switching;
+                // otherwise the default-space guard can reset activeSpace too early.
+                await queryClient.invalidateQueries({
+                    queryKey: getSpacesLevelQueryKey(result.space.spaceLevel ?? form.spaceLevel),
+                });
                 setActiveSpace(result.space);
                 showToast({ message: "创建知识库成功", severity: NotificationSeverity.SUCCESS });
                 return true;
             }
 
-            void queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
+            // Approval-only: no space yet, so sidebar lists do not need a reload.
             showToast({ message: "已提交申请", severity: NotificationSeverity.SUCCESS });
             return { showSuccess: false };
         } catch (error) {
@@ -2555,8 +2710,11 @@ export default function PortalKnowledgeWorkbench() {
                         <main className={s.portalNativeWorkspace} data-testid="portal-file-workspace">
                             {activeSpace ? (
                                 isDeepLinkRestoring ? (
-                                    <div className={s.stateBox}>
-                                        <div className={s.stateTitle}>正在恢复知识库位置...</div>
+                                    <div className={s.stateBox} role="status" aria-live="polite">
+                                        <div className={s.stateLoading}>
+                                            <Loader2 className={`${s.stateLoadingIcon} animate-spin`} size={16} aria-hidden="true" />
+                                            <span>加载中...</span>
+                                        </div>
                                     </div>
                                 ) : isActiveSpaceFavorite ? (
                                     <PortalFavoritesPanel
@@ -2650,7 +2808,7 @@ export default function PortalKnowledgeWorkbench() {
                                                     onFileEncodingUpdated={handleFileEncodingUpdated}
                                                     markPendingDeletion={markPendingDeletion}
                                                     clearPendingDeletion={clearPendingDeletion}
-                                                    setFiles={setCurrentFolderFiles}
+                                                    setFiles={setDisplayFiles}
                                                     setTotal={setCurrentFileListTotal}
                                                 />
                                             </div>

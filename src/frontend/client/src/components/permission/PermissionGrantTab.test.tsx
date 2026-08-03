@@ -230,7 +230,7 @@ describe("PermissionGrantTab", () => {
     const helpIcon = await screen.findByTestId("permission-model-help-knowledge_file-custom_file_editor");
     expect(helpIcon).toHaveAttribute(
       "data-permission-summary",
-      "com_permission.permission_item_rename_file",
+      "com_permission.permission_scope_file：com_permission.permission_item_rename_file",
     );
     expect(screen.queryByText("Folder Only")).not.toBeInTheDocument();
   });

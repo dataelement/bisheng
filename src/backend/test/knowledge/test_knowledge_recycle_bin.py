@@ -209,6 +209,11 @@ async def test_overwrite_conflicts_clears_minio_with_snapshots():
         patch(
             "bisheng.knowledge.domain.services.knowledge_recycle_service.get_async_db_session",
         ) as db_session,
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_recycle_service."
+            "KnowledgeSpaceContentStat.enqueue_file_stat_async",
+            new=AsyncMock(return_value=True),
+        ) as enqueue_projection,
     ):
         session = AsyncMock()
         session.__aenter__ = AsyncMock(return_value=session)
@@ -226,3 +231,4 @@ async def test_overwrite_conflicts_clears_minio_with_snapshots():
     assert pdf_snaps == []
     session.execute.assert_awaited()
     session.commit.assert_awaited()
+    enqueue_projection.assert_awaited_once_with([20])

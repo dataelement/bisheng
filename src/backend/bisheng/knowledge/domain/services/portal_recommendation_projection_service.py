@@ -11,6 +11,7 @@ from typing import Any, Protocol
 
 from bisheng.knowledge.domain.constants import get_business_domain_code_from_file
 from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFileStatus
+from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
 from bisheng.knowledge.domain.repositories.interfaces.portal_recommendation_repository import (
     PortalRecommendationProjectionUpsert,
 )
@@ -27,6 +28,7 @@ class PortalRecommendationSourceFile:
     file_level_path: str | None
     source_update_time: datetime
     is_primary: bool | None
+    space_level: str | None
 
 
 class _SourceRepository(Protocol):
@@ -167,6 +169,10 @@ class PortalRecommendationProjectionService:
         # Legacy files have no version row and are their own primary version.
         if source.is_primary is False:
             return False, "not_primary"
+        if source.space_level == KnowledgeSpaceLevelEnum.PERSONAL.value:
+            return False, "personal_space"
+        if source.space_level is None:
+            return False, "space_scope_unknown"
         if permission_scope == "custom":
             return False, "custom_acl"
         if permission_scope != "inherited":

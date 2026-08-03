@@ -190,9 +190,18 @@ def _relation_model_name_exists(models: list[dict], name: str | None, exclude_mo
     )
 
 
+def _normalize_permission_ids(permissions: list[str] | None) -> list[str]:
+    permissions = list(permissions or [])
+    if "upload_file" in permissions:
+        permissions = [permission for permission in permissions if permission != "upload_file"]
+        permissions.extend(["upload_file_to_space", "upload_file_to_folder"])
+    return list(dict.fromkeys(permissions))
+
+
 def _normalize_model_dict(m: dict) -> dict:
     out = dict(m)
     out["name"] = _normalize_relation_model_name(out.get("name"))
+    out["permissions"] = _normalize_permission_ids(out.get("permissions"))
     gt = out.get("grant_tier")
     if gt not in _GRANT_TIER_VALUES:
         out["grant_tier"] = _infer_grant_tier_from_relation(out.get("relation") or "")
@@ -2178,7 +2187,7 @@ async def create_relation_model(
             "name": _normalize_relation_model_name(request.name),
             "relation": request.relation,
             "grant_tier": _infer_grant_tier_from_relation(request.relation),
-            "permissions": request.permissions or [],
+            "permissions": _normalize_permission_ids(request.permissions),
             "permissions_explicit": True,
             "is_system": False,
         }
@@ -2205,7 +2214,7 @@ async def update_relation_model(
         if request.name is not None:
             m["name"] = _normalize_relation_model_name(request.name)
         if request.permissions is not None:
-            m["permissions"] = request.permissions
+            m["permissions"] = _normalize_permission_ids(request.permissions)
             m["permissions_explicit"] = True
         updated = True
         break

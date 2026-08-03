@@ -1,4 +1,6 @@
 import json
+import subprocess
+import sys
 from datetime import datetime
 from io import BytesIO
 from types import SimpleNamespace
@@ -271,17 +273,38 @@ async def test_missing_params_closes_uploaded_file():
     assert upload.file.closed
 
 
-def test_fastapi_route_returns_actual_422_for_missing_params():
-    app = FastAPI()
-    app.include_router(router, prefix="/api/v2")
-    app.dependency_overrides[get_filelib_sync_service] = lambda: SimpleNamespace()
-    with TestClient(app) as client:
-        response = client.post(
-            "/api/v2/filelib/file/sync",
-            files={"file": ("a.pdf", b"content", "application/pdf")},
-        )
-    assert response.status_code == 422
-    assert response.json()["data"]["error_code"] == 19905
+def test_production_router_reaches_sync_handler_for_missing_params():
+    script = """
+import json
+from types import SimpleNamespace
+
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from bisheng.api.router import router_rpc
+from bisheng.open_endpoints.api.dependencies import get_filelib_sync_service
+
+app = FastAPI()
+app.include_router(router_rpc)
+app.dependency_overrides[get_filelib_sync_service] = lambda: SimpleNamespace()
+with TestClient(app) as client:
+    response = client.post(
+        "/api/v2/filelib/file/sync",
+        files={"file": ("a.pdf", b"content", "application/pdf")},
+    )
+print("ROUTE_RESULT=" + json.dumps({"status_code": response.status_code, "body": response.json()}))
+"""
+    completed = subprocess.run(
+        [sys.executable, "-c", script],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode == 0, completed.stderr
+    result_line = next(line for line in completed.stdout.splitlines() if line.startswith("ROUTE_RESULT="))
+    result = json.loads(result_line.removeprefix("ROUTE_RESULT="))
+    assert result["status_code"] == 422
+    assert result["body"]["data"]["error_code"] == 19905
 
 
 @pytest.mark.parametrize("code", ["03", "04", "05", "06", "07", "09", "10", "11", "12", "14", "15"])
@@ -386,9 +409,7 @@ async def test_sync_orchestration_allows_repeated_external_id_and_writes_source_
     service._get_portal_config = AsyncMock(return_value=SimpleNamespace())
     service._resolve_document_type = Mock(return_value=(category, subcategory))
     service._resolve_business_domain = Mock(return_value=domain)
-    service._resolve_target_space = AsyncMock(
-        return_value=ResolvedFileSyncTarget(space=target_space, folder_id=None)
-    )
+    service._resolve_target_space = AsyncMock(return_value=ResolvedFileSyncTarget(space=target_space, folder_id=None))
     service._ensure_domain_bound = Mock()
     service._require_upload_permission = AsyncMock()
     service._save_temporary_file = AsyncMock(return_value="temporary-url")

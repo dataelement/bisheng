@@ -1,7 +1,8 @@
 import logging
-from typing import TYPE_CHECKING
+from collections.abc import AsyncGenerator
+from typing import TYPE_CHECKING, Annotated
 
-from fastapi import Depends, Request
+from fastapi import Depends, Query, Request
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.common.dependencies.core_deps import get_db_session
@@ -10,7 +11,6 @@ from bisheng.common.errcode.developer_token import DeveloperTokenInvalidFileSync
 from bisheng.common.errcode.filelib_sync import FilelibSyncRuleNotConfiguredError
 from bisheng.developer_token.api.dependencies import (
     get_developer_token_principal,
-    get_developer_token_user,
 )
 from bisheng.developer_token.domain.schemas import (
     DeveloperTokenFileSyncRule,
@@ -21,13 +21,13 @@ from bisheng.knowledge.api.dependencies import (
     get_knowledge_document_repository,
     get_knowledge_document_version_repository,
 )
-from bisheng.knowledge.domain.repositories.interfaces.knowledge_document_repository import (
-    KnowledgeDocumentRepository,
-)
 from bisheng.knowledge.domain.repositories.implementations.knowledge_file_repository_impl import (
     KnowledgeFileRepositoryImpl,
 )
 from bisheng.knowledge.domain.repositories.implementations.knowledge_repository_impl import KnowledgeRepositoryImpl
+from bisheng.knowledge.domain.repositories.interfaces.knowledge_document_repository import (
+    KnowledgeDocumentRepository,
+)
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_document_version_repository import (
     KnowledgeDocumentVersionRepository,
 )
@@ -43,6 +43,12 @@ from bisheng.open_endpoints.domain.repositories.interfaces.filelib_sync_reposito
     FilelibSyncRepository,
 )
 from bisheng.open_endpoints.domain.services.filelib_sync_service import FilelibSyncService
+from bisheng.open_endpoints.domain.services.filelib_user_context_service import (
+    EXTERNAL_USER_ID_MAX_LENGTH,
+    FilelibUserContextService,
+)
+from bisheng.user.domain.repositories.implementations.user_repository_impl import UserRepositoryImpl
+from bisheng.user.domain.repositories.interfaces.user_repository import UserRepository
 
 if TYPE_CHECKING:
     from bisheng.knowledge.domain.services.knowledge_space_chat_service import KnowledgeSpaceChatService
@@ -102,22 +108,62 @@ async def get_knowledge_file_service(
     )
 
 
-async def get_knowledge_space_chat_service_for_openapi(
-    request: Request,
-    developer_user: UserPayload = Depends(get_developer_token_user),
-    version_repo: KnowledgeDocumentVersionRepository = Depends(get_knowledge_document_version_repository),
-    doc_repo: KnowledgeDocumentRepository = Depends(
-        get_knowledge_document_repository
-    ),
-) -> "KnowledgeSpaceChatService":
-    """KnowledgeSpaceChatService bound to the authenticated developer-token user.
+async def get_filelib_user_repository(
+    session: AsyncSession = Depends(get_db_session),
+) -> UserRepository:
+    return UserRepositoryImpl(session)
 
-    Used by the OpenAPI surface so external systems authenticate with
-    ``X-Developer-Token`` instead of user JWTs.
-    """
+
+async def get_filelib_user_context_service(
+    user_repository: UserRepository = Depends(get_filelib_user_repository),
+) -> FilelibUserContextService:
+    return FilelibUserContextService(user_repository)
+
+
+async def get_filelib_developer_token_principal(
+    principal: DeveloperTokenPrincipal = Depends(get_developer_token_principal),
+) -> DeveloperTokenPrincipal:
+    return principal
+
+
+async def get_filelib_knowledge_document_version_repository(
+    repository: KnowledgeDocumentVersionRepository = Depends(get_knowledge_document_version_repository),
+) -> KnowledgeDocumentVersionRepository:
+    return repository
+
+
+async def get_filelib_knowledge_document_repository(
+    repository: KnowledgeDocumentRepository = Depends(get_knowledge_document_repository),
+) -> KnowledgeDocumentRepository:
+    return repository
+
+
+async def get_filelib_request_user(
+    principal: DeveloperTokenPrincipal = Depends(get_developer_token_principal),
+    service: FilelibUserContextService = Depends(get_filelib_user_context_service),
+    external_id: Annotated[
+        str | None,
+        Query(
+            min_length=1,
+            max_length=EXTERNAL_USER_ID_MAX_LENGTH,
+            pattern=r".*\S.*",
+        ),
+    ] = None,
+) -> AsyncGenerator[UserPayload, None]:
+    async with service.use_user(principal, external_id) as login_user:
+        yield login_user
+
+
+def build_knowledge_space_chat_service_for_openapi(
+    request: Request,
+    request_user: UserPayload,
+    version_repo: KnowledgeDocumentVersionRepository,
+    doc_repo: KnowledgeDocumentRepository,
+) -> "KnowledgeSpaceChatService":
+    """Build the retrieval service inside the resolved Filelib user context."""
     from bisheng.knowledge.domain.services.knowledge_space_chat_service import KnowledgeSpaceChatService
 
-    service = KnowledgeSpaceChatService(request=request, login_user=developer_user)
+    service = KnowledgeSpaceChatService(request=request, login_user=request_user)
     service.version_repo = version_repo
     service.doc_repo = doc_repo
     return service

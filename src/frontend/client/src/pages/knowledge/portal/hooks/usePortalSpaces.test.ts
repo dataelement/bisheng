@@ -1,5 +1,9 @@
 import { SpaceLevel, SpaceRole, type KnowledgeSpace } from "~/api/knowledge";
-import { resolveSpacePermissions } from "./usePortalSpaces";
+import {
+    getSpacesLevelQueryKey,
+    resolveSpacePermissions,
+    resolveSpacesListLevel,
+} from "./usePortalSpaces";
 
 const makeSpace = (overrides: Partial<KnowledgeSpace> = {}): KnowledgeSpace =>
     ({
@@ -10,6 +14,30 @@ const makeSpace = (overrides: Partial<KnowledgeSpace> = {}): KnowledgeSpace =>
         isFavorite: false,
         ...overrides,
     }) as KnowledgeSpace;
+
+describe("getSpacesLevelQueryKey", () => {
+    it("maps each category to its sidebar list query key", () => {
+        expect(getSpacesLevelQueryKey(SpaceLevel.PUBLIC)).toEqual(
+            ["knowledgeSpaces", "level", SpaceLevel.PUBLIC],
+        );
+        expect(getSpacesLevelQueryKey(SpaceLevel.DEPARTMENT)).toEqual(
+            ["knowledgeSpaces", "level", SpaceLevel.DEPARTMENT],
+        );
+        expect(getSpacesLevelQueryKey(SpaceLevel.PERSONAL)).toEqual(
+            ["knowledgeSpaces", "level", SpaceLevel.PERSONAL],
+        );
+        expect(getSpacesLevelQueryKey(SpaceLevel.TEAM)).toEqual(
+            ["knowledgeSpaces", "level", SpaceLevel.TEAM],
+        );
+    });
+
+    it("maps TEAM_KS onto the shared team list query", () => {
+        expect(resolveSpacesListLevel(SpaceLevel.TEAM_KS)).toBe(SpaceLevel.TEAM);
+        expect(getSpacesLevelQueryKey(SpaceLevel.TEAM_KS)).toEqual(
+            ["knowledgeSpaces", "level", SpaceLevel.TEAM],
+        );
+    });
+});
 
 describe("resolveSpacePermissions（个人知识库只有编辑功能）", () => {
     it("个人库：即便是 creator 也不能删除、不能授权", () => {

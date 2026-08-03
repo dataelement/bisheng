@@ -1,28 +1,33 @@
-from typing import Dict, List, Literal, Optional
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StringConstraints
+
+ExternalUserId = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=255),
+]
 
 
 class APIAddQAParam(BaseModel):
     question: str
-    answer: List[str]
-    extra: Optional[Dict] = {}
+    answer: list[str]
+    extra: dict | None = {}
 
 
 class APIAppendQAParam(BaseModel):
-    relative_questions: List[str] = []
+    relative_questions: list[str] = []
     id: str = None
 
 
 class QueryQAParam(BaseModel):
-    timeRange: List[str]
+    timeRange: list[str]
 
 
 class KnowledgeBaseFilter(BaseModel):
     """Per-knowledge-base filter applied when retrieving chunks."""
 
     knowledge_base_id: int = Field(..., description="Must appear in knowledge_base_ids")
-    tags: List[str] = Field(
+    tags: list[str] = Field(
         default_factory=list,
         description="Tag names defined under this knowledge base used to narrow files",
     )
@@ -33,15 +38,17 @@ class KnowledgeBaseFilter(BaseModel):
 
 
 class RetrieveFilters(BaseModel):
-    knowledge_base_filters: List[KnowledgeBaseFilter] = Field(default_factory=list)
+    knowledge_base_filters: list[KnowledgeBaseFilter] = Field(default_factory=list)
 
 
 class RetrieveReq(BaseModel):
-    query: str = Field(..., min_length=1, description="User question")
-    knowledge_base_ids: List[int] = Field(
-        ..., min_length=1, description="Knowledge base ids to search across"
+    external_id: ExternalUserId | None = Field(
+        default=None,
+        description="External user ID used for permission and data scope",
     )
-    filters: Optional[RetrieveFilters] = None
+    query: str = Field(..., min_length=1, description="User question")
+    knowledge_base_ids: list[int] = Field(..., min_length=1, description="Knowledge base ids to search across")
+    filters: RetrieveFilters | None = None
     top_k: int = Field(default=10, ge=1, le=200, description="Max chunks to return")
     max_content: int = Field(
         default=15000,
@@ -61,7 +68,7 @@ class RetrieveChunk(BaseModel):
 
 
 class RetrieveResp(BaseModel):
-    chunks: List[RetrieveChunk]
+    chunks: list[RetrieveChunk]
     total: int
 
 
@@ -70,8 +77,8 @@ class FileDetailFile(BaseModel):
     knowledge_id: int
     file_encoding: str
     file_name: str
-    file_size: Optional[int] = None
-    status: Optional[int] = None
+    file_size: int | None = None
+    status: int | None = None
     update_time: str = ""
     is_primary: bool
     document_type: str
@@ -81,6 +88,6 @@ class FileDetailFile(BaseModel):
 
 
 class FileDetailResp(BaseModel):
-    file: Optional[FileDetailFile] = None
+    file: FileDetailFile | None = None
     content: str = ""
     chunk_count: int = 0
