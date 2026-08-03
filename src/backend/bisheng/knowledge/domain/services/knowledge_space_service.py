@@ -4859,7 +4859,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         self,
         categories: list[ShougangPortalCategoryFileCountItem],
     ) -> dict[str, int]:
-        """Count SUCCESS files per document-type category in each card's visible spaces."""
+        """Count SUCCESS files in each category card's visible bound spaces (list-aligned)."""
         visible_scopes: dict[str, set[int]] = {}
         for category in categories:
             spaces = await self._get_shougang_portal_visible_search_spaces(category.space_ids, None)
