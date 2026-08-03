@@ -20,6 +20,19 @@ from bisheng.common.models.space_channel_member import (
 from bisheng.core.context.tenant import bypass_tenant_filter
 
 
+class _EmptyResult:
+    def all(self):
+        return []
+
+
+class _RecordingSession:
+    statement = None
+
+    async def exec(self, statement):
+        self.statement = statement
+        return _EmptyResult()
+
+
 def _channel(channel_id: str, update_time: datetime) -> Channel:
     return Channel(
         id=channel_id,
@@ -104,3 +117,13 @@ async def test_square_orders_unsubscribed_before_applied_then_by_unique_subscrib
     ]
     assert [row[3] for row in rows] == [2, 1, 2, 2, 1]
     assert rows[2][1] == MembershipStatusEnum.PENDING
+
+
+async def test_square_subscriber_sort_uses_subquery_column_without_parameterized_coalesce():
+    session = _RecordingSession()
+
+    await ChannelRepositoryImpl(session).find_square_channels(user_id=7)
+
+    subscriber_order = str(list(session.statement._order_by_clauses)[1])
+    assert "coalesce" not in subscriber_order.lower()
+    assert subscriber_order.endswith("subscriber_count DESC NULLS LAST")

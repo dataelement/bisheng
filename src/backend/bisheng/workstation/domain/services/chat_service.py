@@ -7,8 +7,10 @@ from uuid import uuid4
 
 from fastapi import Request
 from fastapi.responses import StreamingResponse
+from json_repair import json_repair
 from langchain_core.messages import HumanMessage, SystemMessage
 from loguru import logger
+from pydantic import field_validator as PydanticFieldValidator
 
 from bisheng.api.services import knowledge_imp
 from bisheng.api.v1.schema.chat_schema import APIChatCompletion
@@ -582,6 +584,35 @@ async def _build_web_search_tool(user_id: int, tool_id: int | None = None) -> tu
         return None, err
 
 
+def _parse_model_tool_argument(value: Any) -> Any:
+    """Best-effort decode nested structures stringified by tool-calling models."""
+    current = value
+    for _ in range(2):
+        if not isinstance(current, str):
+            break
+        text = current.strip()
+        if not text:
+            break
+        is_container = text.startswith(("{", "["))
+        is_json_string = len(text) >= 2 and text.startswith('"') and text.endswith('"')
+        if not (is_container or is_json_string):
+            break
+        try:
+            parsed = json.loads(text)
+        except (json.JSONDecodeError, ValueError):
+            if not is_container:
+                break
+            try:
+                parsed = json_repair.loads(text)
+            except Exception:
+                # Recovery is optional; field-specific coercion safely handles the original value.
+                break
+        if parsed == current:
+            break
+        current = parsed
+    return current
+
+
 async def _build_knowledge_search_tool(
     knowledge_bases_info: list[dict],
     login_user: UserPayload,
@@ -642,11 +673,44 @@ async def _build_knowledge_search_tool(
             description="ANY: match any tag; ALL: must carry every tag.",
         )
 
+        @PydanticFieldValidator("knowledge_base_id", mode="before")
+        @classmethod
+        def _coerce_knowledge_base_id(cls, value):
+            return value if value is None else str(value)
+
+        @PydanticFieldValidator("tags", mode="before")
+        @classmethod
+        def _coerce_tags(cls, value):
+            parsed = _parse_model_tool_argument(value)
+            if parsed in (None, ""):
+                return []
+            items = parsed if isinstance(parsed, (list, tuple, set)) else [parsed]
+            return [str(item) for item in items if isinstance(item, (str, int, float)) and str(item)]
+
+        @PydanticFieldValidator("tag_match_mode", mode="before")
+        @classmethod
+        def _coerce_tag_match_mode(cls, value):
+            return str(value or "ANY").upper()
+
     class _Filters(PydanticBaseModel):
         knowledge_base_filters: list[_KbFilter] | None = PydanticField(
             default=None,
             description="Per-KB tag filters.",
         )
+
+        @PydanticFieldValidator("knowledge_base_filters", mode="before")
+        @classmethod
+        def _coerce_knowledge_base_filters(cls, value):
+            parsed = _parse_model_tool_argument(value)
+            if parsed in (None, ""):
+                return None
+            items = parsed if isinstance(parsed, list) else [parsed]
+            normalized = []
+            for item in items:
+                item = _parse_model_tool_argument(item)
+                if isinstance(item, (_KbFilter, dict)):
+                    normalized.append(item)
+            return normalized or None
 
     class _SearchKbArgs(PydanticBaseModel):
         knowledge_base_ids: list[str] = PydanticField(
@@ -663,6 +727,33 @@ async def _build_knowledge_search_tool(
             default=None,
             description="Optional search filters (per-KB tag filters).",
         )
+
+        @PydanticFieldValidator("knowledge_base_ids", mode="before")
+        @classmethod
+        def _coerce_knowledge_base_ids(cls, value):
+            parsed = _parse_model_tool_argument(value)
+            if parsed in (None, ""):
+                return list(kb_id_whitelist)
+            items = parsed if isinstance(parsed, (list, tuple, set)) else [parsed]
+            normalized = [str(item) for item in items if isinstance(item, (str, int, float)) and str(item)]
+            return normalized or list(kb_id_whitelist)
+
+        @PydanticFieldValidator("query", mode="before")
+        @classmethod
+        def _coerce_query(cls, value):
+            return value if value is None or isinstance(value, str) else str(value)
+
+        @PydanticFieldValidator("filters", mode="before")
+        @classmethod
+        def _coerce_filters(cls, value):
+            parsed = _parse_model_tool_argument(value)
+            if parsed in (None, ""):
+                return None
+            if isinstance(parsed, (_Filters, dict)):
+                return parsed
+            if isinstance(parsed, list):
+                return {"knowledge_base_filters": parsed}
+            return None
 
     def _format_chunk(doc) -> str:
         # Shared formatter (unwrap stored wrapper + preserve citation_key + aligned
