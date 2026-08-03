@@ -47,7 +47,9 @@ class WorkStationTagsService(BaseService):
 
         ``None`` means full-tenant access (global super / RBAC admin / child
         tenant admin). A ``set`` (possibly empty) means org department-admin
-        scope. Raises when the caller cannot review tags at all.
+        scope, including department-bound spaces and personal spaces owned by
+        members under managed departments. Raises when the caller cannot review
+        tags at all.
         """
         login_user = self.login_user
         if bool(getattr(login_user, "is_global_super", False)):
@@ -86,7 +88,17 @@ class WorkStationTagsService(BaseService):
                 dept_ids.update(int(i) for i in await DepartmentDao.aget_subtree_ids(path))
 
         bindings = await DepartmentKnowledgeSpaceDao.aget_by_department_ids(sorted(dept_ids))
-        return {int(binding.space_id) for binding in bindings or [] if getattr(binding, "space_id", None)}
+        space_ids = {int(binding.space_id) for binding in bindings or [] if getattr(binding, "space_id", None)}
+
+        from bisheng.knowledge.domain.services.department_admin_member_access import (
+            aget_dept_admin_scoped_user_ids,
+            aget_member_personal_space_ids,
+        )
+
+        scoped_user_ids = await aget_dept_admin_scoped_user_ids(int(login_user.user_id))
+        if scoped_user_ids:
+            space_ids.update(await aget_member_personal_space_ids(scoped_user_ids))
+        return space_ids
 
     def _ensure_knowledge_in_scope(self, knowledge_id: int | None, space_ids: set[int] | None) -> None:
         """Reject approve when department admin picks a space outside scope."""

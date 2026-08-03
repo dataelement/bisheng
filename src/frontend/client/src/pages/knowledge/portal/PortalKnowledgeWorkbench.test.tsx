@@ -642,6 +642,9 @@ function openKnowledgeFileFromPortalShell(payload: {
     spaceId: string;
     fileId: string;
     fileName?: string;
+    folderId?: string;
+    parent_id?: string;
+    parentId?: string;
     openNonce?: string;
 }) {
     act(() => {
@@ -2593,6 +2596,56 @@ describe("PortalKnowledgeWorkbench", () => {
         }
     });
 
+    test("opens tag-review deep link to an out-of-sidebar personal space via getSpaceInfo", async () => {
+        const favoriteSpace = makeDefaultFavoriteSpace();
+        const externalPersonalSpace = makeSpace("165", "gzx0169的知识库", {
+            role: SpaceRole.ADMIN,
+            spaceLevel: SpaceLevel.PERSONAL,
+        });
+        const targetFile = makeFile("1485", "README_文件清单.txt", {
+            type: FileType.OTHER,
+            spaceId: "165",
+        });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [],
+            personalSpaces: [favoriteSpace],
+        } as any);
+        jest.mocked(getSpaceInfoApi).mockResolvedValue(externalPersonalSpace as any);
+        jest.mocked(getSpaceChildrenApi).mockImplementation(async (params: any) => (
+            params.space_id === "165"
+                ? { data: [targetFile], total: 1 }
+                : { data: [], total: 0 }
+        ) as any);
+        jest.mocked(searchSpaceChildrenApi).mockResolvedValue({
+            data: [targetFile],
+            total: 1,
+        } as any);
+
+        renderWorkbench(
+            "/knowledge-portal?spaceId=165&fileId=1485&fileName=README_%E6%96%87%E4%BB%B6%E6%B8%85%E5%8D%95.txt",
+        );
+
+        await waitFor(() => {
+            expect(getSpaceInfoApi).toHaveBeenCalledWith("165");
+        });
+
+        const preview = await screen.findByTestId("portal-preview-page");
+        expect(preview).toHaveTextContent("README_文件清单.txt");
+        // Preview-only: sidebar stays on 我的收藏, not the foreign personal space.
+        expect(screen.getByTestId("space-row-favorite-space")).toBeInTheDocument();
+        expect(screen.queryByTestId("space-row-165")).not.toBeInTheDocument();
+        expect(getSpaceChildrenApi).not.toHaveBeenCalledWith(expect.objectContaining({
+            space_id: "165",
+            parent_id: expect.anything(),
+        }));
+        await waitFor(() => {
+            expect(getPortalFilePreviewApi).toHaveBeenCalledWith("165", "1485");
+        });
+        expect(getFilePreviewApi).not.toHaveBeenCalledWith("165", "1485");
+    });
+
     test("opens a deep-linked portal folder from query params", async () => {
         const personalSpace = makeSpace("personal-1", "信息", {
             role: SpaceRole.ADMIN,
@@ -2750,6 +2803,53 @@ describe("PortalKnowledgeWorkbench", () => {
         const restoredWorkspace = await screen.findByTestId("portal-file-workspace");
         expect(within(restoredWorkspace).getByText("目标文档.md")).toBeInTheDocument();
         expect(within(restoredWorkspace).getByText("同目录其它.md")).toBeInTheDocument();
+    });
+
+    test("tag-review postMessage accepts parent_id and navigates into the folder before preview", async () => {
+        const personalSpace = makeSpace("personal-1", "信息", {
+            role: SpaceRole.ADMIN,
+        });
+        const targetFile = makeFile("201", "目标文档.md", {
+            type: FileType.MD,
+            spaceId: "personal-1",
+            parentId: "101",
+        });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [],
+            personalSpaces: [personalSpace],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockImplementation(async (params: any) => {
+            if (params.parent_id === "101") {
+                return { data: [targetFile], total: 1 };
+            }
+            return { data: [], total: 0 };
+        });
+        jest.mocked(searchSpaceChildrenApi).mockResolvedValue({
+            data: [targetFile],
+            total: 1,
+        } as any);
+
+        renderWorkbench("/knowledge-portal");
+        await screen.findByTestId("portal-file-workspace");
+
+        openKnowledgeFileFromPortalShell({
+            spaceId: "personal-1",
+            fileId: "201",
+            fileName: "目标文档.md",
+            parent_id: "101",
+            openNonce: "tag-review-parent-id",
+        });
+
+        const preview = await screen.findByTestId("portal-preview-page");
+        expect(preview).toHaveTextContent("目标文档.md");
+        await waitFor(() => {
+            expect(getSpaceChildrenApi).toHaveBeenCalledWith(expect.objectContaining({
+                space_id: "personal-1",
+                parent_id: "101",
+            }));
+        });
     });
 
     test("formats table update times as full date time without relative labels", async () => {

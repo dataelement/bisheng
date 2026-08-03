@@ -159,6 +159,8 @@ export interface ReviewTagResourceItem {
   id?: number
   submit_time?: string
   knowledge_id?: number
+  /** Immediate parent folder id for portal deep-link navigation. */
+  parent_id?: number | null
   file_url?: string
   [key: string]: any
 }

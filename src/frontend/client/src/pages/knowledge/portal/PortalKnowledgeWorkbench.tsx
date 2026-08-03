@@ -324,6 +324,11 @@ export default function PortalKnowledgeWorkbench() {
     const isDeepLinkRestoring = Boolean(
         portalDeepLinkTarget && restoringDeepLinkKey === portalDeepLinkTarget.key,
     );
+    const isCrossSpacePreview = Boolean(
+        selectedFile?.spaceId
+        && activeSpace?.id
+        && String(selectedFile.spaceId) !== String(activeSpace.id),
+    );
     const selectedFileUsesPortalContentGate = Boolean(
         activeSpace
         && selectedFile
@@ -358,6 +363,10 @@ export default function PortalKnowledgeWorkbench() {
         createPermissionByLevel,
         selectableSpaces,
         spaceLoading,
+        preferredSpace,
+        preferredSpacePending,
+        preferredSpaceResolveFailed,
+        previewOnlyTargetSpace,
         activeGroup,
         getSpacePermissions,
         requestSpacePermissions,
@@ -365,28 +374,54 @@ export default function PortalKnowledgeWorkbench() {
         activeSpace,
         setActiveSpace,
         expandedGroups,
-        preferredSpaceId: isDeepLinkRestoring ? portalDeepLinkTarget?.spaceId : undefined,
+        preferredSpaceId: portalDeepLinkTarget?.spaceId,
+        deepLinkFileId: portalDeepLinkTarget?.fileId,
     });
+
+    const isPreviewOnlyDeepLink = Boolean(
+        previewOnlyTargetSpace
+        && portalDeepLinkTarget?.fileId
+        && String(previewOnlyTargetSpace.id) === portalDeepLinkTarget.spaceId,
+    );
+    const isPotentialOutOfSidebarFileDeepLink = Boolean(
+        portalDeepLinkTarget?.fileId
+        && portalDeepLinkTarget.spaceId
+        && !selectableSpaces.some((space) => String(space.id) === portalDeepLinkTarget.spaceId),
+    );
+    const preservesCrossSpaceDeepLinkPreview = isPreviewOnlyDeepLink || isPotentialOutOfSidebarFileDeepLink;
 
     const handleDeepLinkRestoreComplete = useCallback((targetKey: string) => {
         setRestoringDeepLinkKey((current) => (current === targetKey ? null : current));
     }, []);
 
     useEffect(() => {
+        if (!preferredSpaceResolveFailed || !portalDeepLinkTarget?.spaceId) return;
+        setRestoringDeepLinkKey((current) => (
+            current === portalDeepLinkTarget.key ? null : current
+        ));
+        showToast({
+            message: "无法打开目标知识库，可能没有查看权限",
+            severity: NotificationSeverity.ERROR,
+        });
+    }, [portalDeepLinkTarget?.key, portalDeepLinkTarget?.spaceId, preferredSpaceResolveFailed, showToast]);
+
+    useEffect(() => {
         if (!portalDeepLinkTarget || restoringDeepLinkKey !== portalDeepLinkTarget.key) return;
-        const targetSpaceExists = selectableSpaces.some(
+        const targetInSidebar = selectableSpaces.some(
             (space) => String(space.id) === portalDeepLinkTarget.spaceId,
         );
+        // Out-of-sidebar targets (tag review → another user's personal space) resolve via getSpaceInfo.
+        const targetResolvable = targetInSidebar || Boolean(preferredSpace) || preferredSpacePending;
 
         if (!activeSpace && !spaceLoading) {
-            // Spaces finished loading with no active space — only fail if the target is missing.
-            if (!targetSpaceExists) setRestoringDeepLinkKey(null);
+            if (!targetResolvable && !preferredSpacePending) {
+                setRestoringDeepLinkKey(null);
+            }
             return;
         }
         if (activeSpace && String(activeSpace.id) !== portalDeepLinkTarget.spaceId && !spaceLoading) {
-            // Target space is available: keep overlay while setActiveSpace catches up.
-            // Clearing here used to flash the previous/current space file list before the file opened.
-            if (targetSpaceExists) return;
+            // Keep overlay while preferredSpace / setActiveSpace catches up.
+            if (targetResolvable) return;
             setRestoringDeepLinkKey(null);
             return;
         }
@@ -401,6 +436,8 @@ export default function PortalKnowledgeWorkbench() {
     }, [
         activeSpace,
         portalDeepLinkTarget,
+        preferredSpace,
+        preferredSpacePending,
         restoringDeepLinkKey,
         selectableSpaces,
         spaceLoading,
@@ -1401,9 +1438,11 @@ export default function PortalKnowledgeWorkbench() {
                 const spaceId = String(event.data?.spaceId ?? "").trim();
                 const fileId = String(event.data?.fileId ?? "").trim();
                 if (!spaceId || !fileId) return;
-                const fileName = String(event.data?.fileName ?? "").trim();
-                const folderId = String(event.data?.folderId ?? "").trim();
-                const folderName = String(event.data?.folderName ?? "").trim();
+                const fileName = String(event.data?.fileName ?? event.data?.file_name ?? "").trim();
+                const folderId = String(
+                    event.data?.folderId ?? event.data?.parent_id ?? event.data?.parentId ?? "",
+                ).trim();
+                const folderName = String(event.data?.folderName ?? event.data?.folder_name ?? "").trim();
                 const openNonce = String(event.data?.openNonce ?? "").trim() || String(Date.now());
                 setSearchParams((prev) => {
                     const next = new URLSearchParams(prev);
@@ -1509,7 +1548,10 @@ export default function PortalKnowledgeWorkbench() {
         // settles must not re-run this effect and wipe the file we just opened.
         const openingDeepLinkedFileHere = Boolean(
             portalDeepLinkTarget?.fileId
-            && String(activeSpace.id) === portalDeepLinkTarget.spaceId,
+            && (
+                String(activeSpace.id) === portalDeepLinkTarget.spaceId
+                || preservesCrossSpaceDeepLinkPreview
+            ),
         );
 
         // While a deep-linked file open targets this space, do not wipe selection/search.
@@ -1554,6 +1596,7 @@ export default function PortalKnowledgeWorkbench() {
         activeSpace?.id,
         portalDeepLinkTarget?.fileId,
         portalDeepLinkTarget?.spaceId,
+        preservesCrossSpaceDeepLinkPreview,
         sortBy,
         sortDirection,
         statusFilterNumbers,
@@ -1569,7 +1612,10 @@ export default function PortalKnowledgeWorkbench() {
         if (
             portalDeepLinkTarget?.fileId
             && String(selectedFile.id) === portalDeepLinkTarget.fileId
-            && String(activeSpace?.id) === portalDeepLinkTarget.spaceId
+            && (
+                String(activeSpace?.id) === portalDeepLinkTarget.spaceId
+                || preservesCrossSpaceDeepLinkPreview
+            )
         ) {
             return;
         }
@@ -1587,6 +1633,7 @@ export default function PortalKnowledgeWorkbench() {
         isDeepLinkRestoring,
         portalDeepLinkTarget?.fileId,
         portalDeepLinkTarget?.spaceId,
+        preservesCrossSpaceDeepLinkPreview,
     ]);
 
     useEffect(() => {
@@ -1807,7 +1854,7 @@ export default function PortalKnowledgeWorkbench() {
             previewData: null,
         });
 
-        const loadPreview = selectedFileUsesPortalContentGate
+        const loadPreview = selectedFileUsesPortalContentGate || isCrossSpacePreview
             ? getPortalFilePreviewApi
             : getFilePreviewApi;
         loadPreview(
@@ -1862,7 +1909,7 @@ export default function PortalKnowledgeWorkbench() {
         return () => {
             cancelled = true;
         };
-    }, [activeSpace, selectedFile, selectedFileUsesPortalContentGate]);
+    }, [activeSpace, selectedFile, selectedFileUsesPortalContentGate, isCrossSpacePreview]);
 
     const showUnavailable = useCallback(() => {
         showToast({ message: "暂未开放", severity: NotificationSeverity.INFO });
@@ -2392,6 +2439,7 @@ export default function PortalKnowledgeWorkbench() {
         setSelectedFile,
         onNavigateFolder: handleNavigateFolder,
         onRestoreComplete: handleDeepLinkRestoreComplete,
+        previewOnlyTargetSpace,
     });
 
     const handleNativePageChange = useCallback((page: number) => {

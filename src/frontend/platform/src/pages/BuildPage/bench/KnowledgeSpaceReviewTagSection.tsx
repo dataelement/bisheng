@@ -28,23 +28,25 @@ import { useTranslation } from "react-i18next";
 
 const PAGE_SIZE = 5;
 
+/** Open the file inside knowledge portal with folder context when parent_id is known. */
 function buildReviewTagFileDetailUrl(resource: ReviewTagResourceItem): string | null {
     const fileId = resource.file_id ?? resource.id;
     const spaceId = resource.knowledge_id;
     const fileName = resource.file_name?.trim();
+    const folderId = resource.parent_id ?? resource.folder_id ?? resource.folderId;
     if (!fileId || !spaceId || !fileName) {
         return null;
     }
 
-    const ext = fileName.includes(".") ? (fileName.split(".").pop() || "") : "";
     const params = new URLSearchParams();
-    params.set("name", fileName);
-    if (ext) {
-        params.set("type", ext);
-    }
     params.set("spaceId", String(spaceId));
+    params.set("fileId", String(fileId));
+    params.set("fileName", fileName);
+    if (folderId !== undefined && folderId !== null && String(folderId) !== "") {
+        params.set("folderId", String(folderId));
+    }
 
-    return getWorkspaceClientUrl(`/knowledge/file/${fileId}?${params.toString()}`);
+    return getWorkspaceClientUrl(`/knowledge-portal?${params.toString()}`);
 }
 
 function renderReviewTagFileSource(resource: ReviewTagResourceItem) {

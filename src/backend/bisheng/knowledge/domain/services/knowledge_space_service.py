@@ -226,6 +226,8 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     UploadFolderRecommendFileReq,
 )
 from bisheng.knowledge.domain.services.department_file_view_access_service import (
+    DepartmentFileAccessDecision,
+    DepartmentFileAccessSource,
     DepartmentFileAccessStatus,
 )
 from bisheng.knowledge.domain.services.favorite_notify import (
@@ -934,6 +936,17 @@ class KnowledgeSpaceService(KnowledgeUtils):
             file=file_record,
         )
         if not decision.allowed:
+            space = await KnowledgeDao.aquery_by_id(int(file_record.knowledge_id))
+            if space and await self._can_dept_admin_preview_member_personal_space(space):
+                if resolved is None:
+                    return None
+                capabilities = resolved.capabilities.model_copy(
+                    update={
+                        "can_view": True,
+                        "can_preview": True,
+                    }
+                )
+                return resolved.model_copy(update={"capabilities": capabilities})
             raise SpacePermissionDeniedError()
 
         capabilities = resolved.capabilities.model_copy(
@@ -3313,7 +3326,40 @@ class KnowledgeSpaceService(KnowledgeUtils):
             return space, True
         if self._is_square_preview_space(space):
             return space, False
+        if await self._can_dept_admin_preview_member_personal_space(space):
+            return space, False
         raise SpacePermissionDeniedError()
+
+    async def _can_dept_admin_preview_member_personal_space(self, space: Knowledge) -> bool:
+        """Dept admin read-only metadata/preview for personal spaces owned by scoped members."""
+        from bisheng.knowledge.domain.services.department_admin_member_access import is_dept_admin_of_user
+
+        owner_id = int(getattr(space, "user_id", 0) or 0)
+        if not owner_id or owner_id == int(self.login_user.user_id):
+            return False
+        level = await self._get_space_level(int(space.id))
+        if level != KnowledgeSpaceLevelEnum.PERSONAL:
+            return False
+        return await is_dept_admin_of_user(int(self.login_user.user_id), owner_id)
+
+    async def _resolve_file_preview_access(
+        self,
+        file_id: int,
+        file_record: KnowledgeFile,
+    ) -> tuple[bool, bool]:
+        """Return (allowed, can_download) for preview; dept-admin member scope is read-only."""
+        effective_permissions = await self._get_effective_permission_ids(
+            "knowledge_file",
+            file_id,
+            space_id=file_record.knowledge_id,
+        )
+        if "view_file" in effective_permissions:
+            return True, "download_file" in effective_permissions
+
+        space = await KnowledgeDao.aquery_by_id(int(file_record.knowledge_id))
+        if space and await self._can_dept_admin_preview_member_personal_space(space):
+            return True, False
+        return False, False
 
     # ──────────────────────────── Space CRUD ──────────────────────────────────
 
@@ -6285,12 +6331,16 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 return {}
         detail = KnowledgeService.get_file_share_detail(content_file)
         if resolved is None:
-            effective_permissions = await self._get_effective_permission_ids(
-                "knowledge_file",
-                int(file.id),
-                space_id=space_id,
-            )
-            detail["can_download"] = "download_file" in effective_permissions
+            allowed, can_download = await self._resolve_file_preview_access(int(file.id), file)
+            if allowed:
+                detail["can_download"] = can_download
+            else:
+                effective_permissions = await self._get_effective_permission_ids(
+                    "knowledge_file",
+                    int(file.id),
+                    space_id=space_id,
+                )
+                detail["can_download"] = "download_file" in effective_permissions
         else:
             detail.update(
                 {
@@ -6548,6 +6598,20 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 discovery_scope="public_and_department",
             )
             return (file, spaces) if spaces else (None, [])
+
+        if decision.status == DepartmentFileAccessStatus.NOT_APPLICABLE:
+            space = await KnowledgeDao.aquery_by_id(int(space_id))
+            if space and await self._can_dept_admin_preview_member_personal_space(space):
+                bypass_decision = DepartmentFileAccessDecision(
+                    file_id=int(file.id),
+                    space_id=int(space_id),
+                    status=DepartmentFileAccessStatus.ALLOWED,
+                    source=DepartmentFileAccessSource.DEPARTMENT_APPROVER,
+                    can_download=False,
+                )
+                self._portal_file_access_decision_map[int(file.id)] = bypass_decision
+                self._portal_file_download_map[int(file.id)] = False
+                return (file, [])
 
         spaces = await self._get_shougang_portal_visible_search_spaces(
             [space_id],
@@ -15098,18 +15162,36 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
     async def get_file_preview(self, file_id: int) -> dict:
         file_record = await self._get_file_for_action(file_id)
-        resolved = await self._resolve_document_entry(
+        preview_allowed, preview_can_download = await self._resolve_file_preview_access(
+            file_id,
             file_record,
-            required_capability="can_preview",
         )
-        if resolved is None:
-            await self._require_file_relation(file_id, "can_read")
-            await self._require_permission_id(
-                "knowledge_file",
-                file_id,
-                "view_file",
-                space_id=file_record.knowledge_id,
+        resolved = None
+        if preview_allowed:
+            resolved = await self._resolve_document_entry(file_record, required_capability=None)
+            if resolved is not None and not bool(getattr(resolved.capabilities, "can_preview", False)):
+                resolved = None
+        else:
+            resolved = await self._resolve_document_entry(
+                file_record,
+                required_capability="can_preview",
             )
+
+        if resolved is None:
+            if not preview_allowed:
+                await self._require_file_relation(file_id, "can_read")
+                await self._require_permission_id(
+                    "knowledge_file",
+                    file_id,
+                    "view_file",
+                    space_id=file_record.knowledge_id,
+                )
+                effective_permissions = await self._get_effective_permission_ids(
+                    "knowledge_file",
+                    file_id,
+                    space_id=file_record.knowledge_id,
+                )
+                preview_can_download = "download_file" in effective_permissions
             content_file = file_record
         elif int(resolved.content_file_id) == int(file_record.id):
             content_file = file_record
@@ -15124,12 +15206,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         detail = KnowledgeService.get_file_share_detail(content_file)
         if resolved is None:
-            effective_permissions = await self._get_effective_permission_ids(
-                "knowledge_file",
-                file_id,
-                space_id=file_record.knowledge_id,
-            )
-            detail["can_download"] = "download_file" in effective_permissions
+            detail["can_download"] = preview_can_download
         else:
             detail.update(
                 {
