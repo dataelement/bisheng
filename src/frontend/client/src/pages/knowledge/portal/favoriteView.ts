@@ -1,8 +1,21 @@
-import type { PortalFavoriteFile } from "~/api/knowledge";
+import { SpaceLevel, type KnowledgeSpace, type PortalFavoriteFile } from "~/api/knowledge";
 
 /** 判断一个知识空间是否为"我的收藏"虚拟库。 */
 export function isFavoriteSpace(space: { isFavorite?: boolean } | null | undefined): boolean {
     return Boolean(space?.isFavorite);
+}
+
+/**
+ * True when a personal space is reachable via getSpaceInfo but absent from the sidebar
+ * (e.g. another user's personal library opened from tag review).
+ */
+export function isOutOfSidebarPersonalSpace(
+    space: KnowledgeSpace,
+    selectableSpaces: KnowledgeSpace[],
+): boolean {
+    if (isFavoriteSpace(space)) return false;
+    if (space.spaceLevel !== SpaceLevel.PERSONAL) return false;
+    return !selectableSpaces.some((item) => String(item.id) === String(space.id));
 }
 
 /** 收藏列表行的展示/判定视图模型（纯数据，便于单测）。 */

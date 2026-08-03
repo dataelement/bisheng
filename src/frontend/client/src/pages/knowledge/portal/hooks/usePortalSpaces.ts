@@ -9,6 +9,7 @@ import {
     SpaceSortType,
     type KnowledgeSpace,
 } from "~/api/knowledge";
+import { isOutOfSidebarPersonalSpace } from "../favoriteView";
 import { useAuthContext } from "~/hooks";
 import {
     hasKnowledgeSpacePermission,
@@ -53,6 +54,8 @@ interface UsePortalSpacesParams {
     setActiveSpace: Dispatch<SetStateAction<KnowledgeSpace | null>>;
     expandedGroups: Record<SpaceGroupKey, boolean>;
     preferredSpaceId?: string;
+    /** When set with preferredSpaceId, out-of-sidebar personal targets open preview-only. */
+    deepLinkFileId?: string;
 }
 
 function findDefaultPersonalSpace(spaces: KnowledgeSpace[]): KnowledgeSpace | null {
@@ -94,6 +97,7 @@ export function usePortalSpaces({
     setActiveSpace,
     expandedGroups,
     preferredSpaceId,
+    deepLinkFileId,
 }: UsePortalSpacesParams) {
     const { user } = useAuthContext();
     const preferredSpaceQuery = useQuery({
@@ -229,6 +233,28 @@ export function usePortalSpaces({
             || preferredSpaceQuery.isFetching
         ),
     );
+    /** Deep-link target absent from sidebar lists and getSpaceInfo failed (e.g. 403). */
+    const preferredSpaceResolveFailed = Boolean(
+        preferredSpaceId
+        && !preferredSpace
+        && preferredSpaceQuery.isError
+        && !preferredSpaceQuery.isFetching,
+    );
+    const previewOnlyTargetSpace = useMemo(() => {
+        if (!deepLinkFileId || !preferredSpace) return null;
+        return isOutOfSidebarPersonalSpace(preferredSpace, selectableSpaces) ? preferredSpace : null;
+    }, [deepLinkFileId, preferredSpace, selectableSpaces]);
+    const skipPreferredSpaceActivation = Boolean(
+        deepLinkFileId
+        && preferredSpaceId
+        && (
+            previewOnlyTargetSpace
+            || (
+                !preferredSpace
+                && !selectableSpaces.some((space) => String(space.id) === String(preferredSpaceId))
+            )
+        ),
+    );
     const fullAccessSpaceIds = useMemo(
         () => selectableSpaces
             .filter((space) => hasRoleBasedSpaceActionBypass(space))
@@ -259,7 +285,7 @@ export function usePortalSpaces({
     );
 
     useEffect(() => {
-        if (preferredSpace) {
+        if (preferredSpace && !skipPreferredSpaceActivation) {
             if (String(activeSpace?.id) !== String(preferredSpace.id)) {
                 setActiveSpace(preferredSpace);
             }
@@ -269,6 +295,12 @@ export function usePortalSpaces({
         // Deep-link restore: never fall back to 我的收藏 while a preferred space is requested.
         // Clear a mismatched default so the sidebar/list do not flash the favorite space.
         if (preferredSpaceId) {
+            if (skipPreferredSpaceActivation) {
+                if (!activeSpace && !personalSpacesQuery.isLoading) {
+                    setActiveSpace(defaultPersonalSpace ?? selectableSpaces[0] ?? null);
+                }
+                return;
+            }
             if (activeSpace && String(activeSpace.id) === String(preferredSpaceId)) return;
             if (activeSpace) {
                 setActiveSpace(null);
@@ -288,6 +320,7 @@ export function usePortalSpaces({
         preferredSpaceId,
         selectableSpaces,
         setActiveSpace,
+        skipPreferredSpaceActivation,
     ]);
 
     return {
@@ -296,6 +329,10 @@ export function usePortalSpaces({
         createPermissionByLevel,
         selectableSpaces,
         spaceLoading: personalSpacesQuery.isLoading || preferredSpacePending,
+        preferredSpace,
+        preferredSpacePending,
+        preferredSpaceResolveFailed,
+        previewOnlyTargetSpace,
         activeGroup,
         getSpacePermissions,
         requestSpacePermissions,

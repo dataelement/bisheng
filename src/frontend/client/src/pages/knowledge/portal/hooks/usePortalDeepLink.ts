@@ -4,6 +4,7 @@ import {
     FileType,
     KnowledgeFile,
     KnowledgeSpace,
+    getSpaceChildrenApi,
     searchSpaceChildrenApi,
 } from "~/api/knowledge";
 import { TREE_PAGE_SIZE } from "../constants";
@@ -38,6 +39,8 @@ interface UsePortalDeepLinkParams {
     setSelectedFile: Dispatch<SetStateAction<KnowledgeFile | null>>;
     onNavigateFolder: (folderId?: string, folderName?: string) => void | Promise<void>;
     onRestoreComplete?: (targetKey: string) => void;
+    /** Out-of-sidebar personal space: open preview in place without switching sidebar/tree. */
+    previewOnlyTargetSpace?: KnowledgeSpace | null;
 }
 
 const getQueryValue = (searchParams: URLSearchParams, keys: string[]) => {
@@ -51,7 +54,8 @@ const getQueryValue = (searchParams: URLSearchParams, keys: string[]) => {
 export const resolvePortalDeepLinkTarget = (searchParams: URLSearchParams): PortalDeepLinkTarget | null => {
     const spaceId = getQueryValue(searchParams, ["spaceId", "knowledgeId", "knowledge_id"]);
     if (!spaceId) return null;
-    const folderId = getQueryValue(searchParams, ["folderId", "folder_id"]);
+    // Review-tag list APIs expose parent_id; portal shell may forward it unchanged.
+    const folderId = getQueryValue(searchParams, ["folderId", "folder_id", "parent_id", "parentId"]);
     const folderName = getQueryValue(searchParams, ["folderName", "folder_name"]);
     const fileId = getQueryValue(searchParams, ["fileId", "documentId", "document_id"]);
     const fileName = getQueryValue(searchParams, ["name", "fileName", "documentName", "document_name"]);
@@ -110,10 +114,16 @@ export function usePortalDeepLink({
     setSelectedFile,
     onNavigateFolder,
     onRestoreComplete,
+    previewOnlyTargetSpace = null,
 }: UsePortalDeepLinkParams) {
     const deepLinkTarget = useMemo(
         () => resolvePortalDeepLinkTarget(searchParams),
         [searchParams],
+    );
+    const isPreviewOnlyDeepLink = Boolean(
+        previewOnlyTargetSpace
+        && deepLinkTarget?.fileId
+        && String(previewOnlyTargetSpace.id) === deepLinkTarget.spaceId,
     );
     const deepLinkSpaceAppliedRef = useRef<string | null>(null);
     const deepLinkFolderAppliedRef = useRef<string | null>(null);
@@ -130,16 +140,28 @@ export function usePortalDeepLink({
 
     useEffect(() => {
         if (!deepLinkTarget || deepLinkSpaceAppliedRef.current === deepLinkTarget.key) return;
-        const targetSpace = selectableSpaces.find((space) => String(space.id) === deepLinkTarget.spaceId);
+        if (isPreviewOnlyDeepLink) {
+            deepLinkSpaceAppliedRef.current = deepLinkTarget.key;
+            return;
+        }
+        // Tag-review / admin deep links may target a space returned only by getSpaceInfo,
+        // not present in lazy-loaded sidebar lists (e.g. another user's personal library).
+        const targetSpace = selectableSpaces.find((space) => String(space.id) === deepLinkTarget.spaceId)
+            ?? (
+                activeSpace && String(activeSpace.id) === deepLinkTarget.spaceId
+                    ? activeSpace
+                    : null
+            );
         if (!targetSpace) return;
         deepLinkSpaceAppliedRef.current = deepLinkTarget.key;
         if (String(activeSpace?.id) !== deepLinkTarget.spaceId) {
             setActiveSpace(targetSpace);
         }
-    }, [activeSpace?.id, deepLinkTarget, selectableSpaces, setActiveSpace]);
+    }, [activeSpace, deepLinkTarget, isPreviewOnlyDeepLink, selectableSpaces, setActiveSpace]);
 
     useEffect(() => {
-        if (!deepLinkTarget?.folderId || !activeSpace || String(activeSpace.id) !== deepLinkTarget.spaceId) return;
+        if (!deepLinkTarget?.folderId || isPreviewOnlyDeepLink) return;
+        if (!activeSpace || String(activeSpace.id) !== deepLinkTarget.spaceId) return;
         if (deepLinkFolderAppliedRef.current === deepLinkTarget.key) return;
         deepLinkFolderAppliedRef.current = deepLinkTarget.key;
         setSelectedFile(null);
@@ -162,6 +184,75 @@ export function usePortalDeepLink({
         deepLinkTarget,
         onNavigateFolder,
         onRestoreComplete,
+        setSearchLoading,
+        setSearchMode,
+        setSearchResults,
+        setSearchText,
+        setSelectedFile,
+        setSelectedFileIds,
+        setSelectedFolderIds,
+    ]);
+
+    /** Tag-review → others' personal library: preview only, same pattern as favorites source open. */
+    useEffect(() => {
+        if (!isPreviewOnlyDeepLink || !deepLinkTarget?.fileId || !previewOnlyTargetSpace) return;
+        if (deepLinkHandledRef.current === deepLinkTarget.key) return;
+
+        deepLinkFolderAppliedRef.current = deepLinkTarget.key;
+        const target = deepLinkTarget;
+        const fallbackFile = createDeepLinkedFile(target, target.fileId);
+        setSelectedFileIds(new Set());
+        setSelectedFolderIds(new Set());
+        setSearchText("");
+        setSearchLoading(false);
+        setSearchMode(false);
+        setSearchResults([]);
+        setSelectedFile(fallbackFile);
+        deepLinkHandledRef.current = target.key;
+
+        let cancelled = false;
+        void Promise.all([
+            getSpaceChildrenApi({
+                space_id: target.spaceId,
+                file_ids: [target.fileId],
+                page_size: 1,
+                order_field: "update_time",
+                order_sort: "desc",
+            }),
+            Promise.resolve(previewOnlyTargetSpace),
+        ]).then(([fileResult, sourceSpace]) => {
+            if (cancelled || deepLinkHandledRef.current !== target.key) return;
+            const sourceFile = fileResult.data[0];
+            if (!sourceFile) return;
+            const resolvedSourceSpaceName = sourceFile.sourceSpaceName || sourceSpace?.name || "";
+            const sourcePathTail = sourceFile.sourcePath || sourceFile.folderPath || sourceFile.path || sourceFile.name;
+            const resolvedSourcePath = resolvedSourceSpaceName
+                && sourcePathTail
+                && !String(sourcePathTail).includes(resolvedSourceSpaceName)
+                ? `${resolvedSourceSpaceName}/${sourcePathTail}`
+                : sourcePathTail;
+            setSelectedFile((current) => (
+                current
+                && String(current.id) === String(target.fileId)
+                && String(current.spaceId) === String(target.spaceId)
+                    ? {
+                        ...sourceFile,
+                        sourceSpaceName: resolvedSourceSpaceName,
+                        sourcePath: resolvedSourcePath,
+                    }
+                    : current
+            ));
+        }).catch(() => {
+            // Synthetic file is enough for preview when metadata enrichment fails.
+        });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [
+        deepLinkTarget,
+        isPreviewOnlyDeepLink,
+        previewOnlyTargetSpace,
         setSearchLoading,
         setSearchMode,
         setSearchResults,
@@ -194,6 +285,7 @@ export function usePortalDeepLink({
 
     // Fast path: open when the target row is already in the current list.
     useEffect(() => {
+        if (isPreviewOnlyDeepLink) return;
         if (!deepLinkTarget?.fileId || !activeSpace || String(activeSpace.id) !== deepLinkTarget.spaceId) return;
         if (deepLinkTarget.folderId && deepLinkFolderAppliedRef.current !== deepLinkTarget.key) return;
         if (deepLinkHandledRef.current === deepLinkTarget.key) return;
@@ -218,11 +310,13 @@ export function usePortalDeepLink({
         setSelectedFileIds,
         setSelectedFolderIds,
         activeSpaceIdRef,
+        isPreviewOnlyDeepLink,
     ]);
 
     // Slow path: search once per deep-link key. Do NOT depend on displayedFiles — tree
     // updates used to cancel in-flight search and leave the space list visible without a file.
     useEffect(() => {
+        if (isPreviewOnlyDeepLink) return;
         if (!deepLinkTarget?.fileId || !activeSpace || String(activeSpace.id) !== deepLinkTarget.spaceId) return;
         if (deepLinkTarget.folderId && deepLinkFolderAppliedRef.current !== deepLinkTarget.key) return;
         if (deepLinkHandledRef.current === deepLinkTarget.key) return;
@@ -283,5 +377,6 @@ export function usePortalDeepLink({
         setSelectedFile,
         setSelectedFileIds,
         setSelectedFolderIds,
+        isPreviewOnlyDeepLink,
     ]);
 }

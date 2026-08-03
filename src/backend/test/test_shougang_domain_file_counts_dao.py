@@ -152,12 +152,17 @@ async def test_count_files_by_domain_scopes_only_counts_matching_visible_spaces(
 
 
 @pytest.mark.asyncio
-async def test_count_files_by_category_scopes_sums_bound_space_file_totals():
-    """Category homepage counts SUCCESS+not-deleted files per bound space (list-aligned)."""
+async def test_count_files_by_category_scopes_filters_by_document_type_in_bound_spaces():
+    """Category homepage counts files whose document-type code matches the card code."""
 
     class FakeResult:
         def all(self):
-            return [(10, 3), (20, 5)]
+            return [
+                (10, "GF-STD-PP-001"),
+                (10, "GF-POL-PP-002"),
+                (20, "GF-STD-QM-003"),
+                (10, "GF-PP-QM-004"),
+            ]
 
     class FakeSession:
         async def exec(self, statement):
@@ -167,16 +172,16 @@ async def test_count_files_by_category_scopes_sums_bound_space_file_totals():
     session = FakeSession()
     with _patch_session_factory(session):
         result = await KnowledgeFileDao.async_count_files_by_category_scopes(
-            {"POL": {10}, "STD": {10, 20}},
+            {"POL": {10}, "STD": {10, 20}, "QM": {10}},
         )
 
-    # Encoding is ignored: POL and STD only sum files in their bound spaces.
-    assert result == {"POL": 3, "STD": 8}
+    # Last row's document type is QM, but space 10 is not in QM scope.
+    assert result == {"POL": 1, "STD": 2, "QM": 0}
 
 
 @pytest.mark.asyncio
-async def test_count_files_by_category_scopes_does_not_use_encoding_filter(async_db_session):
-    """Category counts include all SUCCESS files in bound spaces, regardless of encoding."""
+async def test_count_files_by_category_scopes_rejects_like_overfetch_on_non_document_segment(async_db_session):
+    # LIKE '%-POL-%' prefilter fetches this row, but the document-type segment is STD.
     await _insert(async_db_session, knowledge_id=10, file_name="a", file_encoding="GF-STD-POL-001")
     await _insert(async_db_session, knowledge_id=10, file_name="b", file_encoding="GF-POL-PP-002")
     await _insert(async_db_session, knowledge_id=20, file_name="c", file_encoding="GF-STD-QM-003")
@@ -186,7 +191,7 @@ async def test_count_files_by_category_scopes_does_not_use_encoding_filter(async
             {"POL": {10}, "STD": {10, 20}},
         )
 
-    assert result == {"POL": 2, "STD": 3}
+    assert result == {"POL": 1, "STD": 2}
 
 
 @pytest.mark.asyncio
