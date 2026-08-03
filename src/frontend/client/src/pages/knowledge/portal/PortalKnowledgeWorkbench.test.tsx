@@ -5764,6 +5764,61 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(screen.queryByText("搜索结果.md")).not.toBeInTheDocument();
     });
 
+    test("keeps search keyword and results after editing tags in search results", async () => {
+        const personalSpace = makeSpace("personal-1", "我的技术文档", {
+            role: SpaceRole.ADMIN,
+        });
+        const rootFile = makeFile("201", "后端开发.md");
+        const matchedFile = makeFile("401", "搜索结果.md", {
+            tags: [{ id: 1, name: "旧标签" }],
+        });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [],
+            personalSpaces: [personalSpace],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({
+            data: [rootFile],
+            total: 1,
+        } as any);
+        jest.mocked(searchSpaceChildrenApi).mockResolvedValue({
+            data: [matchedFile],
+            total: 1,
+        } as any);
+
+        renderWorkbench();
+
+        expect(await screen.findByText("后端开发.md")).toBeInTheDocument();
+
+        const input = await screen.findByPlaceholderText("com_knowledge.search_in_current_space");
+        fireEvent.change(input, { target: { value: "搜索" } });
+        fireEvent.keyDown(input, { key: "Enter" });
+
+        expect(await screen.findByText("搜索结果.md")).toBeInTheDocument();
+        expect(screen.queryByText("后端开发.md")).not.toBeInTheDocument();
+
+        jest.mocked(getSpaceChildrenApi).mockClear();
+        jest.mocked(searchSpaceChildrenApi).mockClear();
+
+        fireEvent.click(screen.getByTitle("com_knowledge.edit_tags"));
+        fireEvent.click(await screen.findByRole("button", { name: "保存标签" }));
+
+        await waitFor(() => {
+            expect(mockUpdateFileTagsApi).toHaveBeenCalledWith("personal-1", "401", [3]);
+        });
+
+        expect(input).toHaveValue("搜索");
+        expect(screen.getByText("搜索结果.md")).toBeInTheDocument();
+        expect(screen.queryByText("后端开发.md")).not.toBeInTheDocument();
+        expect(getSpaceChildrenApi).not.toHaveBeenCalled();
+        expect(searchSpaceChildrenApi).not.toHaveBeenCalled();
+
+        fireEvent.click(screen.getByTitle("com_knowledge.edit_tags"));
+        const reopened = await screen.findByTestId("edit-tags-modal");
+        expect(within(reopened).getByTestId("edit-tags-initial-ids")).toHaveTextContent("3");
+    });
+
     test("deletes a file from search results through the backend", async () => {
         const personalSpace = makeSpace("personal-1", "我的技术文档", {
             role: SpaceRole.ADMIN,

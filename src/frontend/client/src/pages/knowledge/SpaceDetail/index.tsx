@@ -1264,7 +1264,9 @@ export function KnowledgeSpaceContent({
         }
     };
 
-    // Called after tags are saved successfully — patch in place, then refresh from parent.
+    // Called after tags are saved successfully — patch tags in place only.
+    // Do not trigger a parent list reload here: portal reloadFiles clears search
+    // state, and useFileManager already keeps search params on loadFiles.
     const handleTagsSaved = (tags?: FileTag[], context?: { fileIds?: string[] }) => {
         const savedFileId = editingTagsFileId;
         const batchFileIds = context?.fileIds ?? [];
@@ -1276,7 +1278,6 @@ export function KnowledgeSpaceContent({
             setFiles((prev) => prev.map((file) => (
                 file.id === savedFileId ? { ...file, tags } : file
             )));
-            onEditTags(savedFileId);
             return;
         }
 
@@ -1292,10 +1293,6 @@ export function KnowledgeSpaceContent({
                 });
                 return { ...file, tags: Array.from(merged.values()) };
             }));
-        }
-
-        if (batchFileIds.length > 0) {
-            onEditTags(batchFileIds[0]);
         }
     };
 
