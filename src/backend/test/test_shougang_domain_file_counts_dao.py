@@ -124,13 +124,16 @@ async def test_count_files_by_domain_codes_unmatched_code_returns_zero(async_db_
 
 @pytest.mark.asyncio
 async def test_count_files_by_domain_scopes_only_counts_matching_visible_spaces():
+    """Domain scopes still count by encoding business segment (unchanged by category fix)."""
+
     class FakeResult:
         def all(self):
+            # (file_id, reference_document_id, knowledge_id, file_encoding)
             return [
-                (10, "GF-STD-PP-001"),
-                (11, "GF-STD-PP-002"),
-                (20, "GF-STD-QM-003"),
-                (10, "GF-PP-QM-004"),
+                (1, 1, 10, "GF-STD-PP-001"),
+                (2, 2, 11, "GF-STD-PP-002"),
+                (3, 3, 20, "GF-STD-QM-003"),
+                (4, 4, 10, "GF-PP-QM-004"),
             ]
 
     class FakeSession:
@@ -149,17 +152,12 @@ async def test_count_files_by_domain_scopes_only_counts_matching_visible_spaces(
 
 
 @pytest.mark.asyncio
-async def test_count_files_by_category_scopes_filters_by_document_type_in_bound_spaces():
-    """Category homepage counts files whose document-type code matches the card code."""
+async def test_count_files_by_category_scopes_sums_bound_space_file_totals():
+    """Category homepage counts SUCCESS+not-deleted files per bound space (list-aligned)."""
 
     class FakeResult:
         def all(self):
-            return [
-                (10, "GF-STD-PP-001"),
-                (10, "GF-POL-PP-002"),
-                (20, "GF-STD-QM-003"),
-                (10, "GF-PP-QM-004"),
-            ]
+            return [(10, 3), (20, 5)]
 
     class FakeSession:
         async def exec(self, statement):
@@ -169,16 +167,16 @@ async def test_count_files_by_category_scopes_filters_by_document_type_in_bound_
     session = FakeSession()
     with _patch_session_factory(session):
         result = await KnowledgeFileDao.async_count_files_by_category_scopes(
-            {"POL": {10}, "STD": {10, 20}, "QM": {10}},
+            {"POL": {10}, "STD": {10, 20}},
         )
 
-    # Last row's document type is QM (parsed from the right), but space 10 is not in QM scope.
-    assert result == {"POL": 1, "STD": 2, "QM": 0}
+    # Encoding is ignored: POL and STD only sum files in their bound spaces.
+    assert result == {"POL": 3, "STD": 8}
 
 
 @pytest.mark.asyncio
-async def test_count_files_by_category_scopes_rejects_like_overfetch_on_non_document_segment(async_db_session):
-    # LIKE '%-POL-%' prefilter fetches this row, but the document-type segment is STD.
+async def test_count_files_by_category_scopes_does_not_use_encoding_filter(async_db_session):
+    """Category counts include all SUCCESS files in bound spaces, regardless of encoding."""
     await _insert(async_db_session, knowledge_id=10, file_name="a", file_encoding="GF-STD-POL-001")
     await _insert(async_db_session, knowledge_id=10, file_name="b", file_encoding="GF-POL-PP-002")
     await _insert(async_db_session, knowledge_id=20, file_name="c", file_encoding="GF-STD-QM-003")
@@ -188,7 +186,7 @@ async def test_count_files_by_category_scopes_rejects_like_overfetch_on_non_docu
             {"POL": {10}, "STD": {10, 20}},
         )
 
-    assert result == {"POL": 1, "STD": 2}
+    assert result == {"POL": 2, "STD": 3}
 
 
 @pytest.mark.asyncio
