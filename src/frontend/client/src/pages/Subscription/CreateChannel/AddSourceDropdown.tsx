@@ -160,7 +160,14 @@ export function AddSourceDropdown({
         const isInsideOtherDialog = (node: Node | null) => {
             if (!(node instanceof Element)) return false;
             const targetDialog = node.closest('[role="dialog"], [role="alertdialog"]');
-            return targetDialog != null && targetDialog !== rootDialog;
+            if (targetDialog) return targetDialog !== rootDialog;
+            // A modal's full-screen mask is a SIBLING of its [role=alertdialog]
+            // node inside the same portal layer, so `closest` can never see it.
+            // Without this, clicking the mask of the stacked "link unrecognized"
+            // confirm read as "clicked outside" and collapsed this panel — which
+            // looked like the click had passed through the mask.
+            const layerDialog = node.parentElement?.querySelector('[role="dialog"], [role="alertdialog"]');
+            return layerDialog != null && layerDialog !== rootDialog;
         };
 
         const closePanel = () => {
