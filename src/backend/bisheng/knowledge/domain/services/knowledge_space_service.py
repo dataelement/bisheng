@@ -10493,6 +10493,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 if int(clinic_binding.department_id) != int(department_id):
                     clinic_binding.department_id = int(department_id)
                     await DepartmentKnowledgeSpaceDao.aupdate(clinic_binding)
+                await KnowledgeSpaceContentStat.enqueue_space_rename_stat_async(space_id)
                 return space
 
             old_admin_rows = await DepartmentService.aget_admins(old_department.dept_id, self.login_user)
@@ -10584,7 +10585,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                         )
                         raise
                 raise
-        if name_changed:
+        if name_changed or department_id is not None:
             await KnowledgeSpaceContentStat.enqueue_space_rename_stat_async(space_id)
         new_auth_type = space.auth_type
 
@@ -13282,6 +13283,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
         folder.file_name = new_name
         updated_folder = await KnowledgeFileDao.async_update(folder)
         await KnowledgeDao.async_update_knowledge_update_time_by_id(folder.knowledge_id)
+        descendant_prefix = f"{folder.file_level_path}/{folder.id}"
+        descendants = await SpaceFileDao.get_children_by_prefix(
+            folder.knowledge_id,
+            descendant_prefix,
+        )
+        await KnowledgeSpaceContentStat.enqueue_file_stat_async(
+            [item.id for item in descendants if item.file_type == FileType.FILE.value]
+        )
         return updated_folder
 
     async def delete_folder(self, space_id: int, folder_id: int):
@@ -13811,6 +13820,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 before_value=old_location,
                 after_value=new_location,
             )
+        await KnowledgeSpaceContentStat.enqueue_file_stat_async([file_id])
         self._enqueue_recommendation_file_refresh(file_id)
         return KnowledgeSpaceFileResponse(**updated_file.model_dump())
 
@@ -13909,6 +13919,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if new_parent_path != old_folder_path:
             await self.update_folder_update_time(new_parent_path)
         await KnowledgeDao.async_update_knowledge_update_time_by_id(space_id)
+        descendants = await SpaceFileDao.get_children_by_prefix(space_id, new_prefix)
+        await KnowledgeSpaceContentStat.enqueue_file_stat_async(
+            [item.id for item in descendants if item.file_type == FileType.FILE.value]
+        )
         self._enqueue_recommendation_resource_refresh("folder", folder_id)
         return KnowledgeSpaceFileResponse(**updated_folder.model_dump())
 
@@ -14845,6 +14859,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 ),
             )
         if encoding_changed or subcategory_changed:
+            await KnowledgeSpaceContentStat.enqueue_file_stat_async([file_id])
             self._enqueue_recommendation_file_refresh(file_id)
             if resolved is not None:
                 await self._mark_document_content_changed(updated_file)
@@ -15666,6 +15681,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         )
         if resolved is not None:
             await self._mark_document_content_changed(file_record)
+        await KnowledgeSpaceContentStat.enqueue_file_stat_async([file_id])
 
     async def batch_add_file_tags(
         self, space_id: int, file_ids: list[int], tag_ids: list[int], review_tag_ids: list[int]
@@ -15727,6 +15743,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             )
             if resolved_by_file_id[notified_file_id] is not None:
                 await self._mark_document_content_changed(notified_file)
+        await KnowledgeSpaceContentStat.enqueue_file_stat_async([int(file_record.id) for file_record in files])
 
     async def retry_space_files(self, space_id: int, req_data: dict) -> list:
         """

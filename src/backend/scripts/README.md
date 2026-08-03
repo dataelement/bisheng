@@ -41,6 +41,48 @@ PYTHONPATH=./ .venv/bin/python scripts/execute_sql.py \
 
 ## Knowledge Space Scripts
 
+### `rebuild_knowledge_space_content_stat.py`
+
+重建数据看板的知识空间内容统计索引 `mid_knowledge_space_content_stat`。默认模式严格只读，
+报告 MySQL 当前有效文件数、ES 文件快照/预览日汇总数量、索引 `refresh_interval`，以及新旧
+Redis 队列状态。默认命令不会创建、删除或更新索引，也不会修改 Redis。
+
+```bash
+# 只读预检；部署后必须先执行并保存输出
+PYTHONPATH=./ uv run python scripts/rebuild_knowledge_space_content_stat.py
+
+# 不可逆的正式重建；必须在独立最终确认后，逐字确认唯一目标索引
+PYTHONPATH=./ uv run python scripts/rebuild_knowledge_space_content_stat.py \
+  --apply \
+  --confirm-index mid_knowledge_space_content_stat
+```
+
+正式执行前提：
+
+- 所有 API、Celery worker 与 beat 都已部署同一新版本，旧进程已停止，避免重建后写回旧文档结构。
+- MySQL、Redis、Celery 与统计 Elasticsearch 均健康；预检中的目标索引必须正好是
+  `mid_knowledge_space_content_stat`。
+- 已审核预检中的有效文件数、文件快照数、预览日汇总数、旧/新队列状态和当前刷新间隔。
+- 已安排维护窗口并接受看板短暂为空或只显示部分文件数据；重建期间 30 秒文件可见性和
+  5 秒预览可见性 SLO 均视为降级，不适用。
+- 已取得运行时预检后的单独最终确认。实现或测试阶段不得运行 `--apply`。
+
+风险与回退：正式模式会直接删除原索引，不迁移历史预览数据，历史预览次数会永久清零，
+无法通过脚本回滚。文件快照可以再次从 MySQL 全量重建；预览历史不能恢复，除非另有外部备份。
+脚本使用与全量/增量消费者相同的 owner lock，回收遗留 processing，按新 mapping 创建索引并
+显式设置 `refresh_interval=1s`，全量重建后清理精确旧队列键；释放锁后如仍有 pending，会立即
+重新调度增量同步。锁繁忙、失锁或依赖异常会返回非零退出码并在 JSON 中标记 `degraded` 和
+`failure_stage`。
+
+运行后验证：
+
+- 退出码为 `0`，结果中 `degraded=false`、`owner_lock_released=true`。
+- `result.index.refresh_interval` 为 `1s`，`preview_daily_count` 为 `0`。
+- `result.index.file_snapshot_count` 与 `preflight.source_file_count` 一致；若执行期间有业务变更，
+  等 pending 消费完成后再次核对。
+- 新建或更新一个文件，人工计时验证 30 秒内看板可查；预览一个已有快照的文件，人工计时验证
+  5 秒内当日 `preview_count` 增加。异常或积压时记录为降级，不把该次计时作为 SLO 达标证据。
+
 ### `knowledge_document_distribution_preflight.py`
 
 F059 单实体发布/分享上线前只读检查。校验三张核心表、文档 tenant 可唯一反推、

@@ -72,6 +72,7 @@ class BaseMidTable(BaseModel):
     _index_name: str = ""
     _mappings: dict[str, Any] = {}
     _update_mappings_on_existing: bool = False
+    _include_common_mappings: bool = True
     _mapping_updates_applied: ClassVar[set[str]] = set()
     _es_client: AsyncElasticsearch = None
     _es_client_sync: Elasticsearch = None
@@ -86,7 +87,7 @@ class BaseMidTable(BaseModel):
             return None
         if not self._es_client:
             self._es_client = await get_es_connection()
-        mappings = self._mappings | common_properties
+        mappings = self._mappings | common_properties if self._include_common_mappings else self._mappings
         try:
             exists = await self._es_client.indices.exists(index=self._index_name)
             if not exists:
@@ -96,10 +97,7 @@ class BaseMidTable(BaseModel):
                 )
                 if self._update_mappings_on_existing:
                     self._mapping_updates_applied.add(self._index_name)
-            elif (
-                self._update_mappings_on_existing
-                and self._index_name not in self._mapping_updates_applied
-            ):
+            elif self._update_mappings_on_existing and self._index_name not in self._mapping_updates_applied:
                 await self._es_client.indices.put_mapping(
                     index=self._index_name,
                     properties=mappings,
@@ -117,7 +115,7 @@ class BaseMidTable(BaseModel):
             return None
         if not self._es_client_sync:
             self._es_client_sync = get_es_connection_sync()
-        mappings = self._mappings | common_properties
+        mappings = self._mappings | common_properties if self._include_common_mappings else self._mappings
         try:
             exists = self._es_client_sync.indices.exists(index=self._index_name)
             if not exists:
@@ -127,10 +125,7 @@ class BaseMidTable(BaseModel):
                 )
                 if self._update_mappings_on_existing:
                     self._mapping_updates_applied.add(self._index_name)
-            elif (
-                self._update_mappings_on_existing
-                and self._index_name not in self._mapping_updates_applied
-            ):
+            elif self._update_mappings_on_existing and self._index_name not in self._mapping_updates_applied:
                 self._es_client_sync.indices.put_mapping(
                     index=self._index_name,
                     properties=mappings,

@@ -85,12 +85,14 @@ class DashboardService(BaseModel):
     ) -> List[DimensionQueryFilter]:
         if dataset_code not in self.REALTIME_SCOPED_DATASETS:
             return []
-        filters = [
-            DimensionQueryFilter(
-                fieldId="tenant_id",
-                values=[get_current_tenant_id() or DEFAULT_TENANT_ID],
+        filters = []
+        if dataset_code != "mid_knowledge_space_content_stat":
+            filters.append(
+                DimensionQueryFilter(
+                    fieldId="tenant_id",
+                    values=[get_current_tenant_id() or DEFAULT_TENANT_ID],
+                )
             )
-        ]
         if self.login_user.is_admin():
             return filters
 

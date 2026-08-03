@@ -1,9 +1,10 @@
 """set_primary: promote a non-primary version back to primary."""
+
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi import HTTPException
-from unittest.mock import MagicMock, AsyncMock
 
 from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
@@ -35,6 +36,7 @@ from bisheng.knowledge.domain.services.knowledge_document_distribution_service i
 @pytest.fixture
 def enable_switch(monkeypatch):
     from bisheng.knowledge.domain.services import knowledge_version_service as kvs_mod
+
     mock_settings = MagicMock()
     conf = MagicMock()
     conf.version_management.enabled = True
@@ -65,7 +67,8 @@ async def _seed_two_version_doc(session):
 
 def _build_svc(session):
     return KnowledgeVersionService(
-        request=MagicMock(), login_user=MagicMock(),
+        request=MagicMock(),
+        login_user=MagicMock(),
         doc_repo=KnowledgeDocumentRepositoryImpl(session),
         version_repo=KnowledgeDocumentVersionRepositoryImpl(session),
         knowledge_file_repo=KnowledgeFileRepositoryImpl(session),
@@ -80,8 +83,14 @@ async def test_set_primary_demotes_old_and_points_doc(enable_switch, async_db_se
         "KnowledgeAuditTelemetryService.audit_set_primary_version",
         MagicMock(return_value=None),
     )
+    enqueue_projection = AsyncMock(return_value=True)
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.services.knowledge_version_service.KnowledgeSpaceContentStat.enqueue_file_stat_async",
+        enqueue_projection,
+    )
 
     svc = _build_svc(async_db_session)
+    svc._notify_favorite_version_changed = AsyncMock()
     result = await svc.set_primary_version(version_id=v1.id)
     assert result.new_primary_version_no == 1
 
@@ -91,6 +100,7 @@ async def test_set_primary_demotes_old_and_points_doc(enable_switch, async_db_se
     assert by_no[2].is_primary is False
     fresh_doc = await svc.doc_repo.find_by_id(doc.id)
     assert fresh_doc.primary_version_id == v1.id
+    enqueue_projection.assert_awaited_once_with([100, 101])
 
 
 @pytest.mark.asyncio
@@ -120,6 +130,11 @@ async def test_set_primary_no_op_when_already_primary(enable_switch, async_db_se
         "KnowledgeAuditTelemetryService.audit_set_primary_version",
         MagicMock(return_value=None),
     )
+    enqueue_projection = AsyncMock(return_value=True)
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.services.knowledge_version_service.KnowledgeSpaceContentStat.enqueue_file_stat_async",
+        enqueue_projection,
+    )
     svc = _build_svc(async_db_session)
     result = await svc.set_primary_version(version_id=v2.id)
     assert result.new_primary_version_no == 2
@@ -127,6 +142,7 @@ async def test_set_primary_no_op_when_already_primary(enable_switch, async_db_se
     by_no = {v.version_no: v for v in fresh}
     assert by_no[2].is_primary is True
     assert by_no[1].is_primary is False
+    enqueue_projection.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -236,13 +252,17 @@ async def test_set_primary_delegates_distributed_manager_switch(
         )
     )
     service._enqueue_document_distribution_projection = AsyncMock()
+    enqueue_projection = AsyncMock(return_value=True)
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.services.knowledge_version_service.KnowledgeSpaceContentStat.enqueue_file_stat_async",
+        enqueue_projection,
+    )
 
     result = await service.set_primary_version(version_id=501)
 
     assert result.new_primary_version_no == 1
     (
-        service.document_distribution_service.switch_primary_manager
-        .assert_awaited_once_with(
+        service.document_distribution_service.switch_primary_manager.assert_awaited_once_with(
             tenant_id=7,
             document_id=91,
             current_manager_file_id=101,
@@ -253,6 +273,7 @@ async def test_set_primary_delegates_distributed_manager_switch(
         tenant_id=7,
         entry_ids=None,
     )
+    enqueue_projection.assert_awaited_once_with([100, 101])
 
 
 @pytest.mark.asyncio

@@ -51,6 +51,9 @@ from bisheng.knowledge.domain.services.favorite_notify import (
     collect_favorite_recipient_snapshots,
     enqueue_favorite_change_events,
 )
+from bisheng.telemetry.domain.mid_table.knowledge_space_content import (
+    KnowledgeSpaceContentStat,
+)
 
 
 class KnowledgeVersionService:
@@ -572,6 +575,7 @@ class KnowledgeVersionService:
             before_value=f"V{target_primary_v.version_no}",
             after_value=f"V{next_no}",
         )
+        await KnowledgeSpaceContentStat.enqueue_file_stat_async(affected_file_ids)
 
         return LinkResponse(document_id=target_document_id, new_version_no=next_no)
 
@@ -668,6 +672,9 @@ class KnowledgeVersionService:
                     tenant_id=int(self.login_user.tenant_id),
                     entry_ids=None,
                 )
+                await KnowledgeSpaceContentStat.enqueue_file_stat_async(
+                    [target_kf.id, current_manager.id]
+                )
             KnowledgeAuditTelemetryService.audit_set_primary_version(
                 self.login_user,
                 self.request,
@@ -716,6 +723,9 @@ class KnowledgeVersionService:
                 action_code=FAVORITE_SOURCE_PRIMARY_VERSION_CHANGED,
                 before_value=f"V{old_primary.version_no}",
                 after_value=f"V{target_version.version_no}",
+            )
+            await KnowledgeSpaceContentStat.enqueue_file_stat_async(
+                [target_kf.id, current_manager.id]
             )
 
         KnowledgeAuditTelemetryService.audit_set_primary_version(
@@ -851,6 +861,8 @@ class KnowledgeVersionService:
             version_no,
         )
         enqueue_favorite_change_events(favorite_delete_events)
+        if kf is not None:
+            await KnowledgeSpaceContentStat.enqueue_file_stat_async([kf.id])
         return DeleteVersionResponse(document_id=doc_id, deleted_version_no=version_no)
 
     async def scan_similar_for_file(

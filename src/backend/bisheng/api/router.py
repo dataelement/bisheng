@@ -125,8 +125,8 @@ router_rpc = APIRouter(
     prefix="/api/v2",
 )
 router_rpc.include_router(knowledge_router_rpc)
-router_rpc.include_router(filelib_router_rpc)
 router_rpc.include_router(filelib_sync_router_rpc)
+router_rpc.include_router(filelib_router_rpc)
 router_rpc.include_router(chat_router_rpc)
 router_rpc.include_router(assistant_router_rpc)
 router_rpc.include_router(workflow_router_rpc)
