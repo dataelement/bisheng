@@ -47,6 +47,7 @@ from bisheng.permission.domain.services.owner_service import (
     OwnerProjectionContext,
 )
 from bisheng.permission.domain.services.permission_explain_service import (
+    InheritedGrantSet,
     PermissionSourceExplanation,
 )
 from bisheng.permission.domain.services.projection_plan import ProjectionOutcome
@@ -284,23 +285,44 @@ class SqlPermissionControlState:
         target: VerifiedPermissionTarget,
         models: tuple[GrantModelSnapshot, ...],
     ) -> tuple[GrantSnapshot, ...]:
+        inherited = await self.inherited_grant_set(
+            target=target,
+            models=models,
+        )
+        return inherited.grants if inherited is not None else ()
+
+    async def inherited_grant_set(
+        self,
+        *,
+        target: VerifiedPermissionTarget,
+        models: tuple[GrantModelSnapshot, ...],
+    ) -> InheritedGrantSet | None:
         if target.parent_type is None or target.parent_id is None:
-            return ()
-        parent_mode = await self._mode_by_identity(
+            return None
+        async with get_async_db_session() as session:
+            ancestor_mode = await self._nearest_custom_ancestor_mode(
+                session,
+                tenant_id=target.tenant_id,
+                resource_type=target.parent_type,
+                resource_id=target.parent_id,
+            )
+        ancestor_target = VerifiedPermissionTarget.from_business_service(
             tenant_id=target.tenant_id,
-            resource_type=target.parent_type,
-            resource_id=target.parent_id,
+            resource_type=ancestor_mode.resource_type,
+            resource_id=ancestor_mode.resource_id,
+            resource_version=ancestor_mode.version,
+            context_version=(f"{ancestor_mode.version}:{ancestor_mode.projection_state}"),
+            parent_type=ancestor_mode.parent_type,
+            parent_id=ancestor_mode.parent_id,
         )
-        parent_target = VerifiedPermissionTarget.from_business_service(
-            tenant_id=target.tenant_id,
-            resource_type=target.parent_type,
-            resource_id=target.parent_id,
-            resource_version=parent_mode.version,
-            context_version=(f"{parent_mode.version}:{parent_mode.projection_state}"),
-            parent_type=parent_mode.parent_type,
-            parent_id=parent_mode.parent_id,
+        return InheritedGrantSet(
+            resource_type=ancestor_mode.resource_type,
+            resource_id=ancestor_mode.resource_id,
+            grants=await self.load_grants(
+                target=ancestor_target,
+                models=models,
+            ),
         )
-        return await self.load_grants(target=parent_target, models=models)
 
     async def load_source_page(
         self,
@@ -315,10 +337,12 @@ class SqlPermissionControlState:
 
         if after_id < 0 or limit <= 0:
             raise ValueError("Permission source cursor bounds are invalid")
+        normalized_mode = mode.upper()
         model_by_key = {model.model_key: model for model in models if model.active}
         if not model_by_key:
             return (), False
         fetch_limit = limit + 1
+        inherited_mode: ResourcePermissionMode | None = None
         async with get_async_db_session() as session:
             local_rows = await self._source_rows(
                 session,
@@ -328,15 +352,21 @@ class SqlPermissionControlState:
                 model_keys=tuple(model_by_key),
                 after_id=after_id,
                 limit=fetch_limit,
-                protected_only=mode.upper() == "INHERIT",
+                protected_only=normalized_mode == "INHERIT",
             )
             inherited_rows = []
-            if mode.upper() == "INHERIT" and target.parent_type is not None and target.parent_id is not None:
-                inherited_rows = await self._source_rows(
+            if normalized_mode == "INHERIT" and target.parent_type is not None and target.parent_id is not None:
+                inherited_mode = await self._nearest_custom_ancestor_mode(
                     session,
                     tenant_id=target.tenant_id,
                     resource_type=target.parent_type,
                     resource_id=target.parent_id,
+                )
+                inherited_rows = await self._source_rows(
+                    session,
+                    tenant_id=target.tenant_id,
+                    resource_type=inherited_mode.resource_type,
+                    resource_id=inherited_mode.resource_id,
                     model_keys=tuple(model_by_key),
                     after_id=after_id,
                     limit=fetch_limit,
@@ -350,7 +380,9 @@ class SqlPermissionControlState:
             key=lambda item: (int(item[0].id or 0), item[1], item[2]),
         )
         selected = combined[:limit]
-        inherited_from = f"{target.parent_type}:{target.parent_id}" if target.parent_type and target.parent_id else None
+        inherited_from = (
+            f"{inherited_mode.resource_type}:{inherited_mode.resource_id}" if inherited_mode is not None else None
+        )
         return (
             tuple(
                 PermissionSourceExplanation(
@@ -366,7 +398,7 @@ class SqlPermissionControlState:
                     scope=scope,
                     inherited_from=(inherited_from if scope == "INHERITED" else None),
                     protected=bool(row.protected),
-                    editable=(scope == "LOCAL" and mode.upper() == "CUSTOM" and not row.protected),
+                    editable=(scope == "LOCAL" and normalized_mode == "CUSTOM" and not row.protected),
                 )
                 for row, model_key, scope in selected
             ),
@@ -926,24 +958,34 @@ class SqlPermissionControlState:
             by_model[owner_grant.model.model_key] = owner_grant
         return tuple(by_model[key] for key in sorted(by_model) if by_model[key].active and by_model[key].sources)
 
-    async def _mode_by_identity(
-        self,
+    @staticmethod
+    async def _nearest_custom_ancestor_mode(
+        session,
         *,
         tenant_id: int,
         resource_type: str,
         resource_id: str,
     ) -> ResourcePermissionMode:
-        async with get_async_db_session() as session:
+        current = (resource_type, resource_id)
+        visited: set[tuple[str, str]] = set()
+        while current not in visited:
+            visited.add(current)
             statement = select(ResourcePermissionMode).where(
                 ResourcePermissionMode.tenant_id == tenant_id,
-                ResourcePermissionMode.resource_type == resource_type,
-                ResourcePermissionMode.resource_id == resource_id,
+                ResourcePermissionMode.resource_type == current[0],
+                ResourcePermissionMode.resource_id == current[1],
                 ResourcePermissionMode.projection_state == "CURRENT",
             )
             row = (await session.execute(statement)).scalars().first()
-        if row is None:
-            raise PermissionPublishNotReadyError(msg="Inherited permission scope is not current")
-        return row
+            if row is None:
+                raise PermissionPublishNotReadyError(msg="Inherited permission scope is not current")
+            normalized_mode = row.mode.upper()
+            if normalized_mode == "CUSTOM":
+                return row
+            if normalized_mode != "INHERIT" or row.parent_type is None or row.parent_id is None:
+                raise PermissionPublishNotReadyError(msg="Inherited permission chain has no custom ancestor")
+            current = (row.parent_type, row.parent_id)
+        raise PermissionPublishNotReadyError(msg="Inherited permission chain contains a cycle")
 
     @staticmethod
     async def _mode_row(session, *, target):
