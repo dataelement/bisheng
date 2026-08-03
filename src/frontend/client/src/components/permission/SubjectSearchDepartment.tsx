@@ -341,7 +341,9 @@ function TreeNode({
           }}
         />
         <Building2 className="h-4 w-4 text-gray-400" />
-        <span className="min-w-0 truncate text-sm">{node.name}</span>
+        <span className="min-w-0 truncate text-sm" title={node.name}>
+          {node.name}
+        </span>
         {node.member_count != null && (
           <span className="ml-1 text-xs text-gray-400">({node.member_count})</span>
         )}

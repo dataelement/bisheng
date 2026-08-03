@@ -1586,27 +1586,38 @@ class KnowledgeSpaceService(KnowledgeUtils):
         """Return departments visible to the current user for space creation.
 
         Global admins (and approval delegates) see every active department in the
-        tenant; other users only see the departments they are administrators of
+        tenant; other users see the departments they belong to or administer,
         plus their descendants.
         """
         if self.login_user.is_admin() or approval_request:
             return await DepartmentDao.aget_active_by_tenant(int(self.login_user.tenant_id))
 
-        admin_department_ids = await DepartmentAdminGrantDao.aget_department_ids_by_user_id(self.login_user.user_id)
-        if not admin_department_ids:
+        user_departments, admin_department_ids = await asyncio.gather(
+            UserDepartmentDao.aget_user_departments(self.login_user.user_id),
+            DepartmentAdminGrantDao.aget_department_ids_by_user_id(self.login_user.user_id),
+        )
+        root_department_ids = {
+            int(row.department_id)
+            for row in user_departments
+            if getattr(row, "department_id", None) is not None
+        }
+        root_department_ids.update(int(department_id) for department_id in admin_department_ids)
+        if not root_department_ids:
             return []
 
         all_departments = await DepartmentDao.aget_active_by_tenant(int(self.login_user.tenant_id))
-        admin_dept_paths = {
-            dept.path for dept in all_departments if dept.id in admin_department_ids and getattr(dept, "path", None)
+        visible_root_paths = {
+            dept.path
+            for dept in all_departments
+            if int(dept.id) in root_department_ids and getattr(dept, "path", None)
         }
-        if not admin_dept_paths:
+        if not visible_root_paths:
             return []
 
         return [
             dept
             for dept in all_departments
-            if getattr(dept, "path", None) and any(dept.path.startswith(path) for path in admin_dept_paths)
+            if getattr(dept, "path", None) and any(dept.path.startswith(path) for path in visible_root_paths)
         ]
 
     async def _department_options_for_create(
