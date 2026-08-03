@@ -293,3 +293,4 @@ mdf_file_read_count.sh
 # Local-only 门户联调 (do not commit)
 .cursor/rules/local-portal-dev-stack.mdc
 scripts/dev-stack.sh
+.cursor/

@@ -12,6 +12,7 @@ from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT, JsonType
 from bisheng.database.base import async_get_count, get_count
+from bisheng.knowledge.domain.constants import parse_shougang_file_encoding_codes
 
 
 class KnowledgeFileStatus(int, Enum):
@@ -586,13 +587,12 @@ class KnowledgeFileDao(KnowledgeFileBase):
 
     @classmethod
     async def async_count_files_by_category_scopes(cls, category_space_ids: dict[str, set[int]]) -> dict[str, int]:
-        """Count SUCCESS files in each category card's bound spaces.
+        """Count SUCCESS files per document-type category within each card's bound spaces.
 
-        Aligns with portal category landing list (``aget_file_by_space_filters*``):
-        ``file_type=FILE``, ``status=SUCCESS``, ``deleted_at IS NULL``. Does **not** apply
-        ``active_inventory_predicate`` (non-primary historical rows stay visible in the list).
-        Category ``code`` is only the aggregation key — unlike domain scopes, encoding is
-        not used as a filter. Domain counting stays in ``async_count_files_by_domain_scopes``.
+        Aligns with portal category landing list when ``document_type`` is locked to the
+        card code: ``file_type=FILE``, ``status=SUCCESS``, ``deleted_at IS NULL``,
+        filtered by document-type segment parsed from ``file_encoding``. Does **not**
+        apply ``active_inventory_predicate``. Domain scopes use ``async_count_files_by_domain_scopes``.
         """
         normalized_scopes = {
             code.strip().upper(): {int(space_id) for space_id in space_ids if int(space_id) > 0}
@@ -600,24 +600,35 @@ class KnowledgeFileDao(KnowledgeFileBase):
             if code and code.strip()
         }
         counts = dict.fromkeys(normalized_scopes, 0)
-        all_space_ids = sorted({space_id for space_ids in normalized_scopes.values() for space_id in space_ids})
-        if not all_space_ids:
-            return counts
-        statement = (
-            select(KnowledgeFile.knowledge_id, func.count().label("cnt"))
-            .where(
-                KnowledgeFile.knowledge_id.in_(all_space_ids),
-                KnowledgeFile.file_type == FileType.FILE.value,
-                KnowledgeFile.status == KnowledgeFileStatus.SUCCESS.value,
-                col(KnowledgeFile.deleted_at).is_(None),
+        conditions = [
+            and_(
+                KnowledgeFile.knowledge_id.in_(space_ids),
+                col(KnowledgeFile.file_encoding).like(f"%-{code}-%"),
             )
-            .group_by(KnowledgeFile.knowledge_id)
+            for code, space_ids in normalized_scopes.items()
+            if space_ids
+        ]
+        if not conditions:
+            return counts
+        statement = select(
+            KnowledgeFile.knowledge_id,
+            KnowledgeFile.file_encoding,
+        ).where(
+            KnowledgeFile.file_type == FileType.FILE.value,
+            KnowledgeFile.status == KnowledgeFileStatus.SUCCESS.value,
+            col(KnowledgeFile.deleted_at).is_(None),
+            col(KnowledgeFile.file_encoding).is_not(None),
+            or_(*conditions),
         )
         async with get_async_db_session() as session:
             rows = (await session.exec(statement)).all()
-        file_count_map = {int(row[0]): int(row[1] or 0) for row in rows}
-        for code, space_ids in normalized_scopes.items():
-            counts[code] = sum(int(file_count_map.get(space_id, 0) or 0) for space_id in space_ids)
+        for knowledge_id, encoding in rows:
+            document_code, _ = parse_shougang_file_encoding_codes({"file_encoding": encoding})
+            document_code = (document_code or "").strip().upper()
+            if not document_code:
+                continue
+            if int(knowledge_id) in normalized_scopes.get(document_code, set()):
+                counts[document_code] += 1
         return counts
 
     @classmethod
