@@ -82,10 +82,45 @@ async def test_resolve_reviewable_space_ids_for_department_admin():
                 ]
             ),
         ),
+        patch(
+            "bisheng.knowledge.domain.services.department_admin_member_access.aget_dept_admin_scoped_user_ids",
+            new=AsyncMock(return_value={42, 43}),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.department_admin_member_access.aget_member_personal_space_ids",
+            new=AsyncMock(return_value={165, 166}),
+        ),
     ):
         space_ids = await service.resolve_reviewable_space_ids()
 
-    assert space_ids == {100, 101}
+    assert space_ids == {100, 101, 165, 166}
+
+
+@pytest.mark.asyncio
+async def test_resolve_reviewable_space_ids_includes_member_personal_spaces_only_when_scoped_users_exist():
+    service = _build_service()
+    admin_dept = SimpleNamespace(id=10, path="1/10/")
+    with (
+        patch(
+            "bisheng.database.models.department.DepartmentDao.aget_user_admin_departments",
+            new=AsyncMock(return_value=[admin_dept]),
+        ),
+        patch(
+            "bisheng.database.models.department.DepartmentDao.aget_subtree_ids",
+            new=AsyncMock(return_value=[10]),
+        ),
+        patch(
+            "bisheng.knowledge.domain.models.department_knowledge_space.DepartmentKnowledgeSpaceDao.aget_by_department_ids",
+            new=AsyncMock(return_value=[SimpleNamespace(space_id=100)]),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.department_admin_member_access.aget_dept_admin_scoped_user_ids",
+            new=AsyncMock(return_value=set()),
+        ),
+    ):
+        space_ids = await service.resolve_reviewable_space_ids()
+
+    assert space_ids == {100}
 
 
 @pytest.mark.asyncio
