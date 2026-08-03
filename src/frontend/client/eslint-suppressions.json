@@ -292,9 +292,6 @@
     },
     "no-misleading-character-class": {
       "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 5
     }
   },
   "src/components/Chat/AiModelSelect.tsx": {

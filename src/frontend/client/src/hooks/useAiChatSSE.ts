@@ -55,8 +55,14 @@ export interface SSESubmission {
     onAgentUpdate?: (patch: AgentPatch) => void;
     onFinal: (data: any) => void;
     /** `errorCode` is the backend status_code from the SSE error envelope (e.g.
-        12046 = LLM rate limit), used downstream to pick calm-retry vs red-error UI. */
-    onError: (error: string, errorCode?: number) => void;
+        12046 = LLM rate limit), used downstream to pick calm-retry vs red-error UI.
+        `meta` carries the envelope's classified `error_type` and the raw upstream
+        text, which the error card renders as its copy + "view details" body. */
+    onError: (
+        error: string,
+        errorCode?: number,
+        meta?: { errorType?: string; errorDetail?: string },
+    ) => void;
     onStart: () => void;
     onEnd: () => void;
     /**
@@ -397,7 +403,20 @@ export default function useAiChatSSE(submission: SSESubmission | null) {
                 // back to legacy plain-text shapes, then a generic message.
                 const resolved = translateApiErrorMessage(data);
                 const code = typeof data?.status_code === "number" ? data.status_code : undefined;
-                onError(resolved || data?.text || data?.message || "Stream error", code);
+                // `data.data` carries the backend's classification alongside the
+                // localized copy: without it the bubble could only ever say
+                // "服务器错误" and the upstream reason (which file, which service,
+                // what it actually said) was dropped on the floor.
+                const payload = data?.data ?? {};
+                onError(resolved || data?.text || data?.message || "Stream error", code, {
+                    errorType: typeof payload.error_type === "string" ? payload.error_type : undefined,
+                    errorDetail:
+                        typeof payload.detail === "string"
+                            ? payload.detail
+                            : typeof payload.exception === "string"
+                                ? payload.exception
+                                : undefined,
+                });
             } catch {
                 onError("Connection error");
             }

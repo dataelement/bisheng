@@ -182,6 +182,7 @@
   "12044": "Used app not online",
   "12045": "The department concurrent chat limit has been reached. Please try again later.",
   "12046": "Too many users at the moment. Please try again later.",
+  "12047": "File parsing failed. Please try again later.",
   "12060": "Some messages no longer exist or were deleted. Please refresh the conversation.",
   "12061": "You can select up to 200 messages at a time.",
   "12062": "Message not found or access denied.",
