@@ -869,13 +869,22 @@ export function CreateKnowledgeSpaceDrawer({
                                                 type="button"
                                                 className="flex h-8 w-full items-center justify-between rounded-[6px] border border-[#E5E6EB] bg-white px-3 text-[14px] text-[#212121] outline-none transition-colors hover:border-[#C9CDD4] focus:border-[#165DFF]"
                                             >
-                                                <span className={cn(!selectedDepartmentName && "text-[#86909C]")}>
+                                                <span
+                                                    className={cn(
+                                                        "min-w-0 truncate",
+                                                        !selectedDepartmentName && "text-[#86909C]",
+                                                    )}
+                                                    title={selectedDepartmentName || undefined}
+                                                >
                                                     {selectedDepartmentName || bindDepartmentPlaceholder}
                                                 </span>
-                                                <ChevronDown className="size-4 text-[#86909C]" />
+                                                <ChevronDown className="size-4 shrink-0 text-[#86909C]" />
                                             </button>
                                         </PopoverTrigger>
-                                        <PopoverContent className="w-[360px] bg-white p-0" align="start">
+                                        <PopoverContent
+                                            className="w-[520px] max-w-[calc(100vw-32px)] bg-white p-0"
+                                            align="start"
+                                        >
                                             <div className="h-[320px] p-3">
                                                 <SubjectSearchDepartment
                                                     value={departmentSelection}

@@ -102,6 +102,35 @@ describe("SubjectSearchDepartment", () => {
     ]);
   });
 
+  it("exposes the full department name when the visible label is truncated", async () => {
+    const longDepartmentName = "首钢股份有限公司炼铁作业部生产技术科";
+    mockedGetResourceGrantDepartments.mockResolvedValue([
+      {
+        id: 10,
+        dept_id: "dept-10",
+        name: longDepartmentName,
+        parent_id: null,
+        children: [],
+      },
+    ]);
+
+    render(
+      <SubjectSearchDepartment
+        value={[]}
+        onChange={jest.fn()}
+        resourceType="workflow"
+        resourceId="wf-1"
+        includeChildren
+        onIncludeChildrenChange={jest.fn()}
+      />,
+    );
+
+    expect(await screen.findByText(longDepartmentName)).toHaveAttribute(
+      "title",
+      longDepartmentName,
+    );
+  });
+
   it("shows descendants as checked when an ancestor grant includes child departments", async () => {
     const value: SelectedSubject[] = [
       {

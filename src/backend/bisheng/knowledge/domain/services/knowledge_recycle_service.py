@@ -40,6 +40,9 @@ from bisheng.knowledge.domain.schemas.knowledge_recycle import (
     RecycleRestorePreviewResponse,
     RecycleRestoreRequest,
 )
+from bisheng.telemetry.domain.mid_table.knowledge_space_content import (
+    KnowledgeSpaceContentStat,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -201,6 +204,7 @@ class KnowledgeRecycleService:
             len(all_ids),
             self.login_user.user_id,
         )
+        await KnowledgeSpaceContentStat.enqueue_file_stat_async(file_ids)
         return batch_id
 
     async def list_items(
@@ -374,6 +378,7 @@ class KnowledgeRecycleService:
                 delete(KnowledgeRecycleItem).where(col(KnowledgeRecycleItem.recycle_batch_id).in_(batch_ids))
             )
             await session.commit()
+        await KnowledgeSpaceContentStat.enqueue_file_stat_async(file_ids)
         return {"purged": len(file_ids)}
 
     async def purge_expired(self) -> int:
@@ -541,6 +546,7 @@ class KnowledgeRecycleService:
 
         items = await self._load_list_items(req.item_ids)
         restored = 0
+        restored_file_ids: list[int] = []
         for item in items:
             target_kid, target_folder_id = await self._resolve_target(req, item)
             assert target_kid is not None
@@ -590,8 +596,10 @@ class KnowledgeRecycleService:
             if cross:
                 await self._copy_vectors_cross_space(item.original_knowledge_id, target_kid, vector_file_ids)
 
+            restored_file_ids.extend(batch_file_ids)
             restored += 1
 
+        await KnowledgeSpaceContentStat.enqueue_file_stat_async(restored_file_ids)
         return {"restored": restored}
 
     async def _restore_entries_as_sibling(
@@ -1074,6 +1082,7 @@ class KnowledgeRecycleService:
         async with get_async_db_session() as session:
             await session.execute(delete(KnowledgeFile).where(col(KnowledgeFile.id).in_(target_ids)))
             await session.commit()
+        await KnowledgeSpaceContentStat.enqueue_file_stat_async(target_ids)
 
     @staticmethod
     def _build_minio_deletion_snapshots(files: Sequence[KnowledgeFile]) -> list[dict[str, Any]]:

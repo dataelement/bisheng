@@ -52,6 +52,16 @@ def mock_session():
     return context_manager
 
 
+@pytest.fixture(autouse=True)
+def mock_department_admin_grants():
+    with patch(
+        "bisheng.knowledge.domain.services.knowledge_space_service."
+        "DepartmentAdminGrantDao.aget_department_ids_by_user_id",
+        new=AsyncMock(return_value=[]),
+    ):
+        yield
+
+
 @pytest.mark.asyncio
 async def test_admin_sees_all_departments(mock_session) -> None:
     login_user = _login_user(is_admin=True)
@@ -150,6 +160,50 @@ async def test_returns_user_department_subtree(mock_session) -> None:
     assert len(root["children"]) == 1
     assert root["children"][0]["id"] == 2
     assert root["children"][0]["name"] == "前端组"
+
+
+@pytest.mark.asyncio
+async def test_returns_union_of_user_and_admin_department_subtrees(mock_session) -> None:
+    login_user = _login_user()
+    svc = KnowledgeSpaceService(request=None, login_user=login_user)
+
+    departments = [
+        _department(1, name="炼铁部", path="/1/", sort_order=1),
+        _department(2, name="炼铁作业区", parent_id=1, path="/1/2/", sort_order=1),
+        _department(3, name="设备处", path="/3/", sort_order=2),
+        _department(4, name="设备检修室", parent_id=3, path="/3/4/", sort_order=1),
+        _department(5, name="无关部门", path="/5/", sort_order=3),
+    ]
+
+    with (
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.UserDepartmentDao.aget_user_departments",
+            new=AsyncMock(return_value=[_user_department(1)]),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service."
+            "DepartmentAdminGrantDao.aget_department_ids_by_user_id",
+            new=AsyncMock(return_value=[3]),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.DepartmentDao.aget_active_by_tenant",
+            new=AsyncMock(return_value=departments),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service."
+            "DepartmentKnowledgeSpaceDao.aget_by_department_ids",
+            new=AsyncMock(return_value=[]),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.get_async_db_session",
+            return_value=mock_session,
+        ),
+    ):
+        result = await svc.get_my_department_tree_for_create()
+
+    assert [node["id"] for node in result["data"]] == [1, 3]
+    assert [child["id"] for child in result["data"][0]["children"]] == [2]
+    assert [child["id"] for child in result["data"][1]["children"]] == [4]
 
 
 @pytest.mark.asyncio

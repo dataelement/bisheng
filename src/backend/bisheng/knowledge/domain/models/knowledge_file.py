@@ -10,9 +10,9 @@ from sqlmodel import Field, col, delete, func, select, update
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_async_db_session, get_sync_db_session
+from bisheng.knowledge.domain.constants import parse_shougang_file_encoding_codes
 from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT, JsonType
 from bisheng.database.base import async_get_count, get_count
-from bisheng.knowledge.domain.constants import parse_shougang_file_encoding_codes
 
 
 class KnowledgeFileStatus(int, Enum):
@@ -589,10 +589,10 @@ class KnowledgeFileDao(KnowledgeFileBase):
     async def async_count_files_by_category_scopes(cls, category_space_ids: dict[str, set[int]]) -> dict[str, int]:
         """Count SUCCESS files per document-type category within each card's bound spaces.
 
-        Aligns with portal category landing list when ``document_type`` is locked to the
-        card code: ``file_type=FILE``, ``status=SUCCESS``, ``deleted_at IS NULL``,
-        filtered by document-type segment parsed from ``file_encoding``. Does **not**
-        apply ``active_inventory_predicate``. Domain scopes use ``async_count_files_by_domain_scopes``.
+        Aligns with portal category landing list (``aget_file_by_space_filters*`` +
+        ``_filter_shougang_portal_files_by_document_type``): ``file_type=FILE``,
+        ``status=SUCCESS``, ``deleted_at IS NULL``, filtered by document-type code parsed
+        from ``file_encoding``. Does **not** apply ``active_inventory_predicate``.
         """
         normalized_scopes = {
             code.strip().upper(): {int(space_id) for space_id in space_ids if int(space_id) > 0}

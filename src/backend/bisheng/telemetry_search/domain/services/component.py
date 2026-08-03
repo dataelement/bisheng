@@ -287,7 +287,7 @@ class DataQueryService(BaseModel):
         filters = search_kwargs.pop("filters", None)
         filters = self.merge_filters(filters, metric_config.filter)
         search_params = SearchParameters(
-            metrics=[AggregationExpression(field=metric_config.sum_field, type=AggsTypeEnum.CARDINALITY)],
+            metrics=[AggregationExpression(field=metric_config.sum_field, type=metric_config.sum_type)],
             filters=filters,
             **search_kwargs
         )

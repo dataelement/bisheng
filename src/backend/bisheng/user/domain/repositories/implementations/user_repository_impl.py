@@ -18,10 +18,12 @@ class UserRepositoryImpl(BaseRepositoryImpl[User, int], UserRepository):
 
     async def get_user_with_groups_and_roles_by_user_id(self, user_id: int) -> User | None:
         statement = (
-            select(User).where(User.user_id == user_id).options(
+            select(User)
+            .where(User.user_id == user_id)
+            .options(
                 selectinload(User.groups),  # type: ignore
                 selectinload(User.roles),  # type: ignore
-                selectinload(User.departments)  # type: ignore
+                selectinload(User.departments),  # type: ignore
             )
         )
 
@@ -31,10 +33,12 @@ class UserRepositoryImpl(BaseRepositoryImpl[User, int], UserRepository):
 
     def get_user_with_groups_and_roles_by_user_id_sync(self, user_id: int) -> User | None:
         statement = (
-            select(User).where(User.user_id == user_id).options(
+            select(User)
+            .where(User.user_id == user_id)
+            .options(
                 selectinload(User.groups),  # type: ignore
                 selectinload(User.roles),  # type: ignore
-                selectinload(User.departments)  # type: ignore
+                selectinload(User.departments),  # type: ignore
             )
         )
 
@@ -54,3 +58,11 @@ class UserRepositoryImpl(BaseRepositoryImpl[User, int], UserRepository):
         result = await self.session.exec(statement)
         department_name = result.first()
         return str(department_name).strip() if department_name else None
+
+    async def list_active_by_external_id(self, external_id: str) -> list[User]:
+        statement = select(User).where(
+            User.external_id == external_id,
+            User.delete == 0,
+        )
+        result = await self.session.exec(statement)
+        return list(result.all())

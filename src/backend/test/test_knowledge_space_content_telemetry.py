@@ -1,7 +1,8 @@
 import importlib.util
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
-from types import ModuleType, SimpleNamespace
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -9,15 +10,35 @@ import pytest
 
 class _FakeAsyncIndexClient:
     def __init__(self):
-        self.index_calls = []
+        self.get_calls = []
+        self.update_calls = []
         self.indices = SimpleNamespace(
             exists=AsyncMock(return_value=True),
             put_mapping=AsyncMock(return_value={"acknowledged": True}),
+            put_settings=AsyncMock(return_value={"acknowledged": True}),
         )
 
-    async def index(self, **kwargs):
-        self.index_calls.append(kwargs)
-        return {"result": "created"}
+    async def get(self, **kwargs):
+        self.get_calls.append(kwargs)
+        return {
+            "_source": {
+                "record_type": "file",
+                "space_id": 3,
+                "space_name": "知识空间",
+                "space_level": "department",
+                "space_level_name": "部门库",
+                "file_id": 11,
+                "file_name": "方案.pdf",
+                "file_type": 1,
+                "uploader_user_id": 7,
+                "uploader_user_name": "上传人",
+                "uploader_department_infos": [],
+            }
+        }
+
+    async def update(self, **kwargs):
+        self.update_calls.append(kwargs)
+        return {"result": "updated"}
 
 
 class _FakeSyncIndexClient:
@@ -25,10 +46,12 @@ class _FakeSyncIndexClient:
         self.deleted_queries = []
         self.refreshed_indices = []
         self.put_mappings = []
+        self.put_settings_calls = []
         self.indices = SimpleNamespace(
             exists=lambda **kwargs: True,
             refresh=self.refresh_index,
             put_mapping=self.put_mapping,
+            put_settings=self.put_settings,
         )
 
     def put_mapping(self, **kwargs):
@@ -38,6 +61,10 @@ class _FakeSyncIndexClient:
     def refresh_index(self, **kwargs):
         self.refreshed_indices.append(kwargs)
         return {"_shards": {"successful": 1}}
+
+    def put_settings(self, **kwargs):
+        self.put_settings_calls.append(kwargs)
+        return {"acknowledged": True}
 
     def delete_by_query(self, **kwargs):
         self.deleted_queries.append(kwargs)
@@ -139,17 +166,10 @@ def _import_worker_mid_table():
 
     stubbed_modules = {
         "bisheng.worker.main": SimpleNamespace(bisheng_celery=_DummyCelery()),
-        "bisheng.api.services.workflow": SimpleNamespace(
-            WorkFlowService=SimpleNamespace()
-        ),
-        "bisheng.knowledge.domain.services.knowledge_service": SimpleNamespace(
-            KnowledgeService=SimpleNamespace()
-        ),
+        "bisheng.api.services.workflow": SimpleNamespace(WorkFlowService=SimpleNamespace()),
+        "bisheng.knowledge.domain.services.knowledge_service": SimpleNamespace(KnowledgeService=SimpleNamespace()),
     }
-    previous_modules = {
-        name: sys.modules.get(name, _MISSING)
-        for name in stubbed_modules
-    }
+    previous_modules = {name: sys.modules.get(name, _MISSING) for name in stubbed_modules}
     try:
         sys.modules.update(stubbed_modules)
         module_path = Path(__file__).parents[1] / "bisheng" / "worker" / "telemetry" / "mid_table.py"
@@ -190,7 +210,7 @@ def _stub_file_dimension_lookups(worker_module, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_knowledge_space_content_log_preview_success_builds_preview_record(monkeypatch):
+async def test_knowledge_space_content_log_preview_success_upserts_daily_counter(monkeypatch):
     from bisheng.telemetry.domain.mid_table import knowledge_space_content as module
 
     fake_client = _FakeAsyncIndexClient()
@@ -199,8 +219,6 @@ async def test_knowledge_space_content_log_preview_success_builds_preview_record
         return fake_client
 
     monkeypatch.setattr("bisheng.telemetry.domain.mid_table.base.get_es_connection", fake_get_es_connection)
-    monkeypatch.setattr(module.KnowledgeSpaceContentStat, "_get_user_departments", AsyncMock(return_value=[]))
-    monkeypatch.setattr(module, "generate_uuid", lambda: "event-1")
 
     file_record = SimpleNamespace(
         id=11,
@@ -216,40 +234,43 @@ async def test_knowledge_space_content_log_preview_success_builds_preview_record
         space=space,
         viewer_user_id=9,
         viewer_user_name="查看人",
+        occurred_at=datetime(2026, 8, 3, 15, 30, tzinfo=timezone.utc),
     )
 
-    assert fake_client.index_calls
-    call = fake_client.index_calls[0]
+    assert fake_client.get_calls == [{"index": "mid_knowledge_space_content_stat", "id": "11"}]
+    call = fake_client.update_calls[0]
     assert call["index"] == "mid_knowledge_space_content_stat"
-    assert call["id"] == "preview_event-1"
-    assert call["document"]["record_type"] == "preview"
-    assert call["document"]["event_id"] == "event-1"
-    assert call["document"]["space_id"] == 3
-    assert call["document"]["file_id"] == 11
-    assert call["document"]["viewer_user_id"] == 9
-    assert call["document"]["action_result"] == "success"
+    assert call["id"] == "preview_11_2026-08-03"
+    assert call["retry_on_conflict"] == 5
+    assert call["script"]["source"] == "ctx._source.preview_count += params.increment"
+    assert call["upsert"]["record_type"] == "preview_daily"
+    assert call["upsert"]["local_date"] == "2026-08-03"
+    assert call["upsert"]["preview_count"] == 1
+    assert call["upsert"]["file_name"] == "方案.pdf"
+    assert "refresh" not in call
+    assert not {
+        "tenant_id",
+        "event_id",
+        "viewer_user_id",
+        "viewer_user_name",
+        "action_result",
+        "user_id",
+        "user_name",
+    }.intersection(call["upsert"])
 
 
 @pytest.mark.asyncio
-async def test_knowledge_space_content_log_preview_success_enqueues_retry_on_es_failure(monkeypatch):
+async def test_knowledge_space_content_log_preview_success_does_not_retry_es_failure(monkeypatch):
     from bisheng.telemetry.domain.mid_table import knowledge_space_content as module
 
     class _FailingAsyncIndexClient(_FakeAsyncIndexClient):
-        async def index(self, **kwargs):
+        async def update(self, **kwargs):
             raise RuntimeError("es unavailable")
 
     async def fake_get_es_connection():
         return _FailingAsyncIndexClient()
 
-    retry_records = []
-
-    async def fake_enqueue_preview_record(record):
-        retry_records.append(record)
-
     monkeypatch.setattr("bisheng.telemetry.domain.mid_table.base.get_es_connection", fake_get_es_connection)
-    monkeypatch.setattr(module.KnowledgeSpaceContentStat, "_get_user_departments", AsyncMock(return_value=[]))
-    monkeypatch.setattr(module.KnowledgeSpaceContentStat, "enqueue_preview_record_async", fake_enqueue_preview_record)
-    monkeypatch.setattr(module, "generate_uuid", lambda: "event-retry")
 
     file_record = SimpleNamespace(
         id=11,
@@ -267,7 +288,8 @@ async def test_knowledge_space_content_log_preview_success_enqueues_retry_on_es_
         viewer_user_name="查看人",
     )
 
-    assert [record.es_id for record in retry_records] == ["preview_event-retry"]
+    assert not hasattr(module.KnowledgeSpaceContentStat, "enqueue_preview_record_async")
+    assert not hasattr(module.KnowledgeSpaceContentStat, "PREVIEW_PENDING_KEY")
 
 
 def test_knowledge_space_content_build_file_record_contains_realtime_dimensions():
@@ -301,7 +323,16 @@ def test_knowledge_space_content_build_file_record_contains_realtime_dimensions(
         file_subcategory_labels={"POL-01": "管理制度"},
     )
 
-    assert record.tenant_id == 7
+    dumped = record.model_dump(exclude={"es_id"})
+    assert record.es_id == "11"
+    assert "tenant_id" not in dumped
+    assert not {
+        "user_id",
+        "user_name",
+        "user_group_infos",
+        "user_role_infos",
+        "user_department_infos",
+    }.intersection(dumped)
     assert record.space_level == "department"
     assert record.space_level_name == "部门库"
     assert record.file_category_code == "POL"
@@ -314,6 +345,27 @@ def test_knowledge_space_content_build_file_record_contains_realtime_dimensions(
     assert record.primary_department_id == 21
     assert record.primary_department_name == "质量部"
     assert record.projection_updated_at
+
+
+def test_knowledge_space_content_mapping_excludes_tenant_and_common_user_context():
+    from bisheng.telemetry.domain.mid_table.knowledge_space_content import (
+        KnowledgeSpaceContentStat,
+    )
+
+    stat = KnowledgeSpaceContentStat(ensure_sync_index=False)
+    assert stat._include_common_mappings is False
+    assert not {
+        "tenant_id",
+        "user_id",
+        "user_name",
+        "user_group_infos",
+        "user_role_infos",
+        "user_department_infos",
+    }.intersection(stat._mappings)
+    assert stat._mappings["timestamp"] == {
+        "type": "date",
+        "format": "strict_date_optional_time||epoch_second",
+    }
 
 
 @pytest.mark.parametrize(
@@ -329,12 +381,7 @@ def test_knowledge_space_content_build_file_record_contains_realtime_dimensions(
 def test_only_department_and_clinic_spaces_are_department_bound(level, expected):
     worker_module = _import_worker_mid_table()
 
-    assert (
-        worker_module._is_department_bound_space_scope(
-            SimpleNamespace(level=level)
-        )
-        is expected
-    )
+    assert worker_module._is_department_bound_space_scope(SimpleNamespace(level=level)) is expected
 
 
 def test_unbound_space_content_has_no_owning_department():
@@ -387,50 +434,12 @@ def test_knowledge_space_content_delete_stale_file_records_uses_sync_run_id(monk
     assert call["body"]["query"]["bool"]["must_not"] == [{"term": {"sync_run_id": "run-1"}}]
 
 
-def test_knowledge_space_content_enqueue_file_stat_sync_dedupes_schedule(monkeypatch):
-    from bisheng.telemetry.domain.mid_table import knowledge_space_content as module
-
-    fake_redis = _FakeRedisSetClient()
-    fake_task = _FakeCeleryTask()
-    fake_worker_package = ModuleType("bisheng.worker")
-    fake_worker_package.__path__ = []
-    fake_telemetry_package = ModuleType("bisheng.worker.telemetry")
-    fake_telemetry_package.__path__ = []
-    fake_worker_module = ModuleType("bisheng.worker.telemetry.mid_table")
-    fake_worker_module.sync_pending_knowledge_space_content_stat = fake_task
-
-    monkeypatch.setattr(module, "get_redis_client_sync", lambda: fake_redis, raising=False)
-    monkeypatch.setitem(sys.modules, "bisheng.worker", fake_worker_package)
-    monkeypatch.setitem(sys.modules, "bisheng.worker.telemetry", fake_telemetry_package)
-    monkeypatch.setitem(sys.modules, "bisheng.worker.telemetry.mid_table", fake_worker_module)
-
-    module.KnowledgeSpaceContentStat.enqueue_file_stat_sync([11, "11", 12, None])
-    module.KnowledgeSpaceContentStat.enqueue_file_stat_sync([12])
-
-    assert fake_redis.sets[module.KnowledgeSpaceContentStat.FILE_PENDING_KEY] == {"11", "12"}
-    assert fake_task.apply_async_calls == [{"countdown": 2}]
-
-
-def test_knowledge_space_content_pop_pending_file_ids_caps_batch_size(monkeypatch):
-    from bisheng.telemetry.domain.mid_table import knowledge_space_content as module
-
-    fake_redis = _FakeRedisSetClient()
-    fake_redis.sets[module.KnowledgeSpaceContentStat.FILE_PENDING_KEY] = {str(idx) for idx in range(600)}
-    monkeypatch.setattr(module, "get_redis_client_sync", lambda: fake_redis, raising=False)
-
-    file_ids = module.KnowledgeSpaceContentStat.pop_pending_file_ids_sync()
-
-    assert len(file_ids) == 500
-    assert len(fake_redis.sets[module.KnowledgeSpaceContentStat.FILE_PENDING_KEY]) == 100
-
-
-def test_sync_pending_knowledge_space_content_stat_uses_mysql_current_state(monkeypatch):
+def test_sync_pending_knowledge_space_content_stat_reloads_current_file_state(monkeypatch):
     from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFileStatus
 
     worker_module = _import_worker_mid_table()
     stat_cls = worker_module.KnowledgeSpaceContentStat
     _stub_file_dimension_lookups(worker_module, monkeypatch)
-
     success_file = SimpleNamespace(
         id=21,
         user_id=7,
@@ -440,6 +449,7 @@ def test_sync_pending_knowledge_space_content_stat_uses_mysql_current_state(monk
         file_name="成功.pdf",
         file_type=FileType.FILE.value,
         status=KnowledgeFileStatus.SUCCESS.value,
+        deleted_at=None,
     )
     waiting_file = SimpleNamespace(
         id=22,
@@ -450,214 +460,110 @@ def test_sync_pending_knowledge_space_content_stat_uses_mysql_current_state(monk
         file_name="等待.pdf",
         file_type=FileType.FILE.value,
         status=KnowledgeFileStatus.WAITING.value,
+        deleted_at=None,
     )
     space = SimpleNamespace(id=3, name="空间", type=3)
+    claimed = [
+        SimpleNamespace(member="file:21", kind="file", resource_id=21, enqueued_at_ms=1_000),
+        SimpleNamespace(member="file:22", kind="file", resource_id=22, enqueued_at_ms=1_000),
+        SimpleNamespace(member="file:404", kind="file", resource_id=404, enqueued_at_ms=1_000),
+    ]
     upserted = []
     deleted = []
-    acked_file_ids = []
+    acked = []
 
-    monkeypatch.setattr(stat_cls, "clear_scheduled_sync", lambda: None, raising=False)
-    monkeypatch.setattr(stat_cls, "acquire_lock_sync", lambda: True, raising=False)
-    monkeypatch.setattr(stat_cls, "release_lock_sync", lambda: None, raising=False)
+    monkeypatch.setattr(stat_cls, "clear_scheduled_sync", lambda: None)
+    monkeypatch.setattr(stat_cls, "acquire_lock_sync", lambda: "owner-a")
+    monkeypatch.setattr(stat_cls, "renew_lock_sync", lambda _owner: True)
+    monkeypatch.setattr(stat_cls, "renew_claims_sync", lambda _owner, _members: True)
+    monkeypatch.setattr(stat_cls, "release_lock_sync", lambda _owner: True)
+    monkeypatch.setattr(stat_cls, "claim_pending_sync", lambda _owner, _size: claimed)
     monkeypatch.setattr(
         stat_cls,
-        "peek_pending_file_ids_sync",
-        lambda batch_size=500: [21, 22, 404],
-        raising=False,
+        "ack_claimed_sync",
+        lambda _owner, members: acked.extend(members) or True,
     )
-    monkeypatch.setattr(stat_cls, "ack_pending_file_ids_sync", lambda file_ids: acked_file_ids.extend(file_ids))
-    monkeypatch.setattr(stat_cls, "peek_pending_preview_payloads_sync", lambda batch_size=500: [], raising=False)
-    monkeypatch.setattr(stat_cls, "peek_pending_space_rename_ids_sync", lambda: [], raising=False)
-    monkeypatch.setattr(stat_cls, "peek_pending_space_delete_ids_sync", lambda: [], raising=False)
-    monkeypatch.setattr(stat_cls, "has_pending_sync", lambda: False, raising=False)
+    monkeypatch.setattr(stat_cls, "has_pending_sync", lambda: False)
+    monkeypatch.setattr(
+        stat_cls,
+        "queue_status_sync",
+        lambda: {"pending_count": 0, "processing_count": 0, "oldest_pending_age_ms": 0},
+    )
     monkeypatch.setattr(stat_cls, "insert_records_sync", lambda self, records: upserted.extend(records))
     monkeypatch.setattr(
-        stat_cls, "delete_file_records_sync", lambda self, file_ids: deleted.extend(file_ids), raising=False
+        stat_cls,
+        "delete_file_records_sync",
+        lambda self, file_ids: deleted.extend(file_ids),
     )
     monkeypatch.setattr(
-        "bisheng.telemetry.domain.mid_table.base.get_es_connection_sync", lambda: _FakeSyncIndexClient()
+        "bisheng.telemetry.domain.mid_table.base.get_es_connection_sync",
+        lambda: _FakeSyncIndexClient(),
     )
     monkeypatch.setattr(
         worker_module,
         "_get_knowledge_space_content_rows_by_file_ids",
-        lambda file_ids: [(success_file, space), (waiting_file, space)],
-        raising=False,
+        lambda _file_ids: [(success_file, space), (waiting_file, space)],
     )
-    monkeypatch.setattr(worker_module, "get_user_from_ids_with_cache", lambda user_ids, user_map: user_map)
+    monkeypatch.setattr(worker_module, "get_user_from_ids_with_cache", lambda _ids, user_map: user_map)
 
     worker_module.sync_pending_knowledge_space_content_stat.run()
 
-    assert [record.es_id for record in upserted] == ["file_21"]
+    assert [record.es_id for record in upserted] == ["21"]
     assert deleted == [22, 404]
-    assert acked_file_ids == [21, 22, 404]
+    assert acked == ["file:21", "file:22", "file:404"]
 
 
-def test_sync_pending_knowledge_space_content_stat_keeps_file_ids_when_upsert_fails(monkeypatch):
-    from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFileStatus
-
+def test_sync_pending_knowledge_space_content_stat_does_not_ack_failed_write(monkeypatch):
     worker_module = _import_worker_mid_table()
     stat_cls = worker_module.KnowledgeSpaceContentStat
     _stub_file_dimension_lookups(worker_module, monkeypatch)
-
-    success_file = SimpleNamespace(
+    file_record = SimpleNamespace(
         id=21,
         user_id=7,
         user_name="上传人",
         create_time=None,
         knowledge_id=3,
         file_name="成功.pdf",
-        file_type=FileType.FILE.value,
-        status=KnowledgeFileStatus.SUCCESS.value,
+        file_type=1,
+        status=2,
+        deleted_at=None,
     )
     space = SimpleNamespace(id=3, name="空间", type=3)
-    acked_file_ids = []
+    claimed = [SimpleNamespace(member="file:21", kind="file", resource_id=21, enqueued_at_ms=1_000)]
+    acked = []
 
-    monkeypatch.setattr(stat_cls, "clear_scheduled_sync", lambda: None, raising=False)
-    monkeypatch.setattr(stat_cls, "acquire_lock_sync", lambda: True, raising=False)
-    monkeypatch.setattr(stat_cls, "release_lock_sync", lambda: None, raising=False)
-    monkeypatch.setattr(stat_cls, "peek_pending_file_ids_sync", lambda batch_size=500: [21], raising=False)
-    monkeypatch.setattr(stat_cls, "ack_pending_file_ids_sync", lambda file_ids: acked_file_ids.extend(file_ids))
-    monkeypatch.setattr(stat_cls, "has_pending_sync", lambda: False, raising=False)
+    monkeypatch.setattr(stat_cls, "clear_scheduled_sync", lambda: None)
+    monkeypatch.setattr(stat_cls, "acquire_lock_sync", lambda: "owner-a")
+    monkeypatch.setattr(stat_cls, "renew_lock_sync", lambda _owner: True)
+    monkeypatch.setattr(stat_cls, "renew_claims_sync", lambda _owner, _members: True)
+    monkeypatch.setattr(stat_cls, "release_lock_sync", lambda _owner: True)
+    monkeypatch.setattr(stat_cls, "claim_pending_sync", lambda _owner, _size: claimed)
+    monkeypatch.setattr(
+        stat_cls,
+        "ack_claimed_sync",
+        lambda _owner, members: acked.extend(members) or True,
+    )
+    monkeypatch.setattr(stat_cls, "has_pending_sync", lambda: False)
     monkeypatch.setattr(
         stat_cls,
         "insert_records_sync",
         lambda self, records: (_ for _ in ()).throw(RuntimeError("es down")),
     )
     monkeypatch.setattr(
-        "bisheng.telemetry.domain.mid_table.base.get_es_connection_sync", lambda: _FakeSyncIndexClient()
+        "bisheng.telemetry.domain.mid_table.base.get_es_connection_sync",
+        lambda: _FakeSyncIndexClient(),
     )
     monkeypatch.setattr(
         worker_module,
         "_get_knowledge_space_content_rows_by_file_ids",
-        lambda file_ids: [(success_file, space)],
-        raising=False,
+        lambda _file_ids: [(file_record, space)],
     )
-    monkeypatch.setattr(worker_module, "get_user_from_ids_with_cache", lambda user_ids, user_map: user_map)
+    monkeypatch.setattr(worker_module, "get_user_from_ids_with_cache", lambda _ids, user_map: user_map)
 
-    worker_module.sync_pending_knowledge_space_content_stat.run()
+    with pytest.raises(RuntimeError, match="es down"):
+        worker_module.sync_pending_knowledge_space_content_stat.run()
 
-    assert acked_file_ids == []
-
-
-def test_sync_pending_knowledge_space_content_stat_processes_preview_payloads(monkeypatch):
-    from bisheng.telemetry.domain.mid_table.knowledge_space_content import KnowledgeSpaceContentRecord
-
-    worker_module = _import_worker_mid_table()
-    stat_cls = worker_module.KnowledgeSpaceContentStat
-
-    record = KnowledgeSpaceContentRecord(
-        es_id="preview_event-1",
-        record_type="preview",
-        timestamp=1,
-        user_id=9,
-        user_name="查看人",
-        user_group_infos=[],
-        user_role_infos=[],
-        user_department_infos=[],
-        space_id=3,
-        space_name="空间",
-        file_id=21,
-        file_name="成功.pdf",
-        file_type=1,
-        uploader_user_id=7,
-        uploader_user_name="上传人",
-        uploader_department_infos=[],
-        event_id="event-1",
-        viewer_user_id=9,
-        viewer_user_name="查看人",
-        action_result="success",
-    )
-    payload = stat_cls._serialize_preview_record(record)
-    upserted = []
-    acked_payloads = []
-
-    monkeypatch.setattr(stat_cls, "clear_scheduled_sync", lambda: None, raising=False)
-    monkeypatch.setattr(stat_cls, "acquire_lock_sync", lambda: True, raising=False)
-    monkeypatch.setattr(stat_cls, "release_lock_sync", lambda: None, raising=False)
-    monkeypatch.setattr(stat_cls, "peek_pending_file_ids_sync", lambda batch_size=500: [], raising=False)
-    monkeypatch.setattr(stat_cls, "peek_pending_preview_payloads_sync", lambda batch_size=500: [payload], raising=False)
-    monkeypatch.setattr(
-        stat_cls,
-        "ack_pending_preview_payloads_sync",
-        lambda payloads: acked_payloads.extend(payloads),
-    )
-    monkeypatch.setattr(stat_cls, "peek_pending_space_rename_ids_sync", lambda: [], raising=False)
-    monkeypatch.setattr(stat_cls, "peek_pending_space_delete_ids_sync", lambda: [], raising=False)
-    monkeypatch.setattr(stat_cls, "has_pending_sync", lambda: False, raising=False)
-    monkeypatch.setattr(stat_cls, "insert_records_sync", lambda self, records: upserted.extend(records))
-    monkeypatch.setattr(
-        "bisheng.telemetry.domain.mid_table.base.get_es_connection_sync", lambda: _FakeSyncIndexClient()
-    )
-
-    worker_module.sync_pending_knowledge_space_content_stat.run()
-
-    assert [one.es_id for one in upserted] == ["preview_event-1"]
-    assert acked_payloads == [payload]
-
-
-def test_sync_pending_knowledge_space_content_stat_handles_space_rename_and_delete(monkeypatch):
-    worker_module = _import_worker_mid_table()
-    stat_cls = worker_module.KnowledgeSpaceContentStat
-    _stub_file_dimension_lookups(worker_module, monkeypatch)
-
-    file_record = SimpleNamespace(
-        id=31,
-        user_id=8,
-        user_name="上传人",
-        create_time=None,
-        knowledge_id=5,
-        file_name="文件.pdf",
-        file_type=1,
-        status=2,
-    )
-    renamed_space = SimpleNamespace(id=5, name="新空间", type=3)
-    upserted = []
-    deleted_spaces = []
-    acked_rename_ids = []
-    acked_delete_ids = []
-
-    monkeypatch.setattr(stat_cls, "clear_scheduled_sync", lambda: None, raising=False)
-    monkeypatch.setattr(stat_cls, "acquire_lock_sync", lambda: True, raising=False)
-    monkeypatch.setattr(stat_cls, "release_lock_sync", lambda: None, raising=False)
-    monkeypatch.setattr(stat_cls, "peek_pending_file_ids_sync", lambda batch_size=500: [], raising=False)
-    monkeypatch.setattr(stat_cls, "peek_pending_preview_payloads_sync", lambda batch_size=500: [], raising=False)
-    monkeypatch.setattr(stat_cls, "peek_pending_space_rename_ids_sync", lambda: [5], raising=False)
-    monkeypatch.setattr(
-        stat_cls,
-        "ack_pending_space_rename_ids_sync",
-        lambda space_ids: acked_rename_ids.extend(space_ids),
-    )
-    monkeypatch.setattr(stat_cls, "peek_pending_space_delete_ids_sync", lambda: [6], raising=False)
-    monkeypatch.setattr(
-        stat_cls,
-        "ack_pending_space_delete_ids_sync",
-        lambda space_ids: acked_delete_ids.extend(space_ids),
-    )
-    monkeypatch.setattr(stat_cls, "has_pending_sync", lambda: False, raising=False)
-    monkeypatch.setattr(stat_cls, "insert_records_sync", lambda self, records: upserted.extend(records))
-    monkeypatch.setattr(
-        stat_cls,
-        "delete_space_file_records_sync",
-        lambda self, space_ids: deleted_spaces.extend(space_ids),
-        raising=False,
-    )
-    monkeypatch.setattr(
-        "bisheng.telemetry.domain.mid_table.base.get_es_connection_sync", lambda: _FakeSyncIndexClient()
-    )
-    monkeypatch.setattr(
-        worker_module,
-        "_get_success_space_file_rows_by_space_id",
-        lambda space_id, page, page_size: [(file_record, renamed_space)] if page == 1 else [],
-        raising=False,
-    )
-    monkeypatch.setattr(worker_module, "get_user_from_ids_with_cache", lambda user_ids, user_map: user_map)
-
-    worker_module.sync_pending_knowledge_space_content_stat.run()
-
-    assert [(record.es_id, record.space_name) for record in upserted] == [("file_31", "新空间")]
-    assert deleted_spaces == [6]
-    assert acked_rename_ids == [5]
-    assert acked_delete_ids == [6]
+    assert acked == []
 
 
 def test_add_embedding_enqueues_file_stat_after_success(monkeypatch):

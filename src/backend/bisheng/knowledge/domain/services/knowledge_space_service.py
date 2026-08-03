@@ -1586,27 +1586,38 @@ class KnowledgeSpaceService(KnowledgeUtils):
         """Return departments visible to the current user for space creation.
 
         Global admins (and approval delegates) see every active department in the
-        tenant; other users only see the departments they are administrators of
+        tenant; other users see the departments they belong to or administer,
         plus their descendants.
         """
         if self.login_user.is_admin() or approval_request:
             return await DepartmentDao.aget_active_by_tenant(int(self.login_user.tenant_id))
 
-        admin_department_ids = await DepartmentAdminGrantDao.aget_department_ids_by_user_id(self.login_user.user_id)
-        if not admin_department_ids:
+        user_departments, admin_department_ids = await asyncio.gather(
+            UserDepartmentDao.aget_user_departments(self.login_user.user_id),
+            DepartmentAdminGrantDao.aget_department_ids_by_user_id(self.login_user.user_id),
+        )
+        root_department_ids = {
+            int(row.department_id)
+            for row in user_departments
+            if getattr(row, "department_id", None) is not None
+        }
+        root_department_ids.update(int(department_id) for department_id in admin_department_ids)
+        if not root_department_ids:
             return []
 
         all_departments = await DepartmentDao.aget_active_by_tenant(int(self.login_user.tenant_id))
-        admin_dept_paths = {
-            dept.path for dept in all_departments if dept.id in admin_department_ids and getattr(dept, "path", None)
+        visible_root_paths = {
+            dept.path
+            for dept in all_departments
+            if int(dept.id) in root_department_ids and getattr(dept, "path", None)
         }
-        if not admin_dept_paths:
+        if not visible_root_paths:
             return []
 
         return [
             dept
             for dept in all_departments
-            if getattr(dept, "path", None) and any(dept.path.startswith(path) for path in admin_dept_paths)
+            if getattr(dept, "path", None) and any(dept.path.startswith(path) for path in visible_root_paths)
         ]
 
     async def _department_options_for_create(
@@ -10557,6 +10568,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 if int(clinic_binding.department_id) != int(department_id):
                     clinic_binding.department_id = int(department_id)
                     await DepartmentKnowledgeSpaceDao.aupdate(clinic_binding)
+                await KnowledgeSpaceContentStat.enqueue_space_rename_stat_async(space_id)
                 return space
 
             old_admin_rows = await DepartmentService.aget_admins(old_department.dept_id, self.login_user)
@@ -10648,7 +10660,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                         )
                         raise
                 raise
-        if name_changed:
+        if name_changed or department_id is not None:
             await KnowledgeSpaceContentStat.enqueue_space_rename_stat_async(space_id)
         new_auth_type = space.auth_type
 
@@ -13346,6 +13358,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
         folder.file_name = new_name
         updated_folder = await KnowledgeFileDao.async_update(folder)
         await KnowledgeDao.async_update_knowledge_update_time_by_id(folder.knowledge_id)
+        descendant_prefix = f"{folder.file_level_path}/{folder.id}"
+        descendants = await SpaceFileDao.get_children_by_prefix(
+            folder.knowledge_id,
+            descendant_prefix,
+        )
+        await KnowledgeSpaceContentStat.enqueue_file_stat_async(
+            [item.id for item in descendants if item.file_type == FileType.FILE.value]
+        )
         return updated_folder
 
     async def delete_folder(self, space_id: int, folder_id: int):
@@ -13875,6 +13895,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 before_value=old_location,
                 after_value=new_location,
             )
+        await KnowledgeSpaceContentStat.enqueue_file_stat_async([file_id])
         self._enqueue_recommendation_file_refresh(file_id)
         return KnowledgeSpaceFileResponse(**updated_file.model_dump())
 
@@ -13973,6 +13994,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if new_parent_path != old_folder_path:
             await self.update_folder_update_time(new_parent_path)
         await KnowledgeDao.async_update_knowledge_update_time_by_id(space_id)
+        descendants = await SpaceFileDao.get_children_by_prefix(space_id, new_prefix)
+        await KnowledgeSpaceContentStat.enqueue_file_stat_async(
+            [item.id for item in descendants if item.file_type == FileType.FILE.value]
+        )
         self._enqueue_recommendation_resource_refresh("folder", folder_id)
         return KnowledgeSpaceFileResponse(**updated_folder.model_dump())
 
@@ -14909,6 +14934,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 ),
             )
         if encoding_changed or subcategory_changed:
+            await KnowledgeSpaceContentStat.enqueue_file_stat_async([file_id])
             self._enqueue_recommendation_file_refresh(file_id)
             if resolved is not None:
                 await self._mark_document_content_changed(updated_file)
@@ -15743,6 +15769,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         )
         if resolved is not None:
             await self._mark_document_content_changed(file_record)
+        await KnowledgeSpaceContentStat.enqueue_file_stat_async([file_id])
 
     async def batch_add_file_tags(
         self, space_id: int, file_ids: list[int], tag_ids: list[int], review_tag_ids: list[int]
@@ -15804,6 +15831,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             )
             if resolved_by_file_id[notified_file_id] is not None:
                 await self._mark_document_content_changed(notified_file)
+        await KnowledgeSpaceContentStat.enqueue_file_stat_async([int(file_record.id) for file_record in files])
 
     async def retry_space_files(self, space_id: int, req_data: dict) -> list:
         """
