@@ -2,6 +2,7 @@
 import axios, { AxiosError, AxiosRequestConfig } from 'axios';
 import i18next from "i18next";
 import { setTokenHeader } from '~/api/chat/headers-helpers';
+import { notifyPortalAuthRequired } from '~/api/portalAuthBridge';
 import { getPlatformAdminPanelUrl } from '~/utils/platformAdminUrl';
 import * as endpoints from '~/api/chat/api-endpoints';
 import type * as t from '~/types/chat/types';
@@ -195,6 +196,10 @@ customAxios.interceptors.response.use(
       const isGuestStandaloneChat =
         /\/chat\/(flow|assistant)\/(?!auth\/)[^/]+\/?$/.test(location.pathname);
       if (isGuestStandaloneChat) {
+        return Promise.reject(error);
+      }
+
+      if (notifyPortalAuthRequired()) {
         return Promise.reject(error);
       }
 
