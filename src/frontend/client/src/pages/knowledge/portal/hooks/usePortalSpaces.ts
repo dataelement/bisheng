@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import {
+    useCallback,
+    useEffect,
+    useMemo,
+    useState,
+    type Dispatch,
+    type RefObject,
+    type SetStateAction,
+} from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
     getCreateSpaceOptionsApi,
@@ -56,6 +64,11 @@ interface UsePortalSpacesParams {
     preferredSpaceId?: string;
     /** When set with preferredSpaceId, out-of-sidebar personal targets open preview-only. */
     deepLinkFileId?: string;
+    /**
+     * While set, do not auto-fallback activeSpace to 我的收藏 when the space is
+     * briefly missing from sidebar lists (global-search return navigation).
+     */
+    preserveActiveSpaceIdRef?: RefObject<string | null>;
 }
 
 function findDefaultPersonalSpace(spaces: KnowledgeSpace[]): KnowledgeSpace | null {
@@ -98,6 +111,7 @@ export function usePortalSpaces({
     expandedGroups,
     preferredSpaceId,
     deepLinkFileId,
+    preserveActiveSpaceIdRef,
 }: UsePortalSpacesParams) {
     const { user } = useAuthContext();
     const preferredSpaceQuery = useQuery({
@@ -310,6 +324,16 @@ export function usePortalSpaces({
 
         // 用 String() 兜底：新建返回的 space id 可能是数字，避免与列表里的字符串 id 不匹配而误重置
         if (activeSpace && selectableSpaces.some((space) => String(space.id) === String(activeSpace.id))) return;
+        // Global-search / return-nav may set a valid space that is temporarily absent
+        // from sidebar lists (group not expanded / still loading). Do not bounce to 我的收藏.
+        const preservedId = preserveActiveSpaceIdRef?.current;
+        if (
+            activeSpace
+            && preservedId
+            && String(activeSpace.id) === String(preservedId)
+        ) {
+            return;
+        }
         if (personalSpacesQuery.isLoading) return;
         setActiveSpace(defaultPersonalSpace ?? selectableSpaces[0] ?? null);
     }, [
@@ -318,6 +342,7 @@ export function usePortalSpaces({
         personalSpacesQuery.isLoading,
         preferredSpace,
         preferredSpaceId,
+        preserveActiveSpaceIdRef,
         selectableSpaces,
         setActiveSpace,
         skipPreferredSpaceActivation,

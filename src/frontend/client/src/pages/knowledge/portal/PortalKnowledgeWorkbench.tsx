@@ -286,6 +286,8 @@ export default function PortalKnowledgeWorkbench() {
     const openedFromGlobalSearchRef = useRef(false);
     const globalSearchReturnRef = useRef<{ spaceId: string; parentId?: string } | null>(null);
     const pendingSearchReturnRef = useRef<{ spaceId: string; folderId?: string } | null>(null);
+    /** Prevents usePortalSpaces from resetting to 我的收藏 during search-return space switch. */
+    const preserveActiveSpaceIdRef = useRef<string | null>(null);
     const [globalSearchPathContext, setGlobalSearchPathContext] = useState<{
         groupTitle?: string;
         spaceName?: string;
@@ -384,6 +386,7 @@ export default function PortalKnowledgeWorkbench() {
         expandedGroups,
         preferredSpaceId: portalDeepLinkTarget?.spaceId,
         deepLinkFileId: portalDeepLinkTarget?.fileId,
+        preserveActiveSpaceIdRef,
     });
 
     const isPreviewOnlyDeepLink = Boolean(
@@ -1591,12 +1594,7 @@ export default function PortalKnowledgeWorkbench() {
             }
             setCanCreateFolder(false);
             setCanUploadFile(false);
-            void loadRootTreeRef.current(1, false, activeSpace.id).then(() => {
-                const pending = pendingSearchReturnRef.current;
-                if (!pending || String(activeSpace.id) !== pending.spaceId) return;
-                pendingSearchReturnRef.current = null;
-                void handleNavigateFolderRef.current(pending.folderId || undefined);
-            });
+            void loadRootTreeRef.current(1, false, activeSpace.id);
         } else if (!openingDeepLinkedFileHere) {
             // Sort/filter changed: keep the current folder and reload the same view
             // with the new ordering/filter instead of jumping back to the root.
@@ -1617,6 +1615,22 @@ export default function PortalKnowledgeWorkbench() {
         sortDirection,
         statusFilterNumbers,
     ]);
+
+    // Complete global-search "back to folder" after activeSpace has actually switched
+    // (and usePortalSpaces has not bounced us back to 我的收藏).
+    useEffect(() => {
+        const pending = pendingSearchReturnRef.current;
+        if (!pending || !activeSpace?.id) return;
+        if (String(activeSpace.id) !== pending.spaceId) return;
+        if (isFavoriteSpace(activeSpace)) return;
+        pendingSearchReturnRef.current = null;
+        const folderId = pending.folderId;
+        void Promise.resolve(handleNavigateFolderRef.current(folderId || undefined)).finally(() => {
+            if (preserveActiveSpaceIdRef.current === pending.spaceId) {
+                preserveActiveSpaceIdRef.current = null;
+            }
+        });
+    }, [activeSpace?.id, activeSpace?.isFavorite]);
 
     useEffect(() => {
         if (!selectedFile) return;
@@ -2458,6 +2472,7 @@ export default function PortalKnowledgeWorkbench() {
             const mustSwitchSpace = isFavoriteSpace(activeSpace)
                 || String(activeSpace?.id) !== targetSpaceId;
             if (mustSwitchSpace) {
+                preserveActiveSpaceIdRef.current = targetSpaceId;
                 pendingSearchReturnRef.current = {
                     spaceId: targetSpaceId,
                     folderId: parentFolderId,
@@ -2465,22 +2480,43 @@ export default function PortalKnowledgeWorkbench() {
                 const targetSpace = selectableSpaces.find(
                     (space) => String(space.id) === targetSpaceId,
                 ) ?? null;
+                const activate = (space: KnowledgeSpace) => {
+                    const level = getPortalSpaceLevel(space);
+                    const groupKey: SpaceGroupKey | null = level === SpaceLevel.PUBLIC
+                        ? "public"
+                        : level === SpaceLevel.DEPARTMENT
+                            ? "department"
+                            : level === SpaceLevel.TEAM || level === SpaceLevel.TEAM_KS
+                                ? "team"
+                                : level === SpaceLevel.PERSONAL
+                                    ? "personal"
+                                    : null;
+                    if (groupKey) {
+                        setExpandedGroups((prev) => (
+                            prev[groupKey] ? prev : { ...prev, [groupKey]: true }
+                        ));
+                    }
+                    setActiveSpace(space);
+                };
                 if (targetSpace) {
-                    setActiveSpace(targetSpace);
+                    activate(targetSpace);
                 } else {
                     void getSpaceInfoApi(targetSpaceId).then((space) => {
+                        preserveActiveSpaceIdRef.current = targetSpaceId;
                         pendingSearchReturnRef.current = {
                             spaceId: targetSpaceId,
                             folderId: parentFolderId,
                         };
-                        setActiveSpace(space);
+                        activate(space);
                     }).catch(() => {
                         pendingSearchReturnRef.current = null;
+                        preserveActiveSpaceIdRef.current = null;
                     });
                 }
                 return;
             }
 
+            preserveActiveSpaceIdRef.current = null;
             void handleNavigateFolder(parentFolderId || undefined);
             return;
         }
