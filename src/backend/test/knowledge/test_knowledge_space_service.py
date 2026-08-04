@@ -10,6 +10,7 @@ from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.errcode.knowledge_space import (
     SpaceFileNotFoundError,
     SpaceFileSizeLimitError,
+    SpaceFolderDepthError,
     SpaceFolderNotFoundError,
     SpaceNotFoundError,
     SpacePermissionDeniedError,
@@ -1902,6 +1903,105 @@ class TestTupleLifecycle:
         assert parent_tuple.user == "folder:70"
         assert parent_tuple.relation == "parent"
         assert parent_tuple.object == "folder:72"
+
+    @pytest.mark.asyncio
+    async def test_add_folder_under_level_9_parent_raises_depth_error(self, service):
+        from bisheng.knowledge.domain.services.knowledge_space_service import MAX_FOLDER_LEVEL
+
+        # Parent at MAX_FOLDER_LEVEL (level 9 = UI 第10层): a child would be the
+        # 11th layer, which the product rule forbids.
+        parent_folder = _make_file(
+            file_id=70,
+            knowledge_id=1,
+            file_type=FileType.DIR.value,
+            file_name="deepest",
+            file_level_path="/1/2/3/4/5/6/7/8/9",
+            level=MAX_FOLDER_LEVEL,
+        )
+
+        with (
+            patch.object(
+                service,
+                "_require_permission_id",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.query_by_id",
+                new_callable=AsyncMock,
+                return_value=parent_folder,
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aadd_file",
+                new_callable=AsyncMock,
+            ) as mock_add_file,
+        ):
+            with pytest.raises(SpaceFolderDepthError) as exc_info:
+                await service.add_folder(1, "too-deep", parent_id=70)
+
+        assert exc_info.value.Code == 18011
+        mock_add_file.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_add_folder_under_level_8_parent_creates_level_9_child(self, service):
+        from bisheng.knowledge.domain.services.knowledge_space_service import MAX_FOLDER_LEVEL
+
+        # Boundary: level-8 parent may still gain a level-9 child (the 10th and
+        # deepest allowed layer).
+        parent_folder = _make_file(
+            file_id=70,
+            knowledge_id=1,
+            file_type=FileType.DIR.value,
+            file_name="parent",
+            file_level_path="/1/2/3/4/5/6/7/8",
+            level=MAX_FOLDER_LEVEL - 1,
+        )
+        added_folder = _make_file(
+            file_id=72,
+            knowledge_id=1,
+            file_type=FileType.DIR.value,
+            file_name="child",
+            file_level_path="/1/2/3/4/5/6/7/8/70",
+            level=MAX_FOLDER_LEVEL,
+        )
+
+        with (
+            patch.object(
+                service,
+                "_require_permission_id",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.query_by_id",
+                new_callable=AsyncMock,
+                return_value=parent_folder,
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.SpaceFileDao.count_folder_by_name",
+                new_callable=AsyncMock,
+                return_value=0,
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aadd_file",
+                new_callable=AsyncMock,
+                return_value=added_folder,
+            ) as mock_add_file,
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.batch_write_tuples",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.OwnerService.write_owner_tuple",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_knowledge_update_time_by_id",
+                new_callable=AsyncMock,
+            ),
+        ):
+            result = await service.add_folder(1, "child", parent_id=70)
+
+        assert result.id == 72
+        assert mock_add_file.await_args.args[0].level == MAX_FOLDER_LEVEL
 
     @pytest.mark.asyncio
     async def test_add_file_initializes_file_owner_and_parent_tuples(self, service):
