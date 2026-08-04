@@ -167,14 +167,8 @@ class KnowledgeDocumentEntryResolver:
                     "canonical document does not exist"
                 )
             self._validate_document_identity(document, tenant_id=tenant_id)
-            if (
-                not version.is_primary
-                or int(document.primary_version_id or 0)
-                != int(version.id or 0)
-            ):
-                raise KnowledgeDocumentEntryResolutionError(
-                    "historical physical version is not an ordinary access entry"
-                )
+            # Historical physical versions remain directly readable in their
+            # owning space; capability computation below preserves file access rules.
             if int(document.knowledge_id) != int(space_id):
                 raise KnowledgeDocumentEntryResolutionError(
                     "canonical document space mismatch"
