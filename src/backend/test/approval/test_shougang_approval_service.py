@@ -1155,6 +1155,7 @@ async def test_file_publish_submit_persists_target_folder_snapshot(monkeypatch):
     assert gate_req.business_resource_id == "900:20"
     assert gate_req.payload_snapshot["canonical_document_id"] == 900
     assert gate_req.payload_snapshot["source_entry_id"] == 100
+    assert gate_req.payload_snapshot["source_entry_type_before_submit"] == "normal"
 
 
 @pytest.mark.asyncio
@@ -2675,6 +2676,117 @@ async def test_new_file_publish_approval_uses_distribution_without_copy(monkeypa
     distribution.assert_awaited_once_with(102, payload)
     copy_file.assert_not_called()
     assert result["publish_entry_id"] == 188
+
+
+@pytest.mark.asyncio
+async def test_publish_distribution_activates_manager_before_approved_transfer(
+    monkeypatch,
+):
+    from bisheng.approval.domain.services.shougang_approval_handler import (
+        KnowledgeSpaceFilePublishApprovalHandler,
+    )
+    from bisheng.knowledge.domain.services.knowledge_document_distribution_service import (
+        KnowledgeDocumentDistributionService,
+    )
+
+    class _SessionContext:
+        async def __aenter__(self):
+            return SimpleNamespace()
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    call_order: list[str] = []
+
+    async def _normalize(**kwargs):
+        call_order.append("normalize")
+        return SimpleNamespace(document_id=900, manager_file_id=100)
+
+    async def _publish(command):
+        call_order.append("publish")
+        assert command.document_id == 900
+        assert command.source_entry_id == 100
+        return SimpleNamespace(
+            document_id=900,
+            manager_file_id=100,
+            publish_entry_id=188,
+            target_space_id=20,
+            idempotent=False,
+        )
+
+    monkeypatch.setattr(
+        "bisheng.core.database.get_async_db_session",
+        lambda: _SessionContext(),
+    )
+    monkeypatch.setattr(
+        KnowledgeDocumentDistributionService,
+        "normalize_manager",
+        AsyncMock(side_effect=_normalize),
+    )
+    monkeypatch.setattr(
+        KnowledgeDocumentDistributionService,
+        "publish_approved",
+        AsyncMock(side_effect=_publish),
+    )
+    handler = KnowledgeSpaceFilePublishApprovalHandler()
+    monkeypatch.setattr(
+        handler,
+        "_enqueue_content_statistics",
+        AsyncMock(),
+    )
+
+    result = await handler._publish_distribution(
+        102,
+        {
+            "tenant_id": 1,
+            "canonical_document_id": 900,
+            "source_entry_id": 100,
+            "target_space_id": 20,
+        },
+    )
+
+    assert call_order == ["normalize", "publish"]
+    assert result["publish_entry_id"] == 188
+
+
+@pytest.mark.parametrize(
+    "handler_name",
+    [
+        "KnowledgeSpaceFilePublishApprovalHandler",
+        "KnowledgeSpaceFileShareApprovalHandler",
+    ],
+)
+@pytest.mark.parametrize(
+    "hook_name",
+    ["on_rejected", "on_withdrawn", "on_cancelled"],
+)
+@pytest.mark.asyncio
+async def test_unapproved_distribution_terminal_hooks_restore_source(
+    monkeypatch,
+    handler_name: str,
+    hook_name: str,
+):
+    from bisheng.approval.domain.services import (
+        shougang_approval_handler as handler_module,
+    )
+
+    restore = AsyncMock(return_value=True)
+    monkeypatch.setattr(
+        handler_module,
+        "_restore_unapproved_distribution_source",
+        restore,
+    )
+    handler = getattr(handler_module, handler_name)()
+    payload = {
+        "tenant_id": 1,
+        "canonical_document_id": 900,
+        "source_entry_id": 100,
+        "source_entry_type_before_submit": "normal",
+    }
+
+    await getattr(handler, hook_name)(102, payload, "cancel")
+
+    restore.assert_awaited_once_with(payload)
 
 
 @pytest.mark.asyncio

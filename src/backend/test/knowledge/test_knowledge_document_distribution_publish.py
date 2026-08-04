@@ -132,6 +132,38 @@ async def _seed_manager(session: AsyncSession) -> None:
     await session.commit()
 
 
+async def _seed_ordinary_file(session: AsyncSession) -> None:
+    session.add_all(
+        [
+            Knowledge(
+                id=10,
+                tenant_id=7,
+                name="来源空间",
+                type=KnowledgeTypeEnum.SPACE.value,
+            ),
+            Knowledge(
+                id=20,
+                tenant_id=7,
+                name="目标空间",
+                type=KnowledgeTypeEnum.SPACE.value,
+            ),
+            KnowledgeFile(
+                id=100,
+                tenant_id=7,
+                knowledge_id=10,
+                file_name="ordinary.pdf",
+                object_name="tenant/7/ordinary.pdf",
+                file_size=1024,
+                md5="ordinary-md5",
+                status=KnowledgeFileStatus.SUCCESS.value,
+                file_level_path="/8",
+                level=2,
+            ),
+        ]
+    )
+    await session.commit()
+
+
 def _command() -> PublishKnowledgeDocumentCommand:
     return PublishKnowledgeDocumentCommand(
         tenant_id=7,
@@ -142,6 +174,157 @@ def _command() -> PublishKnowledgeDocumentCommand:
         target_file_level_path="/88",
         target_level=2,
     )
+
+
+@pytest.mark.asyncio
+async def test_publish_submission_identity_keeps_source_as_ordinary_file(
+    async_db_session: AsyncSession,
+):
+    await _seed_ordinary_file(async_db_session)
+    service = _service(async_db_session)
+
+    identity = await service.ensure_document_identity(
+        tenant_id=7,
+        source_file_id=100,
+    )
+
+    file_repository = KnowledgeFileRepositoryImpl(async_db_session)
+    version_repository = KnowledgeDocumentVersionRepositoryImpl(async_db_session)
+    source = await file_repository.find_by_id(100)
+    version = await version_repository.find_by_knowledge_file_id(100)
+    assert identity.document_id == version.document_id
+    assert identity.manager_file_id == 100
+    assert source.reference_document_id is None
+    assert source.entry_type is None
+    assert source.entry_status is None
+
+
+@pytest.mark.asyncio
+async def test_publish_approved_activates_expected_identity_before_transfer(
+    async_db_session: AsyncSession,
+):
+    await _seed_ordinary_file(async_db_session)
+    service = _service(async_db_session)
+    identity = await service.ensure_document_identity(
+        tenant_id=7,
+        source_file_id=100,
+    )
+
+    activated = await service.normalize_manager(
+        tenant_id=7,
+        source_file_id=100,
+        expected_document_id=identity.document_id,
+    )
+    result = await service.publish_approved(
+        PublishKnowledgeDocumentCommand(
+            tenant_id=7,
+            approval_instance_id=7001,
+            document_id=identity.document_id,
+            source_entry_id=100,
+            target_space_id=20,
+        )
+    )
+
+    repository = KnowledgeFileRepositoryImpl(async_db_session)
+    manager = await repository.find_by_id(100)
+    publish = await repository.find_by_id(result.publish_entry_id)
+    assert activated.document_id == identity.document_id
+    assert manager.knowledge_id == 20
+    assert manager.entry_type == KnowledgeFileEntryType.MANAGER.value
+    assert publish.knowledge_id == 10
+    assert publish.entry_type == KnowledgeFileEntryType.PUBLISH.value
+
+
+@pytest.mark.asyncio
+async def test_manager_activation_rejects_stale_document_identity(
+    async_db_session: AsyncSession,
+):
+    await _seed_ordinary_file(async_db_session)
+    service = _service(async_db_session)
+    identity = await service.ensure_document_identity(
+        tenant_id=7,
+        source_file_id=100,
+    )
+
+    with pytest.raises(
+        KnowledgeDocumentDistributionError,
+        match="canonical document has changed",
+    ):
+        await service.normalize_manager(
+            tenant_id=7,
+            source_file_id=100,
+            expected_document_id=identity.document_id + 1,
+        )
+
+    source = await KnowledgeFileRepositoryImpl(async_db_session).find_by_id(100)
+    assert source.reference_document_id is None
+    assert source.entry_type is None
+    assert source.entry_status is None
+
+
+@pytest.mark.asyncio
+async def test_unapproved_legacy_manager_cleanup_is_safe_and_idempotent(
+    async_db_session: AsyncSession,
+):
+    await _seed_ordinary_file(async_db_session)
+    service = _service(async_db_session)
+    identity = await service.normalize_manager(
+        tenant_id=7,
+        source_file_id=100,
+    )
+
+    cleaned = await service.restore_unapproved_manager(
+        tenant_id=7,
+        document_id=identity.document_id,
+        source_file_id=100,
+    )
+    repeated = await service.restore_unapproved_manager(
+        tenant_id=7,
+        document_id=identity.document_id,
+        source_file_id=100,
+    )
+
+    source = await KnowledgeFileRepositoryImpl(async_db_session).find_by_id(100)
+    version = await KnowledgeDocumentVersionRepositoryImpl(
+        async_db_session
+    ).find_by_knowledge_file_id(100)
+    assert cleaned is True
+    assert repeated is False
+    assert source.reference_document_id is None
+    assert source.entry_type is None
+    assert source.entry_status is None
+    assert version.document_id == identity.document_id
+
+
+@pytest.mark.asyncio
+async def test_unapproved_cleanup_does_not_demote_distributed_manager(
+    async_db_session: AsyncSession,
+):
+    await _seed_manager(async_db_session)
+    async_db_session.add(
+        KnowledgeFile(
+            id=101,
+            tenant_id=7,
+            knowledge_id=30,
+            file_name="canonical.pdf",
+            status=KnowledgeFileStatus.SUCCESS.value,
+            reference_document_id=91,
+            entry_type=KnowledgeFileEntryType.SHARE.value,
+            entry_status=KnowledgeFileEntryStatus.ACTIVE.value,
+        )
+    )
+    await async_db_session.commit()
+
+    cleaned = await _service(async_db_session).restore_unapproved_manager(
+        tenant_id=7,
+        document_id=91,
+        source_file_id=100,
+    )
+
+    manager = await KnowledgeFileRepositoryImpl(async_db_session).find_by_id(100)
+    assert cleaned is False
+    assert manager.entry_type == KnowledgeFileEntryType.MANAGER.value
+    assert manager.entry_status == KnowledgeFileEntryStatus.ACTIVE.value
 
 
 @pytest.mark.asyncio

@@ -233,12 +233,12 @@ class KnowledgeDocumentDistributionService:
         await self.session.flush()
         await self.session.commit()
 
-    async def normalize_manager(
+    async def _load_or_create_primary_document(
         self,
         *,
         tenant_id: int,
         source_file_id: int,
-    ) -> CanonicalManagerSnapshot:
+    ) -> tuple[KnowledgeFile, KnowledgeDocument]:
         source_file = await self.file_repository.find_by_id_for_update(source_file_id)
         if source_file is None:
             raise KnowledgeDocumentDistributionError("source file does not exist")
@@ -281,6 +281,43 @@ class KnowledgeDocumentDistributionService:
             if int(document.primary_version_id or 0) != int(version.id or 0):
                 raise KnowledgeDocumentDistributionError("historical version cannot become manager")
 
+        return source_file, document
+
+    async def ensure_document_identity(
+        self,
+        *,
+        tenant_id: int,
+        source_file_id: int,
+    ) -> CanonicalManagerSnapshot:
+        """Create the stable document identity without activating manager behavior."""
+        source_file, document = await self._load_or_create_primary_document(
+            tenant_id=tenant_id,
+            source_file_id=source_file_id,
+        )
+        self.session.add(document)
+        await self.session.flush()
+        await self.session.commit()
+        return CanonicalManagerSnapshot(
+            document_id=int(document.id),
+            manager_file_id=int(source_file.id),
+            manager_space_id=int(source_file.knowledge_id),
+        )
+
+    async def normalize_manager(
+        self,
+        *,
+        tenant_id: int,
+        source_file_id: int,
+        expected_document_id: int | None = None,
+    ) -> CanonicalManagerSnapshot:
+        source_file, document = await self._load_or_create_primary_document(
+            tenant_id=tenant_id,
+            source_file_id=source_file_id,
+        )
+        if expected_document_id is not None and int(document.id) != int(expected_document_id):
+            await self.session.rollback()
+            raise KnowledgeDocumentDistributionError("source canonical document has changed")
+
         source_file.reference_document_id = int(document.id)
         source_file.entry_type = KnowledgeFileEntryType.MANAGER.value
         source_file.entry_status = KnowledgeFileEntryStatus.ACTIVE.value
@@ -298,6 +335,65 @@ class KnowledgeDocumentDistributionService:
             manager_file_id=int(source_file.id),
             manager_space_id=int(source_file.knowledge_id),
         )
+
+    async def restore_unapproved_manager(
+        self,
+        *,
+        tenant_id: int,
+        document_id: int,
+        source_file_id: int,
+    ) -> bool:
+        """Demote only a standalone manager created before approval completed."""
+        document = await self.document_repository.find_by_id_for_update(document_id)
+        source_file = await self.file_repository.find_by_id_for_update(source_file_id)
+        if document is None or source_file is None:
+            await self.session.rollback()
+            return False
+        if (
+            int(document.tenant_id or 0) != int(tenant_id)
+            or int(source_file.tenant_id or 0) != int(tenant_id)
+            or int(document.knowledge_id or 0) != int(source_file.knowledge_id or 0)
+            or document.predecessor_logic_file_id is not None
+            or source_file.reference_document_id != int(document_id)
+            or source_file.entry_type != KnowledgeFileEntryType.MANAGER.value
+            or source_file.entry_status != KnowledgeFileEntryStatus.ACTIVE.value
+        ):
+            await self.session.rollback()
+            return False
+
+        version = await self.version_repository.find_by_knowledge_file_id(source_file_id)
+        if version is None or int(document.primary_version_id or 0) != int(version.id or 0):
+            await self.session.rollback()
+            return False
+
+        entries = await self.file_repository.find_distribution_entries_by_document_id(
+            document_id,
+            for_update=True,
+        )
+        if any(int(entry.id) != int(source_file_id) for entry in entries):
+            await self.session.rollback()
+            return False
+
+        source_file.reference_document_id = None
+        source_file.entry_type = None
+        source_file.entry_status = None
+        source_file.approval_instance_id = None
+        source_file.allow_download = False
+        source_file.projection_status = KnowledgeFileProjectionStatus.READY.value
+        source_file.projection_retry_count = 0
+        source_file.projection_next_retry_at = None
+        source_file.projection_lease_owner = None
+        source_file.projection_lease_until = None
+        source_file.projection_last_error = None
+        source_file.projection_previous_file_id = None
+        source_file.desired_content_generation = 0
+        source_file.applied_content_generation = 0
+        source_file.desired_entry_generation = 0
+        source_file.applied_entry_generation = 0
+        self.session.add(source_file)
+        await self.session.flush()
+        await self.session.commit()
+        return True
 
     async def _ensure_canonical_name_available(
         self,

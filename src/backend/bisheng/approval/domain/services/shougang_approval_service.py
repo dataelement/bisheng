@@ -273,7 +273,7 @@ class ShougangApprovalService:
                     file_repository=file_repository,
                 ),
             )
-            return await service.normalize_manager(
+            return await service.ensure_document_identity(
                 tenant_id=tenant_id,
                 source_file_id=source_file_id,
             )
@@ -847,6 +847,9 @@ class ShougangApprovalService:
                     canonical_source.document_id
                 ),
                 "source_entry_id": int(source_file.id),
+                "source_entry_type_before_submit": (
+                    getattr(source_file, "entry_type", None) or "normal"
+                ),
                 "target_space_id": int(target_space.id),
                 "target_space_name": target_space.name,
                 "target_space_level": (
@@ -1391,6 +1394,9 @@ class ShougangApprovalService:
                 'source_file_name': file_name,
                 'canonical_document_id': int(canonical_source.document_id),
                 'source_entry_id': int(canonical_source.manager_file_id),
+                'source_entry_type_before_submit': (
+                    getattr(source_file, 'entry_type', None) or 'normal'
+                ),
                 'target_space_id': int(target_space.id),
                 'target_space_name': target_space.name,
                 'target_space_level': target_level,
