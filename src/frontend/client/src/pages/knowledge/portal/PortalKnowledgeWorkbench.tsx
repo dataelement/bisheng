@@ -2139,28 +2139,6 @@ export default function PortalKnowledgeWorkbench() {
         [],
     );
 
-    const handleBackToFileList = useCallback(() => {
-        setSelectedFile(null);
-        setActivePanel(null);
-        setAiDrawerOpen(false);
-        setSummaryExpanded(false);
-        setPreview({ loading: false, fileUrl: "", fileType: "", error: "", previewData: null });
-        // Deep-link open used to leave searchMode with a single-file result set.
-        setSearchMode(false);
-        setSearchResults([]);
-        setSearchText("");
-        setSearchTagIds([]);
-        // Early back during tag-review deep link must not stick on the restore overlay.
-        setRestoringDeepLinkKey(null);
-        // Folder children may still be loading / wiped by a late root refresh — refetch.
-        const folderId = currentFolderIdRef.current;
-        if (!folderId) return;
-        const folderNode = findTreeNode(treeNodes, folderId);
-        if (!folderNode?.loaded || folderNode.loading) {
-            void reloadFilesRef.current();
-        }
-    }, [treeNodes]);
-
     // 从"我的收藏"只读面板打开源文件：#4 原地预览——不切换 activeSpace（不跳转到源知识空间），
     // 以携带源空间 id 的合成文件项触发预览流程。预览/下载按 selectedFile.spaceId(源空间) 定位、
     // 由后端鉴权（无访问权限时预览接口自然报错），关闭预览后仍回到「我的收藏」列表。
@@ -2420,6 +2398,37 @@ export default function PortalKnowledgeWorkbench() {
             showToast({ message: "文件夹加载失败", severity: NotificationSeverity.ERROR });
         }
     }, [activeSpace?.id, loadFolderStats, loadRootTree, showToast, sortBy, sortDirection, statusFilterNumbers, treeNodes]);
+
+    const handleBackToFileList = useCallback(() => {
+        const previewedFile = selectedFile;
+        const openedFromSearch = searchModeRef.current;
+
+        setSelectedFile(null);
+        setActivePanel(null);
+        setAiDrawerOpen(false);
+        setSummaryExpanded(false);
+        setPreview({ loading: false, fileUrl: "", fileType: "", error: "", previewData: null });
+        // Deep-link open used to leave searchMode with a single-file result set.
+        setSearchMode(false);
+        setSearchResults([]);
+        setSearchText("");
+        setSearchTagIds([]);
+        // Early back during tag-review deep link must not stick on the restore overlay.
+        setRestoringDeepLinkKey(null);
+
+        if (openedFromSearch && previewedFile && !isFolder(previewedFile)) {
+            void handleNavigateFolder(previewedFile.parentId || undefined);
+            return;
+        }
+
+        // Folder children may still be loading / wiped by a late root refresh — refetch.
+        const folderId = currentFolderIdRef.current;
+        if (!folderId) return;
+        const folderNode = findTreeNode(treeNodes, folderId);
+        if (!folderNode?.loaded || folderNode.loading) {
+            void reloadFilesRef.current();
+        }
+    }, [handleNavigateFolder, selectedFile, treeNodes]);
 
     usePortalDeepLink({
         searchParams,

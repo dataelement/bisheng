@@ -5864,6 +5864,63 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(screen.queryByText("搜索结果.md")).not.toBeInTheDocument();
     });
 
+    test("returns from search preview to the file parent folder list instead of root", async () => {
+        const personalSpace = makeSpace("personal-1", "我的技术文档", {
+            role: SpaceRole.ADMIN,
+        });
+        const folder = makeFile("101", "制度文件", {
+            type: FileType.FOLDER,
+            spaceId: "personal-1",
+        });
+        const targetFile = makeFile("401", "搜索结果.md", {
+            parentId: "101",
+            spaceId: "personal-1",
+        });
+        const siblingFile = makeFile("402", "同目录其它.md", {
+            parentId: "101",
+            spaceId: "personal-1",
+        });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [],
+            personalSpaces: [personalSpace],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockImplementation(async (params: any) => (
+            params.parent_id === "101"
+                ? { data: [targetFile, siblingFile], total: 2 }
+                : { data: [folder], total: 1 }
+        ) as any);
+        jest.mocked(searchSpaceChildrenApi).mockResolvedValue({
+            data: [targetFile],
+            total: 1,
+        } as any);
+
+        renderWorkbench();
+
+        expect(await screen.findByText("制度文件")).toBeInTheDocument();
+
+        const input = await screen.findByPlaceholderText("com_knowledge.search_in_current_space");
+        fireEvent.change(input, { target: { value: "搜索" } });
+        fireEvent.keyDown(input, { key: "Enter" });
+
+        expect(await screen.findByText("搜索结果.md")).toBeInTheDocument();
+        expect(screen.queryByText("制度文件")).not.toBeInTheDocument();
+
+        const workspace = await screen.findByTestId("portal-file-workspace");
+        fireEvent.click(within(workspace).getByRole("button", { name: "打开搜索结果.md" }));
+
+        const preview = await screen.findByTestId("portal-preview-page");
+        expect(preview).toHaveTextContent("搜索结果.md");
+
+        fireEvent.click(within(preview).getByRole("button", { name: "返回文件列表" }));
+
+        const restoredWorkspace = await screen.findByTestId("portal-file-workspace");
+        expect(within(restoredWorkspace).getByText("搜索结果.md")).toBeInTheDocument();
+        expect(within(restoredWorkspace).getByText("同目录其它.md")).toBeInTheDocument();
+        expect(screen.queryByTestId("portal-preview-page")).not.toBeInTheDocument();
+    });
+
     test("keeps search keyword and results after editing tags in search results", async () => {
         const personalSpace = makeSpace("personal-1", "我的技术文档", {
             role: SpaceRole.ADMIN,
