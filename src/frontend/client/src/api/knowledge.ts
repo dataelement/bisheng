@@ -556,6 +556,7 @@ export interface KnowledgeFile {
     isDepartmentFile?: boolean;
     entryType?: KnowledgeDocumentEntryType;
     entryStatus?: string | null;
+    distributionInvalidReason?: string | null;
     canonicalDocumentId?: number | null;
     canonicalVersionId?: number | null;
     managerFileId?: number | null;
@@ -1145,6 +1146,7 @@ export function mapChild(raw: any, spaceId: string): KnowledgeFile {
             : undefined,
         entryType: raw?.entry_type ?? undefined,
         entryStatus: raw?.entry_status ?? undefined,
+        distributionInvalidReason: raw?.distribution_invalid_reason ?? undefined,
         canonicalDocumentId: raw?.canonical_document_id ?? undefined,
         canonicalVersionId: raw?.canonical_version_id ?? undefined,
         managerFileId: capabilities?.canEditContent

@@ -13,6 +13,11 @@ from bisheng.common.errcode.knowledge_space import (
     KnowledgeDocumentManagerRequiredError,
     KnowledgeDocumentStateConflictError,
 )
+from bisheng.knowledge.domain.models.knowledge import (
+    Knowledge,
+    KnowledgeState,
+    KnowledgeTypeEnum,
+)
 from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFile,
     KnowledgeFileEntryStatus,
@@ -166,6 +171,56 @@ def test_container_delete_rejects_any_distribution_state() -> None:
         )
 
     assert exc_info.value.code == 18098
+
+
+async def test_delete_space_routes_to_retirement_without_distribution_blocker() -> None:
+    service = _service()
+    service.knowledge_space_retirement_service = SimpleNamespace(
+        retire=AsyncMock(
+            return_value=SimpleNamespace(entry_ids=[101, 102])
+        )
+    )
+    service._require_permission_id = AsyncMock()
+    service._send_space_event_notification = AsyncMock()
+    service._list_space_child_resources = AsyncMock(
+        side_effect=AssertionError("whole-space deletion must not run the 18098 blocker")
+    )
+    space = Knowledge(
+        id=20,
+        tenant_id=7,
+        name="待删除知识库",
+        type=KnowledgeTypeEnum.SPACE.value,
+        state=KnowledgeState.PUBLISHED.value,
+    )
+
+    with (
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id",
+            new=AsyncMock(return_value=space),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceScopeDao.aget_by_space_id",
+            new=AsyncMock(return_value=None),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_get_members_by_space",
+            new=AsyncMock(return_value=[]),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeAuditTelemetryService.audit_delete_knowledge_space",
+            new=AsyncMock(),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeAuditTelemetryService.telemetry_delete_knowledge"
+        ),
+    ):
+        await service.delete_space(20, migrate_free_space=False)
+
+    service.knowledge_space_retirement_service.retire.assert_awaited_once_with(
+        tenant_id=7,
+        space_id=20,
+    )
+    service._list_space_child_resources.assert_not_awaited()
 
 
 async def test_manager_can_list_and_revoke_share_entries() -> None:

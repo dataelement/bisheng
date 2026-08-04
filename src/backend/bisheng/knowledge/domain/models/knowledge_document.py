@@ -29,6 +29,7 @@ def _default_document_tenant_id() -> int:
 class KnowledgeDocumentLifecycleStatus(str, Enum):
     ACTIVE = "active"
     DELETING = "deleting"
+    INVALID = "invalid"
 
 
 class KnowledgeDocumentBase(SQLModelSerializable):

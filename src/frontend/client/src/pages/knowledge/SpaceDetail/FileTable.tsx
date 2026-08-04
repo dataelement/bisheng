@@ -1163,7 +1163,7 @@ function FileRow({
     const retryText = retryActionLabel ?? localize("com_knowledge.retry");
     const canEditTags = canEditEncoding && !isFolder && !isReadonlyDistributionEntry;
     const canRenameContent = canRename && !isReadonlyDistributionEntry;
-    const canRetry = isAdmin && hasRetryOption;
+    const canRetry = isAdmin && hasRetryOption && file.entryStatus !== "invalid";
     const showPublish = canPublish && Boolean(onPublishFile) && !isFolder && !isReadonlyDistributionEntry;
     const showShare = canShare && Boolean(onShareFile) && !isFolder && file.entryType !== "share";
     const showMoreMenu = showPublish || showShare || canEditTags || canRenameContent || canRetry || canDelete || canMove || Boolean(onManagePermission);
@@ -1362,7 +1362,8 @@ function FileRow({
             className={cn(
                 "group border-b border-b-[#e5e6eb]",
                 // 取消 Table 默认 tr:hover 底色，整行颜色只由单元格 rowBg + group-hover 控制
-                "bg-transparent hover:bg-transparent"
+                "bg-transparent hover:bg-transparent",
+                file.entryStatus === "invalid" && "opacity-60 grayscale",
             )}
             onMouseEnter={() => { setRowHovered(true); onRequestPermissions?.(); }}
             onMouseLeave={() => setRowHovered(false)}
@@ -1421,7 +1422,9 @@ function FileRow({
                             <div className="flex items-center gap-1.5 min-w-0">
                                 {!isFolder && file.entryType && file.entryType !== "normal" && (
                                     <span className="flex h-5 shrink-0 items-center rounded bg-[#f2f3f5] px-1.5 text-xs text-[#4e5969]">
-                                        {file.entryType === "manager"
+                                        {file.entryStatus === "invalid"
+                                            ? "已失效：原管理知识库已删除"
+                                            : file.entryType === "manager"
                                             ? "管理文件"
                                             : file.entryType === "publish"
                                                 ? "发布文件"

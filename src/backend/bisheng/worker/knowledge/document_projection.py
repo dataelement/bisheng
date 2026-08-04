@@ -8,7 +8,7 @@ import uuid
 from datetime import datetime, timedelta
 
 from sqlalchemy import delete
-from sqlmodel import col
+from sqlmodel import col, select
 
 from bisheng.approval.domain.models.approval_instance import (
     ApprovalOutboxStatus,
@@ -19,6 +19,7 @@ from bisheng.approval.domain.repositories.approval_instance_repository import (
 from bisheng.core.context.tenant import DEFAULT_TENANT_ID, get_current_tenant_id
 from bisheng.core.database import get_async_db_session
 from bisheng.database.models.tenant import TenantDao
+from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao, KnowledgeState
 from bisheng.knowledge.domain.models.knowledge_document import (
     KnowledgeDocument,
     KnowledgeDocumentLifecycleStatus,
@@ -90,6 +91,33 @@ async def _delete_entry_permissions(entry_id: int) -> None:
         )
 
 
+async def _delete_resource_permissions(object_type: str, object_id: int) -> None:
+    from bisheng.permission.domain.schemas.tuple_operation import TupleOperation
+    from bisheng.permission.domain.services.permission_service import PermissionService
+
+    fga = await PermissionService._aget_fga()
+    if fga is None:
+        raise RuntimeError("OpenFGA unavailable during knowledge space retirement")
+    tuples = await fga.read_tuples(object=f"{object_type}:{object_id}")
+    operations = [
+        TupleOperation(
+            action="delete",
+            user=str(item["user"]),
+            relation=str(item["relation"]),
+            object=f"{object_type}:{object_id}",
+        )
+        for item in tuples
+        if item.get("user") and item.get("relation")
+    ]
+    if operations:
+        await PermissionService.batch_write_tuples(
+            operations,
+            crash_safe=True,
+            raise_on_failure=True,
+            stop_on_failure=True,
+        )
+
+
 async def _strict_delete_minio_objects(
     files: list[KnowledgeFile],
     artifact_snapshots: list,
@@ -129,7 +157,11 @@ def _require_entries_ready_for_document_delete(
 ) -> None:
     """最终删除前, 所有入口必须已完成各自的投影清理。"""
     if any(
-        item.entry_status != KnowledgeFileEntryStatus.DELETING.value
+        item.entry_status
+        not in {
+            KnowledgeFileEntryStatus.DELETING.value,
+            KnowledgeFileEntryStatus.INVALID.value,
+        }
         or item.projection_status
         != KnowledgeFileProjectionStatus.READY.value
         for item in entries
@@ -222,22 +254,41 @@ async def _finalize_document_delete(entry: KnowledgeFile) -> None:
                 KnowledgeDocumentVersion.document_id == document_id
             )
         )
+        invalid_entries = [
+            item
+            for item in current_entries
+            if item.entry_status == KnowledgeFileEntryStatus.INVALID.value
+        ]
         delete_file_ids = sorted(
             {
                 *physical_file_ids,
-                *(int(item.id) for item in current_entries),
+                *(
+                    int(item.id)
+                    for item in current_entries
+                    if item.entry_status
+                    != KnowledgeFileEntryStatus.INVALID.value
+                ),
             }
         )
         await file_repository.prepare_delete_by_ids(delete_file_ids)
-        await session.execute(
-            delete(KnowledgeDocument).where(
-                KnowledgeDocument.id == document_id
+        if invalid_entries:
+            document.primary_version_id = None
+            document.predecessor_logic_file_id = None
+            document.lifecycle_status = KnowledgeDocumentLifecycleStatus.INVALID.value
+            session.add(document)
+        else:
+            await session.execute(
+                delete(KnowledgeDocument).where(
+                    KnowledgeDocument.id == document_id
+                )
             )
-        )
         await session.commit()
 
 
 async def _finalize_deleting_entry(entry: KnowledgeFile) -> None:
+    if entry.entry_status == KnowledgeFileEntryStatus.INVALID.value:
+        await _delete_entry_permissions(int(entry.id))
+        return
     if entry.entry_type == KnowledgeFileEntryType.MANAGER.value:
         await _finalize_document_delete(entry)
         return
@@ -257,6 +308,24 @@ async def _finalize_deleting_entry(entry: KnowledgeFile) -> None:
                 "F059 logical entry cleanup state changed"
             )
         await repository.prepare_delete_by_ids([int(entry.id)])
+        document_id = int(current.reference_document_id or 0)
+        remaining = await repository.find_distribution_entries_by_document_id(
+            document_id,
+            for_update=True,
+        )
+        if len(remaining) == 1:
+            document_repository = KnowledgeDocumentRepositoryImpl(session)
+            document = await document_repository.find_by_id_for_update(document_id)
+            if (
+                document is not None
+                and document.lifecycle_status
+                == KnowledgeDocumentLifecycleStatus.INVALID.value
+            ):
+                await session.execute(
+                    delete(KnowledgeDocument).where(
+                        KnowledgeDocument.id == document_id
+                    )
+                )
         await session.commit()
 
 
@@ -500,6 +569,19 @@ async def _scan_tenant_projection_async(tenant_id: int) -> int:
                 limit=SCAN_PAGE_SIZE,
             )
         )
+        retiring_space_ids = list(
+            (
+                await session.exec(
+                    select(Knowledge.id)
+                    .where(
+                        Knowledge.tenant_id == tenant_id,
+                        Knowledge.state == KnowledgeState.DELETING.value,
+                    )
+                    .order_by(Knowledge.id.asc())
+                    .limit(SCAN_PAGE_SIZE)
+                )
+            ).all()
+        )
     preparing_count = sum(
         1
         for item in permission_candidates
@@ -538,6 +620,11 @@ async def _scan_tenant_projection_async(tenant_id: int) -> int:
         tenant_id=tenant_id,
         candidates=permission_candidates,
     )
+    for space_id in retiring_space_ids:
+        enqueue_knowledge_space_retirement(
+            tenant_id=tenant_id,
+            space_id=int(space_id),
+        )
     return len(entry_ids)
 
 
@@ -605,3 +692,110 @@ def enqueue_document_projection_entries(
             headers={"tenant_id": int(tenant_id)},
             queue=KNOWLEDGE_QUEUE,
         )
+
+
+async def _process_knowledge_space_retirement_async(
+    *,
+    tenant_id: int,
+    space_id: int,
+) -> str:
+    from bisheng.common.models.space_channel_member import SpaceChannelMemberDao
+    from bisheng.knowledge.domain.models.knowledge_file import FileType
+    from bisheng.knowledge.domain.models.knowledge_space_tag_library import (
+        KnowledgeSpaceTagLibraryDao,
+    )
+    from bisheng.knowledge.domain.services.knowledge_space_pin_service import (
+        KnowledgeSpacePinService,
+    )
+    from bisheng.telemetry.domain.mid_table.knowledge_space_content import (
+        KnowledgeSpaceContentStat,
+    )
+
+    async with get_async_db_session() as session:
+        space = (
+            await session.exec(
+                select(Knowledge).where(
+                    Knowledge.id == space_id,
+                    Knowledge.tenant_id == tenant_id,
+                    Knowledge.state == KnowledgeState.DELETING.value,
+                )
+            )
+        ).first()
+        if space is None:
+            return "completed"
+        local_files = list(
+            (
+                await session.exec(
+                    select(KnowledgeFile).where(
+                        KnowledgeFile.knowledge_id == space_id,
+                        col(KnowledgeFile.deleted_at).is_(None),
+                    )
+                )
+            ).all()
+        )
+    if any(
+        item.reference_document_id is not None
+        and item.entry_status
+        in {
+            KnowledgeFileEntryStatus.PREPARING.value,
+            KnowledgeFileEntryStatus.ACTIVE.value,
+            KnowledgeFileEntryStatus.DELETING.value,
+            KnowledgeFileEntryStatus.INVALID.value,
+        }
+        for item in local_files
+    ):
+        return "waiting"
+
+    from bisheng.channel.domain.models.channel_knowledge_sync import (
+        ChannelKnowledgeSyncDao,
+    )
+    from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
+
+    await asyncio.to_thread(KnowledgeService.delete_knowledge_file_in_vector, space)
+    await asyncio.to_thread(
+        KnowledgeService.delete_knowledge_file_in_minio,
+        space_id,
+        tenant_id,
+    )
+    for item in local_files:
+        await _delete_resource_permissions(
+            "folder" if item.file_type == FileType.DIR.value else "knowledge_file",
+            int(item.id),
+        )
+    await _delete_resource_permissions("knowledge_space", space_id)
+    await KnowledgeSpaceTagLibraryDao.adelete_private_for_knowledge(space_id)
+    await KnowledgeSpacePinService.delete_space_pins(space_id)
+    await KnowledgeSpaceContentStat.enqueue_space_delete_stat_async(space_id)
+    await SpaceChannelMemberDao.clean_space_member(space_id)
+    await ChannelKnowledgeSyncDao.adelete_by_space_id(str(space_id))
+    await KnowledgeDao.async_delete_knowledge(knowledge_id=space_id)
+    return "completed"
+
+
+@bisheng_celery.task(
+    bind=True,
+    acks_late=True,
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_kwargs={"max_retries": 5},
+    name="bisheng.worker.knowledge.document_projection.process_knowledge_space_retirement",
+)
+def process_knowledge_space_retirement(
+    task,
+    tenant_id: int,
+    space_id: int,
+) -> str:
+    return run_async_task(
+        lambda: _process_knowledge_space_retirement_async(
+            tenant_id=int(tenant_id),
+            space_id=int(space_id),
+        )
+    )
+
+
+def enqueue_knowledge_space_retirement(*, tenant_id: int, space_id: int) -> None:
+    process_knowledge_space_retirement.apply_async(
+        kwargs={"tenant_id": int(tenant_id), "space_id": int(space_id)},
+        headers={"tenant_id": int(tenant_id)},
+        queue=KNOWLEDGE_QUEUE,
+    )

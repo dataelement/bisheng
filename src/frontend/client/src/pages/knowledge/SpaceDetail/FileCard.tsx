@@ -261,7 +261,9 @@ export function FileCard({
         );
         const entryBadge = !isFolder && file.entryType && file.entryType !== "normal" && (
             <span className="flex h-5 shrink-0 items-center rounded bg-[#f2f3f5] px-1.5 text-xs text-[#4e5969]">
-                {file.entryType === "manager"
+                {file.entryStatus === "invalid"
+                    ? "已失效：原管理知识库已删除"
+                    : file.entryType === "manager"
                     ? "管理文件"
                     : file.entryType === "publish"
                         ? "发布文件"
@@ -336,7 +338,7 @@ export function FileCard({
     const retryText = retryActionLabel ?? localize("com_knowledge.retry");
     const canEditTags = isAdmin && !isFolder && !isReadonlyDistributionEntry;
     const canRenameContent = canRename && !isReadonlyDistributionEntry;
-    const canRetry = isAdmin && hasRetryOption;
+    const canRetry = isAdmin && hasRetryOption && file.entryStatus !== "invalid";
     const showPublish = canPublish && Boolean(onPublishFile) && !isFolder && !isReadonlyDistributionEntry;
     const showShare = canShare && Boolean(onShareFile) && !isFolder && file.entryType !== "share";
     const showMoreMenu = showPublish || showShare || canEditTags || canRenameContent || canRetry || canDelete || Boolean(onManagePermission);
@@ -357,7 +359,8 @@ export function FileCard({
                 isSelected
                     ? "border-primary shadow-sm"
                     : "border-[#ECECEC] hover:border-[#c9cdd4]",
-                hovered && "shadow-md"
+                hovered && "shadow-md",
+                file.entryStatus === "invalid" && "opacity-60 grayscale",
             )}
             style={{
                 transitionProperty: 'background-color',

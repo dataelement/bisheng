@@ -234,6 +234,7 @@ class SpaceFileDao(KnowledgeFileDao):
                 or_(
                     KnowledgeFile.reference_document_id.is_(None),
                     KnowledgeFile.entry_status == KnowledgeFileEntryStatus.ACTIVE.value,
+                    KnowledgeFile.entry_status == KnowledgeFileEntryStatus.INVALID.value,
                 ),
                 or_(
                     KnowledgeFile.entry_type.is_(None),

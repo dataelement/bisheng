@@ -18,7 +18,7 @@ from langchain_core.documents import Document
 from loguru import logger
 from pydantic import BaseModel
 from sqlalchemy import func, update
-from sqlmodel import select
+from sqlmodel import col, select
 
 from bisheng.api.v1.schemas import ExcelRule, FileProcessBase, KnowledgeFileOne
 from bisheng.approval.domain.schemas.approval_center_schema import ApprovalGateDecision, ApprovalGateRequest
@@ -174,6 +174,9 @@ from bisheng.knowledge.domain.repositories.implementations.portal_recommendation
 from bisheng.knowledge.domain.schemas.favorite_notification_schema import (
     FavoriteChangeEvent,
     FavoriteRecipientSnapshot,
+)
+from bisheng.knowledge.domain.schemas.knowledge_document_distribution_schema import (
+    KnowledgeDocumentEntryCapabilities,
 )
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     GroupedKnowledgeSpacesResp,
@@ -630,6 +633,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         self.department_file_view_access_service = None
         self.department_file_view_lifecycle_service = None
         self.document_distribution_service: KnowledgeDocumentDistributionService | None = None
+        self.knowledge_space_retirement_service = None
         self.document_entry_resolver: KnowledgeDocumentEntryResolver | None = None
         self.document_durable_reference_resolver: KnowledgeDocumentDurableReferenceResolver | None = None
 
@@ -679,18 +683,34 @@ class KnowledgeSpaceService(KnowledgeUtils):
         self,
         file_record: KnowledgeFile,
     ) -> bool:
+        from bisheng.knowledge.domain.services.knowledge_document_distribution_service import (
+            KnowledgeDocumentDistributionError,
+        )
+
         if file_record.reference_document_id is None:
             return False
+        if file_record.entry_status == KnowledgeFileEntryStatus.INVALID.value:
+            if self.document_distribution_service is None:
+                raise KnowledgeDocumentStateConflictError(msg="文档分发生命周期服务不可用")
+            try:
+                await self.document_distribution_service.remove_invalid_entry(
+                    tenant_id=int(file_record.tenant_id),
+                    document_id=int(file_record.reference_document_id),
+                    entry_id=int(file_record.id),
+                )
+            except KnowledgeDocumentDistributionError as exc:
+                raise KnowledgeDocumentStateConflictError() from exc
+            await self._enqueue_document_distribution_projection(
+                tenant_id=int(file_record.tenant_id),
+                entry_ids=[int(file_record.id)],
+            )
+            return True
         if file_record.entry_status != KnowledgeFileEntryStatus.ACTIVE.value:
             raise KnowledgeDocumentStateConflictError()
         if file_record.entry_type == KnowledgeFileEntryType.PUBLISH.value:
             raise KnowledgeDocumentEntryTypeInvalidError(msg="发布入口不能删除")
         if self.document_distribution_service is None:
             raise KnowledgeDocumentStateConflictError(msg="文档分发生命周期服务不可用")
-
-        from bisheng.knowledge.domain.services.knowledge_document_distribution_service import (
-            KnowledgeDocumentDistributionError,
-        )
 
         try:
             if file_record.entry_type == KnowledgeFileEntryType.SHARE.value:
@@ -739,6 +759,17 @@ class KnowledgeSpaceService(KnowledgeUtils):
     ) -> bool:
         if file_record.reference_document_id is None:
             return False
+        if (
+            file_record.entry_status == KnowledgeFileEntryStatus.INVALID.value
+            and file_record.entry_type
+            in {
+                KnowledgeFileEntryType.PUBLISH.value,
+                KnowledgeFileEntryType.SHARE.value,
+            }
+        ):
+            if self.document_distribution_service is None:
+                raise KnowledgeDocumentStateConflictError(msg="文档分发生命周期服务不可用")
+            return True
         if file_record.entry_type == KnowledgeFileEntryType.PUBLISH.value:
             raise KnowledgeDocumentEntryTypeInvalidError(msg="发布入口不能删除")
         if self.document_distribution_service is None:
@@ -2333,7 +2364,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
         Verify that the current user has can_delete permission on the space.
         """
         space = await KnowledgeDao.aquery_by_id(space_id)
-        if not space or space.type != KnowledgeTypeEnum.SPACE.value:
+        if (
+            not space
+            or space.type != KnowledgeTypeEnum.SPACE.value
+            or space.state == KnowledgeState.DELETING.value
+        ):
             raise SpaceNotFoundError()
         allowed = await PermissionService.check(
             user_id=self.login_user.user_id,
@@ -3264,7 +3299,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if space_id is None:
             return set()
         space = await KnowledgeDao.aquery_by_id(int(space_id))
-        if not space or space.type != KnowledgeTypeEnum.SPACE.value:
+        if (
+            not space
+            or space.type != KnowledgeTypeEnum.SPACE.value
+            or space.state == KnowledgeState.DELETING.value
+        ):
             return set()
         space_level = getattr(space, "space_level", None)
         if space_level is None:
@@ -3314,7 +3353,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
     async def _require_read_permission(self, space_id: int) -> Knowledge:
         space = await KnowledgeDao.aquery_by_id(space_id)
-        if not space or space.type != KnowledgeTypeEnum.SPACE.value:
+        if (
+            not space
+            or space.type != KnowledgeTypeEnum.SPACE.value
+            or space.state == KnowledgeState.DELETING.value
+        ):
             raise SpaceNotFoundError()
         effective_permissions = await self._get_effective_permission_ids("knowledge_space", space_id)
         if "view_space" not in effective_permissions:
@@ -3330,7 +3373,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
     async def _require_space_info_permission(self, space_id: int) -> tuple[Knowledge, bool]:
         space = await KnowledgeDao.aquery_by_id(space_id)
-        if not space or space.type != KnowledgeTypeEnum.SPACE.value:
+        if (
+            not space
+            or space.type != KnowledgeTypeEnum.SPACE.value
+            or space.state == KnowledgeState.DELETING.value
+        ):
             raise SpaceNotFoundError()
         effective_permissions = await self._get_effective_permission_ids("knowledge_space", space_id)
         if "view_space" in effective_permissions:
@@ -10070,6 +10117,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             is_department_file=is_department_file,
             entry_type=str(item.get("entry_type") or "normal"),
             entry_status=str(item.get("entry_status") or "active"),
+            distribution_invalid_reason=item.get("distribution_invalid_reason"),
             canonical_document_id=(
                 int(item["canonical_document_id"]) if item.get("canonical_document_id") is not None else None
             ),
@@ -10281,9 +10329,51 @@ class KnowledgeSpaceService(KnowledgeUtils):
                         raise
                     return
                 # decision.action == "normal_delete" → 继续原清理逻辑
-        child_resources = await self._list_space_child_resources(space_id)
         original_members = await SpaceChannelMemberDao.async_get_members_by_space(space_id)
         original_member_ids = [member.user_id for member in original_members]
+
+        if not force:
+            if self.knowledge_space_retirement_service is None:
+                raise KnowledgeDocumentStateConflictError(msg="知识库退役服务不可用")
+            result = await self.knowledge_space_retirement_service.retire(
+                tenant_id=int(space.tenant_id),
+                space_id=space_id,
+            )
+            await self._enqueue_document_distribution_projection(
+                tenant_id=int(space.tenant_id),
+                entry_ids=result.entry_ids,
+            )
+            try:
+                from bisheng.worker.knowledge.document_projection import (
+                    enqueue_knowledge_space_retirement,
+                )
+
+                enqueue_knowledge_space_retirement(
+                    tenant_id=int(space.tenant_id),
+                    space_id=space_id,
+                )
+            except Exception:
+                logger.exception(
+                    "knowledge space retirement enqueue failed: tenant_id=%s space_id=%s",
+                    space.tenant_id,
+                    space_id,
+                )
+            await self._send_space_event_notification(
+                action_code=SPACE_DELETED_MESSAGE,
+                receiver_user_ids=original_member_ids,
+                space_id=space_id,
+                space_name=space.name,
+                navigable=False,
+            )
+            await KnowledgeAuditTelemetryService.audit_delete_knowledge_space(
+                self.login_user,
+                self.request,
+                space,
+            )
+            KnowledgeAuditTelemetryService.telemetry_delete_knowledge(self.login_user)
+            return
+
+        child_resources = await self._list_space_child_resources(space_id)
 
         # Cleaned vectorData in
         await asyncio.to_thread(KnowledgeService.delete_knowledge_file_in_vector, space)
@@ -12511,6 +12601,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 ),
             )
             capability_payload = capabilities.model_dump()
+            is_invalid = (
+                item.entry_status == KnowledgeFileEntryStatus.INVALID.value
+            )
+            if is_invalid:
+                capability_payload = KnowledgeDocumentEntryCapabilities(
+                    can_delete="delete_file" in set(permission_ids)
+                ).model_dump()
             document = (
                 document_map.get(int(item.reference_document_id)) if item.reference_document_id is not None else None
             )
@@ -12532,6 +12629,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if not capability_payload.get("can_edit_content", False):
                 manager_file_id = None
             manager_space_id = int(document.knowledge_id) if document is not None else int(item.knowledge_id)
+            if is_invalid:
+                canonical_version_id = None
+                manager_file_id = None
+                manager_space_id = None
             is_distribution = item.reference_document_id is not None
             projection_ready = (
                 item.projection_status == KnowledgeFileProjectionStatus.READY.value
@@ -12550,6 +12651,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 "canonical_version_id": canonical_version_id,
                 "manager_file_id": manager_file_id,
                 "manager_space_id": manager_space_id,
+                "distribution_invalid_reason": (
+                    "manager_space_deleted" if is_invalid else None
+                ),
                 "desired_content_generation": (int(item.desired_content_generation) if is_distribution else 0),
                 "applied_content_generation": (int(item.applied_content_generation) if is_distribution else 0),
                 "desired_entry_generation": (int(item.desired_entry_generation) if is_distribution else 0),
@@ -12743,6 +12847,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 if item.file_type != FileType.DIR.value:
                     self._entry_permission_ids_by_file[int(item.id)] = set(effective_permissions)
                     self._portal_file_download_map[int(item.id)] = "download_file" in effective_permissions
+                if item.entry_status == KnowledgeFileEntryStatus.INVALID.value:
+                    return True
                 return permission_id in effective_permissions
 
         visibility = await asyncio.gather(*(can_view(item) for item in items))

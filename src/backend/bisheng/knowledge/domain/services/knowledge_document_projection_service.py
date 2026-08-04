@@ -11,6 +11,9 @@ from datetime import datetime, timedelta
 
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from bisheng.knowledge.domain.models.knowledge_document import (
+    KnowledgeDocumentLifecycleStatus,
+)
 from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFile,
     KnowledgeFileEntryStatus,
@@ -335,6 +338,16 @@ class KnowledgeDocumentProjectionService:
             }
         ):
             return
+        if self.document_repository is not None:
+            document = await self.document_repository.find_by_id(
+                int(entry.reference_document_id)
+            )
+            if (
+                document is not None
+                and document.lifecycle_status
+                != KnowledgeDocumentLifecycleStatus.ACTIVE.value
+            ):
+                return
         entries = (
             await self.file_repository.find_distribution_entries_by_document_id(
                 int(entry.reference_document_id),
@@ -388,8 +401,18 @@ class KnowledgeDocumentProjectionService:
                 "projection tenant mismatch"
             )
         version_id = 0
+        is_cleanup = (
+            claimed.entry_status
+            in {
+                KnowledgeFileEntryStatus.DELETING.value,
+                KnowledgeFileEntryStatus.INVALID.value,
+            }
+            or claimed.entry_type
+            == KnowledgeFileEntryType.PROJECTION_TOMBSTONE.value
+        )
         if (
-            self.document_repository is not None
+            not is_cleanup
+            and self.document_repository is not None
             and self.version_repository is not None
             and claimed.reference_document_id is not None
         ):
@@ -431,12 +454,6 @@ class KnowledgeDocumentProjectionService:
         await self.session.commit()
 
         try:
-            is_cleanup = (
-                claimed.entry_status
-                == KnowledgeFileEntryStatus.DELETING.value
-                or claimed.entry_type
-                == KnowledgeFileEntryType.PROJECTION_TOMBSTONE.value
-            )
             if is_cleanup:
                 await self._require_destination_manager_ready_for_cleanup(
                     claimed
@@ -445,6 +462,9 @@ class KnowledgeDocumentProjectionService:
                     int(claimed.knowledge_id),
                     self._cleanup_file_ids(claimed),
                 )
+                if claimed.entry_status == KnowledgeFileEntryStatus.INVALID.value:
+                    # 权限清理必须在 CAS 完成前成功，否则保留失败态供扫描重试。
+                    await self.deleting_entry_finalizer(claimed)
             else:
                 source = await self._resolve_source(claimed)
                 await self.projection_writer(source, claimed, target)
@@ -478,7 +498,11 @@ class KnowledgeDocumentProjectionService:
                     content_generation=target.content_generation,
                     entry_generation=target.entry_generation,
                 )
-            if is_cleanup:
+            if (
+                is_cleanup
+                and claimed.entry_status
+                != KnowledgeFileEntryStatus.INVALID.value
+            ):
                 await self.deleting_entry_finalizer(claimed)
             result_status = "ready" if not is_cleanup else "cleaned"
             logger.info(

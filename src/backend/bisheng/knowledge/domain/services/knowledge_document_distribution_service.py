@@ -10,7 +10,7 @@ from sqlalchemy import delete, or_
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from bisheng.knowledge.domain.models.knowledge import Knowledge
+from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeState
 from bisheng.knowledge.domain.models.knowledge_document import (
     KnowledgeDocument,
     KnowledgeDocumentLifecycleStatus,
@@ -170,6 +170,23 @@ class KnowledgeDocumentDistributionService:
         self.file_repository = file_repository
         self.permission_activation_service = permission_activation_service
         self.permission_snapshot_loader = permission_snapshot_loader
+
+    async def _lock_published_spaces(self, space_ids: set[int]) -> None:
+        normalized = sorted({int(item) for item in space_ids})
+        result = await self.session.execute(
+            select(Knowledge)
+            .where(col(Knowledge.id).in_(normalized))
+            .order_by(Knowledge.id.asc())
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        spaces = list(result.scalars().all())
+        if len(spaces) != len(normalized) or any(
+            item.state != KnowledgeState.PUBLISHED.value for item in spaces
+        ):
+            raise KnowledgeDocumentDistributionError(
+                "source or target knowledge space is no longer published"
+            )
 
     async def _ensure_publish_target_content_not_duplicate(
         self,
@@ -1056,6 +1073,12 @@ class KnowledgeDocumentDistributionService:
         publish_entry_id: int,
         source_md5: str,
     ) -> None:
+        source_entry = await self.file_repository.find_by_id(command.source_entry_id)
+        if source_entry is None:
+            raise KnowledgeDocumentDistributionError("publish source no longer exists")
+        await self._lock_published_spaces(
+            {int(source_entry.knowledge_id), int(command.target_space_id)}
+        )
         await self._ensure_publish_target_content_not_duplicate(
             command,
             lock_target_space=True,
@@ -1252,6 +1275,16 @@ class KnowledgeDocumentDistributionService:
         self,
         command: PublishKnowledgeDocumentCommand,
     ) -> PublishKnowledgeDocumentResult:
+        source_entry = await self.file_repository.find_by_id(
+            command.source_entry_id
+        )
+        if source_entry is None:
+            raise KnowledgeDocumentDistributionError(
+                "publish source no longer exists"
+            )
+        await self._lock_published_spaces(
+            {int(source_entry.knowledge_id), int(command.target_space_id)}
+        )
         existing = await self.file_repository.find_by_approval_instance_id(command.approval_instance_id)
         if existing is not None:
             result_document_id = command.target_document_id or command.document_id
@@ -1527,6 +1560,16 @@ class KnowledgeDocumentDistributionService:
         self,
         command: ShareKnowledgeDocumentCommand,
     ) -> ShareKnowledgeDocumentResult:
+        source_entry = await self.file_repository.find_by_id(
+            command.source_entry_id
+        )
+        if source_entry is None:
+            raise KnowledgeDocumentDistributionError(
+                "share source state no longer exists"
+            )
+        await self._lock_published_spaces(
+            {int(source_entry.knowledge_id), int(command.target_space_id)}
+        )
         existing = await self.file_repository.find_by_approval_instance_id(command.approval_instance_id)
         if existing is not None:
             if (
@@ -1569,6 +1612,16 @@ class KnowledgeDocumentDistributionService:
             await self.session.commit()
 
         try:
+            source_entry = await self.file_repository.find_by_id(
+                command.source_entry_id
+            )
+            if source_entry is None:
+                raise KnowledgeDocumentDistributionError(
+                    "share source state no longer exists"
+                )
+            await self._lock_published_spaces(
+                {int(source_entry.knowledge_id), int(command.target_space_id)}
+            )
             await self.permission_activation_service.prewrite_and_activate(
                 entry_id=int(share.id),
             )
@@ -1646,6 +1699,48 @@ class KnowledgeDocumentDistributionService:
         return RemoveShareEntryResult(
             document_id=document_id,
             share_entry_id=share_entry_id,
+            idempotent=False,
+        )
+
+    async def remove_invalid_entry(
+        self,
+        *,
+        tenant_id: int,
+        document_id: int,
+        entry_id: int,
+    ) -> RemoveShareEntryResult:
+        document = await self.document_repository.find_by_id_for_update(document_id)
+        entry = await self.file_repository.find_by_id_for_update(entry_id)
+        if document is None or entry is None:
+            raise KnowledgeDocumentDistributionError("invalid entry no longer exists")
+        if (
+            int(document.tenant_id or 0) != tenant_id
+            or int(entry.tenant_id or 0) != tenant_id
+            or int(entry.reference_document_id or 0) != document_id
+            or document.lifecycle_status
+            not in {
+                KnowledgeDocumentLifecycleStatus.DELETING.value,
+                KnowledgeDocumentLifecycleStatus.INVALID.value,
+            }
+            or entry.entry_status != KnowledgeFileEntryStatus.INVALID.value
+            or entry.entry_type
+            not in {
+                KnowledgeFileEntryType.PUBLISH.value,
+                KnowledgeFileEntryType.SHARE.value,
+            }
+        ):
+            raise KnowledgeDocumentDistributionError("entry is not an invalid distribution tombstone")
+        entry.entry_status = KnowledgeFileEntryStatus.DELETING.value
+        entry.desired_entry_generation = int(entry.desired_entry_generation or 0) + 1
+        entry.projection_status = KnowledgeFileProjectionStatus.PENDING.value
+        entry.projection_next_retry_at = None
+        entry.projection_lease_owner = None
+        entry.projection_lease_until = None
+        self.session.add(entry)
+        await self.session.commit()
+        return RemoveShareEntryResult(
+            document_id=document_id,
+            share_entry_id=entry_id,
             idempotent=False,
         )
 

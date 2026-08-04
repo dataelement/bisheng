@@ -12,7 +12,7 @@ from bisheng.approval.domain.services.approver_resolver import (
 )
 from bisheng.approval.domain.services.knowledge_space_subscribe_scenario_handler import _resolve_space_roles_via_fga
 from bisheng.knowledge.domain.constants import normalize_business_domain_code
-from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
+from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeState, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_file import (
     FileType,
     KnowledgeFile,
@@ -619,6 +619,19 @@ class KnowledgeSpaceFilePublishApprovalHandler:
 
     async def on_approved(self, instance_id: int, payload_snapshot: dict) -> dict:
         if payload_snapshot.get("canonical_document_id") is not None:
+            source_space = await KnowledgeDao.aquery_by_id(
+                int(payload_snapshot["source_space_id"])
+            )
+            target_space = await KnowledgeDao.aquery_by_id(
+                int(payload_snapshot["target_space_id"])
+            )
+            if (
+                source_space is None
+                or target_space is None
+                or source_space.state != KnowledgeState.PUBLISHED.value
+                or target_space.state != KnowledgeState.PUBLISHED.value
+            ):
+                raise ValueError("source or target space is no longer published")
             source_level = await self._space_level(int(payload_snapshot["source_space_id"]))
             target_level = await self._space_level(int(payload_snapshot["target_space_id"]))
             if not _file_publish_pair_allowed(source_level, target_level):
@@ -860,6 +873,7 @@ class KnowledgeSpaceFileShareApprovalHandler:
         if (
             target_space is None
             or int(target_space.tenant_id) != int(payload_snapshot["tenant_id"])
+            or target_space.state != KnowledgeState.PUBLISHED.value
         ):
             raise ValueError("share target department space is no longer valid")
 
@@ -906,6 +920,14 @@ class KnowledgeSpaceFileShareApprovalHandler:
         target_file_level_path, target_level = (
             await self._resolve_target_location(payload_snapshot)
         )
+        source_space = await KnowledgeDao.aquery_by_id(
+            int(payload_snapshot["source_space_id"])
+        )
+        if (
+            source_space is None
+            or source_space.state != KnowledgeState.PUBLISHED.value
+        ):
+            raise ValueError("share source space is no longer published")
         async with get_async_db_session() as session:
             file_repository = KnowledgeFileRepositoryImpl(session)
             service = KnowledgeDocumentDistributionService(

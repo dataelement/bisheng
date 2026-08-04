@@ -4,6 +4,7 @@ import i18next from "i18next";
 /** 列表/卡片：可点击文件夹、解析成功文件，或查看违规详情。 */
 export function isKnowledgeItemPreviewable(file: KnowledgeFile): boolean {
     if (file.type === FileType.FOLDER) return true;
+    if (file.entryStatus === "invalid") return false;
     return file.status === FileStatus.SUCCESS || file.status === FileStatus.VIOLATION;
 }
 

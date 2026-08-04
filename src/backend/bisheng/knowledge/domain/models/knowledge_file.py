@@ -72,6 +72,7 @@ class KnowledgeFileEntryStatus(str, Enum):
     PREPARING = "preparing"
     ACTIVE = "active"
     DELETING = "deleting"
+    INVALID = "invalid"
 
 
 class KnowledgeFileProjectionStatus(str, Enum):

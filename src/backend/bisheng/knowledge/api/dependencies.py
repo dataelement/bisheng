@@ -225,6 +225,9 @@ async def get_knowledge_space_service(
         KnowledgeDocumentPermissionActivationService,
     )
     from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService as _SvcClass
+    from bisheng.knowledge.domain.services.knowledge_space_retirement_service import (
+        KnowledgeSpaceRetirementService,
+    )
 
     message_service = await _get_message_service(session)
     service = _SvcClass(request=request, login_user=login_user)
@@ -245,6 +248,9 @@ async def get_knowledge_space_service(
                 )
             ),
         )
+    )
+    service.knowledge_space_retirement_service = KnowledgeSpaceRetirementService(
+        session=session
     )
 
     async def _entry_permission_loader(

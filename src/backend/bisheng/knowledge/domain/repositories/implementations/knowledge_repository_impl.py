@@ -5,7 +5,7 @@ from sqlmodel import Session, col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.common.repositories.implementations.base_repository_impl import BaseRepositoryImpl
-from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
+from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeState, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_space_scope import (
     KnowledgeSpaceLevelEnum,
     KnowledgeSpaceScope,
@@ -38,6 +38,7 @@ class KnowledgeRepositoryImpl(BaseRepositoryImpl[Knowledge, int], KnowledgeRepos
             .join(KnowledgeSpaceScope, Knowledge.id == KnowledgeSpaceScope.space_id)
             .where(
                 Knowledge.type == KnowledgeTypeEnum.SPACE.value,
+                Knowledge.state == KnowledgeState.PUBLISHED.value,
                 KnowledgeSpaceScope.level.in_(
                     (
                         KnowledgeSpaceLevelEnum.PUBLIC.value,
@@ -87,6 +88,7 @@ class KnowledgeRepositoryImpl(BaseRepositoryImpl[Knowledge, int], KnowledgeRepos
             .where(
                 col(Knowledge.id).in_(space_ids),
                 Knowledge.type == KnowledgeTypeEnum.SPACE.value,
+                Knowledge.state == KnowledgeState.PUBLISHED.value,
                 KnowledgeSpaceScope.level.in_(
                     (
                         KnowledgeSpaceLevelEnum.PUBLIC.value,

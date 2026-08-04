@@ -621,7 +621,7 @@ export default function PortalKnowledgeWorkbench() {
     const handleDeleteSpace = useCallback(async (space: KnowledgeSpace) => {
         const ok = await confirm({
             title: "提示",
-            description: "确认执行该操作？",
+            description: "删除后，该知识库关联的发布/分享入口将失效且无法继续访问内容。确认删除？",
             confirmText: "删除",
             cancelText: "取消",
         });
@@ -2128,6 +2128,7 @@ export default function PortalKnowledgeWorkbench() {
     const handleSelectFile = useCallback(
         (file: KnowledgeFile) => {
             if (file.isCreating) return;
+            if (file.entryStatus === "invalid") return;
             if (isFolder(file)) {
                 setSelectedFile(null);
                 setActivePanel(null);
