@@ -57,6 +57,7 @@ from bisheng.llm.domain.schemas import (
     WSModel,
 )
 from bisheng.llm.domain.share_fallback import avalidate_system_model_refs
+from bisheng.llm.domain.utils import invalidate_llm_info_cache
 from bisheng.tenant.domain.constants import TenantAuditAction
 from bisheng.tenant.domain.services.resource_share_service import ResourceShareService
 from bisheng.utils import generate_uuid, md5_hash
@@ -935,6 +936,11 @@ class LLMService:
         exist_model = await LLMDao.aget_model_by_id(model_id)
         if not exist_model:
             raise NotFoundError.http_exception()
+        # The probe resolves the model through a 60s in-process cache that no
+        # write invalidates, so a model renamed moments ago would be called under
+        # its old name and reported back as "does not exist". Evict first — an
+        # on-demand check that answers from a minute-old snapshot is worthless.
+        invalidate_llm_info_cache(model_id=model_id, server_id=exist_model.server_id)
         # Probing ignores the online flag on purpose: a model taken offline
         # still needs checking before you decide to bring it back.
         await cls.test_model_status(exist_model, login_user)
