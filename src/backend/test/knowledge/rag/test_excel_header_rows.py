@@ -1,3 +1,4 @@
+import json
 import os
 import tempfile
 
@@ -6,6 +7,7 @@ import pytest
 from bisheng.api.v1.schemas import ExcelRule, FileProcessBase
 from bisheng.knowledge.rag.base_file_pipeline import BaseFilePipeline
 from bisheng.knowledge.rag.pipeline.loader.utils.md_from_excel import convert_file_to_markdown
+from bisheng.utils import md5_hash
 
 
 class _HeaderRowPipeline(BaseFilePipeline):
@@ -47,16 +49,19 @@ def test_split_fingerprint_changes_with_excel_header_rows():
     assert base_fp != changed_fp
 
 
-@pytest.mark.parametrize(
-    "test_file",
-    ["/Users/binfeng/Downloads/测试1.xlsx"],
-)
-def test_excel_markdown_uses_first_row_as_header(test_file: str):
-    pytest.importorskip("openpyxl")
-    if not os.path.exists(test_file):
-        pytest.skip(f"missing fixture file: {test_file}")
+def test_excel_markdown_uses_first_row_as_header():
+    openpyxl = pytest.importorskip("openpyxl")
 
     with tempfile.TemporaryDirectory() as tmp_dir:
+        # Generated in-place: the test used to point at a developer's local file
+        # and therefore always skipped.
+        test_file = os.path.join(tmp_dir, "header_sample.xlsx")
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        for row in [["name", "age"], ["张三", 28], ["李四", 31]]:
+            ws.append(row)
+        wb.save(test_file)
+
         convert_file_to_markdown(
             input_file_path=test_file,
             num_header_rows=[0, 0],

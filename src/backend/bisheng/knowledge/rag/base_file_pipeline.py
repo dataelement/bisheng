@@ -169,6 +169,8 @@ class BaseFilePipeline(BasePipeline):
             header_rows=self._excel_header_row_indices(),
             data_rows=excel_rule.slice_length,
             append_header=excel_rule.append_header,
+            # Used only to degrade a single over-long row to plain text.
+            **self.get_splitter_kwargs(),
         )
 
     def _init_txt_loader(self) -> BaseBishengLoader:
@@ -209,6 +211,8 @@ class BaseFilePipeline(BasePipeline):
             header_rows=self._excel_header_row_indices(),
             data_rows=excel_rule.slice_length,
             append_header=excel_rule.append_header,
+            # Forwarded to the excel delegate for over-long row degradation.
+            **self.get_splitter_kwargs(),
         )
 
     def _build_pdf_loader(self, file_path: str, file_extension: str) -> BaseBishengLoader:
