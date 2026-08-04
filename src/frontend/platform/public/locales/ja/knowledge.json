@@ -282,7 +282,7 @@
   "splitLength": "期待分割長",
   "split": "分割長",
   "maxRowsPerSegment": "1セグメントあたり最大",
-  "sliceLengthHint": "内容が長すぎる場合は自動的にさらに分割されます",
+  "sliceLengthTooltip": "内容が長すぎる場合は自動的にさらに分割されるため、実際の行数が設定値より少なくなることがあります",
   "row": "行",
   "bonly": "第",
   "arrive": "〜",

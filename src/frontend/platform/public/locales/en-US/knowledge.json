@@ -476,7 +476,7 @@
   "customRuleNotEmpty": "Custom rule cannot be empty",
   "errorMsg": "File parsed successfully, but {{value}} questions failed to upload. Please check the file and try again",
   "maxRowsPerSegment": "At most",
-  "sliceLengthHint": "Segments that exceed the size limit are split further automatically",
+  "sliceLengthTooltip": "Oversized segments are split further automatically, so a segment may hold fewer rows than set",
   "gauge": "as header",
   "hfFilter": "Filter headers and footers",
   "keepImages": "Keep document images",

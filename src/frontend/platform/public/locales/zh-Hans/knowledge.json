@@ -297,7 +297,7 @@
   "splitLength": "预期切分长度",
   "split": "切分",
   "maxRowsPerSegment": "每段最多",
-  "sliceLengthHint": "内容过长时会自动拆分为更小的分段",
+  "sliceLengthTooltip": "分段内容过长时会自动拆分为更小的分段，因此实际行数可能少于设定值",
   "row": "行",
   "bonly": "第",
   "arrive": "到",
