@@ -741,11 +741,6 @@
       "count": 1
     }
   },
-  "src/components/Chat/Messages/DeepThinkingGroup.tsx": {
-    "no-restricted-syntax": {
-      "count": 6
-    }
-  },
   "src/components/Chat/Messages/HoverButtons.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 2
@@ -808,9 +803,6 @@
     }
   },
   "src/components/Chat/Messages/ThinkingContent.tsx": {
-    "no-restricted-imports": {
-      "count": 1
-    },
     "no-restricted-syntax": {
       "count": 1
     }
@@ -3345,7 +3337,7 @@
   },
   "src/pages/knowledge/SpaceDetail/KnowledgeSpaceHeader.tsx": {
     "@typescript-eslint/no-unused-vars": {
-      "count": 5
+      "count": 4
     }
   },
   "src/pages/knowledge/SpaceDetail/KnowledgeSpaceShareDialog.tsx": {
@@ -3436,7 +3428,7 @@
   },
   "src/pages/knowledge/index.tsx": {
     "@typescript-eslint/no-unused-vars": {
-      "count": 3
+      "count": 2
     },
     "no-console": {
       "count": 3

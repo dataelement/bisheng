@@ -20,6 +20,7 @@ import {
 import { Button } from "~/components/ui/Button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
 import { CopyShareLinkButton } from "~/components/CopyShareLinkButton";
+import { KnowledgeBreadcrumb } from "./KnowledgeBreadcrumb";
 import { useLocalize, useMediaQuery, usePrefersMobileLayout } from "~/hooks";
 import { knowledgeUploadCapabilities } from "../knowledgeUploadCapabilities";
 
@@ -383,7 +384,21 @@ export function KnowledgeSpaceHeader({
     );
 
     return (
-        <div className="flex min-h-8 items-center justify-between gap-3 pt-4 pb-4 max-[767px]:gap-2 max-[767px]:pb-3">
+        <div className="flex flex-col">
+            {/* Folder-path breadcrumb (desktop only — this header never renders on mobile).
+                Hidden at the space root: with a single level the page content shifts up (design 2075:8134). */}
+            {currentPath.length > 0 && (
+                <KnowledgeBreadcrumb
+                    className="pt-3"
+                    spaceName={space.name}
+                    currentPath={currentPath}
+                    onNavigateFolder={onNavigateFolder}
+                />
+            )}
+        <div className={cn(
+            "flex min-h-8 items-center justify-between gap-3 pb-4 max-[767px]:gap-2 max-[767px]:pb-3",
+            currentPath.length > 0 ? "pt-1" : "pt-4",
+        )}>
 
                     {/* 左侧：根目录显示空间标题 + 信息 + 分享；进入文件夹后显示返回按钮 + 分隔线 + 当前文件夹名（设计稿 11772:70584） */}
                     <div className="flex min-w-0 flex-1 items-center gap-1 text-sm">
@@ -403,7 +418,7 @@ export function KnowledgeSpaceHeader({
                                 </button>
                                 <div className="mx-1 h-4 w-px shrink-0 bg-[#e5e6eb]" aria-hidden />
                                 */}
-                                <h1 className="min-w-0 truncate text-base font-medium text-[#1d2129] max-[767px]:text-[16px] max-[767px]:leading-6">
+                                <h1 className="min-w-0 truncate text-base font-normal text-[#1d2129] max-[767px]:text-[16px] max-[767px]:leading-6">
                                     {currentPath[currentPath.length - 1]?.name || space.name}
                                 </h1>
                             </>
@@ -459,6 +474,7 @@ export function KnowledgeSpaceHeader({
                         {viewFilterSortCluster}
                         {batchAndAddActions}
                     </div>
+        </div>
         </div>
     );
 }
