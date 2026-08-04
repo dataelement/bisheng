@@ -63,6 +63,7 @@ import type {
 } from "./types";
 import {
     collectTreeFileIds,
+    buildPortalDocumentPath,
     createTreeNode,
     dedupeFilesById,
     dedupeTreeNodesByFileId,
@@ -282,6 +283,13 @@ export default function PortalKnowledgeWorkbench() {
     const [searchResults, setSearchResults] = useState<KnowledgeFile[]>([]);
     const searchModeRef = useRef(searchMode);
     searchModeRef.current = searchMode;
+    const openedFromGlobalSearchRef = useRef(false);
+    const globalSearchReturnRef = useRef<{ spaceId: string; parentId?: string } | null>(null);
+    const pendingSearchReturnRef = useRef<{ spaceId: string; folderId?: string } | null>(null);
+    const [globalSearchPathContext, setGlobalSearchPathContext] = useState<{
+        groupTitle?: string;
+        spaceName?: string;
+    } | null>(null);
     const [searchTagIds, setSearchTagIds] = useState<number[]>([]);
     const [searchLoading, setSearchLoading] = useState(false);
     const [statusFilter, setStatusFilter] = useState<FileStatus[]>([]);
@@ -1178,6 +1186,9 @@ export default function PortalKnowledgeWorkbench() {
 
     const reloadFilesRef = useRef(reloadFiles);
     reloadFilesRef.current = reloadFiles;
+    const handleNavigateFolderRef = useRef<(folderId?: string, folderName?: string) => Promise<void>>(
+        async () => {},
+    );
 
     const fileUpload = useFileUpload({
         activeSpace,
@@ -1580,7 +1591,12 @@ export default function PortalKnowledgeWorkbench() {
             }
             setCanCreateFolder(false);
             setCanUploadFile(false);
-            void loadRootTreeRef.current(1, false, activeSpace.id);
+            void loadRootTreeRef.current(1, false, activeSpace.id).then(() => {
+                const pending = pendingSearchReturnRef.current;
+                if (!pending || String(activeSpace.id) !== pending.spaceId) return;
+                pendingSearchReturnRef.current = null;
+                void handleNavigateFolderRef.current(pending.folderId || undefined);
+            });
         } else if (!openingDeepLinkedFileHere) {
             // Sort/filter changed: keep the current folder and reload the same view
             // with the new ordering/filter instead of jumping back to the root.
@@ -1622,6 +1638,8 @@ export default function PortalKnowledgeWorkbench() {
         // #4 收藏原地预览：selectedFile 是来自其它源空间的合成文件（不属于当前 activeSpace，
         // 自然不在其 displayedFiles 中），不应被此“列表中已不存在则关闭预览”的守卫清空。
         if (selectedFile.spaceId && selectedFile.spaceId !== activeSpace?.id) return;
+        // 侧边栏全局搜索打开的文件同样不在当前文件夹列表中。
+        if (openedFromGlobalSearchRef.current) return;
         const exists = displayedFiles.some((file) => file.id === selectedFile.id);
         if (!exists) {
             setSelectedFile(null);
@@ -2398,26 +2416,72 @@ export default function PortalKnowledgeWorkbench() {
             showToast({ message: "文件夹加载失败", severity: NotificationSeverity.ERROR });
         }
     }, [activeSpace?.id, loadFolderStats, loadRootTree, showToast, sortBy, sortDirection, statusFilterNumbers, treeNodes]);
+    handleNavigateFolderRef.current = handleNavigateFolder;
 
     const handleBackToFileList = useCallback(() => {
         const previewedFile = selectedFile;
-        const openedFromSearch = searchModeRef.current;
+        const openedFromInSpaceSearch = searchModeRef.current;
+        const openedFromGlobalSearch = openedFromGlobalSearchRef.current;
 
         setSelectedFile(null);
         setActivePanel(null);
         setAiDrawerOpen(false);
         setSummaryExpanded(false);
         setPreview({ loading: false, fileUrl: "", fileType: "", error: "", previewData: null });
-        // Deep-link open used to leave searchMode with a single-file result set.
         setSearchMode(false);
         setSearchResults([]);
         setSearchText("");
         setSearchTagIds([]);
-        // Early back during tag-review deep link must not stick on the restore overlay.
         setRestoringDeepLinkKey(null);
+        setGlobalSearchPathContext(null);
+        // Capture return context before clearing refs — remounts/effects must not wipe it mid-handler.
+        const globalSearchReturn = globalSearchReturnRef.current;
+        const fromGlobalSearch = openedFromGlobalSearch || Boolean(globalSearchReturn?.spaceId);
+        openedFromGlobalSearchRef.current = false;
+        globalSearchReturnRef.current = null;
 
-        if (openedFromSearch && previewedFile && !isFolder(previewedFile)) {
+        if (openedFromInSpaceSearch && previewedFile && !isFolder(previewedFile)) {
             void handleNavigateFolder(previewedFile.parentId || undefined);
+            return;
+        }
+
+        if (fromGlobalSearch && previewedFile && !isFolder(previewedFile)) {
+            const targetSpaceId = String(
+                globalSearchReturn?.spaceId
+                || previewedFile.spaceId
+                || "",
+            );
+            const parentFolderId = previewedFile.parentId || globalSearchReturn?.parentId;
+            if (!targetSpaceId) return;
+
+            // Favorites (and any mismatched active space) must switch to the file's real space.
+            const mustSwitchSpace = isFavoriteSpace(activeSpace)
+                || String(activeSpace?.id) !== targetSpaceId;
+            if (mustSwitchSpace) {
+                pendingSearchReturnRef.current = {
+                    spaceId: targetSpaceId,
+                    folderId: parentFolderId,
+                };
+                const targetSpace = selectableSpaces.find(
+                    (space) => String(space.id) === targetSpaceId,
+                ) ?? null;
+                if (targetSpace) {
+                    setActiveSpace(targetSpace);
+                } else {
+                    void getSpaceInfoApi(targetSpaceId).then((space) => {
+                        pendingSearchReturnRef.current = {
+                            spaceId: targetSpaceId,
+                            folderId: parentFolderId,
+                        };
+                        setActiveSpace(space);
+                    }).catch(() => {
+                        pendingSearchReturnRef.current = null;
+                    });
+                }
+                return;
+            }
+
+            void handleNavigateFolder(parentFolderId || undefined);
             return;
         }
 
@@ -2428,7 +2492,103 @@ export default function PortalKnowledgeWorkbench() {
         if (!folderNode?.loaded || folderNode.loading) {
             void reloadFilesRef.current();
         }
-    }, [handleNavigateFolder, selectedFile, treeNodes]);
+    }, [activeSpace?.id, handleNavigateFolder, selectableSpaces, selectedFile, treeNodes]);
+
+    const handleGlobalSearchSelectFile = useCallback(
+        (
+            sourceSpaceId: string,
+            sourceFileId: string,
+            fileName?: string,
+            meta?: {
+                spaceName: string;
+                spaceLevelLabel: string;
+                folderPathSegments: string[];
+                parentId?: string;
+            },
+        ) => {
+            const initialParentId = meta?.parentId || undefined;
+            openedFromGlobalSearchRef.current = true;
+            globalSearchReturnRef.current = {
+                spaceId: String(sourceSpaceId),
+                parentId: initialParentId,
+            };
+            setSearchMode(false);
+            setSearchResults([]);
+            setSearchText("");
+            setSearchTagIds([]);
+            setGlobalSearchPathContext({
+                groupTitle: meta?.spaceLevelLabel,
+                spaceName: meta?.spaceName,
+            });
+
+            const displayName = (fileName || "").trim() || "源文件";
+            const resolvedSpaceName = meta?.spaceName || "";
+            const folderPath = meta?.folderPathSegments?.length
+                ? [resolvedSpaceName, ...meta.folderPathSegments].filter(Boolean).join("/")
+                : resolvedSpaceName;
+            const syntheticFile: KnowledgeFile = {
+                id: String(sourceFileId),
+                name: displayName,
+                type: FileType.OTHER,
+                tags: [],
+                path: displayName,
+                spaceId: String(sourceSpaceId),
+                parentId: initialParentId,
+                createdAt: "",
+                updatedAt: "",
+                sourceSpaceName: resolvedSpaceName,
+                sourcePath: "",
+                folderPath,
+            };
+            setActivePanel(null);
+            setAiDrawerOpen(false);
+            setSummaryExpanded(false);
+            setSelectedFile(syntheticFile);
+            void Promise.all([
+                getSpaceChildrenApi({
+                    space_id: String(sourceSpaceId),
+                    file_ids: [sourceFileId],
+                    page_size: 1,
+                    order_field: "update_time",
+                    order_sort: "desc",
+                }),
+                getSpaceInfoApi(String(sourceSpaceId)).catch(() => null),
+            ]).then(([fileResult, sourceSpace]) => {
+                const sourceFile = fileResult.data[0];
+                if (!sourceFile) return;
+                const enrichedSpaceName = sourceFile.sourceSpaceName || sourceSpace?.name || resolvedSpaceName;
+                const sourcePathTail = sourceFile.sourcePath || sourceFile.folderPath || folderPath || sourceFile.path || sourceFile.name;
+                const resolvedSourcePath = enrichedSpaceName
+                    && sourcePathTail
+                    && !String(sourcePathTail).includes(enrichedSpaceName)
+                    ? `${enrichedSpaceName}/${sourcePathTail}`
+                    : sourcePathTail;
+                const resolvedParentId = sourceFile.parentId || initialParentId;
+                const enrichedFile: KnowledgeFile = {
+                    ...sourceFile,
+                    spaceId: String(sourceSpaceId),
+                    parentId: resolvedParentId,
+                    sourceSpaceName: enrichedSpaceName,
+                    sourcePath: resolvedSourcePath,
+                    folderPath: sourceFile.folderPath || folderPath,
+                };
+                globalSearchReturnRef.current = {
+                    spaceId: String(sourceSpaceId),
+                    parentId: resolvedParentId,
+                };
+                setSelectedFile((current) => (
+                    current
+                    && String(current.id) === String(sourceFileId)
+                    && String(current.spaceId) === String(sourceSpaceId)
+                        ? enrichedFile
+                        : current
+                ));
+            }).catch(() => {
+                // Keep synthetic metadata so preview still works.
+            });
+        },
+        [],
+    );
 
     usePortalDeepLink({
         searchParams,
@@ -2706,14 +2866,12 @@ export default function PortalKnowledgeWorkbench() {
         }
     }, [editingSpace, queryClient, showToast]);
 
-    const documentPath = useMemo(() => {
-        const names = [
-            "全部知识库",
-            activeGroup?.title,
-            activeSpace?.name,
-        ].filter(Boolean);
-        return names.join("/");
-    }, [activeGroup?.title, activeSpace?.name]);
+    const documentPath = useMemo(() => buildPortalDocumentPath({
+        activeGroupTitle: globalSearchPathContext?.groupTitle ?? activeGroup?.title,
+        activeSpaceName: globalSearchPathContext?.spaceName ?? selectedFile?.sourceSpaceName ?? activeSpace?.name,
+        currentPath,
+        selectedFile,
+    }), [activeGroup?.title, activeSpace?.name, currentPath, globalSearchPathContext, selectedFile]);
     const aiContextLabel = currentFolderId ? "文件夹" : "知识库";
     const handleWorkbenchDrag = useCallback((event: DragEvent<HTMLDivElement>) => {
         event.preventDefault();
@@ -2758,8 +2916,8 @@ export default function PortalKnowledgeWorkbench() {
                         }
                         onDeleteSpace={(space) => void handleDeleteSpace(space)}
                         onLeaveSpace={(space) => void handleLeaveSpace(space)}
-                        onGlobalSearchSelectFile={(spaceId, fileId, fileName) =>
-                            handleOpenSourceFile(String(spaceId), String(fileId), fileName)
+                        onGlobalSearchSelectFile={(spaceId, fileId, fileName, meta) =>
+                            handleGlobalSearchSelectFile(String(spaceId), String(fileId), fileName, meta)
                         }
                     />
 

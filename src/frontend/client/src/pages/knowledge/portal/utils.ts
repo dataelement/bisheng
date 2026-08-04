@@ -334,3 +334,77 @@ export function toStatusNumbers(statuses: FileStatus[]) {
         .map(fileStatusToNumber)
         .filter((status) => Number.isFinite(status));
 }
+
+function stripTrailingFileName(path: string, fileName?: string) {
+    const normalizedName = (fileName || "").trim();
+    if (!normalizedName) return path;
+    const segments = path.split("/").filter(Boolean);
+    if (segments.length && segments[segments.length - 1] === normalizedName) {
+        return segments.slice(0, -1).join("/");
+    }
+    return path;
+}
+
+function normalizePortalSourcePath(sourcePath: string, activeSpaceName?: string) {
+    const trimmed = sourcePath.trim();
+    if (!trimmed) return "";
+    const withoutSpacePrefix = trimmed.includes(">")
+        ? trimmed.split(">").slice(1).join("/")
+        : trimmed;
+    const normalized = withoutSpacePrefix.replace(/^\/+/, "");
+    if (!activeSpaceName) return normalized;
+    if (normalized === activeSpaceName) return "";
+    if (normalized.startsWith(`${activeSpaceName}/`)) {
+        return normalized.slice(activeSpaceName.length + 1);
+    }
+    return normalized;
+}
+
+function normalizePortalFolderPath(folderPath: string, activeSpaceName?: string) {
+    const trimmed = folderPath.trim().replace(/^\/+/, "");
+    if (!trimmed) return "";
+    if (/^\d+(?:\/\d+)*$/.test(trimmed)) return "";
+    if (!activeSpaceName) return trimmed;
+    if (trimmed === activeSpaceName) return "";
+    if (trimmed.startsWith(`${activeSpaceName}/`)) {
+        return trimmed.slice(activeSpaceName.length + 1);
+    }
+    return trimmed;
+}
+
+export function buildPortalDocumentPath(params: {
+    activeGroupTitle?: string;
+    activeSpaceName?: string;
+    currentPath?: Array<{ name: string }>;
+    selectedFile?: KnowledgeFile | null;
+}): string {
+    const baseNames = [
+        "全部知识库",
+        params.activeGroupTitle,
+        params.activeSpaceName,
+    ].filter(Boolean) as string[];
+
+    const folderSegments: string[] = [];
+    const file = params.selectedFile;
+    if (file) {
+        const folderPath = normalizePortalFolderPath(String(file.folderPath || ""), params.activeSpaceName);
+        if (folderPath) {
+            folderSegments.push(...folderPath.split("/").filter(Boolean));
+        } else {
+            const sourcePath = normalizePortalSourcePath(String(file.sourcePath || ""), params.activeSpaceName);
+            const locationPath = stripTrailingFileName(sourcePath, file.name);
+            if (locationPath) {
+                folderSegments.push(...locationPath.split("/").filter(Boolean));
+            }
+        }
+        if (!folderSegments.length && params.currentPath?.length) {
+            folderSegments.push(...params.currentPath.map((segment) => segment.name));
+        }
+    } else if (params.currentPath?.length) {
+        folderSegments.push(...params.currentPath.map((segment) => segment.name));
+    }
+
+    return folderSegments.length
+        ? [...baseNames, ...folderSegments].join("/")
+        : baseNames.join("/");
+}

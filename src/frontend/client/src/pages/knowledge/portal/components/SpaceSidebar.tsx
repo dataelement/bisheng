@@ -90,7 +90,17 @@ interface SpaceSidebarProps {
     ) => void;
     onDeleteSpace: (space: KnowledgeSpace) => void;
     onLeaveSpace: (space: KnowledgeSpace) => void;
-    onGlobalSearchSelectFile: (spaceId: number, fileId: number, fileName: string) => void;
+    onGlobalSearchSelectFile: (
+        spaceId: number,
+        fileId: number,
+        fileName: string,
+        meta?: {
+            spaceName: string;
+            spaceLevelLabel: string;
+            folderPathSegments: string[];
+            parentId?: string;
+        },
+    ) => void;
 }
 
 /** Where a dragged space would land relative to the row under the pointer. */

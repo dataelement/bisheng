@@ -48,6 +48,7 @@ import {
     getSpaceFolderStatsApi,
     getSpaceInfoApi,
     getSpaceTagsApi,
+    globalSearchSpaceFilesApi,
     importWebLinkApi,
     linkAsNewVersionApi,
     listMyUploadedFilesApi,
@@ -454,6 +455,7 @@ jest.mock("~/api/knowledge", () => ({
     getSpaceFolderStatsApi: jest.fn(),
     getSpaceTagsApi: jest.fn(),
     searchSpaceChildrenApi: jest.fn(),
+    globalSearchSpaceFilesApi: jest.fn(),
     importWebLinkApi: jest.fn(),
     uploadFileToServerApi: jest.fn(),
     addFilesApi: jest.fn(),
@@ -715,6 +717,7 @@ describe("PortalKnowledgeWorkbench", () => {
         jest.mocked(getPortalSpaceFolderStatsApi).mockResolvedValue([] as any);
         jest.mocked(getSpaceFolderStatsApi).mockResolvedValue([] as any);
         jest.mocked(searchSpaceChildrenApi).mockResolvedValue({ data: [], total: 0 } as any);
+        jest.mocked(globalSearchSpaceFilesApi).mockResolvedValue({ data: [], total: 0, page: 1, page_size: 30 } as any);
         jest.mocked(importWebLinkApi).mockResolvedValue(makeFile("web-1", "网页链接", {
             type: FileType.MD,
         }) as any);
@@ -5976,6 +5979,236 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(within(reopened).getByTestId("edit-tags-initial-ids")).toHaveTextContent("3");
     });
 
+    test("shows folder path when previewing a search result", async () => {
+        const personalSpace = makeSpace("personal-1", "我的技术文档", {
+            role: SpaceRole.ADMIN,
+        });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [],
+            personalSpaces: [personalSpace],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({
+            data: [],
+            total: 0,
+        } as any);
+        jest.mocked(searchSpaceChildrenApi).mockResolvedValue({
+            data: [makeFile("401", "搜索结果.md", {
+                parentId: "101",
+                spaceId: "personal-1",
+                folderPath: "我的技术文档/制度文件",
+                sourcePath: "我的技术文档>制度文件/搜索结果.md",
+            })],
+            total: 1,
+        } as any);
+
+        renderWorkbench();
+
+        const input = await screen.findByPlaceholderText("com_knowledge.search_in_current_space");
+        fireEvent.change(input, { target: { value: "搜索" } });
+        fireEvent.keyDown(input, { key: "Enter" });
+
+        const workspace = await screen.findByTestId("portal-file-workspace");
+        fireEvent.click(within(workspace).getByRole("button", { name: "打开搜索结果.md" }));
+
+        const preview = await screen.findByTestId("portal-preview-page");
+        expect(preview).toHaveTextContent("全部知识库/个人知识库/我的技术文档/制度文件");
+    });
+
+    test("returns from global search preview to the file parent folder list", async () => {
+        const personalSpace = makeSpace("1", "我的技术文档", {
+            role: SpaceRole.ADMIN,
+        });
+        const folder = makeFile("101", "制度文件", {
+            type: FileType.FOLDER,
+            spaceId: "1",
+        });
+        const targetFile = makeFile("401", "全局搜索结果.md", {
+            parentId: "101",
+            spaceId: "1",
+        });
+        const siblingFile = makeFile("402", "同目录其它.md", {
+            parentId: "101",
+            spaceId: "1",
+        });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [],
+            personalSpaces: [personalSpace],
+        } as any);
+        jest.mocked(getSpaceInfoApi).mockResolvedValue(personalSpace as any);
+        jest.mocked(getSpaceChildrenApi).mockImplementation(async (params: any) => {
+            if (params.file_ids?.length) {
+                return { data: [targetFile], total: 1 };
+            }
+            return params.parent_id === "101"
+                ? { data: [targetFile, siblingFile], total: 2 }
+                : { data: [folder], total: 1 };
+        });
+        jest.mocked(globalSearchSpaceFilesApi).mockResolvedValue({
+            total: 1,
+            page: 1,
+            page_size: 30,
+            data: [{
+                file_id: 401,
+                file_name: "全局搜索结果.md",
+                file_type_ext: "md",
+                space_id: 1,
+                space_name: "我的技术文档",
+                space_level: "personal",
+                space_level_label: "个人知识库",
+                space_level_order: 4,
+                folder_path: ["制度文件"],
+                parent_id: 101,
+            }],
+        } as any);
+
+        renderWorkbench();
+
+        expect(await screen.findByText("制度文件")).toBeInTheDocument();
+
+        const globalInput = await screen.findByPlaceholderText("搜索所有知识库文件");
+        fireEvent.change(globalInput, { target: { value: "全局" } });
+
+        expect(await screen.findByText("全局搜索结果.md")).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole("button", { name: /全局搜索结果\.md/ }));
+
+        const preview = await screen.findByTestId("portal-preview-page");
+        expect(preview).toHaveTextContent("全局搜索结果.md");
+
+        fireEvent.click(within(preview).getByRole("button", { name: "返回文件列表" }));
+
+        const restoredWorkspace = await screen.findByTestId("portal-file-workspace");
+        expect(within(restoredWorkspace).getByText("全局搜索结果.md")).toBeInTheDocument();
+        expect(within(restoredWorkspace).getByText("同目录其它.md")).toBeInTheDocument();
+        expect(screen.queryByTestId("portal-preview-page")).not.toBeInTheDocument();
+    });
+
+    test("returns from global search preview to source folder when active space is favorites", async () => {
+        const favoriteSpace = makeDefaultFavoriteSpace();
+        const personalSpace = makeSpace("1", "我的技术文档", {
+            role: SpaceRole.ADMIN,
+        });
+        const folder = makeFile("101", "制度文件", {
+            type: FileType.FOLDER,
+            spaceId: "1",
+        });
+        const targetFile = makeFile("401", "全局搜索结果.md", {
+            parentId: "101",
+            spaceId: "1",
+        });
+        const siblingFile = makeFile("402", "同目录其它.md", {
+            parentId: "101",
+            spaceId: "1",
+        });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [],
+            personalSpaces: [favoriteSpace, personalSpace],
+        } as any);
+        jest.mocked(getSpaceInfoApi).mockResolvedValue(personalSpace as any);
+        jest.mocked(getSpaceChildrenApi).mockImplementation(async (params: any) => {
+            if (params.file_ids?.length) {
+                return { data: [targetFile], total: 1 };
+            }
+            return params.parent_id === "101"
+                ? { data: [targetFile, siblingFile], total: 2 }
+                : params.space_id === "1"
+                    ? { data: [folder], total: 1 }
+                    : { data: [], total: 0 };
+        });
+        jest.mocked(globalSearchSpaceFilesApi).mockResolvedValue({
+            total: 1,
+            page: 1,
+            page_size: 30,
+            data: [{
+                file_id: 401,
+                file_name: "全局搜索结果.md",
+                file_type_ext: "md",
+                space_id: 1,
+                space_name: "我的技术文档",
+                space_level: "personal",
+                space_level_label: "个人知识库",
+                space_level_order: 4,
+                folder_path: ["制度文件"],
+                parent_id: 101,
+            }],
+        } as any);
+
+        renderWorkbench();
+
+        expect(await screen.findByTestId("portal-favorites-panel")).toBeInTheDocument();
+
+        const globalInput = await screen.findByPlaceholderText("搜索所有知识库文件");
+        fireEvent.change(globalInput, { target: { value: "全局" } });
+        fireEvent.click(await screen.findByRole("button", { name: /全局搜索结果\.md/ }));
+
+        const preview = await screen.findByTestId("portal-preview-page");
+        expect(preview).toHaveTextContent("全局搜索结果.md");
+
+        fireEvent.click(within(preview).getByRole("button", { name: "返回文件列表" }));
+
+        const restoredWorkspace = await screen.findByTestId("portal-file-workspace");
+        expect(screen.queryByTestId("portal-favorites-panel")).not.toBeInTheDocument();
+        expect(within(restoredWorkspace).getByText("全局搜索结果.md")).toBeInTheDocument();
+        expect(within(restoredWorkspace).getByText("同目录其它.md")).toBeInTheDocument();
+    });
+
+    test("shows folder path when previewing a global search result", async () => {
+        const personalSpace = makeSpace("1", "我的技术文档", {
+            role: SpaceRole.ADMIN,
+        });
+        const targetFile = makeFile("401", "全局搜索结果.md", {
+            parentId: "101",
+            spaceId: "1",
+            folderPath: "我的技术文档/制度文件",
+            sourcePath: "我的技术文档>制度文件/全局搜索结果.md",
+        });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [],
+            personalSpaces: [personalSpace],
+        } as any);
+        jest.mocked(getSpaceInfoApi).mockResolvedValue(personalSpace as any);
+        jest.mocked(getSpaceChildrenApi).mockImplementation(async (params: any) => (
+            params.file_ids?.length
+                ? { data: [targetFile], total: 1 }
+                : { data: [], total: 0 }
+        ) as any);
+        jest.mocked(globalSearchSpaceFilesApi).mockResolvedValue({
+            total: 1,
+            page: 1,
+            page_size: 30,
+            data: [{
+                file_id: 401,
+                file_name: "全局搜索结果.md",
+                file_type_ext: "md",
+                space_id: 1,
+                space_name: "我的技术文档",
+                space_level: "personal",
+                space_level_label: "个人知识库",
+                space_level_order: 4,
+                folder_path: ["制度文件"],
+                parent_id: 101,
+            }],
+        } as any);
+
+        renderWorkbench();
+
+        const globalInput = await screen.findByPlaceholderText("搜索所有知识库文件");
+        fireEvent.change(globalInput, { target: { value: "全局" } });
+
+        fireEvent.click(await screen.findByRole("button", { name: /全局搜索结果\.md/ }));
+
+        const preview = await screen.findByTestId("portal-preview-page");
+        expect(preview).toHaveTextContent("全部知识库/个人知识库/我的技术文档/制度文件");
+    });
+
     test("deletes a file from search results through the backend", async () => {
         const personalSpace = makeSpace("personal-1", "我的技术文档", {
             role: SpaceRole.ADMIN,
@@ -6000,7 +6233,7 @@ describe("PortalKnowledgeWorkbench", () => {
 
         renderWorkbench();
 
-        const input = await screen.findByPlaceholderText("Search in current knowledge space");
+        const input = await screen.findByPlaceholderText("com_knowledge.search_in_current_space");
         fireEvent.change(input, { target: { value: "搜索" } });
 
         expect(await screen.findByText("搜索结果.md")).toBeInTheDocument();

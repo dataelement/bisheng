@@ -720,6 +720,30 @@ describe("updateFileEncoding", () => {
 });
 
 describe("mapChild", () => {
+  it("prefers parent_id and falls back to file_level_path for parentId", () => {
+    expect(mapChild({
+      id: 1,
+      file_name: "a.md",
+      file_type: 1,
+      parent_id: 42,
+      file_level_path: "/10/20",
+    }, "9").parentId).toBe("42");
+
+    expect(mapChild({
+      id: 2,
+      file_name: "b.md",
+      file_type: 1,
+      file_level_path: "/10/20",
+    }, "9").parentId).toBe("20");
+
+    expect(mapChild({
+      id: 3,
+      file_name: "c.md",
+      file_type: 1,
+      file_level_path: "",
+    }, "9").parentId).toBeUndefined();
+  });
+
   it("maps distribution identity, projection state, and server capabilities", () => {
     const file = mapChild(
       {

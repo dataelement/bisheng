@@ -1038,6 +1038,16 @@ export function isWebLinkKnowledgeFile(file: Pick<KnowledgeFile, "fileSource" | 
     return file.fileSource === "web_link" || file.type === FileType.WEB;
 }
 
+/** Derive parent folder id from file_level_path (`/a/b` → last segment) when API omits parent_id. */
+export function resolveParentIdFromRaw(raw: any): string | undefined {
+    if (raw?.parent_id !== undefined && raw?.parent_id !== null && String(raw.parent_id) !== "") {
+        return String(raw.parent_id);
+    }
+    const levelPath = String(raw?.file_level_path ?? "");
+    const parts = levelPath.split("/").filter((part) => /^\d+$/.test(part));
+    return parts.length ? parts[parts.length - 1] : undefined;
+}
+
 /** Map a raw space child (file/folder) to the frontend KnowledgeFile model */
 export function mapChild(raw: any, spaceId: string): KnowledgeFile {
     // Backend keys in children response usually look like:
@@ -1103,7 +1113,7 @@ export function mapChild(raw: any, spaceId: string): KnowledgeFile {
         status,
         tags,
         path: raw?.path ?? raw?.file_level_path ?? String(nameVal),
-        parentId: raw?.parent_id !== undefined && raw?.parent_id !== null ? String(raw.parent_id) : undefined,
+        parentId: resolveParentIdFromRaw(raw),
         spaceId: String(raw?.space_id ?? raw?.knowledge_id ?? spaceId),
         createdAt: raw?.create_time ?? "",
         updatedAt: raw?.update_time ?? "",
@@ -3620,6 +3630,7 @@ export interface GlobalSearchFileResult {
     space_level_label: string;
     space_level_order: number;
     folder_path: string[];
+    parent_id?: number | null;
 }
 
 export interface GlobalSearchResult {

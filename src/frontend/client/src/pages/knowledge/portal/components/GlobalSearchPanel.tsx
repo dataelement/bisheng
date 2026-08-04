@@ -4,7 +4,17 @@ import { type GlobalSearchFileResult, globalSearchSpaceFilesApi } from "~/api/kn
 import s from "./GlobalSearchPanel.module.css";
 
 interface Props {
-    onSelectFile: (spaceId: number, fileId: number, fileName: string) => void;
+    onSelectFile: (
+        spaceId: number,
+        fileId: number,
+        fileName: string,
+        meta?: {
+            spaceName: string;
+            spaceLevelLabel: string;
+            folderPathSegments: string[];
+            parentId?: string;
+        },
+    ) => void;
 }
 
 interface SpaceGroup {
@@ -178,7 +188,19 @@ export function GlobalSearchPanel({ onSelectFile }: Props) {
                                                             className={s.treeFile}
                                                             title={file.file_name}
                                                             onClick={() =>
-                                                                onSelectFile(file.space_id, file.file_id, file.file_name)
+                                                                onSelectFile(
+                                                                    file.space_id,
+                                                                    file.file_id,
+                                                                    file.file_name,
+                                                                    {
+                                                                        spaceName: file.space_name,
+                                                                        spaceLevelLabel: file.space_level_label,
+                                                                        folderPathSegments: file.folder_path,
+                                                                        parentId: file.parent_id != null
+                                                                            ? String(file.parent_id)
+                                                                            : undefined,
+                                                                    },
+                                                                )
                                                             }
                                                         >
                                                             {file.folder_path.length > 0 ? (

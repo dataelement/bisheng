@@ -11085,6 +11085,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     "space_level_label": level_labels.get(level, str(level)),
                     "space_level_order": level_order.get(level, 99),
                     "folder_path": folder_segments,
+                    "parent_id": self._parent_folder_id_from_level_path(f.file_level_path),
                 }
             )
 
@@ -12621,6 +12622,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         result = []
         for one in res:
             item = one.model_dump()
+            # parent_id is not a DB column — derive from file_level_path so clients can
+            # navigate back to the containing folder after search/preview.
+            item["parent_id"] = self._parent_folder_id_from_level_path(one.file_level_path)
             if one.file_type == FileType.DIR:
                 if include_folder_counts:
                     counts = folder_counts.get(
@@ -12977,6 +12981,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
         )
         extra_info_ms = (time.perf_counter() - extra_info_start) * 1000
 
+        folder_path_map, source_path_map = await self._resolve_shougang_portal_source_paths(data)
+        for item in data:
+            item_id = int(item.get("id") or 0)
+            item["folder_path"] = folder_path_map.get(item_id, "")
+            item["source_path"] = source_path_map.get(item_id, "")
+
         next_cursor: str | None = None
         if has_more and visible_page_items:
             last = visible_page_items[-1]
@@ -13275,6 +13285,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
             page_items,
             folder_counts_override=folder_counts_override,
         )
+        folder_path_map, source_path_map = await self._resolve_shougang_portal_source_paths(data)
+        for item in data:
+            item_id = int(item.get("id") or 0)
+            item["folder_path"] = folder_path_map.get(item_id, "")
+            item["source_path"] = source_path_map.get(item_id, "")
         return {"total": total, "page": page, "page_size": page_size, "data": data}
 
     # ──────────────────────────── Folders ─────────────────────────────────────
