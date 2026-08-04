@@ -63,6 +63,7 @@ import type {
 } from "./types";
 import {
     collectTreeFileIds,
+    buildPortalDocumentPath,
     createTreeNode,
     dedupeFilesById,
     dedupeTreeNodesByFileId,
@@ -2697,14 +2698,12 @@ export default function PortalKnowledgeWorkbench() {
         }
     }, [editingSpace, queryClient, showToast]);
 
-    const documentPath = useMemo(() => {
-        const names = [
-            "全部知识库",
-            activeGroup?.title,
-            activeSpace?.name,
-        ].filter(Boolean);
-        return names.join("/");
-    }, [activeGroup?.title, activeSpace?.name]);
+    const documentPath = useMemo(() => buildPortalDocumentPath({
+        activeGroupTitle: activeGroup?.title,
+        activeSpaceName: activeSpace?.name,
+        currentPath,
+        selectedFile,
+    }), [activeGroup?.title, activeSpace?.name, currentPath, selectedFile]);
     const aiContextLabel = currentFolderId ? "文件夹" : "知识库";
     const handleWorkbenchDrag = useCallback((event: DragEvent<HTMLDivElement>) => {
         event.preventDefault();
