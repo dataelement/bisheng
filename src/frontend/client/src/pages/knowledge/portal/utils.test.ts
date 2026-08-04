@@ -1,6 +1,7 @@
 import { FileType, type KnowledgeFile } from "~/api/knowledge";
 import { fileEncodingCategoryLabel } from "./uploadMetadata";
 import {
+    buildPortalDocumentPath,
     createTreeNode,
     dedupeFilesById,
     dedupeTreeNodesByFileId,
@@ -203,6 +204,35 @@ describe("portal preview utils", () => {
                     { code: "CAS\u200B", label: "案例\u200B" },
                 ]),
             ).toBe("CAS / 案例");
+        });
+    });
+
+    describe("buildPortalDocumentPath", () => {
+        it("includes folder path from search result metadata when previewing a file", () => {
+            expect(buildPortalDocumentPath({
+                activeGroupTitle: "个人知识库",
+                activeSpaceName: "我的技术文档",
+                selectedFile: makeFile({
+                    id: "401",
+                    name: "搜索结果.md",
+                    type: FileType.MD,
+                    folderPath: "我的技术文档/制度文件",
+                    sourcePath: "我的技术文档>制度文件/搜索结果.md",
+                }),
+            })).toBe("全部知识库/个人知识库/我的技术文档/制度文件");
+        });
+
+        it("falls back to current folder breadcrumbs when metadata is missing", () => {
+            expect(buildPortalDocumentPath({
+                activeGroupTitle: "个人知识库",
+                activeSpaceName: "我的技术文档",
+                currentPath: [{ name: "制度文件" }],
+                selectedFile: makeFile({
+                    id: "401",
+                    name: "搜索结果.md",
+                    type: FileType.MD,
+                }),
+            })).toBe("全部知识库/个人知识库/我的技术文档/制度文件");
         });
     });
 });

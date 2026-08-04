@@ -5976,6 +5976,43 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(within(reopened).getByTestId("edit-tags-initial-ids")).toHaveTextContent("3");
     });
 
+    test("shows folder path when previewing a search result", async () => {
+        const personalSpace = makeSpace("personal-1", "我的技术文档", {
+            role: SpaceRole.ADMIN,
+        });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [],
+            personalSpaces: [personalSpace],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({
+            data: [],
+            total: 0,
+        } as any);
+        jest.mocked(searchSpaceChildrenApi).mockResolvedValue({
+            data: [makeFile("401", "搜索结果.md", {
+                parentId: "101",
+                spaceId: "personal-1",
+                folderPath: "我的技术文档/制度文件",
+                sourcePath: "我的技术文档>制度文件/搜索结果.md",
+            })],
+            total: 1,
+        } as any);
+
+        renderWorkbench();
+
+        const input = await screen.findByPlaceholderText("com_knowledge.search_in_current_space");
+        fireEvent.change(input, { target: { value: "搜索" } });
+        fireEvent.keyDown(input, { key: "Enter" });
+
+        const workspace = await screen.findByTestId("portal-file-workspace");
+        fireEvent.click(within(workspace).getByRole("button", { name: "打开搜索结果.md" }));
+
+        const preview = await screen.findByTestId("portal-preview-page");
+        expect(preview).toHaveTextContent("全部知识库/个人知识库/我的技术文档/制度文件");
+    });
+
     test("deletes a file from search results through the backend", async () => {
         const personalSpace = makeSpace("personal-1", "我的技术文档", {
             role: SpaceRole.ADMIN,
@@ -6000,7 +6037,7 @@ describe("PortalKnowledgeWorkbench", () => {
 
         renderWorkbench();
 
-        const input = await screen.findByPlaceholderText("Search in current knowledge space");
+        const input = await screen.findByPlaceholderText("com_knowledge.search_in_current_space");
         fireEvent.change(input, { target: { value: "搜索" } });
 
         expect(await screen.findByText("搜索结果.md")).toBeInTheDocument();

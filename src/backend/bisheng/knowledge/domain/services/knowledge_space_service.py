@@ -13275,6 +13275,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
             page_items,
             folder_counts_override=folder_counts_override,
         )
+        folder_path_map, source_path_map = await self._resolve_shougang_portal_source_paths(data)
+        for item in data:
+            item_id = int(item.get("id") or 0)
+            item["folder_path"] = folder_path_map.get(item_id, "")
+            item["source_path"] = source_path_map.get(item_id, "")
         return {"total": total, "page": page, "page_size": page_size, "data": data}
 
     # ──────────────────────────── Folders ─────────────────────────────────────
