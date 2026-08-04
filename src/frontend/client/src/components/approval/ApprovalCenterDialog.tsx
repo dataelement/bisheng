@@ -313,6 +313,7 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
   const [actionLoading, setActionLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [decisionComment, setDecisionComment] = useState("");
+  const [decisionCommentError, setDecisionCommentError] = useState(false);
   const [withdrawDialogOpen, setWithdrawDialogOpen] = useState(false);
   const [withdrawReason, setWithdrawReason] = useState("");
   const [revokeDialogOpen, setRevokeDialogOpen] = useState(false);
@@ -402,6 +403,7 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
     setSelectedTaskId(target?.taskId ?? null);
     setSelectedInstanceId(target?.instanceId ?? null);
     setSearchQuery("");
+    setDecisionCommentError(false);
   }, [open, target?.instanceId, target?.tab, target?.taskId]);
 
   useEffect(() => {
@@ -413,6 +415,8 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
   // Auto-select first visible item when sub-filter changes
   const autoSelectTask = (items: ApprovalTaskItem[]) => {
     const first = getId(items[0], "task");
+    setDecisionComment("");
+    setDecisionCommentError(false);
     setSelectedTaskId(first);
     if (first) { setLoadingDetail(true); getMyApprovalTaskDetailApi(first).then(setTaskDetail).finally(() => setLoadingDetail(false)); }
     else setTaskDetail(null);
@@ -428,7 +432,7 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
   useEffect(() => { if (activeTab === "my_requests") autoSelectRequest(filteredRequestItems); }, [requestsFilter]);
 
   const openTask = async (id: number) => {
-    setSelectedTaskId(id); setLoadingDetail(true); setDecisionComment("");
+    setSelectedTaskId(id); setLoadingDetail(true); setDecisionComment(""); setDecisionCommentError(false);
     try { setTaskDetail(await getMyApprovalTaskDetailApi(id)); } finally { setLoadingDetail(false); }
   };
   const openRequest = async (id: number) => {
@@ -438,9 +442,19 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
 
   const runTaskDecision = async (action: "approve" | "reject") => {
     if (!selectedTaskId) return;
+    const comment = decisionComment.trim();
+    if (action === "reject" && !comment) {
+      setDecisionCommentError(true);
+      showToast({
+        message: localize("com_approval_reject_reason_required"),
+        severity: NotificationSeverity.WARNING,
+      });
+      return;
+    }
+    setDecisionCommentError(false);
     setActionLoading(true);
-    const comment = decisionComment.trim() || (action === "approve" ? "同意" : "驳回");
-    try { await decideApprovalTaskApi(selectedTaskId, { action, comment }); setDecisionComment(""); await loadTasks(selectedTaskId); toast(true); }
+    const submittedComment = comment || "同意";
+    try { await decideApprovalTaskApi(selectedTaskId, { action, comment: submittedComment }); setDecisionComment(""); await loadTasks(selectedTaskId); toast(true); }
     catch { toast(false); } finally { setActionLoading(false); }
   };
   const runWithdraw = () => {
@@ -524,7 +538,12 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
                 <button key={tab} type="button"
                   className={cn("rounded-lg px-4 py-2 text-[14px] transition-colors",
                     activeTab === tab ? "bg-[#e8f3ff] text-[#165dff] font-medium" : "text-[#4e5969] hover:bg-[#f7f8fa]")}
-                  onClick={() => { setActiveTab(tab); setSearchQuery(""); }}>
+                  onClick={() => {
+                    setActiveTab(tab);
+                    setSearchQuery("");
+                    setDecisionComment("");
+                    setDecisionCommentError(false);
+                  }}>
                   {tab === "my_tasks" ? localize("com_approval_my_approval") : localize("com_approval_my_requests")}
                 </button>
               ))}
@@ -654,13 +673,28 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
               {(isTaskPending || isInstancePending || canRevoke) && (
                 <div className="flex flex-col gap-3 border-t border-[#f2f3f5] px-6 py-4">
                   {isTaskPending && (
-                    <textarea
-                      value={decisionComment}
-                      onChange={(e) => setDecisionComment(e.target.value)}
-                      placeholder={localize("com_approval_decision_comment_placeholder")}
-                      rows={2}
-                      className="w-full resize-none rounded-lg border border-[#e5e6eb] px-3 py-2 text-[13px] text-[#1d2129] placeholder:text-[#c9cdd4] outline-none focus:border-[#165dff]"
-                    />
+                    <div>
+                      <textarea
+                        value={decisionComment}
+                        onChange={(e) => {
+                          setDecisionComment(e.target.value);
+                          if (decisionCommentError && e.target.value.trim()) setDecisionCommentError(false);
+                        }}
+                        placeholder={localize("com_approval_decision_comment_placeholder")}
+                        rows={2}
+                        aria-invalid={decisionCommentError}
+                        aria-describedby={decisionCommentError ? "approval-reject-reason-error" : undefined}
+                        className={cn(
+                          "w-full resize-none rounded-lg border px-3 py-2 text-[13px] text-[#1d2129] placeholder:text-[#c9cdd4] outline-none",
+                          decisionCommentError ? "border-[#f53f3f] focus:border-[#f53f3f]" : "border-[#e5e6eb] focus:border-[#165dff]",
+                        )}
+                      />
+                      {decisionCommentError && (
+                        <div id="approval-reject-reason-error" className="mt-1 text-[12px] text-[#f53f3f]">
+                          {localize("com_approval_reject_reason_required")}
+                        </div>
+                      )}
+                    </div>
                   )}
                   <div className="flex items-center justify-end gap-3">
                   <button type="button"

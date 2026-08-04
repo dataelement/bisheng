@@ -23,6 +23,7 @@ from bisheng.approval.domain.services.menu_access_handler import MenuAccessAppro
 from bisheng.approval.domain.services.user_menu_access_service import UserMenuAccessService
 from bisheng.common.errcode.approval import (
     ApprovalGrantNotRevokableError,
+    ApprovalRejectReasonRequiredError,
     ApprovalRequestAlreadyProcessedError,
     ApprovalRequestNotFoundError,
     ApprovalRequestPermissionDeniedError,
@@ -831,6 +832,8 @@ class ApprovalCenterService:
             raise ApprovalRequestPermissionDeniedError()
         if task.status != ApprovalTaskStatus.PENDING:
             raise ApprovalRequestAlreadyProcessedError()
+        if action == 'reject' and not (comment or '').strip():
+            raise ApprovalRejectReasonRequiredError()
 
         if instance.scenario_code == 'department_file_view_request':
             result = await self.instance_repository.decide_fixed_or_node_atomic(

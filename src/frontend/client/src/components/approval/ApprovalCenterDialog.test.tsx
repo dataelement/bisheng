@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 
 import { ApprovalCenterDialog } from "./ApprovalCenterDialog";
 import {
+  decideApprovalTaskApi,
   getApprovalInstanceDetailApi,
   getMyApprovalTaskDetailApi,
   listMyApprovalRequestsApi,
@@ -35,6 +36,7 @@ jest.mock("~/hooks/useLocalize", () => ({
       com_approval_space_level_team: "团队/科室知识库",
       com_approval_auth_type_approval: "需审批",
       com_approval_value_yes: "是",
+      com_approval_reject_reason_required: "请填写拒绝原因",
     };
     return map[key] ?? key;
   },
@@ -387,6 +389,56 @@ describe("ApprovalCenterDialog", () => {
 
     expect(await screen.findByText("王五")).toBeInTheDocument();
     expect(screen.getByText("申请人部门")).toBeInTheDocument();
+  });
+
+  it("blocks a blank rejection reason and shows the required message", async () => {
+    const user = userEvent.setup();
+    jest.mocked(listMyApprovalTasksApi).mockResolvedValue({
+      data: [
+        {
+          task_id: 81,
+          instance_id: 181,
+          business_name: "发布文件",
+          status: "pending",
+        },
+      ],
+      total: 1,
+    });
+    jest.mocked(getMyApprovalTaskDetailApi).mockResolvedValue({
+      task_id: 81,
+      instance_id: 181,
+      business_name: "发布文件",
+      status: "pending",
+    } as any);
+
+    render(
+      <ApprovalCenterDialog
+        open
+        onOpenChange={jest.fn()}
+        target={{ tab: "my_tasks", taskId: 81 }}
+      />,
+    );
+
+    await user.click(await screen.findByRole("button", { name: "com_approval_action_reject" }));
+
+    expect(decideApprovalTaskApi).not.toHaveBeenCalled();
+    expect(screen.getByText("请填写拒绝原因")).toBeInTheDocument();
+    expect(mockShowToast).toHaveBeenCalledWith(
+      expect.objectContaining({ message: "请填写拒绝原因" }),
+    );
+
+    await user.type(
+      screen.getByPlaceholderText("com_approval_decision_comment_placeholder"),
+      "  资料不完整  ",
+    );
+    await user.click(screen.getByRole("button", { name: "com_approval_action_reject" }));
+
+    await waitFor(() => {
+      expect(decideApprovalTaskApi).toHaveBeenCalledWith(81, {
+        action: "reject",
+        comment: "资料不完整",
+      });
+    });
   });
 
   it("lets an approver revoke an executed department-file grant", async () => {
