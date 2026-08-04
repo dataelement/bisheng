@@ -278,11 +278,17 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
       setTaskMode(false);
       return;
     }
-    // On /c/new the mode is driven solely by the nav state: "新建任务" carries
-    // state.taskMode=true, "新建对话" carries none. Set explicitly both ways so
-    // switching from task → chat (or chat → task) actually flips the toggle
-    // instead of leaving a stale mode behind.
-    setTaskMode(!!(location.state as any)?.taskMode);
+    // On /c/new both sidebar entries set the atom themselves before navigating
+    // ("新建任务" → true, "新建对话" → false), so this only has to honour a
+    // navigation that actually declares a mode. Reading an absent state as
+    // "daily" used to drop the user's choice: `newConversation` runs an async
+    // chain that fires its own state-less `navigate('/c/new')` a tick after
+    // ours, and that second landing reset the toggle the button had just set —
+    // the intermittent "新建任务 opens a daily chat, click it again and it works".
+    const navTaskMode = (location.state as { taskMode?: boolean } | null)?.taskMode;
+    if (navTaskMode !== undefined) {
+      setTaskMode(!!navTaskMode);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.key, conversationId]);
 
