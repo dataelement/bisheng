@@ -24,7 +24,7 @@ const ItemForm = ({ data, setData }) => {
         {t('split')}
       </Label>
       <div className="flex items-center gap-2">
-        <span>{t('every')}</span>
+        <span className="whitespace-nowrap">{t('maxRowsPerSegment')}</span>
         <div className="relative">
           <Input
             type="number"
@@ -40,9 +40,9 @@ const ItemForm = ({ data, setData }) => {
           />
           <span className="absolute right-8 top-1/2 -translate-y-1/2 text-gray-400">{t('row')}</span>
         </div>
-        <span>{t('segemnt')}</span>
       </div>
     </div>
+    <p className="pl-[136px] -mt-2 text-xs text-gray-400">{t('sliceLengthHint')}</p>
 
     {/* 第二行：第二个输入框与勾选框组合 */}
     <div className="flex items-center gap-4">
