@@ -13,18 +13,17 @@ import { locationContext } from "@/contexts/locationContext";
 import { userContext } from "@/contexts/userContext";
 import { addLLmServer, deleteLLmServer, getLLmServerDetail, updateLLmServer } from "@/controllers/API/finetune";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { useAdminScope } from "@/hooks/useAdminScope";
 import { ArrowLeft, Plus, Settings, Trash2Icon } from "lucide-react";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import CustomForm from "./CustomForm";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/bs-ui/dialog";
 import { getAdvancedParamsTemplate, templateToJsonString } from "@/util/advancedParamsTemplates";
-import { isGlobalSuperUser } from "./permissions";
+import { canShareToChildren, isGlobalSuperUser } from "./permissions";
 import { useLinsightConfig } from "./tabs/WorkbenchModel";
 import { useModelProviderInfo } from "./useLink";
 import { t } from "i18next";
-
-const ROOT_TENANT_ID = 1
 
 function ModelItem({ data, type, onDelete, onInput, onConfig }) {
     const { t } = useTranslation()
@@ -416,13 +415,21 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
     const [formData, setFormData] = useState({ ...defaultForm })
     const [modelRefs, setModelRefs] = useState({});
 
-    // Show the share-with-children toggle only for super admins working
-    // on Root-tenant servers. Create mode (id === -1) implies a future
-    // Root row (super admin always writes to Root). Edit mode requires
-    // the loaded server to be Root-owned. Multi-tenant must be enabled.
-    const showShareToggle = appConfig.multiTenantEnabled
-        && isGlobalSuperUser(user)
-        && (id === -1 || formData.tenant_id === ROOT_TENANT_ID);
+    // Create mode reads the admin scope fresh instead of taking it from the
+    // list page: the scope is a server-side lease that can expire while the
+    // user sits on the list, and only the value at open time matches the
+    // tenant the backend will write on save.
+    const isCreate = id === -1;
+    const { scope: adminScope } = useAdminScope({
+        enabled: appConfig.multiTenantEnabled && isGlobalSuperUser(user) && isCreate,
+    });
+    const showShareToggle = canShareToChildren({
+        multiTenantEnabled: appConfig.multiTenantEnabled,
+        user,
+        isCreate,
+        serverTenantId: formData.tenant_id,
+        scopeTenantId: adminScope.scope_tenant_id,
+    });
 
     useEffect(() => {
         if (id === -1) return
