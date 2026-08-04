@@ -171,6 +171,12 @@ export function KnowledgeAiInput({
         ro.observe(el);
         return () => ro.disconnect();
     }, [updateReferenceEdges, selectedContent.length, hideReferenceRow]);
+    // Newly ticked items are prepended (newest leftmost) — keep the front chip in
+    // view, mirroring the grey strip.
+    const frontReferenceId = selectedContent[0]?.id;
+    useEffect(() => {
+        referenceRowRef.current?.scrollTo({ left: 0 });
+    }, [frontReferenceId]);
     const pageReferenceRow = useCallback((dir: "left" | "right") => {
         const el = referenceRowRef.current;
         if (!el) return;

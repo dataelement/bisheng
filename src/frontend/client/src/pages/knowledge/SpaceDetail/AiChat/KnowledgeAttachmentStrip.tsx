@@ -103,16 +103,13 @@ export function KnowledgeAttachmentStrip({
         return () => ro.disconnect();
     }, [updateEdges, items.length]);
 
-    // Newly ticked rows append at the row's end — bring them into view. Only on
-    // growth, so removing a chip doesn't yank the row to the far end.
-    const prevLenRef = useRef(items.length);
+    // Newly ticked rows are prepended (newest leftmost) — keep the front chip in
+    // view. Keyed on the front item's id, so swapping one pick for another still
+    // scrolls back even though the count is unchanged.
+    const frontId = items[0]?.id;
     useEffect(() => {
-        const el = scrollRef.current;
-        if (el && items.length > prevLenRef.current) {
-            el.scrollTo({ left: el.scrollWidth });
-        }
-        prevLenRef.current = items.length;
-    }, [items.length]);
+        scrollRef.current?.scrollTo({ left: 0 });
+    }, [frontId]);
 
     // Native non-passive wheel listener so preventDefault actually works
     // (React's synthetic onWheel is passive and can't block page scroll).
