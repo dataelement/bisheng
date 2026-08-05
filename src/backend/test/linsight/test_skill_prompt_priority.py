@@ -47,9 +47,46 @@ def test_skill_lines_present_when_a_skill_is_materialized(has_kb):
     # …and specifically not in the same parallel batch as the deliverable — the
     # exact failure mode observed in production.
     assert "同一轮" in prompt
+    # A truncated read is the other observed drift (the model passed limit=200 and
+    # never reached the generation steps), so the full read is spelled out.
+    assert "limit=1000" in prompt
     # Step 3: a format skill outranks the 3b-3d default derivation path.
     assert "3z" in prompt
     assert "export_docx" in prompt
+
+
+@pytest.mark.parametrize("has_kb", [True, False])
+def test_export_fallback_is_forbidden_when_a_code_executor_is_bound(has_kb):
+    """With an executor the skill route is runnable, so the cheap path is banned.
+
+    Deprioritising it was not enough: a run still took write_file + export_docx
+    and produced a plain markdown-derived .docx, dropping every layout rule the
+    skill specifies.
+    """
+    prompt = _build_linsight_system_prompt(has_kb, skills_present=True, has_code_interpreter=True)
+    # Note: a generic "禁止" also appears in the base template (the "don't claim a
+    # file you never wrote" rule), so match the export ban itself.
+    assert "**禁止**调用 export_docx" in prompt
+    assert "bisheng_code_interpreter" in prompt
+    # The ban is not absolute — a repeatedly failing executor may still fall back.
+    assert "兜底" in prompt
+    # Executor output lands in the local workspace dir, NOT in the object-storage
+    # view ls/glob read. Without saying so the model burns turns hunting the file
+    # it just wrote (observed: 5 tool calls of ls/glob/shutil before giving up).
+    assert "不会**出现在 ls / glob" in prompt
+
+
+@pytest.mark.parametrize("has_kb", [True, False])
+def test_export_fallback_stays_allowed_without_a_code_executor(has_kb):
+    """Lockstep: never forbid the only route a run actually has.
+
+    No executor bound -> the skill's script route cannot run, so the 3b-3d
+    derivation must remain the sanctioned path.
+    """
+    prompt = _build_linsight_system_prompt(has_kb, skills_present=True, has_code_interpreter=False)
+    assert "没有可用的代码执行工具" in prompt
+    assert "**禁止**调用 export_docx" not in prompt
+    assert "bisheng_code_interpreter" not in prompt
 
 
 @pytest.mark.parametrize("has_kb", [True, False])
