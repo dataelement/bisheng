@@ -4,7 +4,7 @@ import asyncio
 import json
 from dataclasses import dataclass
 
-from fastapi import UploadFile
+from fastapi import Request, UploadFile
 from loguru import logger
 from pydantic import ValidationError
 
@@ -26,7 +26,7 @@ from bisheng.database.models.department import Department
 from bisheng.developer_token.domain.schemas import DeveloperTokenFileSyncRule
 from bisheng.knowledge.domain.constants import normalize_business_domain_code
 from bisheng.knowledge.domain.models.knowledge import Knowledge
-from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile, KnowledgeFileStatus
+from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile, KnowledgeFileDao, KnowledgeFileStatus
 from bisheng.knowledge.domain.services.department_space_target_resolver import (
     DepartmentSpaceTargetResolver,
 )
@@ -37,6 +37,11 @@ from bisheng.open_endpoints.domain.repositories.interfaces.filelib_sync_reposito
     FilelibSyncRepository,
 )
 from bisheng.open_endpoints.domain.schemas.filelib_sync import FilelibSyncParams, FilelibSyncResponseData
+from bisheng.open_endpoints.domain.services.filelib_sync_version_link_service import (
+    FILELIB_SYNC_PENDING_VERSION_LINK_KEY,
+    build_filelib_sync_pending_version_link_metadata,
+    resolve_version_link_target_document_id,
+)
 from bisheng.shougang_portal_config.domain.schemas.portal_config_schema import (
     PortalDocumentTypeChildConfig,
     PortalDocumentTypeConfig,
@@ -76,12 +81,14 @@ class FilelibSyncService:
     def __init__(
         self,
         *,
+        request: Request,
         login_user: UserPayload,
         token_id: int,
         file_sync_rule: DeveloperTokenFileSyncRule,
         repository: FilelibSyncRepository,
         knowledge_space_service: KnowledgeSpaceService,
     ) -> None:
+        self.request = request
         self.login_user = login_user
         self.token_id = token_id
         self.file_sync_rule = file_sync_rule
@@ -108,6 +115,11 @@ class FilelibSyncService:
         self._ensure_domain_bound(target.space, domain)
         await self._require_upload_permission(target)
 
+        replaced_file_id, target_document_id = await self._resolve_same_name_version_overwrite(
+            knowledge_id=int(target.space.id),
+            file_name=params.file_name,
+        )
+
         created_file: KnowledgeFile | None = None
         temporary_file_path: str | None = None
         file_persisted = False
@@ -126,6 +138,7 @@ class FilelibSyncService:
                 business_domain_code=domain.code,
                 skip_approval=True,
                 enqueue_processing=False,
+                allow_duplicate_name=replaced_file_id is not None,
             )
             if len(upload_results) != 1 or upload_results[0].status == KnowledgeFileStatus.FAILED.value:
                 raise FilelibSyncConflictError(msg="duplicate file content or name")
@@ -134,7 +147,7 @@ class FilelibSyncService:
             created_file = await self.repository.find_by_id(file_id)
             if created_file is None:
                 raise FilelibSyncNotFoundError(msg="created knowledge file does not exist")
-            created_file.user_metadata = {
+            user_metadata = {
                 **(created_file.user_metadata or {}),
                 "external_file_id": params.external_file_id,
                 "department": identity.main_department.name,
@@ -143,6 +156,14 @@ class FilelibSyncService:
                 "responsible_person_id": identity.responsible_user_id,
                 "filelib_sync_endpoint": "sync",
             }
+            if replaced_file_id is not None and target_document_id is not None:
+                user_metadata[FILELIB_SYNC_PENDING_VERSION_LINK_KEY] = (
+                    build_filelib_sync_pending_version_link_metadata(
+                        target_document_id=target_document_id,
+                        replaced_file_id=replaced_file_id,
+                    )
+                )
+            created_file.user_metadata = user_metadata
             await FileEncodingTransformer.generate_fixed_encoding(
                 invoke_user_id=int(self.login_user.user_id),
                 knowledge_file=created_file,
@@ -172,6 +193,8 @@ class FilelibSyncService:
                 knowledge_id=int(target.space.id),
                 knowledge_name=target.space.name,
                 status=int(created_file.status),
+                version_link_pending=replaced_file_id is not None,
+                replaced_file_id=replaced_file_id,
             )
         except Exception:
             if not file_persisted:
@@ -421,6 +444,32 @@ class FilelibSyncService:
             raise FilelibSyncNotFoundError(msg="configured file sync target does not exist") from exc
         except SpacePermissionDeniedError as exc:
             raise FilelibSyncPermissionDeniedError(msg="no upload permission for file sync target") from exc
+
+    async def _resolve_same_name_version_overwrite(
+        self,
+        *,
+        knowledge_id: int,
+        file_name: str,
+    ) -> tuple[int | None, int | None]:
+        """When a SUCCESS file with the same name exists, prepare a version-chain overwrite."""
+        existing_files = await asyncio.to_thread(
+            KnowledgeFileDao.get_file_by_condition,
+            knowledge_id=knowledge_id,
+            file_name=file_name,
+        )
+        if not existing_files:
+            return None, None
+
+        existing_file = existing_files[0]
+        try:
+            target_document_id = await resolve_version_link_target_document_id(
+                request=self.request,
+                login_user=self.login_user,
+                existing_file=existing_file,
+            )
+        except ValueError as exc:
+            raise FilelibSyncConflictError(msg=str(exc)) from exc
+        return int(existing_file.id), int(target_document_id)
 
     @staticmethod
     async def _save_temporary_file(

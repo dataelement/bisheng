@@ -43,3 +43,5 @@ class FilelibSyncResponseData(BaseModel):
     knowledge_id: int
     knowledge_name: str
     status: int
+    version_link_pending: bool = False
+    replaced_file_id: int | None = None

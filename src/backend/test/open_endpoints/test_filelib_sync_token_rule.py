@@ -62,6 +62,7 @@ def _rule(
 
 def _service(rule, repository=None, knowledge_space_service=None) -> FilelibSyncService:
     return FilelibSyncService(
+        request=SimpleNamespace(headers={}),
         login_user=UserPayload(
             user_id=1,
             user_name="caller",

@@ -50,6 +50,7 @@ def _service(
     knowledge_space_service=None,
 ) -> FilelibSyncService:
     return FilelibSyncService(
+        request=SimpleNamespace(headers={}),
         login_user=UserPayload(
             user_id=7,
             user_name="bound",
@@ -196,6 +197,7 @@ async def test_fixed_folder_upload_passes_parent_id_and_keeps_response_contract(
     service._ensure_domain_bound = MagicMock()
     service._require_upload_permission = AsyncMock()
     service._save_temporary_file = AsyncMock(return_value="temporary-url")
+    service._resolve_same_name_version_overwrite = AsyncMock(return_value=(None, None))
 
     with patch.object(
         FileEncodingTransformer,
@@ -215,4 +217,6 @@ async def test_fixed_folder_upload_passes_parent_id_and_keeps_response_contract(
         "knowledge_id",
         "knowledge_name",
         "status",
+        "version_link_pending",
+        "replaced_file_id",
     }

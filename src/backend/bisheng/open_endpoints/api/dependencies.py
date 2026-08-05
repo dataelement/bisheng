@@ -185,6 +185,7 @@ async def get_filelib_sync_service(
         login_user=principal.user,
     )
     return FilelibSyncService(
+        request=request,
         login_user=principal.user,
         token_id=principal.token_id,
         file_sync_rule=DeveloperTokenFileSyncRule.model_validate(principal.raw_file_sync_rule),

@@ -64,6 +64,7 @@ def _service(repository=None, knowledge_space_service=None) -> FilelibSyncServic
         tenant_id=1,
     )
     return FilelibSyncService(
+        request=SimpleNamespace(headers={}),
         login_user=login_user,
         token_id=42,
         file_sync_rule=_rule(),
@@ -373,17 +374,19 @@ async def test_sync_orchestration_allows_repeated_external_id_and_writes_source_
     knowledge_space_service = SimpleNamespace(
         get_preview_cache_key=Mock(return_value="cache-key"),
         add_file=AsyncMock(return_value=[SimpleNamespace(id=9, status=5)]),
-        enqueue_file_processing=Mock(),
+        enqueue_file_title_extraction=Mock(),
     )
     events = Mock()
     events.attach_mock(repository.update, "persist")
-    events.attach_mock(knowledge_space_service.enqueue_file_processing, "enqueue")
+    events.attach_mock(knowledge_space_service.enqueue_file_title_extraction, "enqueue")
     service = _service(repository, knowledge_space_service)
     identity = SimpleNamespace(
         responsible_user_id=2,
         responsible_user_name="owner",
         responsible_department=_department(20, "责任人部门", "/20/"),
         main_department=_department(10, "主责单位", "/10/"),
+        business_domain_department=None,
+        target_space_department=None,
         selected_department=None,
     )
     category = SimpleNamespace(code="POL")
@@ -402,7 +405,7 @@ async def test_sync_orchestration_allows_repeated_external_id_and_writes_source_
         status=5,
         create_time=datetime(2026, 7, 16),
     )
-    repository.find_by_id.return_value = knowledge_file
+    repository.find_by_id = AsyncMock(return_value=knowledge_file)
     repository.update.side_effect = lambda value: value
 
     service._resolve_identity = AsyncMock(return_value=identity)
@@ -413,6 +416,7 @@ async def test_sync_orchestration_allows_repeated_external_id_and_writes_source_
     service._ensure_domain_bound = Mock()
     service._require_upload_permission = AsyncMock()
     service._save_temporary_file = AsyncMock(return_value="temporary-url")
+    service._resolve_same_name_version_overwrite = AsyncMock(return_value=(None, None))
 
     async def _generate_fixed_encoding(**kwargs):
         kwargs["knowledge_file"].file_encoding = "SGGF-POL-IT-20260700000001"
@@ -443,7 +447,7 @@ async def test_sync_orchestration_allows_repeated_external_id_and_writes_source_
     }
     assert repository.update.await_count == 2
     assert knowledge_space_service.add_file.await_count == 2
-    assert knowledge_space_service.enqueue_file_processing.call_count == 2
+    assert knowledge_space_service.enqueue_file_title_extraction.call_count == 2
     add_kwargs = knowledge_space_service.add_file.await_args_list[0].kwargs
     assert add_kwargs == {
         "knowledge_id": 8,
@@ -454,6 +458,7 @@ async def test_sync_orchestration_allows_repeated_external_id_and_writes_source_
         "business_domain_code": "IT",
         "skip_approval": True,
         "enqueue_processing": False,
+        "allow_duplicate_name": False,
     }
     assert events.method_calls == [
         call.persist(knowledge_file),

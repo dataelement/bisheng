@@ -14484,6 +14484,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         file_source: FileSource = None,
         skip_approval: bool = False,
         enqueue_processing: bool = True,
+        allow_duplicate_name: bool = False,
     ) -> list[KnowledgeSpaceFileResponse]:
         from bisheng.knowledge.domain.services.knowledge_pdf_artifact_service import (
             enqueue_current_pdf_artifact,
@@ -14609,6 +14610,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                         "file_subcategory_code": normalized_file_subcategory_code,
                         "file_subcategory_source": "manual" if normalized_file_subcategory_code else None,
                     },
+                    allow_duplicate_name=allow_duplicate_name,
                 )
                 if db_file.status != KnowledgeFileStatus.FAILED.value:
                     next_file_source = self._resolve_upload_file_source(db_file.file_name, file_source.value)
