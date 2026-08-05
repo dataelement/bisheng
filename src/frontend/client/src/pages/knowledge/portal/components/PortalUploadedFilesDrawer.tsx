@@ -481,7 +481,8 @@ export function PortalUploadedFilesDrawer({
                     data-testid="portal-uploaded-files-drawer"
                     data-upload-records-menu-layer="true"
                     className={s.uploadRecordsInner}
-                >                    <DialogHeader>
+                >
+                    <DialogHeader>
                         <DialogTitle>上传记录</DialogTitle>
                     </DialogHeader>
                     <div className={s.uploadRecordsToolbar}>
@@ -575,10 +576,7 @@ export function PortalUploadedFilesDrawer({
                                     <span className={s.uploadRecordCategoryCell}>
                                         <PortalFileCategoryDropdown
                                             variant="fileTable"
-<<<<<<< HEAD
-=======
                                             menuPortalContainer={menuPortalContainer}
->>>>>>> 56ea243f012423cd3a64e31d34627699d177929a
                                             groups={fileCategoryGroups}
                                             value={draft.fileSubcategoryCode ?? record.fileSubcategoryCode}
                                             fallbackParentCode={selectedFileCategoryCode}
