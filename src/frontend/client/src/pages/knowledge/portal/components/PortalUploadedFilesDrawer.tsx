@@ -471,7 +471,22 @@ export function PortalUploadedFilesDrawer({
     return (
         <>
         <Dialog open={uploadRecordsDialogOpen} onOpenChange={onOpenChange}>
-            <DialogContent className={s.uploadRecordsDialog} onPointerDownOutside={(event) => event.preventDefault()}>
+            <DialogContent
+                className={s.uploadRecordsDialog}
+                // Portaled file-category menus render under document.body (outside DialogContent).
+                // Radix treats those clicks as "outside": preventDefault on pointerdown would
+                // keep the dialog open but also swallow the menu button click. Allow the menu
+                // event through, and block dismiss via onInteractOutside/onFocusOutside instead.
+                onPointerDownOutside={(event) => {
+                    const target = event.target as HTMLElement | null;
+                    if (target?.closest?.('[data-portal-file-category-menu="true"]')) {
+                        return;
+                    }
+                    event.preventDefault();
+                }}
+                onInteractOutside={(event) => event.preventDefault()}
+                onFocusOutside={(event) => event.preventDefault()}
+            >
                 <div data-testid="portal-uploaded-files-drawer" className={s.uploadRecordsInner}>
                     <DialogHeader>
                         <DialogTitle>上传记录</DialogTitle>

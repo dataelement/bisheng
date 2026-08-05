@@ -155,6 +155,7 @@ export function PortalFileCategoryDropdown({
             className={menuClassName}
             role="tree"
             aria-label={ariaLabel}
+            data-portal-file-category-menu="true"
             style={useFloatingMenu ? floatingMenuStyle : undefined}
         >
             {groups.map((group) => {
