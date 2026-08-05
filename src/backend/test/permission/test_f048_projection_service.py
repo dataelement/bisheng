@@ -147,12 +147,15 @@ class FakeFGAProjection:
         self.fail_call: int | None = None
         self.timeout_mode: str | None = None
         self.timeout_call: int | None = None
+        self.reject_existing_writes = False
 
     async def write_atomic(self, *, writes: tuple, deletes: tuple) -> str:
         self.calls.append((writes, deletes))
         call_number = len(self.calls)
         if self.fail_call == call_number:
             raise RuntimeError("definite stage failure")
+        if self.reject_existing_writes and any(_key(row) in self.present for row in writes):
+            raise RuntimeError("cannot write a tuple which already exists")
         if self.timeout_mode is not None and (self.timeout_call is None or self.timeout_call == call_number):
             mode = self.timeout_mode
             self.timeout_mode = None
@@ -372,6 +375,33 @@ async def test_durable_operation_can_be_rebuilt_and_resumed_by_id() -> None:
 
     assert outcome.status == ProjectionOperationStatus.FINALIZED
     assert len(fga.calls) == 2
+    assert finalizer.calls == 1
+
+
+@pytest.mark.asyncio
+async def test_prepared_reconcile_reuses_existing_stage_tuples_and_writes_only_missing() -> None:
+    first_stage = _delta(1, phase="STAGE")
+    missing_stage = _delta(2, phase="STAGE")
+    commit = _delta(3)
+    plan = _plan(
+        first_stage,
+        missing_stage,
+        commit,
+        change_item_count=3,
+    )
+    service, repository, _, _, fga, finalizer, _ = _service(plan)
+    operation = await service.prepare(plan)
+    fga.present.add(_key(first_stage))
+    fga.reject_existing_writes = True
+
+    outcome = await service.reconcile_operation(int(operation.id))
+
+    assert outcome.status == ProjectionOperationStatus.FINALIZED
+    assert repository.operation.status == ProjectionOperationStatus.FINALIZED
+    assert len(fga.calls) == 2
+    stage_writes, stage_deletes = fga.calls[0]
+    assert tuple(_key(row) for row in stage_writes) == (_key(missing_stage),)
+    assert stage_deletes == ()
     assert finalizer.calls == 1
 
 

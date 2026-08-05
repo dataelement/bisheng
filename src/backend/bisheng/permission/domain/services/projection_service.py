@@ -99,6 +99,50 @@ class _NullEvents:
         return None
 
 
+def restore_projection_plan(
+    operation: PermissionProjectionOperation,
+    tuple_rows,
+) -> ProjectionPlan:
+    """Rebuild and checksum-verify one projection plan from durable rows."""
+
+    if operation.id is None or operation.tenant_id is None or not tuple_rows:
+        raise PermissionPublishNotReadyError(
+            msg="Projection ledger is incomplete",
+        )
+    deltas = tuple(
+        ProjectionTupleDelta(
+            phase=row.phase,
+            sequence=int(row.sequence),
+            action=row.action,
+            user=row.fga_user,
+            relation=row.relation,
+            object=row.fga_object,
+        )
+        for row in tuple_rows
+    )
+    for change_item_count in range(0, 51):
+        candidate = ProjectionPlan(
+            tenant_id=int(operation.tenant_id),
+            idempotency_key=operation.idempotency_key,
+            operation_type=operation.operation_type,
+            scope_type=operation.scope_type,
+            scope_key=operation.scope_key,
+            expected_version=int(operation.expected_version),
+            target_version=int(operation.target_version),
+            store_id=operation.store_id,
+            model_id=operation.model_id,
+            operator_id=int(operation.operator_id),
+            change_item_count=change_item_count,
+            deltas=deltas,
+        )
+        normalized = normalize_projection_plan(candidate)
+        if projection_request_checksum(normalized) == operation.request_checksum:
+            return normalized
+    raise PermissionVersionConflictError(
+        msg="Projection ledger checksum cannot be reconstructed",
+    )
+
+
 class ProjectionService:
     """Execute and reconcile one atomic permission projection operation."""
 
@@ -222,50 +266,8 @@ class ProjectionService:
         tuple_rows = await self._repository.aget_operation_tuples(
             operation_id,
         )
-        plan = self._restore_plan(operation, tuple_rows)
+        plan = restore_projection_plan(operation, tuple_rows)
         return await self.reconcile(plan)
-
-    @staticmethod
-    def _restore_plan(
-        operation: PermissionProjectionOperation,
-        tuple_rows,
-    ) -> ProjectionPlan:
-        if operation.id is None or operation.tenant_id is None or not tuple_rows:
-            raise PermissionPublishNotReadyError(
-                msg="Projection ledger is incomplete",
-            )
-        deltas = tuple(
-            ProjectionTupleDelta(
-                phase=row.phase,
-                sequence=int(row.sequence),
-                action=row.action,
-                user=row.fga_user,
-                relation=row.relation,
-                object=row.fga_object,
-            )
-            for row in tuple_rows
-        )
-        for change_item_count in range(0, 51):
-            candidate = ProjectionPlan(
-                tenant_id=int(operation.tenant_id),
-                idempotency_key=operation.idempotency_key,
-                operation_type=operation.operation_type,
-                scope_type=operation.scope_type,
-                scope_key=operation.scope_key,
-                expected_version=int(operation.expected_version),
-                target_version=int(operation.target_version),
-                store_id=operation.store_id,
-                model_id=operation.model_id,
-                operator_id=int(operation.operator_id),
-                change_item_count=change_item_count,
-                deltas=deltas,
-            )
-            normalized = normalize_projection_plan(candidate)
-            if projection_request_checksum(normalized) == operation.request_checksum:
-                return normalized
-        raise PermissionVersionConflictError(
-            msg="Projection ledger checksum cannot be reconstructed",
-        )
 
     async def _run_prepared(
         self,
@@ -293,10 +295,13 @@ class ProjectionService:
         stage_deltas = tuple(delta for delta in plan.deltas if delta.phase == "STAGE")
         applied_stage: list[ProjectionTupleDelta] = []
         try:
-            for offset in range(0, len(stage_deltas), self._stage_batch_size):
-                batch = stage_deltas[offset : offset + self._stage_batch_size]
+            pending_stage = await self._pending_stage_deltas(stage_deltas)
+            for offset in range(0, len(pending_stage), self._stage_batch_size):
+                batch = pending_stage[offset : offset + self._stage_batch_size]
                 await self._write(batch)
                 applied_stage.extend(batch)
+            if stage_deltas and not await self._is_after(stage_deltas):
+                raise RuntimeError("staged tuple verification did not observe full after state")
         except Exception as exc:
             await self._compensate_stage(
                 plan,
@@ -475,6 +480,20 @@ class ProjectionService:
         writes = tuple(delta for delta in deltas if delta.action == "WRITE")
         deletes = tuple(delta for delta in deltas if delta.action == "DELETE")
         return await self._fga.write_atomic(writes=writes, deletes=deletes)
+
+    async def _pending_stage_deltas(
+        self,
+        deltas: tuple[ProjectionTupleDelta, ...],
+    ) -> tuple[ProjectionTupleDelta, ...]:
+        """Return only STAGE mutations whose exact tuple is not already after."""
+
+        if not deltas:
+            return ()
+        present = await self._fga.read_present(
+            deltas,
+            consistency=HIGHER_CONSISTENCY,
+        )
+        return tuple(delta for delta in deltas if (delta.key in present) != (delta.action == "WRITE"))
 
     async def _classify(
         self,

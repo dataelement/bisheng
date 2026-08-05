@@ -24,6 +24,10 @@ export default function InputFileComponent({
 }: FileComponentType) {
   const [myValue, setMyValue] = useState(value);
   const [loading, setLoading] = useState(false);
+  // Callers pass either a suffix array (node params) or an `.a,.b` accept string (form input).
+  const suffixList = Array.isArray(suffixes)
+    ? suffixes
+    : String(suffixes || "").split(",").filter(Boolean);
   const { setErrorData } = useContext(alertContext);
   const { flow } = useContext(TabsContext);
   useEffect(() => {
@@ -35,8 +39,8 @@ export default function InputFileComponent({
   }, [disabled, onChange]);
 
   function checkFileType(fileName: string): boolean {
-    for (let index = 0; index < suffixes.length; index++) {
-      if (fileName.endsWith(suffixes[index])) {
+    for (let index = 0; index < suffixList.length; index++) {
+      if (fileName.endsWith(suffixList[index])) {
         return true;
       }
     }
@@ -62,7 +66,7 @@ export default function InputFileComponent({
     // Create a file input element
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = suffixes.join(",");
+    input.accept = suffixList.join(",");
     input.style.display = "none"; // Hidden from view
     input.multiple = false; // Allow only one file selection
 
@@ -131,7 +135,7 @@ export default function InputFileComponent({
     // Create a file input element
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = suffixes.join(",");
+    input.accept = suffixList.join(",");
     input.style.display = "none"; // Hidden from view
     input.multiple = true; // Allow multiple file selection
 

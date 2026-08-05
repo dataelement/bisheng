@@ -1481,8 +1481,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
     async def _scan_space_action_ids(
         self,
         action: str,
-        *,
-        exclude_square_public: bool = False,
     ) -> list[int]:
         result: list[int] = []
         cursor = None
@@ -1504,7 +1502,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 int(row.id)
                 for row in rows
                 if action in action_map.get(str(row.id), frozenset())
-                and not (exclude_square_public and self._is_square_preview_space(row))
             )
             if len(rows) < 100:
                 break
@@ -1533,12 +1530,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         members = await SpaceChannelMemberDao.async_get_user_followed_members(self.login_user.user_id)
         space_ids = {int(member.business_id) for member in members}
         if not self.login_user.is_admin():
-            space_ids.update(
-                await self._scan_space_action_ids(
-                    "visible",
-                    exclude_square_public=True,
-                )
-            )
+            space_ids.update(await self._scan_space_action_ids("visible"))
         return await self._format_accessible_spaces(
             list(space_ids),
             order_by,

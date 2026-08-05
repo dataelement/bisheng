@@ -917,7 +917,6 @@ class SqlCatalogImpact:
         for source in sources:
             sources_by_grant.setdefault(source.grant_id, []).append(source)
         affected: list[tuple[PermissionGrant, set[str], set[str]]] = []
-        blockers: list[str] = []
         for grant in grants:
             before_model = before_by_key.get(grant.model_key)
             after_model = after_by_key.get(grant.model_key)
@@ -942,12 +941,6 @@ class SqlCatalogImpact:
             if before_effective == after_effective:
                 continue
             affected.append((grant, before_effective, after_effective))
-            if not after_effective and sources_by_grant.get(int(grant.id)):
-                blockers.append(
-                    "active Grant would have no effective actions: "
-                    f"{grant.tenant_id}/{grant.resource_type}/"
-                    f"{grant.resource_id}/{grant.model_key}"
-                )
         resource_keys = {(row.tenant_id, row.resource_type, row.resource_id) for row, _, _ in affected}
         assignee_count = sum(len(sources_by_grant.get(int(row.id), ())) for row, _, _ in affected)
         expansion_count = sum(
@@ -982,7 +975,6 @@ class SqlCatalogImpact:
                 )
                 for row, before, after in affected
             ),
-            tuple(sorted(blockers)),
         )
         return CatalogImpactSummary(
             checksum=sha256(repr(payload).encode()).hexdigest(),
@@ -991,7 +983,7 @@ class SqlCatalogImpact:
             assignee_count=assignee_count,
             expansion_count=expansion_count,
             revocation_count=revocation_count,
-            blockers=tuple(sorted(blockers)),
+            blockers=(),
         )
 
     async def recalculate(

@@ -8,85 +8,92 @@ import {
 import { Checkbox } from "@/components/bs-ui/checkBox";
 import { Input } from "@/components/bs-ui/input";
 import { Label } from "@/components/bs-ui/label";
+import { QuestionTooltip } from "@/components/bs-ui/tooltip";
 import Tip from "@/components/bs-ui/tooltip/tip";
 import { cn } from "@/util/utils";
-import { useMemo } from "react";
+import { useId, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 
 
+/** Number field. The unit is a sibling span, not an overlay -- the native spinner
+ *  sits at the edge of the content box, so anything absolutely positioned inside
+ *  ends up fighting it. */
+const RowInput = ({ value, onChange, onEmpty, disabled = false, max, maxLength }) => (
+  <Input
+    type="number"
+    min={1}
+    max={max}
+    maxLength={maxLength}
+    value={value}
+    disabled={disabled}
+    onChange={onChange}
+    onBlur={(e) => { !e.target.value && onEmpty() }}
+    boxClassName="w-24 shrink-0"
+    className="h-8 border-[#ebecf0] bg-white"
+  />
+)
+
 const ItemForm = ({ data, setData }) => {
   const { t } = useTranslation('knowledge')
+  // Rendered once per file in per-table mode, so the checkbox id must be unique.
+  const headerCheckboxId = useId()
+  const headerEnabled = !!data.append_header
 
-  return <div className="space-y-4 text-sm">
-    {/* 第一行：第一个输入框独立显示 */}
-    <div className="flex items-center gap-3">
-      <Label className="min-w-[124px] text-left text-sm whitespace-nowrap">
-        {t('split')}
-      </Label>
-      <div className="flex items-center gap-2">
-        <span>{t('every')}</span>
-        <div className="relative">
-          <Input
-            type="number"
-            min={1}
-            // max={1000}
-            maxLength={6}
-            value={data.slice_length}
-            onChange={e => setData('slice_length', e.target.value)}
-            className="w-28 h-8"
-            onBlur={(e) => {
-              !e.target.value && setData('slice_length', 10);
-            }}
-          />
-          <span className="absolute right-8 top-1/2 -translate-y-1/2 text-gray-400">{t('row')}</span>
-        </div>
-        <span>{t('segemnt')}</span>
-      </div>
+  return <div className="space-y-4 text-sm text-[#0f172a]">
+    {/* 分段大小：自动细分的说明收进问号，避免一整行灰字打断表单节奏 */}
+    <div className="flex items-center gap-2">
+      <span className="shrink-0">{t('maxRowsPerSegment')}</span>
+      <RowInput
+        value={data.slice_length}
+        maxLength={6}
+        onChange={e => setData('slice_length', e.target.value)}
+        onEmpty={() => setData('slice_length', 10)}
+      />
+      <span className="shrink-0">{t('row')}</span>
+      <QuestionTooltip className="ml-0.5 text-[#94a3b8]" content={t('sliceLengthTooltip')} />
     </div>
 
-    {/* 第二行：第二个输入框与勾选框组合 */}
-    <div className="flex items-center gap-4">
+    {/* 表头：子设置缩进对齐到勾选框标签，未启用时置灰而非留白 */}
+    <div>
       <div className="flex items-center gap-2">
         <Checkbox
-          checked={data.append_header}
+          id={headerCheckboxId}
+          checked={headerEnabled}
           onCheckedChange={(checked) => setData('append_header', checked)}
         />
-        <Label className="text-sm"> {t("addHeader")} </Label>
+        <Label htmlFor={headerCheckboxId} className="cursor-pointer text-sm">
+          {t('addHeader')}
+        </Label>
       </div>
-      <div className={cn("flex items-center gap-3", !data.append_header && "opacity-0")}>
-        <span>{t('bonly')}</span>
-        <div className="relative">
-          <Input
-            type="number"
-            min={1}
-            max={1000}
-            maxLength={4}
-            value={data.header_start_row}
-            onChange={e => setData('header_start_row', e.target.value)}
-            onBlur={(e) => {
-              !e.target.value && setData('header_start_row', 1);
-            }}
-            className="w-28 h-8"
-          />
-          <span className="absolute right-8 top-1/2 -translate-y-1/2 text-gray-400">{t('row')}</span>
-        </div>
-        <span>{t('arrive')}</span>
-        <div className="relative">
-          <Input
-            type="number"
-            min={1}
-            max={1000}
-            maxLength={4}
-            value={data.header_end_row}
-            onChange={e => setData('header_end_row', e.target.value)}
-            onBlur={(e) => {
-              !e.target.value && setData('header_end_row', 1);
-            }}
-            className="w-28 h-8"
-          />
-          <span className="absolute right-8 top-1/2 -translate-y-1/2 text-gray-400">{t('row')}</span>
-        </div>
-        <span>{t('gauge')}</span>
+      {/* Inputs carry their own disabled styling; dim only the surrounding
+          text so the two do not compound into an unreadable opacity. */}
+      <div
+        className={cn(
+          "mt-2.5 flex flex-wrap items-center gap-2 pl-6 transition-colors",
+          !headerEnabled && "text-muted-foreground"
+        )}
+      >
+        <span className="shrink-0">{t('bonly')}</span>
+        <RowInput
+          value={data.header_start_row}
+          max={1000}
+          maxLength={4}
+          disabled={!headerEnabled}
+          onChange={e => setData('header_start_row', e.target.value)}
+          onEmpty={() => setData('header_start_row', 1)}
+        />
+        <span className="shrink-0">{t('row')}</span>
+        <span className="shrink-0">{t('arrive')}</span>
+        <RowInput
+          value={data.header_end_row}
+          max={1000}
+          maxLength={4}
+          disabled={!headerEnabled}
+          onChange={e => setData('header_end_row', e.target.value)}
+          onEmpty={() => setData('header_end_row', 1)}
+        />
+        <span className="shrink-0">{t('row')}</span>
+        <span className="shrink-0">{t('gauge')}</span>
       </div>
     </div>
   </div>

@@ -398,6 +398,83 @@ async def test_action_level_draft_rebuilds_every_standard_and_custom_model(
     assert collaborator.derived_level == 3
 
 
+async def test_catalog_publish_allows_visibility_only_grant_after_action_level_change(
+    session_factory: SessionFactory,
+) -> None:
+    fga = InMemoryCatalogFGA()
+    marker = FakeCatalogMarker()
+    current = await _seed_current(session_factory, fga)
+    source = GrantSourceService().canonicalize_source(
+        source_id=1,
+        subject_type="user",
+        subject_id="42",
+        source_type="DIRECT",
+    )
+    with bypass_tenant_filter():
+        async with session_factory() as session:
+            async with session.begin():
+                grant = PermissionGrant(
+                    tenant_id=1,
+                    resource_type="folder",
+                    resource_id="86206",
+                    model_key="viewer",
+                    state="ACTIVE",
+                    projection_state="CURRENT",
+                )
+                session.add(grant)
+                await session.flush()
+                session.add(
+                    PermissionGrantAssignee(
+                        tenant_id=1,
+                        grant_id=int(grant.id),
+                        subject_type=source.subject_type,
+                        subject_id=source.subject_id,
+                        userset_relation=source.userset_relation,
+                        include_children=source.include_children,
+                        source_type=source.source_type,
+                        source_ref=source.source_ref,
+                        source_locator=source.source_locator,
+                        source_fingerprint=source.source_fingerprint,
+                        projected_subject=source.projected_subject,
+                        protected=source.protected,
+                        state="ACTIVE",
+                    )
+                )
+
+    api = _api(session_factory, fga, marker)
+    draft = await api.create_draft(
+        request=CatalogDraftRequest(
+            idempotency_key="raise-download",
+            base_release_id=int(current.id),
+            change=CatalogChangeRequest(
+                type=CatalogChangeType.ASSIGN_ACTION_LEVEL,
+                action_code="download",
+                level=2,
+            ),
+        ),
+        operator_id=7,
+    )
+
+    impact = draft["impact"]
+    assert impact["resource_count"] == 1
+    assert impact["grant_count"] == 1
+    assert impact["assignee_count"] == 1
+    assert impact["expansion_count"] == 0
+    assert impact["revocation_count"] == 1
+    assert impact["blockers"] == []
+    result = await api.publish_draft(
+        draft_id=draft["draft_id"],
+        request=CatalogPublishRequest(
+            expected_current_release_id=int(current.id),
+            idempotency_key="publish-raise-download",
+            confirmed=True,
+        ),
+        operator_id=7,
+    )
+
+    assert result["status"] == "CURRENT"
+
+
 async def test_catalog_publish_stages_complete_release_and_switches_once(
     session_factory: SessionFactory,
 ) -> None:

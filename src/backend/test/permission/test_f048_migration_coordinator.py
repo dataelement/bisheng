@@ -15,6 +15,7 @@ from bisheng.permission.migration.f048_coordinator import (
     F048MigrationCoordinator,
     MigrationRunRequest,
     MigrationRunState,
+    _legacy_models,
 )
 from bisheng.permission.migration.f048_source_inventory import (
     LegacyConfigSource,
@@ -76,6 +77,33 @@ def _snapshot(*, schema_ready: bool = True) -> SourceInventorySnapshot:
 def test_ready_to_start_is_the_terminal_migration_run_phase() -> None:
     assert FORMAL_PHASES[-1] == "READY_TO_START"
     assert "ACTIVE" not in FORMAL_PHASES
+
+
+def test_legacy_models_preserve_missing_permissions_explicit_semantics() -> None:
+    base = _snapshot()
+    snapshot = replace(
+        base,
+        config_sources=(
+            LegacyConfigSource(
+                key="permission_relation_models_v1",
+                row_version="legacy",
+                raw_value=(
+                    '[{"id":"owner","relation":"owner","permissions":[],"is_system":true},'
+                    '{"id":"manager","relation":"manager","permissions":[],"is_system":true},'
+                    '{"id":"custom","permissions":["edit_app"],"is_system":false}]'
+                ),
+            ),
+            base.config_sources[1],
+        ),
+    )
+
+    models = _legacy_models(snapshot)
+
+    assert [(model.source_key, model.permissions_explicit) for model in models] == [
+        ("owner", False),
+        ("manager", False),
+        ("custom", True),
+    ]
 
 
 class FakeSourceProvider:

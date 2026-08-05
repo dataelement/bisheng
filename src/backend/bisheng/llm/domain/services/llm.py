@@ -680,11 +680,17 @@ class LLMService:
             raise ServerAddError.http_exception(f"<{success_msg.rstrip(',')}>Added{failed_msg}")
 
         await cls.add_llm_server_hook(request, login_user, ret)
+        # Record what the share flag actually did, not what the request asked
+        # for: ``ainsert_server_with_models`` only fans out when the new row is
+        # Root-owned, and a super admin creating under a child-tenant admin
+        # scope lands in that child. Logging the raw request value there would
+        # claim a share that never happened.
+        shared_to_children = bool(getattr(server, "share_to_children", True)) and db_server.tenant_id == ROOT_TENANT_ID
         await _write_llm_audit(
             login_user,
             TenantAuditAction.LLM_SERVER_CREATE.value,
             ret,
-            extra={"share_to_children": getattr(server, "share_to_children", True)},
+            extra={"share_to_children": shared_to_children},
         )
         return ret
 

@@ -292,19 +292,28 @@ def _legacy_models(
     ...,
 ]:
     rows = _config_rows(snapshot, "permission_relation_models_v1")
-    return tuple(
-        LegacyPermissionModel(
-            source_key=str(row.get("id") or row.get("model_id") or row.get("key") or ""),
-            name=str(row.get("name") or row.get("id") or ""),
-            relation=(str(row["relation"]) if row.get("relation") is not None else None),
-            permissions=tuple(str(item) for item in row.get("permissions", ())),
-            is_system=bool(row.get("is_system", False)),
-            permissions_explicit=bool(row.get("permissions_explicit", True)),
-            active=(bool(row["active"]) if row.get("active") is not None else None),
-            grantable_relations=tuple(str(item) for item in row.get("grantable_relations", ())),
+    models: list[LegacyPermissionModel] = []
+    for row in rows:
+        permissions = tuple(str(item) for item in row.get("permissions", ()))
+        is_system = bool(row.get("is_system", False))
+        permissions_explicit = (
+            bool(row["permissions_explicit"])
+            if "permissions_explicit" in row
+            else (False if is_system else bool(permissions))
         )
-        for row in rows
-    )
+        models.append(
+            LegacyPermissionModel(
+                source_key=str(row.get("id") or row.get("model_id") or row.get("key") or ""),
+                name=str(row.get("name") or row.get("id") or ""),
+                relation=(str(row["relation"]) if row.get("relation") is not None else None),
+                permissions=permissions,
+                is_system=is_system,
+                permissions_explicit=permissions_explicit,
+                active=(bool(row["active"]) if row.get("active") is not None else None),
+                grantable_relations=tuple(str(item) for item in row.get("grantable_relations", ())),
+            )
+        )
+    return tuple(models)
 
 
 def _legacy_bindings(
