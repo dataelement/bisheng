@@ -148,6 +148,7 @@ function formatTitle(
 const DETAIL_INTERNAL_KEYS = new Set(["menu_key", "space_id", "channel_id", "applicant_user_id", "applicant_user_name"]);
 const KNOWLEDGE_SPACE_CREATE_SCENARIO = "knowledge_space_create_request";
 const FILE_PUBLISH_SCENARIO = "knowledge_space_file_publish_request";
+const FILE_SHARE_SCENARIO = "knowledge_space_file_share_request";
 const DEPARTMENT_FILE_VIEW_SCENARIO = "department_file_view_request";
 
 type BusinessContentRow = [string, string];
@@ -184,6 +185,7 @@ function localizeBusinessType(value: unknown, localize: ReturnType<typeof useLoc
   const map: Record<string, string> = {
     knowledge_space_create: localize("com_approval_business_type_knowledge_space_create" as any),
     knowledge_space_file_publish: localize("com_approval_business_type_knowledge_space_file_publish" as any),
+    knowledge_space_file_share: localize("com_approval_business_type_knowledge_space_file_share" as any),
   };
   return map[String(value)] ?? formatBusinessValue(value);
 }
@@ -254,6 +256,21 @@ function buildFilePublishRows(snapshot: Record<string, any>, localize: ReturnTyp
   return rows;
 }
 
+function buildFileShareRows(snapshot: Record<string, any>, localize: ReturnType<typeof useLocalize>): BusinessContentRow[] {
+  const rows: BusinessContentRow[] = [];
+  pushBusinessRow(rows, localize("com_approval_field_business_type" as any), snapshot.type, (value) => localizeBusinessType(value, localize));
+  pushNameOrIdRow(rows, localize, "com_approval_field_source_space_name", "com_approval_field_source_space_id", snapshot.source_space_name, snapshot.source_space_id);
+  pushNameOrIdRow(rows, localize, "com_approval_field_source_file_name", "com_approval_field_source_file_id", snapshot.source_file_name, snapshot.source_file_id);
+  pushNameOrIdRow(rows, localize, "com_approval_field_target_space_name", "com_approval_field_target_space_id", snapshot.target_space_name, snapshot.target_space_id);
+  pushNameOrIdRow(rows, localize, "com_approval_field_target_folder_name", "com_approval_field_target_folder_id", snapshot.target_folder_name, snapshot.target_folder_id);
+  // allow_download is boolean; always show so false is not dropped by hasDisplayValue
+  rows.push([
+    localize("com_approval_field_allow_download" as any),
+    localizeBooleanValue(snapshot.allow_download ?? false, localize),
+  ]);
+  return rows;
+}
+
 function buildDepartmentFileViewRows(snapshot: Record<string, any>, localize: ReturnType<typeof useLocalize>): BusinessContentRow[] {
   const rows: BusinessContentRow[] = [];
   pushBusinessRow(rows, localize("com_approval_field_file_name" as any), snapshot.file_name);
@@ -274,6 +291,9 @@ function buildBusinessContentRows(
   }
   if (scenarioCode === FILE_PUBLISH_SCENARIO) {
     return buildFilePublishRows(data, localize);
+  }
+  if (scenarioCode === FILE_SHARE_SCENARIO) {
+    return buildFileShareRows(data, localize);
   }
   if (scenarioCode === DEPARTMENT_FILE_VIEW_SCENARIO) {
     return buildDepartmentFileViewRows(data, localize);
