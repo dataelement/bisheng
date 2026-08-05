@@ -128,25 +128,25 @@ describe("DeveloperTokenFileSyncRule", () => {
     )
   })
 
-  it("clears fixed values, conditionally shows dynamic source, and clears it again", () => {
+  it("clears fixed values, shows per-dimension dynamic source, and clears it again", () => {
     render(<Harness initial={configuredRule} />)
 
     fireEvent.change(screen.getByRole("combobox", { name: "file-sync-business-mode" }), {
       target: { value: "dynamic" },
     })
     expect(screen.getByTestId("rule-state")).toHaveTextContent(
-      '"business_domain":{"mode":"dynamic","code":null}'
+      '"business_domain":{"mode":"dynamic","code":null'
     )
-    expect(screen.getByRole("combobox", { name: "file-sync-dynamic-source" })).toBeInTheDocument()
+    expect(screen.getByRole("combobox", { name: "file-sync-business-dynamic-source" })).toBeInTheDocument()
 
-    fireEvent.change(screen.getByRole("combobox", { name: "file-sync-dynamic-source" }), {
+    fireEvent.change(screen.getByRole("combobox", { name: "file-sync-business-dynamic-source" }), {
       target: { value: "department_id" },
     })
     fireEvent.change(screen.getByRole("combobox", { name: "file-sync-business-mode" }), {
       target: { value: "fixed" },
     })
-    expect(screen.queryByRole("combobox", { name: "file-sync-dynamic-source" })).not.toBeInTheDocument()
-    expect(screen.getByTestId("rule-state")).toHaveTextContent('"dynamic_source":null')
+    expect(screen.queryByRole("combobox", { name: "file-sync-business-dynamic-source" })).not.toBeInTheDocument()
+    expect(screen.getByTestId("rule-state")).toHaveTextContent('"business_domain":{"mode":"fixed"')
   })
 
   it("renders loading and error states and delegates knowledge-space search", () => {

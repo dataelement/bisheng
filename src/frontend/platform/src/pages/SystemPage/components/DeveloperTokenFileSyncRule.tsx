@@ -64,10 +64,6 @@ export default function DeveloperTokenFileSyncRule({
       && !options?.business_domains.some((item) => item.code === value.business_domain.code)
   )
   const businessStale = Boolean(businessOptionMissing && options)
-  const hasDynamicDimension = Boolean(
-    value
-      && (value.business_domain.mode === "dynamic" || value.target_space.mode === "dynamic")
-  )
 
   const handleEnabledChange = (enabled: boolean) => {
     onChange(enabled ? createEmptyFileSyncRule() : null)
@@ -188,45 +184,61 @@ export default function DeveloperTokenFileSyncRule({
           </Select>
         </Field>
 
-        <ModeField
-          label={t("system.developerToken.fileSync.businessDomain")}
-          modeName="file-sync-business-mode"
-          mode={value.business_domain.mode}
-          onModeChange={(mode) => handleModeChange("businessDomain", mode)}
-        >
-          {value.business_domain.mode === "fixed" && (
-            <Field stale={businessStale}>
-              <Select
-                name="file-sync-business-domain"
-                value={value.business_domain.code || UNSET_VALUE}
-                onValueChange={(code) => onChange({
+        <div className="border-y py-3 md:col-span-2">
+          <ModeField
+            inlineControls
+            label={t("system.developerToken.fileSync.businessDomain")}
+            modeName="file-sync-business-mode"
+            mode={value.business_domain.mode}
+            onModeChange={(mode) => handleModeChange("businessDomain", mode)}
+          >
+            {value.business_domain.mode === "fixed" && (
+              <Field stale={businessStale}>
+                <Select
+                  name="file-sync-business-domain"
+                  value={value.business_domain.code || UNSET_VALUE}
+                  onValueChange={(code) => onChange({
+                    ...value,
+                    business_domain: {
+                      ...value.business_domain,
+                      code: code === UNSET_VALUE ? null : code,
+                    },
+                  })}
+                >
+                  <SelectTrigger aria-label={t("system.developerToken.fileSync.businessDomain")}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={UNSET_VALUE}>{t("system.developerToken.fileSync.select")}</SelectItem>
+                    {businessOptionMissing && value.business_domain.code && (
+                      <SelectItem value={value.business_domain.code}>{value.business_domain.code}</SelectItem>
+                    )}
+                    {(options?.business_domains || []).map((item) => (
+                      <SelectItem key={item.code} value={item.code}>
+                        {item.name} ({item.code})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+            )}
+            {value.business_domain.mode === "dynamic" && (
+              <DynamicSourceField
+                hideLabel
+                name="file-sync-business-dynamic-source"
+                value={value.business_domain.dynamic_source}
+                onChange={(dynamic_source) => onChange({
                   ...value,
-                  business_domain: {
-                    ...value.business_domain,
-                    code: code === UNSET_VALUE ? null : code,
-                  },
+                  business_domain: { ...value.business_domain, dynamic_source },
                 })}
-              >
-                <SelectTrigger aria-label={t("system.developerToken.fileSync.businessDomain")}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={UNSET_VALUE}>{t("system.developerToken.fileSync.select")}</SelectItem>
-                  {businessOptionMissing && value.business_domain.code && (
-                    <SelectItem value={value.business_domain.code}>{value.business_domain.code}</SelectItem>
-                  )}
-                  {(options?.business_domains || []).map((item) => (
-                    <SelectItem key={item.code} value={item.code}>
-                      {item.name} ({item.code})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-          )}
-        </ModeField>
+              />
+            )}
+          </ModeField>
+        </div>
 
         <ModeField
+          className="md:col-span-2"
+          inlineControls
           label={t("system.developerToken.fileSync.targetSpace")}
           modeName="file-sync-target-mode"
           mode={value.target_space.mode}
@@ -245,7 +257,7 @@ export default function DeveloperTokenFileSyncRule({
                   error={null}
                   onChange={(target) => onChange({
                     ...value,
-                    target_space: { mode: "fixed", ...target },
+                    target_space: { mode: "fixed", ...target, dynamic_source: null },
                   })}
                   onSearchSpaces={onSearchSpaces}
                 />
@@ -256,37 +268,58 @@ export default function DeveloperTokenFileSyncRule({
               )}
             </Field>
           )}
-        </ModeField>
-
-        {hasDynamicDimension && (
-          <Field label={t("system.developerToken.fileSync.dynamicSource")}>
-            <Select
-              name="file-sync-dynamic-source"
-              value={value.dynamic_source || UNSET_VALUE}
-              onValueChange={(source) => onChange({
+          {value.target_space.mode === "dynamic" && (
+            <DynamicSourceField
+              hideLabel
+              name="file-sync-target-dynamic-source"
+              value={value.target_space.dynamic_source}
+              onChange={(dynamic_source) => onChange({
                 ...value,
-                dynamic_source: source === UNSET_VALUE
-                  ? null
-                  : source as DeveloperTokenFileSyncDynamicSource,
+                target_space: { ...value.target_space, dynamic_source },
               })}
-            >
-              <SelectTrigger aria-label={t("system.developerToken.fileSync.dynamicSource")}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={UNSET_VALUE}>{t("system.developerToken.fileSync.select")}</SelectItem>
-                <SelectItem value="department_id">
-                  {t("system.developerToken.fileSync.sources.departmentId")}
-                </SelectItem>
-                <SelectItem value="responsible_person_id">
-                  {t("system.developerToken.fileSync.sources.responsiblePersonId")}
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </Field>
-        )}
+            />
+          )}
+        </ModeField>
       </div>
     </section>
+  )
+}
+
+function DynamicSourceField({
+  hideLabel = false,
+  name,
+  value,
+  onChange,
+}: {
+  hideLabel?: boolean
+  name: string
+  value: DeveloperTokenFileSyncDynamicSource | null | undefined
+  onChange: (value: DeveloperTokenFileSyncDynamicSource | null) => void
+}) {
+  const { t } = useTranslation()
+  return (
+    <Field label={hideLabel ? undefined : t("system.developerToken.fileSync.dynamicSource")}>
+      <Select
+        name={name}
+        value={value || UNSET_VALUE}
+        onValueChange={(source) => onChange(
+          source === UNSET_VALUE ? null : source as DeveloperTokenFileSyncDynamicSource,
+        )}
+      >
+        <SelectTrigger aria-label={t("system.developerToken.fileSync.dynamicSource")}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={UNSET_VALUE}>{t("system.developerToken.fileSync.select")}</SelectItem>
+          <SelectItem value="department_id">
+            {t("system.developerToken.fileSync.sources.departmentId")}
+          </SelectItem>
+          <SelectItem value="responsible_person_id">
+            {t("system.developerToken.fileSync.sources.responsiblePersonId")}
+          </SelectItem>
+        </SelectContent>
+      </Select>
+    </Field>
   )
 }
 
@@ -312,12 +345,16 @@ function Field({
 }
 
 function ModeField({
+  className,
+  inlineControls = false,
   label,
   modeName,
   mode,
   onModeChange,
   children,
 }: {
+  className?: string
+  inlineControls?: boolean
   label: string
   modeName: string
   mode: DeveloperTokenFileSyncMode
@@ -325,21 +362,34 @@ function ModeField({
   children: React.ReactNode
 }) {
   const { t } = useTranslation()
+  const modeSelect = (
+    <Select
+      name={modeName}
+      value={mode}
+      onValueChange={(next) => onModeChange(next as DeveloperTokenFileSyncMode)}
+    >
+      <SelectTrigger aria-label={label}><SelectValue /></SelectTrigger>
+      <SelectContent>
+        <SelectItem value="fixed">{t("system.developerToken.fileSync.modes.fixed")}</SelectItem>
+        <SelectItem value="dynamic">{t("system.developerToken.fileSync.modes.dynamic")}</SelectItem>
+      </SelectContent>
+    </Select>
+  )
+
   return (
-    <div className="space-y-2 text-sm">
+    <div className={`space-y-2 text-sm${className ? ` ${className}` : ""}`}>
       <div>{label}</div>
-      <Select
-        name={modeName}
-        value={mode}
-        onValueChange={(next) => onModeChange(next as DeveloperTokenFileSyncMode)}
-      >
-        <SelectTrigger aria-label={label}><SelectValue /></SelectTrigger>
-        <SelectContent>
-          <SelectItem value="fixed">{t("system.developerToken.fileSync.modes.fixed")}</SelectItem>
-          <SelectItem value="dynamic">{t("system.developerToken.fileSync.modes.dynamic")}</SelectItem>
-        </SelectContent>
-      </Select>
-      {children}
+      {inlineControls ? (
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
+          <div className="shrink-0 sm:w-52">{modeSelect}</div>
+          <div className="min-w-0 flex-1">{children}</div>
+        </div>
+      ) : (
+        <>
+          {modeSelect}
+          {children}
+        </>
+      )}
     </div>
   )
 }

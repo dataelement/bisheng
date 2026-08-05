@@ -37,8 +37,8 @@ def _rule(*, folder_id: int | None, dynamic: bool = False) -> DeveloperTokenFile
                 "mode": "dynamic" if dynamic else "fixed",
                 "knowledge_id": None if dynamic else 8,
                 "folder_id": None if dynamic else folder_id,
+                "dynamic_source": "department_id" if dynamic else None,
             },
-            "dynamic_source": "department_id" if dynamic else None,
         }
     )
 
@@ -80,7 +80,7 @@ async def test_fixed_folder_target_keeps_stable_folder_id() -> None:
         repository=SimpleNamespace(find_knowledge_by_id=AsyncMock(return_value=space)),
     )
 
-    target = await service._resolve_target_space(SimpleNamespace(selected_department=None))
+    target = await service._resolve_target_space(SimpleNamespace(target_space_department=None, business_domain_department=None))
 
     assert target == ResolvedFileSyncTarget(space=space, folder_id=4096)
 
@@ -91,7 +91,9 @@ async def test_dynamic_target_always_resolves_to_space_root() -> None:
     service = _service(_rule(folder_id=None, dynamic=True))
     service._find_nearest_department_space = AsyncMock(return_value=space)
 
-    target = await service._resolve_target_space(SimpleNamespace(selected_department=SimpleNamespace(id=20)))
+    target = await service._resolve_target_space(
+        SimpleNamespace(target_space_department=SimpleNamespace(id=20), business_domain_department=None)
+    )
 
     assert target == ResolvedFileSyncTarget(space=space, folder_id=None)
 
@@ -131,7 +133,12 @@ async def test_revoked_folder_permission_returns_19902() -> None:
 @pytest.mark.asyncio
 async def test_folder_permission_failure_happens_before_temporary_upload() -> None:
     service = _service(_rule(folder_id=4096))
-    service._resolve_identity = AsyncMock(return_value=SimpleNamespace(selected_department=None))
+    service._resolve_identity = AsyncMock(
+        return_value=SimpleNamespace(
+            target_space_department=None,
+            business_domain_department=None,
+        )
+    )
     service._get_portal_config = AsyncMock(return_value=SimpleNamespace())
     service._resolve_document_type = MagicMock()
     service._resolve_business_domain = MagicMock(return_value=SimpleNamespace())
@@ -166,7 +173,7 @@ async def test_fixed_folder_upload_passes_parent_id_and_keeps_response_contract(
     knowledge_service = SimpleNamespace(
         get_preview_cache_key=MagicMock(return_value="preview-key"),
         add_file=AsyncMock(return_value=[SimpleNamespace(id=9, status=KnowledgeFileStatus.WAITING.value)]),
-        enqueue_file_processing=MagicMock(),
+        enqueue_file_title_extraction=MagicMock(),
     )
     service = _service(
         _rule(folder_id=4096),
@@ -175,7 +182,8 @@ async def test_fixed_folder_upload_passes_parent_id_and_keeps_response_contract(
     )
     service._resolve_identity = AsyncMock(
         return_value=SimpleNamespace(
-            selected_department=None,
+            target_space_department=None,
+            business_domain_department=None,
             main_department=SimpleNamespace(id=20, name="信息部"),
             responsible_user_id=7,
             responsible_user_name="bound",

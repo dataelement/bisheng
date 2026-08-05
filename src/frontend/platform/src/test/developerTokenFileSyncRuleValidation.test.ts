@@ -36,21 +36,24 @@ const options: DeveloperTokenFileSyncOptions = {
 
 function rule(
   businessMode: "fixed" | "dynamic",
-  targetMode: "fixed" | "dynamic"
+  targetMode: "fixed" | "dynamic",
+  businessSource: DeveloperTokenFileSyncRule["business_domain"]["dynamic_source"] = "responsible_person_id",
+  targetSource: DeveloperTokenFileSyncRule["target_space"]["dynamic_source"] = "responsible_person_id",
 ): DeveloperTokenFileSyncRule {
-  const dynamic = businessMode === "dynamic" || targetMode === "dynamic"
   return {
     category: { code: "POLICY", subcategory_code: "MGMT_POLICY" },
     business_domain: {
       mode: businessMode,
       code: businessMode === "fixed" ? "SAFETY" : null,
+      dynamic_source: businessMode === "dynamic" ? businessSource : null,
     },
     target_space: {
       mode: targetMode,
       knowledge_id: targetMode === "fixed" ? 118 : null,
       folder_id: null,
+      dynamic_source: targetMode === "dynamic" ? targetSource : null,
     },
-    dynamic_source: dynamic ? "responsible_person_id" : null,
+    dynamic_source: null,
   }
 }
 
@@ -64,7 +67,7 @@ describe("developer token file-sync rule validation", () => {
     expect(findInvalidFileSyncRule(rule(businessMode, targetMode), options)).toBeNull()
   })
 
-  it("normalizes codes and removes fields that conflict with modes", () => {
+  it("normalizes codes, migrates legacy dynamic source, and removes fields that conflict with modes", () => {
     expect(normalizeFileSyncRule({
       category: { code: " policy ", subcategory_code: " mgmt_policy " },
       business_domain: { mode: "dynamic", code: " safety " },
@@ -72,10 +75,17 @@ describe("developer token file-sync rule validation", () => {
       dynamic_source: "department_id",
     })).toEqual({
       category: { code: "POLICY", subcategory_code: "MGMT_POLICY" },
-      business_domain: { mode: "dynamic", code: null },
-      target_space: { mode: "fixed", knowledge_id: 118, folder_id: 4096 },
-      dynamic_source: "department_id",
+      business_domain: { mode: "dynamic", code: null, dynamic_source: "department_id" },
+      target_space: { mode: "fixed", knowledge_id: 118, folder_id: 4096, dynamic_source: null },
+      dynamic_source: null,
     })
+  })
+
+  it("accepts independent dynamic sources for business domain and target space", () => {
+    expect(findInvalidFileSyncRule(
+      rule("dynamic", "dynamic", "responsible_person_id", "department_id"),
+      options,
+    )).toBeNull()
   })
 
   it("reports stale category, business-domain, and knowledge-space references", () => {
@@ -118,22 +128,34 @@ describe("developer token file-sync rule validation", () => {
     })).toEqual({ field: "businessDomain", reason: "invalid" })
   })
 
-  it("clears incompatible fixed values and a now-unused dynamic source on mode changes", () => {
+  it("clears incompatible fixed values and per-dimension dynamic sources on mode changes", () => {
     const dynamicBusiness = changeFileSyncRuleMode(rule("fixed", "fixed"), "businessDomain", "dynamic")
-    expect(dynamicBusiness.business_domain).toEqual({ mode: "dynamic", code: null })
+    expect(dynamicBusiness.business_domain).toEqual({
+      mode: "dynamic",
+      code: null,
+      dynamic_source: null,
+    })
 
     const fixedAgain = changeFileSyncRuleMode(
-      { ...dynamicBusiness, dynamic_source: "department_id" },
+      {
+        ...dynamicBusiness,
+        business_domain: {
+          mode: "dynamic",
+          code: null,
+          dynamic_source: "department_id",
+        },
+      },
       "businessDomain",
-      "fixed"
+      "fixed",
     )
-    expect(fixedAgain.dynamic_source).toBeNull()
+    expect(fixedAgain.business_domain.dynamic_source).toBeNull()
 
     const dynamicTarget = changeFileSyncRuleMode(rule("fixed", "fixed"), "targetSpace", "dynamic")
     expect(dynamicTarget.target_space).toEqual({
       mode: "dynamic",
       knowledge_id: null,
       folder_id: null,
+      dynamic_source: null,
     })
   })
 
@@ -147,8 +169,14 @@ describe("developer token file-sync rule validation", () => {
     }
 
     expect(formatFileSyncRuleSummary(null, labels)).toBe("Not configured")
-    expect(formatFileSyncRuleSummary(rule("fixed", "dynamic"), labels)).toBe(
-      "POLICY/MGMT_POLICY · Domain: SAFETY · Space: Dynamic(responsible person)"
+    expect(formatFileSyncRuleSummary(rule("fixed", "dynamic", "responsible_person_id", "department_id"), labels)).toBe(
+      "POLICY/MGMT_POLICY · Domain: SAFETY · Space: Dynamic(department)"
+    )
+    expect(formatFileSyncRuleSummary(
+      rule("dynamic", "dynamic", "responsible_person_id", "department_id"),
+      labels,
+    )).toBe(
+      "POLICY/MGMT_POLICY · Domain: Dynamic(responsible person) · Space: Dynamic(department)"
     )
     expect(formatFileSyncRuleSummary({
       ...rule("fixed", "fixed"),

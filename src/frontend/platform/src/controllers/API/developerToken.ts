@@ -27,13 +27,16 @@ export interface DeveloperTokenFileSyncRule {
   business_domain: {
     mode: DeveloperTokenFileSyncMode
     code: string | null
+    dynamic_source?: DeveloperTokenFileSyncDynamicSource | null
   }
   target_space: {
     mode: DeveloperTokenFileSyncMode
     knowledge_id: number | null
     folder_id: number | null
+    dynamic_source?: DeveloperTokenFileSyncDynamicSource | null
   }
-  dynamic_source: DeveloperTokenFileSyncDynamicSource | null
+  /** @deprecated Read-only legacy field; use per-dimension dynamic_source instead. */
+  dynamic_source?: DeveloperTokenFileSyncDynamicSource | null
 }
 
 export interface DeveloperTokenFileSyncCategoryOption {

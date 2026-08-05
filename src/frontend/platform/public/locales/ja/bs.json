@@ -226,7 +226,9 @@
           "subcategory": "子カテゴリ",
           "businessDomain": "業務ドメイン",
           "targetSpace": "対象ナレッジスペース",
-          "dynamicSource": "動的業務ソース"
+          "dynamicSource": "動的業務ソース",
+          "businessDomainDynamicSource": "業務ドメインの動的ソース",
+          "targetSpaceDynamicSource": "対象スペースの動的ソース"
         },
         "summary": {
           "notConfigured": "未設定",

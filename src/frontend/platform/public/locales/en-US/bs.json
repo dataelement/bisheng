@@ -227,7 +227,9 @@
           "subcategory": "subcategory",
           "businessDomain": "business domain",
           "targetSpace": "target knowledge space",
-          "dynamicSource": "dynamic business source"
+          "dynamicSource": "dynamic business source",
+          "businessDomainDynamicSource": "business domain dynamic source",
+          "targetSpaceDynamicSource": "target space dynamic source"
         },
         "summary": {
           "notConfigured": "Not configured",

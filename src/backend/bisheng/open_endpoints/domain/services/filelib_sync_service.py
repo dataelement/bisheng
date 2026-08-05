@@ -54,7 +54,8 @@ class ResolvedIdentity:
     responsible_user_name: str
     responsible_department: Department
     main_department: Department
-    selected_department: Department | None
+    business_domain_department: Department | None
+    target_space_department: Department | None
 
 
 @dataclass(frozen=True)
@@ -101,7 +102,7 @@ class FilelibSyncService:
         self._resolve_document_type(portal_config)
         domain = self._resolve_business_domain(
             portal_config,
-            identity.selected_department,
+            identity.business_domain_department,
         )
         target = await self._resolve_target_space(identity)
         self._ensure_domain_bound(target.space, domain)
@@ -202,11 +203,30 @@ class FilelibSyncService:
             raise FilelibSyncInvalidParamsError(msg="file must not be empty")
 
     def _require_dynamic_source_id(self, params: FilelibSyncParams) -> None:
-        source = self.file_sync_rule.dynamic_source
-        if source == "department_id" and params.department_id is None:
+        required_fields: set[str] = set()
+        if self.file_sync_rule.business_domain.mode == "dynamic":
+            required_fields.add(self.file_sync_rule.business_domain.dynamic_source or "")
+        if self.file_sync_rule.target_space.mode == "dynamic":
+            required_fields.add(self.file_sync_rule.target_space.dynamic_source or "")
+        required_fields.discard("")
+
+        if "department_id" in required_fields and params.department_id is None:
             raise FilelibSyncInvalidParamsError(msg="department_id is required by the token rule")
-        if source == "responsible_person_id" and params.responsible_person_id is None:
+        if "responsible_person_id" in required_fields and params.responsible_person_id is None:
             raise FilelibSyncInvalidParamsError(msg="responsible_person_id is required by the token rule")
+
+    @staticmethod
+    def _department_for_dynamic_source(
+        *,
+        source: str,
+        main_department: Department,
+        responsible_department: Department,
+    ) -> Department:
+        if source == "department_id":
+            return main_department
+        if source == "responsible_person_id":
+            return responsible_department
+        raise FilelibSyncInvalidParamsError(msg="invalid dynamic source in token rule")
 
     async def _resolve_identity(self, params: FilelibSyncParams) -> ResolvedIdentity:
         caller_department = await self._resolve_unique_primary_department(
@@ -239,18 +259,28 @@ class FilelibSyncService:
         if params.department and params.department != main_department.name:
             raise FilelibSyncInvalidParamsError(msg="department does not match department_id")
 
-        selected_department = None
-        if self.file_sync_rule.dynamic_source == "department_id":
-            selected_department = main_department
-        elif self.file_sync_rule.dynamic_source == "responsible_person_id":
-            selected_department = responsible_department
+        business_domain_department = None
+        if self.file_sync_rule.business_domain.mode == "dynamic":
+            business_domain_department = self._department_for_dynamic_source(
+                source=str(self.file_sync_rule.business_domain.dynamic_source),
+                main_department=main_department,
+                responsible_department=responsible_department,
+            )
+        target_space_department = None
+        if self.file_sync_rule.target_space.mode == "dynamic":
+            target_space_department = self._department_for_dynamic_source(
+                source=str(self.file_sync_rule.target_space.dynamic_source),
+                main_department=main_department,
+                responsible_department=responsible_department,
+            )
 
         return ResolvedIdentity(
             responsible_user_id=responsible_user_id,
             responsible_user_name=responsible_user_name,
             responsible_department=responsible_department,
             main_department=main_department,
-            selected_department=selected_department,
+            business_domain_department=business_domain_department,
+            target_space_department=target_space_department,
         )
 
     async def _resolve_unique_primary_department(
@@ -342,9 +372,9 @@ class FilelibSyncService:
                 space=space,
                 folder_id=self.file_sync_rule.target_space.folder_id,
             )
-        if identity.selected_department is None:
+        if identity.target_space_department is None:
             raise FilelibSyncNotFoundError(msg="dynamic target department does not exist")
-        space = await self._find_nearest_department_space(identity.selected_department)
+        space = await self._find_nearest_department_space(identity.target_space_department)
         return ResolvedFileSyncTarget(space=space, folder_id=None)
 
     async def _find_nearest_department_space(self, department: Department) -> Knowledge:

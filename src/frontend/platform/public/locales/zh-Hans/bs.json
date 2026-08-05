@@ -227,7 +227,9 @@
           "subcategory": "二级分类",
           "businessDomain": "业务域",
           "targetSpace": "目标知识库",
-          "dynamicSource": "动态业务来源"
+          "dynamicSource": "动态业务来源",
+          "businessDomainDynamicSource": "业务域动态来源",
+          "targetSpaceDynamicSource": "目标知识库动态来源"
         },
         "summary": {
           "notConfigured": "未配置",

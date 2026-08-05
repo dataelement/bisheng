@@ -1,10 +1,12 @@
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.knowledge.domain.constants import normalize_business_domain_code
+
+FileSyncDynamicSource = Literal["department_id", "responsible_person_id"]
 
 
 class FileSyncCategoryRule(BaseModel):
@@ -24,6 +26,7 @@ class FileSyncBusinessDomainRule(BaseModel):
 
     mode: Literal["fixed", "dynamic"]
     code: str | None = None
+    dynamic_source: FileSyncDynamicSource | None = None
 
     @field_validator("code", mode="before")
     @classmethod
@@ -46,6 +49,7 @@ class FileSyncTargetSpaceRule(BaseModel):
     mode: Literal["fixed", "dynamic"]
     knowledge_id: int | None = Field(default=None, strict=True, gt=0)
     folder_id: int | None = Field(default=None, strict=True, gt=0)
+    dynamic_source: FileSyncDynamicSource | None = None
 
 
 class DeveloperTokenFileSyncRule(BaseModel):
@@ -54,7 +58,28 @@ class DeveloperTokenFileSyncRule(BaseModel):
     category: FileSyncCategoryRule
     business_domain: FileSyncBusinessDomainRule
     target_space: FileSyncTargetSpaceRule
-    dynamic_source: Literal["department_id", "responsible_person_id"] | None = None
+    # Deprecated: migrated into per-dimension dynamic_source on read; never persisted on save.
+    dynamic_source: FileSyncDynamicSource | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def migrate_legacy_dynamic_source(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        legacy = data.get("dynamic_source")
+        if legacy is None:
+            return data
+        payload = dict(data)
+        business_domain = dict(payload.get("business_domain") or {})
+        target_space = dict(payload.get("target_space") or {})
+        if business_domain.get("mode") == "dynamic" and business_domain.get("dynamic_source") is None:
+            business_domain["dynamic_source"] = legacy
+        if target_space.get("mode") == "dynamic" and target_space.get("dynamic_source") is None:
+            target_space["dynamic_source"] = legacy
+        payload["business_domain"] = business_domain
+        payload["target_space"] = target_space
+        payload["dynamic_source"] = None
+        return payload
 
 
 class DeveloperTokenPrincipal(BaseModel):

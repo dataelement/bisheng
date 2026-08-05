@@ -43,12 +43,17 @@ https://{bisheng-host}/api/v2
     "mode": "fixed",
     "code": "SAFETY"
   },
+  "business_domain": {
+    "mode": "dynamic",
+    "code": null,
+    "dynamic_source": "responsible_person_id"
+  },
   "target_space": {
     "mode": "dynamic",
     "knowledge_id": null,
-    "folder_id": null
-  },
-  "dynamic_source": "responsible_person_id"
+    "folder_id": null,
+    "dynamic_source": "department_id"
+  }
 }
 ```
 
@@ -58,26 +63,29 @@ https://{bisheng-host}/api/v2
 | `category.subcategory_code` | 必填；必须属于上述一级分类；保存时转大写；`[A-Z0-9_-]{1,16}`。 |
 | `business_domain.mode` | `fixed` 或 `dynamic`。 |
 | `business_domain.code` | 业务域为 `fixed` 时必填，为 `dynamic` 时必须为 `null`。 |
+| `business_domain.dynamic_source` | 业务域为 `dynamic` 时必填；可选 `department_id` 或 `responsible_person_id`；为 `fixed` 时必须为 `null`。 |
 | `target_space.mode` | `fixed` 或 `dynamic`。 |
 | `target_space.knowledge_id` | 目标空间为 `fixed` 时必填正整数，为 `dynamic` 时必须为 `null`。 |
 | `target_space.folder_id` | 目标空间为 `fixed` 时可缺失或为 `null`（空间根目录），也可为正整数目录 ID；为 `dynamic` 时必须为 `null`。 |
-| `dynamic_source` | 任一维度为 `dynamic` 时必填；可选 `department_id` 或 `responsible_person_id`。两个维度均为 `fixed` 时必须为 `null`。 |
+| `target_space.dynamic_source` | 目标空间为 `dynamic` 时必填；可选 `department_id` 或 `responsible_person_id`；为 `fixed` 时必须为 `null`。 |
 
-分类始终固定。业务域和目标空间可独立选择固定或动态，因此共有四种组合：
+分类始终固定。业务域和目标空间可独立选择固定或动态，且**各自**配置动态来源，因此共有四种组合：
 
-| 业务域 | 目标空间 | 固定值 | `dynamic_source` | 请求中动态必填 ID |
+| 业务域 | 目标空间 | 固定值 | 动态来源 | 请求中动态必填 ID |
 |---|---|---|---|---|
-| fixed | fixed | 域 code、空间 ID、可空目录 ID | 必须为空 | 无 |
-| fixed | dynamic | 域 code | 必填 | 配置指定的一个 ID |
-| dynamic | fixed | 空间 ID、可空目录 ID | 必填 | 配置指定的一个 ID |
-| dynamic | dynamic | 无域/空间固定值 | 必填 | 配置指定的一个 ID；两个动态维度共用解析结果 |
+| fixed | fixed | 域 code、空间 ID、可空目录 ID | 无 | 无 |
+| fixed | dynamic | 域 code | `target_space.dynamic_source` | 该维度配置的 ID |
+| dynamic | fixed | 空间 ID、可空目录 ID | `business_domain.dynamic_source` | 该维度配置的 ID |
+| dynamic | dynamic | 无域/空间固定值 | 两个维度各自配置 | 两个维度所需 ID 的**并集**（可不同） |
+
+**向后兼容**：旧配置若仍使用顶层 `dynamic_source`，读取时会自动复制到仍为 `dynamic` 且未单独配置的维度，保存后不再持久化顶层字段。
 
 ### 2.2 动态来源语义
 
-- `department_id`：请求必须显式提供 `params.department_id`。系统在 Token 当前租户内按部门 ID 解析动态业务。
-- `responsible_person_id`：请求必须显式提供 `params.responsible_person_id`。系统在 Token 当前租户内解析人员，并要求该人员恰好有一个有效主部门。
+- `department_id`：该维度解析时使用 `params.department_id` 对应的部门。
+- `responsible_person_id`：该维度解析时使用 `params.responsible_person_id`（或调用者本人）的唯一主部门。
 
-系统不会在缺少配置指定 ID 时回退到调用人、另一个 ID 或名称字段。名称与 ID 同时提供时，名称必须与 ID 对应对象一致。
+两个维度可以配置不同来源，例如业务域按责任人主部门、目标空间按 `department_id`。请求必须提供当前 Token 规则所需的全部 ID 字段并集。
 
 ### 2.3 固定引用与运行时复核
 

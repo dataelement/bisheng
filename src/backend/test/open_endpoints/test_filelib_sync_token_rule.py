@@ -33,19 +33,29 @@ def _rule(
     business_domain_mode: str = "fixed",
     target_space_mode: str = "fixed",
     dynamic_source: str | None = None,
+    *,
+    business_domain_source: str | None = None,
+    target_space_source: str | None = None,
 ) -> DeveloperTokenFileSyncRule:
+    bd_source = business_domain_source
+    if bd_source is None and dynamic_source and business_domain_mode == "dynamic":
+        bd_source = dynamic_source
+    ts_source = target_space_source
+    if ts_source is None and dynamic_source and target_space_mode == "dynamic":
+        ts_source = dynamic_source
     return DeveloperTokenFileSyncRule.model_validate(
         {
             "category": {"code": "POLICY", "subcategory_code": "MGMT_POLICY"},
             "business_domain": {
                 "mode": business_domain_mode,
                 "code": "IT" if business_domain_mode == "fixed" else None,
+                "dynamic_source": bd_source if business_domain_mode == "dynamic" else None,
             },
             "target_space": {
                 "mode": target_space_mode,
                 "knowledge_id": 8 if target_space_mode == "fixed" else None,
+                "dynamic_source": ts_source if target_space_mode == "dynamic" else None,
             },
-            "dynamic_source": dynamic_source,
         }
     )
 
@@ -122,7 +132,8 @@ async def test_department_dynamic_source_selects_explicit_department() -> None:
     )._resolve_identity(params)
 
     assert identity.main_department.id == 20
-    assert identity.selected_department.id == 20
+    assert identity.business_domain_department.id == 20
+    assert identity.target_space_department.id == 20
     assert identity.responsible_user_id == 1
 
 
@@ -219,9 +230,12 @@ async def test_fixed_dynamic_matrix_resolves_independent_dimensions(
             side_effect=lambda knowledge_id: fixed_space if knowledge_id == 8 else dynamic_space
         )
     )
-    service = _service(_rule(domain_mode, space_mode, source), repository)
+    service = _service(_rule(domain_mode, space_mode, dynamic_source=source), repository)
     selected_department = _department(20, "动态部门", "/1/20/")
-    identity = SimpleNamespace(selected_department=selected_department)
+    identity = SimpleNamespace(
+        business_domain_department=selected_department if domain_mode == "dynamic" else None,
+        target_space_department=selected_department if space_mode == "dynamic" else None,
+    )
     config = SimpleNamespace(
         portal=SimpleNamespace(
             domains=[
@@ -247,7 +261,7 @@ async def test_fixed_dynamic_matrix_resolves_independent_dimensions(
         "bisheng.open_endpoints.domain.services.filelib_sync_service.DepartmentSpaceTargetResolver.resolve",
         new=AsyncMock(return_value=22),
     ):
-        domain = service._resolve_business_domain(config, selected_department)
+        domain = service._resolve_business_domain(config, identity.business_domain_department)
         target = await service._resolve_target_space(identity)
 
     assert domain.code == expected_domain
@@ -259,7 +273,10 @@ async def test_fixed_dynamic_matrix_resolves_independent_dimensions(
 async def test_dynamic_space_ambiguity_maps_to_19904_before_lookup() -> None:
     repository = SimpleNamespace(find_knowledge_by_id=AsyncMock())
     service = _service(_rule("fixed", "dynamic", "department_id"), repository)
-    identity = SimpleNamespace(selected_department=_department(20, "动态部门", "/1/20/"))
+    identity = SimpleNamespace(
+        target_space_department=_department(20, "动态部门", "/1/20/"),
+        business_domain_department=None,
+    )
 
     with patch(
         "bisheng.open_endpoints.domain.services.filelib_sync_service.DepartmentSpaceTargetResolver.resolve",
@@ -284,6 +301,76 @@ async def test_missing_dynamic_id_fails_before_temporary_upload() -> None:
         )
 
     service._save_temporary_file.assert_not_awaited()
+
+
+def test_split_dynamic_sources_require_union_of_configured_ids() -> None:
+    service = _service(
+        _rule(
+            "dynamic",
+            "dynamic",
+            business_domain_source="responsible_person_id",
+            target_space_source="department_id",
+        )
+    )
+    params = service.parse_params(
+        json.dumps(
+            {
+                "external_file_id": "ext-1",
+                "file_name": "a.pdf",
+                "responsible_person_id": 2,
+            }
+        )
+    )
+
+    with pytest.raises(FilelibSyncInvalidParamsError, match="department_id"):
+        service._require_dynamic_source_id(params)
+
+
+@pytest.mark.asyncio
+async def test_split_dynamic_sources_resolve_independent_departments() -> None:
+    caller_department = _department(10, "调用人部门")
+    responsible_department = _department(30, "责任人部门")
+    explicit_department = _department(20, "请求部门")
+    repository = SimpleNamespace(
+        find_user_by_id=AsyncMock(return_value=SimpleNamespace(user_id=2, user_name="owner")),
+        find_primary_departments=AsyncMock(
+            side_effect=[
+                [UserDepartment(user_id=1, department_id=10, is_primary=1)],
+                [UserDepartment(user_id=2, department_id=30, is_primary=1)],
+            ]
+        ),
+        find_department_by_id=AsyncMock(
+            side_effect=lambda department_id: {
+                10: caller_department,
+                20: explicit_department,
+                30: responsible_department,
+            }.get(department_id)
+        ),
+    )
+    service = _service(
+        _rule(
+            "dynamic",
+            "dynamic",
+            business_domain_source="responsible_person_id",
+            target_space_source="department_id",
+        ),
+        repository,
+    )
+    params = service.parse_params(
+        json.dumps(
+            {
+                "external_file_id": "ext-1",
+                "file_name": "a.pdf",
+                "department_id": 20,
+                "responsible_person_id": 2,
+            }
+        )
+    )
+
+    identity = await service._resolve_identity(params)
+
+    assert identity.business_domain_department.id == 30
+    assert identity.target_space_department.id == 20
 
 
 def test_rule_and_token_id_are_not_accepted_from_request_params() -> None:

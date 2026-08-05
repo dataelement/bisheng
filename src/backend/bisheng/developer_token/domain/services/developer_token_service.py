@@ -524,14 +524,20 @@ class DeveloperTokenService:
         space_fixed = normalized.target_space.mode == "fixed"
         if domain_fixed != bool(normalized.business_domain.code):
             raise DeveloperTokenInvalidFileSyncRuleError(msg="business domain mode and code do not match")
+        if domain_fixed and normalized.business_domain.dynamic_source is not None:
+            raise DeveloperTokenInvalidFileSyncRuleError(msg="fixed business domain cannot specify dynamic source")
+        if not domain_fixed and normalized.business_domain.dynamic_source is None:
+            raise DeveloperTokenInvalidFileSyncRuleError(msg="dynamic business domain requires dynamic source")
         if space_fixed != (normalized.target_space.knowledge_id is not None):
             raise DeveloperTokenInvalidFileSyncRuleError(msg="target space mode and knowledge id do not match")
         if not space_fixed and normalized.target_space.folder_id is not None:
             raise DeveloperTokenInvalidFileSyncRuleError(msg="dynamic target cannot specify a folder id")
-
-        has_dynamic_dimension = not domain_fixed or not space_fixed
-        if has_dynamic_dimension != (normalized.dynamic_source is not None):
-            raise DeveloperTokenInvalidFileSyncRuleError(msg="dynamic source does not match rule modes")
+        if space_fixed and normalized.target_space.dynamic_source is not None:
+            raise DeveloperTokenInvalidFileSyncRuleError(msg="fixed target space cannot specify dynamic source")
+        if not space_fixed and normalized.target_space.dynamic_source is None:
+            raise DeveloperTokenInvalidFileSyncRuleError(msg="dynamic target space requires dynamic source")
+        if normalized.dynamic_source is not None:
+            raise DeveloperTokenInvalidFileSyncRuleError(msg="legacy dynamic source must not be persisted")
         return normalized
 
     @classmethod
@@ -1198,8 +1204,9 @@ class DeveloperTokenService:
             "category_code": normalized.category.code,
             "subcategory_code": normalized.category.subcategory_code,
             "business_domain_mode": normalized.business_domain.mode,
+            "business_domain_dynamic_source": normalized.business_domain.dynamic_source,
             "target_space_mode": normalized.target_space.mode,
-            "dynamic_source": normalized.dynamic_source,
+            "target_space_dynamic_source": normalized.target_space.dynamic_source,
         }
 
     @classmethod

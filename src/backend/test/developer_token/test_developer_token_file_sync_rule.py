@@ -28,14 +28,17 @@ from bisheng.developer_token.domain.services.developer_token_service import Deve
         {
             "category": {"code": "POLICY", "subcategory_code": "MGMT_POLICY"},
             "business_domain": {"mode": "fixed", "code": "SA"},
-            "target_space": {"mode": "dynamic", "knowledge_id": None},
-            "dynamic_source": "department_id",
+            "target_space": {"mode": "dynamic", "knowledge_id": None, "dynamic_source": "department_id"},
         },
         {
             "category": {"code": "POLICY", "subcategory_code": "MGMT_POLICY"},
-            "business_domain": {"mode": "dynamic", "code": None},
+            "business_domain": {"mode": "dynamic", "code": None, "dynamic_source": "responsible_person_id"},
             "target_space": {"mode": "fixed", "knowledge_id": 118},
-            "dynamic_source": "responsible_person_id",
+        },
+        {
+            "category": {"code": "POLICY", "subcategory_code": "MGMT_POLICY"},
+            "business_domain": {"mode": "dynamic", "code": None, "dynamic_source": "department_id"},
+            "target_space": {"mode": "dynamic", "knowledge_id": None, "dynamic_source": "responsible_person_id"},
         },
         {
             "category": {"code": "POLICY", "subcategory_code": "MGMT_POLICY"},
@@ -52,6 +55,23 @@ def test_rule_schema_accepts_all_mode_combinations_and_normalizes_codes(payload)
     assert rule.category.subcategory_code in {"MGMT-POLICY", "MGMT_POLICY"}
     if rule.business_domain.code:
         assert rule.business_domain.code == "SA"
+    assert rule.dynamic_source is None
+
+
+def test_legacy_top_level_dynamic_source_migrates_to_per_dimension() -> None:
+    rule = DeveloperTokenFileSyncRule.model_validate(
+        {
+            "category": {"code": "POLICY", "subcategory_code": "MGMT_POLICY"},
+            "business_domain": {"mode": "dynamic", "code": None},
+            "target_space": {"mode": "dynamic", "knowledge_id": None},
+            "dynamic_source": "responsible_person_id",
+        }
+    )
+
+    assert rule.business_domain.dynamic_source == "responsible_person_id"
+    assert rule.target_space.dynamic_source == "responsible_person_id"
+    assert rule.dynamic_source is None
+    DeveloperTokenService._normalize_file_sync_rule(rule)
 
 
 def test_folder_id_is_backward_compatible_and_fixed_target_accepts_a_directory() -> None:
@@ -81,8 +101,7 @@ def test_dynamic_target_rejects_a_folder_id_with_19813() -> None:
         {
             "category": {"code": "POLICY", "subcategory_code": "MGMT_POLICY"},
             "business_domain": {"mode": "fixed", "code": "SA"},
-            "target_space": {"mode": "dynamic", "knowledge_id": None, "folder_id": 4096},
-            "dynamic_source": "department_id",
+            "target_space": {"mode": "dynamic", "knowledge_id": None, "folder_id": 4096, "dynamic_source": "department_id"},
         }
     )
 
@@ -137,21 +156,23 @@ def test_rule_schema_rejects_unknown_fields_invalid_codes_and_types(payload) -> 
         },
         {
             "category": {"code": "POLICY", "subcategory_code": "MGMT_POLICY"},
-            "business_domain": {"mode": "dynamic", "code": "SA"},
+            "business_domain": {"mode": "dynamic", "code": "SA", "dynamic_source": "department_id"},
             "target_space": {"mode": "fixed", "knowledge_id": 118},
-            "dynamic_source": "department_id",
         },
         {
             "category": {"code": "POLICY", "subcategory_code": "MGMT_POLICY"},
-            "business_domain": {"mode": "fixed", "code": "SA"},
+            "business_domain": {"mode": "fixed", "code": "SA", "dynamic_source": "department_id"},
             "target_space": {"mode": "fixed", "knowledge_id": 118},
-            "dynamic_source": "department_id",
         },
         {
             "category": {"code": "POLICY", "subcategory_code": "MGMT_POLICY"},
             "business_domain": {"mode": "dynamic", "code": None},
             "target_space": {"mode": "dynamic", "knowledge_id": None},
-            "dynamic_source": None,
+        },
+        {
+            "category": {"code": "POLICY", "subcategory_code": "MGMT_POLICY"},
+            "business_domain": {"mode": "dynamic", "code": None, "dynamic_source": "department_id"},
+            "target_space": {"mode": "dynamic", "knowledge_id": None},
         },
     ],
 )
@@ -505,7 +526,8 @@ def test_audit_snapshot_contains_only_rule_summary() -> None:
         "category_code": "POLICY",
         "subcategory_code": "MGMT_POLICY",
         "business_domain_mode": "fixed",
+        "business_domain_dynamic_source": None,
         "target_space_mode": "fixed",
-        "dynamic_source": None,
+        "target_space_dynamic_source": None,
     }
     assert "file_sync_rule" not in snapshot
