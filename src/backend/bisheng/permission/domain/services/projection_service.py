@@ -293,10 +293,13 @@ class ProjectionService:
         stage_deltas = tuple(delta for delta in plan.deltas if delta.phase == "STAGE")
         applied_stage: list[ProjectionTupleDelta] = []
         try:
-            for offset in range(0, len(stage_deltas), self._stage_batch_size):
-                batch = stage_deltas[offset : offset + self._stage_batch_size]
+            pending_stage = await self._pending_stage_deltas(stage_deltas)
+            for offset in range(0, len(pending_stage), self._stage_batch_size):
+                batch = pending_stage[offset : offset + self._stage_batch_size]
                 await self._write(batch)
                 applied_stage.extend(batch)
+            if stage_deltas and not await self._is_after(stage_deltas):
+                raise RuntimeError("staged tuple verification did not observe full after state")
         except Exception as exc:
             await self._compensate_stage(
                 plan,
@@ -475,6 +478,24 @@ class ProjectionService:
         writes = tuple(delta for delta in deltas if delta.action == "WRITE")
         deletes = tuple(delta for delta in deltas if delta.action == "DELETE")
         return await self._fga.write_atomic(writes=writes, deletes=deletes)
+
+    async def _pending_stage_deltas(
+        self,
+        deltas: tuple[ProjectionTupleDelta, ...],
+    ) -> tuple[ProjectionTupleDelta, ...]:
+        """Return only STAGE mutations whose exact tuple is not already after."""
+
+        if not deltas:
+            return ()
+        present = await self._fga.read_present(
+            deltas,
+            consistency=HIGHER_CONSISTENCY,
+        )
+        return tuple(
+            delta
+            for delta in deltas
+            if (delta.key in present) != (delta.action == "WRITE")
+        )
 
     async def _classify(
         self,

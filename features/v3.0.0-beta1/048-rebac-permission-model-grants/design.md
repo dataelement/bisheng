@@ -858,7 +858,8 @@ operation 重试；出现混合集或 scope version 已被外部改变时标 FAI
   来源在子资源上只是继承能力，快照为带 `SNAPSHOT_FROM_PARENT` 审计的普通来源，不把
   protected 属性复制下来；public/shared 等 system 来源继续由 system relation 传播，
   不进入快照。若 subject+model 与本资源 protected assignee 重合，只保留本资源
-  protected 来源；staging 完成后一个 Write 删除 `inherit_mode`、写 `custom_mode`。
+  protected 来源；staging 先以 higher consistency 识别往返切换保留的同 key tuple，只补写
+  尚未达到 after state 的 tuple，完成后一个 Write 删除 `inherit_mode`、写 `custom_mode`。
 - `CUSTOM→INHERIT`：确认合法直接 parent；一个 Write 删除 `custom_mode`、写
   `inherit_mode`；本级 ordinary assignee 立即不生效，随后逐 source 标 RETIRED 并清理。
   同一 Grant 若仍有 protected source 必须保持 ACTIVE/link；只有最后一个 active source
@@ -1590,6 +1591,7 @@ D3 已完成全部旧运行数据退役，D6 没有延后的 cleanup 窗口。�
 
 | 日期 | 改动 | 触发原因 |
 |---|---|---|
+| 2026-08-05 | projection 恢复 PREPARED 时以 higher consistency 过滤已满足的 STAGE tuple，只补写缺失项后再 commit | 116 环境 `CUSTOM→INHERIT→CUSTOM` 往返时保留 Grant link，重复 WRITE 被 OpenFGA 拒绝并留下 3 条 PREPARED operation |
 | 2026-08-05 | 允许模型在特定资源类型上形成仅可见 Grant；资源级 effective actions 变空仅计入撤权影响，不阻断 Catalog 发布 | `visible` 独立于可配置业务 action，动作等级调整不应阻止合法的仅可见授权 |
 | 2026-07-31 | `permission_migration_item.message` 改为 MySQL LONGTEXT/DM8 CLOB，完整冻结旧 Config 源载荷以支持断点续跑；数据脚本不再删除两份旧 Config 原始行，verify 仅审计其保留数，但旧 Config 运行路径仍必须不可达 | 真实迁移遇到 MySQL TEXT 64 KiB 上限；用户要求保留 Config 方便故障排查 |
 | 2026-07-31 | 简化升级顺序为“更新镜像并启动→进入 backend 容器执行 migrate/verify→迁移成功后重启服务”；旧 model 下 API/Worker 进程允许存活但 F048 runtime 不初始化、readiness=503、ready heartbeat=0，应用自动拒绝非 health HTTP/WS；重启就绪后自动恢复访问；移除 `F048_SERVICES_STOPPED` 人工标记 | 用户明确要求沿用之前版本的简单升级流程，只额外增加迁移后重启 |
