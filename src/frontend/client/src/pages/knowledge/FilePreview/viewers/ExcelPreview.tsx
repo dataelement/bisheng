@@ -16,8 +16,6 @@ const ExcelPreview = ({ filePath, fileExt: fileExtProp }: { filePath: string; fi
     const [images, setImages] = useState([]); // 存储图片数据
     const [imagePositions, setImagePositions] = useState({}); // 图片位置映射
     const tableContainerRef = useRef(null);
-    const hScrollRef = useRef(null);
-    const [tableContentWidth, setTableContentWidth] = useState(0);
     const getFileExtension = (filePath) => {
         if (!filePath) return "";
 
@@ -44,54 +42,6 @@ const ExcelPreview = ({ filePath, fileExt: fileExtProp }: { filePath: string; fi
 
     // ---------------------- Screen Size Detection (Adapt to Small/Large Screens) ----------------------
     const [screenSize, setScreenSize] = useState("medium"); // small/medium/large
-
-    // Keep a viewport-bottom horizontal scrollbar in sync with the table
-    // (native h-scrollbar sits at content bottom and forces users to scroll down first).
-    useEffect(() => {
-        const table = tableContainerRef.current;
-        if (!table) return undefined;
-
-        const updateWidth = () => {
-            setTableContentWidth(table.scrollWidth || 0);
-        };
-        updateWidth();
-
-        const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(updateWidth) : null;
-        ro?.observe(table);
-        if (table.firstElementChild) ro?.observe(table.firstElementChild);
-        window.addEventListener("resize", updateWidth);
-        return () => {
-            ro?.disconnect();
-            window.removeEventListener("resize", updateWidth);
-        };
-    }, [activeSheet, excelData, loading]);
-
-    useEffect(() => {
-        const table = tableContainerRef.current;
-        const sticky = hScrollRef.current;
-        if (!table || !sticky) return undefined;
-
-        let syncing = false;
-        const onTableScroll = () => {
-            if (syncing) return;
-            syncing = true;
-            sticky.scrollLeft = table.scrollLeft;
-            syncing = false;
-        };
-        const onStickyScroll = () => {
-            if (syncing) return;
-            syncing = true;
-            table.scrollLeft = sticky.scrollLeft;
-            syncing = false;
-        };
-        table.addEventListener("scroll", onTableScroll, { passive: true });
-        sticky.addEventListener("scroll", onStickyScroll, { passive: true });
-        sticky.scrollLeft = table.scrollLeft;
-        return () => {
-            table.removeEventListener("scroll", onTableScroll);
-            sticky.removeEventListener("scroll", onStickyScroll);
-        };
-    }, [activeSheet, excelData, loading, tableContentWidth]);
 
     useEffect(() => {
         const handleResize = () => {
@@ -543,14 +493,12 @@ const ExcelPreview = ({ filePath, fileExt: fileExtProp }: { filePath: string; fi
 
         return (
             <div className="flex flex-col relative flex-1 min-h-0" data-testid="excel-preview-scroll">
-                {/* Vertical scroll here; horizontal native bar hidden — mirrored by sticky bar below */}
-                <div className="flex-1 min-h-0 overflow-y-auto border border-gray-200 bg-white relative">
-                    <div
-                        ref={tableContainerRef}
-                        className="min-h-full overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-                        style={{ width: "100%" }}
-                        data-testid="excel-preview-table-hscroll"
-                    >
+                <div
+                    ref={tableContainerRef}
+                    className="flex-1 min-h-0 border border-gray-200 bg-white relative overflow-auto"
+                    style={{ width: "100%" }}
+                    data-testid="excel-preview-table-scroll"
+                >
                     <div className="min-w-full">
                         <table className="min-w-full border-collapse">
                             <thead className="bg-gray-50">
@@ -740,16 +688,6 @@ const ExcelPreview = ({ filePath, fileExt: fileExtProp }: { filePath: string; fi
                             </tbody>
                         </table>
                     </div>
-                    </div>
-                </div>
-                {/* Always-visible horizontal scrollbar at the preview viewport bottom */}
-                <div
-                    ref={hScrollRef}
-                    className="shrink-0 overflow-x-auto overflow-y-hidden border-x border-b border-gray-200 bg-white z-20 [scrollbar-color:#c9cdd4_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#c9cdd4] [&::-webkit-scrollbar-track]:bg-transparent"
-                    data-testid="excel-preview-sticky-hscroll"
-                    aria-label="horizontal scroll"
-                >
-                    <div style={{ width: Math.max(tableContentWidth, 1), height: 1 }} />
                 </div>
             </div>
         );
