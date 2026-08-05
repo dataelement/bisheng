@@ -879,6 +879,25 @@ Safety:
 
 ## Organization Migration Scripts
 
+### `import_filelib_department_mapping.py`
+
+将 CSV 中的组织映射导入 ``filelib_department_mapping`` 表，供 ``filelib_sync`` 将上游
+``department_id`` 解析为内部 ``department.external_id``。
+
+CSV 必需列：``external_department_id``、``org_code``；可选列：``external_department_name``。
+按 ``external_department_id`` 去重并 upsert。默认 dry-run，``--apply`` 才写入数据库。
+
+```bash
+PYTHONPATH=./ .venv/bin/python scripts/import_filelib_department_mapping.py \
+  --csv /Users/binfeng/Downloads/ORG_ORGANIZATION_org_code_8digits.csv
+
+PYTHONPATH=./ .venv/bin/python scripts/import_filelib_department_mapping.py \
+  --csv /Users/binfeng/Downloads/ORG_ORGANIZATION_org_code_8digits.csv --apply
+
+bash scripts/import_filelib_department_mapping.sh \
+  --csv /Users/binfeng/Downloads/ORG_ORGANIZATION_org_code_8digits.csv --apply
+```
+
 ### `migrate_root_departments_under_default_org.py`
 
 把默认租户中除 `tenant.root_dept_id` 指向节点以外的其他数据库根部门，整体迁移到默认组织下。迁移会级联更新整个部门子树的 `path`，并为 active 根部门补充 OpenFGA `parent` 关系；部门 ID、成员、管理员和知识空间绑定均保持不变。

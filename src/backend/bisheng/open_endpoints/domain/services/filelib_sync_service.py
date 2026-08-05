@@ -273,12 +273,7 @@ class FilelibSyncService:
             subject="responsible person",
         )
 
-        if params.department_id is None:
-            main_department = caller_department
-        else:
-            main_department = await self.repository.find_department_by_id(params.department_id)
-            if main_department is None:
-                raise FilelibSyncNotFoundError(msg="department does not exist")
+        main_department = await self._resolve_main_department(params, caller_department)
         if params.department and params.department != main_department.name:
             raise FilelibSyncInvalidParamsError(msg="department does not match department_id")
 
@@ -305,6 +300,28 @@ class FilelibSyncService:
             business_domain_department=business_domain_department,
             target_space_department=target_space_department,
         )
+
+    async def _resolve_main_department(
+        self,
+        params: FilelibSyncParams,
+        caller_department: Department,
+    ) -> Department:
+        if params.department_id is None:
+            return caller_department
+
+        mapping = await self.repository.find_department_mapping_by_external_department_id(
+            str(params.department_id),
+        )
+        if mapping is None:
+            raise FilelibSyncNotFoundError(msg="external department mapping does not exist")
+
+        department = await self.repository.find_department_by_external_id(
+            mapping.org_code,
+            tenant_id=int(self.login_user.tenant_id),
+        )
+        if department is None:
+            raise FilelibSyncNotFoundError(msg="department does not exist")
+        return department
 
     async def _resolve_unique_primary_department(
         self,

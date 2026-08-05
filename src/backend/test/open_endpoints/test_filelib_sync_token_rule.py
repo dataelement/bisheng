@@ -17,16 +17,48 @@ from bisheng.common.errcode.knowledge_space import DepartmentKnowledgeSpaceAmbig
 from bisheng.database.models.department import Department, UserDepartment
 from bisheng.developer_token.domain.schemas import DeveloperTokenFileSyncRule
 from bisheng.knowledge.domain.models.knowledge import Knowledge
+from bisheng.open_endpoints.domain.models.filelib_department_mapping import FilelibDepartmentMapping
 from bisheng.open_endpoints.domain.services.filelib_sync_service import FilelibSyncService
 
 
-def _department(department_id: int, name: str, path: str | None = None) -> Department:
+def _department(department_id: int, name: str, path: str | None = None, *, external_id: str | None = None) -> Department:
     return Department(
         id=department_id,
         dept_id=f"D-{department_id}",
         name=name,
         path=path or f"/{department_id}/",
+        external_id=external_id,
     )
+
+
+def _department_mapping(
+    external_department_id: str,
+    org_code: str,
+    *,
+    external_department_name: str | None = None,
+) -> FilelibDepartmentMapping:
+    return FilelibDepartmentMapping(
+        id=1,
+        external_department_id=external_department_id,
+        external_department_name=external_department_name,
+        org_code=org_code,
+    )
+
+
+def _mapping_repository(
+    *,
+    caller_department: Department,
+    mapped_department: Department | None = None,
+    mapping: FilelibDepartmentMapping | None = None,
+    **extra: object,
+) -> SimpleNamespace:
+    repository = SimpleNamespace(
+        find_primary_departments=AsyncMock(return_value=[UserDepartment(user_id=1, department_id=caller_department.id, is_primary=1)]),
+        find_department_mapping_by_external_department_id=AsyncMock(return_value=mapping),
+        find_department_by_external_id=AsyncMock(return_value=mapped_department),
+        **extra,
+    )
+    return repository
 
 
 def _rule(
@@ -107,15 +139,12 @@ def test_fixed_fixed_rule_does_not_require_dynamic_id() -> None:
 @pytest.mark.asyncio
 async def test_department_dynamic_source_selects_explicit_department() -> None:
     caller_department = _department(10, "调用人部门")
-    selected_department = _department(20, "动态部门")
-    repository = SimpleNamespace(
-        find_primary_departments=AsyncMock(return_value=[UserDepartment(user_id=1, department_id=10, is_primary=1)]),
-        find_department_by_id=AsyncMock(
-            side_effect=lambda department_id: {
-                10: caller_department,
-                20: selected_department,
-            }.get(department_id)
-        ),
+    selected_department = _department(20, "动态部门", external_id="ORG-20")
+    mapping = _department_mapping("20", "ORG-20", external_department_name="动态部门")
+    repository = _mapping_repository(
+        caller_department=caller_department,
+        mapped_department=selected_department,
+        mapping=mapping,
     )
     params = _service(_rule()).parse_params(
         json.dumps(
@@ -136,6 +165,8 @@ async def test_department_dynamic_source_selects_explicit_department() -> None:
     assert identity.business_domain_department.id == 20
     assert identity.target_space_department.id == 20
     assert identity.responsible_user_id == 1
+    repository.find_department_mapping_by_external_department_id.assert_awaited_once_with("20")
+    repository.find_department_by_external_id.assert_awaited_once_with("ORG-20", tenant_id=5)
 
 
 @pytest.mark.asyncio
@@ -331,7 +362,8 @@ def test_split_dynamic_sources_require_union_of_configured_ids() -> None:
 async def test_split_dynamic_sources_resolve_independent_departments() -> None:
     caller_department = _department(10, "调用人部门")
     responsible_department = _department(30, "责任人部门")
-    explicit_department = _department(20, "请求部门")
+    explicit_department = _department(20, "请求部门", external_id="ORG-20")
+    mapping = _department_mapping("20", "ORG-20", external_department_name="请求部门")
     repository = SimpleNamespace(
         find_user_by_id=AsyncMock(return_value=SimpleNamespace(user_id=2, user_name="owner")),
         find_primary_departments=AsyncMock(
@@ -340,13 +372,8 @@ async def test_split_dynamic_sources_resolve_independent_departments() -> None:
                 [UserDepartment(user_id=2, department_id=30, is_primary=1)],
             ]
         ),
-        find_department_by_id=AsyncMock(
-            side_effect=lambda department_id: {
-                10: caller_department,
-                20: explicit_department,
-                30: responsible_department,
-            }.get(department_id)
-        ),
+        find_department_mapping_by_external_department_id=AsyncMock(return_value=mapping),
+        find_department_by_external_id=AsyncMock(return_value=explicit_department),
     )
     service = _service(
         _rule(

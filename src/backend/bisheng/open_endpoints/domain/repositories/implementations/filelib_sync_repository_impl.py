@@ -9,6 +9,7 @@ from bisheng.database.models.department import Department, UserDepartment
 from bisheng.database.models.tenant import UserTenant
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
+from bisheng.open_endpoints.domain.models.filelib_department_mapping import FilelibDepartmentMapping
 from bisheng.open_endpoints.domain.repositories.interfaces.filelib_sync_repository import (
     FilelibSyncRepository,
 )
@@ -66,6 +67,33 @@ class FilelibSyncRepositoryImpl(
                 Department.id == department_id,
                 Department.status == "active",
                 Department.is_deleted == 0,
+            )
+        )
+        return result.first()
+
+    async def find_department_by_external_id(
+        self,
+        external_id: str,
+        *,
+        tenant_id: int,
+    ) -> Department | None:
+        result = await self.session.exec(
+            select(Department).where(
+                Department.external_id == external_id,
+                Department.tenant_id == tenant_id,
+                Department.status == "active",
+                Department.is_deleted == 0,
+            )
+        )
+        return result.first()
+
+    async def find_department_mapping_by_external_department_id(
+        self,
+        external_department_id: str,
+    ) -> FilelibDepartmentMapping | None:
+        result = await self.session.exec(
+            select(FilelibDepartmentMapping).where(
+                FilelibDepartmentMapping.external_department_id == external_department_id,
             )
         )
         return result.first()
