@@ -231,7 +231,11 @@ class _LanguageTailMiddleware(AgentMiddleware):
         return await handler(self._append(request))
 
 
-def _build_linsight_system_prompt(has_knowledge_base: bool, skills_present: bool = False) -> str:
+def _build_linsight_system_prompt(
+    has_knowledge_base: bool,
+    skills_present: bool = False,
+    has_code_interpreter: bool = False,
+) -> str:
     """Resolve the main system prompt, toggling search_knowledge_base mentions.
 
     When no KB / knowledge space is selected the tool is NOT injected (the empty
@@ -250,6 +254,16 @@ def _build_linsight_system_prompt(has_knowledge_base: bool, skills_present: bool
     — the skill body arrived after the deliverable was already produced, so the
     selected skill had zero effect on it. These lines force the read to happen
     before producing anything, and hand the skill priority over 3b-3d.
+
+    ``has_code_interpreter`` hardens the deliverable rule. With the skill read
+    early but the default path merely deprioritised, a run was still observed
+    taking ``write_file`` + ``export_docx`` (the cheap path) instead of the
+    skill's script route. When a code executor IS bound, the fallback exports are
+    therefore forbidden outright rather than "deprioritised" — a prohibition the
+    model cannot satisfy by doing the easy thing. Without an executor the skill's
+    route is unrunnable, so the ban would be a dead end: the softer wording (fall
+    back to 3b-3d) is kept for that case. Same lockstep discipline as everywhere
+    else in this prompt — never forbid the only tool a run actually has.
     """
     if has_knowledge_base:
         exec_line = (
@@ -280,18 +294,38 @@ def _build_linsight_system_prompt(has_knowledge_base: bool, skills_present: bool
     if skills_present:
         skill_exec_line = (
             "   - 【技能优先】系统提示的 “Available Skills” 列出了本次可用的技能。动手前先对照每个技能的"
-            "描述判断是否与任务匹配；一旦匹配，**必须先** read_file 读完它的 SKILL.md"
-            "（传 limit=1000，默认 100 行读不全），再按它的指引执行。"
+            "描述判断是否与任务匹配；一旦匹配，**必须先** read_file 读完它的 SKILL.md，"
+            "**且必须传 limit=1000 一次读完**（默认 100 行、或自己改小成 200 都只能读到开头，"
+            "关键的生成步骤在后面），再按它的指引执行。"
             "严禁一边产出一边读，更不要把“读 SKILL.md”和“产出交付物”放进同一轮并行工具调用"
             "——技能内容返回时交付物已经生成，等于没读。\n"
         )
-        skill_deliverable_line = (
-            "   - 3z（优先级最高）：若上一步命中了与交付格式相关的技能（如 docx / xlsx / pptx），"
-            "交付物本体一律按该技能 SKILL.md 指定的做法生成（通常需要用代码执行工具运行脚本，"
-            "把成品直接写进 output/），此时不要再对同一份内容调用 export_docx / export_pdf 重复产出。"
-            "3a 的 markdown 规范源仍然要写（界面预览依赖它）。"
-            "只有在没有匹配技能、或技能要求的执行手段本次不可用时，才退回下面的 3b-3d 默认派生路径。\n"
-        )
+        if has_code_interpreter:
+            # Hard prohibition: the fallback exports are the cheap path the model
+            # keeps drifting back to, so remove them from the option set entirely
+            # (a code executor is bound, i.e. the skill's route IS runnable).
+            skill_deliverable_line = (
+                "   - 3z（优先级最高，覆盖下面的 3b-3d）：若上一步命中了与交付格式相关的技能"
+                "（如 docx / xlsx / pptx），交付物本体**必须**按该技能 SKILL.md 指定的做法生成——"
+                "用 bisheng_code_interpreter 执行技能给出的脚本/库（技能正文若用的语言本环境跑不了，"
+                "就用 Python 等价库实现同样的排版要求），把成品直接写进 output/。"
+                "此时**禁止**调用 export_docx / export_pdf 从 markdown 派生同一份交付物——"
+                "那条路径丢掉技能规定的全部排版细节，等于没用技能；"
+                "只有代码执行连续失败、确实产不出成品时，才允许退回 export_docx / export_pdf 兜底，"
+                "并在收尾里说明退化。3a 的 markdown 规范源仍然要写（界面预览依赖它）。"
+                "注意：代码执行器直接写在工作区本地目录，它生成的文件**不会**出现在 ls / glob 的结果里"
+                "（那两个工具读的是对象存储视图）。只要执行返回 exitcode 0 且日志显示写成功，"
+                "就视为交付物已产出，继续下一步；不要反复 ls / glob 找它，也不要因为“找不到”而重新生成。\n"
+            )
+        else:
+            # No executor bound: the skill's route cannot run, so banning the
+            # exports would leave no way to produce the file at all.
+            skill_deliverable_line = (
+                "   - 3z（优先级最高）：若上一步命中了与交付格式相关的技能（如 docx / xlsx / pptx），"
+                "交付物内容与排版尽量遵循该技能 SKILL.md 的要求。"
+                "本次没有可用的代码执行工具，技能里需要执行脚本的做法无法落地，"
+                "因此交付物仍按下面的 3b-3d 生成。3a 的 markdown 规范源仍然要写。\n"
+            )
     else:
         skill_exec_line = ""
         skill_deliverable_line = ""
@@ -810,7 +844,13 @@ async def create_linsight_agent(
     return create_deep_agent(
         model=model,
         tools=[*tools, ask_user, *export_tools],
-        system_prompt=_build_linsight_system_prompt(has_kb, skills_present=skills_advertised),
+        system_prompt=_build_linsight_system_prompt(
+            has_kb,
+            skills_present=skills_advertised,
+            # Gates the hard "no export_docx/export_pdf" rule: only meaningful
+            # when the skill's script route can actually run in this session.
+            has_code_interpreter=has_code_interpreter,
+        ),
         middleware=middlewares,
         subagents=[researcher],
         backend=backend,
