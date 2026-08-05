@@ -663,6 +663,12 @@ function getPortalCategoryButton(scope: HTMLElement, label: string, selectedText
     });
 }
 
+async function findPortalCategoryButton(label: string, selectedText: string) {
+    return screen.findByRole("button", {
+        name: `${label} 当前选择：${selectedText}`,
+    });
+}
+
 function selectPortalSubcategory(
     scope: HTMLElement,
     label: string,
@@ -674,6 +680,19 @@ function selectPortalSubcategory(
     // fileTable variant portals the menu to document.body (upload records / file table).
     const tree = within(scope).queryByRole("tree", { name: label })
         ?? screen.getByRole("tree", { name: label });
+    fireEvent.click(within(tree).getByRole("button", { name: parentText }));
+    const childButtons = within(tree).getAllByRole("button", { name: childText });
+    fireEvent.click(childButtons[childButtons.length - 1]);
+}
+
+async function selectPortalSubcategoryByLabel(
+    label: string,
+    selectedText: string,
+    parentText: string,
+    childText = parentText,
+) {
+    fireEvent.click(await findPortalCategoryButton(label, selectedText));
+    const tree = await screen.findByRole("tree", { name: label });
     fireEvent.click(within(tree).getByRole("button", { name: parentText }));
     const childButtons = within(tree).getAllByRole("button", { name: childText });
     fireEvent.click(childButtons[childButtons.length - 1]);
@@ -748,6 +767,7 @@ describe("PortalKnowledgeWorkbench", () => {
             safeMetadata: { file_name: "部门制度.md" },
         } as any);
         jest.mocked(getFileStatsApi).mockResolvedValue({ views: 0, downloads: 0 } as any);
+        jest.mocked(updateFileEncoding).mockReset();
         jest.mocked(updateFileEncoding).mockResolvedValue(makeFile("201", "后端开发.md", {
             fileEncoding: "RPT-PP-00000001",
         }) as any);
@@ -767,6 +787,8 @@ describe("PortalKnowledgeWorkbench", () => {
         jest.mocked(uploadFileToServerApi).mockResolvedValue({ file_path: "/tmp/uploaded.pdf" } as any);
         jest.mocked(addFilesApi).mockResolvedValue([] as any);
         jest.mocked(recommendUploadFoldersApi).mockResolvedValue({ items: [] } as any);
+        // mockReset clears leftover mockResolvedValueOnce queues from prior tests
+        jest.mocked(listMyUploadedFilesApi).mockReset();
         jest.mocked(listMyUploadedFilesApi).mockResolvedValue({ data: [], total: 0 } as any);
         jest.mocked(listPortalFavoritesApi).mockResolvedValue({ data: [], total: 0 } as any);
         jest.mocked(removePortalFavoriteApi).mockResolvedValue(undefined as any);
@@ -5146,19 +5168,21 @@ describe("PortalKnowledgeWorkbench", () => {
         renderWorkbench();
 
         openMyUploadsFromPortalShell();
-        const drawer = await screen.findByTestId("portal-uploaded-files-drawer");
+        const categoryButton = await findPortalCategoryButton("修改编码文档.pdf文件分类", "标准规范 / --");
+        const drawer = categoryButton.closest("[data-testid=\"portal-uploaded-files-drawer\"]") as HTMLElement;
         expect(within(drawer).queryByRole("button", {
             name: "修改编码文档.pdf文件编码 当前编码：SGGF-STD-EM-20260600000001",
         })).not.toBeInTheDocument();
         expect(screen.queryByDisplayValue("SGGF-STD-EM-20260600000001")).not.toBeInTheDocument();
 
-        const categoryButton = getPortalCategoryButton(drawer, "修改编码文档.pdf文件分类", "标准规范 / --");
         fireEvent.click(categoryButton);
-        expect(screen.getByRole("tree", { name: "修改编码文档.pdf文件分类" })).toBeInTheDocument();
+        expect(await screen.findByRole("tree", { name: "修改编码文档.pdf文件分类" })).toBeInTheDocument();
         fireEvent.pointerDown(document.body);
-        expect(screen.queryByRole("tree", { name: "修改编码文档.pdf文件分类" })).not.toBeInTheDocument();
+        await waitFor(() => {
+            expect(screen.queryByRole("tree", { name: "修改编码文档.pdf文件分类" })).not.toBeInTheDocument();
+        });
 
-        selectPortalSubcategory(drawer, "修改编码文档.pdf文件分类", "标准规范 / --", "报告", "报告 / 报告");
+        await selectPortalSubcategoryByLabel("修改编码文档.pdf文件分类", "标准规范 / --", "报告", "报告 / 报告");
 
         await waitFor(() => {
             expect(updateFileEncoding).toHaveBeenCalledWith("personal-1", "501", "SGGF-RPT-EM-20260600000001", "RPT");
@@ -5208,11 +5232,11 @@ describe("PortalKnowledgeWorkbench", () => {
         renderWorkbench();
 
         openMyUploadsFromPortalShell();
-        const drawer = await screen.findByTestId("portal-uploaded-files-drawer");
-        expect(getPortalCategoryButton(drawer, "修改历史编码文档.pdf文件分类", "--")).toBeInTheDocument();
+        const categoryButton = await findPortalCategoryButton("修改历史编码文档.pdf文件分类", "--");
+        const drawer = categoryButton.closest("[data-testid=\"portal-uploaded-files-drawer\"]") as HTMLElement;
         expect(within(drawer).getByLabelText("修改历史编码文档.pdf业务域类型 当前业务域：--")).toHaveDisplayValue("--");
 
-        selectPortalSubcategory(drawer, "修改历史编码文档.pdf文件分类", "--", "报告", "报告 / 报告");
+        await selectPortalSubcategoryByLabel("修改历史编码文档.pdf文件分类", "--", "报告", "报告 / 报告");
 
         await waitFor(() => {
             expect(updateFileEncoding).not.toHaveBeenCalled();
@@ -5255,8 +5279,7 @@ describe("PortalKnowledgeWorkbench", () => {
         renderWorkbench();
 
         openMyUploadsFromPortalShell();
-        const drawer = await screen.findByTestId("portal-uploaded-files-drawer");
-        selectPortalSubcategory(drawer, "修改重复编码文档.pdf文件分类", "标准规范 / --", "报告", "报告 / 报告");
+        await selectPortalSubcategoryByLabel("修改重复编码文档.pdf文件分类", "标准规范 / --", "报告", "报告 / 报告");
 
         await waitFor(() => {
             expect(mockShowToast).toHaveBeenCalledWith(expect.objectContaining({
