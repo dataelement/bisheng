@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { LogOut } from "lucide-react";
 import { Outlined } from "bisheng-icons";
-import { Channel, SortType, canDeleteChannel, canEditChannelSettings, canManageChannelPermissions, getChannelsApi } from "~/api/channels";
+import { Channel, SortType, canDeleteChannel, canEditChannelSettings, canManageChannelPermissions, getChannelDetailApi, getChannelsApi } from "~/api/channels";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -65,15 +65,29 @@ export function ChannelActionsMenu({
         queryFn: () => getChannelsApi({ type: "subscribed", sortBy: SortType.RECENT_UPDATE }),
         placeholderData: (prev) => prev,
     });
+    const { data: channelDetail, isFetched: isChannelDetailFetched } = useQuery({
+        queryKey: ["channelDetail", channel.id],
+        queryFn: () => getChannelDetailApi(channel.id),
+        staleTime: 60_000,
+    });
 
     const type: "created" | "subscribed" = subscribedChannels.some((c) => c.id === channel.id) && !createdChannels.some((c) => c.id === channel.id)
         ? "subscribed"
         : "created";
 
     // Prefer the freshest channel record from the lists (role/name can be stale on a deep-linked channel).
-    const liveChannel = createdChannels.find((c) => c.id === channel.id)
+    const listChannel = createdChannels.find((c) => c.id === channel.id)
         || subscribedChannels.find((c) => c.id === channel.id)
         || channel;
+    // Channel detail is the authoritative permission snapshot for the active
+    // resource. It also covers deep links whose locally constructed Channel
+    // record may not have actions yet.
+    const liveChannel: Channel = {
+        ...listChannel,
+        actions: Array.isArray(channelDetail?.actions)
+            ? channelDetail.actions
+            : listChannel.actions,
+    };
 
     const { handleDeleteChannel, handleUnsubscribeChannel } = useChannelActions({
         activeChannelId: channel.id,
@@ -91,6 +105,15 @@ export function ChannelActionsMenu({
     // Unsubscribe remains a separate subscription operation.
     const canDissolve = canDeleteChannel(liveChannel.actions);
     const canUnsubscribe = type === "subscribed";
+    const hasMenuItem = Boolean(
+        (isMobile && onShare)
+        || (isMobile && onOpenSourceFilter)
+        || (canEditSettings && onChannelSettings)
+        || (canManageMembers && onManageMembers)
+        || canDissolve
+        || canUnsubscribe,
+    );
+    const permissionsResolving = !isChannelDetailFetched && !Array.isArray(listChannel.actions);
     const itemCls = "flex w-full cursor-pointer items-center gap-2 rounded-[6px] px-2 py-[5px] text-sm leading-[22px] text-[#212121]";
     const iconCls = "size-4 text-[#4E5969]";
 
@@ -99,12 +122,12 @@ export function ChannelActionsMenu({
             <DropdownMenuTrigger asChild>
                 <button
                     type="button"
-                    disabled={disabled}
+                    disabled={disabled || permissionsResolving || !hasMenuItem}
                     className={cn(
                         isMobile
                             ? "inline-flex size-5 shrink-0 items-center justify-center text-[#212121]"
                             : "inline-flex size-8 items-center justify-center rounded-[6px] border border-[#EBECF0] bg-white text-[#4e5969] outline-none transition-colors fine-pointer:hover:bg-[#F7F8FA]",
-                        disabled && "pointer-events-none opacity-20",
+                        (disabled || permissionsResolving || !hasMenuItem) && "pointer-events-none opacity-20",
                         triggerClassName,
                     )}
                     aria-label={localize("com_subscription.channel_settings")}
