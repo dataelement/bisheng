@@ -1306,6 +1306,7 @@
     "load_pdf_failed": "PDFファイルの読み込みに失敗しました",
     "loading": "読み込み中...",
     "loading_path": "パスを読み込み中...",
+    "breadcrumb_expand": "クリックして省略された{{count}}階層を表示",
     "max_200_chars": "最大200文字まで",
     "max_20_chars": "最大50文字まで",
     "max_20_chars_spaced": "最大50文字まで",

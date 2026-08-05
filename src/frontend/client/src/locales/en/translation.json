@@ -1382,6 +1382,7 @@
     "load_pdf_failed": "Failed to load PDF file",
     "loading": "Loading...",
     "loading_path": "Loading path...",
+    "breadcrumb_expand": "Click to show {{count}} hidden levels",
     "max_200_chars": "Maximum 200 characters",
     "max_20_chars": "Maximum 50 characters",
     "max_20_chars_spaced": "Maximum 50 characters",

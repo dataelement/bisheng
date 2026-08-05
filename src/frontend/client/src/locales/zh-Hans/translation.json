@@ -1309,6 +1309,7 @@
     "load_pdf_failed": "无法加载 PDF 文件",
     "loading": "加载中...",
     "loading_path": "加载路径中...",
+    "breadcrumb_expand": "点击展开省略的 {{count}} 层",
     "max_200_chars": "最多输入200个字符",
     "max_20_chars": "最多输入 50个字符",
     "max_20_chars_spaced": "最多输入 50 个字符",

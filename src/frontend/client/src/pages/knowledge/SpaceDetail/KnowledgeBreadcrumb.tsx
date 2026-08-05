@@ -1,8 +1,14 @@
 import { useState } from "react";
 import { Outlined } from "bisheng-icons";
 import { cn } from "~/utils";
+import { useLocalize } from "~/hooks";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
-import { HoverCard, HoverCardContent, HoverCardTrigger } from "~/components/ui/HoverCard";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from "~/components/ui/DropdownMenu";
 
 interface BreadcrumbNode {
     id?: string;
@@ -19,8 +25,8 @@ interface KnowledgeBreadcrumbProps {
 
 /** Parent segment width cap: 8 CJK characters at 12px (design "最大长度为8个中文字符"). */
 const PARENT_MAX_WIDTH = "max-w-[96px]";
-/** When the chain exceeds 5 levels, collapse the middle into an ellipsis (design 2075:8134). */
-const COLLAPSE_THRESHOLD = 5;
+/** When the chain exceeds 4 levels, collapse the middle into an ellipsis (spec §5.1). */
+const COLLAPSE_THRESHOLD = 4;
 
 function Separator() {
     return <Outlined.Right className="size-4 shrink-0 text-text-4" aria-hidden />;
@@ -37,6 +43,7 @@ function ParentCrumb({ node, onNavigate }: { node: BreadcrumbNode; onNavigate: (
             onClick={() => onNavigate(node.id)}
             onMouseEnter={(e) => setOverflowing(e.currentTarget.scrollWidth > e.currentTarget.clientWidth)}
             className={cn(
+                // text-text-3 is the client carrier of the `text-hint` role (gray-6, 色彩规范).
                 "shrink-0 truncate text-text-3 transition-colors hover:text-blue-600",
                 PARENT_MAX_WIDTH,
             )}
@@ -49,8 +56,34 @@ function ParentCrumb({ node, onNavigate }: { node: BreadcrumbNode; onNavigate: (
         <Tooltip>
             <TooltipTrigger asChild>{button}</TooltipTrigger>
             {overflowing && (
-                <TooltipContent noArrow side="bottom" className="z-[999] bg-white px-3 py-2 text-sm text-[#4e5969] shadow-md">
+                <TooltipContent noArrow side="bottom" sideOffset={6} className="z-[999] max-w-[320px] break-all">
                     {node.name}
+                </TooltipContent>
+            )}
+        </Tooltip>
+    );
+}
+
+/**
+ * Row inside the collapsed-levels menu: full name (no 96px cap — the user opened the menu
+ * to read it), truncate + tooltip only past the menu's own 240px width cap (spec §5.3).
+ */
+function MenuItemName({ name }: { name: string }) {
+    const [overflowing, setOverflowing] = useState(false);
+    return (
+        <Tooltip>
+            <TooltipTrigger asChild>
+                <span
+                    className="min-w-0 flex-1 truncate"
+                    onMouseEnter={(e) => setOverflowing(e.currentTarget.scrollWidth > e.currentTarget.clientWidth)}
+                >
+                    {name}
+                </span>
+            </TooltipTrigger>
+            {/* Dark tooltip to the RIGHT of the menu panel so it never covers other rows. */}
+            {overflowing && (
+                <TooltipContent noArrow side="right" sideOffset={16} className="z-[999] max-w-[320px] break-all">
+                    {name}
                 </TooltipContent>
             )}
         </Tooltip>
@@ -60,8 +93,15 @@ function ParentCrumb({ node, onNavigate }: { node: BreadcrumbNode; onNavigate: (
 /**
  * Folder path breadcrumb above the knowledge-space header title (desktop only; design 2075:8134).
  * Hidden at the space root ("single level" case) — the caller only renders it inside a folder.
+ * Collapse behavior follows 组件-Breadcrumb面包屑.md §5.
  */
 export function KnowledgeBreadcrumb({ spaceName, currentPath, onNavigateFolder, className }: KnowledgeBreadcrumbProps) {
+    const localize = useLocalize();
+    // The ellipsis tooltip is fully controlled by pointer enter/leave. Radix's default
+    // focus-open would re-show it (and leave it stuck) when the menu closes and returns
+    // focus to the trigger.
+    const [menuOpen, setMenuOpen] = useState(false);
+    const [tipOpen, setTipOpen] = useState(false);
     // Full chain: space root first, current folder last.
     const items: BreadcrumbNode[] = [{ id: undefined, name: spaceName }, ...currentPath];
     const current = items[items.length - 1];
@@ -84,24 +124,57 @@ export function KnowledgeBreadcrumb({ spaceName, currentPath, onNavigateFolder, 
             ))}
             {collapse && (
                 <span className="flex shrink-0 items-center gap-0.5">
-                    <HoverCard openDelay={100} closeDelay={150}>
-                        <HoverCardTrigger asChild>
-                            <span className="cursor-pointer px-0.5 text-text-3 transition-colors hover:text-blue-600">
-                                ...
-                            </span>
-                        </HoverCardTrigger>
-                        <HoverCardContent
-                            align="start"
-                            className="flex w-auto max-w-[420px] flex-wrap items-center gap-x-0.5 gap-y-1 rounded-lg border border-border-base bg-white px-4 py-2 text-caption leading-6 text-text-3 shadow-md"
+                    {/* Spec §5.2/§5.3: the ellipsis is a discoverable button (24×24 gray container,
+                        darker on hover and while the menu is open, tooltip says what it expands),
+                        and it opens a click-to-open single-column menu — one level per row (top =
+                        highest ancestor), no separators/indent, whole row clickable, scrolls past
+                        8 rows. Radix provides Esc/outside-click close, arrow-key nav, aria-expanded. */}
+                    <DropdownMenu
+                        open={menuOpen}
+                        onOpenChange={(open) => {
+                            setMenuOpen(open);
+                            if (open) setTipOpen(false);
+                        }}
+                    >
+                        <Tooltip open={tipOpen}>
+                            <TooltipTrigger asChild>
+                                <DropdownMenuTrigger asChild>
+                                    <button
+                                        type="button"
+                                        aria-label={localize("com_knowledge.breadcrumb_expand", { count: hiddenParents.length })}
+                                        onMouseEnter={() => setTipOpen(!menuOpen)}
+                                        onMouseLeave={() => setTipOpen(false)}
+                                        className="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded leading-none text-text-3 transition-colors hover:bg-fill-2 aria-expanded:bg-fill-2"
+                                    >
+                                        ...
+                                    </button>
+                                </DropdownMenuTrigger>
+                            </TooltipTrigger>
+                            {/* Mounted only while our controlled state says so — Radix's exit-animation
+                                Presence can otherwise leave it stuck in the DOM after the menu closes. */}
+                            {tipOpen && !menuOpen && (
+                                <TooltipContent noArrow side="bottom" sideOffset={6} className="z-[999]">
+                                    {localize("com_knowledge.breadcrumb_expand", { count: hiddenParents.length })}
+                                </TooltipContent>
+                            )}
+                        </Tooltip>
+                        <DropdownMenuContent
+                            align="center"
+                            sideOffset={4}
+                            className="max-h-80 min-w-[120px] max-w-[240px] overflow-y-auto p-1"
                         >
-                            {hiddenParents.map((node, idx) => (
-                                <span key={node.id} className="flex shrink-0 items-center gap-0.5">
-                                    {idx > 0 && <Separator />}
-                                    <ParentCrumb node={node} onNavigate={onNavigateFolder} />
-                                </span>
+                            {hiddenParents.map((node) => (
+                                <DropdownMenuItem
+                                    key={node.id}
+                                    onClick={() => onNavigateFolder(node.id)}
+                                    // Same colors as the outer parent crumbs: hint gray at rest, brand on hover.
+                                    className="h-8 shrink-0 px-3 py-0 text-caption text-text-3 data-[highlighted]:bg-fill-1 data-[highlighted]:text-blue-600"
+                                >
+                                    <MenuItemName name={node.name} />
+                                </DropdownMenuItem>
                             ))}
-                        </HoverCardContent>
-                    </HoverCard>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                     <Separator />
                 </span>
             )}
@@ -111,8 +184,8 @@ export function KnowledgeBreadcrumb({ spaceName, currentPath, onNavigateFolder, 
                     <Separator />
                 </span>
             ))}
-            {/* Current page: not clickable, no hover effect, only limited by the row width. */}
-            <span aria-current="page" className="min-w-0 truncate whitespace-nowrap">
+            {/* Current page: not clickable, no hover; one shade darker than parents ("you are here"). */}
+            <span aria-current="page" className="min-w-0 truncate whitespace-nowrap text-text-1">
                 {current.name}
             </span>
         </nav>
