@@ -2,7 +2,7 @@
 
 > **定位**：SDD 全流程第 1 步（Spec Discovery）的产出。回答三件事：现状代码能承载 PRD-1 多少、缺口在哪、怎么拆 Feature——并汇总必须由用户拍板的关键决策（★ 暂停点）。
 > **输入**：《3.0 应用工场 PRD-1 专业开发者通道与应用运行时》v1.5（22 条目：DEV×7 / RT×7 / GOV×8）+ 伴生《3.0 开放 API 鉴权与身份传递 PRD》v2.0（R1–R9）。
-> **方法**：11 维并行代码调研（每维含文件/符号级锚点），完整调研记录在 [research/](./research/) 目录——spec/design 阶段编写时**必读对应维度文件**，锚点已核实到行号。
+> **方法**：11 维并行代码调研（每维含文件/符号级锚点）。**完整调研记录含未修复安全缺口的行级定位，按既定口径不入公开仓**，存放在仓外私有目录 `~/Projects/bisheng-sdd-private/v3.0.0-prd1-discovery/research/`（11 个维度文件：v2-open-api / auth-identity / permission-rebac / knowledge-retrieval / approval-center / model-llm / marketplace-versions / audit-notify / quota-tenant-roles / mcp-runtime-infra / appdb-storage-sdk）——spec/design 阶段编写时**必读对应维度文件**。伴生《3.0 开放 API 鉴权与身份传递 PRD》同口径，只留本地 `docs/product/`，不提交。
 > **日期**：2026-08-06 ｜ 状态：待用户确认（★）
 
 ---
@@ -10,7 +10,7 @@
 ## 1. 总体结论
 
 1. **地基厚、门面缺**。PRD-1 所需的领域能力（权限双层过滤、审批引擎、站内信、配额引擎、标签/广场、模型管理、MinIO 快照、审计）在代码中全部存在且可复用；缺的是四个「对外门面」——**API key 凭据体系、MCP Server、OpenAI/Anthropic 兼容网关、CLI/SDK**——以及一整块绿地：**应用托管运行时**（per-app 实例编排/路由/隔离，全仓零先例）。
-2. **伴生 PRD 是一切的地基**。个人 key（DEV-01）、应用 token（GOV-08）、CLI/MCP/SDK 三面鉴权全部踩在《开放 API 鉴权与身份传递 PRD》R1 统一凭据底座上；v2 现状零鉴权 + `resolve_operator` 裸 user_id 是活的越权通道（filelib.py:173/378/637 等已核实）。**F049（开放 API 鉴权改造）必须首批交付**。
+2. **伴生 PRD 是一切的地基**。个人 key（DEV-01）、应用 token（GOV-08）、CLI/MCP/SDK 三面鉴权全部踩在《开放 API 鉴权与身份传递 PRD》R1 统一凭据底座上；v2 开放面的鉴权现状与代用户通道存在已核实的安全缺口（细节见私有调研记录）。**F049（开放 API 鉴权改造）必须首批交付**。
 3. **检索强度分叉已被代码证实**。工作台双层过滤路径（`KnowledgeFileVisibilityService` 索引层预过滤 + `view_file` 结果层兜底）真实存在且能被任意 key 解析身份驱动（`init_login_user` + `request=None` 均有生产先例）；旧 v2 `/filelib/retrieve` 只有库级一次校验（其端点注释与实现不符）。PRD 的「声明白名单 ∩ 用户文件级权限」有现成引擎可接——但**资源权限评估/检索过滤链路上 strict fail-closed 不存在**（`PermissionService.check`/`list_accessible_ids` 及结果层兜底三处全是静默降级为缩小集；仓内 fail-closed 参照实现只有 `has_tenant_admin`（user_deps.py）与 `hmac_auth.py`，不在检索链路上），需新建调用面隔离的严格模式。
 4. **两个「与 PRD 字面冲突」的现状**需要产品确认：审批单处理界面只存在于 client 工作台弹窗（platform 只有场景配置）；现有版本机制是可变指针（`change_current_version` 原地切换），与 RT-05「前向新建、不可变、终态标注」语义相反——工场应用应独立建版本表，不复用 `flow_version`。
 
@@ -18,12 +18,12 @@
 
 ## 2. 现状地图（按 PRD 域，Top 结论）
 
-详细锚点见 research/ 对应文件；此处只列影响拆分与决策的要点。
+详细锚点见私有调研记录对应文件（路径见文首）；此处只列影响拆分与决策的要点，安全缺口一律不写行级定位。
 
 ### 2.1 凭据与开放 API（DEV-01 / GOV-08 / 伴生 PRD）→ research: v2-open-api, auth-identity
 
 - **可复用**：合格随机源 `generate_short_high_entropy_string`；恒时比较 + fail-closed 鉴权依赖的唯一正确姿势 `sso_sync/hmac_auth.py`；「非 cookie 凭据 → UserPayload + set_current_tenant_id」收口模式（`get_default_operator_async`）；撤销 ≤5s = 照抄 `aincrement_token_version` 的「原子 UPDATE + 主动刷 Redis 缓存」；账号禁用联动挂接点 `ainvalidate_jwt_after_account_disabled`。
-- **缺口**：全仓无任何 ApiKey 表 / bs- 前缀 / require_api_key 配置；v2 约 45 个端点（8 个路由文件）多数**内联调用**身份解析（非 Depends），鉴权改造必须逐端点替换；WS 鉴权 `t` 参数是死路径（cookie 无条件覆盖），握手改走 Authorization 头（中间件已读 scope headers，可行）。
+- **缺口**：全仓无任何 ApiKey 表 / bs- 前缀 / require_api_key 配置；v2 约 45 个端点（8 个路由文件）多数**内联调用**身份解析（非 Depends），鉴权改造必须逐端点替换；WS 握手鉴权需改走 Authorization 头（现有查询参数路径不生效，中间件已读 scope headers，可行）。
 - **风险**：v1 端点只认 cookie（headers 分支零调用方）——**PAT 不能复用 v1 面**，必须独立 router；`User` 表无 `user_type` 字段（服务账号主体需 Alembic）。
 
 ### 2.2 权限与可见范围（GOV-01 / RT-02 过滤 / NFR-1）→ research: permission-rebac
@@ -47,7 +47,7 @@
 ### 2.5 模型面（DEV-02 双协议 / GOV-04 账单）→ research: model-llm
 
 - **可复用**：llm_server/llm_model 双表 + Root 共享 + `BishengLLM`（19 服务商、全链路流式）+ 模型收回错误族（LlmModelOfflineError 等）+ telemetry 每调用全覆盖 + F017 账单表结构。
-- **缺口**：OpenAI/Anthropic 兼容**入站**端点零现状（唯一的 `/api/v2/assistant/chat/completions` 是助手外壳非模型直连，且零鉴权）；按名称解析模型不存在（只认数字 model_id，且租户内跨服务商同名 model_name 合法——歧义规则要定义）；账单表无 key 维度，落账点只覆盖 workflow 节点（建议下沉 BishengLLM 层统一落账）。
+- **缺口**：OpenAI/Anthropic 兼容**入站**端点零现状（现有的 v2 助手对话端点是助手外壳、非模型直连，且同属 F049 鉴权改造范围）；按名称解析模型不存在（只认数字 model_id，且租户内跨服务商同名 model_name 合法——歧义规则要定义）；账单表无 key 维度，落账点只覆盖 workflow 节点（建议下沉 BishengLLM 层统一落账）。
 
 ### 2.6 广场 / 版本 / 管理列表（RT-02 / RT-05 / GOV-09）→ research: marketplace-versions
 
@@ -106,7 +106,7 @@
 
 | # | 决策 | 选项与建议 |
 |---|------|-----------|
-| **D1** | **首批启动 feature**：是否按「批次 A 先行、F049 第一个进 spec」推进？ | 建议：是。F049 是 DEV-01/CLI/MCP/SDK/应用 token 的共同地基，且 v2 零鉴权是在产的安全缺口，越早关越好。 |
+| **D1** | **首批启动 feature**：是否按「批次 A 先行、F049 第一个进 spec」推进？ | 建议：是。F049 是 DEV-01/CLI/MCP/SDK/应用 token 的共同地基，且 v2 开放面的鉴权缺口在产，越早关越好。 |
 | **D2** | **开发基线分支**：应用工场落在哪条权限基线上？main（当前，pre-F048 七级链 + 旧四档 relation）还是 3.0.0 线（含 F048 PermissionModel/Grant 权限重写，INV-9~26）？ | app 资源类型注册、细粒度模板、授权弹窗在两条基线下实现**完全不同**；批次 A 受影响小、批次 B 受影响大。需明确 v3.0.0 主线分支与 F048 的合入关系后才能写批次 B 的 design。 |
 | **D3** | **app 资产载体**：复用 flow 表新增 FlowType（广场/标签/权限链路自动继承，但混入存量语义）vs 独立 app 表（干净，但 ~8 处硬编码点全要显式扩）？ | 倾向独立表 + 列表 UNION 第三支（版本/档位/改码权等字段本就装不进 flow 表），spec 阶段定稿。 |
 | **D4** | **运行时隔离选型**：docker SDK+docker.sock（与现单机 compose 最兼容，但 sock≈host root，信创环境 docker 权限不确定）vs 裸进程+cgroup v2（无 docker 依赖，跨发行版差异大）？ | design 阶段决策，但需要产品先回答：目标客户环境（含信创）是否保证有 docker 且允许平台持有 socket 权限。 |
