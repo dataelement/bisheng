@@ -1583,6 +1583,7 @@
     "search_space_placeholder": "输入知识库名称或简介进行搜索",
     "share": "分享",
     "share_link_copied": "分享链接已复制到粘贴板",
+    "folder_sort_failed": "排序失败",
     "sort_by_name_label": "名称",
     "sort_by_type_label": "类型",
     "sort_by_update_time_label": "更新时间",

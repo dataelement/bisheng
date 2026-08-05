@@ -255,6 +255,28 @@ async def reorder_space(
     return resp_200(data=True)
 
 
+@router.post("/{space_id}/folders/{folder_id}/sort")
+async def reorder_folder(
+    space_id: int,
+    folder_id: int,
+    prev_folder_id: int | None = Body(default=None, embed=True),
+    next_folder_id: int | None = Body(default=None, embed=True),
+    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+):
+    """调整文件夹在其所在目录内的管理员排序（系统管理员）。
+
+    传入拖拽后上下相邻的文件夹 ID（列表首/尾时对应一侧为空），只改被拖动的这一条。
+    仅文件夹参与排序，文件保持原有排序规则。
+    """
+    await svc.reorder_folder(
+        space_id,
+        folder_id,
+        prev_folder_id=prev_folder_id,
+        next_folder_id=next_folder_id,
+    )
+    return resp_200(data=True)
+
+
 @router.delete("/{space_id}")
 async def delete_space(
     space_id: int,

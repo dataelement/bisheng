@@ -11292,6 +11292,93 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         await KnowledgeDao.async_update_sort_weights({int(space_id): new_weight})
 
+    async def _load_sibling_folders_in_display_order(self, folder: KnowledgeFile) -> list[KnowledgeFile]:
+        """Folders sharing a directory with ``folder``, in the order the UI shows them.
+
+        The directory is identified by the folder's lineage path: its last segment is the
+        parent folder id, and an empty path means the space root. ``page_size=0`` returns
+        the whole directory, which the midpoint algorithm needs to spread weights.
+        """
+        ancestor_ids = [int(part) for part in (folder.file_level_path or "").split("/") if part]
+        parent_id = ancestor_ids[-1] if ancestor_ids else None
+        return await SpaceFileDao.async_list_children(
+            int(folder.knowledge_id),
+            parent_id,
+            order_field="file_type",
+            order_sort="asc",
+            page=1,
+            page_size=0,
+            file_type=FileType.DIR.value,
+        )
+
+    async def _respread_directory_sort_weights(self, folders: list[KnowledgeFile]) -> dict[int, int]:
+        """Assign evenly spaced weights following the list's current order.
+
+        Runs on the directory's first drag (every weight still NULL) and, rarely, when a
+        midpoint gap is exhausted. Returns the weights it wrote.
+        """
+        weights = {int(item.id): (index + 1) * self._SORT_WEIGHT_STEP for index, item in enumerate(folders)}
+        await KnowledgeFileDao.async_update_sort_weights(weights)
+        for item in folders:
+            item.sort_weight = weights[int(item.id)]
+        return weights
+
+    async def reorder_folder(
+        self,
+        space_id: int,
+        folder_id: int,
+        prev_folder_id: int | None = None,
+        next_folder_id: int | None = None,
+    ) -> None:
+        """Move a folder between two sibling folders in its directory's admin order.
+
+        Callers pass the ids it is dropped between (either may be None at the list
+        edges); the new weight is their midpoint, so only this row is written no matter
+        how many folders the directory holds. Only folders take part — files keep a NULL
+        weight and their existing ordering.
+        """
+        if not self.login_user.is_admin():
+            raise SpacePermissionDeniedError()
+
+        folder = await KnowledgeFileDao.aquery_by_id(folder_id)
+        if not folder or int(folder.knowledge_id) != int(space_id) or folder.file_type != FileType.DIR.value:
+            raise SpaceFolderNotFoundError()
+
+        folders = await self._load_sibling_folders_in_display_order(folder)
+        folder_by_id = {int(item.id): item for item in folders}
+        if int(folder_id) not in folder_by_id:
+            raise SpaceFolderNotFoundError()
+        for neighbour_id in (prev_folder_id, next_folder_id):
+            if neighbour_id is not None and int(neighbour_id) not in folder_by_id:
+                # A neighbour from another directory (or a stale client view) would place
+                # the folder against an order it isn't part of.
+                raise SpaceFolderNotFoundError()
+
+        if any(item.sort_weight is None for item in folders):
+            # First drag in this directory: freeze the order currently on screen.
+            await self._respread_directory_sort_weights(folders)
+
+        prev_weight = folder_by_id[int(prev_folder_id)].sort_weight if prev_folder_id is not None else None
+        next_weight = folder_by_id[int(next_folder_id)].sort_weight if next_folder_id is not None else None
+
+        if prev_weight is None and next_weight is None:
+            return  # Only folder in the directory; nothing to order against.
+        if prev_weight is None:
+            new_weight = next_weight - self._SORT_WEIGHT_STEP
+        elif next_weight is None:
+            new_weight = prev_weight + self._SORT_WEIGHT_STEP
+        else:
+            new_weight = (prev_weight + next_weight) // 2
+            if new_weight in (prev_weight, next_weight):
+                # Gap exhausted between these two: re-spread the directory, then retry
+                # the midpoint against the refreshed neighbour weights.
+                await self._respread_directory_sort_weights(folders)
+                prev_weight = folder_by_id[int(prev_folder_id)].sort_weight
+                next_weight = folder_by_id[int(next_folder_id)].sort_weight
+                new_weight = (prev_weight + next_weight) // 2
+
+        await KnowledgeFileDao.async_update_sort_weights({int(folder_id): new_weight})
+
     async def pin_space(self, space_id: int, is_pinned: bool = True) -> bool:
         space = await KnowledgeDao.aquery_by_id(space_id)
         if not space or space.type != KnowledgeTypeEnum.SPACE.value:

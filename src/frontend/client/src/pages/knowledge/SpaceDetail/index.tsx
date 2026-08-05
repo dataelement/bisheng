@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useLayoutEffect, useMemo, useCallback, typ
 import { useRecoilValue } from "recoil";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FolderPlus, Loader2 } from "lucide-react";
-import { FileStatus, FileType, FileTag, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceLevel, SpaceRole, batchDeleteApi, batchDownloadApi, batchMoveApi, batchRetryApi, downloadWatermarkedKnowledgeFileApi, getPendingSimilarFilesApi, importWebLinkApi } from "~/api/knowledge";
+import { FileStatus, FileType, FileTag, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceLevel, SpaceRole, batchDeleteApi, batchDownloadApi, batchMoveApi, batchRetryApi, downloadWatermarkedKnowledgeFileApi, getPendingSimilarFilesApi, importWebLinkApi, reorderFolderApi } from "~/api/knowledge";
 import { useConfirm, useToastContext } from "~/Providers";
 import { useVersionManagementEnabled } from "~/hooks";
 import {
@@ -33,6 +33,7 @@ import {
     triggerUrlDownload,
 } from "../knowledgeUtils";
 import { bishengConfState } from "~/pages/appChat/store/atoms";
+import store from "~/store";
 import { SearchParams } from "./CompoundSearchInput";
 import { EditTagsModal } from "./EditTagsModal";
 import { FileCard } from "./FileCard";
@@ -900,6 +901,28 @@ export function KnowledgeSpaceContent({
         };
     }, [isAdmin, permissionEntryProbeKey, space.id, space.spaceLevel]);
 
+    // Folder manual ordering is admin-defined and shared by everyone, so it follows the
+    // same gate as knowledge-space ordering: system admins only.
+    const currentUser = useRecoilValue(store.user);
+    const isSystemAdmin = currentUser?.role === "admin";
+
+    const handleReorderFolder = useCallback(async (
+        folderId: string,
+        prevFolderId: string | null,
+        nextFolderId: string | null,
+    ) => {
+        try {
+            await reorderFolderApi(String(space.id), folderId, {
+                prev_folder_id: prevFolderId,
+                next_folder_id: nextFolderId,
+            });
+            // Reuse the parent's reload signal so the list reflects the persisted order.
+            onDeleteFile("");
+        } catch {
+            showToast({ message: localize("com_knowledge.folder_sort_failed"), status: "error" });
+        }
+    }, [localize, onDeleteFile, showToast, space.id]);
+
     // Read max file size from env config (MB), fallback to default 200MB
     const bishengConfig = useRecoilValue(bishengConfState);
     const uploadSizeLimits = useMemo(
@@ -1660,6 +1683,10 @@ export function KnowledgeSpaceContent({
                                     onAcceptAlias={onAcceptAlias}
                                     onRejectAlias={onRejectAlias}
                                     onNavigateFolder={(id) => onNavigateFolder(id)}
+                                    canReorderFolders={isSystemAdmin}
+                                    onReorderFolder={(folderId, prevFolderId, nextFolderId) =>
+                                        void handleReorderFolder(folderId, prevFolderId, nextFolderId)
+                                    }
                                     onPreview={(id) => handlePreviewFile(id)}
                                     onValidateName={validateFileName}
                                     onCancelCreate={onCancelCreateFolder}

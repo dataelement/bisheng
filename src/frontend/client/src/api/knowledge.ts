@@ -1366,6 +1366,22 @@ export async function reorderSpaceApi(
     });
 }
 
+/**
+ * Move a folder between two sibling folders in its directory's admin-defined order.
+ * Pass the ids it was dropped between; either is null at the list edges.
+ * System admin only; only folders participate in this ordering.
+ */
+export async function reorderFolderApi(
+    spaceId: string,
+    folderId: string,
+    neighbours: { prev_folder_id: string | null; next_folder_id: string | null },
+): Promise<void> {
+    await request.post(`/api/v1/knowledge/space/${spaceId}/folders/${folderId}/sort`, {
+        prev_folder_id: neighbours.prev_folder_id ? Number(neighbours.prev_folder_id) : null,
+        next_folder_id: neighbours.next_folder_id ? Number(neighbours.next_folder_id) : null,
+    });
+}
+
 export async function getGroupedSpacesApi(params?: {
     order_by?: string;
 }): Promise<GroupedKnowledgeSpaces> {
