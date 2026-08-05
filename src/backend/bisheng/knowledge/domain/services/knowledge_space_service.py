@@ -11340,7 +11340,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if not self.login_user.is_admin():
             raise SpacePermissionDeniedError()
 
-        folder = await KnowledgeFileDao.aquery_by_id(folder_id)
+        folder = await KnowledgeFileDao.query_by_id(folder_id)
         if not folder or int(folder.knowledge_id) != int(space_id) or folder.file_type != FileType.DIR.value:
             raise SpaceFolderNotFoundError()
 
