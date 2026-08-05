@@ -234,7 +234,7 @@ export function FilterConditionEditor({
                 <button
                     type="button"
                     onClick={addCondition}
-                    className="inline-flex items-center gap-[4px] rounded-md border border-[#EBECF0] bg-white/50 backdrop-blur-[4px] px-[12px] py-[3px] text-[14px] leading-[22px] text-[#212121] hover:bg-[#F8F8F8]"
+                    className="inline-flex items-center gap-[4px] rounded-md border border-[#EBECF0] bg-white/50 px-[12px] py-[3px] text-[14px] leading-[22px] text-[#212121] hover:bg-[#F8F8F8]"
                     title={localize("com_subscription.add_condition")}
                 >
                     <SquarePlus className="size-4 shrink-0 text-[#212121]" strokeWidth={1.5} />
@@ -341,7 +341,7 @@ export function FilterConditionEditor({
                     <button
                         type="button"
                         onClick={addCondition}
-                        className="inline-flex items-center gap-[4px] rounded-md border border-[#EBECF0] bg-white/50 backdrop-blur-[4px] px-[12px] py-[3px] text-[14px] leading-[22px] text-[#212121] hover:bg-[#F8F8F8]"
+                        className="inline-flex items-center gap-[4px] rounded-md border border-[#EBECF0] bg-white/50 px-[12px] py-[3px] text-[14px] leading-[22px] text-[#212121] hover:bg-[#F8F8F8]"
                         title={localize("com_subscription.add_condition")}
                     >
                         <SquarePlus className="size-4 shrink-0 text-[#212121]" strokeWidth={1.5} />

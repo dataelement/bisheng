@@ -710,7 +710,7 @@ export default function Knowledge() {
             {/* Drag and Drop Overlay */}
             {isDragging && (
                 <div
-                    className={`absolute inset-0.5 z-[100] rounded-[12px] backdrop-blur-[16px] flex flex-col items-center justify-center pointer-events-none transition-all duration-300 ${dragError ? "border border-dashed border-red-500 bg-[rgba(255,236,232,0.7)]" : "border border-dashed bg-[rgba(255,255,255,0.7)]"}`}
+                    className={`absolute inset-0.5 z-[100] rounded-[12px] flex flex-col items-center justify-center pointer-events-none transition-all duration-300 ${dragError ? "border border-dashed border-red-500 bg-[rgba(255,236,232,0.7)]" : "border border-dashed bg-[rgba(255,255,255,0.7)]"}`}
                 >
                     <div className={`flex flex-col items-center justify-center p-8 rounded-2xl ${dragError ? "bg-transparent" : "bg-white/50"}`}>
                         {dragError ? (

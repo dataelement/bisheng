@@ -78,7 +78,7 @@ export function ModalSection() {
           rows={[
             ['圆角', <code key="c">rounded-2xl（16px）</code>, '移动端是否保留直角/贴底待定'],
             ['内边距', <code key="c">p-5（20px）· 区块间 gap-4</code>, ''],
-            ['遮罩', <><code>bg-gray-500/90</code> + <code>backdrop-blur-md</code></>, '灰底毛玻璃'],
+            ['遮罩', <><code>bg-gray-500/90</code> + <code></code></>, '灰底毛玻璃'],
             ['边框 / 阴影', <code key="c">border #ebebeb + 淡投影</code>, ''],
             ['标题', <code key="c">text-base font-medium leading-6</code>, ''],
             ['取消 / 确认按钮', '白底描边 + danger/primary 两档', '与二次确认一致'],
