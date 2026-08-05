@@ -218,6 +218,10 @@ export function PortalUploadedFilesDrawer({
     businessDomainOptions,
     encodingPrefix = DEFAULT_ENCODING_PREFIX,
 }: PortalUploadedFilesDrawerProps) {
+    // Mount floating category menus inside the dialog layer (not document.body).
+    // Body portals are treated as Radix "outside" clicks and break selection,
+    // especially when the upload list has only one short row.
+    const [menuPortalContainer, setMenuPortalContainer] = useState<HTMLDivElement | null>(null);
     const [records, setRecords] = useState<UploadedFileRecord[]>([]);
     const [total, setTotal] = useState(0);
     const [page, setPage] = useState(1);
@@ -471,24 +475,13 @@ export function PortalUploadedFilesDrawer({
     return (
         <>
         <Dialog open={uploadRecordsDialogOpen} onOpenChange={onOpenChange}>
-            <DialogContent
-                className={s.uploadRecordsDialog}
-                // Portaled file-category menus render under document.body (outside DialogContent).
-                // Radix treats those clicks as "outside": preventDefault on pointerdown would
-                // keep the dialog open but also swallow the menu button click. Allow the menu
-                // event through, and block dismiss via onInteractOutside/onFocusOutside instead.
-                onPointerDownOutside={(event) => {
-                    const target = event.target as HTMLElement | null;
-                    if (target?.closest?.('[data-portal-file-category-menu="true"]')) {
-                        return;
-                    }
-                    event.preventDefault();
-                }}
-                onInteractOutside={(event) => event.preventDefault()}
-                onFocusOutside={(event) => event.preventDefault()}
-            >
-                <div data-testid="portal-uploaded-files-drawer" className={s.uploadRecordsInner}>
-                    <DialogHeader>
+            <DialogContent className={s.uploadRecordsDialog} onPointerDownOutside={(event) => event.preventDefault()}>
+                <div
+                    ref={setMenuPortalContainer}
+                    data-testid="portal-uploaded-files-drawer"
+                    data-upload-records-menu-layer="true"
+                    className={s.uploadRecordsInner}
+                >                    <DialogHeader>
                         <DialogTitle>上传记录</DialogTitle>
                     </DialogHeader>
                     <div className={s.uploadRecordsToolbar}>
@@ -582,6 +575,10 @@ export function PortalUploadedFilesDrawer({
                                     <span className={s.uploadRecordCategoryCell}>
                                         <PortalFileCategoryDropdown
                                             variant="fileTable"
+<<<<<<< HEAD
+=======
+                                            menuPortalContainer={menuPortalContainer}
+>>>>>>> 56ea243f012423cd3a64e31d34627699d177929a
                                             groups={fileCategoryGroups}
                                             value={draft.fileSubcategoryCode ?? record.fileSubcategoryCode}
                                             fallbackParentCode={selectedFileCategoryCode}

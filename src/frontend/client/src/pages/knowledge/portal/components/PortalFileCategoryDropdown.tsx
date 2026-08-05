@@ -16,6 +16,12 @@ interface PortalFileCategoryDropdownProps {
     disabled?: boolean;
     clearable?: boolean;
     variant?: "default" | "fileTable";
+    /**
+     * Where to mount the floating menu for `variant="fileTable"`.
+     * Prefer a node inside the host Dialog/sheet so Radix outside-click logic
+     * still treats menu clicks as "inside". Falls back to `document.body`.
+     */
+    menuPortalContainer?: HTMLElement | null;
     ariaLabel: string;
     /** Show a bottom "AI 自动生成" option that resolves to an empty selection. */
     showAiOption?: boolean;
@@ -60,6 +66,7 @@ export function PortalFileCategoryDropdown({
     disabled = false,
     clearable = false,
     variant = "default",
+    menuPortalContainer = null,
     ariaLabel,
     showAiOption = false,
     onChange,
@@ -78,15 +85,51 @@ export function PortalFileCategoryDropdown({
     const displayText = getPortalFileCategoryDisplayText(groups, value, fallbackParentCode, placeholder);
     const hasValue = Boolean(normalizeEncodingCode(value || ""));
     const useFloatingMenu = variant === "fileTable";
+    const portalTarget = useFloatingMenu
+        ? (menuPortalContainer ?? (typeof document !== "undefined" ? document.body : null))
+        : null;
 
     const updateFloatingMenuStyle = useCallback(() => {
         if (!useFloatingMenu || typeof window === "undefined") return;
         const trigger = triggerRef.current;
         if (!trigger) return;
         const rect = trigger.getBoundingClientRect();
-        const viewportMargin = 12;
         const gap = 4;
         const minWidth = 280;
+        const localContainer = menuPortalContainer && menuPortalContainer !== document.body
+            ? menuPortalContainer
+            : null;
+
+        // Dialog content uses CSS transforms, so viewport `fixed` coords are wrong when the
+        // menu is portaled inside the dialog. Anchor with container-relative `absolute` instead.
+        if (localContainer) {
+            const containerRect = localContainer.getBoundingClientRect();
+            const width = Math.min(
+                Math.max(rect.width, minWidth),
+                Math.max(minWidth, containerRect.width - 16),
+            );
+            const availableBelow = containerRect.bottom - rect.bottom - gap;
+            const availableAbove = rect.top - containerRect.top - gap;
+            const openAbove = availableBelow < 180 && availableAbove > availableBelow;
+            const maxHeight = Math.min(320, Math.max(160, openAbove ? availableAbove : availableBelow));
+            const left = Math.min(
+                Math.max(rect.left - containerRect.left, 8),
+                Math.max(8, containerRect.width - width - 8),
+            );
+            const top = openAbove
+                ? Math.max(8, rect.top - containerRect.top - gap - maxHeight)
+                : rect.bottom - containerRect.top + gap;
+            setFloatingMenuStyle({
+                position: "absolute",
+                top,
+                left,
+                width,
+                maxHeight,
+            });
+            return;
+        }
+
+        const viewportMargin = 12;
         const maxWidth = Math.max(minWidth, window.innerWidth - viewportMargin * 2);
         const width = Math.min(Math.max(rect.width, minWidth), maxWidth);
         const left = Math.min(
@@ -109,7 +152,7 @@ export function PortalFileCategoryDropdown({
             width,
             maxHeight,
         });
-    }, [useFloatingMenu]);
+    }, [menuPortalContainer, useFloatingMenu]);
 
     useEffect(() => {
         if (!open) return undefined;
@@ -247,7 +290,7 @@ export function PortalFileCategoryDropdown({
                     <X size={14} />
                 </button>
             ) : null}
-            {menu && useFloatingMenu && typeof document !== "undefined" ? createPortal(menu, document.body) : menu}
+            {menu && portalTarget ? createPortal(menu, portalTarget) : menu}
         </div>
     );
 }
