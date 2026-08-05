@@ -918,6 +918,15 @@ class LLMService:
             db_server,
         )
 
+        # The probe below resolves the model and its server through the same 60s
+        # in-process cache that no write invalidates, so a model renamed a moment
+        # ago would be called under its old name and the verdict recorded against
+        # it -- the status the list then shows belongs to the previous name. Evict
+        # what this save just changed before probing anything.
+        invalidate_llm_info_cache(server_id=db_server.id)
+        for one in new_server_info.models:
+            invalidate_llm_info_cache(model_id=one.id)
+
         # Determine if the model status needs to be re-determined
         for one in new_server_info.models:
             if one.id not in old_model_dict:

@@ -143,3 +143,88 @@ class TestVerifyDefeatsTheInfoCache:
             await LLMService.verify_model_status(model.id, _login_user())
 
         assert seen["cached_at_probe_time"] is None
+
+
+class TestSaveDefeatsTheInfoCache:
+    """Saving a renamed model re-probes it, and that probe has the same problem.
+
+    Renaming a model and pressing save probed it through the very same 60s
+    ``LLM_CACHE``, so the call went out under the OLD name and the verdict
+    recorded against it -- the status shown on returning to the list belonged to
+    the previous name, and only pressing "update status" (which does evict) put
+    it right. Save must evict what it just wrote before probing.
+    """
+
+    def _server_req(self):
+        from bisheng.llm.domain.schemas import LLMModelCreateReq, LLMServerCreateReq
+
+        return LLMServerCreateReq(
+            id=1,
+            name="provider",
+            type="openai",
+            config={},
+            models=[
+                LLMModelCreateReq(
+                    id=7,
+                    name="model 1",
+                    model_name="gpt-x-renamed",
+                    model_type=LLMModelType.LLM.value,
+                )
+            ],
+        )
+
+    def _patches(self, db_server, new_server_info, old_models):
+        """Stub out everything between the request and the probe loop."""
+        return (
+            patch(
+                "bisheng.llm.domain.services.llm.LLMDao.aget_server_by_id",
+                AsyncMock(return_value=db_server),
+            ),
+            patch(
+                "bisheng.llm.domain.services.llm.LLMDao.aget_model_by_server_ids",
+                AsyncMock(return_value=old_models),
+            ),
+            patch(
+                "bisheng.llm.domain.services.llm.LLMDao.update_server_with_models",
+                AsyncMock(return_value=db_server),
+            ),
+            patch.object(LLMService, "get_one_llm", AsyncMock(return_value=new_server_info)),
+            patch("bisheng.llm.domain.services.llm._write_llm_audit", AsyncMock()),
+        )
+
+    async def test_save_evicts_before_reprobing_the_renamed_model(self):
+        from bisheng.llm.domain.const import LLM_CACHE
+        from bisheng.llm.domain.models.llm_server import LLMServer
+        from bisheng.llm.domain.schemas import LLMModelInfo, LLMServerInfo
+        from bisheng.llm.domain.utils import _scoped_cache_key
+
+        # A child-owned server keeps the Root share_to_children branch out of it.
+        db_server = LLMServer(id=1, name="provider", type="openai", config={}, tenant_id=2)
+        renamed = LLMModelInfo(id=7, server_id=1, name="model 1", model_name="gpt-x-renamed", model_type="llm")
+        new_server_info = LLMServerInfo(id=1, name="provider", type="openai", models=[renamed])
+        old_models = [_model()]  # still called gpt-x -> the rename is what triggers the probe
+
+        model_key = _scoped_cache_key("llm:model:", 7)
+        server_key = _scoped_cache_key("llm:server:", 1)
+        LLM_CACHE[model_key] = "row carrying the pre-rename model_name"
+        LLM_CACHE[server_key] = "row carrying the pre-rename server config"
+        seen = {}
+
+        async def record_cache_state(*args, **kwargs):
+            seen["model_cached_at_probe_time"] = LLM_CACHE.get(model_key)
+            seen["server_cached_at_probe_time"] = LLM_CACHE.get(server_key)
+
+        p1, p2, p3, p4, p5 = self._patches(db_server, new_server_info, old_models)
+        with (
+            p1,
+            p2,
+            p3,
+            p4,
+            p5,
+            patch.object(LLMService, "test_model_status", record_cache_state),
+        ):
+            await LLMService.update_llm_server(MagicMock(), _login_user(), self._server_req())
+
+        # The probe ran (the name changed) and saw neither stale row.
+        assert seen["model_cached_at_probe_time"] is None
+        assert seen["server_cached_at_probe_time"] is None
