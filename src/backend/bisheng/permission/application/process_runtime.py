@@ -37,7 +37,16 @@ async def initialize_f048_background_runtime(
     *,
     external_scopes: dict[str, ExternalProjectionScopePort] | None = None,
 ) -> F048RuntimeComponents:
-    """Compose the business-independent runtime for a background process."""
+    """Compose the business-independent runtime for a background process.
+
+    This layer cannot know the business resource adapters, so it leaves the
+    resource registry UNSET. A process that only needs the permission runtime may
+    stop here; a process that runs business code (tool init, resource checks) must
+    NOT — ``check_business_action`` would raise "F048 resource registry is not
+    configured". Those processes call
+    ``bisheng.api.services.f048_permission_runtime.initialize_f048_worker_runtime``,
+    which wraps this and attaches the same resource composition the API installs.
+    """
 
     components = await build_f048_permission_runtime(
         client,

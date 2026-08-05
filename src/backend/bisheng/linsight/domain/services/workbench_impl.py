@@ -1566,9 +1566,15 @@ class LinsightWorkbenchImpl:
                     tool_ids, file_dir, user_id=session_version.user_id
                 )
                 tools.extend(bisheng_code_tool)
-            except Exception as e:
-                logger.error(
-                    f"Failed to initialize BiSheng code interpreter tool: session_version_id={session_version.id}, error={e!s}"
+            except Exception:
+                # Swallowing is deliberate (a broken tool must not kill the task),
+                # but it must stay diagnosable: logger.error(f"...{e!s}") dropped the
+                # traceback, so a run silently losing the code interpreter looked
+                # identical whether the cause was a permission gate, a bad config or
+                # a missing sandbox. logger.exception keeps the stack.
+                logger.exception(
+                    "Failed to initialize BiSheng code interpreter tool: session_version_id={}",
+                    session_version.id,
                 )
 
         # Unified-resource direction (2026-06-16): task mode reuses the daily

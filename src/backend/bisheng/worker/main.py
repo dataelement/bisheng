@@ -91,17 +91,21 @@ async def _init_worker_openfga() -> bool:
             "permission runtime until migration completes and the worker restarts"
         )
         return False
+    # Celery tasks run business code (tool init, resource checks), so this process
+    # needs the resource registry the bare background runtime leaves unset.
+    from bisheng.api.services.f048_permission_runtime import (
+        initialize_f048_worker_runtime,
+    )
     from bisheng.department.domain.services.department_projection_scope import (
         configure_department_projection_runtime,
         get_department_projection_scope,
     )
     from bisheng.permission.application.process_runtime import (
         bind_f048_process_runtime,
-        initialize_f048_background_runtime,
     )
 
     try:
-        components = await initialize_f048_background_runtime(
+        components = await initialize_f048_worker_runtime(
             client,
             external_scopes={
                 "department": get_department_projection_scope(),

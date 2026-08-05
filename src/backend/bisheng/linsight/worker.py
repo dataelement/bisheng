@@ -470,6 +470,12 @@ class ScheduleCenterProcess(Process):
                 fga_manager = None
                 f048_migration_required = True
             else:
+                # The worker runs business code (ToolExecutor tool init on every
+                # task), so it needs the resource registry the bare background
+                # runtime leaves unset — hence the API-side composition root.
+                from bisheng.api.services.f048_permission_runtime import (
+                    initialize_f048_worker_runtime,
+                )
                 from bisheng.common.errcode.permission import (
                     AuthorizationModelMismatchError,
                     PermissionPublishNotReadyError,
@@ -480,12 +486,11 @@ class ScheduleCenterProcess(Process):
                 )
                 from bisheng.permission.application.process_runtime import (
                     bind_f048_process_runtime,
-                    initialize_f048_background_runtime,
                 )
 
                 try:
                     f048_components = loop.run_until_complete(
-                        initialize_f048_background_runtime(
+                        initialize_f048_worker_runtime(
                             fga_client,
                             external_scopes={
                                 "department": get_department_projection_scope(),
