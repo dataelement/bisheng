@@ -89,19 +89,23 @@ async def materialize_session_skills(
             # off the worker's event loop so concurrent tasks aren't stalled.
             pairs = await asyncio.to_thread(_collect_bundle_pairs, store, tenant_id, name)
             if not pairs:
-                logger.warning("linsight skill %r (tenant %s) has no files on disk; skipping", name, tenant_id)
+                logger.warning("linsight skill {!r} (tenant {}) has no files on disk; skipping", name, tenant_id)
                 continue
             responses = await backend.aupload_files(pairs)
             failed = [r for r in responses if getattr(r, "error", None)]
             if failed:
-                logger.warning("linsight skill %r copy had failures, not advertising: %s", name, failed)
+                logger.warning("linsight skill {!r} copy had failures, not advertising: {}", name, failed)
                 continue
             copied.append(name)
         except Exception:
             # Best-effort: one malformed/unreadable bundle must never abort the task.
-            logger.exception("failed to materialize linsight skill %r (tenant %s)", name, tenant_id)
+            logger.exception("failed to materialize linsight skill {!r} (tenant {})", name, tenant_id)
+    # loguru formats with str.format, NOT printf — printf placeholders print
+    # literally and silently drop every arg (this line used to log a useless
+    # "tenant=%s selected=%r ... -> materialized %s", hiding exactly the fact a
+    # skill-provisioning investigation needs).
     logger.info(
-        "linsight skill provisioning: tenant=%s selected=%r enabled=%s -> materialized %s",
+        "linsight skill provisioning: tenant={} selected={!r} enabled={} -> materialized {}",
         tenant_id,
         selected,
         sorted(enabled),
