@@ -1867,6 +1867,7 @@
 .uploadDialogInner,
 .uploadReviewInner,
 .uploadRecordsInner {
+  position: relative;
   width: 100%;
   max-width: 100%;
   display: flex;
@@ -2488,6 +2489,11 @@
   min-width: 280px;
   max-width: min(420px, calc(100vw - 24px));
   max-height: min(320px, calc(100vh - 24px));
+}
+
+/* Upload-record dialog layer: keep floating menus above table/footer siblings */
+.uploadRecordsInner > [data-portal-file-category-menu="true"] {
+  z-index: 320;
 }
 
 .fileTableCategoryMenu .uploadCategoryGroupButton,

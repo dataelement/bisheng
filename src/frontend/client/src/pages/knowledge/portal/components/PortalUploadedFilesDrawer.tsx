@@ -218,6 +218,10 @@ export function PortalUploadedFilesDrawer({
     businessDomainOptions,
     encodingPrefix = DEFAULT_ENCODING_PREFIX,
 }: PortalUploadedFilesDrawerProps) {
+    // Mount floating category menus inside the dialog layer (not document.body).
+    // Body portals are treated as Radix "outside" clicks and break selection,
+    // especially when the upload list has only one short row.
+    const [menuPortalContainer, setMenuPortalContainer] = useState<HTMLDivElement | null>(null);
     const [records, setRecords] = useState<UploadedFileRecord[]>([]);
     const [total, setTotal] = useState(0);
     const [page, setPage] = useState(1);
@@ -472,7 +476,12 @@ export function PortalUploadedFilesDrawer({
         <>
         <Dialog open={uploadRecordsDialogOpen} onOpenChange={onOpenChange}>
             <DialogContent className={s.uploadRecordsDialog} onPointerDownOutside={(event) => event.preventDefault()}>
-                <div data-testid="portal-uploaded-files-drawer" className={s.uploadRecordsInner}>
+                <div
+                    ref={setMenuPortalContainer}
+                    data-testid="portal-uploaded-files-drawer"
+                    data-upload-records-menu-layer="true"
+                    className={s.uploadRecordsInner}
+                >
                     <DialogHeader>
                         <DialogTitle>上传记录</DialogTitle>
                     </DialogHeader>
@@ -566,6 +575,8 @@ export function PortalUploadedFilesDrawer({
                                     </span>
                                     <span className={s.uploadRecordCategoryCell}>
                                         <PortalFileCategoryDropdown
+                                            variant="fileTable"
+                                            menuPortalContainer={menuPortalContainer}
                                             groups={fileCategoryGroups}
                                             value={draft.fileSubcategoryCode ?? record.fileSubcategoryCode}
                                             fallbackParentCode={selectedFileCategoryCode}
