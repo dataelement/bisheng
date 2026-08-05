@@ -5714,7 +5714,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     "searched_at": searched_at.isoformat() if isinstance(searched_at, datetime) else searched_at,
                 },
                 headers={"tenant_id": int(payload["tenant_id"])},
-                queue="knowledge_celery",
+                queue="celery",
                 expires=600,
             )
 

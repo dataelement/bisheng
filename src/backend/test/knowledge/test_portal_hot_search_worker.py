@@ -77,7 +77,7 @@ async def test_fanout_dispatches_per_tenant_with_headers():
     assert count == 3  # default tenant + 5 + 7
     tenant_ids = sorted(h["tenant_id"] for h, _q in dispatched)
     assert tenant_ids == [1, 5, 7]
-    assert all(q == "knowledge_celery" for _h, q in dispatched)
+    assert all(q == "celery" for _h, q in dispatched)
 
 
 @pytest.mark.asyncio

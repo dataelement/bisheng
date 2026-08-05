@@ -56,7 +56,7 @@ from bisheng.worker.approval.tasks import (
 from bisheng.worker.main import bisheng_celery
 
 logger = logging.getLogger(__name__)
-KNOWLEDGE_QUEUE = "knowledge_celery"
+DEFAULT_QUEUE = "celery"
 SCAN_PAGE_SIZE = 100
 
 
@@ -547,7 +547,7 @@ async def _reconcile_rollback_candidates(
                 ),
             },
             headers={"tenant_id": int(tenant_id)},
-            queue=KNOWLEDGE_QUEUE,
+            queue=DEFAULT_QUEUE,
         )
         dispatched += 1
     return dispatched
@@ -610,7 +610,7 @@ async def _scan_tenant_projection_async(tenant_id: int) -> int:
                 "entry_id": int(entry_id),
             },
             headers={"tenant_id": int(tenant_id)},
-            queue=KNOWLEDGE_QUEUE,
+            queue=DEFAULT_QUEUE,
         )
     await _reconcile_permission_candidates(
         tenant_id=tenant_id,
@@ -656,7 +656,7 @@ async def _fanout_projection_scan_async() -> int:
         scan_tenant_document_projections.apply_async(
             kwargs={"tenant_id": tenant_id},
             headers={"tenant_id": tenant_id},
-            queue=KNOWLEDGE_QUEUE,
+            queue=DEFAULT_QUEUE,
         )
     return len(set(tenant_ids))
 
@@ -680,7 +680,7 @@ def enqueue_document_projection_entries(
         scan_tenant_document_projections.apply_async(
             kwargs={"tenant_id": int(tenant_id)},
             headers={"tenant_id": int(tenant_id)},
-            queue=KNOWLEDGE_QUEUE,
+            queue=DEFAULT_QUEUE,
         )
         return
     for entry_id in sorted({int(item) for item in entry_ids}):
@@ -690,7 +690,7 @@ def enqueue_document_projection_entries(
                 "entry_id": entry_id,
             },
             headers={"tenant_id": int(tenant_id)},
-            queue=KNOWLEDGE_QUEUE,
+            queue=DEFAULT_QUEUE,
         )
 
 
@@ -797,5 +797,5 @@ def enqueue_knowledge_space_retirement(*, tenant_id: int, space_id: int) -> None
     process_knowledge_space_retirement.apply_async(
         kwargs={"tenant_id": int(tenant_id), "space_id": int(space_id)},
         headers={"tenant_id": int(tenant_id)},
-        queue=KNOWLEDGE_QUEUE,
+        queue=DEFAULT_QUEUE,
     )

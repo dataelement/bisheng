@@ -348,6 +348,181 @@ def test_file_space_level_options_group_section_libraries_under_team():
 
 
 @pytest.mark.asyncio
+async def test_date_field_enums_keep_raw_value_and_format_display_label(
+    monkeypatch,
+):
+    from bisheng.telemetry_search.domain.services import dashboard as module
+
+    timestamp_ms = 1785134769000
+    dataset = SimpleNamespace(
+        es_index_name="mid_knowledge_space_content_stat",
+        schema_config={
+            "dimensions": [
+                {
+                    "field": "timestamp",
+                    "field_type": "date",
+                }
+            ]
+        },
+    )
+    repository = SimpleNamespace(find_one=AsyncMock(return_value=dataset))
+    es_client = SimpleNamespace(
+        search=AsyncMock(
+            return_value={
+                "aggregations": {
+                    "total_count": {"value": 1},
+                    "enum_values": {
+                        "buckets": [{"key": timestamp_ms}],
+                    },
+                }
+            }
+        )
+    )
+
+    class FakeDbSession:
+        async def __aenter__(self):
+            return SimpleNamespace()
+
+        async def __aexit__(self, _exc_type, _exc, _traceback):
+            return False
+
+    monkeypatch.setattr(module, "get_async_db_session", FakeDbSession)
+    monkeypatch.setattr(
+        module,
+        "DashboardDatasetRepositoryImpl",
+        lambda _session: repository,
+    )
+    monkeypatch.setattr(
+        module,
+        "get_es_connection",
+        AsyncMock(return_value=es_client),
+    )
+    monkeypatch.setattr(
+        module.DashboardService,
+        "_get_realtime_scope_filters",
+        AsyncMock(return_value=[]),
+    )
+    service = module.DashboardService.model_construct()
+
+    result = await service.get_dataset_field_enums(
+        dataset_code="mid_knowledge_space_content_stat",
+        field="timestamp",
+    )
+
+    assert result["options"] == [
+        {
+            "value": timestamp_ms,
+            "label": datetime.fromtimestamp(timestamp_ms / 1000).strftime(
+                "%Y-%m-%d %H:%M:%S"
+            ),
+        }
+    ]
+
+
+@pytest.mark.parametrize(
+    ("field", "values", "expected_labels"),
+    [
+        (
+            "department_source",
+            ["event_time", "current_primary_backfill"],
+            ["提问时所属主部门", "当前主部门（历史回填）"],
+        ),
+        (
+            "scene",
+            [
+                "expert_question",
+                "smart_qa",
+                "document_qa",
+                "my_knowledge_document_qa",
+            ],
+            [
+                "专家问答",
+                "智能问答",
+                "知识门户·文档问答",
+                "我的知识·文档问答",
+            ],
+        ),
+        (
+            "source_app",
+            [
+                "bisheng_my_knowledge",
+                "expert_qa",
+                "shougang_portal",
+                "unknown_app",
+            ],
+            ["毕昇·我的知识", "专家问答", "首钢知识门户", "unknown_app"],
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_realtime_qa_field_enums_keep_codes_and_use_readable_labels(
+    monkeypatch,
+    field,
+    values,
+    expected_labels,
+):
+    from bisheng.telemetry_search.domain.services import dashboard as module
+
+    dataset = SimpleNamespace(
+        es_index_name="mid_realtime_qa_question_fact",
+        schema_config={
+            "dimensions": [
+                {"field": field, "field_type": "string"},
+            ]
+        },
+    )
+    repository = SimpleNamespace(find_one=AsyncMock(return_value=dataset))
+    es_client = SimpleNamespace(
+        search=AsyncMock(
+            return_value={
+                "aggregations": {
+                    "total_count": {"value": len(values)},
+                    "enum_values": {
+                        "buckets": [{"key": value} for value in values],
+                    },
+                }
+            }
+        )
+    )
+
+    class FakeDbSession:
+        async def __aenter__(self):
+            return SimpleNamespace()
+
+        async def __aexit__(self, _exc_type, _exc, _traceback):
+            return False
+
+    monkeypatch.setattr(module, "get_async_db_session", FakeDbSession)
+    monkeypatch.setattr(
+        module,
+        "DashboardDatasetRepositoryImpl",
+        lambda _session: repository,
+    )
+    monkeypatch.setattr(
+        module,
+        "get_es_connection",
+        AsyncMock(return_value=es_client),
+    )
+    monkeypatch.setattr(
+        module.DashboardService,
+        "_get_realtime_scope_filters",
+        AsyncMock(return_value=[]),
+    )
+    service = module.DashboardService.model_construct()
+
+    result = await service.get_dataset_field_enums(
+        dataset_code="mid_realtime_qa_question_fact",
+        field=field,
+    )
+
+    assert result["enums"] == values
+    assert result["options"] == [
+        {"value": value, "label": label}
+        for value, label in zip(values, expected_labels, strict=True)
+    ]
+
+
+@pytest.mark.asyncio
 async def test_realtime_temporal_datasets_default_to_today_and_include_today():
     from bisheng.telemetry_search.domain.schemas.component import (
         ComponentDataConfig,

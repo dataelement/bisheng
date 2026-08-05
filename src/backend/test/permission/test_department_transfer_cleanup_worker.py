@@ -73,7 +73,7 @@ def test_tasks_are_late_acknowledged_and_permission_route_is_forced():
         beat_schedule={},
     )
 
-    assert config.task_routers["bisheng.worker.permission.*"] == {"queue": "knowledge_celery"}
+    assert config.task_routers["bisheng.worker.permission.*"] == {"queue": "celery"}
     scan = config.beat_schedule["scan_department_transfer_permission_cleanup"]
     assert scan["task"].endswith(".scan_due_events")
     assert scan["schedule"] == 30.0
@@ -123,7 +123,7 @@ async def test_scan_recovers_preparing_event_and_dispatches_due_event(monkeypatc
     repository.activate_event.assert_awaited_once()
     worker_module.process_event.apply_async.assert_called_once_with(
         args=[51],
-        queue="knowledge_celery",
+        queue="celery",
     )
 
 

@@ -148,7 +148,7 @@ async def test_rollback_reconcile_dispatches_from_preparing_tombstone() -> None:
             "manager_file_id": 100,
         },
         "headers": {"tenant_id": 7},
-        "queue": projection_worker.KNOWLEDGE_QUEUE,
+        "queue": projection_worker.DEFAULT_QUEUE,
     }
 
 

@@ -44,6 +44,112 @@ class DashboardService(BaseModel):
         "department": "部门库",
         "team": "团队库（含科室库）",
     }
+    APPLICATION_TYPE_LABELS: ClassVar[dict[str, str]] = {
+        "workflow": "工作流",
+        "assistant": "助手",
+        "linsight": "Linsight",
+        "daily_chat": "日常对话",
+        "knowledge_base": "知识库",
+        "knowledge_space": "知识空间",
+        "rag_traceability": "RAG溯源",
+        "evaluation": "模型评测",
+        "model_test": "模型连通性测试",
+        "asr": "语音识别",
+        "tts": "语音合成",
+        "unknown": "未知",
+    }
+    STATUS_LABELS: ClassVar[dict[str, str]] = {
+        "success": "成功",
+        "failed": "失败",
+        "parse_failed": "解析失败",
+    }
+    DASHBOARD_ENUM_LABELS: ClassVar[
+        dict[str, dict[str, dict[str, str]]]
+    ] = {
+        "mid_app_increment": {
+            "app_type": APPLICATION_TYPE_LABELS,
+        },
+        "mid_sessions_increment": {
+            "source": {
+                "platform": "平台端",
+                "api": "API调用",
+            },
+            "app_id": APPLICATION_TYPE_LABELS,
+        },
+        "mid_session_run_dtl": {
+            "app_id": APPLICATION_TYPE_LABELS,
+        },
+        "mid_tool_call_dtl": {
+            "tool_type": {
+                "0": "API工具",
+                "1": "内置工具",
+                "2": "MCP工具",
+            },
+            "app_type": APPLICATION_TYPE_LABELS,
+            "app_id": APPLICATION_TYPE_LABELS,
+        },
+        "mid_doc_parse_dtl": {
+            "parse_type": {
+                "local": "本地解析",
+                "uns": "UNS解析",
+                "etl4lm": "ETL4LM解析",
+                "un_etl4lm": "非ETL4LM解析",
+                "mineru": "MinerU解析",
+                "paddle_ocr": "PaddleOCR解析",
+            },
+            "status": STATUS_LABELS,
+            "app_type": APPLICATION_TYPE_LABELS,
+        },
+        "mid_model_call_dtl": {
+            "model_type": {
+                "llm": "大语言模型",
+                "embedding": "嵌入模型",
+                "rerank": "重排模型",
+                "asr": "语音识别",
+                "tts": "语音合成",
+            },
+            "app_id": APPLICATION_TYPE_LABELS,
+        },
+        "mid_realtime_qa_question_fact": {
+            "department_source": {
+                "event_time": "提问时所属主部门",
+                "current_primary_backfill": "当前主部门（历史回填）",
+            },
+            "scene": {
+                "expert_question": "专家问答",
+                "smart_qa": "智能问答",
+                "document_qa": "知识门户·文档问答",
+                "my_knowledge_document_qa": "我的知识·文档问答",
+            },
+            "source_app": {
+                "bisheng_my_knowledge": "毕昇·我的知识",
+                "expert_qa": "专家问答",
+                "shougang_portal": "首钢知识门户",
+            },
+        },
+        "mid_user_daily_participation": {
+            "department_source": {
+                "event_time": "登录时所属主部门",
+                "current_roster": "当前在职名册",
+                "current_roster_backfill": "当前名册（历史回填）",
+                "current_primary_backfill": "当前主部门（历史登录回填）",
+            },
+        },
+    }
+
+    @staticmethod
+    def _format_date_enum_label(value: Any) -> Any:
+        if not isinstance(value, (int, float)) or isinstance(value, bool):
+            return value
+        return datetime.fromtimestamp(value / 1000).strftime("%Y-%m-%d %H:%M:%S")
+
+    @classmethod
+    def _get_enum_labels(
+        cls,
+        dataset_code: str,
+        field: str,
+    ) -> dict[str, str]:
+        return cls.DASHBOARD_ENUM_LABELS.get(dataset_code, {}).get(field, {})
 
     @classmethod
     def _uses_realtime_dataset(
@@ -582,15 +688,18 @@ class DashboardService(BaseModel):
         if not dataset:
             raise NotFoundError()
         schema_config = dataset.schema_config if isinstance(dataset.schema_config, dict) else {}
-        allowed_fields = {
-            dimension.get("field")
+        dimension_by_field = {
+            dimension.get("field"): dimension
             for dimension in schema_config.get("dimensions", [])
             if dimension.get("field")
         }
+        allowed_fields = set(dimension_by_field)
         if field not in allowed_fields or (
             label_field and label_field not in allowed_fields
         ):
             raise UnAuthorizedError()
+        label_dimension = dimension_by_field[label_field or field]
+        label_field_type = label_dimension.get("field_type") or label_dimension.get("type")
 
         scope_filters = await self._get_realtime_scope_filters(dataset_code)
         skip = (page - 1) * size
@@ -634,9 +743,29 @@ class DashboardService(BaseModel):
 
         current_aggs = core_aggs
 
+        enum_labels = self._get_enum_labels(dataset_code, field)
         if keyword:
             search_field = label_field or field
-            filter_query = {"match_phrase": {f"{search_field}.text": keyword}}
+            text_filter = {"match_phrase": {f"{search_field}.text": keyword}}
+            if enum_labels:
+                normalized_keyword = keyword.casefold()
+                matched_values = [
+                    value
+                    for value, label in enum_labels.items()
+                    if normalized_keyword in value.casefold()
+                    or normalized_keyword in label.casefold()
+                ]
+                search_filters = [text_filter]
+                if matched_values:
+                    search_filters.append({"terms": {field: matched_values}})
+                filter_query = {
+                    "bool": {
+                        "should": search_filters,
+                        "minimum_should_match": 1,
+                    }
+                }
+            else:
+                filter_query = text_filter
 
             current_aggs = {
                 "filter_wrapper": {
@@ -704,6 +833,10 @@ class DashboardService(BaseModel):
                 if label_buckets
                 else value
             )
+            if label_field_type == "date":
+                label = self._format_date_enum_label(label)
+            else:
+                label = enum_labels.get(str(value), label)
             options.append({"value": value, "label": label})
         if (
             dataset_code == "mid_knowledge_space_content_stat"

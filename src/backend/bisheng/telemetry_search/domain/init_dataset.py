@@ -491,12 +491,16 @@ DASHBOARD_DATASET = [
                     field="tool_type"
                 ),
                 DimensionConfig(
-                    name="应用名称",
+                    name="应用类型",
                     field="app_type"
                 ),
                 DimensionConfig(
                     name="应用ID",
                     field="app_id"
+                ),
+                DimensionConfig(
+                    name="应用名称",
+                    field="app_name"
                 )
             ]
         ).model_dump()
@@ -1049,7 +1053,7 @@ DASHBOARD_DATASET = [
                     field="status"
                 ),
                 DimensionConfig(
-                    name="文件来源",
+                    name="应用类型",
                     field="app_type"
                 )
             ]
@@ -1585,23 +1589,25 @@ def _clone_dashboard_dataset(dataset: DashboardDataset) -> DashboardDataset:
     return DashboardDataset(**data)
 
 
-REALTIME_DASHBOARD_DATASET_CODES = (
+DASHBOARD_DATASET_REFRESH_CODES = (
     "mid_knowledge_space_content_stat",
     "mid_realtime_qa_question_fact",
     "mid_user_daily_participation",
+    "mid_tool_call_dtl",
+    "mid_doc_parse_dtl",
 )
 
 
-async def _upgrade_realtime_dashboard_datasets(
+async def _upgrade_dashboard_datasets(
     dashboard_dataset_repository: DashboardDatasetRepositoryImpl,
 ):
-    """Idempotently install or refresh the three real-time dashboard datasets."""
+    """Idempotently install or refresh dashboard datasets with schema updates."""
     seed_by_code = {
         dataset.dataset_code: dataset
         for dataset in DASHBOARD_DATASET
-        if dataset.dataset_code in REALTIME_DASHBOARD_DATASET_CODES
+        if dataset.dataset_code in DASHBOARD_DATASET_REFRESH_CODES
     }
-    for dataset_code in REALTIME_DASHBOARD_DATASET_CODES:
+    for dataset_code in DASHBOARD_DATASET_REFRESH_CODES:
         seed_dataset = seed_by_code[dataset_code]
         existing_dataset = await dashboard_dataset_repository.find_one(
             dataset_code=dataset_code
@@ -1630,7 +1636,7 @@ async def init_dashboard_datasets():
         else:
             # Upgrade path: add department dimensions to existing datasets
             await _upgrade_datasets_add_department_dimensions(dashboard_dataset_repository)
-            await _upgrade_realtime_dashboard_datasets(dashboard_dataset_repository)
+            await _upgrade_dashboard_datasets(dashboard_dataset_repository)
     preset_dashboard = await DashboardDao.get_dashboards(dashboard_type=[DashboardType.PRESET_OSS])
     if not preset_dashboard:
         await DashboardDao.exec_sql_str(preset_oss_dashboard_sql)

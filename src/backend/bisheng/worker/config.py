@@ -1,4 +1,5 @@
 from bisheng.common.services.config_service import settings
+from bisheng.core.config.celery_queues import build_celery_task_routes
 from bisheng.core.config.celery_redis import build_celery_redis_config
 
 _celery_redis_config = build_celery_redis_config(settings.celery_redis_url)
@@ -11,13 +12,7 @@ result_serializer = "json"
 accept_content = ["json"]
 timezone = "Asia/Shanghai"
 enable_utc = False
-_DEFAULT_ROUTES = {
-    "bisheng.worker.knowledge.pdf_artifact_worker.generate_knowledge_file_pdf_celery": {
-        "queue": "knowledge_pdf_celery"
-    },
-    "bisheng.worker.approval.*": {"queue": "workflow_celery"},
-}
-task_routes = {**_DEFAULT_ROUTES, **settings.celery_task.task_routers}
+task_routes = build_celery_task_routes(settings.celery_task.task_routers)
 # redisHealth check interval, unit sec
 redis_backend_health_check_interval = 5
 

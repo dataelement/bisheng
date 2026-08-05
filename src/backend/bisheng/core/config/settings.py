@@ -9,6 +9,7 @@ from cryptography.fernet import Fernet
 from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from bisheng.core.config.celery_queues import build_celery_task_routes
 from bisheng.core.config.llm import LLMConf
 from bisheng.core.config.multi_tenant import MultiTenantConf
 from bisheng.core.config.openfga import OpenFGAConf
@@ -162,24 +163,7 @@ class CeleryConf(BaseModel):
 
     @model_validator(mode="after")
     def validate(self):
-        if not self.task_routers:
-            self.task_routers = {
-                "bisheng.worker.knowledge.*": {"queue": "knowledge_celery"},  # Knowledge Base Related Tasks
-                "bisheng.worker.workflow.*": {"queue": "workflow_celery"},  # Workflow Execution Related Tasks
-                "bisheng.worker.org_sync.*": {"queue": "knowledge_celery"},
-                # Org Sync Tasks (low frequency, reuse knowledge queue)
-                "bisheng.worker.tenant_reconcile.*": {"queue": "knowledge_celery"},
-                # v2.5.1 F012 — 6h catch-up, reuse knowledge_celery
-                "bisheng.worker.admin_scope.*": {"queue": "knowledge_celery"},  # v2.5.1 F019 — 10min sweep, low-volume
-                "bisheng.worker.message.*": {"queue": "knowledge_celery"},  # WeChat message push tasks
-                "bisheng.worker.portal_course.*": {"queue": "knowledge_celery"},
-                "bisheng.worker.permission.*": {"queue": "knowledge_celery"},
-            }
-        else:
-            self.task_routers.setdefault(
-                "bisheng.worker.permission.*",
-                {"queue": "knowledge_celery"},
-            )
+        self.task_routers = build_celery_task_routes(self.task_routers)
         if "telemetry_mid_user_increment" not in self.beat_schedule:
             self.beat_schedule["telemetry_mid_user_increment"] = {
                 "task": "bisheng.worker.telemetry.mid_table.sync_mid_user_increment",

@@ -199,10 +199,28 @@ const getPieChartOption = (
 ) => {
   const { series } = data;
   const isDonut = chartType === 'donut';
+  const metricNumberFormat = dataConfig && 'metrics' in dataConfig
+    ? dataConfig.metrics[0]?.numberFormat
+    : undefined;
+  const isPercentMetric = metricNumberFormat?.type === 'percent';
+
+  const formatMetricValue = (value: unknown) => {
+    if (!metricNumberFormat) return String(value);
+    const [formattedValue, unit] = unitConversion(value, dataConfig);
+    return `${formattedValue}${unit}`;
+  };
 
   const tooltipFormatter = (params: any) => {
-    return `${params.name.replaceAll('\n', '<br/>')}: ${params.value} (${params.percent}%)`;
+    const name = params.name.replaceAll('\n', '<br/>');
+    const formattedValue = formatMetricValue(params.value);
+    return isPercentMetric
+      ? `${name}: ${formattedValue}`
+      : `${name}: ${formattedValue} (${params.percent}%)`;
   };
+
+  const dataLabelFormatter = isPercentMetric
+    ? (params: any) => `${params.name}: ${formatMetricValue(params.value)}`
+    : '{b}: {d}%';
 
   return {
     backgroundColor: styleConfig.bgColor,
@@ -221,7 +239,7 @@ const getPieChartOption = (
       itemStyle: { borderRadius: 0, borderColor: '#fff', borderWidth: 2 },
       label: {
         show: styleConfig.showDataLabel ?? true,
-        formatter: '{b}: {d}%',
+        formatter: dataLabelFormatter,
         fontSize: 10,
         color: "#666",
         textBorderWidth: 0,

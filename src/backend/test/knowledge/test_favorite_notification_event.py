@@ -72,7 +72,7 @@ def test_enqueue_splits_event_batches():
     second_payload = task.apply_async.call_args_list[1].kwargs["args"][0]
     assert len(first_payload) == 100
     assert len(second_payload) == 1
-    assert task.apply_async.call_args_list[0].kwargs["queue"] == "knowledge_celery"
+    assert task.apply_async.call_args_list[0].kwargs["queue"] == "celery"
 
 
 def test_enqueue_splits_large_delete_recipient_snapshot():

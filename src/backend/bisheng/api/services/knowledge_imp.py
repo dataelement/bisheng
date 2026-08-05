@@ -379,7 +379,7 @@ def addEmbedding(
 
                     refresh_file_similarity_candidates_celery.apply_async(
                         args=(db_file.id,),
-                        queue="knowledge_celery",
+                        queue="celery",
                     )
                 except Exception:
                     logger.exception("enqueue similarity candidate refresh failed file_id={}", db_file.id)

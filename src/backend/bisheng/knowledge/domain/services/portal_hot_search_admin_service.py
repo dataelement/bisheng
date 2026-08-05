@@ -17,7 +17,7 @@ from bisheng.knowledge.domain.schemas.portal_hot_search_schema import (
 )
 from bisheng.utils.http_middleware import _check_is_global_super
 
-KNOWLEDGE_QUEUE = "knowledge_celery"
+DEFAULT_QUEUE = "celery"
 
 
 class PortalHotSearchAdminService:
@@ -64,7 +64,7 @@ class PortalHotSearchAdminService:
 
         async_result = trigger_portal_hot_search_rebuild_celery.apply_async(
             headers={"tenant_id": tenant_id},
-            queue=KNOWLEDGE_QUEUE,
+            queue=DEFAULT_QUEUE,
         )
         return str(async_result.id)
 
@@ -72,5 +72,5 @@ class PortalHotSearchAdminService:
     def _dispatch_fanout_rebuild() -> str:
         from bisheng.worker.knowledge.portal_hot_search import fanout_portal_hot_search_rebuild
 
-        async_result = fanout_portal_hot_search_rebuild.apply_async(queue=KNOWLEDGE_QUEUE)
+        async_result = fanout_portal_hot_search_rebuild.apply_async(queue=DEFAULT_QUEUE)
         return str(async_result.id)
