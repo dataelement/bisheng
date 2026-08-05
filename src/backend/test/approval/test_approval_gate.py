@@ -26,6 +26,7 @@ from bisheng.approval.domain.repositories.approval_query_repository import Appro
 from bisheng.approval.domain.repositories.approval_scenario_repository import ApprovalScenarioRepository
 from bisheng.approval.domain.repositories.user_menu_access_repository import UserMenuAccessRepository
 from bisheng.approval.domain.schemas.approval_center_schema import ApprovalGateDecision, ApprovalGateRequest
+from bisheng.approval.domain.services.approval_center_service import SELF_APPROVAL_COMMENT
 from bisheng.approval.domain.services.approval_gate import ApprovalGate
 from bisheng.approval.domain.services.approval_registry import ApprovalRegistry
 from bisheng.common.errcode.approval import ApprovalScenarioDisabledError
@@ -474,6 +475,103 @@ async def test_gate_pending_when_route_hits_flow():
     assert [row.approver_user_id for row in created_rows] == [1001, 1002]
     instance_repository.create_task.assert_not_called()
     instance_repository.create_action_log.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_gate_auto_approves_when_applicant_is_only_approver(
+    monkeypatch,
+    mock_approval_gate_audit_log,
+):
+    handler = SimpleNamespace(
+        build_detail=AsyncMock(return_value={"file_name": "北京天气.txt"}),
+        build_title=AsyncMock(return_value="publish file: 北京天气.txt"),
+        resolve_approvers=AsyncMock(return_value=[7]),
+    )
+    node = SimpleNamespace(
+        node_code="applicant_department_admin",
+        node_name="发布人部门管理员审批",
+        node_order=1,
+        node_mode="or",
+        approver_config={"sources": [{"type": "department_admin"}]},
+    )
+    scenario_repository = SimpleNamespace(
+        get_scenario_by_code=AsyncMock(
+            return_value=SimpleNamespace(
+                id=2,
+                scenario_code="knowledge_space_file_publish_request",
+                scenario_name="知识空间文件发布审批",
+                enabled=True,
+            )
+        ),
+        list_route_rules=AsyncMock(
+            return_value=[SimpleNamespace(id=31, route_type="flow", flow_definition_id=9)]
+        ),
+        get_active_flow_version=AsyncMock(return_value=SimpleNamespace(id=21)),
+        list_node_definitions=AsyncMock(return_value=[node]),
+    )
+    approved_instance = SimpleNamespace(id=300, status=ApprovalInstanceStatus.APPROVED)
+    instance_repository = SimpleNamespace(
+        find_duplicate_active_instance=AsyncMock(return_value=None),
+        create_instance=AsyncMock(side_effect=lambda row: row.model_copy(update={"id": 300})),
+        create_tasks=AsyncMock(
+            side_effect=lambda rows: [rows[0].model_copy(update={"id": 301})]
+        ),
+        create_action_log=AsyncMock(),
+        get_instance=AsyncMock(return_value=approved_instance),
+    )
+
+    async def decide_self_task(
+        _service,
+        *,
+        task_id,
+        action,
+        operator_user_id,
+        operator_user_name,
+        operator_tenant_id,
+        comment,
+    ):
+        assert (task_id, action) == (301, "approve")
+        assert (operator_user_id, operator_user_name, operator_tenant_id) == (
+            7,
+            "gzx0052",
+            1,
+        )
+        assert comment == SELF_APPROVAL_COMMENT
+
+    monkeypatch.setattr(
+        "bisheng.approval.domain.services.approval_center_service."
+        "ApprovalCenterService.decide_task",
+        decide_self_task,
+    )
+    gate = ApprovalGate(
+        registry=SimpleNamespace(get_handler=AsyncMock(return_value=handler)),
+        scenario_repository=scenario_repository,
+        instance_repository=instance_repository,
+        route_matcher=AsyncMock(
+            return_value=SimpleNamespace(id=31, route_type="flow", flow_definition_id=9)
+        ),
+    )
+
+    result = await gate.request_or_pass(
+        ApprovalGateRequest(
+            tenant_id=1,
+            scenario_code="knowledge_space_file_publish_request",
+            business_key="knowledge-file-publish:document:88:target:68:user:7",
+            business_resource_type="knowledge_space_file_publish_request",
+            business_resource_id="88:68",
+            business_name="publish file: 北京天气.txt",
+            applicant_user_id=7,
+            applicant_user_name="gzx0052",
+            applicant_department_id=5,
+            payload_snapshot={"applicant_department_id": 5},
+        )
+    )
+
+    assert result.decision == ApprovalGateDecision.PASS
+    assert result.instance_id == 300
+    assert result.task_ids == []
+    instance_repository.create_tasks.assert_awaited_once()
+    instance_repository.get_instance.assert_awaited_once_with(300)
 
 
 @pytest.mark.asyncio

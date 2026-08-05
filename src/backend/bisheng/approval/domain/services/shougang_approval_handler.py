@@ -265,7 +265,7 @@ async def _resolve_file_publish_approvers(node_config: dict, req) -> list[int]:
         publish_department_admin_ids = await resolve_file_publish_department_admins(
             start_department_ids=start_department_ids,
             start_user_ids=start_user_ids,
-            applicant_user_id=getattr(req, "applicant_user_id", None),
+            applicant_user_id=None,
         )
 
     department_admins_added = False

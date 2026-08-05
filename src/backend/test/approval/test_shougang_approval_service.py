@@ -3303,7 +3303,7 @@ async def test_file_publish_handler_accepts_explicit_department_admin_regardless
 
 
 @pytest.mark.asyncio
-async def test_file_publish_handler_skips_applicant_and_uses_nearest_ancestor_admin(monkeypatch):
+async def test_file_publish_handler_keeps_applicant_as_nearest_department_admin(monkeypatch):
     from bisheng.approval.domain.services.shougang_approval_handler import KnowledgeSpaceFilePublishApprovalHandler
     from bisheng.database.models.department import DepartmentDao
     from bisheng.database.models.department_admin_grant import DepartmentAdminGrantDao
@@ -3339,7 +3339,7 @@ async def test_file_publish_handler_skips_applicant_and_uses_nearest_ancestor_ad
         ),
     )
 
-    assert approvers == [8]
+    assert approvers == [4]
 
 
 @pytest.mark.asyncio
