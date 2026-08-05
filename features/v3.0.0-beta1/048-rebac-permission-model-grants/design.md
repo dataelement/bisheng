@@ -849,6 +849,13 @@ FGA Write 超时属于 `COMMIT_UNKNOWN`：reconciler 用 higher consistency 对�
 operation 重试；出现混合集或 scope version 已被外部改变时标 FAILED_CLOSED 并 fence
 该资源，不能盲目补写覆盖后来状态。
 
+人工恢复统一从 backend 容器运行
+`scripts/reconcile_f048_projection_operations.py --tenant-id <tenant> <operation...>`；默认
+dry-run 必须先核对 ledger、CURRENT Catalog 的 Store/model pin 与 scope fence，只有显式
+`--apply` 才逐 operation 调用领域 `reconcile_operation()`。脚本不得直接 UPDATE operation
+状态、资源镜像或增删 OpenFGA tuple；`FAILED_CLOSED`、pin/scope 不匹配或 ledger 不完整时
+保持阻断并转人工分析。重复传入 `FINALIZED` operation 只验证并跳过。
+
 #### Mode switch
 
 - 只有 folder / knowledge_file 开放 mode draft/apply；knowledge_space 与 knowledge_library
@@ -1591,6 +1598,7 @@ D3 已完成全部旧运行数据退役，D6 没有延后的 cleanup 窗口。�
 
 | 日期 | 改动 | 触发原因 |
 |---|---|---|
+| 2026-08-05 | 增加 `reconcile_f048_projection_operations.py` dry-run/apply 运维入口，以 durable ledger 和 live Store/model/scope fence 恢复指定 operation | 116 环境需要安全恢复 11/15/18，并为后续同类 in-flight publish blocker 提供可重复执行的前向修复入口 |
 | 2026-08-05 | projection 恢复 PREPARED 时以 higher consistency 过滤已满足的 STAGE tuple，只补写缺失项后再 commit | 116 环境 `CUSTOM→INHERIT→CUSTOM` 往返时保留 Grant link，重复 WRITE 被 OpenFGA 拒绝并留下 3 条 PREPARED operation |
 | 2026-08-05 | 允许模型在特定资源类型上形成仅可见 Grant；资源级 effective actions 变空仅计入撤权影响，不阻断 Catalog 发布 | `visible` 独立于可配置业务 action，动作等级调整不应阻止合法的仅可见授权 |
 | 2026-07-31 | `permission_migration_item.message` 改为 MySQL LONGTEXT/DM8 CLOB，完整冻结旧 Config 源载荷以支持断点续跑；数据脚本不再删除两份旧 Config 原始行，verify 仅审计其保留数，但旧 Config 运行路径仍必须不可达 | 真实迁移遇到 MySQL TEXT 64 KiB 上限；用户要求保留 Config 方便故障排查 |

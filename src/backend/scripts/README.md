@@ -31,6 +31,40 @@ Options:
 
 ## Permission Scripts
 
+### `reconcile_f048_projection_operations.py`
+
+Inspect and recover explicitly selected F048 permission projection ledger
+operations. The script validates tenant ownership, the live Catalog/OpenFGA
+Store and model pin, durable tuple rows, and the resource projection fence. It
+then delegates recovery to the normal projection reconciler; it never updates
+ledger status or OpenFGA tuples directly.
+
+Run from `src/backend/` with the same `config` value as the live service. The
+default is dry-run:
+
+```bash
+export config=config.yaml
+PYTHONPATH=./ .venv/bin/python \
+  scripts/reconcile_f048_projection_operations.py \
+  --tenant-id 1 11 15 18
+```
+
+After reviewing every `preflight` record, apply the recovery:
+
+```bash
+PYTHONPATH=./ .venv/bin/python \
+  scripts/reconcile_f048_projection_operations.py \
+  --tenant-id 1 11 15 18 --apply
+```
+
+The command exits with code `3` without writing if an operation is from a
+different tenant, uses a different Store/model pin, has an incomplete ledger,
+is `FAILED_CLOSED`, or no longer owns the expected resource projection fence.
+Exit code `4` indicates an unexpected runtime/infrastructure failure. Re-run
+is safe: already `FINALIZED` operations are verified and skipped. Catalog
+publish should only be retried when the final `remaining_active` report is
+empty.
+
 ### `migrate_f048_permission_data.py`
 
 Formal, forward-only migration from the legacy relation-model Config and

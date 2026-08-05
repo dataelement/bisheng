@@ -99,6 +99,50 @@ class _NullEvents:
         return None
 
 
+def restore_projection_plan(
+    operation: PermissionProjectionOperation,
+    tuple_rows,
+) -> ProjectionPlan:
+    """Rebuild and checksum-verify one projection plan from durable rows."""
+
+    if operation.id is None or operation.tenant_id is None or not tuple_rows:
+        raise PermissionPublishNotReadyError(
+            msg="Projection ledger is incomplete",
+        )
+    deltas = tuple(
+        ProjectionTupleDelta(
+            phase=row.phase,
+            sequence=int(row.sequence),
+            action=row.action,
+            user=row.fga_user,
+            relation=row.relation,
+            object=row.fga_object,
+        )
+        for row in tuple_rows
+    )
+    for change_item_count in range(0, 51):
+        candidate = ProjectionPlan(
+            tenant_id=int(operation.tenant_id),
+            idempotency_key=operation.idempotency_key,
+            operation_type=operation.operation_type,
+            scope_type=operation.scope_type,
+            scope_key=operation.scope_key,
+            expected_version=int(operation.expected_version),
+            target_version=int(operation.target_version),
+            store_id=operation.store_id,
+            model_id=operation.model_id,
+            operator_id=int(operation.operator_id),
+            change_item_count=change_item_count,
+            deltas=deltas,
+        )
+        normalized = normalize_projection_plan(candidate)
+        if projection_request_checksum(normalized) == operation.request_checksum:
+            return normalized
+    raise PermissionVersionConflictError(
+        msg="Projection ledger checksum cannot be reconstructed",
+    )
+
+
 class ProjectionService:
     """Execute and reconcile one atomic permission projection operation."""
 
@@ -222,50 +266,8 @@ class ProjectionService:
         tuple_rows = await self._repository.aget_operation_tuples(
             operation_id,
         )
-        plan = self._restore_plan(operation, tuple_rows)
+        plan = restore_projection_plan(operation, tuple_rows)
         return await self.reconcile(plan)
-
-    @staticmethod
-    def _restore_plan(
-        operation: PermissionProjectionOperation,
-        tuple_rows,
-    ) -> ProjectionPlan:
-        if operation.id is None or operation.tenant_id is None or not tuple_rows:
-            raise PermissionPublishNotReadyError(
-                msg="Projection ledger is incomplete",
-            )
-        deltas = tuple(
-            ProjectionTupleDelta(
-                phase=row.phase,
-                sequence=int(row.sequence),
-                action=row.action,
-                user=row.fga_user,
-                relation=row.relation,
-                object=row.fga_object,
-            )
-            for row in tuple_rows
-        )
-        for change_item_count in range(0, 51):
-            candidate = ProjectionPlan(
-                tenant_id=int(operation.tenant_id),
-                idempotency_key=operation.idempotency_key,
-                operation_type=operation.operation_type,
-                scope_type=operation.scope_type,
-                scope_key=operation.scope_key,
-                expected_version=int(operation.expected_version),
-                target_version=int(operation.target_version),
-                store_id=operation.store_id,
-                model_id=operation.model_id,
-                operator_id=int(operation.operator_id),
-                change_item_count=change_item_count,
-                deltas=deltas,
-            )
-            normalized = normalize_projection_plan(candidate)
-            if projection_request_checksum(normalized) == operation.request_checksum:
-                return normalized
-        raise PermissionVersionConflictError(
-            msg="Projection ledger checksum cannot be reconstructed",
-        )
 
     async def _run_prepared(
         self,
@@ -491,11 +493,7 @@ class ProjectionService:
             deltas,
             consistency=HIGHER_CONSISTENCY,
         )
-        return tuple(
-            delta
-            for delta in deltas
-            if (delta.key in present) != (delta.action == "WRITE")
-        )
+        return tuple(delta for delta in deltas if (delta.key in present) != (delta.action == "WRITE"))
 
     async def _classify(
         self,
