@@ -407,6 +407,20 @@ def _scoped_cache_key(key_prefix: str, unique_id: Any) -> str:
     return f"{key_prefix}t{tid}:{unique_id}"
 
 
+def invalidate_llm_info_cache(*, model_id: int | None = None, server_id: int | None = None) -> None:
+    """Drop the cached model/server rows so the next read hits the database.
+
+    ``LLM_CACHE`` is a 60s in-process TTL cache with no write-through, so a model
+    renamed a moment ago keeps resolving under its old name until the entry ages
+    out. Callers whose whole purpose is "tell me the state right now" evict first
+    rather than act on a stale config.
+    """
+    for key_prefix, unique_id in (("llm:model:", model_id), ("llm:server:", server_id)):
+        if unique_id is None:
+            continue
+        LLM_CACHE.pop(_scoped_cache_key(key_prefix, unique_id), None)
+
+
 def wrapper_bisheng_llm_info(key_prefix: str):
     """
     LLM Information Cache Decorator

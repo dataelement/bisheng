@@ -57,6 +57,7 @@ from bisheng.llm.domain.schemas import (
     WSModel,
 )
 from bisheng.llm.domain.share_fallback import avalidate_system_model_refs
+from bisheng.llm.domain.utils import invalidate_llm_info_cache
 from bisheng.tenant.domain.constants import TenantAuditAction
 from bisheng.tenant.domain.services.resource_share_service import ResourceShareService
 from bisheng.utils import generate_uuid, md5_hash
@@ -679,11 +680,17 @@ class LLMService:
             raise ServerAddError.http_exception(f"<{success_msg.rstrip(',')}>Added{failed_msg}")
 
         await cls.add_llm_server_hook(request, login_user, ret)
+        # Record what the share flag actually did, not what the request asked
+        # for: ``ainsert_server_with_models`` only fans out when the new row is
+        # Root-owned, and a super admin creating under a child-tenant admin
+        # scope lands in that child. Logging the raw request value there would
+        # claim a share that never happened.
+        shared_to_children = bool(getattr(server, "share_to_children", True)) and db_server.tenant_id == ROOT_TENANT_ID
         await _write_llm_audit(
             login_user,
             TenantAuditAction.LLM_SERVER_CREATE.value,
             ret,
-            extra={"share_to_children": getattr(server, "share_to_children", True)},
+            extra={"share_to_children": shared_to_children},
         )
         return ret
 
@@ -935,6 +942,11 @@ class LLMService:
         exist_model = await LLMDao.aget_model_by_id(model_id)
         if not exist_model:
             raise NotFoundError.http_exception()
+        # The probe resolves the model through a 60s in-process cache that no
+        # write invalidates, so a model renamed moments ago would be called under
+        # its old name and reported back as "does not exist". Evict first — an
+        # on-demand check that answers from a minute-old snapshot is worthless.
+        invalidate_llm_info_cache(model_id=model_id, server_id=exist_model.server_id)
         # Probing ignores the online flag on purpose: a model taken offline
         # still needs checking before you decide to bring it back.
         await cls.test_model_status(exist_model, login_user)

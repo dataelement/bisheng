@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { canManageModelSettings, canManageWorkbenchConfig } from "@/pages/ModelPage/manage/permissions";
+import { canManageModelSettings, canManageWorkbenchConfig, canShareToChildren } from "@/pages/ModelPage/manage/permissions";
 
 describe("canManageModelSettings", () => {
   it("allows super admins", () => {
@@ -59,6 +59,78 @@ describe("canManageModelSettings", () => {
         web_menu: ["build"],
         is_child_admin: false,
       } as any),
+    ).toBe(false);
+  });
+});
+
+describe("canShareToChildren", () => {
+  const superUser = { role: "admin", is_global_super: true } as any;
+
+  it("hides the toggle in single-tenant deployments", () => {
+    expect(
+      canShareToChildren({ multiTenantEnabled: false, user: superUser, isCreate: true }),
+    ).toBe(false);
+  });
+
+  it("hides the toggle for Child Admins", () => {
+    expect(
+      canShareToChildren({
+        multiTenantEnabled: true,
+        user: { role: "editor", is_child_admin: true } as any,
+        isCreate: true,
+      }),
+    ).toBe(false);
+  });
+
+  it("shows the toggle on create under the default (Root) scope", () => {
+    expect(
+      canShareToChildren({ multiTenantEnabled: true, user: superUser, isCreate: true }),
+    ).toBe(true);
+    expect(
+      canShareToChildren({
+        multiTenantEnabled: true,
+        user: superUser,
+        isCreate: true,
+        scopeTenantId: 1,
+      }),
+    ).toBe(true);
+  });
+
+  it("hides the toggle on create under a child-tenant admin scope", () => {
+    // The new row lands in the scoped child tenant, and the tree is locked
+    // to two layers (INV-T1) — a child has no children to share with, so the
+    // backend skips the fan-out and the toggle would do nothing.
+    expect(
+      canShareToChildren({
+        multiTenantEnabled: true,
+        user: superUser,
+        isCreate: true,
+        scopeTenantId: 7,
+      }),
+    ).toBe(false);
+  });
+
+  it("shows the toggle when editing a Root-owned server", () => {
+    expect(
+      canShareToChildren({
+        multiTenantEnabled: true,
+        user: superUser,
+        isCreate: false,
+        serverTenantId: 1,
+      }),
+    ).toBe(true);
+  });
+
+  it("hides the toggle when editing a child-owned server", () => {
+    expect(
+      canShareToChildren({
+        multiTenantEnabled: true,
+        user: superUser,
+        isCreate: false,
+        serverTenantId: 7,
+        // Scope is irrelevant in edit mode — ownership is what decides.
+        scopeTenantId: null,
+      }),
     ).toBe(false);
   });
 });

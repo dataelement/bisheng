@@ -1,18 +1,18 @@
 import json
-from typing import Any, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 from langchain_core.documents import BaseDocumentTransformer, Document
 
+from bisheng.common.constants.knowledge import KNOWLEDGE_MAX_CHUNK_CHARS
 from bisheng.common.errcode.knowledge import KnowledgeFileChunkMaxError
 
 
 class DirectChunkTransformer(BaseDocumentTransformer):
-    def __init__(self, max_chunk_limit: int = 10000) -> None:
+    def __init__(self, max_chunk_limit: int = KNOWLEDGE_MAX_CHUNK_CHARS) -> None:
         self.max_chunk_limit = max_chunk_limit
 
-    def transform_documents(
-            self, documents: Sequence[Document], **kwargs: Any
-    ) -> Sequence[Document]:
+    def transform_documents(self, documents: Sequence[Document], **kwargs: Any) -> Sequence[Document]:
         for index, one in enumerate(documents):
             one.metadata["chunk_index"] = index
             if "bbox" not in one.metadata:

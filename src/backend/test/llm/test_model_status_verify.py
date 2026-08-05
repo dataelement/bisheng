@@ -85,3 +85,61 @@ class TestProbeWritesStatus:
 
         _, status, _ = status_writes.call_args[0]
         assert status == STATUS_NORMAL
+
+
+class TestVerifyDefeatsTheInfoCache:
+    """An on-demand check must not answer from a minute-old snapshot.
+
+    `LLM_CACHE` is a 60s in-process TTL cache with no write-through, and the
+    probe resolves the model through it (`get_model_server_info(..., cache=True)`).
+    Renaming a model and immediately pressing "check" therefore probed the OLD
+    name and reported `model_not_found`; it only started working once the entry
+    aged out. Verify evicts the entry first.
+    """
+
+    async def test_verify_evicts_the_cached_model_and_server(self):
+        from bisheng.llm.domain.const import LLM_CACHE
+        from bisheng.llm.domain.utils import _scoped_cache_key
+
+        model = _model()
+        model_key = _scoped_cache_key("llm:model:", model.id)
+        server_key = _scoped_cache_key("llm:server:", model.server_id)
+        LLM_CACHE[model_key] = "row carrying the pre-rename model_name"
+        LLM_CACHE[server_key] = "row carrying the pre-rename server config"
+
+        with (
+            patch(
+                "bisheng.llm.domain.services.llm.LLMDao.aget_model_by_id",
+                AsyncMock(return_value=model),
+            ),
+            patch.object(LLMService, "test_model_status", AsyncMock()),
+        ):
+            await LLMService.verify_model_status(model.id, _login_user())
+
+        assert LLM_CACHE.get(model_key) is None
+        assert LLM_CACHE.get(server_key) is None
+
+    async def test_eviction_happens_before_the_probe_runs(self):
+        # Ordering is the whole fix: evicting after the probe would still have
+        # let the probe build its client from the stale row.
+        from bisheng.llm.domain.const import LLM_CACHE
+        from bisheng.llm.domain.utils import _scoped_cache_key
+
+        model = _model()
+        model_key = _scoped_cache_key("llm:model:", model.id)
+        LLM_CACHE[model_key] = "stale"
+        seen = {}
+
+        async def record_cache_state(*args, **kwargs):
+            seen["cached_at_probe_time"] = LLM_CACHE.get(model_key)
+
+        with (
+            patch(
+                "bisheng.llm.domain.services.llm.LLMDao.aget_model_by_id",
+                AsyncMock(return_value=model),
+            ),
+            patch.object(LLMService, "test_model_status", record_cache_state),
+        ):
+            await LLMService.verify_model_status(model.id, _login_user())
+
+        assert seen["cached_at_probe_time"] is None
