@@ -1,4 +1,10 @@
-"""API-process composition root for the F048 permission runtime."""
+"""Composition roots for the F048 permission runtime.
+
+Two entries share one business resource composition: ``initialize_f048_api_runtime``
+(API process — also installs the HTTP dependency wiring) and
+``initialize_f048_worker_runtime`` (Celery / Linsight worker — same resource
+registry, no HTTP wiring).
+"""
 
 from __future__ import annotations
 
@@ -12,6 +18,7 @@ from bisheng.channel.domain.services.f048_channel_permission import (
     ChannelDaoPermissionLoader,
     F048ChannelPermissionAdapter,
 )
+from bisheng.core.openfga.client import FGAClient
 from bisheng.knowledge.domain.services.knowledge_permission_service import (
     F048KnowledgeContainerPermissionAdapter,
     F048KnowledgeFilePermissionAdapter,
@@ -48,6 +55,9 @@ from bisheng.permission.application.runtime import (
     F048PermissionRuntime,
     F048RuntimeComponents,
     build_f048_permission_runtime,
+)
+from bisheng.permission.application.sql_runtime import (
+    ExternalProjectionScopePort,
 )
 from bisheng.permission.domain.schemas import VerifiedPermissionTarget
 from bisheng.permission.domain.services.catalog_service import CatalogService
@@ -191,7 +201,11 @@ async def initialize_f048_api_runtime(
     *,
     external_scopes: dict[str, ExternalProjectionScopePort] | None = None,
 ) -> F048ApiRuntime:
-    """Build and install the sole API permission composition."""
+    """Build and install the API process's permission composition.
+
+    Sole composition for THIS process; ``initialize_f048_worker_runtime`` is the
+    background-process counterpart and shares the same resource registry build.
+    """
 
     components = await build_f048_permission_runtime(
         client,
