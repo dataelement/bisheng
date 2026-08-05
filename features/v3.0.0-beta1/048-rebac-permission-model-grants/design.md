@@ -533,7 +533,7 @@ CatalogService 的生成规则固定为；每次 action 的 level/active/scope �
 - 每个自定义模型保留管理员显式选择；过滤 inactive/unassigned/越 scope 动作后，
   等级重新取剩余动作最高 level，不按等级补动作；
 - action scope 在每个具体资源 relation 上取交集；模型在目标资源上没有任何适用 action
-  时不得创建 Grant，资源可见性不能用来绕过该合法性检查；
+  时，该 Grant 仍可通过 active model 产生 `visible`，但不产生任何可配置业务 action；
 - action 变为 inactive/unassigned 后，引用它的 active 自定义模型必须在 draft 中修复或
   停用；不能把空的 effective model 发布为 active。
 
@@ -1590,6 +1590,7 @@ D3 已完成全部旧运行数据退役，D6 没有延后的 cleanup 窗口。�
 
 | 日期 | 改动 | 触发原因 |
 |---|---|---|
+| 2026-08-05 | 允许模型在特定资源类型上形成仅可见 Grant；资源级 effective actions 变空仅计入撤权影响，不阻断 Catalog 发布 | `visible` 独立于可配置业务 action，动作等级调整不应阻止合法的仅可见授权 |
 | 2026-07-31 | `permission_migration_item.message` 改为 MySQL LONGTEXT/DM8 CLOB，完整冻结旧 Config 源载荷以支持断点续跑；数据脚本不再删除两份旧 Config 原始行，verify 仅审计其保留数，但旧 Config 运行路径仍必须不可达 | 真实迁移遇到 MySQL TEXT 64 KiB 上限；用户要求保留 Config 方便故障排查 |
 | 2026-07-31 | 简化升级顺序为“更新镜像并启动→进入 backend 容器执行 migrate/verify→迁移成功后重启服务”；旧 model 下 API/Worker 进程允许存活但 F048 runtime 不初始化、readiness=503、ready heartbeat=0，应用自动拒绝非 health HTTP/WS；重启就绪后自动恢复访问；移除 `F048_SERVICES_STOPPED` 人工标记 | 用户明确要求沿用之前版本的简单升级流程，只额外增加迁移后重启 |
 | 2026-07-30 | 运行时不再配置 Store/model/Catalog ID；沿用按 Store name 查询唯一 Store 与 latest model 的方式，并增加 F048 checksum + SQL CURRENT Catalog 一致性门禁；迁移 CLI 移除 `--expected-store-id` | 用户明确纠正易变 ID 不应写入配置 |
