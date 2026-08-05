@@ -671,7 +671,9 @@ function selectPortalSubcategory(
     childText = parentText,
 ) {
     fireEvent.click(getPortalCategoryButton(scope, label, selectedText));
-    const tree = within(scope).getByRole("tree", { name: label });
+    // fileTable variant portals the menu to document.body (upload records / file table).
+    const tree = within(scope).queryByRole("tree", { name: label })
+        ?? screen.getByRole("tree", { name: label });
     fireEvent.click(within(tree).getByRole("button", { name: parentText }));
     const childButtons = within(tree).getAllByRole("button", { name: childText });
     fireEvent.click(childButtons[childButtons.length - 1]);
@@ -5152,9 +5154,9 @@ describe("PortalKnowledgeWorkbench", () => {
 
         const categoryButton = getPortalCategoryButton(drawer, "修改编码文档.pdf文件分类", "标准规范 / --");
         fireEvent.click(categoryButton);
-        expect(within(drawer).getByRole("tree", { name: "修改编码文档.pdf文件分类" })).toBeInTheDocument();
+        expect(screen.getByRole("tree", { name: "修改编码文档.pdf文件分类" })).toBeInTheDocument();
         fireEvent.pointerDown(document.body);
-        expect(within(drawer).queryByRole("tree", { name: "修改编码文档.pdf文件分类" })).not.toBeInTheDocument();
+        expect(screen.queryByRole("tree", { name: "修改编码文档.pdf文件分类" })).not.toBeInTheDocument();
 
         selectPortalSubcategory(drawer, "修改编码文档.pdf文件分类", "标准规范 / --", "报告", "报告 / 报告");
 

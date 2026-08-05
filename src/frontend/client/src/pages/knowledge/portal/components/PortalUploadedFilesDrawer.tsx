@@ -566,6 +566,7 @@ export function PortalUploadedFilesDrawer({
                                     </span>
                                     <span className={s.uploadRecordCategoryCell}>
                                         <PortalFileCategoryDropdown
+                                            variant="fileTable"
                                             groups={fileCategoryGroups}
                                             value={draft.fileSubcategoryCode ?? record.fileSubcategoryCode}
                                             fallbackParentCode={selectedFileCategoryCode}
