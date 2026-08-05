@@ -28,21 +28,28 @@ import { cname } from "@/components/bs-ui/utils";
 import EditUserGroup from "./EditUserGroup";
 import { userContext } from "@/contexts/userContext";
 
+const isGroupCreator = (user: any, ug: UserGroupV2) => {
+    const creatorId = Number(ug.create_user)
+    const currentUserId = Number(user?.user_id)
+    return Number.isFinite(creatorId)
+        && Number.isFinite(currentUserId)
+        && creatorId === currentUserId
+}
+
 export const canDeleteUserGroup = (user: any, ug: UserGroupV2) => {
     if (user?.role === "admin") return true
     const isUserGroupManager =
         user?.can_manage_user_groups
         || user?.is_department_admin
         || user?.is_child_admin
-    const creatorId = Number(ug.create_user)
-    const currentUserId = Number(user?.user_id)
-    if (
-        isUserGroupManager
-        && Number.isFinite(creatorId)
-        && Number.isFinite(currentUserId)
-        && creatorId === currentUserId
-    ) return true
+    if (isUserGroupManager && isGroupCreator(user, ug)) return true
     return false
+}
+
+/** Mirrors the backend guard on PUT /user-groups/{id}: super admin or creator only. */
+export const canEditUserGroup = (user: any, ug: UserGroupV2) => {
+    if (user?.role === "admin") return true
+    return isGroupCreator(user, ug)
 }
 
 export default function UserGroups() {
@@ -224,7 +231,7 @@ export default function UserGroups() {
                                     {...ugRc.getTdProps(4)}
                                     className="whitespace-nowrap text-right"
                                 >
-                                    <Button variant="link" disabled={loading} onClick={() => setUserGroup({ ...ug })}
+                                    <Button variant="link" disabled={loading || !canEditUserGroup(user, ug)} onClick={() => setUserGroup({ ...ug })}
                                         className="px-0 pl-6">{t('edit')}
                                     </Button>
                                     <Button variant="link" disabled={loading || !canDeleteUserGroup(user, ug)} onClick={() => handleDelete(ug)} className="text-red-500 px-0 pl-6">{t('delete')}</Button>
