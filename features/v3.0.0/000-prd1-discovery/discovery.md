@@ -28,11 +28,16 @@
 - **缺口**：全仓无任何 ApiKey 表 / bs- 前缀 / require_api_key 配置；v2 约 45 个端点（8 个路由文件）多数**内联调用**身份解析（非 Depends），鉴权改造必须逐端点替换；WS 握手鉴权需改走 Authorization 头（现有查询参数路径不生效，中间件已读 scope headers，可行）。
 - **风险**：v1 端点只认 cookie（headers 分支零调用方）——**PAT 不能复用 v1 面**，必须独立 router；`User` 表无 `user_type` 字段（服务账号主体需 Alembic）。
 
-### 2.2 权限与可见范围（GOV-01 / RT-02 过滤 / NFR-1）→ research: permission-rebac
+### 2.2 权限与可见范围（GOV-01 / RT-02 过滤 / NFR-1）→ research: permission-rebac ⚠️**已按 F048 基线重核，本节为重核后结论**
 
-- **可复用**：通用授权 API `POST /permissions/resources/{type}/{id}/authorize` + platform `PermissionDialog`（构建页应用卡片已在用）；授权变更即时生效（affected_user_ids 逐用户失效缓存）；列表过滤范式「admin bypass + ListObjects∪绑定表预过滤 + keyset + 行级细粒度」；创建即 owner（`OwnerService.write_owner_tuple` + FailedTuple 补偿）。
-- **缺口**：`app` 资源类型全链路注册 ≈ 7 处 per-type dispatch + OpenFGA 静态模型加类型 + 两个前端 ResourceType 联合类型；**存量环境 FGA 模型只写一次**（仅 store 无模型或 force_write_model 时写入）——app 类型上线必须配运维升级手段（F048 迁移被拦的教训直接适用）。
-- **风险**：super_admin / 子租户管理员两个 allow-all 短路 ↔ 伴生 PRD「禁代表这两类身份」准入必须贯穿 MCP/SDK/应用运行时全部委托面。
+> research/permission-rebac.md 是在 `main`（pre-F048）上做的，其「七级链 + owner/manager/editor/viewer 四档 + FGA 故障降级 owner 兜底」结论**在本基线已全部作废**——`PermissionService` 降格为身份/LLM 兼容桥，对 F048 业务资源类型直接 raise。阅读该文件时以本节为准。
+
+- **今天的判定链**：业务侧唯一入口是 `check_business_action` / `require_business_action` / `batch_check_business_actions`；链路 = 解析 actor → 业务 adapter 产出已验证目标 → runtime 检查动作。短路只剩两个 allow-all：**super_admin** 与**当前租户的租户管理员**（Root 租户没有租户管理员这一档）。
+- **fail-closed 已经是现状**：OpenFGA 故障、Catalog 未就绪、资源镜像非 CURRENT、动作未分级——全部 raise 明确错误，**没有任何 owner/creator 兜底分支**。这意味着 NFR-1.4 在权限侧天然满足（见 D6 已解）。
+- **列表过滤范式变了**：不再用 ListObjects（生产装配 DenyListObjects 策略、无调用方），改为「SQL 出业务候选 → 批量 check 具体动作」，知识文件可见性预过滤就是这个形状。admin 短路仍在且位于策略检查之前。
+- **可复用**：通用授权 API（`/permissions/resources/{type}/{id}/` 下的 grants / mode-drafts / my-permissions 等）+ platform `PermissionDialog` 及其子组件；创建即 owner 走 adapter 的 `authorize_created`（protected owner grant + 投影账本 + `scripts/reconcile_f048_projection_operations.py` 人工续跑）。
+- **缺口（比 pre-F048 更重）**：新增 `app` 资源类型要动 **后端 12 处 + 前端 3 处联合类型**；且**存量环境仍有「只写一次」缺口**——授权模型本身已有 checksum 检测 + 全站 503 迁移闸门（比 main 好），但 Catalog 的「动作↔资源类型范围表」只在首次迁移与草稿发布时写入，且变更类型枚举里**没有「改资源范围」这一种**，迁移脚本又因 checksum 不符无法重跑。给存量环境加资源类型必须新写运维脚本或扩展变更类型。
+- **风险**：① 委托红线的正确谓词是 runtime 的 system-authorized 判定（super_admin ∪ 当前租户管理员），不是 legacy 的 `is_admin()`；② 身份构造有两条路径，同步路径不计算 super 标记，后台/工具执行路径自造的身份也不带——同一个人在不同入口的判定结果可能不同；③ F048 判定**无缓存且每目标 3 次 SQL**，MCP/应用运行时的高频检索会放大；④ 前端三处类型里有 `linsight_skill` 但后端 registry 未注册，对它调通用授权 API 会直接报错（存量隐患）。
 
 ### 2.3 检索（DEV-02 / GOV-05 / NFR-1.4）→ research: knowledge-retrieval
 
@@ -109,11 +114,11 @@
 | # | 决策 | 选项与建议 |
 |---|------|-----------|
 | **D1** | **首批启动 feature**：是否按「批次 A 先行、F049 第一个进 spec」推进？ | 建议：是。F049 是 DEV-01/CLI/MCP/SDK/应用 token 的共同地基，且 v2 开放面的鉴权缺口在产，越早关越好。 |
-| **D2** | **开发基线分支**：应用工场落在哪条权限基线上？main（当前，pre-F048 七级链 + 旧四档 relation）还是 3.0.0 线（含 F048 PermissionModel/Grant 权限重写，INV-9~26）？ | app 资源类型注册、细粒度模板、授权弹窗在两条基线下实现**完全不同**；批次 A 受影响小、批次 B 受影响大。需明确 v3.0.0 主线分支与 F048 的合入关系后才能写批次 B 的 design。 |
+| ~~**D2**~~ **已定** | ~~开发基线分支~~ | **2026-08-06 定：3.0.0 线（含 F048）**——开发在 `3.0-vibe`（基于 `feat/3.0.0-beta1`），F048 权限重写已实装并经代码核实。连带：beta1 的 INV-8~26 无条件生效；§2.2 已按此基线重核（research/permission-rebac.md 的 pre-F048 结论作废）。 |
 | **D3** | **app 资产载体**：复用 flow 表新增 FlowType（广场/标签/权限链路自动继承，但混入存量语义）vs 独立 app 表（干净，但 ~8 处硬编码点全要显式扩）？ | 倾向独立表 + 列表 UNION 第三支（版本/档位/改码权等字段本就装不进 flow 表），spec 阶段定稿。 |
 | **D4** | **运行时隔离选型**：docker SDK+docker.sock（与现单机 compose 最兼容，但 sock≈host root，信创环境 docker 权限不确定）vs 裸进程+cgroup v2（无 docker 依赖，跨发行版差异大）？ | design 阶段决策，但需要产品先回答：目标客户环境（含信创）是否保证有 docker 且允许平台持有 socket 权限。 |
 | **D5** | **审批处理界面落位**：PRD 写「平台审批中心」（platform 管理后台），现状审批处理面只在 client 工作台弹窗（platform 只有场景配置+异常处理）。复用 client 弹窗（改造小、PRD 措辞需修订）vs platform 新建整套处理面（符合字面、工作量大）？ | 建议复用 client 弹窗 + 场景定制详情渲染，PRD 措辞同步修订。 |
-| **D6** | **strict fail-closed 的边界**：NFR-1.4 的「权限评估失败」是否包含 FGA 连接失败时现有的 owner/creator 兜底（那次是刻意从硬 fail-closed 改过来的）？ | 建议：新开放面（MCP/SDK/应用运行时）strict 模式一律报错；平台内既有面维持现状降级。仓内 fail-closed 参照实现 = `has_tenant_admin`（user_deps.py）。⚠️与 D2 联动：若基线含 F048，「既有面维持降级」与 beta1 INV-19（权限服务不可用必须 fail closed）/INV-9（FGA 故障后不得 fallback）正面冲突，须作为显式豁免登记或将本决策收窄为「仅 pre-F048 基线期间维持现状」。定稿后作为 INV-27 写进 release-contract。 |
+| ~~**D6**~~ **基本自解** | ~~strict fail-closed 的边界~~ | **随 D2 落定而消解**：F048 基线上权限判定已硬 fail-closed（FGA 故障/Catalog 未就绪/动作未分级全部 raise，无 owner 兜底），NFR-1.4 在权限侧天然满足，无需再为开放面单开 strict 模式。已登记为 INV-30（只补充「部分过滤亦属失败」这一判据）。**残留一处需拍板**：全局超管判定在 OpenFGA 故障时会回落到 legacy 角色位判定——故障时反而可能把人判成超管并命中 allow-all，是当前唯一带 fail-open 味道的分支，是否一并收紧待定。 |
 | **D7** | **appdb 双库范围**：per-app 数据库首发是否 MySQL+DM8 双库同步交付？DM8 的 schema-per-app 与迁移前自动快照均无先例，「首发仅 MySQL、DM8 二期」可大幅降险但违背 C2，需显式豁免决策。 | 需产品/交付侧拍板。 |
 
 次级决策（spec/design 阶段随对应 feature 定，先登记）：模型名歧义规则（跨服务商同名 model_name）；MCP Server 部署形态（同进程 mount vs 独立进程）；/apps/{slug} 路由承接者（nginx 增强 vs FastAPI 反代 vs 独立 ingress，商业版 Java gateway 联动）；高频审计事件分层；实例配额存储形态与覆盖写修复；CLI 安装包形态（wheel+内网镜像 vs 单文件二进制）；PAT 与开放 API 个人访问令牌是否合并（PRD-1 §6 开放问题 3）；**GOV-05 密钥引用是否随本册交付**（录入面 WB-05 属 PRD-2 且不在 §1 最小承载面清单，需产品确认）。
@@ -122,7 +127,7 @@
 
 ## 5. 重大风险登记（进 design 阶段必须消化）
 
-1. **FGA 模型存量升级**：app 类型上线需运维介入写新模型（force_write_model / runbook），无自动升级通道——发布方案前置演练（F048 存量被拦教训）。
+1. **新资源类型的存量生效缺口（按 F048 基线重核）**：授权模型侧已有 checksum 检测 + 全站 503 迁移闸门，但 Catalog 的「动作↔资源类型范围表」只在首次迁移与草稿发布时写入，**变更类型枚举里没有「改资源范围」**，迁移脚本又因 checksum 不符无法重跑——给存量环境加 `app` 类型必须新写运维脚本或扩展变更类型。F054 design 必须前置演练（F048 存量被拦教训）。
 2. **租户配额整体覆盖写**（已核实缺陷）：新增实例配额前必须先改合并写语义，否则两入口互清。
 3. **单机容量**：per-app 实例叠在已合跑全家桶的单机上，GOV-03 实例配额是 RT-08 承诺的唯一护栏——为此实例配额**执行闸门已划入 F054 自身**（复用 tenant.quota_config，先于档位实体存在），F054 单独合入不会出现无护栏窗口。
 4. **DM8**：版本快照大 JSON / appdb 迁移快照均有写放大与工具缺失风险（快照体走 MinIO；D7 决策）。
@@ -133,6 +138,8 @@
 
 ## 6. 下一步
 
-1. ★ 用户确认：D1–D7（至少 D1/D2）+ Feature 拆分方案（§3）。
-2. 确认后：按 D1 结论对首批 feature 写 spec.md（`features/v3.0.0/{NNN}-{name}/spec.md`）→ `/sdd-review spec` → ★。
-3. release-contract.md 已随本文档初始化（表 3 登记规划依赖图；表 1/表 2 随各 spec 编写时登记）。
+**进度（2026-08-06）**：D2 已定（3.0.0 线含 F048），D6 随之消解；F049 已按伴生 PRD 的 P0 阶段线收窄并完成 spec 初稿（`049-openapi-auth-baseline/spec.md`），release-contract 表 1/表 2 已正式登记（ApiCredential、ServiceAccount；INV-27~30）。
+
+1. ★ 待用户确认：F049 spec（含其 §4 的三项 [待澄清]——WS 端点与免登录分享页的冲突、统一身份构造导致的权限放宽、无身份端点的归属基准）+ 仍未拍板的 D1 / D3 / D4 / D5 / D7。
+2. 确认后：`/sdd-review 049-openapi-auth-baseline spec` → 修订 → 写 design.md（Constitution Check）→ ★。
+3. **research/ 的时效性提醒**：11 份调研在 `main`（pre-F048）上完成，与本基线相差 242 个后端文件。已按 F048 重核并回写的维度：权限（§2.2）、v2 开放 API 与身份体系（已并入 F049 spec）。**其余维度在被引用前需重核**——尤其检索（`knowledge_file_visibility_service` 有 139 行改动）、模型面、审批。
