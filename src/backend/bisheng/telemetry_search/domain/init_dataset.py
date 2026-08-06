@@ -802,6 +802,10 @@ DASHBOARD_DATASET = [
                     is_virtual=True,
                     filter=FilterExpression(bool_operator="must", filters=[
                         TermOp(field="record_type", value="preview_daily"),
+                        TermsOp(
+                            field="space_level",
+                            value=list(KNOWLEDGE_SPACE_DASHBOARD_FILE_LEVELS),
+                        ),
                     ]),
                     aggregations=[
                         AggregationExpression(

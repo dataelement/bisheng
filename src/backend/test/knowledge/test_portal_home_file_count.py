@@ -55,6 +55,7 @@ async def test_portal_file_count_uses_dashboard_es_metric(monkeypatch: pytest.Mo
                                         "department",
                                         "team",
                                         "team_ks",
+                                        "personal",
                                     ]
                                 }
                             },

@@ -73,11 +73,6 @@ async def _get_field_options(
         "get_es_connection",
         AsyncMock(return_value=es_client),
     )
-    monkeypatch.setattr(
-        module.DashboardService,
-        "_get_realtime_scope_filters",
-        AsyncMock(return_value=[]),
-    )
     service = module.DashboardService.model_construct()
 
     result = await service.get_dataset_field_enums(
@@ -250,6 +245,19 @@ async def test_dashboard_enum_options_keep_values_and_use_readable_labels(
     assert result["options"] == [
         {"value": value, "label": label} for value, label in zip(values, expected_labels, strict=True)
     ]
+
+
+@pytest.mark.asyncio
+async def test_realtime_dataset_enum_query_has_no_implicit_scope_filter(monkeypatch):
+    result, body = await _get_field_options(
+        monkeypatch,
+        dataset_code="mid_realtime_qa_question_fact",
+        field="primary_department_id",
+        values=[9, 10, 11],
+    )
+
+    assert result["enums"] == [9, 10, 11]
+    assert "query" not in body
 
 
 @pytest.mark.parametrize(

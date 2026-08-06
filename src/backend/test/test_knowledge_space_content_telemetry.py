@@ -260,6 +260,28 @@ async def test_knowledge_space_content_log_preview_success_upserts_daily_counter
 
 
 @pytest.mark.asyncio
+async def test_favorite_space_preview_is_not_projected(monkeypatch):
+    from bisheng.telemetry.domain.mid_table import knowledge_space_content as module
+
+    fake_client = _FakeAsyncIndexClient()
+
+    async def fake_get_es_connection():
+        return fake_client
+
+    monkeypatch.setattr("bisheng.telemetry.domain.mid_table.base.get_es_connection", fake_get_es_connection)
+
+    await module.KnowledgeSpaceContentStat.log_preview_success(
+        file_record=SimpleNamespace(id=11),
+        space=SimpleNamespace(id=3, name="我的收藏", is_favorite=True),
+        viewer_user_id=9,
+        viewer_user_name="查看人",
+    )
+
+    assert fake_client.get_calls == []
+    assert fake_client.update_calls == []
+
+
+@pytest.mark.asyncio
 async def test_knowledge_space_content_log_preview_success_does_not_retry_es_failure(monkeypatch):
     from bisheng.telemetry.domain.mid_table import knowledge_space_content as module
 
@@ -384,6 +406,24 @@ def test_only_department_and_clinic_spaces_are_department_bound(level, expected)
     assert worker_module._is_department_bound_space_scope(SimpleNamespace(level=level)) is expected
 
 
+@pytest.mark.parametrize(
+    ("is_favorite", "expected"),
+    [(False, True), (True, False)],
+)
+def test_content_projection_excludes_favorite_spaces(is_favorite, expected):
+    from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFileStatus
+
+    worker_module = _import_worker_mid_table()
+    file_record = SimpleNamespace(
+        file_type=FileType.FILE.value,
+        status=KnowledgeFileStatus.SUCCESS.value,
+        deleted_at=None,
+    )
+    space = SimpleNamespace(type=3, is_favorite=is_favorite)
+
+    assert worker_module._is_file_content_stat_visible(file_record, space) is expected
+
+
 def test_unbound_space_content_has_no_owning_department():
     from bisheng.telemetry.domain.mid_table import knowledge_space_content as module
 
@@ -432,6 +472,19 @@ def test_knowledge_space_content_delete_stale_file_records_uses_sync_run_id(monk
     assert call["conflicts"] == "proceed"
     assert call["body"]["query"]["bool"]["filter"] == [{"term": {"record_type": "file"}}]
     assert call["body"]["query"]["bool"]["must_not"] == [{"term": {"sync_run_id": "run-1"}}]
+
+
+def test_delete_space_records_removes_file_and_preview_rows(monkeypatch):
+    from bisheng.telemetry.domain.mid_table import knowledge_space_content as module
+
+    fake_client = _FakeSyncIndexClient()
+    monkeypatch.setattr("bisheng.telemetry.domain.mid_table.base.get_es_connection_sync", lambda: fake_client)
+
+    deleted = module.KnowledgeSpaceContentStat().delete_space_records_sync([3, 4])
+
+    assert deleted == 3
+    query = fake_client.deleted_queries[0]["body"]["query"]
+    assert query == {"terms": {"space_id": [3, 4]}}
 
 
 def test_sync_pending_knowledge_space_content_stat_reloads_current_file_state(monkeypatch):

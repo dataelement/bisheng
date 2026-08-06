@@ -76,10 +76,10 @@
 | 知识库文件存量表 | 总文件数 | `total_file_count` | `knowledge_base_type = 文档知识库` | 有时间维度：每桶 `value_count(file_id)` 后累计；无时间维度：`cardinality(file_id)` | 截至当前时间桶的文档文件总量 | 文件上传时间；支持年/月/周/日 | 无时间维度时按 `file_id` 去重 |
 | 知识库文件存量表 | 总 QA 对数 | `total_qa_count` | `knowledge_base_type = QA知识库` | 有时间维度：每桶 `value_count(file_id)` 后累计；无时间维度：`cardinality(file_id)` | 截至当前时间桶的 QA 数据总量 | QA 创建时间；支持年/月/周/日 | 无时间维度时按 `file_id` 去重 |
 | 知识库文件存量表 | 文件大小 | `file_size` | `knowledge_base_type = 文档知识库` | 实体字段；默认 `sum(file_size)`，可配置其他聚合 | 默认等于文档文件大小之和 | 文件上传时间；支持年/月/周/日 | 不去重，一条文件记录参与一次 |
-| 知识空间内容统计 | 总文件数 | `total_file_count` | `record_type=file`、`file_type=1`、`space_level` 为 `public`、`department`、`team` 或 `team_ks` | 有时间维度：每桶 `value_count(file_id)` 后累计；无时间维度：直接 `value_count(file_id)` | 当前有效文件快照按创建时间形成的累计数量 | 文件创建时间；支持年/月/周/日 | 当前每个文件只有一条快照 |
+| 知识空间内容统计 | 总文件数 | `total_file_count` | `record_type=file`、`file_type=1`、`space_level` 为 `public`、`department`、`team`、`team_ks` 或 `personal`；排除“我的收藏” | 有时间维度：每桶 `value_count(file_id)` 后累计；无时间维度：直接 `value_count(file_id)` | 当前有效文件快照按创建时间形成的累计数量 | 文件创建时间；支持年/月/周/日 | 当前每个文件只有一条快照 |
 | 知识空间内容统计 | 新增文件数 | `new_file_count` | 与“总文件数”相同 | `value_count(file_id)` | 查询周期或时间桶内创建、且当前仍有效的文件数量 | 文件创建时间；支持年/月/周/日 | 当前每个文件一条快照 |
 | 知识空间内容统计 | 内容贡献人数 | `contributor_count` | `record_type=file`、空间级别在允许集合内 | `cardinality(uploader_user_id)` | 上传过当前有效内容的不同用户数 | 文件创建时间；支持年/月/周/日 | 按上传人 ID 去重 |
-| 知识空间内容统计 | 预览次数 | `preview_count` | `record_type = preview_daily` | `sum(preview_count)` | 各“文件＋自然日”记录中的预览计数之和 | 中国自然日零点；支持年/月/周/日 | 不按用户去重，每次成功预览均加 1 |
+| 知识空间内容统计 | 预览次数 | `preview_count` | `record_type = preview_daily`、空间级别在允许集合内；排除“我的收藏” | `sum(preview_count)` | 各“文件＋自然日”记录中的预览计数之和 | 中国自然日零点；支持年/月/周/日 | 不按用户去重，每次成功预览均加 1 |
 | 文件解析事件表 | 文档上传次数 | `doc_parse_count` | 无 | `value_count(event_id)` | 全部文件解析事件数量 | 解析事件时间；支持年/月/周/日 | 不额外去重 |
 | 文件解析事件表 | 文档入库成功次数 | `doc_parse_success_count` | `status = success` | `value_count(event_id)` | 解析成功事件数量 | 解析事件时间；支持年/月/周/日 | 不额外去重 |
 | 文件解析事件表 | 文档入库成功率 | `doc_parse_success_rate` | 分子：`status=success`；分母：全部解析事件 | 两次 `value_count(event_id)` | 解析成功次数 ÷ 全部解析次数 | 解析事件时间；支持年/月/周/日 | 不额外去重 |

@@ -5,4 +5,5 @@ KNOWLEDGE_SPACE_DASHBOARD_FILE_LEVELS = (
     "department",
     "team",
     "team_ks",
+    "personal",
 )

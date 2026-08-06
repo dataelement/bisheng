@@ -687,7 +687,9 @@ return 0
         viewer_user_name: str,
         occurred_at: datetime | None = None,
     ) -> None:
-        del space, viewer_user_id, viewer_user_name
+        if getattr(space, "is_favorite", False):
+            return
+        del viewer_user_id, viewer_user_name
         file_id = int(file_record.id)
         mid_table = cls(ensure_sync_index=False)
         try:
@@ -757,19 +759,12 @@ return 0
             raise RuntimeError(f"Failed to delete {len(real_errors)} knowledge space content file telemetry records.")
         return int(success or 0)
 
-    def delete_space_file_records_sync(self, space_ids: Iterable[int]) -> int:
+    def delete_space_records_sync(self, space_ids: Iterable[int]) -> int:
         ids = self._normalize_ids(space_ids)
         if not ids:
             return 0
         result = self.delete_by_query_sync(
-            {
-                "bool": {
-                    "filter": [
-                        {"term": {"record_type": "file"}},
-                        {"terms": {"space_id": ids}},
-                    ]
-                }
-            },
+            {"terms": {"space_id": ids}},
             refresh=False,
         )
         return int(result.get("deleted", 0) or 0)
