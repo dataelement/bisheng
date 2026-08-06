@@ -77,7 +77,7 @@
 
 | 模块编码 (MMM) | 模块 | Owner Feature |
 |----------------|------|---------------|
-| 260 | open_api（开放 API 鉴权，26001–26012 见伴生 PRD 附录 C；伴生 PRD 待决项 D5 = 确认 260 未被占用） | F049（design 阶段核对 `common/errcode/` 后定稿；委托类错误码 26004–26007 的实际启用随 F050） |
+| 260 | open_api（开放 API 鉴权，26001–26012 见伴生 PRD 附录 C）。**已确认可用**：`docs/constitution.md` C5 模块登记表明确「260 is reserved for the Open API (`/api/v2`) authentication module，尚未实现，不得他用」——伴生 PRD 待决项 D5 就此关闭 | F049（委托类错误码 26004–26007 的实际启用随 F050）；落码时按 C5 要求在同一次改动中回写 constitution 表 |
 | _待分配_ | app_factory（应用工场，模块号 spec 阶段核对 errcode 目录后分配） | F054/F055/F056 |
 
 ---
@@ -89,3 +89,4 @@
 | 2026-08-06 | 初始化 v3.0.0 契约：登记编号约定（F049 起 / INV-27 起）、PRD-1 九个 Feature 的规划依赖图（表 3）、领域对象候选（表 1，未生效）；正式登记随各 spec 评审进行 | 全部 |
 | 2026-08-06 | 对抗校验修正：GOV-05 主体归属 F055（原漏映射）；会话 key 派生归 F049、接线随 PRD-2；F049 范围收为 R1–R7+R9（R8 P2 顺延）；ResourceTier 由 F056 移至 F055 并把实例配额执行闸门划入 F054（消除依赖倒挂与无护栏窗口）；PRD-2 最小承载面逐面指名；beta1 契约来源分支与 INV-8~26 条件生效、历史编号空间说明补齐 | 表 1/表 3/编号约定 |
 | 2026-08-06 | **开发基线定为 `3.0-vibe`（基于 `feat/3.0.0-beta1`，F048 已实装）**——Discovery 决策 D2 由分支选择确定；INV-8~26 因而无条件生效。**F049 按伴生 PRD 自身 P0/P1 阶段线拆分**：F049 收窄为 P0 鉴权底座（spec 定稿），R2/R3 委托与 R7 双归属并入 F050（更名 identity-modes-and-personal-key）。表 1 正式登记 ApiCredential 与 ServiceAccount 两个领域对象（原为候选）；表 2 登记 INV-27~30（默认拒绝 / 凭据底座 / 服务账号不可登录 / 开放面 fail-closed 加强） | F049、F050、表 1/表 2/表 3 |
+| 2026-08-06 | 分支跟进 `feat/3.0.0-beta1`（rebase 至 `f4b85fa5e`）。据其新增的 constitution C5 模块登记表确认 **260 段已被明确预留给开放 API 鉴权模块且尚未实现** → 伴生 PRD 待决项 D5 关闭，错误码表相应改为「已确认可用」，并登记落码时须按 C5 回写 constitution | 错误码表 / F049 |
