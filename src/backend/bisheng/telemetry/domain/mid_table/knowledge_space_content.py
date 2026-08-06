@@ -11,6 +11,7 @@ from elasticsearch import helpers
 from loguru import logger
 from pydantic import BaseModel, Field
 
+from bisheng.common.constants.telemetry import KNOWLEDGE_SPACE_CONTENT_STAT_INDEX
 from bisheng.common.schemas.telemetry.base_telemetry_schema import UserDepartmentInfo
 from bisheng.core.cache.redis_manager import get_redis_client, get_redis_client_sync
 from bisheng.knowledge.domain.constants import (
@@ -81,8 +82,8 @@ class ProjectionWorkItem:
 
 
 class KnowledgeSpaceContentStat(BaseMidTable):
-    INDEX_NAME: ClassVar[str] = "mid_knowledge_space_content_stat"
-    _index_name: str = "mid_knowledge_space_content_stat"
+    INDEX_NAME: ClassVar[str] = KNOWLEDGE_SPACE_CONTENT_STAT_INDEX
+    _index_name: str = KNOWLEDGE_SPACE_CONTENT_STAT_INDEX
     _update_mappings_on_existing: bool = True
     _include_common_mappings: bool = False
     _refresh_settings_applied: ClassVar[set[str]] = set()

@@ -22,7 +22,6 @@ from bisheng.knowledge.api.dependencies import (
     get_portal_pdf_download_service,
 )
 from bisheng.knowledge.api.portal_pdf_download_response import prepare_portal_pdf_download_response
-from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     ChatReq,
     KnowledgeSpaceFolderStatsReq,
@@ -357,7 +356,7 @@ async def get_shougang_portal_home_stats(
     _ = login_user
     result, total_files = await asyncio.gather(
         PortalTelemetryEventService.count_home_events(),
-        KnowledgeFileDao.async_count_all_success_files(),
+        PortalTelemetryEventService.count_dashboard_files(),
     )
     return resp_200(ShougangPortalHomeStatsResp(**result, total_files=total_files).model_dump(mode="json"))
 

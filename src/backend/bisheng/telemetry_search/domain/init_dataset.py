@@ -1,3 +1,7 @@
+from bisheng.common.constants.telemetry import (
+    KNOWLEDGE_SPACE_CONTENT_STAT_INDEX,
+    KNOWLEDGE_SPACE_DASHBOARD_FILE_LEVELS,
+)
 from bisheng.core.database import get_async_db_session, get_database_connection
 from bisheng.database.models.group import DefaultGroup
 from bisheng.database.models.group_resource import GroupResourceDao, GroupResource, ResourceTypeEnum
@@ -719,8 +723,8 @@ DASHBOARD_DATASET = [
     ),
     DashboardDataset(
         dataset_name="知识空间内容统计",
-        dataset_code="mid_knowledge_space_content_stat",
-        es_index_name="mid_knowledge_space_content_stat",
+        dataset_code=KNOWLEDGE_SPACE_CONTENT_STAT_INDEX,
+        es_index_name=KNOWLEDGE_SPACE_CONTENT_STAT_INDEX,
         description="知识空间成功文件与文件预览统计数据表",
         is_commercial_only=False,
         schema_config=SchemaConfig(
@@ -734,7 +738,7 @@ DASHBOARD_DATASET = [
                         TermOp(field="file_type", value=1),
                         TermsOp(
                             field="space_level",
-                            value=["public", "department", "team", "team_ks"],
+                            value=list(KNOWLEDGE_SPACE_DASHBOARD_FILE_LEVELS),
                         ),
                     ]),
                     aggregations=[
@@ -762,7 +766,7 @@ DASHBOARD_DATASET = [
                         TermOp(field="file_type", value=1),
                         TermsOp(
                             field="space_level",
-                            value=["public", "department", "team", "team_ks"],
+                            value=list(KNOWLEDGE_SPACE_DASHBOARD_FILE_LEVELS),
                         ),
                     ]),
                     aggregations=[
@@ -781,7 +785,7 @@ DASHBOARD_DATASET = [
                         TermOp(field="record_type", value="file"),
                         TermsOp(
                             field="space_level",
-                            value=["public", "department", "team", "team_ks"],
+                            value=list(KNOWLEDGE_SPACE_DASHBOARD_FILE_LEVELS),
                         ),
                     ]),
                     aggregations=[
