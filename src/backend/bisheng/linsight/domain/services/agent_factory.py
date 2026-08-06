@@ -697,6 +697,7 @@ async def create_linsight_agent(
     backend=None,
     checkpointer=None,
     skills_present: bool = False,
+    turn_budget_sink: dict | None = None,
 ):
     """Build the deepagents-backed Linsight agent (design §2.1).
 
@@ -711,6 +712,9 @@ async def create_linsight_agent(
             FakeWorkspaceBackend is constructed (stub default).
         checkpointer: LangGraph checkpointer. When None an InMemorySaver is used
             (Wave1; real run injects PlainRedisCheckpointer, C5).
+        turn_budget_sink: mutable dict the MAIN graph's resilience middleware flags
+            when the run had to wrap up early on its turn budget, so the caller can
+            tell the user. Main graph only — a subagent landing early is internal.
 
     Returns:
         ``CompiledStateGraph`` to be driven by ``agent.astream(...)``.
@@ -750,7 +754,7 @@ async def create_linsight_agent(
     # client-side ValueError for video, and silent mojibake for docx/xlsx.
     has_code_interpreter = any(getattr(t, "name", None) == CODE_INTERPRETER_TOOL for t in tools)
     middlewares: list = [
-        build_resilience_middleware(linsight_conf, is_subagent=False),
+        build_resilience_middleware(linsight_conf, is_subagent=False, budget_sink=turn_budget_sink),
         build_tool_loop_breaker_middleware(linsight_conf, is_subagent=False),
         *build_binary_guards(has_code_interpreter),
     ]
