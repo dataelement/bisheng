@@ -2288,6 +2288,10 @@
     "gate_blocked_action": "重新登录"
   },
   "workstation": {
+    "toc": {
+      "label": "目录",
+      "open": "展开目录"
+    },
     "messageExport": {
       "entry": "导出",
       "exportAsWord": "导出为 Word",

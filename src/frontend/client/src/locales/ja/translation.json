@@ -2282,6 +2282,10 @@
     "gate_blocked_action": "再ログイン"
   },
   "workstation": {
+    "toc": {
+      "label": "目次",
+      "open": "目次を表示"
+    },
     "messageExport": {
       "entry": "エクスポート",
       "exportAsWord": "Word でエクスポート",

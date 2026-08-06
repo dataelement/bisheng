@@ -2359,6 +2359,10 @@
     "gate_blocked_action": "Sign in again"
   },
   "workstation": {
+    "toc": {
+      "label": "Contents",
+      "open": "Show contents"
+    },
     "messageExport": {
       "entry": "Export",
       "exportAsWord": "Export as Word",
