@@ -26,6 +26,7 @@ import { filterPermissionModelsWithScopeItems } from "./permissionModelInfo";
 import { RelationModelOption, RelationSelect } from "./RelationSelect";
 import { SubjectSearchDepartment } from "./SubjectSearchDepartment";
 import { SubjectSearchUser } from "./SubjectSearchUser";
+import { SubjectSearchUserTree } from "./SubjectSearchUserTree";
 
 const SUBJECT_TYPES: SubjectType[] = ["user", "department"];
 const DEFAULT_MODELS: RelationModelOption[] = [
@@ -39,6 +40,12 @@ const EMPTY_GRANTED_SUBJECT_IDS: Record<SubjectType, number[]> = {
   department: [],
   user_group: [],
 };
+const KNOWLEDGE_RESOURCE_TYPES = new Set<ResourceType>([
+  "knowledge_space",
+  "knowledge_library",
+  "folder",
+  "knowledge_file",
+]);
 
 function normalizeSubjectType(type?: SubjectType): SubjectType {
   return type && SUBJECT_TYPES.includes(type) ? type : "user";
@@ -179,6 +186,7 @@ export function PermissionGrantTab({
   const includeChildren = includeChildrenProp ?? internalIncludeChildren;
   const handleIncludeChildrenChange = onIncludeChildrenChange ?? setInternalIncludeChildren;
   const effectiveSubjectType = normalizeSubjectType(fixedSubjectType ?? subjectType);
+  const usesKnowledgeUserTree = KNOWLEDGE_RESOURCE_TYPES.has(resourceType);
   const grantSubjectScopeResourceId =
     grantSubjectScopeSpaceId || (resourceType === "knowledge_space" ? resourceId : undefined);
 
@@ -420,7 +428,19 @@ export function PermissionGrantTab({
           !fixedSubjectType && "mt-4"
         )}
       >
-        {effectiveSubjectType === "user" && (
+        {effectiveSubjectType === "user" && usesKnowledgeUserTree && (
+          <SubjectSearchUserTree
+            value={selected}
+            onChange={setSelected}
+            resourceType={resourceType}
+            resourceId={resourceId}
+            disabledIds={grantedSubjectIds.user}
+            loadDepartments={grantSubjectScopeResourceId ? loadKnowledgeSpaceDepartments : undefined}
+            grantDepartmentsApi={activePermissionApi.getGrantDepartments}
+            grantUsersApi={activePermissionApi.getGrantUsers}
+          />
+        )}
+        {effectiveSubjectType === "user" && !usesKnowledgeUserTree && (
           <SubjectSearchUser
             value={selected}
             onChange={setSelected}

@@ -15,9 +15,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const configuredRule: FileSyncRule = {
   category: { code: "POLICY", subcategory_code: "MGMT_POLICY" },
-  business_domain: { mode: "fixed", code: "SAFETY" },
-  target_space: { mode: "dynamic", knowledge_id: null, folder_id: null },
-  dynamic_source: "department_id",
+  business_domain: { mode: "fixed", code: "SAFETY", dynamic_source: null },
+  target_space: {
+    mode: "dynamic",
+    knowledge_id: null,
+    folder_id: null,
+    dynamic_source: "department_id",
+  },
+  dynamic_source: null,
 }
 
 const emptyOptions = (tenantId: number, userId: number): DeveloperTokenFileSyncOptions => ({

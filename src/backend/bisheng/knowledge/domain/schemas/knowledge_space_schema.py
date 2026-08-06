@@ -562,6 +562,7 @@ class ShougangPortalFileItemResp(BaseModel):
     is_department_file: bool = False
     entry_type: Literal["normal", "manager", "publish", "share"] = "normal"
     entry_status: str = "active"
+    distribution_invalid_reason: str | None = None
     canonical_document_id: int | None = None
     canonical_version_id: int | None = None
     manager_file_id: int | None = None
@@ -1061,6 +1062,7 @@ class KnowledgeSpaceFileResponse(KnowledgeFileRead):
     canonical_version_id: int | None = None
     manager_file_id: int | None = None
     manager_space_id: int | None = None
+    distribution_invalid_reason: str | None = None
     projection_ready: bool = True
     capabilities: KnowledgeDocumentEntryCapabilities = Field(
         default_factory=KnowledgeDocumentEntryCapabilities

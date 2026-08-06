@@ -63,7 +63,7 @@ class CeleryKnowledgeMigrationTaskDispatcher:
 
         task = preflight_knowledge_migration.apply_async(
             args=[batch_id],
-            queue="knowledge_celery",
+            queue="celery",
         )
         return str(task.id) if task.id else None
 
@@ -72,7 +72,7 @@ class CeleryKnowledgeMigrationTaskDispatcher:
 
         task = execute_knowledge_migration.apply_async(
             args=[batch_id, round_no],
-            queue="knowledge_celery",
+            queue="celery",
         )
         return str(task.id) if task.id else None
 

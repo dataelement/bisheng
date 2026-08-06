@@ -59,7 +59,7 @@ from bisheng.common.errcode.knowledge_space import (
     SpacePermissionDeniedError,
 )
 from bisheng.database.models.department import UserDepartmentDao
-from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum, KnowledgeDao, KnowledgeTypeEnum
+from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum, KnowledgeDao, KnowledgeState, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_file import (
     FileType,
     KnowledgeFileDao,
@@ -273,7 +273,7 @@ class ShougangApprovalService:
                     file_repository=file_repository,
                 ),
             )
-            return await service.normalize_manager(
+            return await service.ensure_document_identity(
                 tenant_id=tenant_id,
                 source_file_id=source_file_id,
             )
@@ -624,6 +624,7 @@ class ShougangApprovalService:
         if (
             not target_space
             or target_space.type != KnowledgeTypeEnum.SPACE.value
+            or target_space.state != KnowledgeState.PUBLISHED.value
         ):
             raise HTTPException(status_code=404, detail="目标知识空间不存在")
         if int(target_space.tenant_id) != int(space_service.login_user.tenant_id):
@@ -699,6 +700,7 @@ class ShougangApprovalService:
             )
             if int(space.id) != int(source_space_id)
             and int(space.tenant_id) == int(space_service.login_user.tenant_id)
+            and space.state == KnowledgeState.PUBLISHED.value
         ]
         items = [
             ShougangFileShareTargetSpace(
@@ -847,6 +849,9 @@ class ShougangApprovalService:
                     canonical_source.document_id
                 ),
                 "source_entry_id": int(source_file.id),
+                "source_entry_type_before_submit": (
+                    getattr(source_file, "entry_type", None) or "normal"
+                ),
                 "target_space_id": int(target_space.id),
                 "target_space_name": target_space.name,
                 "target_space_level": (
@@ -877,7 +882,11 @@ class ShougangApprovalService:
 
     async def _load_publish_source(self, source_space_id: int, source_file_id: int):
         source_space = await KnowledgeDao.aquery_by_id(source_space_id)
-        if not source_space or source_space.type != KnowledgeTypeEnum.SPACE.value:
+        if (
+            not source_space
+            or source_space.type != KnowledgeTypeEnum.SPACE.value
+            or source_space.state != KnowledgeState.PUBLISHED.value
+        ):
             raise HTTPException(status_code=404, detail='源知识空间不存在')
         source_file = await KnowledgeFileDao.query_by_id(source_file_id)
         if not source_file or source_file.knowledge_id != source_space_id:
@@ -911,7 +920,11 @@ class ShougangApprovalService:
         require_view_space: bool = False,
     ):
         target_space = await KnowledgeDao.aquery_by_id(target_space_id)
-        if not target_space or target_space.type != KnowledgeTypeEnum.SPACE.value:
+        if (
+            not target_space
+            or target_space.type != KnowledgeTypeEnum.SPACE.value
+            or target_space.state != KnowledgeState.PUBLISHED.value
+        ):
             raise HTTPException(status_code=404, detail='目标知识空间不存在')
         scope = await KnowledgeSpaceScopeDao.aget_by_space_id(target_space_id)
         target_level = scope.level if scope else KnowledgeSpaceLevelEnum.PERSONAL
@@ -1022,6 +1035,8 @@ class ShougangApprovalService:
         )
         items: list[ShougangFilePublishTargetSpace] = []
         for space in spaces:
+            if space.state != KnowledgeState.PUBLISHED.value:
+                continue
             if int(getattr(space, "tenant_id", space_service.login_user.tenant_id)) != int(
                 space_service.login_user.tenant_id
             ):
@@ -1391,6 +1406,9 @@ class ShougangApprovalService:
                 'source_file_name': file_name,
                 'canonical_document_id': int(canonical_source.document_id),
                 'source_entry_id': int(canonical_source.manager_file_id),
+                'source_entry_type_before_submit': (
+                    getattr(source_file, 'entry_type', None) or 'normal'
+                ),
                 'target_space_id': int(target_space.id),
                 'target_space_name': target_space.name,
                 'target_space_level': target_level,

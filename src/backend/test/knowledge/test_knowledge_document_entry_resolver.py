@@ -160,6 +160,48 @@ async def _seed_ordinary_primary(
     await async_db_session.commit()
 
 
+async def _seed_ordinary_history(async_db_session: AsyncSession) -> None:
+    async_db_session.add_all(
+        [
+            KnowledgeDocument(
+                id=93,
+                tenant_id=7,
+                knowledge_id=10,
+                primary_version_id=504,
+            ),
+            KnowledgeFile(
+                id=104,
+                tenant_id=7,
+                knowledge_id=10,
+                file_name="ordinary-v1.pdf",
+                object_name="tenant/7/ordinary-v1.pdf",
+            ),
+            KnowledgeFile(
+                id=105,
+                tenant_id=7,
+                knowledge_id=10,
+                file_name="ordinary-v2.pdf",
+                object_name="tenant/7/ordinary-v2.pdf",
+            ),
+            KnowledgeDocumentVersion(
+                id=503,
+                document_id=93,
+                knowledge_file_id=104,
+                version_no=1,
+                is_primary=False,
+            ),
+            KnowledgeDocumentVersion(
+                id=504,
+                document_id=93,
+                knowledge_file_id=105,
+                version_no=2,
+                is_primary=True,
+            ),
+        ]
+    )
+    await async_db_session.commit()
+
+
 def _resolver(
     async_db_session: AsyncSession,
     permission_loader=_all_permissions,
@@ -244,19 +286,77 @@ async def test_resolution_rejects_cross_space_cross_tenant_and_hidden_states(
 
 
 @pytest.mark.asyncio
-async def test_historical_physical_id_is_not_an_ordinary_access_entry(
+async def test_cross_space_historical_physical_id_is_not_an_ordinary_access_entry(
     async_db_session: AsyncSession,
 ):
     await _seed_distribution(async_db_session)
 
     with pytest.raises(
         KnowledgeDocumentEntryResolutionError,
-        match="historical",
+        match="space",
     ):
         await _resolver(async_db_session).resolve(
             tenant_id=7,
             space_id=10,
             file_id=99,
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("use_durable_reference", [False, True], ids=["direct", "durable"])
+async def test_same_space_historical_version_resolves_to_its_physical_file(
+    async_db_session: AsyncSession,
+    use_durable_reference: bool,
+):
+    await _seed_ordinary_history(async_db_session)
+    entry_resolver = _resolver(async_db_session)
+
+    if use_durable_reference:
+        durable_resolver = KnowledgeDocumentDurableReferenceResolver(
+            entry_resolver=entry_resolver,
+            version_repository=KnowledgeDocumentVersionRepositoryImpl(async_db_session),
+            file_repository=KnowledgeFileRepositoryImpl(async_db_session),
+        )
+        resolved = await durable_resolver.resolve(
+            tenant_id=7,
+            requested_space_id=10,
+            durable_file_id=104,
+        )
+    else:
+        resolved = await entry_resolver.resolve(
+            tenant_id=7,
+            space_id=10,
+            file_id=104,
+        )
+
+    assert resolved.entry_type == "normal"
+    assert resolved.entry_file_id == 104
+    assert resolved.content_file_id == 104
+    assert resolved.capabilities.can_view is True
+    assert resolved.capabilities.can_download is True
+
+
+@pytest.mark.asyncio
+async def test_same_space_historical_durable_reference_rechecks_permission(
+    async_db_session: AsyncSession,
+):
+    await _seed_ordinary_history(async_db_session)
+
+    async def no_permissions(_file_id: int, _space_id: int) -> set[str]:
+        return set()
+
+    entry_resolver = _resolver(async_db_session, no_permissions)
+    durable_resolver = KnowledgeDocumentDurableReferenceResolver(
+        entry_resolver=entry_resolver,
+        version_repository=KnowledgeDocumentVersionRepositoryImpl(async_db_session),
+        file_repository=KnowledgeFileRepositoryImpl(async_db_session),
+    )
+
+    with pytest.raises(KnowledgeDocumentEntryResolutionError, match="authorized"):
+        await durable_resolver.resolve(
+            tenant_id=7,
+            requested_space_id=10,
+            durable_file_id=104,
         )
 
 

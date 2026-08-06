@@ -63,6 +63,7 @@ function decodeEnvelopeMessage(envelope: any) {
         "person id is required": "errors.21013",
         "person id already exists": "errors.personIdAlreadyExists",
         "person id already belongs to a deleted account. please restore the original account.": "errors.21020",
+        "business domain and target knowledge space are not bound": "system.developerToken.fileSync.domainSpaceUnboundError",
         "department name already exists at this level": "errors.21001",
         "department not found": "errors.21000",
         "cannot delete department with children": "errors.21002",

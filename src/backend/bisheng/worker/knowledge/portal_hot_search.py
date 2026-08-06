@@ -43,12 +43,12 @@ from bisheng.knowledge.domain.services.portal_hot_search_scoring_service import 
 from bisheng.worker._asyncio_utils import run_async_task
 from bisheng.worker.main import bisheng_celery
 
-KNOWLEDGE_QUEUE = "knowledge_celery"
+DEFAULT_QUEUE = "celery"
 
 
 def _dispatch_task_for_tenants(task, tenant_ids: list[int]) -> None:
     for tenant_id in sorted({int(value) for value in tenant_ids if int(value) > 0}):
-        task.apply_async(headers={"tenant_id": tenant_id}, queue=KNOWLEDGE_QUEUE)
+        task.apply_async(headers={"tenant_id": tenant_id}, queue=DEFAULT_QUEUE)
 
 
 def _build_llm_invoke(tenant_id: int) -> Callable[[str], str] | None:

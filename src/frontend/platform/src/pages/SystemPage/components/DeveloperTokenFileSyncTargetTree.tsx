@@ -12,6 +12,7 @@ import useDeveloperTokenFileSyncTargetTree from "./useDeveloperTokenFileSyncTarg
 interface TargetValue {
   knowledge_id: number | null
   folder_id: number | null
+  parent_folder_id?: number | null
 }
 
 interface DeveloperTokenFileSyncTargetTreeProps {
@@ -20,6 +21,7 @@ interface DeveloperTokenFileSyncTargetTreeProps {
   groups: DeveloperTokenFileSyncTargetSpaceGroup[]
   value: TargetValue
   display: DeveloperTokenFileSyncTargetDisplay | null
+  folderMode?: "none" | "fixed" | "dynamic"
   loading: boolean
   error: string | null
   onChange: (value: TargetValue) => void
@@ -32,6 +34,7 @@ export default function DeveloperTokenFileSyncTargetTree({
   groups,
   value,
   display,
+  folderMode = "fixed",
   loading,
   error,
   onChange,
@@ -45,8 +48,33 @@ export default function DeveloperTokenFileSyncTargetTree({
   const displayMatchesValue = Boolean(
     display
       && display.knowledge_id === value.knowledge_id
-      && (display.folder_id ?? null) === value.folder_id
+      && (display.folder_id ?? null) === (folderMode === "fixed" ? value.folder_id : value.parent_folder_id ?? null)
   )
+
+  const isRootSelected = (spaceId: number) => (
+    value.knowledge_id === spaceId
+    && (folderMode === "fixed"
+      ? value.folder_id == null
+      : folderMode === "dynamic"
+        ? value.parent_folder_id == null
+        : value.folder_id == null)
+  )
+
+  const handleSelectRoot = (spaceId: number) => {
+    if (folderMode === "dynamic") {
+      onChange({ knowledge_id: spaceId, folder_id: null, parent_folder_id: null })
+      return
+    }
+    onChange({ knowledge_id: spaceId, folder_id: null })
+  }
+
+  const handleSelectFolder = (spaceId: number, folderId: number) => {
+    if (folderMode === "dynamic") {
+      onChange({ knowledge_id: spaceId, folder_id: null, parent_folder_id: folderId })
+      return
+    }
+    onChange({ knowledge_id: spaceId, folder_id: folderId })
+  }
 
   return (
     <div className="space-y-2 rounded-md border p-2">
@@ -99,15 +127,15 @@ export default function DeveloperTokenFileSyncTargetTree({
               <div key={space.id} className="space-y-1">
                 <TargetRow
                   name={space.name}
-                  selectable={space.selectable}
-                  selected={value.knowledge_id === space.id && value.folder_id == null}
+                  selectable={space.selectable || folderMode === "none"}
+                  selected={isRootSelected(space.id)}
                   hasChildren={space.has_children}
                   expanded={branch?.expanded || false}
                   detail={space.selectable
                     ? t("system.developerToken.fileSync.targetTree.root")
                     : t("system.developerToken.fileSync.targetTree.navigationOnly")}
                   onToggle={() => tree.toggleBranch(space.id)}
-                  onSelect={() => onChange({ knowledge_id: space.id, folder_id: null })}
+                  onSelect={() => handleSelectRoot(space.id)}
                 />
                 {branch?.expanded && (
                   <FolderBranch
@@ -115,8 +143,10 @@ export default function DeveloperTokenFileSyncTargetTree({
                     parentId={undefined}
                     depth={1}
                     value={value}
+                    folderMode={folderMode}
                     tree={tree}
-                    onChange={onChange}
+                    onSelectRoot={handleSelectRoot}
+                    onSelectFolder={handleSelectFolder}
                   />
                 )}
               </div>
@@ -133,8 +163,10 @@ interface FolderBranchProps {
   parentId?: number
   depth: number
   value: TargetValue
+  folderMode: "none" | "fixed" | "dynamic"
   tree: ReturnType<typeof useDeveloperTokenFileSyncTargetTree>
-  onChange: (value: TargetValue) => void
+  onSelectRoot: (spaceId: number) => void
+  onSelectFolder: (spaceId: number, folderId: number) => void
 }
 
 function FolderBranch({
@@ -142,8 +174,10 @@ function FolderBranch({
   parentId,
   depth,
   value,
+  folderMode,
   tree,
-  onChange,
+  onSelectRoot,
+  onSelectFolder,
 }: FolderBranchProps) {
   const { t } = useTranslation()
   const branch = tree.getBranch(knowledgeId, parentId)
@@ -157,8 +191,16 @@ function FolderBranch({
           knowledgeId={knowledgeId}
           depth={depth}
           value={value}
+          folderMode={folderMode}
           tree={tree}
-          onChange={onChange}
+          isSelected={value.knowledge_id === knowledgeId && (
+            folderMode === "fixed"
+              ? value.folder_id === folder.id
+              : folderMode === "dynamic"
+                ? value.parent_folder_id === folder.id
+                : false
+          )}
+          onSelectFolder={onSelectFolder}
         />
       ))}
       {branch.loading && (
@@ -186,31 +228,36 @@ function FolderNode({
   knowledgeId,
   depth,
   value,
+  folderMode,
   tree,
-  onChange,
+  isSelected,
+  onSelectFolder,
 }: {
   folder: DeveloperTokenFileSyncTargetFolderOption
   knowledgeId: number
   depth: number
   value: TargetValue
+  folderMode: "none" | "fixed" | "dynamic"
   tree: ReturnType<typeof useDeveloperTokenFileSyncTargetTree>
-  onChange: (value: TargetValue) => void
+  isSelected: boolean
+  onSelectFolder: (spaceId: number, folderId: number) => void
 }) {
   const { t } = useTranslation()
   const branch = tree.getBranch(knowledgeId, folder.id)
+  const selectable = folderMode !== "none" && folder.selectable
   return (
     <div className="space-y-1" style={{ paddingLeft: `${depth * 16}px` }}>
       <TargetRow
         name={folder.name}
-        selectable={folder.selectable}
-        selected={value.knowledge_id === knowledgeId && value.folder_id === folder.id}
+        selectable={selectable}
+        selected={isSelected}
         hasChildren={folder.has_children}
         expanded={branch?.expanded || false}
-        detail={!folder.selectable
+        detail={!selectable
           ? t("system.developerToken.fileSync.targetTree.navigationOnly")
           : undefined}
         onToggle={() => tree.toggleBranch(knowledgeId, folder.id)}
-        onSelect={() => onChange({ knowledge_id: knowledgeId, folder_id: folder.id })}
+        onSelect={() => onSelectFolder(knowledgeId, folder.id)}
       />
       {branch?.expanded && (
         <FolderBranch
@@ -218,8 +265,10 @@ function FolderNode({
           parentId={folder.id}
           depth={depth + 1}
           value={value}
+          folderMode={folderMode}
           tree={tree}
-          onChange={onChange}
+          onSelectRoot={() => undefined}
+          onSelectFolder={onSelectFolder}
         />
       )}
     </div>

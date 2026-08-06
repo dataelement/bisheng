@@ -70,6 +70,44 @@ def _service(actor_relation: ChannelRelationEnum, sync_service=None) -> ChannelA
 
 
 @pytest.mark.asyncio
+async def test_list_grant_users_uses_shared_service_with_legacy_response_contract():
+    service = _service(ChannelRelationEnum.OWNER)
+    service._require_manage_access = AsyncMock()
+    service._resolve_channel_tenant = AsyncMock(return_value=3)
+    expected = [
+        {
+            "user_id": 8,
+            "user_name": "Alice",
+            "external_id": "EMP008",
+            "primary_department_path": "总部/研发部",
+            "department_paths": ["总部/研发部"],
+            "department_memberships": [],
+        }
+    ]
+
+    with patch(
+        "bisheng.permission.domain.services.grant_subject_user_service.list_grant_subject_users",
+        new_callable=AsyncMock,
+        return_value=expected,
+    ) as mock_list_users:
+        result = await service.list_grant_users(
+            "channel-1",
+            _User(),
+            keyword="Ali",
+            page=2,
+            page_size=50,
+        )
+
+    assert result == expected
+    mock_list_users.assert_awaited_once_with(
+        tenant_id=3,
+        keyword="Ali",
+        page=2,
+        page_size=50,
+    )
+
+
+@pytest.mark.asyncio
 async def test_owner_can_grant_user_owner_manager_editor_viewer():
     service = _service(ChannelRelationEnum.OWNER)
     request = ChannelAuthorizeRequest(grants=[

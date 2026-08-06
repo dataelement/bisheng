@@ -189,10 +189,12 @@
         "selectBindingFirst": "Select the token's bound user first to determine the configuration tenant.",
         "optionsRequiredError": "File-sync configuration options are not loaded. Retry before saving.",
         "invalidError": "The file-sync field “{{field}}” is invalid or stale. Check it and try again.",
+        "domainSpaceUnboundError": "The fixed business domain and fixed target knowledge space are not bound in portal configuration. Adjust the selection or switch one side to dynamic mode.",
         "category": "Parent category",
         "subcategory": "Subcategory",
         "businessDomain": "Business domain",
         "targetSpace": "Target knowledge space",
+        "targetFolder": "Target folder",
         "dynamicSource": "Dynamic business source",
         "select": "Select",
         "stale": "The saved value is stale. Its original value is retained until you select a replacement.",
@@ -218,6 +220,20 @@
           "fixed": "Fixed configuration",
           "dynamic": "Resolve at runtime"
         },
+        "folderModes": {
+          "none": "Space root",
+          "fixed": "Fixed folder",
+          "dynamic": "Dynamic folder"
+        },
+        "folderDynamicSource": "Child folder naming source",
+        "folderPath": "Folder path",
+        "folderPathPlaceholder": "e.g. Policies/Management",
+        "parentFolderPath": "Parent folder path",
+        "parentFolderPathPlaceholder": "Leave empty for space root, e.g. Policies",
+        "folderSources": {
+          "departmentName": "Use sync department name (department_id mapping)",
+          "callerMainDepartmentName": "Use token-bound user's primary department name"
+        },
         "sources": {
           "departmentId": "Use department_id",
           "responsiblePersonId": "Use the primary department of responsible_person_id"
@@ -227,14 +243,23 @@
           "subcategory": "subcategory",
           "businessDomain": "business domain",
           "targetSpace": "target knowledge space",
-          "dynamicSource": "dynamic business source"
+          "targetFolder": "target folder",
+          "dynamicSource": "dynamic business source",
+          "businessDomainDynamicSource": "business domain dynamic source",
+          "targetSpaceDynamicSource": "target space dynamic source",
+          "targetFolderDynamicSource": "folder dynamic naming source",
+          "businessDomainTargetBinding": "business domain and target space binding"
         },
         "summary": {
           "notConfigured": "Not configured",
           "businessDomain": "Domain",
           "targetSpace": "Target",
+          "targetFolder": "Folder",
           "dynamicDepartment": "Dynamic(department_id)",
-          "dynamicResponsiblePerson": "Dynamic(responsible person's primary department)"
+          "dynamicResponsiblePerson": "Dynamic(responsible person's primary department)",
+          "folderNone": "Root",
+          "folderDynamicDepartmentName": "Dynamic(sync department name)",
+          "folderDynamicCallerMainDepartmentName": "Dynamic(bound user primary department name)"
         }
       },
       "saveConfig": "Save config",

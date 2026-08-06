@@ -9,7 +9,7 @@ import logging
 import uuid
 from contextvars import ContextVar
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.permission import (
@@ -919,102 +919,21 @@ async def _list_knowledge_space_grant_users(
     keyword: str,
     page: int,
     page_size: int,
+    department_id: int | None = None,
+    unassigned: bool = False,
 ) -> list[dict]:
-    from sqlalchemy import or_
-    from sqlmodel import select
+    from bisheng.permission.domain.services.grant_subject_user_service import (
+        list_grant_subject_users,
+    )
 
-    from bisheng.core.context.tenant import bypass_tenant_filter
-    from bisheng.core.database import get_async_db_session
-    from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
-    from bisheng.database.models.tenant import Tenant, UserTenant
-    from bisheng.user.domain.models.user import User
-
-    with bypass_tenant_filter():
-        async with get_async_db_session() as session:
-            stmt = (
-                select(User)
-                .join(UserTenant, UserTenant.user_id == User.user_id)
-                .join(Tenant, Tenant.id == UserTenant.tenant_id)
-                .where(
-                    UserTenant.tenant_id == tenant_id,
-                    UserTenant.status == "active",
-                    Tenant.status == "active",
-                    User.delete == 0,
-                )
-                .order_by(User.user_id.desc())
-            )
-            if keyword:
-                keyword_pattern = f"%{keyword}%"
-                stmt = stmt.where(
-                    or_(
-                        User.user_name.like(keyword_pattern),
-                        User.external_id.like(keyword_pattern),
-                    )
-                )
-            if page and page_size:
-                stmt = stmt.offset((page - 1) * page_size).limit(page_size)
-            result = await session.exec(stmt)
-            active_users = list(result.all())
-
-    if not active_users:
-        return []
-
-    user_ids = [int(user.user_id) for user in active_users if getattr(user, "user_id", None) is not None]
-    dept_rows = await UserDepartmentDao.aget_by_user_ids(user_ids)
-    departments = await DepartmentDao.aget_active_by_tenant(tenant_id)
-    dept_map = {int(dept.id): dept for dept in departments if getattr(dept, "id", None) is not None}
-
-    def _department_display_path(dept) -> str | None:
-        if dept is None:
-            return None
-        path_ids: list[int] = []
-        for part in str(getattr(dept, "path", "") or "").split("/"):
-            part = part.strip()
-            if part.isdigit():
-                path_ids.append(int(part))
-        labels = [getattr(dept_map.get(dept_id), "name", f"#{dept_id}") for dept_id in path_ids]
-        current_name = getattr(dept, "name", None)
-        if current_name and current_name not in labels:
-            labels.append(current_name)
-        return "/".join(labels) if labels else current_name
-
-    dept_paths_by_user: dict[int, list[str]] = {}
-    primary_by_user = {}
-    for row in dept_rows:
-        user_id = int(getattr(row, "user_id", 0) or 0)
-        dept_id = int(getattr(row, "department_id", 0) or 0)
-        if not user_id or not dept_id:
-            continue
-        dept = dept_map.get(dept_id)
-        if int(getattr(row, "is_primary", 0) or 0) == 1:
-            primary_by_user[user_id] = dept
-        path_label = _department_display_path(dept)
-        if path_label:
-            paths = dept_paths_by_user.setdefault(user_id, [])
-            if path_label not in paths:
-                paths.append(path_label)
-
-    for user_id, paths in list(dept_paths_by_user.items()):
-        dept_paths_by_user[user_id] = sorted(
-            paths,
-            key=lambda path: (
-                0 if path == _department_display_path(primary_by_user.get(user_id)) else 1,
-                path,
-            ),
-        )
-
-    return [
-        {
-            "user_id": int(user.user_id),
-            "user_name": user.user_name,
-            "external_id": getattr(user, "external_id", None),
-            "primary_department_path": _department_display_path(
-                primary_by_user.get(int(user.user_id)),
-            ),
-            "department_paths": dept_paths_by_user.get(int(user.user_id), []),
-        }
-        for user in active_users
-    ]
+    return await list_grant_subject_users(
+        tenant_id=tenant_id,
+        keyword=keyword,
+        page=page,
+        page_size=page_size,
+        department_id=department_id,
+        unassigned=unassigned,
+    )
 
 
 async def _list_knowledge_space_grant_departments(*, tenant_id: int) -> list[dict]:
@@ -1848,8 +1767,15 @@ async def get_grant_subject_users(
     keyword: str = "",
     page: int = Query(1, ge=1),
     page_size: int = Query(1000, ge=1, le=2000),
+    department_id: int | None = Query(None, ge=1),
+    unassigned: bool = False,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
+    if department_id is not None and unassigned:
+        raise HTTPException(
+            status_code=422,
+            detail="department_id and unassigned are mutually exclusive",
+        )
     if resource_type not in VALID_RESOURCE_TYPES:
         return PermissionInvalidResourceError.return_resp()
     if not await _has_resource_permission_management_access(
@@ -1871,6 +1797,8 @@ async def get_grant_subject_users(
             keyword=keyword,
             page=page,
             page_size=page_size,
+            department_id=department_id,
+            unassigned=unassigned,
         )
     )
 

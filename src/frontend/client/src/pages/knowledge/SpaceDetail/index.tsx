@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useLayoutEffect, useMemo, useCallback, typ
 import { useRecoilValue } from "recoil";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FolderPlus, Loader2 } from "lucide-react";
-import { FileStatus, FileType, FileTag, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceLevel, SpaceRole, batchDeleteApi, batchDownloadApi, batchMoveApi, batchRetryApi, downloadWatermarkedKnowledgeFileApi, getPendingSimilarFilesApi, importWebLinkApi } from "~/api/knowledge";
+import { FileStatus, FileType, FileTag, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceLevel, SpaceRole, batchDeleteApi, batchDownloadApi, batchMoveApi, batchRetryApi, downloadWatermarkedKnowledgeFileApi, getPendingSimilarFilesApi, importWebLinkApi, reorderFolderApi } from "~/api/knowledge";
 import { useConfirm, useToastContext } from "~/Providers";
 import { useVersionManagementEnabled } from "~/hooks";
 import {
@@ -33,6 +33,11 @@ import {
     triggerUrlDownload,
 } from "../knowledgeUtils";
 import { bishengConfState } from "~/pages/appChat/store/atoms";
+import {
+    resolveFolderReorderNeighbours,
+    type FolderDropPosition,
+} from "./resolveFolderReorderNeighbours";
+import store from "~/store";
 import { SearchParams } from "./CompoundSearchInput";
 import { EditTagsModal } from "./EditTagsModal";
 import { FileCard } from "./FileCard";
@@ -900,6 +905,43 @@ export function KnowledgeSpaceContent({
         };
     }, [isAdmin, permissionEntryProbeKey, space.id, space.spaceLevel]);
 
+    // Folder manual ordering is admin-defined and shared by everyone, so it follows the
+    // same gate as knowledge-space ordering: system admins only.
+    const currentUser = useRecoilValue(store.user);
+    const isSystemAdmin = currentUser?.role === "admin";
+
+    // Card view drags the same folders as the list view; the grid wrapper carries the
+    // handlers so FileCard itself stays unaware of ordering.
+    const [cardDraggingFolderId, setCardDraggingFolderId] = useState<string | null>(null);
+    const [cardFolderDropTarget, setCardFolderDropTarget] = useState<{ id: string; position: FolderDropPosition } | null>(null);
+    const cardFolderReorderEnabled = isSystemAdmin && !sortBy;
+
+    const isCardDraggableFolder = useCallback((file: KnowledgeFile) => (
+        cardFolderReorderEnabled && file.type === FileType.FOLDER && !file.isCreating
+    ), [cardFolderReorderEnabled]);
+
+    const handleCardFolderDragEnd = useCallback(() => {
+        setCardDraggingFolderId(null);
+        setCardFolderDropTarget(null);
+    }, []);
+
+    const handleReorderFolder = useCallback(async (
+        folderId: string,
+        prevFolderId: string | null,
+        nextFolderId: string | null,
+    ) => {
+        try {
+            await reorderFolderApi(String(space.id), folderId, {
+                prev_folder_id: prevFolderId,
+                next_folder_id: nextFolderId,
+            });
+            // Reuse the parent's reload signal so the list reflects the persisted order.
+            onDeleteFile("");
+        } catch {
+            showToast({ message: localize("com_knowledge.folder_sort_failed"), status: "error" });
+        }
+    }, [localize, onDeleteFile, showToast, space.id]);
+
     // Read max file size from env config (MB), fallback to default 200MB
     const bishengConfig = useRecoilValue(bishengConfState);
     const uploadSizeLimits = useMemo(
@@ -1600,7 +1642,52 @@ export function KnowledgeSpaceContent({
                                 }
                             >
                                 {displayFiles.map((file) => (
-                                    <div key={file.id} data-knowledge-file-item>
+                                    <div
+                                        key={file.id}
+                                        data-knowledge-file-item
+                                        className={cn(
+                                            isCardDraggableFolder(file) && "cursor-grab",
+                                            cardDraggingFolderId === file.id && "opacity-50",
+                                            // Cards flow left-to-right, so the insertion line is vertical.
+                                            cardFolderDropTarget?.id === file.id && cardFolderDropTarget.position === "before"
+                                                && "border-l-2 border-l-[#165dff]",
+                                            cardFolderDropTarget?.id === file.id && cardFolderDropTarget.position === "after"
+                                                && "border-r-2 border-r-[#165dff]",
+                                        )}
+                                        draggable={isCardDraggableFolder(file) || undefined}
+                                        onDragStart={isCardDraggableFolder(file) ? () => setCardDraggingFolderId(file.id) : undefined}
+                                        onDragEnd={isCardDraggableFolder(file) ? handleCardFolderDragEnd : undefined}
+                                        onDragOver={isCardDraggableFolder(file) ? (event) => {
+                                            if (!cardDraggingFolderId || cardDraggingFolderId === file.id) return;
+                                            event.preventDefault();
+                                            event.dataTransfer.dropEffect = "move";
+                                            const bounds = event.currentTarget.getBoundingClientRect();
+                                            const position: FolderDropPosition =
+                                                event.clientX < bounds.left + bounds.width / 2 ? "before" : "after";
+                                            setCardFolderDropTarget((prev) => (
+                                                prev && prev.id === file.id && prev.position === position
+                                                    ? prev
+                                                    : { id: file.id, position }
+                                            ));
+                                        } : undefined}
+                                        onDragLeave={isCardDraggableFolder(file)
+                                            ? () => setCardFolderDropTarget((prev) => (prev?.id === file.id ? null : prev))
+                                            : undefined}
+                                        onDrop={isCardDraggableFolder(file) ? (event) => {
+                                            event.preventDefault();
+                                            const dropPosition = cardFolderDropTarget?.id === file.id
+                                                ? cardFolderDropTarget.position
+                                                : "before";
+                                            const draggedId = cardDraggingFolderId;
+                                            handleCardFolderDragEnd();
+                                            if (!draggedId) return;
+                                            const neighbours = resolveFolderReorderNeighbours(
+                                                displayFiles, draggedId, file.id, dropPosition,
+                                            );
+                                            if (!neighbours) return;
+                                            void handleReorderFolder(draggedId, neighbours.prevFolderId, neighbours.nextFolderId);
+                                        } : undefined}
+                                    >
                                         <FileCard
                                             file={file}
                                             userRole={space.role}
@@ -1660,6 +1747,10 @@ export function KnowledgeSpaceContent({
                                     onAcceptAlias={onAcceptAlias}
                                     onRejectAlias={onRejectAlias}
                                     onNavigateFolder={(id) => onNavigateFolder(id)}
+                                    canReorderFolders={isSystemAdmin}
+                                    onReorderFolder={(folderId, prevFolderId, nextFolderId) =>
+                                        void handleReorderFolder(folderId, prevFolderId, nextFolderId)
+                                    }
                                     onPreview={(id) => handlePreviewFile(id)}
                                     onValidateName={validateFileName}
                                     onCancelCreate={onCancelCreateFolder}

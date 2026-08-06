@@ -64,6 +64,7 @@ def _service(repository=None, knowledge_space_service=None) -> FilelibSyncServic
         tenant_id=1,
     )
     return FilelibSyncService(
+        request=SimpleNamespace(headers={}),
         login_user=login_user,
         token_id=42,
         file_sync_rule=_rule(),
@@ -112,8 +113,8 @@ def test_parse_params_normalizes_string_ids():
     )
     assert params.external_file_id == "ext-1"
     assert params.file_name == "report.pdf"
-    assert params.department_id == 12
-    assert params.responsible_person_id == 34
+    assert params.department_id == "12"
+    assert params.responsible_person_id == "34"
 
 
 def test_portal_domain_config_preserves_department_bindings():
@@ -136,19 +137,87 @@ def test_department_chain_starts_at_self_and_walks_to_root():
     assert FilelibSyncService._department_chain(department) == [3, 2, 1]
 
 
-async def test_other_responsible_name_without_id_is_rejected():
+async def test_unknown_responsible_external_id_is_rejected():
     caller_department = _department(10, "调用人部门", "/10/")
     repository = SimpleNamespace(
         find_primary_departments=AsyncMock(return_value=[UserDepartment(user_id=1, department_id=10, is_primary=1)]),
         find_department_by_id=AsyncMock(return_value=caller_department),
+        find_users_by_external_id=AsyncMock(return_value=[]),
     )
     params = FilelibSyncParams(
         external_file_id="ext-1",
         file_name="a.pdf",
         responsible_person="someone-else",
     )
-    with pytest.raises(FilelibSyncInvalidParamsError, match="responsible_person does not match"):
+    with pytest.raises(FilelibSyncNotFoundError, match="responsible person does not exist"):
         await _service(repository)._resolve_identity(params)
+
+
+async def test_responsible_person_resolves_user_by_external_id():
+    caller_department = _department(10, "调用人部门", "/10/")
+    responsible_department = _department(20, "责任部门", "/20/")
+    responsible_user = SimpleNamespace(user_id=2, user_name="owner", external_id="gzx01")
+    repository = SimpleNamespace(
+        find_primary_departments=AsyncMock(
+            side_effect=[
+                [UserDepartment(user_id=1, department_id=10, is_primary=1)],
+                [UserDepartment(user_id=2, department_id=20, is_primary=1)],
+            ]
+        ),
+        find_department_by_id=AsyncMock(
+            side_effect=lambda department_id: caller_department if department_id == 10 else responsible_department,
+        ),
+        find_users_by_external_id=AsyncMock(return_value=[responsible_user]),
+    )
+    params = FilelibSyncParams(
+        external_file_id="ext-1",
+        file_name="a.pdf",
+        responsible_person="gzx01",
+    )
+    identity = await _service(repository)._resolve_identity(params)
+    assert identity.responsible_user_id == 2
+    assert identity.responsible_user_external_id == "gzx01"
+    assert identity.main_department.id == 20
+    assert identity.main_department.name == "责任部门"
+    repository.find_users_by_external_id.assert_awaited_once_with("gzx01", tenant_id=1)
+
+
+async def test_responsible_person_id_must_match_external_id():
+    params = FilelibSyncParams(
+        external_file_id="ext-1",
+        file_name="a.pdf",
+        responsible_person_id="gzx01",
+        responsible_person="other-id",
+    )
+    with pytest.raises(FilelibSyncInvalidParamsError, match="responsible_person does not match"):
+        FilelibSyncService._resolve_responsible_external_id(params)
+
+
+async def test_responsible_person_id_resolves_user_by_external_id():
+    caller_department = _department(10, "调用人部门", "/10/")
+    responsible_department = _department(20, "责任部门", "/20/")
+    responsible_user = SimpleNamespace(user_id=2, user_name="owner", external_id="gzx01")
+    repository = SimpleNamespace(
+        find_primary_departments=AsyncMock(
+            side_effect=[
+                [UserDepartment(user_id=1, department_id=10, is_primary=1)],
+                [UserDepartment(user_id=2, department_id=20, is_primary=1)],
+            ]
+        ),
+        find_department_by_id=AsyncMock(
+            side_effect=lambda department_id: caller_department if department_id == 10 else responsible_department,
+        ),
+        find_users_by_external_id=AsyncMock(return_value=[responsible_user]),
+    )
+    params = FilelibSyncParams(
+        external_file_id="ext-1",
+        file_name="a.pdf",
+        responsible_person_id="gzx01",
+    )
+    identity = await _service(repository)._resolve_identity(params)
+    assert identity.responsible_user_id == 2
+    assert identity.responsible_user_external_id == "gzx01"
+    repository.find_users_by_external_id.assert_awaited_once_with("gzx01", tenant_id=1)
 
 
 async def test_main_department_name_without_id_must_match_caller_department():
@@ -156,6 +225,9 @@ async def test_main_department_name_without_id_must_match_caller_department():
     repository = SimpleNamespace(
         find_primary_departments=AsyncMock(return_value=[UserDepartment(user_id=1, department_id=10, is_primary=1)]),
         find_department_by_id=AsyncMock(return_value=caller_department),
+        find_user_by_id=AsyncMock(
+            return_value=SimpleNamespace(user_id=1, user_name="caller", external_id="caller-ext"),
+        ),
     )
     params = FilelibSyncParams(
         external_file_id="ext-1",
@@ -191,6 +263,73 @@ async def test_ambiguous_department_binding_is_rejected_before_space_lookup():
             await _service(repository)._find_nearest_department_space(department)
 
     repository.find_knowledge_by_id.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_resolve_target_space_falls_back_to_token_user_personal_space():
+    personal_space = Knowledge(id=99, name="admin的知识库", type=3)
+    fallback_folder = KnowledgeFile(id=5001, knowledge_id=99, file_name="leaf", file_type=0)
+    repository = SimpleNamespace(find_knowledge_by_id=AsyncMock(return_value=None))
+    knowledge_space_service = SimpleNamespace(
+        ensure_personal_default_space=AsyncMock(return_value=personal_space),
+        find_or_create_folder_path_for_file_sync=AsyncMock(return_value=fallback_folder),
+    )
+    service = _service(repository, knowledge_space_service)
+    service.token_name = "联调Token"
+    service.file_sync_rule = DeveloperTokenFileSyncRule.model_validate(
+        {
+            "category": {"code": "POLICY", "subcategory_code": "MGMT_POLICY"},
+            "business_domain": {"mode": "fixed", "code": "IT"},
+            "target_space": {
+                "mode": "fixed",
+                "knowledge_id": 118,
+                "folder_mode": "fixed",
+                "folder_path": "政策文件/管理制度",
+            },
+        }
+    )
+    identity = SimpleNamespace(
+        target_space_department=None,
+        main_department=SimpleNamespace(id=1, name="同步部门"),
+        caller_department=SimpleNamespace(id=2, name="绑定用户主责部门"),
+    )
+
+    target = await service._resolve_target_space(identity)
+
+    assert target.used_personal_fallback is True
+    assert target.space.id == 99
+    assert target.folder_id == 5001
+    knowledge_space_service.ensure_personal_default_space.assert_awaited_once()
+    knowledge_space_service.find_or_create_folder_path_for_file_sync.assert_awaited_once_with(
+        99,
+        "业务接口未分配/联调Token/政策文件/管理制度",
+    )
+
+
+def test_build_personal_fallback_folder_path_uses_token_name_and_configured_target_path():
+    service = _service()
+    service.token_name = "联调Token"
+    service.file_sync_rule = DeveloperTokenFileSyncRule.model_validate(
+        {
+            "category": {"code": "POLICY", "subcategory_code": "MGMT_POLICY"},
+            "business_domain": {"mode": "fixed", "code": "IT"},
+            "target_space": {
+                "mode": "fixed",
+                "knowledge_id": 118,
+                "folder_mode": "dynamic",
+                "parent_folder_path": "政策文件",
+                "folder_dynamic_source": "department_name",
+            },
+        }
+    )
+    identity = SimpleNamespace(
+        main_department=SimpleNamespace(id=20, name="同步部门"),
+        caller_department=SimpleNamespace(id=30, name="绑定用户主责部门"),
+    )
+
+    assert service.build_personal_fallback_folder_path(identity) == (
+        "业务接口未分配/联调Token/政策文件/同步部门"
+    )
 
 
 def test_unbound_business_domain_is_rejected():
@@ -373,17 +512,19 @@ async def test_sync_orchestration_allows_repeated_external_id_and_writes_source_
     knowledge_space_service = SimpleNamespace(
         get_preview_cache_key=Mock(return_value="cache-key"),
         add_file=AsyncMock(return_value=[SimpleNamespace(id=9, status=5)]),
-        enqueue_file_processing=Mock(),
+        enqueue_file_title_extraction=Mock(),
     )
     events = Mock()
-    events.attach_mock(repository.update, "persist")
-    events.attach_mock(knowledge_space_service.enqueue_file_processing, "enqueue")
+    events.attach_mock(knowledge_space_service.enqueue_file_title_extraction, "enqueue")
     service = _service(repository, knowledge_space_service)
     identity = SimpleNamespace(
         responsible_user_id=2,
         responsible_user_name="owner",
+        responsible_user_external_id="owner-ext",
         responsible_department=_department(20, "责任人部门", "/20/"),
         main_department=_department(10, "主责单位", "/10/"),
+        business_domain_department=None,
+        target_space_department=None,
         selected_department=None,
     )
     category = SimpleNamespace(code="POL")
@@ -402,8 +543,7 @@ async def test_sync_orchestration_allows_repeated_external_id_and_writes_source_
         status=5,
         create_time=datetime(2026, 7, 16),
     )
-    repository.find_by_id.return_value = knowledge_file
-    repository.update.side_effect = lambda value: value
+    repository.find_by_id = AsyncMock(return_value=knowledge_file)
 
     service._resolve_identity = AsyncMock(return_value=identity)
     service._get_portal_config = AsyncMock(return_value=SimpleNamespace())
@@ -413,16 +553,23 @@ async def test_sync_orchestration_allows_repeated_external_id_and_writes_source_
     service._ensure_domain_bound = Mock()
     service._require_upload_permission = AsyncMock()
     service._save_temporary_file = AsyncMock(return_value="temporary-url")
+    service._resolve_same_name_version_overwrite = AsyncMock(return_value=(None, None))
 
     async def _generate_fixed_encoding(**kwargs):
         kwargs["knowledge_file"].file_encoding = "SGGF-POL-IT-20260700000001"
         return kwargs["knowledge_file"].file_encoding
 
     upload = UploadFile(filename="a.pdf", file=BytesIO(b"content"), size=7)
-    with patch.object(
-        FileEncodingTransformer,
-        "generate_fixed_encoding",
-        side_effect=_generate_fixed_encoding,
+    with (
+        patch.object(
+            FileEncodingTransformer,
+            "generate_fixed_encoding",
+            side_effect=_generate_fixed_encoding,
+        ),
+        patch(
+            "bisheng.open_endpoints.domain.services.filelib_sync_service.KnowledgeFileDao.update",
+            side_effect=lambda value: value,
+        ) as persist_update,
     ):
         result = await service.sync(
             raw_params='{"external_file_id":"ext-1","file_name":"a.pdf"}',
@@ -437,13 +584,18 @@ async def test_sync_orchestration_allows_repeated_external_id_and_writes_source_
         "external_file_id": "ext-1",
         "department": "主责单位",
         "department_id": 10,
-        "responsible_person": "owner",
+        "responsible_person": "owner-ext",
         "responsible_person_id": 2,
         "filelib_sync_endpoint": "sync",
     }
-    assert repository.update.await_count == 2
+    assert knowledge_file.user_id == 2
+    assert knowledge_file.user_name == "owner"
+    assert knowledge_file.updater_id == 2
+    assert knowledge_file.updater_name == "owner"
+    service._ensure_domain_bound.assert_not_called()
+    assert persist_update.call_count == 2
     assert knowledge_space_service.add_file.await_count == 2
-    assert knowledge_space_service.enqueue_file_processing.call_count == 2
+    assert knowledge_space_service.enqueue_file_title_extraction.call_count == 2
     add_kwargs = knowledge_space_service.add_file.await_args_list[0].kwargs
     assert add_kwargs == {
         "knowledge_id": 8,
@@ -454,11 +606,13 @@ async def test_sync_orchestration_allows_repeated_external_id_and_writes_source_
         "business_domain_code": "IT",
         "skip_approval": True,
         "enqueue_processing": False,
+        "allow_duplicate_name": True,
+        "allow_duplicate_content": True,
+        "skip_space_business_domain_check": True,
     }
+    assert persist_update.call_args_list == [call(knowledge_file), call(knowledge_file)]
     assert events.method_calls == [
-        call.persist(knowledge_file),
         call.enqueue([knowledge_file], ["cache-key"]),
-        call.persist(knowledge_file),
         call.enqueue([knowledge_file], ["cache-key"]),
     ]
     assert "token_id" not in knowledge_file.user_metadata

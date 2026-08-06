@@ -43,12 +43,17 @@ https://{bisheng-host}/api/v2
     "mode": "fixed",
     "code": "SAFETY"
   },
+  "business_domain": {
+    "mode": "dynamic",
+    "code": null,
+    "dynamic_source": "responsible_person_id"
+  },
   "target_space": {
     "mode": "dynamic",
     "knowledge_id": null,
-    "folder_id": null
-  },
-  "dynamic_source": "responsible_person_id"
+    "folder_id": null,
+    "dynamic_source": "department_id"
+  }
 }
 ```
 
@@ -58,34 +63,44 @@ https://{bisheng-host}/api/v2
 | `category.subcategory_code` | 必填；必须属于上述一级分类；保存时转大写；`[A-Z0-9_-]{1,16}`。 |
 | `business_domain.mode` | `fixed` 或 `dynamic`。 |
 | `business_domain.code` | 业务域为 `fixed` 时必填，为 `dynamic` 时必须为 `null`。 |
+| `business_domain.dynamic_source` | 业务域为 `dynamic` 时必填；可选 `department_id` 或 `responsible_person_id`；为 `fixed` 时必须为 `null`。 |
 | `target_space.mode` | `fixed` 或 `dynamic`。 |
 | `target_space.knowledge_id` | 目标空间为 `fixed` 时必填正整数，为 `dynamic` 时必须为 `null`。 |
 | `target_space.folder_id` | 目标空间为 `fixed` 时可缺失或为 `null`（空间根目录），也可为正整数目录 ID；为 `dynamic` 时必须为 `null`。 |
-| `dynamic_source` | 任一维度为 `dynamic` 时必填；可选 `department_id` 或 `responsible_person_id`。两个维度均为 `fixed` 时必须为 `null`。 |
+| `target_space.dynamic_source` | 目标空间为 `dynamic` 时必填；可选 `department_id` 或 `responsible_person_id`；为 `fixed` 时必须为 `null`。 |
 
-分类始终固定。业务域和目标空间可独立选择固定或动态，因此共有四种组合：
+分类始终固定。业务域和目标空间可独立选择固定或动态，且**各自**配置动态来源，因此共有四种组合：
 
-| 业务域 | 目标空间 | 固定值 | `dynamic_source` | 请求中动态必填 ID |
+| 业务域 | 目标空间 | 固定值 | 动态来源 | 请求中动态必填 ID |
 |---|---|---|---|---|
-| fixed | fixed | 域 code、空间 ID、可空目录 ID | 必须为空 | 无 |
-| fixed | dynamic | 域 code | 必填 | 配置指定的一个 ID |
-| dynamic | fixed | 空间 ID、可空目录 ID | 必填 | 配置指定的一个 ID |
-| dynamic | dynamic | 无域/空间固定值 | 必填 | 配置指定的一个 ID；两个动态维度共用解析结果 |
+| fixed | fixed | 域 code、空间 ID、可空目录 ID | 无 | 无 |
+| fixed | dynamic | 域 code | `target_space.dynamic_source` | 该维度配置的 ID |
+| dynamic | fixed | 空间 ID、可空目录 ID | `business_domain.dynamic_source` | 该维度配置的 ID |
+| dynamic | dynamic | 无域/空间固定值 | 两个维度各自配置 | 两个维度所需 ID 的**并集**（可不同） |
+
+**向后兼容**：旧配置若仍使用顶层 `dynamic_source`，读取时会自动复制到仍为 `dynamic` 且未单独配置的维度，保存后不再持久化顶层字段。
 
 ### 2.2 动态来源语义
 
-- `department_id`：请求必须显式提供 `params.department_id`。系统在 Token 当前租户内按部门 ID 解析动态业务。
-- `responsible_person_id`：请求必须显式提供 `params.responsible_person_id`。系统在 Token 当前租户内解析人员，并要求该人员恰好有一个有效主部门。
+- `department_id`：该维度解析时使用 `params.department_id`（字符串，对应 `filelib_department_mapping.external_department_id`）映射到的部门。
+- `responsible_person_id`：该维度解析时使用 `params.responsible_person_id` 或等价的 `params.responsible_person`（均为 `user.external_id`）解析出的用户，取其唯一主部门。
 
-系统不会在缺少配置指定 ID 时回退到调用人、另一个 ID 或名称字段。名称与 ID 同时提供时，名称必须与 ID 对应对象一致。
+两个维度可以配置不同来源，例如业务域按责任人主部门、目标空间按 `department_id`。请求必须提供当前 Token 规则所需的全部 ID 字段并集。
 
 ### 2.3 固定引用与运行时复核
 
-保存配置时，系统按 Token 目标租户校验分类父子关系、启用业务域、有效知识空间、目录类型与所属空间、固定域/空间双向绑定，并以 Token 绑定用户校验最终节点的 `upload_file` 权限。调用统一接口时会再次校验，以发现配置保存后发生的删除、停用、跨租户、目录错配、解绑或权限撤销。
+保存配置时，系统按 Token 目标租户校验分类父子关系、启用业务域、有效知识空间、目录类型与所属空间、**固定域 + 固定空间**双向绑定，并以 Token 绑定用户校验最终节点的 `upload_file` 权限。调用统一接口时会再次校验，以发现配置保存后发生的删除、停用、跨租户、目录错配、解绑或权限撤销。
 
-固定目录只保存稳定 `folder_id`，不保存路径快照。目录重命名或在同一空间移动后仍按该 ID 生效，管理页展示查询得到的当前路径；目录删除或不再属于所选空间时返回 `19903`，权限撤销时返回 `19902`，均不回退到空间根目录。动态目标不支持目录，始终写入解析出的空间根目录。
+**运行时业务域规则：**
 
-最终域与空间必须同时满足：
+- Token 业务域为 **fixed**：始终使用 Token 配置的域 code，不要求与目标知识库做门户双向绑定，也不要求目标知识库 `business_domain_codes` 已包含该域。
+- Token 业务域为 **dynamic**：按请求解析出的部门匹配门户业务域，且必须与最终目标知识库双向绑定。
+
+固定域 + 固定空间在保存 Token 时仍必须双向绑定；固定域 + 动态空间保存时不做双向绑定校验。
+
+固定目录可保存稳定 `folder_id` 或相对路径 `folder_path`。固定目标空间保存路径时会按 Token 绑定用户校验；动态目标空间保存固定路径时不绑定具体空间 ID，运行时先解析目标空间，再在该空间下按路径查找或创建目录。动态目标仍不支持保存 `folder_id` 或“固定父路径 + 动态子目录名”组合。
+
+动态业务域解析成功后，最终域与空间必须同时满足：
 
 ```text
 space.id in domain.space_ids
@@ -186,13 +201,13 @@ GET /api/v1/admin/developer-tokens/config/file-sync-target-children
 | `external_file_id` | string | 是 | 第三方文件标识，1～255 字符；用于回传和审计，不提供幂等保证。 |
 | `file_name` | string | 是 | 最终文件名，1～200 字符；必须是 base name，不能包含 `/` 或 `\`。 |
 | `department` | string | 否 | 主责单位名称；与 `department_id` 同传时必须一致。 |
-| `department_id` | positive integer | 条件必填 | 当 Token 的 `dynamic_source=department_id` 时必须显式提供；否则可用于文件元数据。 |
-| `responsible_person` | string | 否 | 责任人名称；与 `responsible_person_id` 同传时必须一致。 |
-| `responsible_person_id` | positive integer | 条件必填 | 当 Token 的 `dynamic_source=responsible_person_id` 时必须显式提供；否则可用于文件元数据。 |
+| `department_id` | string | 条件必填 | 第三方部门 ID，1～128 字符；与 `filelib_department_mapping.external_department_id` 对应；当 Token 的 `dynamic_source=department_id` 时必须显式提供；否则可用于文件元数据。 |
+| `responsible_person` | string | 否 | 责任人 `user.external_id`；单独传入时按此外部人员 ID 解析用户；与 `responsible_person_id` 同传时必须一致；解析成功后作为文件上传人/更新人写入。 |
+| `responsible_person_id` | string | 条件必填 | 责任人 `user.external_id`，1～128 字符；当 Token 的 `dynamic_source=responsible_person_id` 时必须提供本字段或等价的 `responsible_person`；两者语义相同，任选其一。 |
 
 未知 `params` 字段按既有行为忽略，但任何分类、业务域或目标知识空间覆盖字段都不会参与业务解析。
 
-两个维度均为固定时，责任人默认 Token 绑定用户，主责单位默认该用户的唯一主部门；调用人或责任人的主部门不存在/不唯一时仍会失败。
+两个维度均为固定时，责任人默认 Token 绑定用户，主责单位默认该责任人的唯一主部门；未传 `department_id` 时不会回退到 Token 绑定用户的主部门。调用人或责任人的主部门不存在/不唯一时仍会失败。
 
 ## 4. 调用示例
 
@@ -250,7 +265,7 @@ Token 配置：
 curl -X POST 'https://{bisheng-host}/api/v2/filelib/file/sync' \
   -H 'X-Developer-Token: bst_REDACTED' \
   -F 'file=@./精益项目报告.pdf' \
-  -F 'params={"external_file_id":"SG-DOC-0002","file_name":"精益项目报告.pdf","responsible_person_id":12}'
+  -F 'params={"external_file_id":"SG-DOC-0002","file_name":"精益项目报告.pdf","responsible_person":"EMP001"}'
 ```
 
 ## 5. 成功响应与处理状态
@@ -321,9 +336,10 @@ Developer Token 认证与访问控制错误沿用通用契约，业务码位于�
 
 - 本接口不是幂等接口。`external_file_id` 只用于回传、元数据和审计，不执行唯一约束；重复提交会分别进入正常上传流程。
 - 现有知识上传重复内容/名称校验仍可能返回 `19904`，但不能把它当成基于 `external_file_id` 的幂等机制。
-- 固定根目录以 `parent_id=null` 写入，固定目录以稳定 `folder_id` 作为 `parent_id` 写入；动态目标始终写入空间根目录。其他跳过审批、先持久化后异步入队行为保持不变。
+- 固定根目录以 `parent_id=null` 写入；固定目标空间可保存稳定 `folder_id`，固定/动态目标空间均可保存相对 `folder_path`，运行时写入对应目录；动态子目录始终写入解析出的目标空间（可位于根目录或固定父路径下）。其他跳过审批、先持久化后异步入队行为保持不变。
 - Token ID 仅用于服务端受控日志和 Token 审计；Header、Token 明文/密文/哈希、完整规则 JSON 都不得写入文件元数据或业务日志。
 - 文件元数据记录 `external_file_id`、最终主责单位、责任人以及固定来源 `filelib_sync_endpoint=sync`。
+- 文件记录的 `user_id`/`user_name`（上传人）与 `updater_id`/`updater_name`（更新人）写入解析后的责任人；未传责任人参数时默认 Token 绑定用户。Token 绑定用户仍用于权限校验与审计日志。
 
 ## 8. 发布切换清单
 

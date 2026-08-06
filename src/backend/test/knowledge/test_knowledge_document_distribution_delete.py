@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta
 from unittest.mock import AsyncMock
 
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from bisheng.knowledge.domain.models.knowledge import (
+    Knowledge,
+    KnowledgeState,
+    KnowledgeTypeEnum,
+)
 from bisheng.knowledge.domain.models.knowledge_document import (
     KnowledgeDocument,
     KnowledgeDocumentLifecycleStatus,
@@ -39,6 +45,12 @@ from bisheng.knowledge.domain.services.knowledge_document_distribution_service i
 from bisheng.knowledge.domain.services.knowledge_document_permission_activation_service import (
     KnowledgeDocumentPermissionActivationService,
 )
+from bisheng.knowledge.domain.services.knowledge_document_projection_service import (
+    KnowledgeDocumentProjectionService,
+)
+from bisheng.knowledge.domain.services.knowledge_space_retirement_service import (
+    KnowledgeSpaceRetirementService,
+)
 
 
 def _service(
@@ -63,6 +75,27 @@ def _service(
 async def _seed_manager(session: AsyncSession) -> None:
     session.add_all(
         [
+            Knowledge(
+                id=10,
+                tenant_id=7,
+                name="管理库",
+                type=KnowledgeTypeEnum.SPACE.value,
+                state=KnowledgeState.PUBLISHED.value,
+            ),
+            Knowledge(
+                id=20,
+                tenant_id=7,
+                name="发布目标库",
+                type=KnowledgeTypeEnum.SPACE.value,
+                state=KnowledgeState.PUBLISHED.value,
+            ),
+            Knowledge(
+                id=30,
+                tenant_id=7,
+                name="分享目标库",
+                type=KnowledgeTypeEnum.SPACE.value,
+                state=KnowledgeState.PUBLISHED.value,
+            ),
             KnowledgeDocument(
                 id=91,
                 tenant_id=7,
@@ -347,3 +380,148 @@ async def test_final_delete_keeps_physical_cleanup_facts_until_worker_finishes(
     assert manager.entry_status == KnowledgeFileEntryStatus.DELETING.value
     assert manager.object_name == "tenant/7/canonical.pdf"
     assert [version.knowledge_file_id for version in versions] == [100]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("retiring_space_id", "expected_document_status", "expected_remote_status"),
+    [
+        (
+            10,
+            KnowledgeDocumentLifecycleStatus.DELETING.value,
+            KnowledgeFileEntryStatus.INVALID.value,
+        ),
+        (
+            20,
+            KnowledgeDocumentLifecycleStatus.ACTIVE.value,
+            KnowledgeFileEntryStatus.DELETING.value,
+        ),
+    ],
+)
+async def test_space_retirement_invalidates_only_when_manager_space_is_deleted(
+    async_db_session: AsyncSession,
+    retiring_space_id: int,
+    expected_document_status: str,
+    expected_remote_status: str,
+):
+    await _seed_manager(async_db_session)
+    async_db_session.add_all(
+        [
+            KnowledgeFile(
+                id=101,
+                tenant_id=7,
+                knowledge_id=20,
+                file_name="canonical.pdf",
+                status=KnowledgeFileStatus.SUCCESS.value,
+                reference_document_id=91,
+                entry_type=KnowledgeFileEntryType.PUBLISH.value,
+                entry_status=KnowledgeFileEntryStatus.ACTIVE.value,
+                projection_status=KnowledgeFileProjectionStatus.READY.value,
+                desired_content_generation=3,
+                applied_content_generation=3,
+            ),
+        ]
+    )
+    await async_db_session.commit()
+
+    result = await KnowledgeSpaceRetirementService(
+        session=async_db_session
+    ).retire(tenant_id=7, space_id=retiring_space_id)
+
+    document = await KnowledgeDocumentRepositoryImpl(async_db_session).find_by_id(91)
+    repository = KnowledgeFileRepositoryImpl(async_db_session)
+    manager = await repository.find_by_id(100)
+    remote = await repository.find_by_id(101)
+    retired_space = await async_db_session.get(Knowledge, retiring_space_id)
+    assert result.idempotent is False
+    assert retired_space.state == KnowledgeState.DELETING.value
+    assert document.lifecycle_status == expected_document_status
+    if retiring_space_id == 10:
+        assert manager.entry_status == KnowledgeFileEntryStatus.DELETING.value
+    else:
+        assert manager.entry_status == KnowledgeFileEntryStatus.ACTIVE.value
+    assert remote.entry_status == expected_remote_status
+
+
+@pytest.mark.asyncio
+async def test_approved_cannot_create_entry_after_target_space_starts_retiring(
+    async_db_session: AsyncSession,
+):
+    await _seed_manager(async_db_session)
+    target = await async_db_session.get(Knowledge, 30)
+    target.state = KnowledgeState.DELETING.value
+    async_db_session.add(target)
+    await async_db_session.commit()
+
+    with pytest.raises(
+        KnowledgeDocumentDistributionError,
+        match="no longer published",
+    ):
+        await _service(async_db_session).share_approved(
+            ShareKnowledgeDocumentCommand(
+                tenant_id=7,
+                approval_instance_id=8002,
+                document_id=91,
+                source_entry_id=100,
+                target_space_id=30,
+            )
+        )
+
+    entries = await KnowledgeFileRepositoryImpl(
+        async_db_session
+    ).find_distribution_entries_by_document_id(91)
+    assert [item.id for item in entries] == [100]
+
+
+@pytest.mark.asyncio
+async def test_invalid_projection_cleanup_failure_remains_retryable(
+    async_db_session: AsyncSession,
+):
+    await _seed_manager(async_db_session)
+    invalid = KnowledgeFile(
+        id=101,
+        tenant_id=7,
+        knowledge_id=20,
+        file_name="canonical.pdf",
+        status=KnowledgeFileStatus.SUCCESS.value,
+        reference_document_id=91,
+        entry_type=KnowledgeFileEntryType.PUBLISH.value,
+        entry_status=KnowledgeFileEntryStatus.INVALID.value,
+        projection_status=KnowledgeFileProjectionStatus.PENDING.value,
+        desired_entry_generation=2,
+        applied_entry_generation=1,
+    )
+    async_db_session.add(invalid)
+    await async_db_session.commit()
+    repository = KnowledgeFileRepositoryImpl(async_db_session)
+    cleaner = AsyncMock(side_effect=RuntimeError("ES unavailable"))
+    finalizer = AsyncMock()
+    service = KnowledgeDocumentProjectionService(
+        session=async_db_session,
+        file_repository=repository,
+        document_repository=KnowledgeDocumentRepositoryImpl(async_db_session),
+        version_repository=KnowledgeDocumentVersionRepositoryImpl(async_db_session),
+        projection_cleaner=cleaner,
+        deleting_entry_finalizer=finalizer,
+    )
+    started = datetime.now()
+
+    with pytest.raises(RuntimeError, match="ES unavailable"):
+        await service.process_entry(
+            tenant_id=7,
+            entry_id=101,
+            lease_owner="first",
+            now=started,
+        )
+    failed = await repository.find_by_id(101)
+    assert failed.projection_status == KnowledgeFileProjectionStatus.FAILED.value
+
+    cleaner.side_effect = None
+    result = await service.process_entry(
+        tenant_id=7,
+        entry_id=101,
+        lease_owner="retry",
+        now=started + timedelta(seconds=10),
+    )
+    assert result.status == "cleaned"
+    finalizer.assert_awaited_once()

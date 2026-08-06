@@ -556,6 +556,7 @@ export interface KnowledgeFile {
     isDepartmentFile?: boolean;
     entryType?: KnowledgeDocumentEntryType;
     entryStatus?: string | null;
+    distributionInvalidReason?: string | null;
     canonicalDocumentId?: number | null;
     canonicalVersionId?: number | null;
     managerFileId?: number | null;
@@ -1145,6 +1146,7 @@ export function mapChild(raw: any, spaceId: string): KnowledgeFile {
             : undefined,
         entryType: raw?.entry_type ?? undefined,
         entryStatus: raw?.entry_status ?? undefined,
+        distributionInvalidReason: raw?.distribution_invalid_reason ?? undefined,
         canonicalDocumentId: raw?.canonical_document_id ?? undefined,
         canonicalVersionId: raw?.canonical_version_id ?? undefined,
         managerFileId: capabilities?.canEditContent
@@ -1361,6 +1363,22 @@ export async function reorderSpaceApi(
     await request.post(`/api/v1/knowledge/space/${spaceId}/sort`, {
         prev_space_id: neighbours.prev_space_id ? Number(neighbours.prev_space_id) : null,
         next_space_id: neighbours.next_space_id ? Number(neighbours.next_space_id) : null,
+    });
+}
+
+/**
+ * Move a folder between two sibling folders in its directory's admin-defined order.
+ * Pass the ids it was dropped between; either is null at the list edges.
+ * System admin only; only folders participate in this ordering.
+ */
+export async function reorderFolderApi(
+    spaceId: string,
+    folderId: string,
+    neighbours: { prev_folder_id: string | null; next_folder_id: string | null },
+): Promise<void> {
+    await request.post(`/api/v1/knowledge/space/${spaceId}/folders/${folderId}/sort`, {
+        prev_folder_id: neighbours.prev_folder_id ? Number(neighbours.prev_folder_id) : null,
+        next_folder_id: neighbours.next_folder_id ? Number(neighbours.next_folder_id) : null,
     });
 }
 

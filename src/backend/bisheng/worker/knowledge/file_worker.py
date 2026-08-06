@@ -514,6 +514,22 @@ def refresh_file_similarity_candidates_celery(file_id: int) -> int:
     return count
 
 
+def _complete_filelib_sync_version_link_if_needed(file_id: int) -> None:
+    from bisheng.open_endpoints.domain.services.filelib_sync_version_link_service import (
+        complete_pending_filelib_sync_version_link,
+    )
+    from bisheng.worker._asyncio_utils import run_async_task
+
+    try:
+        run_async_task(lambda: complete_pending_filelib_sync_version_link(file_id))
+    except Exception as exc:
+        logger.warning(
+            "filelib sync pending version link hook failed file_id={} error={}",
+            file_id,
+            exc,
+        )
+
+
 @bisheng_celery.task(acks_late=True)
 def parse_knowledge_file_celery(file_id: int, preview_cache_key: str = None, callback_url: str = None):
     """ Asynchronously parse one incoming successful file """
@@ -535,6 +551,7 @@ def parse_knowledge_file_celery(file_id: int, preview_cache_key: str = None, cal
                 == KnowledgeFileStatus.SUCCESS.value
             ):
                 _mark_manager_projection_after_parse(db_file[0])
+                _complete_filelib_sync_version_link_if_needed(file_id)
             _enqueue_recommendation_projection_refresh(file_id)
             _enqueue_current_pdf_artifact_sync(
                 tenant_id=int(db_file[0].tenant_id),

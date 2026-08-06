@@ -31,6 +31,8 @@ class KnowledgeState(Enum):
     COPYING = 2
     REBUILDING = 3  # Status in Document Knowledge Base Reconstruction
     FAILED = 4  # Status of Documentation Knowledge Base Reconstruction Failure
+    DELETING = 5  # 知识空间退役中，业务侧立即不可见
+
 
 class MetadataFieldType(str, Enum):
     """ Metadata field type"""
@@ -306,6 +308,7 @@ class KnowledgeDao(KnowledgeBase):
             page: int = 0,
             limit: int = 0,
             filter_knowledge: List[int] = None) -> Union[Select, SelectOfScalar]:
+        statement = statement.where(Knowledge.state != KnowledgeState.DELETING.value)
         if knowledge_id_extra:
             statement = statement.where(
                 or_(Knowledge.id.in_(knowledge_id_extra), Knowledge.user_id == user_id))
@@ -553,6 +556,7 @@ class KnowledgeDao(KnowledgeBase):
                                       statement,
                                       name: str = None,
                                       knowledge_type: KnowledgeTypeEnum = None):
+        statement = statement.where(Knowledge.state != KnowledgeState.DELETING.value)
         if knowledge_type is not None:
             statement = statement.where(Knowledge.type == knowledge_type.value)
 
@@ -1081,6 +1085,7 @@ class KnowledgeDao(KnowledgeBase):
             )
             .where(
                 Knowledge.type == KnowledgeTypeEnum.SPACE.value,
+                Knowledge.state == KnowledgeState.PUBLISHED.value,
                 Knowledge.is_released == True,  # noqa: E712 — `IS 1` is rejected by DM8; `= 1` works on both MySQL and DM8
                 Knowledge.auth_type.in_([AuthTypeEnum.PUBLIC.value, AuthTypeEnum.APPROVAL.value]),
             )
@@ -1127,6 +1132,7 @@ class KnowledgeDao(KnowledgeBase):
             .select_from(Knowledge)
             .where(
                 Knowledge.type == KnowledgeTypeEnum.SPACE.value,
+                Knowledge.state == KnowledgeState.PUBLISHED.value,
                 Knowledge.is_released == True,  # noqa: E712 — `IS 1` is rejected by DM8; `= 1` works on both MySQL and DM8
                 Knowledge.auth_type.in_([AuthTypeEnum.PUBLIC.value, AuthTypeEnum.APPROVAL.value]),
             )

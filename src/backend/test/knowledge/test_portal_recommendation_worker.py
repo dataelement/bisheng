@@ -92,7 +92,7 @@ def test_tenant_fanout_always_uses_explicit_headers_and_knowledge_queue():
     assert task.apply_async.call_count == 3
     for tenant_id, call in zip((1, 5, 8), task.apply_async.call_args_list, strict=False):
         assert call.kwargs["headers"] == {"tenant_id": tenant_id}
-        assert call.kwargs["queue"] == "knowledge_celery"
+        assert call.kwargs["queue"] == "celery"
         assert call.kwargs["kwargs"] == {"mode": "daily"}
 
 

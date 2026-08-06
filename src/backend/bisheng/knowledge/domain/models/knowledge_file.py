@@ -72,6 +72,7 @@ class KnowledgeFileEntryStatus(str, Enum):
     PREPARING = "preparing"
     ACTIVE = "active"
     DELETING = "deleting"
+    INVALID = "invalid"
 
 
 class KnowledgeFileProjectionStatus(str, Enum):
@@ -109,6 +110,14 @@ class KnowledgeFileBase(SQLModelSerializable):
     file_source: str | None = Field(default=FileSource.UPLOAD.value, description="File source")
     level: int | None = Field(default=0)
     file_level_path: str | None = Field(default=None, index=True)
+    sort_weight: int | None = Field(
+        default=None,
+        sa_column=Column(
+            Integer,
+            nullable=True,
+            comment="管理员手动排序权重，越小越靠前；NULL 表示未排过，排在已排序的之后",
+        ),
+    )
     abstract: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
     file_size: int | None = Field(default=None, index=False, description="File size inbytes")
     md5: str | None = Field(default=None, index=False)
@@ -714,6 +723,23 @@ class KnowledgeFileDao(KnowledgeFileBase):
             await session.commit()
             await session.refresh(knowledge_file)
         return knowledge_file
+
+    @classmethod
+    async def async_update_sort_weights(cls, weight_by_file_id: dict[int, int]) -> None:
+        """Write manual sort weights for the given folders.
+
+        Used both for a single drag (one row) and for (re)assigning a whole directory's
+        weights, so it stays one round-trip per row rather than loading ORM objects.
+        Callers own the ordering semantics.
+        """
+        if not weight_by_file_id:
+            return
+        async with get_async_db_session() as session:
+            for file_id, weight in weight_by_file_id.items():
+                await session.exec(
+                    update(KnowledgeFile).where(KnowledgeFile.id == int(file_id)).values(sort_weight=int(weight))
+                )
+            await session.commit()
 
     @classmethod
     async def async_update_batch(cls, knowledge_files: list[KnowledgeFile]) -> bool:

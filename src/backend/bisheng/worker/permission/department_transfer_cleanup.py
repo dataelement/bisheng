@@ -103,7 +103,7 @@ async def _scan_due_events_async() -> int:
             await _mark_overdue_if_needed(repository, event, now=now)
             await session.commit()
             try:
-                process_event.apply_async(args=[event_id], queue="knowledge_celery")
+                process_event.apply_async(args=[event_id], queue="celery")
                 dispatched += 1
             except Exception as exc:
                 logger.warning(

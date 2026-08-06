@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 
 import { ApprovalCenterDialog } from "./ApprovalCenterDialog";
 import {
+  decideApprovalTaskApi,
   getApprovalInstanceDetailApi,
   getMyApprovalTaskDetailApi,
   listMyApprovalRequestsApi,
@@ -24,6 +25,8 @@ jest.mock("~/hooks/useLocalize", () => ({
       com_approval_field_source_file_name: "源文件",
       com_approval_field_target_space_name: "目标知识库",
       com_approval_field_target_document_title: "目标文档",
+      com_approval_field_target_folder_name: "目标文件夹",
+      com_approval_field_allow_download: "允许下载",
       com_approval_field_file_name: "文件",
       com_approval_field_space_name: "知识库",
       com_approval_field_department_name: "文件所属部门",
@@ -32,9 +35,12 @@ jest.mock("~/hooks/useLocalize", () => ({
       com_approval_node_not_started: "未开始",
       com_approval_business_type_knowledge_space_create: "新建知识库",
       com_approval_business_type_knowledge_space_file_publish: "发布文件",
+      com_approval_business_type_knowledge_space_file_share: "分享文件",
       com_approval_space_level_team: "团队/科室知识库",
       com_approval_auth_type_approval: "需审批",
       com_approval_value_yes: "是",
+      com_approval_value_no: "否",
+      com_approval_reject_reason_required: "请填写拒绝原因",
     };
     return map[key] ?? key;
   },
@@ -154,6 +160,67 @@ describe("ApprovalCenterDialog", () => {
     expect(screen.queryByText("auth_type")).not.toBeInTheDocument();
     expect(screen.queryByText("space_level")).not.toBeInTheDocument();
     expect(screen.queryByText("is_released")).not.toBeInTheDocument();
+  });
+
+  it("renders Shougang file share business content with localized labels and values", async () => {
+    jest.mocked(listMyApprovalTasksApi).mockResolvedValue({
+      data: [
+        {
+          task_id: 42,
+          instance_id: 142,
+          business_name: "分享文件：操作手册.md → 业务域知识库",
+          status: "pending",
+          scenario_code: "knowledge_space_file_share_request",
+        },
+      ],
+      total: 1,
+    });
+    jest.mocked(getMyApprovalTaskDetailApi).mockResolvedValue({
+      task_id: 42,
+      instance_id: 142,
+      business_name: "分享文件：操作手册.md → 业务域知识库",
+      status: "pending",
+      scenario_code: "knowledge_space_file_share_request",
+      detail_snapshot: {
+        type: "knowledge_space_file_share",
+        allow_download: false,
+        source_file_id: 862,
+        source_space_id: 66,
+        target_space_id: 12,
+        target_folder_id: 0,
+        source_file_name: "操作手册.md",
+        source_space_name: "测试部门01-子部门2",
+        target_space_name: "0111",
+        target_folder_name: "根目录",
+      },
+    } as any);
+
+    render(
+      <ApprovalCenterDialog
+        open
+        onOpenChange={jest.fn()}
+        target={{ tab: "my_tasks", taskId: 42 }}
+      />,
+    );
+
+    expect(await screen.findByText("业务类型")).toBeInTheDocument();
+    expect(screen.getByText("分享文件")).toBeInTheDocument();
+    expect(screen.getByText("源知识库")).toBeInTheDocument();
+    expect(screen.getByText("测试部门01-子部门2")).toBeInTheDocument();
+    expect(screen.getByText("源文件")).toBeInTheDocument();
+    expect(screen.getByText("操作手册.md")).toBeInTheDocument();
+    expect(screen.getByText("目标知识库")).toBeInTheDocument();
+    expect(screen.getByText("0111")).toBeInTheDocument();
+    expect(screen.getByText("目标文件夹")).toBeInTheDocument();
+    expect(screen.getByText("根目录")).toBeInTheDocument();
+    expect(screen.getByText("允许下载")).toBeInTheDocument();
+    expect(screen.getByText("否")).toBeInTheDocument();
+    expect(screen.queryByText("type")).not.toBeInTheDocument();
+    expect(screen.queryByText("allow_download")).not.toBeInTheDocument();
+    expect(screen.queryByText("source_file_id")).not.toBeInTheDocument();
+    expect(screen.queryByText("source_space_id")).not.toBeInTheDocument();
+    expect(screen.queryByText("target_space_id")).not.toBeInTheDocument();
+    expect(screen.queryByText("knowledge_space_file_share")).not.toBeInTheDocument();
   });
 
   it("renders Shougang file publish business content with names instead of duplicate ID fields", async () => {
@@ -387,6 +454,56 @@ describe("ApprovalCenterDialog", () => {
 
     expect(await screen.findByText("王五")).toBeInTheDocument();
     expect(screen.getByText("申请人部门")).toBeInTheDocument();
+  });
+
+  it("blocks a blank rejection reason and shows the required message", async () => {
+    const user = userEvent.setup();
+    jest.mocked(listMyApprovalTasksApi).mockResolvedValue({
+      data: [
+        {
+          task_id: 81,
+          instance_id: 181,
+          business_name: "发布文件",
+          status: "pending",
+        },
+      ],
+      total: 1,
+    });
+    jest.mocked(getMyApprovalTaskDetailApi).mockResolvedValue({
+      task_id: 81,
+      instance_id: 181,
+      business_name: "发布文件",
+      status: "pending",
+    } as any);
+
+    render(
+      <ApprovalCenterDialog
+        open
+        onOpenChange={jest.fn()}
+        target={{ tab: "my_tasks", taskId: 81 }}
+      />,
+    );
+
+    await user.click(await screen.findByRole("button", { name: "com_approval_action_reject" }));
+
+    expect(decideApprovalTaskApi).not.toHaveBeenCalled();
+    expect(screen.getByText("请填写拒绝原因")).toBeInTheDocument();
+    expect(mockShowToast).toHaveBeenCalledWith(
+      expect.objectContaining({ message: "请填写拒绝原因" }),
+    );
+
+    await user.type(
+      screen.getByPlaceholderText("com_approval_decision_comment_placeholder"),
+      "  资料不完整  ",
+    );
+    await user.click(screen.getByRole("button", { name: "com_approval_action_reject" }));
+
+    await waitFor(() => {
+      expect(decideApprovalTaskApi).toHaveBeenCalledWith(81, {
+        action: "reject",
+        comment: "资料不完整",
+      });
+    });
   });
 
   it("lets an approver revoke an executed department-file grant", async () => {

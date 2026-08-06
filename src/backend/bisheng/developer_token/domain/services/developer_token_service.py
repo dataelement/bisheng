@@ -383,6 +383,11 @@ class DeveloperTokenService:
                 FileSyncOptionBusinessDomain(
                     code=code,
                     name=str(getattr(item, "name", "") or "").strip(),
+                    space_ids=[
+                        int(space_id)
+                        for space_id in (getattr(item, "space_ids", None) or [])
+                        if int(space_id) > 0
+                    ],
                 )
             )
 
@@ -399,6 +404,7 @@ class DeveloperTokenService:
                     name=space.name,
                     selectable=space.selectable,
                     has_children=space.has_children,
+                    business_domain_codes=list(space.business_domain_codes),
                 )
             )
 
@@ -524,15 +530,59 @@ class DeveloperTokenService:
         space_fixed = normalized.target_space.mode == "fixed"
         if domain_fixed != bool(normalized.business_domain.code):
             raise DeveloperTokenInvalidFileSyncRuleError(msg="business domain mode and code do not match")
+        if domain_fixed and normalized.business_domain.dynamic_source is not None:
+            raise DeveloperTokenInvalidFileSyncRuleError(msg="fixed business domain cannot specify dynamic source")
+        if not domain_fixed and normalized.business_domain.dynamic_source is None:
+            raise DeveloperTokenInvalidFileSyncRuleError(msg="dynamic business domain requires dynamic source")
         if space_fixed != (normalized.target_space.knowledge_id is not None):
             raise DeveloperTokenInvalidFileSyncRuleError(msg="target space mode and knowledge id do not match")
-        if not space_fixed and normalized.target_space.folder_id is not None:
-            raise DeveloperTokenInvalidFileSyncRuleError(msg="dynamic target cannot specify a folder id")
-
-        has_dynamic_dimension = not domain_fixed or not space_fixed
-        if has_dynamic_dimension != (normalized.dynamic_source is not None):
-            raise DeveloperTokenInvalidFileSyncRuleError(msg="dynamic source does not match rule modes")
+        if space_fixed and normalized.target_space.dynamic_source is not None:
+            raise DeveloperTokenInvalidFileSyncRuleError(msg="fixed target space cannot specify dynamic source")
+        if not space_fixed and normalized.target_space.dynamic_source is None:
+            raise DeveloperTokenInvalidFileSyncRuleError(msg="dynamic target space requires dynamic source")
+        cls._validate_target_folder_rule(normalized.target_space, space_fixed=space_fixed)
+        if normalized.dynamic_source is not None:
+            raise DeveloperTokenInvalidFileSyncRuleError(msg="legacy dynamic source must not be persisted")
         return normalized
+
+    @staticmethod
+    def _validate_target_folder_rule(target_space, *, space_fixed: bool) -> None:
+        folder_mode = target_space.folder_mode
+        folder_id = target_space.folder_id
+        folder_path = target_space.folder_path
+        parent_folder_path = target_space.parent_folder_path
+        folder_dynamic_source = target_space.folder_dynamic_source
+
+        if folder_mode == "none":
+            if (
+                folder_id is not None
+                or folder_path is not None
+                or parent_folder_path is not None
+                or folder_dynamic_source is not None
+            ):
+                raise DeveloperTokenInvalidFileSyncRuleError(msg="folder mode none cannot specify folder fields")
+            return
+
+        if folder_mode == "fixed":
+            if parent_folder_path is not None or folder_dynamic_source is not None:
+                raise DeveloperTokenInvalidFileSyncRuleError(msg="fixed folder mode cannot specify dynamic folder fields")
+            if folder_path is None and folder_id is None:
+                raise DeveloperTokenInvalidFileSyncRuleError(msg="fixed folder mode requires folder path")
+            if not space_fixed and folder_id is not None:
+                raise DeveloperTokenInvalidFileSyncRuleError(msg="dynamic target cannot use a fixed folder id")
+            return
+
+        if folder_mode != "dynamic":
+            raise DeveloperTokenInvalidFileSyncRuleError(msg="folder mode is invalid")
+
+        if folder_id is not None or folder_path is not None:
+            raise DeveloperTokenInvalidFileSyncRuleError(msg="dynamic folder mode cannot specify a fixed folder path")
+        if folder_dynamic_source is None:
+            raise DeveloperTokenInvalidFileSyncRuleError(msg="dynamic folder mode requires folder dynamic source")
+        if not space_fixed and parent_folder_path is not None:
+            raise DeveloperTokenInvalidFileSyncRuleError(
+                msg="dynamic target cannot specify a parent folder path",
+            )
 
     @classmethod
     async def _validate_file_sync_rule(
@@ -585,7 +635,7 @@ class DeveloperTokenService:
                     tenant_id=tenant_id,
                     user_id=user_id,
                     knowledge_id=int(normalized.target_space.knowledge_id),
-                    folder_id=normalized.target_space.folder_id,
+                    folder_id=None,
                 )
                 if fixed_space is None:
                     raise DeveloperTokenInvalidFileSyncRuleError(msg="target knowledge space is unavailable")
@@ -756,6 +806,7 @@ class DeveloperTokenService:
             )
             return DeveloperTokenPrincipal(
                 token_id=int(token.id),
+                token_name=str(token.name or ""),
                 tenant_id=int(token.tenant_id),
                 user=user_payload,
                 raw_file_sync_rule=raw_file_sync_rule,
@@ -1198,8 +1249,9 @@ class DeveloperTokenService:
             "category_code": normalized.category.code,
             "subcategory_code": normalized.category.subcategory_code,
             "business_domain_mode": normalized.business_domain.mode,
+            "business_domain_dynamic_source": normalized.business_domain.dynamic_source,
             "target_space_mode": normalized.target_space.mode,
-            "dynamic_source": normalized.dynamic_source,
+            "target_space_dynamic_source": normalized.target_space.dynamic_source,
         }
 
     @classmethod

@@ -386,6 +386,7 @@ def _get_success_space_file_rows(page: int, page_size: int):
         .join(Knowledge, KnowledgeFile.knowledge_id == Knowledge.id)
         .where(
             Knowledge.type == KnowledgeTypeEnum.SPACE.value,
+            Knowledge.is_favorite == False,  # noqa: E712
             KnowledgeFile.file_type == FileType.FILE.value,
             KnowledgeFile.status == KnowledgeFileStatus.SUCCESS.value,
             col(KnowledgeFile.deleted_at).is_(None),
@@ -407,6 +408,7 @@ def _get_success_space_file_rows_by_space_id(space_id: int, page: int, page_size
         .where(
             Knowledge.id == space_id,
             Knowledge.type == KnowledgeTypeEnum.SPACE.value,
+            Knowledge.is_favorite == False,  # noqa: E712
             KnowledgeFile.file_type == FileType.FILE.value,
             KnowledgeFile.status == KnowledgeFileStatus.SUCCESS.value,
             col(KnowledgeFile.deleted_at).is_(None),
@@ -436,6 +438,16 @@ def _get_knowledge_space_content_rows_by_file_ids(file_ids: List[int]):
     with bypass_tenant_filter():
         with get_sync_db_session() as session:
             return session.exec(statement).all()
+
+
+def _get_favorite_space_ids() -> list[int]:
+    statement = select(Knowledge.id).where(
+        Knowledge.type == KnowledgeTypeEnum.SPACE.value,
+        Knowledge.is_favorite == True,  # noqa: E712
+    )
+    with bypass_tenant_filter():
+        with get_sync_db_session() as session:
+            return [int(space_id) for space_id in session.exec(statement).all()]
 
 
 def _is_department_bound_space_scope(scope) -> bool:
@@ -577,6 +589,7 @@ def _build_knowledge_space_content_records(
 def _is_file_content_stat_visible(file_record: KnowledgeFile, space: Knowledge) -> bool:
     return (
         space.type == KnowledgeTypeEnum.SPACE.value
+        and not bool(getattr(space, "is_favorite", False))
         and file_record.file_type == FileType.FILE.value
         and file_record.status == KnowledgeFileStatus.SUCCESS.value
         and getattr(file_record, "deleted_at", None) is None
@@ -621,11 +634,15 @@ def rebuild_knowledge_space_content_file_projection(owner_token: str) -> dict[st
     if not KnowledgeSpaceContentStat.renew_lock_sync(owner_token):
         raise RuntimeError("Knowledge space content full projection owner lock lost before cleanup")
     deleted_count = mid_table.delete_stale_file_records_sync(sync_run_id)
+    deleted_favorite_count = mid_table.delete_space_records_sync(
+        _get_favorite_space_ids()
+    )
     queue_status = KnowledgeSpaceContentStat.queue_status_sync()
     return {
         **queue_status,
         "synced": synced_count,
         "deleted_stale": deleted_count,
+        "deleted_favorite": deleted_favorite_count,
         "reclaimed_count": 0,
         "batch_duration_ms": KnowledgeSpaceContentStat._now_ms() - sync_started_ms,
         "projection_lag_ms": queue_status["oldest_pending_age_ms"],
@@ -800,7 +817,7 @@ def sync_pending_knowledge_space_content_stat():
                     mid_table.insert_records_sync(records)
                     space_synced_count += len(records)
             if space_synced_count == 0:
-                mid_table.delete_space_file_records_sync([space_id])
+                mid_table.delete_space_records_sync([space_id])
             if not KnowledgeSpaceContentStat.renew_lock_sync(owner_token):
                 raise RuntimeError("Knowledge space content projection owner lock lost before space ack")
             if not KnowledgeSpaceContentStat.ack_claimed_sync(owner_token, [item.member]):

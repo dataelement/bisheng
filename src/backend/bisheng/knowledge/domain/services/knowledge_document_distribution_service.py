@@ -10,7 +10,7 @@ from sqlalchemy import delete, or_
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from bisheng.knowledge.domain.models.knowledge import Knowledge
+from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeState
 from bisheng.knowledge.domain.models.knowledge_document import (
     KnowledgeDocument,
     KnowledgeDocumentLifecycleStatus,
@@ -171,6 +171,23 @@ class KnowledgeDocumentDistributionService:
         self.permission_activation_service = permission_activation_service
         self.permission_snapshot_loader = permission_snapshot_loader
 
+    async def _lock_published_spaces(self, space_ids: set[int]) -> None:
+        normalized = sorted({int(item) for item in space_ids})
+        result = await self.session.execute(
+            select(Knowledge)
+            .where(col(Knowledge.id).in_(normalized))
+            .order_by(Knowledge.id.asc())
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        spaces = list(result.scalars().all())
+        if len(spaces) != len(normalized) or any(
+            item.state != KnowledgeState.PUBLISHED.value for item in spaces
+        ):
+            raise KnowledgeDocumentDistributionError(
+                "source or target knowledge space is no longer published"
+            )
+
     async def _ensure_publish_target_content_not_duplicate(
         self,
         command: PublishKnowledgeDocumentCommand,
@@ -233,12 +250,12 @@ class KnowledgeDocumentDistributionService:
         await self.session.flush()
         await self.session.commit()
 
-    async def normalize_manager(
+    async def _load_or_create_primary_document(
         self,
         *,
         tenant_id: int,
         source_file_id: int,
-    ) -> CanonicalManagerSnapshot:
+    ) -> tuple[KnowledgeFile, KnowledgeDocument]:
         source_file = await self.file_repository.find_by_id_for_update(source_file_id)
         if source_file is None:
             raise KnowledgeDocumentDistributionError("source file does not exist")
@@ -281,6 +298,43 @@ class KnowledgeDocumentDistributionService:
             if int(document.primary_version_id or 0) != int(version.id or 0):
                 raise KnowledgeDocumentDistributionError("historical version cannot become manager")
 
+        return source_file, document
+
+    async def ensure_document_identity(
+        self,
+        *,
+        tenant_id: int,
+        source_file_id: int,
+    ) -> CanonicalManagerSnapshot:
+        """Create the stable document identity without activating manager behavior."""
+        source_file, document = await self._load_or_create_primary_document(
+            tenant_id=tenant_id,
+            source_file_id=source_file_id,
+        )
+        self.session.add(document)
+        await self.session.flush()
+        await self.session.commit()
+        return CanonicalManagerSnapshot(
+            document_id=int(document.id),
+            manager_file_id=int(source_file.id),
+            manager_space_id=int(source_file.knowledge_id),
+        )
+
+    async def normalize_manager(
+        self,
+        *,
+        tenant_id: int,
+        source_file_id: int,
+        expected_document_id: int | None = None,
+    ) -> CanonicalManagerSnapshot:
+        source_file, document = await self._load_or_create_primary_document(
+            tenant_id=tenant_id,
+            source_file_id=source_file_id,
+        )
+        if expected_document_id is not None and int(document.id) != int(expected_document_id):
+            await self.session.rollback()
+            raise KnowledgeDocumentDistributionError("source canonical document has changed")
+
         source_file.reference_document_id = int(document.id)
         source_file.entry_type = KnowledgeFileEntryType.MANAGER.value
         source_file.entry_status = KnowledgeFileEntryStatus.ACTIVE.value
@@ -298,6 +352,65 @@ class KnowledgeDocumentDistributionService:
             manager_file_id=int(source_file.id),
             manager_space_id=int(source_file.knowledge_id),
         )
+
+    async def restore_unapproved_manager(
+        self,
+        *,
+        tenant_id: int,
+        document_id: int,
+        source_file_id: int,
+    ) -> bool:
+        """Demote only a standalone manager created before approval completed."""
+        document = await self.document_repository.find_by_id_for_update(document_id)
+        source_file = await self.file_repository.find_by_id_for_update(source_file_id)
+        if document is None or source_file is None:
+            await self.session.rollback()
+            return False
+        if (
+            int(document.tenant_id or 0) != int(tenant_id)
+            or int(source_file.tenant_id or 0) != int(tenant_id)
+            or int(document.knowledge_id or 0) != int(source_file.knowledge_id or 0)
+            or document.predecessor_logic_file_id is not None
+            or source_file.reference_document_id != int(document_id)
+            or source_file.entry_type != KnowledgeFileEntryType.MANAGER.value
+            or source_file.entry_status != KnowledgeFileEntryStatus.ACTIVE.value
+        ):
+            await self.session.rollback()
+            return False
+
+        version = await self.version_repository.find_by_knowledge_file_id(source_file_id)
+        if version is None or int(document.primary_version_id or 0) != int(version.id or 0):
+            await self.session.rollback()
+            return False
+
+        entries = await self.file_repository.find_distribution_entries_by_document_id(
+            document_id,
+            for_update=True,
+        )
+        if any(int(entry.id) != int(source_file_id) for entry in entries):
+            await self.session.rollback()
+            return False
+
+        source_file.reference_document_id = None
+        source_file.entry_type = None
+        source_file.entry_status = None
+        source_file.approval_instance_id = None
+        source_file.allow_download = False
+        source_file.projection_status = KnowledgeFileProjectionStatus.READY.value
+        source_file.projection_retry_count = 0
+        source_file.projection_next_retry_at = None
+        source_file.projection_lease_owner = None
+        source_file.projection_lease_until = None
+        source_file.projection_last_error = None
+        source_file.projection_previous_file_id = None
+        source_file.desired_content_generation = 0
+        source_file.applied_content_generation = 0
+        source_file.desired_entry_generation = 0
+        source_file.applied_entry_generation = 0
+        self.session.add(source_file)
+        await self.session.flush()
+        await self.session.commit()
+        return True
 
     async def _ensure_canonical_name_available(
         self,
@@ -960,6 +1073,12 @@ class KnowledgeDocumentDistributionService:
         publish_entry_id: int,
         source_md5: str,
     ) -> None:
+        source_entry = await self.file_repository.find_by_id(command.source_entry_id)
+        if source_entry is None:
+            raise KnowledgeDocumentDistributionError("publish source no longer exists")
+        await self._lock_published_spaces(
+            {int(source_entry.knowledge_id), int(command.target_space_id)}
+        )
         await self._ensure_publish_target_content_not_duplicate(
             command,
             lock_target_space=True,
@@ -1156,6 +1275,16 @@ class KnowledgeDocumentDistributionService:
         self,
         command: PublishKnowledgeDocumentCommand,
     ) -> PublishKnowledgeDocumentResult:
+        source_entry = await self.file_repository.find_by_id(
+            command.source_entry_id
+        )
+        if source_entry is None:
+            raise KnowledgeDocumentDistributionError(
+                "publish source no longer exists"
+            )
+        await self._lock_published_spaces(
+            {int(source_entry.knowledge_id), int(command.target_space_id)}
+        )
         existing = await self.file_repository.find_by_approval_instance_id(command.approval_instance_id)
         if existing is not None:
             result_document_id = command.target_document_id or command.document_id
@@ -1431,6 +1560,16 @@ class KnowledgeDocumentDistributionService:
         self,
         command: ShareKnowledgeDocumentCommand,
     ) -> ShareKnowledgeDocumentResult:
+        source_entry = await self.file_repository.find_by_id(
+            command.source_entry_id
+        )
+        if source_entry is None:
+            raise KnowledgeDocumentDistributionError(
+                "share source state no longer exists"
+            )
+        await self._lock_published_spaces(
+            {int(source_entry.knowledge_id), int(command.target_space_id)}
+        )
         existing = await self.file_repository.find_by_approval_instance_id(command.approval_instance_id)
         if existing is not None:
             if (
@@ -1473,6 +1612,16 @@ class KnowledgeDocumentDistributionService:
             await self.session.commit()
 
         try:
+            source_entry = await self.file_repository.find_by_id(
+                command.source_entry_id
+            )
+            if source_entry is None:
+                raise KnowledgeDocumentDistributionError(
+                    "share source state no longer exists"
+                )
+            await self._lock_published_spaces(
+                {int(source_entry.knowledge_id), int(command.target_space_id)}
+            )
             await self.permission_activation_service.prewrite_and_activate(
                 entry_id=int(share.id),
             )
@@ -1550,6 +1699,48 @@ class KnowledgeDocumentDistributionService:
         return RemoveShareEntryResult(
             document_id=document_id,
             share_entry_id=share_entry_id,
+            idempotent=False,
+        )
+
+    async def remove_invalid_entry(
+        self,
+        *,
+        tenant_id: int,
+        document_id: int,
+        entry_id: int,
+    ) -> RemoveShareEntryResult:
+        document = await self.document_repository.find_by_id_for_update(document_id)
+        entry = await self.file_repository.find_by_id_for_update(entry_id)
+        if document is None or entry is None:
+            raise KnowledgeDocumentDistributionError("invalid entry no longer exists")
+        if (
+            int(document.tenant_id or 0) != tenant_id
+            or int(entry.tenant_id or 0) != tenant_id
+            or int(entry.reference_document_id or 0) != document_id
+            or document.lifecycle_status
+            not in {
+                KnowledgeDocumentLifecycleStatus.DELETING.value,
+                KnowledgeDocumentLifecycleStatus.INVALID.value,
+            }
+            or entry.entry_status != KnowledgeFileEntryStatus.INVALID.value
+            or entry.entry_type
+            not in {
+                KnowledgeFileEntryType.PUBLISH.value,
+                KnowledgeFileEntryType.SHARE.value,
+            }
+        ):
+            raise KnowledgeDocumentDistributionError("entry is not an invalid distribution tombstone")
+        entry.entry_status = KnowledgeFileEntryStatus.DELETING.value
+        entry.desired_entry_generation = int(entry.desired_entry_generation or 0) + 1
+        entry.projection_status = KnowledgeFileProjectionStatus.PENDING.value
+        entry.projection_next_retry_at = None
+        entry.projection_lease_owner = None
+        entry.projection_lease_until = None
+        self.session.add(entry)
+        await self.session.commit()
+        return RemoveShareEntryResult(
+            document_id=document_id,
+            share_entry_id=entry_id,
             idempotent=False,
         )
 

@@ -6,7 +6,7 @@ the next node.
 """
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, contextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -36,7 +36,7 @@ from bisheng.approval.domain.models.approval_scenario import (
 from bisheng.approval.domain.repositories.approval_instance_repository import ApprovalInstanceRepository
 from bisheng.approval.domain.repositories.approval_scenario_repository import ApprovalScenarioRepository
 from bisheng.approval.domain.services.approval_center_service import ApprovalCenterService
-
+from bisheng.common.errcode.approval import ApprovalRejectReasonRequiredError
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -174,9 +174,6 @@ async def _make_task(instance: ApprovalInstance, node: ApprovalNodeDefinition, a
     )
 
 
-from contextlib import contextmanager
-
-
 @contextmanager
 def _service_infra_mocked():
     """Suppress all side effects that touch real DB / messaging infrastructure."""
@@ -189,6 +186,42 @@ def _service_infra_mocked():
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    'comment',
+    [None, '', ' \t'],
+    ids=['missing', 'empty', 'whitespace'],
+)
+async def test_rejection_requires_non_blank_reason_before_state_change(
+    comment: str | None,
+) -> None:
+    task = SimpleNamespace(
+        id=101,
+        instance_id=201,
+        approver_user_id=7,
+        status=ApprovalTaskStatus.PENDING,
+    )
+    instance = SimpleNamespace(id=201, tenant_id=1)
+    repository = SimpleNamespace(
+        get_task=AsyncMock(return_value=task),
+        get_instance=AsyncMock(return_value=instance),
+        list_tasks=AsyncMock(),
+    )
+    service = ApprovalCenterService(instance_repository=repository)
+
+    with pytest.raises(ApprovalRejectReasonRequiredError):
+        await service.decide_task(
+            task_id=101,
+            action='reject',
+            operator_user_id=7,
+            operator_user_name='approver',
+            operator_tenant_id=1,
+            comment=comment,
+        )
+
+    repository.list_tasks.assert_not_awaited()
+
 
 @pytest.mark.asyncio
 async def test_or_node_approval_advances_to_next_node_not_finalize(repos):

@@ -18,7 +18,7 @@ from langchain_core.documents import Document
 from loguru import logger
 from pydantic import BaseModel
 from sqlalchemy import func, update
-from sqlmodel import select
+from sqlmodel import col, select
 
 from bisheng.api.v1.schemas import ExcelRule, FileProcessBase, KnowledgeFileOne
 from bisheng.approval.domain.schemas.approval_center_schema import ApprovalGateDecision, ApprovalGateRequest
@@ -174,6 +174,9 @@ from bisheng.knowledge.domain.repositories.implementations.portal_recommendation
 from bisheng.knowledge.domain.schemas.favorite_notification_schema import (
     FavoriteChangeEvent,
     FavoriteRecipientSnapshot,
+)
+from bisheng.knowledge.domain.schemas.knowledge_document_distribution_schema import (
+    KnowledgeDocumentEntryCapabilities,
 )
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     GroupedKnowledgeSpacesResp,
@@ -548,6 +551,7 @@ class FileSyncTargetSpaceItem:
     space_type: str
     selectable: bool
     has_children: bool
+    business_domain_codes: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -630,6 +634,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         self.department_file_view_access_service = None
         self.department_file_view_lifecycle_service = None
         self.document_distribution_service: KnowledgeDocumentDistributionService | None = None
+        self.knowledge_space_retirement_service = None
         self.document_entry_resolver: KnowledgeDocumentEntryResolver | None = None
         self.document_durable_reference_resolver: KnowledgeDocumentDurableReferenceResolver | None = None
 
@@ -679,18 +684,34 @@ class KnowledgeSpaceService(KnowledgeUtils):
         self,
         file_record: KnowledgeFile,
     ) -> bool:
+        from bisheng.knowledge.domain.services.knowledge_document_distribution_service import (
+            KnowledgeDocumentDistributionError,
+        )
+
         if file_record.reference_document_id is None:
             return False
+        if file_record.entry_status == KnowledgeFileEntryStatus.INVALID.value:
+            if self.document_distribution_service is None:
+                raise KnowledgeDocumentStateConflictError(msg="文档分发生命周期服务不可用")
+            try:
+                await self.document_distribution_service.remove_invalid_entry(
+                    tenant_id=int(file_record.tenant_id),
+                    document_id=int(file_record.reference_document_id),
+                    entry_id=int(file_record.id),
+                )
+            except KnowledgeDocumentDistributionError as exc:
+                raise KnowledgeDocumentStateConflictError() from exc
+            await self._enqueue_document_distribution_projection(
+                tenant_id=int(file_record.tenant_id),
+                entry_ids=[int(file_record.id)],
+            )
+            return True
         if file_record.entry_status != KnowledgeFileEntryStatus.ACTIVE.value:
             raise KnowledgeDocumentStateConflictError()
         if file_record.entry_type == KnowledgeFileEntryType.PUBLISH.value:
             raise KnowledgeDocumentEntryTypeInvalidError(msg="发布入口不能删除")
         if self.document_distribution_service is None:
             raise KnowledgeDocumentStateConflictError(msg="文档分发生命周期服务不可用")
-
-        from bisheng.knowledge.domain.services.knowledge_document_distribution_service import (
-            KnowledgeDocumentDistributionError,
-        )
 
         try:
             if file_record.entry_type == KnowledgeFileEntryType.SHARE.value:
@@ -739,6 +760,17 @@ class KnowledgeSpaceService(KnowledgeUtils):
     ) -> bool:
         if file_record.reference_document_id is None:
             return False
+        if (
+            file_record.entry_status == KnowledgeFileEntryStatus.INVALID.value
+            and file_record.entry_type
+            in {
+                KnowledgeFileEntryType.PUBLISH.value,
+                KnowledgeFileEntryType.SHARE.value,
+            }
+        ):
+            if self.document_distribution_service is None:
+                raise KnowledgeDocumentStateConflictError(msg="文档分发生命周期服务不可用")
+            return True
         if file_record.entry_type == KnowledgeFileEntryType.PUBLISH.value:
             raise KnowledgeDocumentEntryTypeInvalidError(msg="发布入口不能删除")
         if self.document_distribution_service is None:
@@ -1208,6 +1240,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 space_type=level,
                 selectable=access.root_space_ids is None or int(space.id) in access.root_space_ids,
                 has_children=int(space.id) in spaces_with_children,
+                business_domain_codes=tuple(
+                    code
+                    for value in (getattr(space, "business_domain_codes", None) or [])
+                    if (code := normalize_business_domain_code(value)) is not None
+                ),
             )
             for space, level in page_rows
         ]
@@ -1322,14 +1359,20 @@ class KnowledgeSpaceService(KnowledgeUtils):
         login_user: UserPayload,
         knowledge_id: int,
         folder_id: int | None,
+        strict_catalog: bool = True,
     ) -> Knowledge:
         async with get_async_db_session() as session:
             knowledge_repository = KnowledgeRepositoryImpl(session)
             file_repository = KnowledgeFileRepositoryImpl(session)
-            spaces = await knowledge_repository.find_file_sync_spaces_by_ids({knowledge_id})
-            if not spaces:
-                raise SpaceNotFoundError()
-            space = spaces[0][0]
+            if strict_catalog:
+                spaces = await knowledge_repository.find_file_sync_spaces_by_ids({knowledge_id})
+                if not spaces:
+                    raise SpaceNotFoundError()
+                space = spaces[0][0]
+            else:
+                space = await knowledge_repository.find_space_by_id(knowledge_id)
+                if space is None:
+                    raise SpaceNotFoundError()
             object_type = "knowledge_space"
             object_id = knowledge_id
             if folder_id is not None:
@@ -2333,7 +2376,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
         Verify that the current user has can_delete permission on the space.
         """
         space = await KnowledgeDao.aquery_by_id(space_id)
-        if not space or space.type != KnowledgeTypeEnum.SPACE.value:
+        if (
+            not space
+            or space.type != KnowledgeTypeEnum.SPACE.value
+            or space.state == KnowledgeState.DELETING.value
+        ):
             raise SpaceNotFoundError()
         allowed = await PermissionService.check(
             user_id=self.login_user.user_id,
@@ -3264,7 +3311,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if space_id is None:
             return set()
         space = await KnowledgeDao.aquery_by_id(int(space_id))
-        if not space or space.type != KnowledgeTypeEnum.SPACE.value:
+        if (
+            not space
+            or space.type != KnowledgeTypeEnum.SPACE.value
+            or space.state == KnowledgeState.DELETING.value
+        ):
             return set()
         space_level = getattr(space, "space_level", None)
         if space_level is None:
@@ -3314,7 +3365,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
     async def _require_read_permission(self, space_id: int) -> Knowledge:
         space = await KnowledgeDao.aquery_by_id(space_id)
-        if not space or space.type != KnowledgeTypeEnum.SPACE.value:
+        if (
+            not space
+            or space.type != KnowledgeTypeEnum.SPACE.value
+            or space.state == KnowledgeState.DELETING.value
+        ):
             raise SpaceNotFoundError()
         effective_permissions = await self._get_effective_permission_ids("knowledge_space", space_id)
         if "view_space" not in effective_permissions:
@@ -3330,7 +3385,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
     async def _require_space_info_permission(self, space_id: int) -> tuple[Knowledge, bool]:
         space = await KnowledgeDao.aquery_by_id(space_id)
-        if not space or space.type != KnowledgeTypeEnum.SPACE.value:
+        if (
+            not space
+            or space.type != KnowledgeTypeEnum.SPACE.value
+            or space.state == KnowledgeState.DELETING.value
+        ):
             raise SpaceNotFoundError()
         effective_permissions = await self._get_effective_permission_ids("knowledge_space", space_id)
         if "view_space" in effective_permissions:
@@ -4012,6 +4071,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if again:
                 return again
             raise
+
+    async def ensure_personal_default_space(self) -> Knowledge:
+        """Get or create the login user's default personal knowledge space."""
+        return await self._ensure_personal_default_space()
 
     async def _ensure_personal_spaces(self) -> tuple[Knowledge, Knowledge]:
         """确保并返回当前用户固定的『我的收藏』和默认个人知识库。"""
@@ -5667,7 +5730,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     "searched_at": searched_at.isoformat() if isinstance(searched_at, datetime) else searched_at,
                 },
                 headers={"tenant_id": int(payload["tenant_id"])},
-                queue="knowledge_celery",
+                queue="celery",
                 expires=600,
             )
 
@@ -10070,6 +10133,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             is_department_file=is_department_file,
             entry_type=str(item.get("entry_type") or "normal"),
             entry_status=str(item.get("entry_status") or "active"),
+            distribution_invalid_reason=item.get("distribution_invalid_reason"),
             canonical_document_id=(
                 int(item["canonical_document_id"]) if item.get("canonical_document_id") is not None else None
             ),
@@ -10281,9 +10345,51 @@ class KnowledgeSpaceService(KnowledgeUtils):
                         raise
                     return
                 # decision.action == "normal_delete" → 继续原清理逻辑
-        child_resources = await self._list_space_child_resources(space_id)
         original_members = await SpaceChannelMemberDao.async_get_members_by_space(space_id)
         original_member_ids = [member.user_id for member in original_members]
+
+        if not force:
+            if self.knowledge_space_retirement_service is None:
+                raise KnowledgeDocumentStateConflictError(msg="知识库退役服务不可用")
+            result = await self.knowledge_space_retirement_service.retire(
+                tenant_id=int(space.tenant_id),
+                space_id=space_id,
+            )
+            await self._enqueue_document_distribution_projection(
+                tenant_id=int(space.tenant_id),
+                entry_ids=result.entry_ids,
+            )
+            try:
+                from bisheng.worker.knowledge.document_projection import (
+                    enqueue_knowledge_space_retirement,
+                )
+
+                enqueue_knowledge_space_retirement(
+                    tenant_id=int(space.tenant_id),
+                    space_id=space_id,
+                )
+            except Exception:
+                logger.exception(
+                    "knowledge space retirement enqueue failed: tenant_id=%s space_id=%s",
+                    space.tenant_id,
+                    space_id,
+                )
+            await self._send_space_event_notification(
+                action_code=SPACE_DELETED_MESSAGE,
+                receiver_user_ids=original_member_ids,
+                space_id=space_id,
+                space_name=space.name,
+                navigable=False,
+            )
+            await KnowledgeAuditTelemetryService.audit_delete_knowledge_space(
+                self.login_user,
+                self.request,
+                space,
+            )
+            KnowledgeAuditTelemetryService.telemetry_delete_knowledge(self.login_user)
+            return
+
+        child_resources = await self._list_space_child_resources(space_id)
 
         # Cleaned vectorData in
         await asyncio.to_thread(KnowledgeService.delete_knowledge_file_in_vector, space)
@@ -11201,6 +11307,93 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 new_weight = (prev_weight + next_weight) // 2
 
         await KnowledgeDao.async_update_sort_weights({int(space_id): new_weight})
+
+    async def _load_sibling_folders_in_display_order(self, folder: KnowledgeFile) -> list[KnowledgeFile]:
+        """Folders sharing a directory with ``folder``, in the order the UI shows them.
+
+        The directory is identified by the folder's lineage path: its last segment is the
+        parent folder id, and an empty path means the space root. ``page_size=0`` returns
+        the whole directory, which the midpoint algorithm needs to spread weights.
+        """
+        ancestor_ids = [int(part) for part in (folder.file_level_path or "").split("/") if part]
+        parent_id = ancestor_ids[-1] if ancestor_ids else None
+        return await SpaceFileDao.async_list_children(
+            int(folder.knowledge_id),
+            parent_id,
+            order_field="file_type",
+            order_sort="asc",
+            page=1,
+            page_size=0,
+            file_type=FileType.DIR.value,
+        )
+
+    async def _respread_directory_sort_weights(self, folders: list[KnowledgeFile]) -> dict[int, int]:
+        """Assign evenly spaced weights following the list's current order.
+
+        Runs on the directory's first drag (every weight still NULL) and, rarely, when a
+        midpoint gap is exhausted. Returns the weights it wrote.
+        """
+        weights = {int(item.id): (index + 1) * self._SORT_WEIGHT_STEP for index, item in enumerate(folders)}
+        await KnowledgeFileDao.async_update_sort_weights(weights)
+        for item in folders:
+            item.sort_weight = weights[int(item.id)]
+        return weights
+
+    async def reorder_folder(
+        self,
+        space_id: int,
+        folder_id: int,
+        prev_folder_id: int | None = None,
+        next_folder_id: int | None = None,
+    ) -> None:
+        """Move a folder between two sibling folders in its directory's admin order.
+
+        Callers pass the ids it is dropped between (either may be None at the list
+        edges); the new weight is their midpoint, so only this row is written no matter
+        how many folders the directory holds. Only folders take part — files keep a NULL
+        weight and their existing ordering.
+        """
+        if not self.login_user.is_admin():
+            raise SpacePermissionDeniedError()
+
+        folder = await KnowledgeFileDao.query_by_id(folder_id)
+        if not folder or int(folder.knowledge_id) != int(space_id) or folder.file_type != FileType.DIR.value:
+            raise SpaceFolderNotFoundError()
+
+        folders = await self._load_sibling_folders_in_display_order(folder)
+        folder_by_id = {int(item.id): item for item in folders}
+        if int(folder_id) not in folder_by_id:
+            raise SpaceFolderNotFoundError()
+        for neighbour_id in (prev_folder_id, next_folder_id):
+            if neighbour_id is not None and int(neighbour_id) not in folder_by_id:
+                # A neighbour from another directory (or a stale client view) would place
+                # the folder against an order it isn't part of.
+                raise SpaceFolderNotFoundError()
+
+        if any(item.sort_weight is None for item in folders):
+            # First drag in this directory: freeze the order currently on screen.
+            await self._respread_directory_sort_weights(folders)
+
+        prev_weight = folder_by_id[int(prev_folder_id)].sort_weight if prev_folder_id is not None else None
+        next_weight = folder_by_id[int(next_folder_id)].sort_weight if next_folder_id is not None else None
+
+        if prev_weight is None and next_weight is None:
+            return  # Only folder in the directory; nothing to order against.
+        if prev_weight is None:
+            new_weight = next_weight - self._SORT_WEIGHT_STEP
+        elif next_weight is None:
+            new_weight = prev_weight + self._SORT_WEIGHT_STEP
+        else:
+            new_weight = (prev_weight + next_weight) // 2
+            if new_weight in (prev_weight, next_weight):
+                # Gap exhausted between these two: re-spread the directory, then retry
+                # the midpoint against the refreshed neighbour weights.
+                await self._respread_directory_sort_weights(folders)
+                prev_weight = folder_by_id[int(prev_folder_id)].sort_weight
+                next_weight = folder_by_id[int(next_folder_id)].sort_weight
+                new_weight = (prev_weight + next_weight) // 2
+
+        await KnowledgeFileDao.async_update_sort_weights({int(folder_id): new_weight})
 
     async def pin_space(self, space_id: int, is_pinned: bool = True) -> bool:
         space = await KnowledgeDao.aquery_by_id(space_id)
@@ -12511,6 +12704,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 ),
             )
             capability_payload = capabilities.model_dump()
+            is_invalid = (
+                item.entry_status == KnowledgeFileEntryStatus.INVALID.value
+            )
+            if is_invalid:
+                capability_payload = KnowledgeDocumentEntryCapabilities(
+                    can_delete="delete_file" in set(permission_ids)
+                ).model_dump()
             document = (
                 document_map.get(int(item.reference_document_id)) if item.reference_document_id is not None else None
             )
@@ -12532,6 +12732,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if not capability_payload.get("can_edit_content", False):
                 manager_file_id = None
             manager_space_id = int(document.knowledge_id) if document is not None else int(item.knowledge_id)
+            if is_invalid:
+                canonical_version_id = None
+                manager_file_id = None
+                manager_space_id = None
             is_distribution = item.reference_document_id is not None
             projection_ready = (
                 item.projection_status == KnowledgeFileProjectionStatus.READY.value
@@ -12550,6 +12754,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 "canonical_version_id": canonical_version_id,
                 "manager_file_id": manager_file_id,
                 "manager_space_id": manager_space_id,
+                "distribution_invalid_reason": (
+                    "manager_space_deleted" if is_invalid else None
+                ),
                 "desired_content_generation": (int(item.desired_content_generation) if is_distribution else 0),
                 "applied_content_generation": (int(item.applied_content_generation) if is_distribution else 0),
                 "desired_entry_generation": (int(item.desired_entry_generation) if is_distribution else 0),
@@ -12743,6 +12950,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 if item.file_type != FileType.DIR.value:
                     self._entry_permission_ids_by_file[int(item.id)] = set(effective_permissions)
                     self._portal_file_download_map[int(item.id)] = "download_file" in effective_permissions
+                if item.entry_status == KnowledgeFileEntryStatus.INVALID.value:
+                    return True
                 return permission_id in effective_permissions
 
         visibility = await asyncio.gather(*(can_view(item) for item in items))
@@ -13335,6 +13544,48 @@ class KnowledgeSpaceService(KnowledgeUtils):
             raise
         await KnowledgeDao.async_update_knowledge_update_time_by_id(knowledge_id)
         return added_folder
+
+    async def find_or_create_folder_for_file_sync(
+        self,
+        knowledge_id: int,
+        folder_name: str,
+        parent_id: int | None = None,
+    ) -> KnowledgeFile:
+        file_level_path = ""
+        if parent_id is not None:
+            parent_folder = await self._get_folder_for_action(knowledge_id, parent_id)
+            file_level_path = f"{parent_folder.file_level_path}/{parent_id}"
+
+        existing = await SpaceFileDao.find_folder_by_name(
+            knowledge_id,
+            folder_name,
+            file_level_path,
+        )
+        if existing is not None:
+            return existing
+        return await self.add_folder(knowledge_id, folder_name, parent_id)
+
+    async def find_or_create_folder_path_for_file_sync(
+        self,
+        knowledge_id: int,
+        folder_path: str | None,
+    ) -> KnowledgeFile | None:
+        from bisheng.developer_token.domain.file_sync_folder_path import split_file_sync_folder_path
+
+        segments = split_file_sync_folder_path(folder_path)
+        if not segments:
+            return None
+
+        parent_id: int | None = None
+        current: KnowledgeFile | None = None
+        for segment in segments:
+            current = await self.find_or_create_folder_for_file_sync(
+                knowledge_id,
+                segment,
+                parent_id,
+            )
+            parent_id = int(current.id)
+        return current
 
     async def rename_folder(self, folder_id: int, new_name: str) -> KnowledgeFile:
         folder = await KnowledgeFileDao.query_by_id(folder_id)
@@ -14378,6 +14629,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         file_source: FileSource = None,
         skip_approval: bool = False,
         enqueue_processing: bool = True,
+        allow_duplicate_name: bool = False,
+        allow_duplicate_content: bool = False,
+        skip_space_business_domain_check: bool = False,
     ) -> list[KnowledgeSpaceFileResponse]:
         from bisheng.knowledge.domain.services.knowledge_pdf_artifact_service import (
             enqueue_current_pdf_artifact,
@@ -14460,7 +14714,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         normalized_business_domain_code = self.normalize_business_domain_code(business_domain_code)
         if business_domain_code and not normalized_business_domain_code:
             raise SpaceBusinessDomainCodeInvalidError()
-        self._ensure_business_domain_allowed_for_space(db_knowledge, normalized_business_domain_code)
+        if not skip_space_business_domain_check:
+            self._ensure_business_domain_allowed_for_space(db_knowledge, normalized_business_domain_code)
         if normalized_business_domain_code:
             split_rule_dict[self.business_domain_code_key] = normalized_business_domain_code
         process_files = []
@@ -14503,6 +14758,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
                         "file_subcategory_code": normalized_file_subcategory_code,
                         "file_subcategory_source": "manual" if normalized_file_subcategory_code else None,
                     },
+                    allow_duplicate_name=allow_duplicate_name,
+                    allow_duplicate_content=allow_duplicate_content,
                 )
                 if db_file.status != KnowledgeFileStatus.FAILED.value:
                     next_file_source = self._resolve_upload_file_source(db_file.file_name, file_source.value)

@@ -176,8 +176,10 @@ class ChannelAuthorizationService:
         tenant_id = await self._resolve_channel_tenant(channel_id, login_user)
         if tenant_id is None:
             return []
-        from bisheng.permission.api.endpoints.resource_permission import _list_knowledge_space_grant_users
-        return await _list_knowledge_space_grant_users(
+        from bisheng.permission.domain.services.grant_subject_user_service import (
+            list_grant_subject_users,
+        )
+        return await list_grant_subject_users(
             tenant_id=tenant_id,
             keyword=keyword,
             page=page,

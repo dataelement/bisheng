@@ -3192,6 +3192,60 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(handleDeleteFile).toHaveBeenCalledWith("310");
     });
 
+    test("失效分发文件灰显且只保留本地删除动作", async () => {
+        const departmentSpace = makeSpace("department-invalid", "接收知识库", {
+            role: SpaceRole.ADMIN,
+            spaceLevel: SpaceLevel.DEPARTMENT,
+        });
+        const invalidFile = makeFile("319", "已失效制度.pdf", {
+            type: FileType.PDF,
+            spaceId: departmentSpace.id,
+            entryType: "publish",
+            entryStatus: "invalid",
+            distributionInvalidReason: "manager_space_deleted",
+            capabilities: {
+                canView: false,
+                canPreview: false,
+                canDownload: false,
+                canMove: false,
+                canManageMembers: false,
+                canEditContent: false,
+                canPublish: false,
+                canShare: false,
+                canDelete: true,
+            },
+        });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [departmentSpace],
+            teamSpaces: [],
+            personalSpaces: [],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({
+            data: [invalidFile],
+            page_size: 20,
+            has_more: false,
+            next_cursor: null,
+        });
+        jest.mocked(getSpaceInfoApi).mockResolvedValue(departmentSpace as any);
+
+        renderWorkbench(`/knowledge-portal?spaceId=${departmentSpace.id}`);
+
+        const row = await screen.findByTestId("file-tree-row-319");
+        expect(within(row).getByText("已失效：原管理知识库已删除")).toBeInTheDocument();
+        fireEvent.click(within(row).getByText("已失效制度.pdf"));
+        expect(getPortalFilePreviewApi).not.toHaveBeenCalled();
+        fireEvent.mouseEnter(row);
+        const buttons = within(row).getAllByRole("button");
+        fireEvent.click(buttons[buttons.length - 1]);
+        expect(
+            await screen.findByRole("button", { name: "com_knowledge.delete" })
+        ).toBeInTheDocument();
+        expect(screen.queryByText("分享")).not.toBeInTheDocument();
+        expect(screen.queryByText("发布")).not.toBeInTheDocument();
+        expect(screen.queryByText("权限管理")).not.toBeInTheDocument();
+    });
+
     test("keeps share deletion hidden when the live delete permission is denied", async () => {
         const favoriteSpace = makeDefaultFavoriteSpace();
         const departmentSpace = makeSpace("department-delete-denied", "接收知识库", {

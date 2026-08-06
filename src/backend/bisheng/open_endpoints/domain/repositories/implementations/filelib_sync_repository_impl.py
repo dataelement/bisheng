@@ -9,6 +9,7 @@ from bisheng.database.models.department import Department, UserDepartment
 from bisheng.database.models.tenant import UserTenant
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
+from bisheng.open_endpoints.domain.models.filelib_department_mapping import FilelibDepartmentMapping
 from bisheng.open_endpoints.domain.repositories.interfaces.filelib_sync_repository import (
     FilelibSyncRepository,
 )
@@ -46,6 +47,29 @@ class FilelibSyncRepositoryImpl(
         )
         return result.first()
 
+    async def find_users_by_external_id(
+        self,
+        external_id: str,
+        *,
+        tenant_id: int,
+    ) -> list[User]:
+        normalized_external_id = str(external_id or "").strip()
+        if not normalized_external_id:
+            return []
+        result = await self.session.exec(
+            select(User)
+            .join(UserTenant, UserTenant.user_id == User.user_id)
+            .where(
+                User.external_id == normalized_external_id,
+                User.delete == 0,
+                UserTenant.tenant_id == tenant_id,
+                UserTenant.status == "active",
+                UserTenant.is_active == 1,
+            )
+            .distinct()
+        )
+        return list(result.all())
+
     async def find_primary_departments(self, user_id: int) -> list[UserDepartment]:
         result = await self.session.exec(
             select(UserDepartment)
@@ -66,6 +90,33 @@ class FilelibSyncRepositoryImpl(
                 Department.id == department_id,
                 Department.status == "active",
                 Department.is_deleted == 0,
+            )
+        )
+        return result.first()
+
+    async def find_department_by_external_id(
+        self,
+        external_id: str,
+        *,
+        tenant_id: int,
+    ) -> Department | None:
+        result = await self.session.exec(
+            select(Department).where(
+                Department.external_id == external_id,
+                Department.tenant_id == tenant_id,
+                Department.status == "active",
+                Department.is_deleted == 0,
+            )
+        )
+        return result.first()
+
+    async def find_department_mapping_by_external_department_id(
+        self,
+        external_department_id: str,
+    ) -> FilelibDepartmentMapping | None:
+        result = await self.session.exec(
+            select(FilelibDepartmentMapping).where(
+                FilelibDepartmentMapping.external_department_id == external_department_id,
             )
         )
         return result.first()

@@ -80,6 +80,20 @@ describe("large PDF lazy rendering", () => {
 
     beforeEach(() => observers.splice(0, observers.length));
 
+    it("keeps the multi-page document inside its own scroll container", () => {
+        const { document } = createPdfDocument(7);
+        const { container } = render(
+            <PdfViewer
+                pdfDoc={document}
+                zoomLevel={100}
+                targetPage={null}
+                onCurrentPageChange={jest.fn()}
+            />
+        );
+
+        expect(container.firstElementChild).toHaveClass("min-h-0", "overflow-auto");
+    });
+
     it("renders only nearby document pages until another page enters overscan", async () => {
         const { document, getPage } = createPdfDocument(100);
         render(

@@ -2,6 +2,10 @@ import logging
 from typing import Any
 
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
+from bisheng.common.constants.telemetry import (
+    KNOWLEDGE_SPACE_CONTENT_STAT_INDEX,
+    KNOWLEDGE_SPACE_DASHBOARD_FILE_LEVELS,
+)
 from bisheng.common.schemas.telemetry.event_data_schema import (
     PortalDocumentDownloadEventData,
     PortalDocumentReadEventData,
@@ -222,6 +226,40 @@ class PortalTelemetryEventService:
             "favorite_count": counts[BaseTelemetryTypeEnum.PORTAL_FAVORITE.value],
             "qa_count": counts[BaseTelemetryTypeEnum.PORTAL_QA.value],
         }
+
+    @staticmethod
+    async def count_dashboard_files() -> int:
+        """Count file snapshots with the global dashboard metric definition."""
+        es_client = await get_statistics_es_connection()
+        response = await es_client.search(
+            index=KNOWLEDGE_SPACE_CONTENT_STAT_INDEX,
+            body={
+                "size": 0,
+                "query": {
+                    "bool": {
+                        "filter": [
+                            {"term": {"record_type": "file"}},
+                            {"term": {"file_type": 1}},
+                            {
+                                "terms": {
+                                    "space_level": list(KNOWLEDGE_SPACE_DASHBOARD_FILE_LEVELS),
+                                }
+                            },
+                        ]
+                    }
+                },
+                "aggs": {
+                    "total_file_count": {
+                        "value_count": {
+                            "field": "file_id",
+                        }
+                    }
+                },
+            },
+            filter_path="aggregations.total_file_count.value",
+        )
+        value = response["aggregations"]["total_file_count"]["value"]
+        return int(value or 0)
 
 
 def is_portal_bff_proxy_source(source: str | None) -> bool:

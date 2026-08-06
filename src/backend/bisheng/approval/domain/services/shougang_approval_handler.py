@@ -12,11 +12,12 @@ from bisheng.approval.domain.services.approver_resolver import (
 )
 from bisheng.approval.domain.services.knowledge_space_subscribe_scenario_handler import _resolve_space_roles_via_fga
 from bisheng.knowledge.domain.constants import normalize_business_domain_code
-from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
+from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeState, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_file import (
     FileType,
     KnowledgeFile,
     KnowledgeFileDao,
+    KnowledgeFileEntryType,
     KnowledgeFileStatus,
 )
 from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum, KnowledgeSpaceScopeDao
@@ -75,6 +76,55 @@ def _file_publish_pair_allowed(source_level, target_level) -> bool:
         else KnowledgeSpaceLevelEnum(str(target_level))
     )
     return target_level in FILE_PUBLISH_TARGET_LEVELS.get(source_level, set())
+
+
+async def _restore_unapproved_distribution_source(
+    payload_snapshot: dict,
+) -> bool:
+    document_id = payload_snapshot.get("canonical_document_id")
+    source_file_id = payload_snapshot.get("source_entry_id")
+    tenant_id = payload_snapshot.get("tenant_id")
+    if document_id is None or source_file_id is None or tenant_id is None:
+        return False
+    original_entry_type = payload_snapshot.get("source_entry_type_before_submit")
+    if original_entry_type not in {None, "normal"}:
+        return False
+
+    from bisheng.core.database import get_async_db_session
+    from bisheng.knowledge.domain.repositories.implementations.knowledge_document_repository_impl import (
+        KnowledgeDocumentRepositoryImpl,
+    )
+    from bisheng.knowledge.domain.repositories.implementations.knowledge_document_version_repository_impl import (
+        KnowledgeDocumentVersionRepositoryImpl,
+    )
+    from bisheng.knowledge.domain.repositories.implementations.knowledge_file_repository_impl import (
+        KnowledgeFileRepositoryImpl,
+    )
+    from bisheng.knowledge.domain.services.knowledge_document_distribution_service import (
+        KnowledgeDocumentDistributionService,
+    )
+    from bisheng.knowledge.domain.services.knowledge_document_permission_activation_service import (
+        KnowledgeDocumentPermissionActivationService,
+    )
+
+    async with get_async_db_session() as session:
+        file_repository = KnowledgeFileRepositoryImpl(session)
+        service = KnowledgeDocumentDistributionService(
+            session=session,
+            document_repository=KnowledgeDocumentRepositoryImpl(session),
+            version_repository=KnowledgeDocumentVersionRepositoryImpl(session),
+            file_repository=file_repository,
+            permission_activation_service=(
+                KnowledgeDocumentPermissionActivationService(
+                    file_repository=file_repository,
+                )
+            ),
+        )
+        return await service.restore_unapproved_manager(
+            tenant_id=int(tenant_id),
+            document_id=int(document_id),
+            source_file_id=int(source_file_id),
+        )
 
 
 def _normalize_file_publish_business_domain_codes(raw_codes: Any) -> list[str]:
@@ -215,7 +265,7 @@ async def _resolve_file_publish_approvers(node_config: dict, req) -> list[int]:
         publish_department_admin_ids = await resolve_file_publish_department_admins(
             start_department_ids=start_department_ids,
             start_user_ids=start_user_ids,
-            applicant_user_id=getattr(req, "applicant_user_id", None),
+            applicant_user_id=None,
         )
 
     department_admins_added = False
@@ -498,6 +548,11 @@ class KnowledgeSpaceFilePublishApprovalHandler:
                     file_repository=file_repository,
                 ),
             )
+            await service.normalize_manager(
+                tenant_id=int(payload_snapshot["tenant_id"]),
+                source_file_id=int(payload_snapshot["source_entry_id"]),
+                expected_document_id=int(payload_snapshot["canonical_document_id"]),
+            )
             result = await service.publish_approved(
                 PublishKnowledgeDocumentCommand(
                     tenant_id=int(payload_snapshot["tenant_id"]),
@@ -564,6 +619,19 @@ class KnowledgeSpaceFilePublishApprovalHandler:
 
     async def on_approved(self, instance_id: int, payload_snapshot: dict) -> dict:
         if payload_snapshot.get("canonical_document_id") is not None:
+            source_space = await KnowledgeDao.aquery_by_id(
+                int(payload_snapshot["source_space_id"])
+            )
+            target_space = await KnowledgeDao.aquery_by_id(
+                int(payload_snapshot["target_space_id"])
+            )
+            if (
+                source_space is None
+                or target_space is None
+                or source_space.state != KnowledgeState.PUBLISHED.value
+                or target_space.state != KnowledgeState.PUBLISHED.value
+            ):
+                raise ValueError("source or target space is no longer published")
             source_level = await self._space_level(int(payload_snapshot["source_space_id"]))
             target_level = await self._space_level(int(payload_snapshot["target_space_id"]))
             if not _file_publish_pair_allowed(source_level, target_level):
@@ -733,10 +801,18 @@ class KnowledgeSpaceFilePublishApprovalHandler:
         }
 
     async def on_rejected(self, instance_id: int, payload_snapshot: dict, reason: str | None) -> None:
-        return None
+        await _restore_unapproved_distribution_source(payload_snapshot)
 
     async def on_withdrawn(self, instance_id: int, payload_snapshot: dict, reason: str | None) -> None:
-        return None
+        await _restore_unapproved_distribution_source(payload_snapshot)
+
+    async def on_cancelled(
+        self,
+        instance_id: int,
+        payload_snapshot: dict,
+        reason: str | None,
+    ) -> None:
+        await _restore_unapproved_distribution_source(payload_snapshot)
 
 
 class KnowledgeSpaceFileShareApprovalHandler:
@@ -797,6 +873,7 @@ class KnowledgeSpaceFileShareApprovalHandler:
         if (
             target_space is None
             or int(target_space.tenant_id) != int(payload_snapshot["tenant_id"])
+            or target_space.state != KnowledgeState.PUBLISHED.value
         ):
             raise ValueError("share target department space is no longer valid")
 
@@ -843,6 +920,14 @@ class KnowledgeSpaceFileShareApprovalHandler:
         target_file_level_path, target_level = (
             await self._resolve_target_location(payload_snapshot)
         )
+        source_space = await KnowledgeDao.aquery_by_id(
+            int(payload_snapshot["source_space_id"])
+        )
+        if (
+            source_space is None
+            or source_space.state != KnowledgeState.PUBLISHED.value
+        ):
+            raise ValueError("share source space is no longer published")
         async with get_async_db_session() as session:
             file_repository = KnowledgeFileRepositoryImpl(session)
             service = KnowledgeDocumentDistributionService(
@@ -858,6 +943,18 @@ class KnowledgeSpaceFileShareApprovalHandler:
                     )
                 ),
             )
+            source_entry = await file_repository.find_by_id(
+                int(payload_snapshot["source_entry_id"])
+            )
+            if (
+                source_entry is not None
+                and source_entry.entry_type != KnowledgeFileEntryType.PUBLISH.value
+            ):
+                await service.normalize_manager(
+                    tenant_id=int(payload_snapshot["tenant_id"]),
+                    source_file_id=int(payload_snapshot["source_entry_id"]),
+                    expected_document_id=int(payload_snapshot["canonical_document_id"]),
+                )
             result = await service.share_approved(
                 ShareKnowledgeDocumentCommand(
                     tenant_id=int(payload_snapshot["tenant_id"]),
@@ -917,7 +1014,7 @@ class KnowledgeSpaceFileShareApprovalHandler:
         payload_snapshot: dict,
         reason: str | None,
     ) -> None:
-        return None
+        await _restore_unapproved_distribution_source(payload_snapshot)
 
     async def on_withdrawn(
         self,
@@ -925,7 +1022,15 @@ class KnowledgeSpaceFileShareApprovalHandler:
         payload_snapshot: dict,
         reason: str | None,
     ) -> None:
-        return None
+        await _restore_unapproved_distribution_source(payload_snapshot)
+
+    async def on_cancelled(
+        self,
+        instance_id: int,
+        payload_snapshot: dict,
+        reason: str | None,
+    ) -> None:
+        await _restore_unapproved_distribution_source(payload_snapshot)
 
 
 async def _link_file_as_version(

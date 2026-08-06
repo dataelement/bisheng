@@ -111,7 +111,7 @@ def test_worker_and_beat_registration_are_stable():
 
     config = CeleryConf()
     assert config.task_routers["bisheng.worker.portal_course.*"] == {
-        "queue": "knowledge_celery"
+        "queue": "celery"
     }
     assert config.beat_schedule["scan_portal_course_media_cleanup"]["task"] == (
         "bisheng.worker.portal_course.tasks.scan_portal_course_media_cleanup"

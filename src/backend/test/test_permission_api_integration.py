@@ -574,6 +574,15 @@ class TestPermissionApiIntegration:
                         "external_id": "EMP001",
                         "primary_department_path": "总部/研发部",
                         "department_paths": ["总部/研发部"],
+                        "department_memberships": [
+                            {
+                                "department_id": 11,
+                                "dept_id": "BS@11",
+                                "name": "研发部",
+                                "path": "总部/研发部",
+                                "is_primary": True,
+                            }
+                        ],
                     }
                 ],
             ) as mock_list_users,
@@ -589,7 +598,84 @@ class TestPermissionApiIntegration:
         assert body["data"][0]["user_name"] == "Alice"
         assert body["data"][0]["external_id"] == "EMP001"
         assert body["data"][0]["department_paths"] == ["总部/研发部"]
-        mock_list_users.assert_awaited_once_with(tenant_id=3, keyword="Ali", page=1, page_size=1000)
+        assert body["data"][0]["department_memberships"][0]["department_id"] == 11
+        mock_list_users.assert_awaited_once_with(
+            tenant_id=3,
+            keyword="Ali",
+            page=1,
+            page_size=1000,
+            department_id=None,
+            unassigned=False,
+        )
+
+    def test_grant_subject_users_endpoint_forwards_direct_department_filter(self):
+        app = _make_app(_ViewerUser)
+
+        with (
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._has_resource_permission_management_access",
+                new_callable=AsyncMock,
+                return_value=True,
+            ),
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._resolve_grant_subject_tenant_id",
+                new_callable=AsyncMock,
+                return_value=3,
+            ),
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._list_knowledge_space_grant_users",
+                new_callable=AsyncMock,
+                return_value=[],
+            ) as mock_list_users,
+        ):
+            with TestClient(app) as client:
+                response = client.get(
+                    "/api/v1/permissions/resources/knowledge_space/1/grant-subjects/users",
+                    params={"department_id": 11, "page": 2, "page_size": 50},
+                )
+
+        assert response.status_code == 200
+        mock_list_users.assert_awaited_once_with(
+            tenant_id=3,
+            keyword="",
+            page=2,
+            page_size=50,
+            department_id=11,
+            unassigned=False,
+        )
+
+    def test_grant_subject_users_endpoint_rejects_conflicting_filters(self):
+        app = _make_app(_ViewerUser)
+
+        with TestClient(app) as client:
+            response = client.get(
+                "/api/v1/permissions/resources/knowledge_space/1/grant-subjects/users",
+                params={"department_id": 11, "unassigned": True},
+            )
+
+        assert response.status_code == 422
+
+    def test_grant_subject_users_endpoint_denies_before_querying_candidates(self):
+        app = _make_app(_ViewerUser)
+
+        with (
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._has_resource_permission_management_access",
+                new_callable=AsyncMock,
+                return_value=False,
+            ),
+            patch(
+                "bisheng.permission.api.endpoints.resource_permission._list_knowledge_space_grant_users",
+                new_callable=AsyncMock,
+            ) as mock_list_users,
+        ):
+            with TestClient(app) as client:
+                response = client.get(
+                    "/api/v1/permissions/resources/knowledge_space/1/grant-subjects/users",
+                )
+
+        assert response.json()["status_code"] == 19000
+        mock_list_users.assert_not_awaited()
 
     def test_knowledge_space_grant_subject_departments_endpoint_returns_tenant_tree(self):
         app = _make_app(_ViewerUser)

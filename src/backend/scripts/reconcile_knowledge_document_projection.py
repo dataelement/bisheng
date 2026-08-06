@@ -1,6 +1,6 @@
 """检查或重新调度单个 F059 文档入口投影。
 
-默认只读; 显式传入 ``--apply`` 才会向 knowledge Celery 队列调度任务:
+默认只读; 显式传入 ``--apply`` 才会向默认 Celery 队列调度任务:
 
     PYTHONPATH=./ .venv/bin/python \
       scripts/reconcile_knowledge_document_projection.py \
@@ -106,7 +106,7 @@ def main() -> int:
                     "entry_id": int(args.entry_id),
                 },
                 headers={"tenant_id": int(args.tenant_id)},
-                queue="knowledge_celery",
+                queue="celery",
             )
             snapshot["dispatch_status"] = "submitted"
             snapshot["task_id"] = str(task.id)

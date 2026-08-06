@@ -19,6 +19,12 @@ export type DeveloperTokenFileSyncDynamicSource =
   | "department_id"
   | "responsible_person_id"
 
+export type DeveloperTokenFileSyncFolderMode = "none" | "fixed" | "dynamic"
+
+export type DeveloperTokenFileSyncFolderDynamicSource =
+  | "department_name"
+  | "caller_main_department_name"
+
 export interface DeveloperTokenFileSyncRule {
   category: {
     code: string
@@ -27,13 +33,21 @@ export interface DeveloperTokenFileSyncRule {
   business_domain: {
     mode: DeveloperTokenFileSyncMode
     code: string | null
+    dynamic_source?: DeveloperTokenFileSyncDynamicSource | null
   }
   target_space: {
     mode: DeveloperTokenFileSyncMode
     knowledge_id: number | null
-    folder_id: number | null
+    /** @deprecated Legacy folder id; prefer folder_path. */
+    folder_id?: number | null
+    dynamic_source?: DeveloperTokenFileSyncDynamicSource | null
+    folder_mode?: DeveloperTokenFileSyncFolderMode
+    folder_path?: string | null
+    parent_folder_path?: string | null
+    folder_dynamic_source?: DeveloperTokenFileSyncFolderDynamicSource | null
   }
-  dynamic_source: DeveloperTokenFileSyncDynamicSource | null
+  /** @deprecated Read-only legacy field; use per-dimension dynamic_source instead. */
+  dynamic_source?: DeveloperTokenFileSyncDynamicSource | null
 }
 
 export interface DeveloperTokenFileSyncCategoryOption {
@@ -45,6 +59,7 @@ export interface DeveloperTokenFileSyncCategoryOption {
 export interface DeveloperTokenFileSyncBusinessDomainOption {
   code: string
   name: string
+  space_ids?: number[]
 }
 
 export interface DeveloperTokenFileSyncTargetSpaceOption {
@@ -52,6 +67,7 @@ export interface DeveloperTokenFileSyncTargetSpaceOption {
   name: string
   selectable: boolean
   has_children: boolean
+  business_domain_codes?: string[]
 }
 
 export interface DeveloperTokenFileSyncTargetSpaceGroup {

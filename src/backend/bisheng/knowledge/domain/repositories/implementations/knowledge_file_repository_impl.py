@@ -340,6 +340,7 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
                 [
                     KnowledgeFileEntryStatus.ACTIVE.value,
                     KnowledgeFileEntryStatus.DELETING.value,
+                    KnowledgeFileEntryStatus.INVALID.value,
                 ]
             ),
             has_work,
@@ -428,7 +429,12 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
                     (
                         and_(
                             target_is_current,
-                            KnowledgeFile.entry_status == KnowledgeFileEntryStatus.ACTIVE.value,
+                            col(KnowledgeFile.entry_status).in_(
+                                [
+                                    KnowledgeFileEntryStatus.ACTIVE.value,
+                                    KnowledgeFileEntryStatus.INVALID.value,
+                                ]
+                            ),
                         ),
                         None,
                     ),

@@ -67,7 +67,7 @@ async def execute_sync(
         from bisheng.worker.org_sync.tasks import execute_org_sync
         execute_org_sync.apply_async(
             args=[config_id, 'manual', login_user.user_id],
-            queue='knowledge_celery',
+            queue='celery',
         )
 
         return resp_200({
