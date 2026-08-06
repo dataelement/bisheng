@@ -20,12 +20,18 @@ const options: DeveloperTokenFileSyncOptions = {
       children: [{ code: "MGMT_POLICY", label: "Management policy" }],
     },
   ],
-  business_domains: [{ code: "SAFETY", name: "Safety" }],
+  business_domains: [{ code: "SAFETY", name: "Safety", space_ids: [118] }],
   target_space_groups: {
     data: [
       {
         space_type: "department",
-        spaces: [{ id: 118, name: "Safety space", selectable: true, has_children: true }],
+        spaces: [{
+          id: 118,
+          name: "Safety space",
+          selectable: true,
+          has_children: true,
+          business_domain_codes: ["SAFETY"],
+        }],
       },
     ],
     has_more: false,
@@ -52,6 +58,10 @@ function rule(
       knowledge_id: targetMode === "fixed" ? 118 : null,
       folder_id: null,
       dynamic_source: targetMode === "dynamic" ? targetSource : null,
+      folder_mode: "none",
+      folder_path: null,
+      parent_folder_path: null,
+      folder_dynamic_source: null,
     },
     dynamic_source: null,
   }
@@ -76,7 +86,16 @@ describe("developer token file-sync rule validation", () => {
     })).toEqual({
       category: { code: "POLICY", subcategory_code: "MGMT_POLICY" },
       business_domain: { mode: "dynamic", code: null, dynamic_source: "department_id" },
-      target_space: { mode: "fixed", knowledge_id: 118, folder_id: 4096, dynamic_source: null },
+      target_space: {
+        mode: "fixed",
+        knowledge_id: 118,
+        folder_id: null,
+        dynamic_source: null,
+        folder_mode: "fixed",
+        folder_path: null,
+        parent_folder_path: null,
+        folder_dynamic_source: null,
+      },
       dynamic_source: null,
     })
   })
@@ -99,12 +118,16 @@ describe("developer token file-sync rule validation", () => {
     }, options)).toEqual({ field: "businessDomain", reason: "stale" })
     expect(findInvalidFileSyncRule({
       ...rule("fixed", "fixed"),
-      target_space: { mode: "fixed", knowledge_id: 999, folder_id: 4096 },
+      target_space: {
+        mode: "fixed",
+        knowledge_id: 999,
+        folder_mode: "fixed",
+        folder_path: "Policies/Management",
+      },
     }, options, {
       knowledge_id: 999,
       knowledge_name: null,
-      target_type: "folder",
-      folder_id: 4096,
+      target_type: "root",
       folder_path: [],
       stale: true,
     })).toEqual({ field: "targetSpace", reason: "stale" })
@@ -113,12 +136,35 @@ describe("developer token file-sync rule validation", () => {
   it("validates folder ids without assuming the current space page is exhaustive", () => {
     expect(findInvalidFileSyncRule({
       ...rule("fixed", "fixed"),
-      target_space: { mode: "fixed", knowledge_id: 999, folder_id: 4096 },
+      target_space: { mode: "fixed", knowledge_id: 999, folder_id: 4096, folder_mode: "fixed", folder_path: "A/B" },
     }, options)).toBeNull()
     expect(findInvalidFileSyncRule({
       ...rule("fixed", "fixed"),
-      target_space: { mode: "fixed", knowledge_id: 118, folder_id: -1 },
-    }, options)).toEqual({ field: "targetSpace", reason: "invalid" })
+      target_space: {
+        mode: "fixed",
+        knowledge_id: 118,
+        folder_mode: "fixed",
+        folder_path: "   ",
+      },
+    }, options)).toEqual({ field: "targetFolder", reason: "required" })
+  })
+
+  it("reports unbound fixed business domain and target knowledge space", () => {
+    expect(findInvalidFileSyncRule({
+      ...rule("fixed", "fixed"),
+      business_domain: { mode: "fixed", code: "SAFETY" },
+      target_space: {
+        mode: "fixed",
+        knowledge_id: 118,
+        folder_id: null,
+        folder_mode: "dynamic",
+        parent_folder_path: "政策文件",
+        folder_dynamic_source: "department_name",
+      },
+    }, {
+      ...options,
+      business_domains: [{ code: "SAFETY", name: "Safety", space_ids: [] }],
+    })).toEqual({ field: "businessDomainTargetBinding", reason: "unbound" })
   })
 
   it("uses the same 16-character business-domain code contract as the backend", () => {
@@ -126,6 +172,22 @@ describe("developer token file-sync rule validation", () => {
       ...rule("fixed", "dynamic"),
       business_domain: { mode: "fixed", code: "BAD-CODE" },
     })).toEqual({ field: "businessDomain", reason: "invalid" })
+  })
+
+  it("accepts fixed folder path when target space is dynamic", () => {
+    expect(findInvalidFileSyncRule({
+      ...rule("dynamic", "dynamic"),
+      target_space: {
+        mode: "dynamic",
+        knowledge_id: null,
+        folder_id: null,
+        dynamic_source: "responsible_person_id",
+        folder_mode: "fixed",
+        folder_path: "政策文件/管理制度",
+        parent_folder_path: null,
+        folder_dynamic_source: null,
+      },
+    }, options)).toBeNull()
   })
 
   it("clears incompatible fixed values and per-dimension dynamic sources on mode changes", () => {
@@ -150,12 +212,28 @@ describe("developer token file-sync rule validation", () => {
     )
     expect(fixedAgain.business_domain.dynamic_source).toBeNull()
 
-    const dynamicTarget = changeFileSyncRuleMode(rule("fixed", "fixed"), "targetSpace", "dynamic")
+    const dynamicTarget = changeFileSyncRuleMode({
+      ...rule("fixed", "fixed"),
+      target_space: {
+        mode: "fixed",
+        knowledge_id: 118,
+        folder_id: null,
+        dynamic_source: null,
+        folder_mode: "fixed",
+        folder_path: "政策文件/管理制度",
+        parent_folder_path: null,
+        folder_dynamic_source: null,
+      },
+    }, "targetSpace", "dynamic")
     expect(dynamicTarget.target_space).toEqual({
       mode: "dynamic",
       knowledge_id: null,
       folder_id: null,
       dynamic_source: null,
+      folder_mode: "fixed",
+      folder_path: "政策文件/管理制度",
+      parent_folder_path: null,
+      folder_dynamic_source: null,
     })
   })
 
@@ -164,19 +242,23 @@ describe("developer token file-sync rule validation", () => {
       notConfigured: "Not configured",
       businessDomain: "Domain",
       targetSpace: "Space",
+      targetFolder: "Folder",
       dynamicDepartment: "Dynamic(department)",
       dynamicResponsiblePerson: "Dynamic(responsible person)",
+      folderNone: "Root",
+      folderDynamicDepartmentName: "Dynamic(sync department name)",
+      folderDynamicCallerMainDepartmentName: "Dynamic(bound user primary department name)",
     }
 
     expect(formatFileSyncRuleSummary(null, labels)).toBe("Not configured")
     expect(formatFileSyncRuleSummary(rule("fixed", "dynamic", "responsible_person_id", "department_id"), labels)).toBe(
-      "POLICY/MGMT_POLICY · Domain: SAFETY · Space: Dynamic(department)"
+      "POLICY/MGMT_POLICY · Domain: SAFETY · Space: Dynamic(department) · Folder: Root"
     )
     expect(formatFileSyncRuleSummary(
       rule("dynamic", "dynamic", "responsible_person_id", "department_id"),
       labels,
     )).toBe(
-      "POLICY/MGMT_POLICY · Domain: Dynamic(responsible person) · Space: Dynamic(department)"
+      "POLICY/MGMT_POLICY · Domain: Dynamic(responsible person) · Space: Dynamic(department) · Folder: Root"
     )
     expect(formatFileSyncRuleSummary({
       ...rule("fixed", "fixed"),

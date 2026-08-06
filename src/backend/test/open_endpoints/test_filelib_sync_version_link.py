@@ -51,7 +51,7 @@ def _service(knowledge_space_service=None, repository=None) -> FilelibSyncServic
 
 
 @pytest.mark.asyncio
-async def test_sync_same_name_uploads_new_file_and_marks_version_link_pending():
+async def test_sync_same_name_upload_replaces_existing_without_version_link():
     repository = SimpleNamespace(
         find_by_id=AsyncMock(),
         update=AsyncMock(side_effect=lambda value: value),
@@ -66,6 +66,7 @@ async def test_sync_same_name_uploads_new_file_and_marks_version_link_pending():
         return_value=SimpleNamespace(
             responsible_user_id=2,
             responsible_user_name="owner",
+            responsible_user_external_id="owner-ext",
             responsible_department=SimpleNamespace(id=20),
             main_department=SimpleNamespace(id=10, name="主责单位"),
             business_domain_department=None,
@@ -84,7 +85,7 @@ async def test_sync_same_name_uploads_new_file_and_marks_version_link_pending():
     service._ensure_domain_bound = Mock()
     service._require_upload_permission = AsyncMock()
     service._save_temporary_file = AsyncMock(return_value="temporary-url")
-    service._resolve_same_name_version_overwrite = AsyncMock(return_value=(55, 7001))
+    service._resolve_same_name_version_overwrite = AsyncMock(return_value=(None, None))
 
     knowledge_file = KnowledgeFile(
         id=99,
@@ -99,49 +100,52 @@ async def test_sync_same_name_uploads_new_file_and_marks_version_link_pending():
         return kwargs["knowledge_file"].file_encoding
 
     upload = UploadFile(filename="report.pdf", file=BytesIO(b"new-content"), size=11)
-    with patch.object(
-        FileEncodingTransformer,
-        "generate_fixed_encoding",
-        side_effect=_generate_fixed_encoding,
+    with (
+        patch.object(
+            FileEncodingTransformer,
+            "generate_fixed_encoding",
+            side_effect=_generate_fixed_encoding,
+        ),
+        patch(
+            "bisheng.open_endpoints.domain.services.filelib_sync_service.KnowledgeFileDao.update",
+            side_effect=lambda value: value,
+        ),
     ):
         result = await service.sync(
             raw_params='{"external_file_id":"ext-9","file_name":"report.pdf"}',
             upload_file=upload,
         )
 
+    service._resolve_same_name_version_overwrite.assert_awaited_once()
     assert knowledge_space_service.add_file.await_args.kwargs["allow_duplicate_name"] is True
-    assert result.version_link_pending is True
-    assert result.replaced_file_id == 55
-    assert knowledge_file.user_metadata[FILELIB_SYNC_PENDING_VERSION_LINK_KEY] == {
-        "target_document_id": 7001,
-        "replaced_file_id": 55,
-    }
+    assert knowledge_space_service.add_file.await_args.kwargs["allow_duplicate_content"] is True
+    assert result.version_link_pending is False
+    assert result.replaced_file_id is None
+    assert FILELIB_SYNC_PENDING_VERSION_LINK_KEY not in (knowledge_file.user_metadata or {})
 
 
 @pytest.mark.asyncio
-async def test_resolve_same_name_version_overwrite_rejects_unparsed_existing():
-    service = _service()
-    existing = KnowledgeFile(
-        id=55,
-        knowledge_id=8,
-        file_name="report.pdf",
-        status=KnowledgeFileStatus.WAITING.value,
-    )
-    with (
-        patch(
-            "bisheng.open_endpoints.domain.services.filelib_sync_service.asyncio.to_thread",
-            new=AsyncMock(return_value=[existing]),
-        ),
-        patch(
-            "bisheng.open_endpoints.domain.services.filelib_sync_service.resolve_version_link_target_document_id",
-            side_effect=ValueError("existing same-name file is not parsed successfully"),
-        ),
-        pytest.raises(FilelibSyncConflictError, match="existing same-name file is not parsed successfully"),
+async def test_resolve_same_name_version_overwrite_replaces_success_existing():
+    knowledge_space_service = SimpleNamespace(delete_file=AsyncMock())
+    service = _service(knowledge_space_service=knowledge_space_service)
+    existing = [
+        KnowledgeFile(id=55, knowledge_id=8, file_name="report.pdf", status=KnowledgeFileStatus.SUCCESS.value),
+        KnowledgeFile(id=56, knowledge_id=8, file_name="report.pdf", status=KnowledgeFileStatus.WAITING.value),
+    ]
+    with patch(
+        "bisheng.open_endpoints.domain.services.filelib_sync_service.asyncio.to_thread",
+        new=AsyncMock(return_value=existing),
     ):
-        await service._resolve_same_name_version_overwrite(
+        replaced_file_id, target_document_id = await service._resolve_same_name_version_overwrite(
             knowledge_id=8,
             file_name="report.pdf",
         )
+
+    assert replaced_file_id is None
+    assert target_document_id is None
+    assert knowledge_space_service.delete_file.await_count == 2
+    knowledge_space_service.delete_file.assert_any_await(55)
+    knowledge_space_service.delete_file.assert_any_await(56)
 
 
 @pytest.mark.asyncio

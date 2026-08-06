@@ -96,6 +96,108 @@ def test_folder_id_is_backward_compatible_and_fixed_target_accepts_a_directory()
     assert folder_rule.target_space.folder_id == 4096
 
 
+def test_dynamic_folder_rule_accepts_parent_path_and_naming_source() -> None:
+    rule = DeveloperTokenFileSyncRule.model_validate(
+        {
+            "category": {"code": "POLICY", "subcategory_code": "MGMT_POLICY"},
+            "business_domain": {"mode": "fixed", "code": "SA"},
+            "target_space": {
+                "mode": "fixed",
+                "knowledge_id": 118,
+                "folder_mode": "dynamic",
+                "parent_folder_path": "政策文件",
+                "folder_dynamic_source": "department_name",
+            },
+        }
+    )
+
+    assert rule.target_space.folder_mode == "dynamic"
+    assert rule.target_space.parent_folder_path == "政策文件"
+    DeveloperTokenService._normalize_file_sync_rule(rule)
+
+
+def test_fixed_folder_rule_requires_folder_path() -> None:
+    rule = DeveloperTokenFileSyncRule.model_validate(
+        {
+            "category": {"code": "POLICY", "subcategory_code": "MGMT_POLICY"},
+            "business_domain": {"mode": "fixed", "code": "SA"},
+            "target_space": {
+                "mode": "fixed",
+                "knowledge_id": 118,
+                "folder_mode": "fixed",
+            },
+        }
+    )
+
+    with pytest.raises(DeveloperTokenInvalidFileSyncRuleError) as exc_info:
+        DeveloperTokenService._normalize_file_sync_rule(rule)
+
+    assert exc_info.value.code == 19813
+
+
+def test_dynamic_target_accepts_fixed_folder_path() -> None:
+    rule = DeveloperTokenFileSyncRule.model_validate(
+        {
+            "category": {"code": "POLICY", "subcategory_code": "MGMT_POLICY"},
+            "business_domain": {
+                "mode": "dynamic",
+                "code": None,
+                "dynamic_source": "responsible_person_id",
+            },
+            "target_space": {
+                "mode": "dynamic",
+                "knowledge_id": None,
+                "dynamic_source": "responsible_person_id",
+                "folder_mode": "fixed",
+                "folder_path": "政策文件/管理制度",
+            },
+        }
+    )
+
+    assert rule.target_space.folder_path == "政策文件/管理制度"
+    DeveloperTokenService._normalize_file_sync_rule(rule)
+
+
+def test_dynamic_target_with_dynamic_folder_rejects_parent_folder_path() -> None:
+    rule = DeveloperTokenFileSyncRule.model_validate(
+        {
+            "category": {"code": "POLICY", "subcategory_code": "MGMT_POLICY"},
+            "business_domain": {"mode": "fixed", "code": "SA"},
+            "target_space": {
+                "mode": "dynamic",
+                "knowledge_id": None,
+                "dynamic_source": "department_id",
+                "folder_mode": "dynamic",
+                "parent_folder_path": "政策文件",
+                "folder_dynamic_source": "department_name",
+            },
+        }
+    )
+
+    with pytest.raises(DeveloperTokenInvalidFileSyncRuleError) as exc_info:
+        DeveloperTokenService._normalize_file_sync_rule(rule)
+
+    assert exc_info.value.code == 19813
+
+
+def test_folder_path_normalizes_slashes() -> None:
+    rule = DeveloperTokenFileSyncRule.model_validate(
+        {
+            "category": {"code": "POLICY", "subcategory_code": "MGMT_POLICY"},
+            "business_domain": {"mode": "fixed", "code": "SA"},
+            "target_space": {
+                "mode": "fixed",
+                "knowledge_id": 118,
+                "folder_mode": "fixed",
+                "folder_path": " 政策文件 / 管理制度 ",
+            },
+        }
+    )
+
+    assert rule.target_space.folder_path == "政策文件/管理制度"
+    DeveloperTokenService._normalize_file_sync_rule(rule)
+
+
 def test_dynamic_target_rejects_a_folder_id_with_19813() -> None:
     rule = DeveloperTokenFileSyncRule.model_validate(
         {
@@ -317,7 +419,12 @@ async def test_fixed_folder_is_validated_for_bound_user_before_persistence(monke
         {
             "category": {"code": "POLICY", "subcategory_code": "MGMT_POLICY"},
             "business_domain": {"mode": "fixed", "code": "SA"},
-            "target_space": {"mode": "fixed", "knowledge_id": 118, "folder_id": 4096},
+            "target_space": {
+                "mode": "fixed",
+                "knowledge_id": 118,
+                "folder_mode": "fixed",
+                "folder_path": "政策文件/管理制度",
+            },
             "dynamic_source": None,
         }
     )
@@ -328,9 +435,9 @@ async def test_fixed_folder_is_validated_for_bound_user_before_persistence(monke
         tenant_id=5,
         user_id=7,
         knowledge_id=118,
-        folder_id=4096,
+        folder_id=None,
     )
-    assert normalized["target_space"]["folder_id"] == 4096
+    assert normalized["target_space"]["folder_path"] == "政策文件/管理制度"
 
 
 @pytest.mark.asyncio

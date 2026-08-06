@@ -551,6 +551,7 @@ class FileSyncTargetSpaceItem:
     space_type: str
     selectable: bool
     has_children: bool
+    business_domain_codes: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -1239,6 +1240,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 space_type=level,
                 selectable=access.root_space_ids is None or int(space.id) in access.root_space_ids,
                 has_children=int(space.id) in spaces_with_children,
+                business_domain_codes=tuple(
+                    code
+                    for value in (getattr(space, "business_domain_codes", None) or [])
+                    if (code := normalize_business_domain_code(value)) is not None
+                ),
             )
             for space, level in page_rows
         ]
@@ -1353,14 +1359,20 @@ class KnowledgeSpaceService(KnowledgeUtils):
         login_user: UserPayload,
         knowledge_id: int,
         folder_id: int | None,
+        strict_catalog: bool = True,
     ) -> Knowledge:
         async with get_async_db_session() as session:
             knowledge_repository = KnowledgeRepositoryImpl(session)
             file_repository = KnowledgeFileRepositoryImpl(session)
-            spaces = await knowledge_repository.find_file_sync_spaces_by_ids({knowledge_id})
-            if not spaces:
-                raise SpaceNotFoundError()
-            space = spaces[0][0]
+            if strict_catalog:
+                spaces = await knowledge_repository.find_file_sync_spaces_by_ids({knowledge_id})
+                if not spaces:
+                    raise SpaceNotFoundError()
+                space = spaces[0][0]
+            else:
+                space = await knowledge_repository.find_space_by_id(knowledge_id)
+                if space is None:
+                    raise SpaceNotFoundError()
             object_type = "knowledge_space"
             object_id = knowledge_id
             if folder_id is not None:
@@ -4059,6 +4071,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if again:
                 return again
             raise
+
+    async def ensure_personal_default_space(self) -> Knowledge:
+        """Get or create the login user's default personal knowledge space."""
+        return await self._ensure_personal_default_space()
 
     async def _ensure_personal_spaces(self) -> tuple[Knowledge, Knowledge]:
         """确保并返回当前用户固定的『我的收藏』和默认个人知识库。"""
@@ -13529,6 +13545,48 @@ class KnowledgeSpaceService(KnowledgeUtils):
         await KnowledgeDao.async_update_knowledge_update_time_by_id(knowledge_id)
         return added_folder
 
+    async def find_or_create_folder_for_file_sync(
+        self,
+        knowledge_id: int,
+        folder_name: str,
+        parent_id: int | None = None,
+    ) -> KnowledgeFile:
+        file_level_path = ""
+        if parent_id is not None:
+            parent_folder = await self._get_folder_for_action(knowledge_id, parent_id)
+            file_level_path = f"{parent_folder.file_level_path}/{parent_id}"
+
+        existing = await SpaceFileDao.find_folder_by_name(
+            knowledge_id,
+            folder_name,
+            file_level_path,
+        )
+        if existing is not None:
+            return existing
+        return await self.add_folder(knowledge_id, folder_name, parent_id)
+
+    async def find_or_create_folder_path_for_file_sync(
+        self,
+        knowledge_id: int,
+        folder_path: str | None,
+    ) -> KnowledgeFile | None:
+        from bisheng.developer_token.domain.file_sync_folder_path import split_file_sync_folder_path
+
+        segments = split_file_sync_folder_path(folder_path)
+        if not segments:
+            return None
+
+        parent_id: int | None = None
+        current: KnowledgeFile | None = None
+        for segment in segments:
+            current = await self.find_or_create_folder_for_file_sync(
+                knowledge_id,
+                segment,
+                parent_id,
+            )
+            parent_id = int(current.id)
+        return current
+
     async def rename_folder(self, folder_id: int, new_name: str) -> KnowledgeFile:
         folder = await KnowledgeFileDao.query_by_id(folder_id)
         if not folder or folder.file_type != 0:
@@ -14572,6 +14630,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         skip_approval: bool = False,
         enqueue_processing: bool = True,
         allow_duplicate_name: bool = False,
+        allow_duplicate_content: bool = False,
+        skip_space_business_domain_check: bool = False,
     ) -> list[KnowledgeSpaceFileResponse]:
         from bisheng.knowledge.domain.services.knowledge_pdf_artifact_service import (
             enqueue_current_pdf_artifact,
@@ -14654,7 +14714,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         normalized_business_domain_code = self.normalize_business_domain_code(business_domain_code)
         if business_domain_code and not normalized_business_domain_code:
             raise SpaceBusinessDomainCodeInvalidError()
-        self._ensure_business_domain_allowed_for_space(db_knowledge, normalized_business_domain_code)
+        if not skip_space_business_domain_check:
+            self._ensure_business_domain_allowed_for_space(db_knowledge, normalized_business_domain_code)
         if normalized_business_domain_code:
             split_rule_dict[self.business_domain_code_key] = normalized_business_domain_code
         process_files = []
@@ -14698,6 +14759,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                         "file_subcategory_source": "manual" if normalized_file_subcategory_code else None,
                     },
                     allow_duplicate_name=allow_duplicate_name,
+                    allow_duplicate_content=allow_duplicate_content,
                 )
                 if db_file.status != KnowledgeFileStatus.FAILED.value:
                     next_file_source = self._resolve_upload_file_source(db_file.file_name, file_source.value)

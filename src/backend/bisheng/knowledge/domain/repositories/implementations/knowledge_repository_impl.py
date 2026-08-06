@@ -98,3 +98,12 @@ class KnowledgeRepositoryImpl(BaseRepositoryImpl[Knowledge, int], KnowledgeRepos
             )
         )
         return [(row[0], row[1].value if hasattr(row[1], "value") else str(row[1])) for row in result.all()]
+
+    async def find_space_by_id(self, space_id: int) -> Knowledge | None:
+        result = await self.session.execute(
+            select(Knowledge).where(
+                Knowledge.id == space_id,
+                Knowledge.type == KnowledgeTypeEnum.SPACE.value,
+            )
+        )
+        return result.scalar_one_or_none()

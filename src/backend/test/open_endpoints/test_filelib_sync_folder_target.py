@@ -25,20 +25,39 @@ from bisheng.knowledge.rag.pipeline.transformer.file_encoding import FileEncodin
 from bisheng.open_endpoints.domain.services.filelib_sync_service import (
     FilelibSyncService,
     ResolvedFileSyncTarget,
+    ResolvedIdentity,
 )
 
 
+def _identity(**overrides) -> ResolvedIdentity:
+    defaults = {
+        "responsible_user_id": 7,
+        "responsible_user_name": "bound",
+        "responsible_user_external_id": "bound-ext",
+        "responsible_department": SimpleNamespace(id=21, name="责任部门"),
+        "caller_department": SimpleNamespace(id=30, name="绑定用户主责部门"),
+        "main_department": SimpleNamespace(id=20, name="信息部"),
+        "business_domain_department": None,
+        "target_space_department": None,
+    }
+    defaults.update(overrides)
+    return ResolvedIdentity(**defaults)
+
+
 def _rule(*, folder_id: int | None, dynamic: bool = False) -> DeveloperTokenFileSyncRule:
+    target_space: dict = {
+        "mode": "dynamic" if dynamic else "fixed",
+        "knowledge_id": None if dynamic else 8,
+        "folder_id": None if dynamic else folder_id,
+        "dynamic_source": "department_id" if dynamic else None,
+    }
+    if not dynamic and folder_id is not None:
+        target_space["folder_mode"] = "fixed"
     return DeveloperTokenFileSyncRule.model_validate(
         {
             "category": {"code": "POLICY", "subcategory_code": "MGMT_POLICY"},
             "business_domain": {"mode": "fixed", "code": "IT"},
-            "target_space": {
-                "mode": "dynamic" if dynamic else "fixed",
-                "knowledge_id": None if dynamic else 8,
-                "folder_id": None if dynamic else folder_id,
-                "dynamic_source": "department_id" if dynamic else None,
-            },
+            "target_space": target_space,
         }
     )
 
@@ -74,16 +93,34 @@ def _space() -> Knowledge:
 
 
 @pytest.mark.asyncio
-async def test_fixed_folder_target_keeps_stable_folder_id() -> None:
+async def test_fixed_folder_target_resolves_string_path() -> None:
     space = _space()
+    created = KnowledgeFile(id=4096, knowledge_id=8, file_name="管理制度", file_type=0)
+    knowledge_space_service = SimpleNamespace(
+        find_or_create_folder_path_for_file_sync=AsyncMock(return_value=created),
+    )
     service = _service(
-        _rule(folder_id=4096),
+        DeveloperTokenFileSyncRule.model_validate(
+            {
+                "category": {"code": "POLICY", "subcategory_code": "MGMT_POLICY"},
+                "business_domain": {"mode": "fixed", "code": "IT"},
+                "target_space": {
+                    "mode": "fixed",
+                    "knowledge_id": 8,
+                    "folder_mode": "fixed",
+                    "folder_path": "政策文件/管理制度",
+                },
+            }
+        ),
         repository=SimpleNamespace(find_knowledge_by_id=AsyncMock(return_value=space)),
+        knowledge_space_service=knowledge_space_service,
     )
 
     target = await service._resolve_target_space(SimpleNamespace(target_space_department=None, business_domain_department=None))
+    folder_id = await service._resolve_target_folder(int(target.space.id), _identity())
 
-    assert target == ResolvedFileSyncTarget(space=space, folder_id=4096)
+    assert target == ResolvedFileSyncTarget(space=space, folder_id=None)
+    assert folder_id == 4096
 
 
 @pytest.mark.asyncio
@@ -143,7 +180,8 @@ async def test_folder_permission_failure_happens_before_temporary_upload() -> No
     service._get_portal_config = AsyncMock(return_value=SimpleNamespace())
     service._resolve_document_type = MagicMock()
     service._resolve_business_domain = MagicMock(return_value=SimpleNamespace())
-    service._resolve_target_space = AsyncMock(return_value=ResolvedFileSyncTarget(space=_space(), folder_id=4096))
+    service._resolve_target_space = AsyncMock(return_value=ResolvedFileSyncTarget(space=_space(), folder_id=None))
+    service._resolve_target_folder = AsyncMock(return_value=4096)
     service._ensure_domain_bound = MagicMock()
     service._require_upload_permission = AsyncMock(side_effect=FilelibSyncPermissionDeniedError())
     service._save_temporary_file = AsyncMock()
@@ -188,21 +226,29 @@ async def test_fixed_folder_upload_passes_parent_id_and_keeps_response_contract(
             main_department=SimpleNamespace(id=20, name="信息部"),
             responsible_user_id=7,
             responsible_user_name="bound",
+            responsible_user_external_id="bound-ext",
         )
     )
     service._get_portal_config = AsyncMock(return_value=SimpleNamespace())
     service._resolve_document_type = MagicMock()
     service._resolve_business_domain = MagicMock(return_value=SimpleNamespace(code="IT", name="信息", space_ids=[8]))
-    service._resolve_target_space = AsyncMock(return_value=ResolvedFileSyncTarget(space=space, folder_id=4096))
+    service._resolve_target_space = AsyncMock(return_value=ResolvedFileSyncTarget(space=space, folder_id=None))
+    service._resolve_target_folder = AsyncMock(return_value=4096)
     service._ensure_domain_bound = MagicMock()
     service._require_upload_permission = AsyncMock()
     service._save_temporary_file = AsyncMock(return_value="temporary-url")
     service._resolve_same_name_version_overwrite = AsyncMock(return_value=(None, None))
 
-    with patch.object(
-        FileEncodingTransformer,
-        "generate_fixed_encoding",
-        new=AsyncMock(return_value=created.file_encoding),
+    with (
+        patch.object(
+            FileEncodingTransformer,
+            "generate_fixed_encoding",
+            new=AsyncMock(return_value=created.file_encoding),
+        ),
+        patch(
+            "bisheng.open_endpoints.domain.services.filelib_sync_service.KnowledgeFileDao.update",
+            side_effect=lambda value: value,
+        ),
     ):
         result = await service.sync(
             raw_params=json.dumps({"external_file_id": "ext-1", "file_name": "a.pdf"}),

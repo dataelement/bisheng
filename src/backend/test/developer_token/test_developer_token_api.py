@@ -159,6 +159,36 @@ def test_secret_view_route_returns_secret_payload():
     assert resp.json()["data"]["plaintext_token"] == "bst_secret"
 
 
+def test_update_accepts_file_sync_folder_path_fields():
+    app = _app(_user())
+    client = TestClient(app)
+    service_mock = AsyncMock(return_value=_read())
+    with patch(f"{ENDPOINT_MOD}.DeveloperTokenService.update_token", new=service_mock):
+        resp = client.put(
+            "/api/v1/admin/developer-tokens/1",
+            json={
+                "file_sync_rule": {
+                    "category": {"code": "POLICY", "subcategory_code": "MGMT_POLICY"},
+                    "business_domain": {"mode": "fixed", "code": "SA"},
+                    "target_space": {
+                        "mode": "fixed",
+                        "knowledge_id": 118,
+                        "folder_mode": "dynamic",
+                        "folder_path": None,
+                        "parent_folder_path": "政策文件",
+                        "folder_dynamic_source": "department_name",
+                    },
+                },
+            },
+        )
+
+    assert resp.status_code == 200
+    target_space = service_mock.await_args.args[2].file_sync_rule.target_space
+    assert target_space.folder_mode == "dynamic"
+    assert target_space.parent_folder_path == "政策文件"
+    assert target_space.folder_dynamic_source == "department_name"
+
+
 def test_global_config_routes():
     app = _app(_user())
     client = TestClient(app)

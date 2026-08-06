@@ -562,6 +562,33 @@ JSON 报告：
 - `--apply` 会删除来源文件并生成新的目标文件 ID。收藏、分享链接及其他保存旧文件 ID 的引用不会迁移，
   执行前必须先审核 dry-run 报告并确认这些引用中断的影响。
 
+## OpenAPI Verification Scripts
+
+### `verify_filelib_sync.py`
+
+使用 Developer Token 调用 ``POST /api/v2/filelib/file/sync``，上传文件并附带 JSON ``params``，
+用于联调 filelib 同步接口。成功时退出码 ``0``，HTTP 或业务失败时退出码 ``1``。
+
+``params`` 示例见 ``scripts/examples/filelib_sync_params.example.json``。
+
+```bash
+cd src/backend
+
+PYTHONPATH=./ .venv/bin/python scripts/verify_filelib_sync.py \
+  --token bst_xxx \
+  --file /path/to/report.pdf \
+  --params /path/to/sync_params.json
+
+# 可选：指定网关或服务地址
+FILELIB_SYNC_BASE_URL=http://10.0.0.1:7860 \
+  bash scripts/verify_filelib_sync.sh \
+  --token bst_xxx \
+  --file /path/to/report.pdf \
+  --params scripts/examples/filelib_sync_params.example.json
+```
+
+注意：Token 需已配置文件同步规则，且路由白名单允许 ``POST /api/v2/filelib/file/sync``。
+
 ## Export Scripts
 
 ### `get_knowledge_file_chunks.py`

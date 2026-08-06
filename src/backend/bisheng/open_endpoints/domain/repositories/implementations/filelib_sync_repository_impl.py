@@ -47,6 +47,29 @@ class FilelibSyncRepositoryImpl(
         )
         return result.first()
 
+    async def find_users_by_external_id(
+        self,
+        external_id: str,
+        *,
+        tenant_id: int,
+    ) -> list[User]:
+        normalized_external_id = str(external_id or "").strip()
+        if not normalized_external_id:
+            return []
+        result = await self.session.exec(
+            select(User)
+            .join(UserTenant, UserTenant.user_id == User.user_id)
+            .where(
+                User.external_id == normalized_external_id,
+                User.delete == 0,
+                UserTenant.tenant_id == tenant_id,
+                UserTenant.status == "active",
+                UserTenant.is_active == 1,
+            )
+            .distinct()
+        )
+        return list(result.all())
+
     async def find_primary_departments(self, user_id: int) -> list[UserDepartment]:
         result = await self.session.exec(
             select(UserDepartment)

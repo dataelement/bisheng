@@ -17,6 +17,7 @@ from bisheng.common.errcode.knowledge_space import DepartmentKnowledgeSpaceAmbig
 from bisheng.database.models.department import Department, UserDepartment
 from bisheng.developer_token.domain.schemas import DeveloperTokenFileSyncRule
 from bisheng.knowledge.domain.models.knowledge import Knowledge
+from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 from bisheng.open_endpoints.domain.models.filelib_department_mapping import FilelibDepartmentMapping
 from bisheng.open_endpoints.domain.services.filelib_sync_service import FilelibSyncService
 
@@ -53,7 +54,13 @@ def _mapping_repository(
     **extra: object,
 ) -> SimpleNamespace:
     repository = SimpleNamespace(
+        find_user_by_id=AsyncMock(
+            return_value=SimpleNamespace(user_id=1, user_name="caller", external_id="caller-ext"),
+        ),
         find_primary_departments=AsyncMock(return_value=[UserDepartment(user_id=1, department_id=caller_department.id, is_primary=1)]),
+        find_department_by_id=AsyncMock(
+            side_effect=lambda department_id: caller_department if department_id == caller_department.id else mapped_department,
+        ),
         find_department_mapping_by_external_department_id=AsyncMock(return_value=mapping),
         find_department_by_external_id=AsyncMock(return_value=mapped_department),
         **extra,
@@ -136,6 +143,21 @@ def test_fixed_fixed_rule_does_not_require_dynamic_id() -> None:
     service._require_dynamic_source_id(params)
 
 
+def test_responsible_person_satisfies_responsible_person_id_requirement() -> None:
+    service = _service(_rule("dynamic", "fixed", "responsible_person_id"))
+    params = service.parse_params(
+        json.dumps(
+            {
+                "external_file_id": "ext-1",
+                "file_name": "a.pdf",
+                "responsible_person": "gzx01",
+            }
+        )
+    )
+
+    service._require_dynamic_source_id(params)
+
+
 @pytest.mark.asyncio
 async def test_department_dynamic_source_selects_explicit_department() -> None:
     caller_department = _department(10, "调用人部门")
@@ -151,7 +173,7 @@ async def test_department_dynamic_source_selects_explicit_department() -> None:
             {
                 "external_file_id": "ext-1",
                 "file_name": "a.pdf",
-                "department_id": 20,
+                "department_id": "20",
             }
         )
     )
@@ -173,7 +195,9 @@ async def test_department_dynamic_source_selects_explicit_department() -> None:
 async def test_responsible_person_requires_unique_primary_department() -> None:
     caller_department = _department(10, "调用人部门")
     repository = SimpleNamespace(
-        find_user_by_id=AsyncMock(return_value=SimpleNamespace(user_id=2, user_name="owner")),
+        find_users_by_external_id=AsyncMock(
+            return_value=[SimpleNamespace(user_id=2, user_name="owner", external_id="owner-ext")],
+        ),
         find_primary_departments=AsyncMock(
             side_effect=[
                 [UserDepartment(user_id=1, department_id=10, is_primary=1)],
@@ -194,7 +218,7 @@ async def test_responsible_person_requires_unique_primary_department() -> None:
             {
                 "external_file_id": "ext-1",
                 "file_name": "a.pdf",
-                "responsible_person_id": 2,
+                "responsible_person_id": "owner-ext",
             }
         )
     )
@@ -302,22 +326,38 @@ async def test_fixed_dynamic_matrix_resolves_independent_dimensions(
 
 
 @pytest.mark.asyncio
-async def test_dynamic_space_ambiguity_maps_to_19904_before_lookup() -> None:
+async def test_dynamic_space_ambiguity_falls_back_to_token_user_personal_space() -> None:
+    personal_space = Knowledge(id=99, name="admin的知识库", type=3)
+    fallback_folder = KnowledgeFile(id=5001, knowledge_id=99, file_name="leaf", file_type=0)
     repository = SimpleNamespace(find_knowledge_by_id=AsyncMock())
-    service = _service(_rule("fixed", "dynamic", "department_id"), repository)
+    knowledge_space_service = SimpleNamespace(
+        ensure_personal_default_space=AsyncMock(return_value=personal_space),
+        find_or_create_folder_path_for_file_sync=AsyncMock(return_value=fallback_folder),
+    )
+    service = _service(_rule("fixed", "dynamic", "department_id"), repository, knowledge_space_service)
+    service.token_name = "联调Token"
     identity = SimpleNamespace(
         target_space_department=_department(20, "动态部门", "/1/20/"),
         business_domain_department=None,
+        main_department=_department(20, "动态部门", "/1/20/"),
+        caller_department=_department(30, "绑定部门", "/1/30/"),
     )
 
     with patch(
         "bisheng.open_endpoints.domain.services.filelib_sync_service.DepartmentSpaceTargetResolver.resolve",
         new=AsyncMock(side_effect=DepartmentKnowledgeSpaceAmbiguousError()),
     ):
-        with pytest.raises(FilelibSyncConflictError):
-            await service._resolve_target_space(identity)
+        target = await service._resolve_target_space(identity)
 
+    assert target.used_personal_fallback is True
+    assert target.space.id == 99
+    assert target.folder_id == 5001
     repository.find_knowledge_by_id.assert_not_awaited()
+    knowledge_space_service.ensure_personal_default_space.assert_awaited_once()
+    knowledge_space_service.find_or_create_folder_path_for_file_sync.assert_awaited_once_with(
+        99,
+        "业务接口未分配/联调Token",
+    )
 
 
 @pytest.mark.asyncio
@@ -349,7 +389,7 @@ def test_split_dynamic_sources_require_union_of_configured_ids() -> None:
             {
                 "external_file_id": "ext-1",
                 "file_name": "a.pdf",
-                "responsible_person_id": 2,
+                "responsible_person_id": "owner-ext",
             }
         )
     )
@@ -364,14 +404,22 @@ async def test_split_dynamic_sources_resolve_independent_departments() -> None:
     responsible_department = _department(30, "责任人部门")
     explicit_department = _department(20, "请求部门", external_id="ORG-20")
     mapping = _department_mapping("20", "ORG-20", external_department_name="请求部门")
+    departments = {
+        caller_department.id: caller_department,
+        responsible_department.id: responsible_department,
+        explicit_department.id: explicit_department,
+    }
     repository = SimpleNamespace(
-        find_user_by_id=AsyncMock(return_value=SimpleNamespace(user_id=2, user_name="owner")),
+        find_users_by_external_id=AsyncMock(
+            return_value=[SimpleNamespace(user_id=2, user_name="owner", external_id="owner-ext")],
+        ),
         find_primary_departments=AsyncMock(
             side_effect=[
                 [UserDepartment(user_id=1, department_id=10, is_primary=1)],
                 [UserDepartment(user_id=2, department_id=30, is_primary=1)],
             ]
         ),
+        find_department_by_id=AsyncMock(side_effect=lambda department_id: departments.get(department_id)),
         find_department_mapping_by_external_department_id=AsyncMock(return_value=mapping),
         find_department_by_external_id=AsyncMock(return_value=explicit_department),
     )
@@ -389,8 +437,8 @@ async def test_split_dynamic_sources_resolve_independent_departments() -> None:
             {
                 "external_file_id": "ext-1",
                 "file_name": "a.pdf",
-                "department_id": 20,
-                "responsible_person_id": 2,
+                "department_id": "20",
+                "responsible_person_id": "owner-ext",
             }
         )
     )

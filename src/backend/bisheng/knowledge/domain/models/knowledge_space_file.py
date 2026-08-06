@@ -130,6 +130,31 @@ class SpaceFileDao(KnowledgeFileDao):
         )
 
     @classmethod
+    async def find_folder_by_name(
+        cls,
+        knowledge_id: int,
+        folder_name: str,
+        file_level_path: str,
+    ) -> KnowledgeFile | None:
+        if file_level_path:
+            path_filter = KnowledgeFile.file_level_path == file_level_path
+        else:
+            path_filter = cls._root_path_filter()
+        statement = (
+            select(KnowledgeFile)
+            .where(
+                KnowledgeFile.knowledge_id == knowledge_id,
+                KnowledgeFile.file_type == 0,
+                KnowledgeFile.file_name == folder_name,
+                path_filter,
+                col(KnowledgeFile.deleted_at).is_(None),
+            )
+            .limit(1)
+        )
+        async with get_async_db_session() as session:
+            return (await session.execute(statement)).scalar_one_or_none()
+
+    @classmethod
     async def count_folder_by_name(
         cls, knowledge_id: int, folder_name: str, file_level_path: str, exclude_id: int | None = None
     ) -> int:

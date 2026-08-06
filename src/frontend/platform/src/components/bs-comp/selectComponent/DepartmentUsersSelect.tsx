@@ -68,6 +68,7 @@ function resolveTreeDepartmentId(
 }
 
 const TREE_INDENT_PER_LEVEL = 22
+const ROOT_TENANT_ID = 1
 
 function findSubtreeRoot(
   nodes: DepartmentTreeNode[],
@@ -85,14 +86,14 @@ function findMountedTenantId(
   nodes: DepartmentTreeNode[],
   departmentId: number,
   inheritedTenantId?: number
-): number | undefined {
+): number {
   for (const node of nodes) {
     const tenantId = node.mounted_tenant_id ?? inheritedTenantId
-    if (node.id === departmentId) return tenantId ?? undefined
+    if (node.id === departmentId) return tenantId ?? ROOT_TENANT_ID
     const childTenantId = findMountedTenantId(node.children || [], departmentId, tenantId ?? undefined)
-    if (childTenantId != null) return childTenantId
+    if (childTenantId > 0) return childTenantId
   }
-  return undefined
+  return ROOT_TENANT_ID
 }
 
 export default function DepartmentUsersSelect({
@@ -246,14 +247,18 @@ export default function DepartmentUsersSelect({
     })
   }
 
-  const setPicked = (user: DepartmentUserOption, departmentPath: string) => {
+  const setPicked = (user: DepartmentUserOption, departmentPath: string, departmentId: number, deptBusinessId?: string) => {
     const id = Number(user.value)
     if (lockedSet.has(id)) return
     const pathTrim = departmentPath.trim()
+    const tenantId = findMountedTenantId(tree, departmentId)
     const withPath = (row: DepartmentUserOption): DepartmentUserOption => ({
       ...row,
       value: id,
       label: user.label,
+      department_id: departmentId,
+      dept_id: deptBusinessId ?? row.dept_id,
+      tenant_id: tenantId,
       department_path: pathTrim || undefined,
     })
     if (multiple) {
@@ -405,12 +410,12 @@ export default function DepartmentUsersSelect({
                 <div
                   key={`${did}-${u.value}`}
                   className={`flex items-center rounded-md py-1.5 pl-1.5 pr-2 text-sm ${locked ? "opacity-60" : "cursor-pointer hover:bg-accent"}`}
-                  onClick={() => setPicked(u, displayPathForNode)}
+                  onClick={() => setPicked(u, displayPathForNode, did, node.dept_id)}
                 >
                   <div className="relative shrink-0 self-stretch" style={{ width: (depth + 1) * TREE_INDENT_PER_LEVEL }} aria-hidden>
                     <span className="pointer-events-none absolute bottom-1 right-0 top-1 w-px bg-border" aria-hidden />
                   </div>
-                  <Checkbox checked={selected} disabled={locked} onCheckedChange={() => setPicked(u, displayPathForNode)} />
+                  <Checkbox checked={selected} disabled={locked} onCheckedChange={() => setPicked(u, displayPathForNode, did, node.dept_id)} />
                   <UserIcon className="h-3.5 w-3.5 text-muted-foreground" />
                   <span className="truncate">{u.label}</span>
                   <span className="shrink-0">（{u.external_id ?? u.value}）</span>

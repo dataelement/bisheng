@@ -141,6 +141,7 @@ async def test_options_filter_invalid_categories_disabled_domains_and_page_space
                     space_type="department",
                     selectable=True,
                     has_children=False,
+                    business_domain_codes=("SA",),
                 )
             ],
             has_more=False,
@@ -182,7 +183,16 @@ async def test_options_filter_invalid_categories_disabled_domains_and_page_space
             "label": "政策制度",
             "children": [{"code": "MGMT_POLICY", "label": "管理政策"}],
         }
-        assert [item.model_dump() for item in result.business_domains] == [{"code": "SA", "name": "安全"}]
+        assert [item.model_dump() for item in result.business_domains] == [
+            {"code": "SA", "name": "安全", "space_ids": []},
+        ]
+        assert result.target_space_groups.data[0].spaces[0].model_dump() == {
+            "id": 118,
+            "name": "安全库",
+            "selectable": True,
+            "has_children": False,
+            "business_domain_codes": ["SA"],
+        }
         assert result.target_space_groups.next_cursor is None
         list_spaces.assert_awaited_once_with(
             login_user=bound_user,
