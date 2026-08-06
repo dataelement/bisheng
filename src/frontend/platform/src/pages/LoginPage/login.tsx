@@ -17,6 +17,7 @@ import { PWD_RULE, handleEncrypt, handleLdapEncrypt } from './utils';
 import { locationContext } from '@/contexts/locationContext';
 import { ldapLoginApi, getSSOurlApi } from '@/controllers/API/pro';
 import { getBrandAssetUrl } from '@/utils/brand';
+import { consumeLoginReturnTo } from '@/utils/loginReturnTo';
 import { getWorkspaceClientUrl } from '@/utils/workspaceUrl';
 
 interface LoginPageProps {
@@ -161,11 +162,12 @@ export const LoginPage = ({ forceLocal = false }: LoginPageProps) => {
 
                 window.self === window.top ? localStorage.removeItem('ws_token') : localStorage.setItem('ws_token', res.access_token)
                 localStorage.setItem('isLogin', '1')
-                const pathname = localStorage.getItem('LOGIN_PATHNAME')
-                if (pathname) {
-                    // After the login session expires, redirect back to the login page. After successful login, redirect back to the page before login.
-                    localStorage.removeItem('LOGIN_PATHNAME')
-                    location.href = pathname
+                // A 401 anywhere in the two SPAs stores where the user was; come
+                // back to it. Validated + consumed in one place so this path and
+                // the SSO landing in App.tsx cannot drift apart.
+                const returnTo = consumeLoginReturnTo()
+                if (returnTo) {
+                    location.href = returnTo
                 } else {
                     const entry = (res as { default_entry?: string }).default_entry
                     if (entry === 'workspace') {

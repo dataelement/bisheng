@@ -29,6 +29,7 @@ from bisheng.common.schemas.telemetry.event_data_schema import ApplicationAliveE
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
 from bisheng.core.cache.redis_manager import get_redis_client
+from bisheng.core.context.tenant import bypass_tenant_filter_if
 from bisheng.core.logger import trace_id_var
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.session import MessageSessionDao
@@ -132,18 +133,24 @@ async def linsight_file_download(
     login_user: UserPayload = Depends(UserPayload.get_login_user),
     share_link: Union["ShareLink", None] = Depends(header_share_token_parser),
 ) -> UnifiedResponseModel:
-    session_version_model = await LinsightSessionVersionDao.get_by_id(session_version_id)
+    with bypass_tenant_filter_if(share_link is not None):
+        session_version_model = await LinsightSessionVersionDao.get_by_id(session_version_id)
     if not session_version_model:
         raise NotFoundError()
 
     # judge permission
     if session_version_model.user_id != login_user.user_id and not login_user.is_admin():
-        # Access by sharing a link
-        if (
-            share_link is None
-            or share_link.meta_data is None
-            or share_link.meta_data.get("versionId") != session_version_id
-        ):
+        # Access by sharing a link. Both share shapes grant, same as
+        # session-version-list / execute-task-detail: a workbench_chat share
+        # carries resource_id = the session and no versionId, and its recipient
+        # must still be able to download the task's output files.
+        shared_to_session = share_link is not None and share_link.resource_id == session_version_model.session_id
+        shared_to_version = (
+            share_link is not None
+            and share_link.meta_data is not None
+            and share_link.meta_data.get("versionId") == session_version_id
+        )
+        if not (shared_to_session or shared_to_version):
             raise UnAuthorizedError()
 
     minio_client = await get_minio_storage()
@@ -506,7 +513,8 @@ async def get_linsight_session_version_list(
     :return:
     """
 
-    linsight_session_version_models = await LinsightWorkbenchImpl.get_linsight_session_version_list(session_id)
+    with bypass_tenant_filter_if(share_link is not None):
+        linsight_session_version_models = await LinsightWorkbenchImpl.get_linsight_session_version_list(session_id)
 
     if linsight_session_version_models and login_user.user_id != linsight_session_version_models[0].user_id:
         # Access by sharing a link. Two share shapes are valid:
@@ -543,7 +551,10 @@ async def get_linsight_session_version_list(
     # rate through the shared /liked endpoint and re-highlight on reload (same as
     # the in-conversation task turn).
     version_dumps = [model.model_dump() for model in linsight_session_version_models]
-    feedback_map = await linsight_execute_utils.get_task_feedback_by_version(session_id)
+    # ChatMessage is tenant-aware too — without the same widening, a cross-tenant
+    # share recipient silently loses the like/dislike state.
+    with bypass_tenant_filter_if(share_link is not None):
+        feedback_map = await linsight_execute_utils.get_task_feedback_by_version(session_id)
     for dump in version_dumps:
         info = feedback_map.get(dump.get("id"))
         dump["message_id"] = info["message_id"] if info else None
@@ -566,12 +577,13 @@ async def get_execute_task_detail(
     :return:
     """
 
-    execute_task_models = await LinsightWorkbenchImpl.get_execute_task_detail(session_version_id)
+    with bypass_tenant_filter_if(share_link is not None):
+        execute_task_models = await LinsightWorkbenchImpl.get_execute_task_detail(session_version_id)
 
-    if not execute_task_models:
-        return resp_200([])
+        if not execute_task_models:
+            return resp_200([])
 
-    linsight_session_version_model = await LinsightSessionVersionDao.get_by_id(session_version_id)
+        linsight_session_version_model = await LinsightSessionVersionDao.get_by_id(session_version_id)
 
     if login_user.user_id != linsight_session_version_model.user_id:
         # Access by sharing a link. workbench_chat share: resource_id is this

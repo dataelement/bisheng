@@ -8,6 +8,7 @@ import { lazy, Suspense, type ReactNode } from 'react';
 import { createBrowserRouter, Navigate, Outlet, useParams } from 'react-router-dom';
 import ChatRoute from './ChatRoute';
 import LoginLayout from './Layouts/Login';
+import { RequireLogin } from './RequireLogin';
 import RouteErrorBoundary from './RouteErrorBoundary';
 // import ShareRoute from './ShareRoute';
 import MainLayout from '@/layouts/MainLayout';
@@ -242,7 +243,10 @@ export const router = createBrowserRouter([
       { path: 'chat/flow/auth/:flowId', element: suspended(<StandaloneChatPage mode="auth" flowType="workflow" />) },
       { path: 'chat/assistant/auth/:flowId', element: suspended(<StandaloneChatPage mode="auth" flowType="assistant" />) },
 
-      { path: 'share/:token/:vid?', element: suspended(<Share />) },
+      // Share links are viewable by any LOGGED-IN user (owner or not) — every
+      // endpoint behind them is login-gated, so an anonymous visitor must go
+      // through login first and is returned here afterwards.
+      { path: 'share/:token/:vid?', element: suspended(<RequireLogin><Share /></RequireLogin>) },
       { path: 'knowledge/file/:fileId', element: suspended(<FilePreviewPage />) },
       { path: 'channel/:channelId/article/:articleId', element: suspended(<ArticlePage />) },
     ],
