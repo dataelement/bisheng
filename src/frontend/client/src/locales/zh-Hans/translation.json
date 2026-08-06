@@ -1954,5 +1954,22 @@
       "renderFailed": "文件生成失败，请稍后重试"
     }
   },
-  "com_linsight_legacy_sop": "历史 SOP 文档（旧版会话）"
+  "com_linsight_legacy_sop": "历史 SOP 文档（旧版会话）",
+  "com_error_page": {
+    "title": "哎呀，系统出了点小状况",
+    "description": "别担心，您的数据是安全的。最快的求助方式：直接截图本页面，发给技术支持或研发同学。",
+    "copy_before": "也可以 ",
+    "copy_link": "点击复制错误信息",
+    "copy_after": "，或",
+    "copied": "已复制",
+    "refresh": "刷新重试",
+    "download": "下载错误日志",
+    "screenshot_hint": "截图时请包含此区域",
+    "trace_id": "追踪ID",
+    "error_code": "错误码",
+    "time": "时间",
+    "version": "版本",
+    "route": "页面",
+    "user": "用户"
+  }
 }

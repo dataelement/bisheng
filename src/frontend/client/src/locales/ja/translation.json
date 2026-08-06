@@ -1948,5 +1948,22 @@
       "renderFailed": "ファイル生成に失敗しました。再度お試しください"
     }
   },
-  "com_linsight_legacy_sop": "旧バージョンの SOP ドキュメント"
+  "com_linsight_legacy_sop": "旧バージョンの SOP ドキュメント",
+  "com_error_page": {
+    "title": "おっと、問題が発生しました",
+    "description": "ご安心ください。データは安全です。最も早い解決方法：この画面をスクリーンショットして、サポートまたは開発担当者にお送りください。",
+    "copy_before": "または ",
+    "copy_link": "エラー情報をコピー",
+    "copy_after": " するか、",
+    "copied": "コピーしました",
+    "refresh": "再読み込み",
+    "download": "エラーログをダウンロード",
+    "screenshot_hint": "スクリーンショットにはこの領域を含めてください",
+    "trace_id": "トレースID",
+    "error_code": "エラーコード",
+    "time": "日時",
+    "version": "バージョン",
+    "route": "ページ",
+    "user": "ユーザー"
+  }
 }

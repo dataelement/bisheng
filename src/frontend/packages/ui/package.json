@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "BiSheng shared UI component library — presentation-only components + design tokens. No state management, no HTTP, no i18n keys, no routing (contract, see README).",
+  "description": "BiSheng shared UI component library \u2014 presentation-only components + design tokens. No state management, no HTTP, no i18n keys, no routing (contract, see README).",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {
@@ -25,6 +25,7 @@
     "bisheng-icons": "catalog:",
     "class-variance-authority": "catalog:",
     "clsx": "catalog:",
+    "qrcode.react": "catalog:",
     "tailwind-merge": "catalog:"
   },
   "devDependencies": {

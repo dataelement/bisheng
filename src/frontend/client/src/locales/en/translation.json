@@ -2025,5 +2025,22 @@
       "renderFailed": "Failed to generate file, please try again"
     }
   },
-  "com_linsight_legacy_sop": "Legacy SOP document (pre-migration session)"
+  "com_linsight_legacy_sop": "Legacy SOP document (pre-migration session)",
+  "com_error_page": {
+    "title": "Oops, something went wrong",
+    "description": "Don't worry — your data is safe. The quickest way to get help: screenshot this page and send it to support or your engineering contact.",
+    "copy_before": "You can also ",
+    "copy_link": "copy the error details",
+    "copy_after": ", or",
+    "copied": "Copied",
+    "refresh": "Refresh and retry",
+    "download": "Download error log",
+    "screenshot_hint": "Please include this area in your screenshot",
+    "trace_id": "Trace ID",
+    "error_code": "Error code",
+    "time": "Time",
+    "version": "Version",
+    "route": "Page",
+    "user": "User"
+  }
 }
