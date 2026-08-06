@@ -2274,6 +2274,10 @@
   "com_approval_search_placeholder": "搜索申请人、场景或文件",
   "knowledge_qa_noVisibleContent": "未在你有权访问的内容中找到相关信息",
   "workstation": {
+    "toc": {
+      "label": "目录",
+      "open": "展开目录"
+    },
     "messageExport": {
       "entry": "导出",
       "exportAsWord": "导出为 Word",

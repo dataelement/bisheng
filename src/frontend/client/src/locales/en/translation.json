@@ -2345,6 +2345,10 @@
   "com_approval_search_placeholder": "Search applicant, scenario or file",
   "knowledge_qa_noVisibleContent": "No relevant content found in resources accessible to you.",
   "workstation": {
+    "toc": {
+      "label": "Contents",
+      "open": "Show contents"
+    },
     "messageExport": {
       "entry": "Export",
       "exportAsWord": "Export as Word",
