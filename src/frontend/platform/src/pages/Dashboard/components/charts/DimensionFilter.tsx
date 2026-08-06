@@ -3,7 +3,7 @@
 import { MultiSelect, Option } from "@/components/bs-ui/multiSelect.tsx"
 import { getFieldEnums } from "@/controllers/API/dashboard"
 import { useEditorDashboardStore } from "@/store/dashboardStore"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import {
   DashboardComponent,
@@ -34,6 +34,8 @@ export function DimensionFilter({ component, isDark }: DimensionFilterProps) {
   )
   const [options, setOptions] = useState<Record<string, Option[]>>({})
   const [loading, setLoading] = useState<Record<string, boolean>>({})
+  const listRequestVersions = useRef<Record<string, number>>({})
+  const pendingRequestCounts = useRef<Record<string, number>>({})
 
   const loadOptions = useCallback(async (
     fieldId: string,
@@ -42,6 +44,15 @@ export function DimensionFilter({ component, isDark }: DimensionFilterProps) {
     exactValues: string[] = []
   ) => {
     if (!component.dataset_code || !fieldId) return []
+    const isExactLookup = exactValues.length > 0
+    const requestVersion = isExactLookup
+      ? 0
+      : (listRequestVersions.current[fieldId] || 0) + 1
+    if (!isExactLookup) {
+      listRequestVersions.current[fieldId] = requestVersion
+    }
+    pendingRequestCounts.current[fieldId] =
+      (pendingRequestCounts.current[fieldId] || 0) + 1
     setLoading(current => ({ ...current, [fieldId]: true }))
     try {
       const response = await getFieldEnums({
@@ -57,15 +68,23 @@ export function DimensionFilter({ component, isDark }: DimensionFilterProps) {
         label: String(option?.label ?? option),
         value: String(option?.value ?? option),
       }))
-      setOptions(current => {
-        const merged = new Map(
-          [...(current[fieldId] || []), ...nextOptions].map(option => [option.value, option])
-        )
-        return { ...current, [fieldId]: Array.from(merged.values()) }
-      })
+      if (
+        !isExactLookup &&
+        listRequestVersions.current[fieldId] === requestVersion
+      ) {
+        setOptions(current => ({ ...current, [fieldId]: nextOptions }))
+      }
       return nextOptions
     } finally {
-      setLoading(current => ({ ...current, [fieldId]: false }))
+      const pendingCount = Math.max(
+        0,
+        (pendingRequestCounts.current[fieldId] || 1) - 1
+      )
+      pendingRequestCounts.current[fieldId] = pendingCount
+      setLoading(current => ({
+        ...current,
+        [fieldId]: pendingCount > 0,
+      }))
     }
   }, [component.dataset_code])
 
@@ -90,7 +109,7 @@ export function DimensionFilter({ component, isDark }: DimensionFilterProps) {
 
   return (
     <div
-      className={`no-drag flex size-full items-center gap-3 overflow-x-auto px-2 ${
+      className={`flex size-full items-center gap-3 overflow-x-auto px-2 ${
         isDark ? "text-slate-100" : "text-slate-900"
       }`}
     >
@@ -135,7 +154,7 @@ export function DimensionFilter({ component, isDark }: DimensionFilterProps) {
             placeholder={`全部${field.displayName}`}
             searchPlaceholder={`搜索${field.displayName}`}
             emptyMessage="暂无可选项"
-            triggerClassName="h-9 bg-background"
+            triggerClassName="no-drag h-9 bg-background"
             contentClassName="min-w-64"
           />
         </div>
