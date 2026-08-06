@@ -102,8 +102,20 @@ daily_chat:
 linsight:
   # 历史记录中工具消息的最大token，超过后需要总结下历史记录
   tool_buffer: 100000
-  # 单个任务最大执行步骤数，防止死循环
-  max_steps: 200
+  # 单个任务最大执行步骤数（LangGraph recursion_limit），防止死循环。
+  # ⚠️ 这里的“步骤”是 LangGraph super-step，不是模型轮次：一轮模型调用约消耗 4 个 super-step
+  #   （model → 工具循环熔断器 after_model → TodoList after_model → tools），
+  #   所以 500 ≈ 115 轮。它是跑飞时的保险丝，真正的业务上限请调 max_model_turns。
+  #   若本值低于 max_model_turns 所需，后端会自动抬高并打 warning 日志。
+  max_steps: 500
+  # 主图轮次预算：一次任务运行最多允许多少次模型调用，到顶前会提示模型收尾（软着陆）。
+  # ask_user 打断恢复后重新计数（中间件随 agent 重建）。
+  max_model_turns: 115
+  # 子代理（researcher）自己的轮次预算，独立计数（子图跑自己的 Pregel 循环）
+  max_model_turns_subagent: 30
+  # 距离预算耗尽还剩多少轮时开始提示模型收尾；最后 2 轮只保留写文件/导出工具，
+  # 归零时不再提供任何工具，模型只能输出文本，图正常结束
+  soft_landing_turns: 8
   # 灵思任务执行过程中模型调用重试次数
   retry_num: 3
   # 灵思任务执行过程中模型调用重试间隔时间（秒）
