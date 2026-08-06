@@ -142,4 +142,4 @@
 
 1. ★ 待用户确认：F049 spec（含其 §4 的三项 [待澄清]——WS 端点与免登录分享页的冲突、统一身份构造导致的权限放宽、无身份端点的归属基准）+ 仍未拍板的 D1 / D3 / D4 / D5 / D7。
 2. 确认后：`/sdd-review 049-openapi-auth-baseline spec` → 修订 → 写 design.md（Constitution Check）→ ★。
-3. **research/ 的时效性提醒**：11 份调研在 `main`（pre-F048）上完成，与本基线相差 242 个后端文件。已按 F048 重核并回写的维度：权限（§2.2）、v2 开放 API 与身份体系（已并入 F049 spec）。**其余维度在被引用前需重核**——尤其检索（`knowledge_file_visibility_service` 有 139 行改动）、模型面、审批。
+3. **research/ 的时效性提醒**：11 份调研在 `main`（pre-F048）上完成，与本基线相差 242 个后端文件。已按 F048 重核的三块结论收在 **[baseline-recheck.md](./baseline-recheck.md)**（44 端点按身份来源分类的改造基数、两层改造方案、WS 分享页冲突取证、F048 判定链与 fail-closed 现状、新增资源类型 12+3 处清单与 Catalog 范围表存量缺口）——**与 research/ 冲突时以它和 §2.2 为准**。其余维度在被引用前需重核，尤其检索（`knowledge_file_visibility_service` 有 139 行改动）、模型面、审批。
