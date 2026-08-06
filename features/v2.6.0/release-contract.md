@@ -24,6 +24,8 @@
 | PortalCourseMediaCleanup | F062-portal-course-management | 课程上传对象的 provisional、替换、删除清理任务及最终一致重试 |
 | KnowledgeFilePdfArtifact | F063-unified-pdf-artifact | 知识文件统一 PDF 派生产物的当前 generation、独立处理状态、对象引用、重试信息和删除清理；不拥有 KnowledgeFile 解析状态、预览或下载行为 |
 | DeveloperToken.file_sync_rule（扩展） | F066-token-configured-filelib-sync | 每个开发者 Token 最多一份完整的文件同步业务配置；只保存稳定分类/业务域编码、知识空间 ID、可空目录 ID、固定/动态模式及动态来源，不保存路径快照，不取得门户配置、部门、知识空间、目录或文件的所有权 |
+| UserPointAccount / UserPointLog / PointRule / PointCopy / PointRankSnapshot / PointSyncOutbox / PointFavoriteTierAward | F070-points-system | 积分账户、append-only 流水、规则/说明文案、排行快照、外部同步 outbox、收藏阶梯已授档位；站内信文案为代码常量（无模板表）；不拥有知识文件/审批/站内信本体写所有权 |
+| Department.org_level（扩展） | F070-points-system | 仅拥有部门节点组织层级标签（company/dept/office/squad）的写入与「指定唯一公司根 → 级联打标」行为；不拥有部门树结构、用户挂载、组织同步 |
 
 **规则**：
 - 非 Owner Feature 的 AC 中不得出现其他对象的"创建/修改/删除"行为，只能"读取"或"调用" Owner 的 Service
@@ -47,6 +49,10 @@
 | INV-8 | 动态业务域只读取当前租户首钢门户聚合配置中的 `domains[].department_ids`；Token 仅保存业务域编码引用，不复制部门与业务域映射，不建立第二配置事实源 | DeveloperToken.file_sync_rule, ShougangPortalAdminConfig | F066 |
 | INV-9 | 文件同步配置缺失、不完整、空间/目录引用失效、跨租户、目录不属于所选空间、绑定用户无目标节点上传权限、动态来源参数缺失、动态解析无唯一结果或业务域与目标空间未绑定时必须失败关闭；不得回退到根目录、请求中的其他 ID、调用人默认值、任意知识空间或旧接口固定规则 | DeveloperToken.file_sync_rule, Department, Knowledge, KnowledgeFile | F066 |
 | INV-10 | F069 的四个 Filelib 查询接口必须先通过 Developer Token 调用资格校验；可选 `external_id` 只在 Token 校验成功后决定业务用户、权限和全局数据作用域，缺失时回退 Token 绑定用户。显式值必须全局唯一匹配有效用户，不存在、禁用或重复均统一失败关闭；目标用户完整继承角色、ReBAC/RBAC 和全局超级管理员权限。该不变量仅适用于未启用租户功能的部署，启用多租户前必须重新评审，禁止直接沿用全局作用域。 | DeveloperToken, User, Knowledge | F069 |
+| INV-11 | 积分流水 `user_point_log` 为 append-only：禁止 UPDATE/DELETE；纠错仅追加冲正或调分流水；账户余额与流水在同一事务内更新，可用流水重算对账 | UserPointAccount, UserPointLog | F070 |
+| INV-12 | 自动记分必须带租户内唯一 `idempotency_key`；重试/重复事件不得双计；平台超级管理员账号不参与自动发放与激励榜 | UserPointLog, User | F070 |
+| INV-13 | `department.org_level` 全租户（或约定作用域）至多一个 `company` 节点；级联打标不得改写 `parent_id`/`path`/用户挂载；组织标签与知识空间 level 不得强绑 | Department.org_level, KnowledgeSpace | F070 |
+| INV-14 | 积分规则配置、全站调分与说明文案仅平台超级管理员可写；公共库管理员不得改规则；站内不做申诉流程；积分站内信文案为代码常量不可运营配置 | PointRule, PointCopy, UserPointLog | F070 |
 
 **规则**：
 - 新增不变量：先在此表追加，再写 AC
@@ -68,6 +74,7 @@
 | F064-portal-watermarked-pdf-download | F063 | 只读 F063 提供的当前有效 `KnowledgeFilePdfArtifact` 引用；不创建、更新或删除统一 PDF 产物，不取得其写所有权 |
 | F066-token-configured-filelib-sync | F044, F047, F060 | 扩展开发者 Token 配置，收口 F047 的 11 个固定规则接口，复用 F060 动态空间解析器、Knowledge 目录只读契约与 PermissionService；不复制门户业务域配置或授权事实 |
 | F069-filelib-external-user-context | F004, F044 | 复用统一 PermissionService 与 Developer Token 认证；不新增身份或授权事实，只为四个 Filelib 查询接口组合调用资格与可选业务用户上下文；仅允许在未启用租户功能的部署发布 |
+| F070-points-system | F002, F004, F009, F012, F025（发布审批结果只读）, 现有 knowledge/qa_expert/message/telemetry | 新建积分域；扩展 Department.org_level；挂钩只读/调用知识上传发布、收藏、采纳、日活与站内信，不取得其写所有权；外部协同办公同步不阻塞 MVP |
 
 ---
 
@@ -82,6 +89,7 @@
 | 198 | developer_token | F044 开发者 Token 管理与认证错误码；F066 在该模块追加文件同步规则 19813 与目标树游标 19814 |
 | 199 | filelib_sync | F047 文件同步既有错误码；F066 只在该模块内追加 Token 文件同步配置缺失等运行时错误码 |
 | 250 | portal_course | F062 门户课程管理、媒体校验与播放进度错误码 |
+| 182 | points | F070 积分账户、流水、规则、排行、组织打标与同步 outbox 错误码 |
 
 ---
 
@@ -100,3 +108,4 @@
 | 2026-07-22 | 登记 F066 的 `DeveloperToken.file_sync_rule` 扩展所有权、F044/F047/F060 依赖、199 错误码边界及权限不扩张、门户配置单一事实源和失败关闭不变量 | F066, F044, F047, F060 |
 | 2026-07-22 | 扩展 F066 固定目标到知识空间根目录或目录；明确选项、保存和运行时按 Token 绑定用户过滤/复核 `upload_file`，目录失效或无权不得回退根目录 | F066, Knowledge, Permission |
 | 2026-08-02 | 登记 F069 Filelib 外部用户上下文：新增 INV-10 与 F004/F044 依赖，明确 Token 资格优先、可选目标用户完整权限、全局唯一匹配失败关闭及无租户部署边界 | F069, F004, F044, User, Knowledge |
+| 2026-08-06 | 登记 F070 积分系统：领域对象、Department.org_level 扩展、INV-11~14、模块编码 182；外部同步不阻塞 MVP | F070, F002, Department, Knowledge, Message |
