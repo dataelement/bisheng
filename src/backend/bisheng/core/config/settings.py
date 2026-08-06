@@ -211,6 +211,11 @@ class CeleryConf(BaseModel):
                 "task": "bisheng.worker.permission.retry_failed_tuples.retry_failed_tuples",
                 "schedule": 30.0,  # Every 30 seconds
             }
+        if "cleanup_succeeded_failed_tuples" not in self.beat_schedule:
+            self.beat_schedule["cleanup_succeeded_failed_tuples"] = {
+                "task": "bisheng.worker.permission.retry_failed_tuples.cleanup_succeeded_failed_tuples",
+                "schedule": crontab.from_string("30 3 * * *"),  # 03:30 every day
+            }
         # v2.5.1 F012: 6h user-leaf-tenant catch-up reconcile.
         if "reconcile_user_tenant_assignments" not in self.beat_schedule:
             self.beat_schedule["reconcile_user_tenant_assignments"] = {

@@ -1,8 +1,14 @@
 import asyncio
 import importlib.util
 import sys
+from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
+
+from bisheng.common.services.config_service import settings
+from bisheng.core.config.settings import CeleryConf
+from bisheng.database.models.failed_tuple import FailedTupleDao
 
 
 def _load_retry_module():
@@ -15,7 +21,9 @@ def _load_retry_module():
     return module
 
 
-_retry_single = _load_retry_module()._retry_single
+_retry_module = _load_retry_module()
+_cleanup_succeeded_failed_tuples = _retry_module._cleanup_succeeded_failed_tuples
+_retry_single = _retry_module._retry_single
 
 
 class _FakeDao:
@@ -80,3 +88,22 @@ def test_retry_single_treats_missing_delete_as_success():
     assert _FakeDao.succeeded == [7]
     assert _FakeDao.retries == []
     assert _FakeDao.dead == []
+
+
+async def test_cleanup_deletes_only_succeeded_records_before_retention_cutoff(monkeypatch):
+    delete_old_succeeded = AsyncMock(return_value=4)
+    monkeypatch.setattr(FailedTupleDao, "adelete_old_succeeded", delete_old_succeeded)
+    monkeypatch.setattr(settings.openfga, "failed_tuple_succeeded_retention_days", 30)
+
+    deleted = await _cleanup_succeeded_failed_tuples(now=datetime(2026, 8, 6, 3, 30))
+
+    assert deleted == 4
+    delete_old_succeeded.assert_awaited_once_with(datetime(2026, 7, 7, 3, 30))
+
+
+def test_cleanup_is_scheduled_on_the_default_queue():
+    schedule = CeleryConf().beat_schedule["cleanup_succeeded_failed_tuples"]
+
+    assert schedule["task"] == ("bisheng.worker.permission.retry_failed_tuples.cleanup_succeeded_failed_tuples")
+    assert schedule["schedule"] is not None
+    assert "options" not in schedule

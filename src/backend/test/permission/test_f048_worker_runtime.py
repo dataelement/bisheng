@@ -190,6 +190,26 @@ def test_legacy_failed_tuple_retry_remains_tenant_agnostic() -> None:
         current_tenant_id.reset(token)
 
 
+def test_failed_tuple_cleanup_remains_tenant_agnostic() -> None:
+    task_name = "bisheng.worker.permission.retry_failed_tuples.cleanup_succeeded_failed_tuples"
+    token = current_tenant_id.set(None)
+    try:
+        headers = {}
+        inject_tenant_header(sender=task_name, headers=headers)
+        assert headers == {}
+
+        sender = SimpleNamespace(
+            name=task_name,
+            request=SimpleNamespace(headers={}),
+        )
+        restore_tenant_context(sender=sender)
+        assert get_current_tenant_id() == DEFAULT_TENANT_ID
+        reset_tenant_context(sender=sender)
+        assert get_current_tenant_id() is None
+    finally:
+        current_tenant_id.reset(token)
+
+
 @pytest.mark.parametrize("tenant_id", (None, 0, -1, "bad", True))
 def test_permission_prerun_rejects_missing_or_invalid_tenant(tenant_id) -> None:
     headers = {"f048_permission_task": True}

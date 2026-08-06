@@ -13,6 +13,7 @@ Retry policy:
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timedelta
 
 from bisheng.worker.main import bisheng_celery
 
@@ -26,6 +27,29 @@ LOCK_TTL = 60  # seconds — must be > typical execution time
 def retry_failed_tuples():
     """Retry pending failed tuple operations."""
     _retry_failed_tuples_sync()
+
+
+@bisheng_celery.task(acks_late=True)
+def cleanup_succeeded_failed_tuples():
+    """Delete succeeded compensation records after their retention period."""
+    from bisheng.worker._asyncio_utils import run_async_task
+
+    run_async_task(_cleanup_succeeded_failed_tuples)
+
+
+async def _cleanup_succeeded_failed_tuples(*, now: datetime | None = None) -> int:
+    from bisheng.common.services.config_service import settings
+    from bisheng.database.models.failed_tuple import FailedTupleDao
+
+    retention_days = settings.openfga.failed_tuple_succeeded_retention_days
+    cutoff = (now or datetime.now()) - timedelta(days=retention_days)
+    deleted = await FailedTupleDao.adelete_old_succeeded(cutoff)
+    logger.info(
+        "Cleaned up %d succeeded permission compensation records older than %d days",
+        deleted,
+        retention_days,
+    )
+    return deleted
 
 
 def _retry_failed_tuples_sync() -> None:
