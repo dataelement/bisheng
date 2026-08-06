@@ -52,7 +52,7 @@ async def _fan_out_all() -> None:
             continue
         try:
             reconcile_single_config.apply_async(
-                args=[c.id], queue='knowledge_celery',
+                args=[c.id], queue='celery',
             )
         except Exception as e:
             logger.exception(

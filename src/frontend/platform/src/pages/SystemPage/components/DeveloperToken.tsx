@@ -41,6 +41,7 @@ import {
 import DeveloperTokenGlobalSettings from "./DeveloperTokenGlobalSettings"
 import DeveloperTokenTable from "./DeveloperTokenTable"
 import useDeveloperTokenFileSyncOptions from "./useDeveloperTokenFileSyncOptions"
+import { resolveDepartmentUserTenantId } from "./developerTokenBinding"
 
 const PAGE_SIZE = 20
 
@@ -168,9 +169,13 @@ export default function DeveloperToken() {
   }
 
   const handleBindingChange = (value: DepartmentUserOption[]) => {
-    const selectedTenantId = Number(value[0]?.tenant_id ?? user?.tenant_id) || null
+    const selected = value[0]
+    const selectedTenantId = resolveDepartmentUserTenantId(
+      selected,
+      Number(user?.tenant_id ?? user?.leaf_tenant_id) || null,
+    )
     const bindingChanged = selectedTenantId !== form.tenant_id
-      || value[0]?.value !== form.user[0]?.value
+      || selected?.value !== form.user[0]?.value
     setForm({
       ...form,
       user: value,
@@ -185,8 +190,12 @@ export default function DeveloperToken() {
     notConfigured: t("system.developerToken.fileSync.summary.notConfigured"),
     businessDomain: t("system.developerToken.fileSync.summary.businessDomain"),
     targetSpace: t("system.developerToken.fileSync.summary.targetSpace"),
+    targetFolder: t("system.developerToken.fileSync.summary.targetFolder"),
     dynamicDepartment: t("system.developerToken.fileSync.summary.dynamicDepartment"),
     dynamicResponsiblePerson: t("system.developerToken.fileSync.summary.dynamicResponsiblePerson"),
+    folderNone: t("system.developerToken.fileSync.summary.folderNone"),
+    folderDynamicDepartmentName: t("system.developerToken.fileSync.summary.folderDynamicDepartmentName"),
+    folderDynamicCallerMainDepartmentName: t("system.developerToken.fileSync.summary.folderDynamicCallerMainDepartmentName"),
     root: t("system.developerToken.fileSync.targetTree.root"),
     stale: t("system.developerToken.fileSync.targetTree.stale"),
   }
@@ -298,9 +307,11 @@ export default function DeveloperToken() {
         toast({
           title: t("prompt"),
           variant: "error",
-          description: t("system.developerToken.fileSync.invalidError", {
-            field: t(`system.developerToken.fileSync.errorFields.${invalidFileSyncRule.field}`),
-          }),
+          description: invalidFileSyncRule.reason === "unbound"
+            ? t("system.developerToken.fileSync.domainSpaceUnboundError")
+            : t("system.developerToken.fileSync.invalidError", {
+              field: t(`system.developerToken.fileSync.errorFields.${invalidFileSyncRule.field}`),
+            }),
         })
         return
       }
@@ -492,6 +503,7 @@ export default function DeveloperToken() {
               error={fileSyncOptionsError}
               onSearchSpaces={handleSearchFileSyncSpaces}
               targetDisplay={form.file_sync_target_display}
+              boundUserId={boundUserId}
             />
           </div>
           <DialogFooter>

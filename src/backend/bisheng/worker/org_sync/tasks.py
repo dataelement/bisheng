@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 @bisheng_celery.task(acks_late=True, time_limit=1800, soft_time_limit=1500)
 def execute_org_sync(config_id: int, trigger_type: str, trigger_user: int = None):
-    """Execute org sync for a given config. Runs in knowledge_celery queue."""
+    """Execute org sync for a given config. Runs in the default queue."""
     run_async_task(lambda: _execute_org_sync_async(config_id, trigger_type, trigger_user))
 
 
@@ -70,7 +70,7 @@ async def _check_schedules_async():
                 )
                 execute_org_sync.apply_async(
                     args=[config.id, 'scheduled', None],
-                    queue='knowledge_celery',
+                    queue='celery',
                 )
         except Exception as e:
             logger.warning(

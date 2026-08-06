@@ -83,7 +83,8 @@ def _compute_ext_rank_case_when():
 def child_order_cursor_key_len(order_field: str | None) -> int:
     order_field = normalize_child_order_field(order_field)
     if order_field == "file_type":
-        return 4
+        # file_type + manual-order flag + weight + ext_rank + update_time + id
+        return 6
     if order_field == "file_name":
         return 3
     return 2
@@ -92,8 +93,14 @@ def child_order_cursor_key_len(order_field: str | None) -> int:
 def build_child_order_cursor_key(item: KnowledgeFile, order_field: str | None) -> list:
     order_field = normalize_child_order_field(order_field)
     if order_field == "file_type":
+        # Must mirror order_field_text()'s file_type branch column-for-column, including
+        # the two manual-order terms: NULL weights sort last (1 > 0), and NULL itself is
+        # never compared as a value because the flag term already separates the groups.
+        weight = item.sort_weight
         return [
             item.file_type,
+            1 if weight is None else 0,
+            weight if weight is not None else 0,
             _compute_ext_rank_python(item.file_name),
             item.update_time,
             item.id,
@@ -121,6 +128,31 @@ class SpaceFileDao(KnowledgeFileDao):
             KnowledgeFile.file_level_path == "",
             KnowledgeFile.file_level_path.is_(None),
         )
+
+    @classmethod
+    async def find_folder_by_name(
+        cls,
+        knowledge_id: int,
+        folder_name: str,
+        file_level_path: str,
+    ) -> KnowledgeFile | None:
+        if file_level_path:
+            path_filter = KnowledgeFile.file_level_path == file_level_path
+        else:
+            path_filter = cls._root_path_filter()
+        statement = (
+            select(KnowledgeFile)
+            .where(
+                KnowledgeFile.knowledge_id == knowledge_id,
+                KnowledgeFile.file_type == 0,
+                KnowledgeFile.file_name == folder_name,
+                path_filter,
+                col(KnowledgeFile.deleted_at).is_(None),
+            )
+            .limit(1)
+        )
+        async with get_async_db_session() as session:
+            return (await session.execute(statement)).scalar_one_or_none()
 
     @classmethod
     async def count_folder_by_name(
@@ -303,13 +335,21 @@ class SpaceFileDao(KnowledgeFileDao):
         order_sort = normalize_child_order_sort(order_sort)
         order_dir_asc = order_sort == "asc"
         if order_field == "file_type":
+            # The two manual-order terms mirror order_field_text(): a NULL-flag that
+            # sorts never-dragged rows last, then the weight itself (NULL coalesced to 0
+            # so it never compares as NULL — the flag term already separated the groups).
+            # Both always ascend, like the ORDER BY, regardless of order_sort.
             return (
                 KnowledgeFile.file_type,
+                case((KnowledgeFile.sort_weight.is_(None), 1), else_=0),
+                func.coalesce(KnowledgeFile.sort_weight, 0),
                 _compute_ext_rank_case_when(),
                 KnowledgeFile.update_time,
                 KnowledgeFile.id,
             ), (
                 not order_dir_asc,
+                False,
+                False,
                 not order_dir_asc,
                 True,
                 True,
@@ -362,8 +402,16 @@ class SpaceFileDao(KnowledgeFileDao):
             when_clauses = "\n                ".join(
                 f"WHEN LOWER(file_name) LIKE '%.{ext}' THEN {rank}" for ext, rank in ext_priorities
             )
+            # Admin-dragged folder order applies only in this default mode; picking a
+            # column header switches to the branches below, where sort_weight is absent
+            # and the manual order intentionally stops applying. Never-dragged rows have
+            # a NULL weight and sort behind the dragged ones (CASE keeps NULLS-LAST
+            # portable across MySQL and DM8), so untouched directories keep their
+            # existing order.
             order_text += f"""
             file_type {order_sort},
+            CASE WHEN sort_weight IS NULL THEN 1 ELSE 0 END,
+            sort_weight ASC,
             CASE
                 {when_clauses}
                 ELSE 999

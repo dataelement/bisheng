@@ -1,20 +1,43 @@
 import copy
 from datetime import datetime, timedelta
-from typing import List, Dict, Any, Union, Literal
+from typing import Any, Dict, List, Literal, Union
 
 from loguru import logger
 from pydantic import BaseModel, Field
 
-from bisheng.common.errcode.telemetry import QueryDatasetNotFoundError, QueryMetricNotFoundError, \
-    QueryAggregationNotFoundError, QueryDimensionNotFoundError, QueryOperatorNotFoundError
+from bisheng.common.errcode.telemetry import (
+    QueryAggregationNotFoundError,
+    QueryDatasetNotFoundError,
+    QueryDimensionNotFoundError,
+    QueryMetricNotFoundError,
+    QueryOperatorNotFoundError,
+)
 from bisheng.core.database import get_async_db_session
-from .search_engine_service import SearchParameters, SearchEngineService
-from ..models.dashboard_dataset import SchemaConfig, MetricConfig, DimensionConfig, FormulaEnum
+
+from ..models.dashboard_dataset import DimensionConfig, FormulaEnum, MetricConfig, SchemaConfig
 from ..repositories.implementations.dataset_repository_impl import DashboardDatasetRepositoryImpl
-from ..schemas.component import ComponentDataConfig, TimeFilter, DataQueryResult, AggregationType, \
-    DimensionField, DimensionQueryFilter, LogicType, OperatorType
-from ..schemas.query_builder import AggregationExpression, AggsTypeEnum, FilterExpression, AtomFilter, TermOp, RangeOp, \
-    RangeValue, MatchPhraseOp, TermsOp
+from ..schemas.component import (
+    AggregationType,
+    ComponentDataConfig,
+    DataQueryResult,
+    DimensionField,
+    DimensionQueryFilter,
+    LogicType,
+    OperatorType,
+    TimeFilter,
+)
+from ..schemas.query_builder import (
+    AggregationExpression,
+    AggsTypeEnum,
+    AtomFilter,
+    FilterExpression,
+    MatchPhraseOp,
+    RangeOp,
+    RangeValue,
+    TermOp,
+    TermsOp,
+)
+from .search_engine_service import SearchEngineService, SearchParameters
 
 TIMESTAMP_FIELD = "timestamp"
 REALTIME_TEMPORAL_DATASETS = {
@@ -30,10 +53,6 @@ class DataQueryService(BaseModel):
     dimension_filters: List[DimensionQueryFilter] = Field(
         default_factory=list,
         description="runtime dimension filters from linked filter components",
-    )
-    scope_filters: List[DimensionQueryFilter] = Field(
-        default_factory=list,
-        description="server-enforced tenant and administrative scope filters",
     )
 
     def _expand_dimension_filter_values(
@@ -525,19 +544,6 @@ class DataQueryService(BaseModel):
         if runtime_filters:
             filter_expressions.append(
                 FilterExpression(bool_operator="must", filters=runtime_filters)
-            )
-
-        server_scope_filters = [
-            TermsOp(field=scope_filter.field_id, value=scope_filter.values)
-            for scope_filter in self.scope_filters
-            if scope_filter.values
-        ]
-        if server_scope_filters:
-            filter_expressions.append(
-                FilterExpression(
-                    bool_operator="must",
-                    filters=server_scope_filters,
-                )
             )
 
         time_range = []

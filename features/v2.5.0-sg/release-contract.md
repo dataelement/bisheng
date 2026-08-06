@@ -77,6 +77,7 @@
 | INV-SG-23 | 新的知识文件链接/邀请码分享必须停止创建；上线前已创建的链接在原失效、密码、邀请码、下载和撤销规则下继续访问，并动态解析当前业务文档入口 | ShareLink, KnowledgeDocument, KnowledgeFile | F059 |
 | INV-SG-24 | canonical 内容变化与 `KnowledgeDocument.content_generation`、入口变化与对应 `KnowledgeFile` 的期望内容/入口代次必须在同一关系事务中提交；Worker 按入口期望/已应用双代次和 lease/CAS 幂等处理并恢复租户上下文，Celery 消息仅加速，定时任务必须补偿未完成或失败状态且不得伪报同步完成 | KnowledgeDocument, KnowledgeFile | F059 |
 | INV-SG-25 | F059 不扫描、推断、合并或回填上线前旧发布副本；新不变量只约束上线后由 F059 创建的逻辑入口关系 | KnowledgeDocument, KnowledgeFile | F059 |
+| INV-SG-26 | `knowledge_celery` 只允许标题提取、首次文件解析和文件解析重试三个白名单任务；PDF Artifact 继续使用 `knowledge_pdf_celery`，工作流/审批继续使用 `workflow_celery`，其余后台任务进入默认 `celery` | Celery task routing | F060 |
 
 INV-SG-1 的“不继承”只约束推荐业务域特征，不修改基线 INV-12 中部门管理员的权限继承语义。
 
@@ -102,6 +103,7 @@ INV-SG-1 的“不继承”只约束推荐业务域特征，不修改基线 INV-
 | F059-knowledge-publish-share-unification | 既有 knowledge / version / tag / search / QA / stats 模块 | 依赖业务文档版本链、知识空间目录、MinIO、ES/Milvus、水印下载和统计能力 |
 | F059-knowledge-publish-share-unification | F004-rebac-core, F008-resource-rebac-adaptation | 依赖统一入口权限检查、`share_file` 和 OpenFGA 失败补偿 |
 | F059-knowledge-publish-share-unification | 既有 approval / share_link 模块 | 复用发布审批，新增固定两节点分享审批，并兼容已有知识文件分享链接 |
+| F060-knowledge-parse-queue-isolation | 既有 Celery Worker 与 knowledge 文件解析任务 | 只调整任务路由所有权，不修改任务协议、解析实现或存量消息 |
 
 ```text
 F001 ──┐
@@ -140,6 +142,7 @@ approval/share_link ────────────────┘
 | 2026-07-16 | 对齐远端业务域部门绑定实现，删除独立绑定领域对象和表，改用 `domains[].department_ids` 唯一配置源 | F056 |
 | 2026-07-19 | 登记 F057 对既有知识、权限和推荐投影的复用边界，并增加公共数据保护、判重与安全执行不变量 | F057 |
 | 2026-07-27 | 登记 F059 对 `KnowledgeFile` 逻辑入口及 `KnowledgeDocument` 状态驱动投影补偿的扩展边界；不新增领域表，并增加单实体发布、同级分享、权限、检索去重、容量和旧链接兼容不变量 | F059 |
+| 2026-08-05 | 登记 F060 的 Celery 队列所有权：`knowledge_celery` 仅承载三个文件解析白名单任务 | F060 |
 
 ---
 
@@ -157,8 +160,8 @@ approval/share_link ────────────────┘
 
 ### F058 不变式
 
-- **INV-SG-16**：统计投影和字段选项不得成为授权事实源；所有结果必须在后端按当前租户和当前用户权限重新裁剪。
-- **INV-SG-17**：文件总数只包含当前成功实体主版本文件；文件夹、失败、处理中、个人知识库和历史版本不得计入。
+- **INV-SG-16**：统计投影和字段选项不得成为资源授权事实源；看板资源访问继续由后端校验，统计数据范围由看板配置的租户、部门、知识空间等维度筛选决定，查询服务不得按当前用户隐式追加数据集范围条件。
+- **INV-SG-17**：文件总数只包含公共库、部门库、团队库、科室库和普通个人库中的当前成功实体主版本文件；文件夹、失败、处理中、“我的收藏”和历史版本不得计入。
 - **INV-SG-18**：同一成功用户问题只生成一个问答事实；失败、重试和重新生成不得重复计数。
 - **INV-SG-19**：参与人数按 Asia/Shanghai 自然日和 user_id 去重；Token 刷新不得写入登录事实。
 - **INV-SG-20**：维度筛选只影响显式绑定的图表；旧查询组件和旧图表配置必须保持兼容。

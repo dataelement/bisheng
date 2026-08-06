@@ -73,9 +73,40 @@ def test_realtime_dashboard_seed_contains_three_target_datasets():
     assert knowledge_metrics["total_file_count"]["sum_type"] == "value_count"
     assert knowledge_metrics["new_file_count"]["aggregations"][0]["type"] == "value_count"
     assert knowledge_metrics["preview_count"]["filter"]["filters"] == [
-        {"operator": "term", "field": "record_type", "value": "preview_daily"}
+        {"operator": "term", "field": "record_type", "value": "preview_daily"},
+        {
+            "operator": "terms",
+            "field": "space_level",
+            "value": ["public", "department", "team", "team_ks", "personal"],
+        },
     ]
+    for metric_name in ("total_file_count", "new_file_count", "contributor_count"):
+        level_filter = next(
+            item
+            for item in knowledge_metrics[metric_name]["filter"]["filters"]
+            if item["field"] == "space_level"
+        )
+        assert level_filter["value"] == [
+            "public",
+            "department",
+            "team",
+            "team_ks",
+            "personal",
+        ]
     assert knowledge_metrics["preview_count"]["aggregations"][0]["type"] == "sum"
+    assert knowledge_metrics["download_count"]["name"] == "下载次数"
+    assert knowledge_metrics["download_count"]["filter"]["filters"] == [
+        {"operator": "term", "field": "record_type", "value": "download_daily"},
+        {
+            "operator": "terms",
+            "field": "space_level",
+            "value": ["public", "department", "team", "team_ks", "personal"],
+        },
+    ]
+    download_aggregation = knowledge_metrics["download_count"]["aggregations"][0]
+    assert download_aggregation["name"] == "download_count"
+    assert download_aggregation["type"] == "sum"
+    assert download_aggregation["field"] == "download_count"
     knowledge_dimensions = {
         dimension["field"]: dimension["name"]
         for dimension in knowledge_dataset.schema_config["dimensions"]
@@ -303,9 +334,6 @@ async def test_runtime_dimension_filters_are_combined_with_and():
             DimensionQueryFilter(fieldId="space_level", values=["public", "team"]),
             DimensionQueryFilter(fieldId="business_domain_code", values=["steel"]),
         ],
-        scope_filters=[
-            DimensionQueryFilter(fieldId="tenant_id", values=[2]),
-        ],
     )
     filters, time_range = await service.convert_filters(
         {
@@ -329,10 +357,66 @@ async def test_runtime_dimension_filters_are_combined_with_and():
         "business_domain_code",
     ]
     assert dumped["filters"][0]["value"] == ["public", "team", "team_ks"]
-    scope = filters[1].model_dump()
-    assert scope["bool_operator"] == "must"
-    assert scope["filters"][0]["field"] == "tenant_id"
-    assert scope["filters"][0]["value"] == [2]
+
+
+@pytest.mark.asyncio
+async def test_realtime_component_query_does_not_pass_server_scope(monkeypatch):
+    from bisheng.telemetry_search.domain.models.dashboard import (
+        Dashboard,
+        DashboardComponent,
+        DashboardStatus,
+        DashboardType,
+    )
+    from bisheng.telemetry_search.domain.services import dashboard as module
+
+    dashboard = Dashboard(
+        id=12,
+        title="实时统计",
+        status=DashboardStatus.PUBLISHED.value,
+        dashboard_type=DashboardType.PRESET_OSS.value,
+        user_id=7,
+    )
+    component = DashboardComponent(
+        id="metric-1",
+        dashboard_id=12,
+        type="metric",
+        dataset_code="mid_realtime_qa_question_fact",
+    )
+    captured_kwargs = {}
+
+    class FakeDataQueryService:
+        def __init__(self, **kwargs):
+            captured_kwargs.update(kwargs)
+
+        async def query_telemetry_data(self):
+            return "query-result"
+
+    monkeypatch.setattr(
+        module.DashboardDao,
+        "get_one",
+        AsyncMock(return_value=dashboard),
+    )
+    monkeypatch.setattr(
+        module.DashboardDao,
+        "get_one_component",
+        AsyncMock(return_value=component),
+    )
+    monkeypatch.setattr(module, "DataQueryService", FakeDataQueryService)
+    service = module.DashboardService.model_construct(
+        login_user=SimpleNamespace(
+            is_admin=lambda: True,
+            async_access_check=AsyncMock(return_value=True),
+        )
+    )
+
+    result = await service.query_component_data(
+        dashboard_id=12,
+        component_id="metric-1",
+    )
+
+    assert result == "query-result"
+    assert "scope_filters" not in captured_kwargs
+    assert captured_kwargs["dimension_filters"] == []
 
 
 def test_file_space_level_options_group_section_libraries_under_team():
@@ -344,7 +428,173 @@ def test_file_space_level_options_group_section_libraries_under_team():
         "public": "公共库",
         "department": "部门库",
         "team": "团队库（含科室库）",
+        "personal": "个人库",
     }
+
+
+@pytest.mark.asyncio
+async def test_date_field_enums_keep_raw_value_and_format_display_label(
+    monkeypatch,
+):
+    from bisheng.telemetry_search.domain.services import dashboard as module
+
+    timestamp_ms = 1785134769000
+    dataset = SimpleNamespace(
+        es_index_name="mid_knowledge_space_content_stat",
+        schema_config={
+            "dimensions": [
+                {
+                    "field": "timestamp",
+                    "field_type": "date",
+                }
+            ]
+        },
+    )
+    repository = SimpleNamespace(find_one=AsyncMock(return_value=dataset))
+    es_client = SimpleNamespace(
+        search=AsyncMock(
+            return_value={
+                "aggregations": {
+                    "total_count": {"value": 1},
+                    "enum_values": {
+                        "buckets": [{"key": timestamp_ms}],
+                    },
+                }
+            }
+        )
+    )
+
+    class FakeDbSession:
+        async def __aenter__(self):
+            return SimpleNamespace()
+
+        async def __aexit__(self, _exc_type, _exc, _traceback):
+            return False
+
+    monkeypatch.setattr(module, "get_async_db_session", FakeDbSession)
+    monkeypatch.setattr(
+        module,
+        "DashboardDatasetRepositoryImpl",
+        lambda _session: repository,
+    )
+    monkeypatch.setattr(
+        module,
+        "get_es_connection",
+        AsyncMock(return_value=es_client),
+    )
+    service = module.DashboardService.model_construct()
+
+    result = await service.get_dataset_field_enums(
+        dataset_code="mid_knowledge_space_content_stat",
+        field="timestamp",
+    )
+
+    assert result["options"] == [
+        {
+            "value": timestamp_ms,
+            "label": datetime.fromtimestamp(timestamp_ms / 1000).strftime(
+                "%Y-%m-%d %H:%M:%S"
+            ),
+        }
+    ]
+
+
+@pytest.mark.parametrize(
+    ("field", "values", "expected_labels"),
+    [
+        (
+            "department_source",
+            ["event_time", "current_primary_backfill"],
+            ["提问时所属主部门", "当前主部门（历史回填）"],
+        ),
+        (
+            "scene",
+            [
+                "expert_question",
+                "smart_qa",
+                "document_qa",
+                "my_knowledge_document_qa",
+            ],
+            [
+                "专家问答",
+                "智能问答",
+                "知识门户·文档问答",
+                "我的知识·文档问答",
+            ],
+        ),
+        (
+            "source_app",
+            [
+                "bisheng_my_knowledge",
+                "expert_qa",
+                "shougang_portal",
+                "unknown_app",
+            ],
+            ["毕昇·我的知识", "专家问答", "首钢知识门户", "unknown_app"],
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_realtime_qa_field_enums_keep_codes_and_use_readable_labels(
+    monkeypatch,
+    field,
+    values,
+    expected_labels,
+):
+    from bisheng.telemetry_search.domain.services import dashboard as module
+
+    dataset = SimpleNamespace(
+        es_index_name="mid_realtime_qa_question_fact",
+        schema_config={
+            "dimensions": [
+                {"field": field, "field_type": "string"},
+            ]
+        },
+    )
+    repository = SimpleNamespace(find_one=AsyncMock(return_value=dataset))
+    es_client = SimpleNamespace(
+        search=AsyncMock(
+            return_value={
+                "aggregations": {
+                    "total_count": {"value": len(values)},
+                    "enum_values": {
+                        "buckets": [{"key": value} for value in values],
+                    },
+                }
+            }
+        )
+    )
+
+    class FakeDbSession:
+        async def __aenter__(self):
+            return SimpleNamespace()
+
+        async def __aexit__(self, _exc_type, _exc, _traceback):
+            return False
+
+    monkeypatch.setattr(module, "get_async_db_session", FakeDbSession)
+    monkeypatch.setattr(
+        module,
+        "DashboardDatasetRepositoryImpl",
+        lambda _session: repository,
+    )
+    monkeypatch.setattr(
+        module,
+        "get_es_connection",
+        AsyncMock(return_value=es_client),
+    )
+    service = module.DashboardService.model_construct()
+
+    result = await service.get_dataset_field_enums(
+        dataset_code="mid_realtime_qa_question_fact",
+        field=field,
+    )
+
+    assert result["enums"] == values
+    assert result["options"] == [
+        {"value": value, "label": label}
+        for value, label in zip(values, expected_labels, strict=True)
+    ]
 
 
 @pytest.mark.asyncio
@@ -374,96 +624,6 @@ async def test_realtime_temporal_datasets_default_to_today_and_include_today():
         today - timedelta(days=6)
     )
     assert datetime.fromtimestamp(seven_day_range[1] / 1000).date() == today
-
-
-@pytest.mark.asyncio
-async def test_knowledge_space_admin_scope_has_no_tenant_filter(monkeypatch):
-    from bisheng.telemetry_search.domain.services import dashboard as module
-
-    monkeypatch.setattr(module, "get_current_tenant_id", lambda: 7)
-    service = module.DashboardService.model_construct(
-        login_user=SimpleNamespace(is_admin=lambda: True)
-    )
-
-    filters = await service._get_realtime_scope_filters(
-        "mid_knowledge_space_content_stat"
-    )
-
-    assert filters == []
-
-
-@pytest.mark.asyncio
-async def test_department_admin_file_scope_uses_manageable_spaces(monkeypatch):
-    from bisheng.common.models.space_channel_member import SpaceChannelMemberDao
-    from bisheng.database.models.department import DepartmentDao
-    from bisheng.permission.domain.services.permission_service import (
-        PermissionService,
-    )
-    from bisheng.telemetry_search.domain.services import dashboard as module
-
-    monkeypatch.setattr(module, "get_current_tenant_id", lambda: 7)
-    monkeypatch.setattr(
-        DepartmentDao,
-        "aget_user_admin_departments",
-        AsyncMock(return_value=[SimpleNamespace(id=9, path="1/9")]),
-    )
-    monkeypatch.setattr(
-        PermissionService,
-        "list_accessible_ids",
-        AsyncMock(return_value=["12", "invalid"]),
-    )
-    monkeypatch.setattr(
-        SpaceChannelMemberDao,
-        "async_get_user_managed_members",
-        AsyncMock(return_value=[SimpleNamespace(business_id="13")]),
-    )
-    service = module.DashboardService.model_construct(
-        login_user=SimpleNamespace(
-            user_id=22,
-            is_admin=lambda: False,
-        )
-    )
-
-    filters = await service._get_realtime_scope_filters(
-        "mid_knowledge_space_content_stat"
-    )
-
-    assert [item.model_dump(by_alias=True) for item in filters] == [
-        {"fieldId": "space_id", "values": [12, 13]},
-    ]
-
-
-@pytest.mark.asyncio
-async def test_department_admin_qa_scope_includes_department_subtree(monkeypatch):
-    from bisheng.database.models.department import DepartmentDao
-    from bisheng.telemetry_search.domain.services import dashboard as module
-
-    monkeypatch.setattr(module, "get_current_tenant_id", lambda: 7)
-    monkeypatch.setattr(
-        DepartmentDao,
-        "aget_user_admin_departments",
-        AsyncMock(return_value=[SimpleNamespace(id=9, path="1/9")]),
-    )
-    monkeypatch.setattr(
-        DepartmentDao,
-        "aget_subtree_ids",
-        AsyncMock(return_value=[9, 10, 11]),
-    )
-    service = module.DashboardService.model_construct(
-        login_user=SimpleNamespace(
-            user_id=22,
-            is_admin=lambda: False,
-        )
-    )
-
-    filters = await service._get_realtime_scope_filters(
-        "mid_realtime_qa_question_fact"
-    )
-
-    assert [item.model_dump(by_alias=True) for item in filters] == [
-        {"fieldId": "tenant_id", "values": [7]},
-        {"fieldId": "primary_department_id", "values": [9, 10, 11]},
-    ]
 
 
 @pytest.mark.asyncio

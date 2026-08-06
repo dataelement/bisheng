@@ -1580,6 +1580,7 @@
     "search_space_placeholder": "ナレッジスペース名または説明を入力して検索",
     "share": "共有",
     "share_link_copied": "共有リンクがクリップボードにコピーされました",
+    "folder_sort_failed": "並び替えに失敗しました",
     "sort_by_name_label": "名前で並べ替え",
     "sort_by_type_label": "種類で並べ替え",
     "sort_by_update_time_label": "更新時間で並べ替え",

@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List, Any, Sequence, Dict, ClassVar
+from typing import Any, ClassVar, Dict, List, Sequence
 
 from fastapi import Request
 from pydantic import BaseModel, ConfigDict
@@ -7,24 +7,20 @@ from sqlalchemy import Row, RowMapping
 
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.common.dependencies.user_deps import UserPayload
-from bisheng.common.errcode.http_error import UnAuthorizedError, NotFoundError
+from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
 from bisheng.common.errcode.telemetry import DashboardMaxError, DashBoardShareAuthError
 from bisheng.core.database import get_async_db_session
-from bisheng.core.context.tenant import (
-    DEFAULT_TENANT_ID,
-    get_current_tenant_id,
-)
 from bisheng.core.search.elasticsearch.manager import get_es_connection
-from bisheng.database.models.group_resource import GroupResourceDao, GroupResource, ResourceTypeEnum
+from bisheng.database.models.group_resource import GroupResource, GroupResourceDao, ResourceTypeEnum
 from bisheng.database.models.role_access import AccessType, WebMenuResource
 from bisheng.user.domain.services.user import UserService
 from bisheng.utils import generate_uuid, get_request_ip
-from ..models.dashboard import DashboardType, DashboardStatus, Dashboard, DashboardDefault, DashboardComponent
+
+from ..models.dashboard import Dashboard, DashboardComponent, DashboardDefault, DashboardStatus, DashboardType
 from ..models.dashboard_dao import DashboardDao
 from ..repositories.implementations.dataset_repository_impl import DashboardDatasetRepositoryImpl
-from ..schemas.dashboard import DashboardRead, DashboardCreate
-from ..schemas.component import DimensionQueryFilter
-from ..services.component import TimeFilter, ComponentDataConfig, DataQueryService
+from ..schemas.dashboard import DashboardCreate, DashboardRead
+from ..services.component import ComponentDataConfig, DataQueryService, TimeFilter
 from ..utils import is_commercial
 
 
@@ -34,7 +30,7 @@ class DashboardService(BaseModel):
     request: Request = None
     login_user: UserPayload = None
 
-    REALTIME_SCOPED_DATASETS: ClassVar[set[str]] = {
+    REALTIME_DATASETS: ClassVar[set[str]] = {
         "mid_knowledge_space_content_stat",
         "mid_realtime_qa_question_fact",
         "mid_user_daily_participation",
@@ -43,7 +39,114 @@ class DashboardService(BaseModel):
         "public": "公共库",
         "department": "部门库",
         "team": "团队库（含科室库）",
+        "personal": "个人库",
     }
+    APPLICATION_TYPE_LABELS: ClassVar[dict[str, str]] = {
+        "workflow": "工作流",
+        "assistant": "助手",
+        "linsight": "Linsight",
+        "daily_chat": "日常对话",
+        "knowledge_base": "知识库",
+        "knowledge_space": "知识空间",
+        "rag_traceability": "RAG溯源",
+        "evaluation": "模型评测",
+        "model_test": "模型连通性测试",
+        "asr": "语音识别",
+        "tts": "语音合成",
+        "unknown": "未知",
+    }
+    STATUS_LABELS: ClassVar[dict[str, str]] = {
+        "success": "成功",
+        "failed": "失败",
+        "parse_failed": "解析失败",
+    }
+    DASHBOARD_ENUM_LABELS: ClassVar[
+        dict[str, dict[str, dict[str, str]]]
+    ] = {
+        "mid_app_increment": {
+            "app_type": APPLICATION_TYPE_LABELS,
+        },
+        "mid_sessions_increment": {
+            "source": {
+                "platform": "平台端",
+                "api": "API调用",
+            },
+            "app_id": APPLICATION_TYPE_LABELS,
+        },
+        "mid_session_run_dtl": {
+            "app_id": APPLICATION_TYPE_LABELS,
+        },
+        "mid_tool_call_dtl": {
+            "tool_type": {
+                "0": "API工具",
+                "1": "内置工具",
+                "2": "MCP工具",
+            },
+            "app_type": APPLICATION_TYPE_LABELS,
+            "app_id": APPLICATION_TYPE_LABELS,
+        },
+        "mid_doc_parse_dtl": {
+            "parse_type": {
+                "local": "本地解析",
+                "uns": "UNS解析",
+                "etl4lm": "ETL4LM解析",
+                "un_etl4lm": "非ETL4LM解析",
+                "mineru": "MinerU解析",
+                "paddle_ocr": "PaddleOCR解析",
+            },
+            "status": STATUS_LABELS,
+            "app_type": APPLICATION_TYPE_LABELS,
+        },
+        "mid_model_call_dtl": {
+            "model_type": {
+                "llm": "大语言模型",
+                "embedding": "嵌入模型",
+                "rerank": "重排模型",
+                "asr": "语音识别",
+                "tts": "语音合成",
+            },
+            "app_id": APPLICATION_TYPE_LABELS,
+        },
+        "mid_realtime_qa_question_fact": {
+            "department_source": {
+                "event_time": "提问时所属主部门",
+                "current_primary_backfill": "当前主部门（历史回填）",
+            },
+            "scene": {
+                "expert_question": "专家问答",
+                "smart_qa": "智能问答",
+                "document_qa": "知识门户·文档问答",
+                "my_knowledge_document_qa": "我的知识·文档问答",
+            },
+            "source_app": {
+                "bisheng_my_knowledge": "毕昇·我的知识",
+                "expert_qa": "专家问答",
+                "shougang_portal": "首钢知识门户",
+            },
+        },
+        "mid_user_daily_participation": {
+            "department_source": {
+                "event_time": "登录时所属主部门",
+                "current_roster": "当前在职名册",
+                "current_roster_backfill": "当前名册（历史回填）",
+                "current_primary_backfill": "当前主部门（历史登录回填）",
+            },
+        },
+    }
+
+    @staticmethod
+    def _format_date_enum_label(value: Any) -> Any:
+        if not isinstance(value, (int, float)) or isinstance(value, bool):
+            return value
+        return datetime.fromtimestamp(value / 1000).strftime("%Y-%m-%d %H:%M:%S")
+
+    @classmethod
+    def _get_enum_labels(
+        cls,
+        dataset_code: str,
+        field: str,
+    ) -> dict[str, str]:
+        return cls.DASHBOARD_ENUM_LABELS.get(dataset_code, {}).get(field, {})
 
     @classmethod
     def _uses_realtime_dataset(
@@ -51,7 +154,7 @@ class DashboardService(BaseModel):
         components: Sequence[DashboardComponent],
     ) -> bool:
         return any(
-            component.dataset_code in cls.REALTIME_SCOPED_DATASETS
+            component.dataset_code in cls.REALTIME_DATASETS
             for component in components
         )
 
@@ -78,81 +181,6 @@ class DashboardService(BaseModel):
             [*existing_components, *incoming_components]
         ):
             raise UnAuthorizedError()
-
-    async def _get_realtime_scope_filters(
-        self,
-        dataset_code: str,
-    ) -> List[DimensionQueryFilter]:
-        if dataset_code not in self.REALTIME_SCOPED_DATASETS:
-            return []
-        filters = []
-        if dataset_code != "mid_knowledge_space_content_stat":
-            filters.append(
-                DimensionQueryFilter(
-                    fieldId="tenant_id",
-                    values=[get_current_tenant_id() or DEFAULT_TENANT_ID],
-                )
-            )
-        if self.login_user.is_admin():
-            return filters
-
-        from bisheng.database.models.department import DepartmentDao
-
-        admin_departments = await DepartmentDao.aget_user_admin_departments(
-            self.login_user.user_id
-        )
-        if not admin_departments:
-            raise UnAuthorizedError()
-
-        if dataset_code == "mid_knowledge_space_content_stat":
-            from bisheng.common.models.space_channel_member import SpaceChannelMemberDao
-            from bisheng.permission.domain.services.permission_service import PermissionService
-
-            accessible_ids = await PermissionService.list_accessible_ids(
-                user_id=self.login_user.user_id,
-                relation="can_manage",
-                object_type="knowledge_space",
-                login_user=self.login_user,
-            )
-            managed_members = await SpaceChannelMemberDao.async_get_user_managed_members(
-                self.login_user.user_id
-            )
-            space_ids = {
-                int(member.business_id)
-                for member in managed_members
-                if str(member.business_id).isdigit()
-            }
-            if accessible_ids is not None:
-                space_ids.update(
-                    int(space_id)
-                    for space_id in accessible_ids
-                    if str(space_id).isdigit()
-                )
-            filters.append(
-                DimensionQueryFilter(
-                    fieldId="space_id",
-                    values=sorted(space_ids) or ["__deny_all__"],
-                )
-            )
-            return filters
-
-        department_ids = set()
-        for department in admin_departments:
-            department_ids.add(int(department.id))
-            if department.path:
-                department_ids.update(
-                    int(department_id)
-                    for department_id in await DepartmentDao.aget_subtree_ids(
-                        department.path
-                    )
-                )
-        filters.append(
-            DimensionQueryFilter(
-                fieldId="primary_department_id",
-                values=sorted(department_ids) or ["__deny_all__"],
-            )
-        )
-        return filters
 
     @classmethod
     async def get_simple_dashboards(cls, keyword: str = None, filter_ids: List[int] = None) -> List[Dashboard]:
@@ -531,19 +559,17 @@ class DashboardService(BaseModel):
         if component is None:
             raise NotFoundError()
         if (
-            component.dataset_code in self.REALTIME_SCOPED_DATASETS
+            component.dataset_code in self.REALTIME_DATASETS
             and not self.login_user.is_admin()
             and dashboard.status != DashboardStatus.PUBLISHED.value
         ):
             raise UnAuthorizedError()
         data_config = ComponentDataConfig(**component.data_config)
-        scope_filters = await self._get_realtime_scope_filters(component.dataset_code)
         res = await DataQueryService(
             dataset_code=component.dataset_code,
             data_config=data_config,
             time_filters=time_filters,
             dimension_filters=dimension_filters or [],
-            scope_filters=scope_filters,
         ).query_telemetry_data()
         return res
 
@@ -582,17 +608,19 @@ class DashboardService(BaseModel):
         if not dataset:
             raise NotFoundError()
         schema_config = dataset.schema_config if isinstance(dataset.schema_config, dict) else {}
-        allowed_fields = {
-            dimension.get("field")
+        dimension_by_field = {
+            dimension.get("field"): dimension
             for dimension in schema_config.get("dimensions", [])
             if dimension.get("field")
         }
+        allowed_fields = set(dimension_by_field)
         if field not in allowed_fields or (
             label_field and label_field not in allowed_fields
         ):
             raise UnAuthorizedError()
+        label_dimension = dimension_by_field[label_field or field]
+        label_field_type = label_dimension.get("field_type") or label_dimension.get("type")
 
-        scope_filters = await self._get_realtime_scope_filters(dataset_code)
         skip = (page - 1) * size
         es_client = await get_es_connection()
 
@@ -634,9 +662,29 @@ class DashboardService(BaseModel):
 
         current_aggs = core_aggs
 
+        enum_labels = self._get_enum_labels(dataset_code, field)
         if keyword:
             search_field = label_field or field
-            filter_query = {"match_phrase": {f"{search_field}.text": keyword}}
+            text_filter = {"match_phrase": {f"{search_field}.text": keyword}}
+            if enum_labels:
+                normalized_keyword = keyword.casefold()
+                matched_values = [
+                    value
+                    for value, label in enum_labels.items()
+                    if normalized_keyword in value.casefold()
+                    or normalized_keyword in label.casefold()
+                ]
+                search_filters = [text_filter]
+                if matched_values:
+                    search_filters.append({"terms": {field: matched_values}})
+                filter_query = {
+                    "bool": {
+                        "should": search_filters,
+                        "minimum_should_match": 1,
+                    }
+                }
+            else:
+                filter_query = text_filter
 
             current_aggs = {
                 "filter_wrapper": {
@@ -660,14 +708,7 @@ class DashboardService(BaseModel):
             "size": 0,
             "aggs": aggs_body
         }
-        query_filters = [
-            {
-                "terms": {
-                    scope_filter.field_id: scope_filter.values,
-                }
-            }
-            for scope_filter in scope_filters
-        ]
+        query_filters = []
         normalized_exact_values = [
             value.strip()
             for value in (exact_values or "").split(",")
@@ -704,6 +745,10 @@ class DashboardService(BaseModel):
                 if label_buckets
                 else value
             )
+            if label_field_type == "date":
+                label = self._format_date_enum_label(label)
+            else:
+                label = enum_labels.get(str(value), label)
             options.append({"value": value, "label": label})
         if (
             dataset_code == "mid_knowledge_space_content_stat"

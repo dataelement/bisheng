@@ -34,6 +34,10 @@ import TagGroup from "./TagGroup";
 import { EditEncodingModal } from "./EditEncodingModal";
 import FileIconRenderer from "./FileIcon";
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import {
+    resolveFolderReorderNeighbours,
+    type FolderDropPosition,
+} from "./resolveFolderReorderNeighbours";
 import { SortType, SortDirection, FileStatus, FileType, KnowledgeFile, SpaceRole, updateFileEncoding } from "~/api/knowledge";
 import { formatBytes } from "~/utils";
 import { useInlineRename } from "../hooks/useInlineRename";
@@ -681,6 +685,9 @@ interface FileTableProps {
     onAcceptAlias?: (id: string) => void;
     onRejectAlias?: (id: string) => void;
     onNavigateFolder: (id: string) => void;
+    /** System admins may drag folders to define the shared order within a directory. */
+    canReorderFolders?: boolean;
+    onReorderFolder?: (folderId: string, prevFolderId: string | null, nextFolderId: string | null) => void;
     onPreview?: (id: string) => void;
     onValidateName: (name: string, isFolder: boolean, fileId: string, isCreating: boolean) => string | null;
     onCancelCreate?: () => void;
@@ -719,7 +726,7 @@ interface FileTableProps {
     retryActionLabel?: string;
 }
 
-export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, currentUserRole, onDownload, onEditTags, onRename, onDelete, onRetry, onAcceptAlias, onRejectAlias, onNavigateFolder, onPreview, onValidateName, onCancelCreate, onRequestPermissions, permissionEntryIds, renameEntryIds, deleteEntryIds, downloadEntryIds, downloadingEntryIds, publishEntryIds, shareEntryIds, onManagePermission, onMove, moveEntryIds, onPublishFile, onShareFile, sortBy, sortDirection, onSort, versionManagementEnabled, onOpenVersionManagement, onOpenVersionHistory, canManageMembers = false, enableEncodingClassification = false, metadataEditableFileIds, fileCategoryOptions = [], fileCategoryGroups = DEFAULT_PORTAL_FILE_CATEGORY_GROUPS, businessDomainOptions = [], encodingPrefix = DEFAULT_ENCODING_PREFIX, onFileEncodingUpdated, canRetryFile, retryActionLabel }: FileTableProps) {
+export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, currentUserRole, onDownload, onEditTags, onRename, onDelete, onRetry, onAcceptAlias, onRejectAlias, onNavigateFolder, canReorderFolders = false, onReorderFolder, onPreview, onValidateName, onCancelCreate, onRequestPermissions, permissionEntryIds, renameEntryIds, deleteEntryIds, downloadEntryIds, downloadingEntryIds, publishEntryIds, shareEntryIds, onManagePermission, onMove, moveEntryIds, onPublishFile, onShareFile, sortBy, sortDirection, onSort, versionManagementEnabled, onOpenVersionManagement, onOpenVersionHistory, canManageMembers = false, enableEncodingClassification = false, metadataEditableFileIds, fileCategoryOptions = [], fileCategoryGroups = DEFAULT_PORTAL_FILE_CATEGORY_GROUPS, businessDomainOptions = [], encodingPrefix = DEFAULT_ENCODING_PREFIX, onFileEncodingUpdated, canRetryFile, retryActionLabel }: FileTableProps) {
     // Shougang feature gate
     const { data: bsConfig } = useGetBsConfig();
     const shougangEnabled = bsConfig?.shougang?.enabled ?? false;
@@ -764,6 +771,44 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
     const [editingEncodingFile, setEditingEncodingFile] = useState<KnowledgeFile | null>(null);
     const [encodingDrafts, setEncodingDrafts] = useState<Record<string, EncodingDraft>>({});
     const [savingEncodingFileId, setSavingEncodingFileId] = useState<string | null>(null);
+
+    // Folder drag-to-reorder. The manual order only exists in the default sort mode, so
+    // picking a column header suspends dragging rather than silently reordering rows the
+    // user is no longer sorting by.
+    const [draggingFolderId, setDraggingFolderId] = useState<string | null>(null);
+    const [folderDropTarget, setFolderDropTarget] = useState<{ id: string; position: FolderDropPosition } | null>(null);
+    const folderReorderEnabled = canReorderFolders && Boolean(onReorderFolder) && !sortBy;
+
+    const isDraggableFolder = useCallback((file: KnowledgeFile) => (
+        folderReorderEnabled && file.type === FileType.FOLDER && !file.isCreating
+    ), [folderReorderEnabled]);
+
+    const handleFolderDragEnd = useCallback(() => {
+        setDraggingFolderId(null);
+        setFolderDropTarget(null);
+    }, []);
+
+    const handleFolderDragOver = useCallback((event: React.DragEvent<HTMLElement>, file: KnowledgeFile) => {
+        if (!draggingFolderId || !isDraggableFolder(file) || draggingFolderId === file.id) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "move";
+        const bounds = event.currentTarget.getBoundingClientRect();
+        const position: FolderDropPosition = event.clientY < bounds.top + bounds.height / 2 ? "before" : "after";
+        setFolderDropTarget((prev) => (
+            prev && prev.id === file.id && prev.position === position ? prev : { id: file.id, position }
+        ));
+    }, [draggingFolderId, isDraggableFolder]);
+
+    const handleFolderDrop = useCallback((event: React.DragEvent<HTMLElement>, file: KnowledgeFile) => {
+        event.preventDefault();
+        const dropPosition = folderDropTarget?.id === file.id ? folderDropTarget.position : "before";
+        const draggedId = draggingFolderId;
+        handleFolderDragEnd();
+        if (!draggedId || !onReorderFolder) return;
+        const neighbours = resolveFolderReorderNeighbours(files, draggedId, file.id, dropPosition);
+        if (!neighbours) return;
+        onReorderFolder(draggedId, neighbours.prevFolderId, neighbours.nextFolderId);
+    }, [draggingFolderId, files, folderDropTarget, handleFolderDragEnd, onReorderFolder]);
 
     // Non-portal spaces retain their existing creator/admin behavior.  The
     // public portal supplies a per-file set resolved from rename_file.
@@ -942,6 +987,14 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
                                 onAcceptAlias={onAcceptAlias ? () => onAcceptAlias(file.id) : undefined}
                                 onRejectAlias={onRejectAlias ? () => onRejectAlias(file.id) : undefined}
                                 onNavigateFolder={() => onNavigateFolder?.(file.id)}
+                                draggableFolder={isDraggableFolder(file)}
+                                dragging={draggingFolderId === file.id}
+                                dropPosition={folderDropTarget?.id === file.id ? folderDropTarget.position : null}
+                                onFolderDragStart={() => setDraggingFolderId(file.id)}
+                                onFolderDragEnd={handleFolderDragEnd}
+                                onFolderDragOver={(event) => handleFolderDragOver(event, file)}
+                                onFolderDragLeave={() => setFolderDropTarget((prev) => (prev?.id === file.id ? null : prev))}
+                                onFolderDrop={(event) => handleFolderDrop(event, file)}
                                 onPreview={() => onPreview?.(file.id)}
                                 onValidateName={(newName) => onValidateName?.(newName, file.type === FileType.FOLDER, file.id, !!file.isCreating)}
                                 onCancelCreate={onCancelCreate}
@@ -1032,6 +1085,14 @@ function FileRow({
     onDelete,
     onRetry,
     onNavigateFolder,
+    draggableFolder = false,
+    dragging = false,
+    dropPosition = null,
+    onFolderDragStart,
+    onFolderDragEnd,
+    onFolderDragOver,
+    onFolderDragLeave,
+    onFolderDrop,
     onPreview,
     onValidateName,
     onCancelCreate,
@@ -1084,6 +1145,14 @@ function FileRow({
     onAcceptAlias?: () => void;
     onRejectAlias?: () => void;
     onNavigateFolder?: () => void;
+    draggableFolder?: boolean;
+    dragging?: boolean;
+    dropPosition?: FolderDropPosition | null;
+    onFolderDragStart?: () => void;
+    onFolderDragEnd?: () => void;
+    onFolderDragOver?: (event: React.DragEvent<HTMLElement>) => void;
+    onFolderDragLeave?: () => void;
+    onFolderDrop?: (event: React.DragEvent<HTMLElement>) => void;
     onPreview?: () => void;
     onValidateName?: (newName: string) => string | null;
     onRequestPermissions?: () => void;
@@ -1364,7 +1433,18 @@ function FileRow({
                 // 取消 Table 默认 tr:hover 底色，整行颜色只由单元格 rowBg + group-hover 控制
                 "bg-transparent hover:bg-transparent",
                 file.entryStatus === "invalid" && "opacity-60 grayscale",
+                draggableFolder && "cursor-grab",
+                dragging && "opacity-50",
+                // Insertion line marking where the dragged folder would land.
+                dropPosition === "before" && "!border-t-2 !border-t-[#165dff]",
+                dropPosition === "after" && "!border-b-2 !border-b-[#165dff]",
             )}
+            draggable={draggableFolder || undefined}
+            onDragStart={draggableFolder ? onFolderDragStart : undefined}
+            onDragEnd={draggableFolder ? onFolderDragEnd : undefined}
+            onDragOver={draggableFolder ? onFolderDragOver : undefined}
+            onDragLeave={draggableFolder ? onFolderDragLeave : undefined}
+            onDrop={draggableFolder ? onFolderDrop : undefined}
             onMouseEnter={() => { setRowHovered(true); onRequestPermissions?.(); }}
             onMouseLeave={() => setRowHovered(false)}
         >

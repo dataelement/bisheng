@@ -1655,6 +1655,7 @@
     "search_space_placeholder": "Enter knowledge space name or description to search",
     "share": "Share",
     "share_link_copied": "Share link copied to clipboard",
+    "folder_sort_failed": "Failed to reorder",
     "sort_by_name_label": "Sort by name",
     "sort_by_type_label": "Sort by type",
     "sort_by_update_time_label": "Sort by update time",

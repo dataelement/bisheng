@@ -239,7 +239,7 @@ def enqueue_favorite_change_events(events: Iterable[FavoriteChangeEvent]) -> Non
             try:
                 send_favorite_change_notifications.apply_async(
                     args=[[event.model_dump(mode="json") for event in batch]],
-                    queue="knowledge_celery",
+                    queue="celery",
                 )
             except Exception:
                 # 通知是明确的尽力流程；入队失败不能回滚已完成的文档操作。

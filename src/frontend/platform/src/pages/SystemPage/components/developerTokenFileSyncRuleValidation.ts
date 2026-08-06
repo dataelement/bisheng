@@ -1,5 +1,7 @@
 import type {
   DeveloperTokenFileSyncDynamicSource,
+  DeveloperTokenFileSyncFolderDynamicSource,
+  DeveloperTokenFileSyncFolderMode,
   DeveloperTokenFileSyncMode,
   DeveloperTokenFileSyncOptions,
   DeveloperTokenFileSyncRule,
@@ -9,16 +11,20 @@ import type {
 const CATEGORY_CODE_PATTERN = /^[A-Z0-9_]{1,16}$/
 const SUBCATEGORY_CODE_PATTERN = /^[A-Z0-9_-]{1,16}$/
 const BUSINESS_DOMAIN_CODE_PATTERN = /^[A-Z0-9_]{1,16}$/
+const FOLDER_PATH_PATTERN = /^[^/\\]+(?:\/[^/\\]+)*$/
 
 export type FileSyncRuleErrorField =
   | "category"
   | "subcategory"
   | "businessDomain"
   | "targetSpace"
+  | "targetFolder"
+  | "businessDomainTargetBinding"
   | "businessDomainDynamicSource"
   | "targetSpaceDynamicSource"
+  | "targetFolderDynamicSource"
 
-export type FileSyncRuleErrorReason = "required" | "invalid" | "stale"
+export type FileSyncRuleErrorReason = "required" | "invalid" | "stale" | "unbound"
 
 export interface FileSyncRuleError {
   field: FileSyncRuleErrorField
@@ -29,8 +35,12 @@ export interface FileSyncRuleSummaryLabels {
   notConfigured: string
   businessDomain: string
   targetSpace: string
+  targetFolder: string
   dynamicDepartment: string
   dynamicResponsiblePerson: string
+  folderNone: string
+  folderDynamicDepartmentName: string
+  folderDynamicCallerMainDepartmentName: string
   root?: string
   stale?: string
 }
@@ -59,12 +69,74 @@ function formatDynamicSourceLabel(
   return "-"
 }
 
+export function normalizeFolderPath(value?: string | null): string | null {
+  const segments = (value ?? "")
+    .replace(/\\/g, "/")
+    .split("/")
+    .map((segment) => segment.trim())
+    .filter(Boolean)
+  if (!segments.length) return null
+  return segments.join("/")
+}
+
 export function createEmptyFileSyncRule(): DeveloperTokenFileSyncRule {
   return {
     category: { code: "", subcategory_code: "" },
     business_domain: { mode: "fixed", code: null, dynamic_source: null },
-    target_space: { mode: "fixed", knowledge_id: null, folder_id: null, dynamic_source: null },
+    target_space: {
+      mode: "fixed",
+      knowledge_id: null,
+      folder_id: null,
+      dynamic_source: null,
+      folder_mode: "none",
+      folder_path: null,
+      parent_folder_path: null,
+      folder_dynamic_source: null,
+    },
     dynamic_source: null,
+  }
+}
+
+function inferFolderMode(targetSpace: DeveloperTokenFileSyncRule["target_space"]): DeveloperTokenFileSyncFolderMode {
+  if (targetSpace.folder_mode && targetSpace.folder_mode !== "none") {
+    return targetSpace.folder_mode
+  }
+  if (normalizeFolderPath(targetSpace.folder_path)) return "fixed"
+  if (targetSpace.folder_id != null) return "fixed"
+  return "none"
+}
+
+function normalizeTargetFolderFields(
+  targetSpace: DeveloperTokenFileSyncRule["target_space"],
+): DeveloperTokenFileSyncRule["target_space"] {
+  const folderMode = inferFolderMode(targetSpace)
+  if (folderMode === "none") {
+    return {
+      ...targetSpace,
+      folder_mode: "none",
+      folder_id: null,
+      folder_path: null,
+      parent_folder_path: null,
+      folder_dynamic_source: null,
+    }
+  }
+  if (folderMode === "fixed") {
+    return {
+      ...targetSpace,
+      folder_mode: "fixed",
+      folder_path: normalizeFolderPath(targetSpace.folder_path),
+      folder_id: null,
+      parent_folder_path: null,
+      folder_dynamic_source: null,
+    }
+  }
+  return {
+    ...targetSpace,
+    folder_mode: "dynamic",
+    folder_id: null,
+    folder_path: null,
+    parent_folder_path: normalizeFolderPath(targetSpace.parent_folder_path),
+    folder_dynamic_source: targetSpace.folder_dynamic_source ?? null,
   }
 }
 
@@ -87,18 +159,15 @@ export function normalizeFileSyncRule(
         ? migrated.business_domain.dynamic_source ?? null
         : null,
     },
-    target_space: {
-      mode: migrated.target_space.mode,
+    target_space: normalizeTargetFolderFields({
+      ...migrated.target_space,
       knowledge_id: migrated.target_space.mode === "fixed"
         ? migrated.target_space.knowledge_id
-        : null,
-      folder_id: migrated.target_space.mode === "fixed"
-        ? migrated.target_space.folder_id ?? null
         : null,
       dynamic_source: migrated.target_space.mode === "dynamic"
         ? migrated.target_space.dynamic_source ?? null
         : null,
-    },
+    }),
     dynamic_source: null,
   }
 }
@@ -119,14 +188,95 @@ export function changeFileSyncRuleMode(
     }
     : {
       ...rule,
-      target_space: {
+      target_space: normalizeTargetFolderFields({
         mode,
         knowledge_id: mode === "fixed" ? rule.target_space.knowledge_id : null,
-        folder_id: mode === "fixed" ? rule.target_space.folder_id ?? null : null,
+        folder_id: null,
         dynamic_source: mode === "dynamic" ? rule.target_space.dynamic_source ?? null : null,
-      },
+        folder_mode: rule.target_space.folder_mode ?? "none",
+        folder_path: rule.target_space.folder_mode === "fixed"
+          ? rule.target_space.folder_path ?? null
+          : mode === "dynamic"
+            ? null
+            : rule.target_space.folder_path ?? null,
+        parent_folder_path: mode === "dynamic" && rule.target_space.folder_mode === "dynamic"
+          ? null
+          : rule.target_space.parent_folder_path ?? null,
+        folder_dynamic_source: rule.target_space.folder_mode === "dynamic"
+          ? rule.target_space.folder_dynamic_source ?? null
+          : null,
+      }),
     }
   return normalizeFileSyncRule(next) as DeveloperTokenFileSyncRule
+}
+
+export function changeFileSyncFolderMode(
+  rule: DeveloperTokenFileSyncRule,
+  folderMode: DeveloperTokenFileSyncFolderMode,
+): DeveloperTokenFileSyncRule {
+  const next: DeveloperTokenFileSyncRule = {
+    ...rule,
+    target_space: normalizeTargetFolderFields({
+      ...rule.target_space,
+      folder_mode: folderMode,
+      folder_path: folderMode === "fixed" ? rule.target_space.folder_path ?? null : null,
+      parent_folder_path: folderMode === "dynamic" ? rule.target_space.parent_folder_path ?? null : null,
+      folder_dynamic_source: folderMode === "dynamic" ? rule.target_space.folder_dynamic_source ?? null : null,
+    }),
+  }
+  return normalizeFileSyncRule(next) as DeveloperTokenFileSyncRule
+}
+
+function formatFolderDynamicSourceLabel(
+  source: DeveloperTokenFileSyncFolderDynamicSource | null | undefined,
+  labels: FileSyncRuleSummaryLabels,
+): string {
+  if (source === "department_name") return labels.folderDynamicDepartmentName
+  if (source === "caller_main_department_name") return labels.folderDynamicCallerMainDepartmentName
+  return "-"
+}
+
+function formatFolderSummary(
+  rule: DeveloperTokenFileSyncRule,
+  labels: FileSyncRuleSummaryLabels,
+): string {
+  const folderMode = inferFolderMode(rule.target_space)
+  if (folderMode === "none") return labels.folderNone
+  if (folderMode === "fixed") return rule.target_space.folder_path || "-"
+  const parent = rule.target_space.parent_folder_path
+  const child = formatFolderDynamicSourceLabel(rule.target_space.folder_dynamic_source, labels)
+  return parent ? `${parent}/${child}` : child
+}
+
+function findSelectedTargetSpace(
+  options: DeveloperTokenFileSyncOptions,
+  knowledgeId: number | null | undefined,
+) {
+  if (!Number.isInteger(knowledgeId) || Number(knowledgeId) <= 0) return null
+  return options.target_space_groups.data
+    .flatMap((group) => group.spaces)
+    .find((space) => space.id === knowledgeId) ?? null
+}
+
+function isFixedDomainSpaceBound(
+  rule: DeveloperTokenFileSyncRule,
+  options: DeveloperTokenFileSyncOptions,
+): boolean {
+  if (rule.business_domain.mode !== "fixed" || rule.target_space.mode !== "fixed") {
+    return true
+  }
+  const domainCode = rule.business_domain.code
+  const knowledgeId = rule.target_space.knowledge_id
+  if (!domainCode || !Number.isInteger(knowledgeId) || Number(knowledgeId) <= 0) {
+    return true
+  }
+  const domain = options.business_domains.find((item) => item.code === domainCode)
+  const space = findSelectedTargetSpace(options, knowledgeId)
+  if (!domain || !space) return true
+  const domainSpaceIds = domain.space_ids ?? []
+  const spaceDomainCodes = space.business_domain_codes ?? []
+  return domainSpaceIds.includes(Number(knowledgeId))
+    && spaceDomainCodes.includes(domainCode)
 }
 
 export function findInvalidFileSyncRule(
@@ -178,19 +328,18 @@ export function findInvalidFileSyncRule(
     if (!Number.isInteger(knowledgeId) || Number(knowledgeId) <= 0) {
       return { field: "targetSpace", reason: knowledgeId == null ? "required" : "invalid" }
     }
-    const folderId = normalized.target_space.folder_id
-    if (folderId != null && (!Number.isInteger(folderId) || folderId <= 0)) {
-      return { field: "targetSpace", reason: "invalid" }
-    }
     if (
       targetDisplay?.stale
       && targetDisplay.knowledge_id === knowledgeId
-      && (targetDisplay.folder_id ?? null) === folderId
+      && targetDisplay.target_type === "root"
     ) {
       return { field: "targetSpace", reason: "stale" }
     }
     if (normalized.target_space.dynamic_source != null) {
       return { field: "targetSpaceDynamicSource", reason: "invalid" }
+    }
+    if (options && !isFixedDomainSpaceBound(normalized, options)) {
+      return { field: "businessDomainTargetBinding", reason: "unbound" }
     }
   } else if (
     normalized.target_space.knowledge_id != null
@@ -199,6 +348,26 @@ export function findInvalidFileSyncRule(
     return { field: "targetSpace", reason: "invalid" }
   } else if (!normalized.target_space.dynamic_source) {
     return { field: "targetSpaceDynamicSource", reason: "required" }
+  }
+
+  const folderMode = inferFolderMode(normalized.target_space)
+  if (folderMode === "fixed") {
+    const folderPath = normalized.target_space.folder_path
+    if (!folderPath) return { field: "targetFolder", reason: "required" }
+    if (!FOLDER_PATH_PATTERN.test(folderPath)) {
+      return { field: "targetFolder", reason: "invalid" }
+    }
+  } else if (folderMode === "dynamic") {
+    const parentPath = normalized.target_space.parent_folder_path
+    if (parentPath && !FOLDER_PATH_PATTERN.test(parentPath)) {
+      return { field: "targetFolder", reason: "invalid" }
+    }
+    if (!normalized.target_space.folder_dynamic_source) {
+      return { field: "targetFolderDynamicSource", reason: "required" }
+    }
+    if (normalized.target_space.mode === "dynamic" && parentPath) {
+      return { field: "targetFolder", reason: "invalid" }
+    }
   }
 
   if (normalized.dynamic_source) return { field: "businessDomainDynamicSource", reason: "invalid" }
@@ -218,10 +387,12 @@ export function formatFileSyncRuleSummary(
   const target = normalized.target_space.mode === "fixed"
     ? formatFixedTarget(normalized, labels, targetDisplay)
     : formatDynamicSourceLabel(normalized.target_space.dynamic_source, labels)
+  const folder = formatFolderSummary(normalized, labels)
   return [
     `${normalized.category.code}/${normalized.category.subcategory_code}`,
     `${labels.businessDomain}: ${domain}`,
     `${labels.targetSpace}: ${target}`,
+    `${labels.targetFolder}: ${folder}`,
   ].join(" · ")
 }
 
@@ -231,12 +402,9 @@ function formatFixedTarget(
   display?: DeveloperTokenFileSyncTargetDisplay | null,
 ): string {
   const knowledgeId = rule.target_space.knowledge_id
-  const folderId = rule.target_space.folder_id
-  const displayMatches = display
-    && display.knowledge_id === knowledgeId
-    && (display.folder_id ?? null) === (folderId ?? null)
+  const displayMatches = display && display.knowledge_id === knowledgeId
   if (!displayMatches) {
-    return folderId == null ? String(knowledgeId || "-") : `${knowledgeId}/${folderId}`
+    return String(knowledgeId || "-")
   }
   const segments = [display.knowledge_name || String(display.knowledge_id)]
   if (display.target_type === "root") segments.push(labels.root || "Root")

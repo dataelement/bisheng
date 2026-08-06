@@ -133,8 +133,8 @@ def test_sync_api_forwards_raw_params_to_service():
     service = SimpleNamespace(sync=AsyncMock(side_effect=_sync))
     params = {
         **DEFAULT_PARAMS,
-        "department_id": 20491061,
-        "responsible_person_id": 34,
+        "department_id": "20491061",
+        "responsible_person_id": "34",
     }
     with TestClient(_build_app(service=service)) as client:
         response = client.post(SYNC_PATH, files=_multipart_files(params=params))

@@ -4,9 +4,12 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.developer_token.domain.file_sync_folder_path import normalize_file_sync_folder_path
 from bisheng.knowledge.domain.constants import normalize_business_domain_code
 
 FileSyncDynamicSource = Literal["department_id", "responsible_person_id"]
+FileSyncFolderMode = Literal["none", "fixed", "dynamic"]
+FileSyncFolderDynamicSource = Literal["department_name", "caller_main_department_name"]
 
 
 class FileSyncCategoryRule(BaseModel):
@@ -50,6 +53,28 @@ class FileSyncTargetSpaceRule(BaseModel):
     knowledge_id: int | None = Field(default=None, strict=True, gt=0)
     folder_id: int | None = Field(default=None, strict=True, gt=0)
     dynamic_source: FileSyncDynamicSource | None = None
+    folder_mode: FileSyncFolderMode = "none"
+    folder_path: str | None = None
+    parent_folder_path: str | None = None
+    folder_dynamic_source: FileSyncFolderDynamicSource | None = None
+
+    @field_validator("folder_path", "parent_folder_path", mode="before")
+    @classmethod
+    def normalize_folder_path(cls, value: Any) -> str | None:
+        if value is None:
+            return None
+        if isinstance(value, str) and not value.strip():
+            return None
+        return normalize_file_sync_folder_path(value)
+
+    @model_validator(mode="after")
+    def infer_legacy_folder_mode(self):
+        if self.folder_mode == "none":
+            if self.folder_path:
+                self.folder_mode = "fixed"
+            elif self.folder_id is not None:
+                self.folder_mode = "fixed"
+        return self
 
 
 class DeveloperTokenFileSyncRule(BaseModel):
@@ -86,6 +111,7 @@ class DeveloperTokenPrincipal(BaseModel):
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
     token_id: int
+    token_name: str = ""
     tenant_id: int
     user: UserPayload
     raw_file_sync_rule: dict | None = None
@@ -105,6 +131,7 @@ class FileSyncOptionCategory(BaseModel):
 class FileSyncOptionBusinessDomain(BaseModel):
     code: str
     name: str
+    space_ids: list[int] = Field(default_factory=list)
 
 
 class FileSyncTargetSpaceOption(BaseModel):
@@ -112,6 +139,7 @@ class FileSyncTargetSpaceOption(BaseModel):
     name: str
     selectable: bool
     has_children: bool
+    business_domain_codes: list[str] = Field(default_factory=list)
 
 
 class FileSyncTargetSpaceGroup(BaseModel):

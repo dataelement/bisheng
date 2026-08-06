@@ -291,4 +291,4 @@ async def cancel_primary_department_change(
 async def _dispatch_cleanup_event(event_id: int) -> None:
     from bisheng.worker.permission.department_transfer_cleanup import process_event
 
-    process_event.apply_async(args=[event_id], queue="knowledge_celery")
+    process_event.apply_async(args=[event_id], queue="celery")

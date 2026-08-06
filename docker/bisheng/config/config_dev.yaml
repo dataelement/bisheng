@@ -40,8 +40,16 @@ celery_task:
   knowledge_file_time_limit: null  # 每秒处理10个文件  null: 表示无限制
   # 对celery熟悉的用户可以自定义配置任务的路由，启动不同类型的worker处理不同类型的异步任务，注意工作流的执行只能在一个进程内
   task_routers:
-    bisheng.worker.knowledge.*: # 知识库文件处理相关任务
+    bisheng.worker.knowledge.file_title_worker.extract_knowledge_file_title_celery:
       queue: knowledge_celery
+    bisheng.worker.knowledge.file_worker.parse_knowledge_file_celery:
+      queue: knowledge_celery
+    bisheng.worker.knowledge.file_worker.retry_knowledge_file_celery:
+      queue: knowledge_celery
+    bisheng.worker.knowledge.pdf_artifact_worker.generate_knowledge_file_pdf_celery:
+      queue: knowledge_pdf_celery
+    bisheng.worker.knowledge.*: # 其他知识库后台任务
+      queue: celery
     bisheng.worker.workflow.*: # 工作流相关任务
       queue: workflow_celery
 

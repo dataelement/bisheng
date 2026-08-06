@@ -551,6 +551,7 @@ class FileSyncTargetSpaceItem:
     space_type: str
     selectable: bool
     has_children: bool
+    business_domain_codes: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -1239,6 +1240,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 space_type=level,
                 selectable=access.root_space_ids is None or int(space.id) in access.root_space_ids,
                 has_children=int(space.id) in spaces_with_children,
+                business_domain_codes=tuple(
+                    code
+                    for value in (getattr(space, "business_domain_codes", None) or [])
+                    if (code := normalize_business_domain_code(value)) is not None
+                ),
             )
             for space, level in page_rows
         ]
@@ -1353,14 +1359,20 @@ class KnowledgeSpaceService(KnowledgeUtils):
         login_user: UserPayload,
         knowledge_id: int,
         folder_id: int | None,
+        strict_catalog: bool = True,
     ) -> Knowledge:
         async with get_async_db_session() as session:
             knowledge_repository = KnowledgeRepositoryImpl(session)
             file_repository = KnowledgeFileRepositoryImpl(session)
-            spaces = await knowledge_repository.find_file_sync_spaces_by_ids({knowledge_id})
-            if not spaces:
-                raise SpaceNotFoundError()
-            space = spaces[0][0]
+            if strict_catalog:
+                spaces = await knowledge_repository.find_file_sync_spaces_by_ids({knowledge_id})
+                if not spaces:
+                    raise SpaceNotFoundError()
+                space = spaces[0][0]
+            else:
+                space = await knowledge_repository.find_space_by_id(knowledge_id)
+                if space is None:
+                    raise SpaceNotFoundError()
             object_type = "knowledge_space"
             object_id = knowledge_id
             if folder_id is not None:
@@ -4060,6 +4072,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 return again
             raise
 
+    async def ensure_personal_default_space(self) -> Knowledge:
+        """Get or create the login user's default personal knowledge space."""
+        return await self._ensure_personal_default_space()
+
     async def _ensure_personal_spaces(self) -> tuple[Knowledge, Knowledge]:
         """确保并返回当前用户固定的『我的收藏』和默认个人知识库。"""
         favorite_space = await self._ensure_favorite_space()
@@ -5714,7 +5730,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     "searched_at": searched_at.isoformat() if isinstance(searched_at, datetime) else searched_at,
                 },
                 headers={"tenant_id": int(payload["tenant_id"])},
-                queue="knowledge_celery",
+                queue="celery",
                 expires=600,
             )
 
@@ -11292,6 +11308,93 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         await KnowledgeDao.async_update_sort_weights({int(space_id): new_weight})
 
+    async def _load_sibling_folders_in_display_order(self, folder: KnowledgeFile) -> list[KnowledgeFile]:
+        """Folders sharing a directory with ``folder``, in the order the UI shows them.
+
+        The directory is identified by the folder's lineage path: its last segment is the
+        parent folder id, and an empty path means the space root. ``page_size=0`` returns
+        the whole directory, which the midpoint algorithm needs to spread weights.
+        """
+        ancestor_ids = [int(part) for part in (folder.file_level_path or "").split("/") if part]
+        parent_id = ancestor_ids[-1] if ancestor_ids else None
+        return await SpaceFileDao.async_list_children(
+            int(folder.knowledge_id),
+            parent_id,
+            order_field="file_type",
+            order_sort="asc",
+            page=1,
+            page_size=0,
+            file_type=FileType.DIR.value,
+        )
+
+    async def _respread_directory_sort_weights(self, folders: list[KnowledgeFile]) -> dict[int, int]:
+        """Assign evenly spaced weights following the list's current order.
+
+        Runs on the directory's first drag (every weight still NULL) and, rarely, when a
+        midpoint gap is exhausted. Returns the weights it wrote.
+        """
+        weights = {int(item.id): (index + 1) * self._SORT_WEIGHT_STEP for index, item in enumerate(folders)}
+        await KnowledgeFileDao.async_update_sort_weights(weights)
+        for item in folders:
+            item.sort_weight = weights[int(item.id)]
+        return weights
+
+    async def reorder_folder(
+        self,
+        space_id: int,
+        folder_id: int,
+        prev_folder_id: int | None = None,
+        next_folder_id: int | None = None,
+    ) -> None:
+        """Move a folder between two sibling folders in its directory's admin order.
+
+        Callers pass the ids it is dropped between (either may be None at the list
+        edges); the new weight is their midpoint, so only this row is written no matter
+        how many folders the directory holds. Only folders take part — files keep a NULL
+        weight and their existing ordering.
+        """
+        if not self.login_user.is_admin():
+            raise SpacePermissionDeniedError()
+
+        folder = await KnowledgeFileDao.query_by_id(folder_id)
+        if not folder or int(folder.knowledge_id) != int(space_id) or folder.file_type != FileType.DIR.value:
+            raise SpaceFolderNotFoundError()
+
+        folders = await self._load_sibling_folders_in_display_order(folder)
+        folder_by_id = {int(item.id): item for item in folders}
+        if int(folder_id) not in folder_by_id:
+            raise SpaceFolderNotFoundError()
+        for neighbour_id in (prev_folder_id, next_folder_id):
+            if neighbour_id is not None and int(neighbour_id) not in folder_by_id:
+                # A neighbour from another directory (or a stale client view) would place
+                # the folder against an order it isn't part of.
+                raise SpaceFolderNotFoundError()
+
+        if any(item.sort_weight is None for item in folders):
+            # First drag in this directory: freeze the order currently on screen.
+            await self._respread_directory_sort_weights(folders)
+
+        prev_weight = folder_by_id[int(prev_folder_id)].sort_weight if prev_folder_id is not None else None
+        next_weight = folder_by_id[int(next_folder_id)].sort_weight if next_folder_id is not None else None
+
+        if prev_weight is None and next_weight is None:
+            return  # Only folder in the directory; nothing to order against.
+        if prev_weight is None:
+            new_weight = next_weight - self._SORT_WEIGHT_STEP
+        elif next_weight is None:
+            new_weight = prev_weight + self._SORT_WEIGHT_STEP
+        else:
+            new_weight = (prev_weight + next_weight) // 2
+            if new_weight in (prev_weight, next_weight):
+                # Gap exhausted between these two: re-spread the directory, then retry
+                # the midpoint against the refreshed neighbour weights.
+                await self._respread_directory_sort_weights(folders)
+                prev_weight = folder_by_id[int(prev_folder_id)].sort_weight
+                next_weight = folder_by_id[int(next_folder_id)].sort_weight
+                new_weight = (prev_weight + next_weight) // 2
+
+        await KnowledgeFileDao.async_update_sort_weights({int(folder_id): new_weight})
+
     async def pin_space(self, space_id: int, is_pinned: bool = True) -> bool:
         space = await KnowledgeDao.aquery_by_id(space_id)
         if not space or space.type != KnowledgeTypeEnum.SPACE.value:
@@ -13442,6 +13545,48 @@ class KnowledgeSpaceService(KnowledgeUtils):
         await KnowledgeDao.async_update_knowledge_update_time_by_id(knowledge_id)
         return added_folder
 
+    async def find_or_create_folder_for_file_sync(
+        self,
+        knowledge_id: int,
+        folder_name: str,
+        parent_id: int | None = None,
+    ) -> KnowledgeFile:
+        file_level_path = ""
+        if parent_id is not None:
+            parent_folder = await self._get_folder_for_action(knowledge_id, parent_id)
+            file_level_path = f"{parent_folder.file_level_path}/{parent_id}"
+
+        existing = await SpaceFileDao.find_folder_by_name(
+            knowledge_id,
+            folder_name,
+            file_level_path,
+        )
+        if existing is not None:
+            return existing
+        return await self.add_folder(knowledge_id, folder_name, parent_id)
+
+    async def find_or_create_folder_path_for_file_sync(
+        self,
+        knowledge_id: int,
+        folder_path: str | None,
+    ) -> KnowledgeFile | None:
+        from bisheng.developer_token.domain.file_sync_folder_path import split_file_sync_folder_path
+
+        segments = split_file_sync_folder_path(folder_path)
+        if not segments:
+            return None
+
+        parent_id: int | None = None
+        current: KnowledgeFile | None = None
+        for segment in segments:
+            current = await self.find_or_create_folder_for_file_sync(
+                knowledge_id,
+                segment,
+                parent_id,
+            )
+            parent_id = int(current.id)
+        return current
+
     async def rename_folder(self, folder_id: int, new_name: str) -> KnowledgeFile:
         folder = await KnowledgeFileDao.query_by_id(folder_id)
         if not folder or folder.file_type != 0:
@@ -14485,6 +14630,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         skip_approval: bool = False,
         enqueue_processing: bool = True,
         allow_duplicate_name: bool = False,
+        allow_duplicate_content: bool = False,
+        skip_space_business_domain_check: bool = False,
     ) -> list[KnowledgeSpaceFileResponse]:
         from bisheng.knowledge.domain.services.knowledge_pdf_artifact_service import (
             enqueue_current_pdf_artifact,
@@ -14567,7 +14714,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         normalized_business_domain_code = self.normalize_business_domain_code(business_domain_code)
         if business_domain_code and not normalized_business_domain_code:
             raise SpaceBusinessDomainCodeInvalidError()
-        self._ensure_business_domain_allowed_for_space(db_knowledge, normalized_business_domain_code)
+        if not skip_space_business_domain_check:
+            self._ensure_business_domain_allowed_for_space(db_knowledge, normalized_business_domain_code)
         if normalized_business_domain_code:
             split_rule_dict[self.business_domain_code_key] = normalized_business_domain_code
         process_files = []
@@ -14611,6 +14759,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                         "file_subcategory_source": "manual" if normalized_file_subcategory_code else None,
                     },
                     allow_duplicate_name=allow_duplicate_name,
+                    allow_duplicate_content=allow_duplicate_content,
                 )
                 if db_file.status != KnowledgeFileStatus.FAILED.value:
                     next_file_source = self._resolve_upload_file_source(db_file.file_name, file_source.value)

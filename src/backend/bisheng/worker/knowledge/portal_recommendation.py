@@ -49,7 +49,7 @@ from bisheng.shougang_portal_config.domain.services.portal_config_service import
 from bisheng.worker._asyncio_utils import run_async_task
 from bisheng.worker.main import bisheng_celery
 
-KNOWLEDGE_QUEUE = "knowledge_celery"
+DEFAULT_QUEUE = "celery"
 PROJECTION_PAGE_SIZE = 500
 
 
@@ -70,7 +70,7 @@ def _dispatch_task_for_tenants(task, tenant_ids: list[int], *, kwargs: dict | No
         task.apply_async(
             kwargs=dict(kwargs or {}),
             headers={"tenant_id": tenant_id},
-            queue=KNOWLEDGE_QUEUE,
+            queue=DEFAULT_QUEUE,
         )
 
 
@@ -91,7 +91,7 @@ def enqueue_portal_recommendation_projection_refresh(
             "deleted": bool(deleted),
         },
         headers={"tenant_id": resolved_tenant_id},
-        queue=KNOWLEDGE_QUEUE,
+        queue=DEFAULT_QUEUE,
     )
 
 
@@ -113,7 +113,7 @@ def enqueue_portal_recommendation_projection_refresh_batch(
             "deleted": bool(deleted),
         },
         headers={"tenant_id": resolved_tenant_id},
-        queue=KNOWLEDGE_QUEUE,
+        queue=DEFAULT_QUEUE,
     )
 
 
@@ -132,7 +132,7 @@ def enqueue_portal_recommendation_resource_refresh(
             "event_version": event_version,
         },
         headers={"tenant_id": resolved_tenant_id},
-        queue=KNOWLEDGE_QUEUE,
+        queue=DEFAULT_QUEUE,
     )
 
 
@@ -148,7 +148,7 @@ def enqueue_portal_recommendation_user_invalidation(
     invalidate_user_ids_celery.apply_async(
         kwargs={"user_ids": normalized_ids},
         headers={"tenant_id": resolved_tenant_id},
-        queue=KNOWLEDGE_QUEUE,
+        queue=DEFAULT_QUEUE,
     )
 
 
@@ -163,12 +163,12 @@ def enqueue_portal_recommendation_config_post_commit(
         invalidate_department_users_celery.apply_async(
             kwargs={"department_ids": sorted({int(value) for value in department_ids})},
             headers=headers,
-            queue=KNOWLEDGE_QUEUE,
+            queue=DEFAULT_QUEUE,
         )
     if rebuild_pools:
         prepare_pool_rebuild_celery.apply_async(
             headers=headers,
-            queue=KNOWLEDGE_QUEUE,
+            queue=DEFAULT_QUEUE,
         )
 
 
@@ -176,7 +176,7 @@ def enqueue_portal_recommendation_pool_rebuild(*, tenant_id: int | None = None) 
     resolved_tenant_id = int(tenant_id or get_current_tenant_id() or DEFAULT_TENANT_ID)
     prepare_pool_rebuild_celery.apply_async(
         headers={"tenant_id": resolved_tenant_id},
-        queue=KNOWLEDGE_QUEUE,
+        queue=DEFAULT_QUEUE,
     )
 
 
@@ -794,7 +794,7 @@ async def _prepare_pool_rebuild_async() -> bool:
             "fingerprint": fingerprint,
         },
         headers={"tenant_id": tenant_id},
-        queue=KNOWLEDGE_QUEUE,
+        queue=DEFAULT_QUEUE,
     )
     return True
 

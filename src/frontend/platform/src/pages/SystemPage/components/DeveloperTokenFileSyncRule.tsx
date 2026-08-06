@@ -6,8 +6,11 @@ import {
   SelectValue,
 } from "@/components/bs-ui/select"
 import { Switch } from "@/components/bs-ui/switch"
+import { Input } from "@/components/bs-ui/input"
 import type {
   DeveloperTokenFileSyncDynamicSource,
+  DeveloperTokenFileSyncFolderDynamicSource,
+  DeveloperTokenFileSyncFolderMode,
   DeveloperTokenFileSyncMode,
   DeveloperTokenFileSyncOptions,
   DeveloperTokenFileSyncRule as FileSyncRule,
@@ -16,8 +19,10 @@ import type {
 import { useMemo } from "react"
 import { useTranslation } from "react-i18next"
 import {
+  changeFileSyncFolderMode,
   changeFileSyncRuleMode,
   createEmptyFileSyncRule,
+  normalizeFolderPath,
 } from "./developerTokenFileSyncRuleValidation"
 import DeveloperTokenFileSyncTargetTree from "./DeveloperTokenFileSyncTargetTree"
 
@@ -31,6 +36,7 @@ interface DeveloperTokenFileSyncRuleProps {
   error: string | null
   onSearchSpaces: (keyword: string) => void
   targetDisplay?: DeveloperTokenFileSyncTargetDisplay | null
+  boundUserId?: number | null
 }
 
 export default function DeveloperTokenFileSyncRule({
@@ -41,6 +47,7 @@ export default function DeveloperTokenFileSyncRule({
   error,
   onSearchSpaces,
   targetDisplay = null,
+  boundUserId = null,
 }: DeveloperTokenFileSyncRuleProps) {
   const { t } = useTranslation()
   const selectedCategory = useMemo(
@@ -123,7 +130,12 @@ export default function DeveloperTokenFileSyncRule({
           {t("system.developerToken.fileSync.optionsError")}
         </p>
       )}
-      {!loading && !error && !options && (
+      {!loading && !error && !options && boundUserId && (
+        <p className="text-xs text-muted-foreground">
+          {t("system.developerToken.fileSync.optionsLoading")}
+        </p>
+      )}
+      {!loading && !error && !options && !boundUserId && (
         <p className="text-xs text-muted-foreground">
           {t("system.developerToken.fileSync.selectBindingFirst")}
         </p>
@@ -190,7 +202,7 @@ export default function DeveloperTokenFileSyncRule({
             label={t("system.developerToken.fileSync.businessDomain")}
             modeName="file-sync-business-mode"
             mode={value.business_domain.mode}
-            onModeChange={(mode) => handleModeChange("businessDomain", mode)}
+            onModeChange={(mode) => handleModeChange("businessDomain", mode as DeveloperTokenFileSyncMode)}
           >
             {value.business_domain.mode === "fixed" && (
               <Field stale={businessStale}>
@@ -242,7 +254,7 @@ export default function DeveloperTokenFileSyncRule({
           label={t("system.developerToken.fileSync.targetSpace")}
           modeName="file-sync-target-mode"
           mode={value.target_space.mode}
-          onModeChange={(mode) => handleModeChange("targetSpace", mode)}
+          onModeChange={(mode) => handleModeChange("targetSpace", mode as DeveloperTokenFileSyncMode)}
         >
           {value.target_space.mode === "fixed" && (
             <Field>
@@ -253,11 +265,21 @@ export default function DeveloperTokenFileSyncRule({
                   groups={options.target_space_groups.data}
                   value={value.target_space}
                   display={targetDisplay}
+                  folderMode="none"
                   loading={false}
                   error={null}
                   onChange={(target) => onChange({
                     ...value,
-                    target_space: { mode: "fixed", ...target, dynamic_source: null },
+                    target_space: {
+                      mode: "fixed",
+                      knowledge_id: target.knowledge_id,
+                      folder_id: null,
+                      dynamic_source: null,
+                      folder_mode: value.target_space.folder_mode ?? "none",
+                      folder_path: value.target_space.folder_path ?? null,
+                      parent_folder_path: value.target_space.parent_folder_path ?? null,
+                      folder_dynamic_source: value.target_space.folder_dynamic_source ?? null,
+                    },
                   })}
                   onSearchSpaces={onSearchSpaces}
                 />
@@ -280,8 +302,105 @@ export default function DeveloperTokenFileSyncRule({
             />
           )}
         </ModeField>
+
+        <ModeField
+          className="md:col-span-2"
+          inlineControls
+          label={t("system.developerToken.fileSync.targetFolder")}
+          modeName="file-sync-folder-mode"
+          mode={value.target_space.folder_mode || "none"}
+          onModeChange={(mode) => onChange(changeFileSyncFolderMode(value, mode as DeveloperTokenFileSyncFolderMode))}
+          modeOptions={[
+            { value: "none", label: t("system.developerToken.fileSync.folderModes.none") },
+            { value: "fixed", label: t("system.developerToken.fileSync.folderModes.fixed") },
+            { value: "dynamic", label: t("system.developerToken.fileSync.folderModes.dynamic") },
+          ]}
+        >
+          {value.target_space.folder_mode === "fixed" && (
+            <Field label={t("system.developerToken.fileSync.folderPath")}>
+              <Input
+                name="file-sync-folder-path"
+                value={value.target_space.folder_path ?? ""}
+                placeholder={t("system.developerToken.fileSync.folderPathPlaceholder")}
+                onChange={(event) => onChange({
+                  ...value,
+                  target_space: {
+                    ...value.target_space,
+                    folder_mode: "fixed",
+                    folder_path: normalizeFolderPath(event.target.value),
+                    folder_id: null,
+                    parent_folder_path: null,
+                    folder_dynamic_source: null,
+                  },
+                })}
+              />
+            </Field>
+          )}
+          {value.target_space.folder_mode === "dynamic" && value.target_space.mode === "fixed" && (
+            <Field label={t("system.developerToken.fileSync.parentFolderPath")}>
+              <Input
+                name="file-sync-parent-folder-path"
+                value={value.target_space.parent_folder_path ?? ""}
+                placeholder={t("system.developerToken.fileSync.parentFolderPathPlaceholder")}
+                onChange={(event) => onChange({
+                  ...value,
+                  target_space: {
+                    ...value.target_space,
+                    folder_mode: "dynamic",
+                    parent_folder_path: normalizeFolderPath(event.target.value),
+                    folder_path: null,
+                    folder_id: null,
+                  },
+                })}
+              />
+            </Field>
+          )}
+          {value.target_space.folder_mode === "dynamic" && (
+            <FolderDynamicSourceField
+              value={value.target_space.folder_dynamic_source}
+              onChange={(folder_dynamic_source) => onChange({
+                ...value,
+                target_space: { ...value.target_space, folder_dynamic_source },
+              })}
+            />
+          )}
+        </ModeField>
       </div>
     </section>
+  )
+}
+
+function FolderDynamicSourceField({
+  value,
+  onChange,
+}: {
+  value: DeveloperTokenFileSyncFolderDynamicSource | null | undefined
+  onChange: (value: DeveloperTokenFileSyncFolderDynamicSource | null) => void
+}) {
+  const { t } = useTranslation()
+  return (
+    <Field label={t("system.developerToken.fileSync.folderDynamicSource")}>
+      <Select
+        name="file-sync-folder-dynamic-source"
+        value={value || UNSET_VALUE}
+        onValueChange={(source) => onChange(
+          source === UNSET_VALUE ? null : source as DeveloperTokenFileSyncFolderDynamicSource,
+        )}
+      >
+        <SelectTrigger aria-label={t("system.developerToken.fileSync.folderDynamicSource")}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={UNSET_VALUE}>{t("system.developerToken.fileSync.select")}</SelectItem>
+          <SelectItem value="department_name">
+            {t("system.developerToken.fileSync.folderSources.departmentName")}
+          </SelectItem>
+          <SelectItem value="caller_main_department_name">
+            {t("system.developerToken.fileSync.folderSources.callerMainDepartmentName")}
+          </SelectItem>
+        </SelectContent>
+      </Select>
+    </Field>
   )
 }
 
@@ -351,27 +470,36 @@ function ModeField({
   modeName,
   mode,
   onModeChange,
+  modeOptions,
   children,
 }: {
   className?: string
   inlineControls?: boolean
   label: string
   modeName: string
-  mode: DeveloperTokenFileSyncMode
-  onModeChange: (mode: DeveloperTokenFileSyncMode) => void
+  mode: string
+  onModeChange: (mode: string) => void
+  modeOptions?: Array<{ value: string; label: string; disabled?: boolean }>
   children: React.ReactNode
 }) {
   const { t } = useTranslation()
+  const options = modeOptions ?? [
+    { value: "fixed", label: t("system.developerToken.fileSync.modes.fixed") },
+    { value: "dynamic", label: t("system.developerToken.fileSync.modes.dynamic") },
+  ]
   const modeSelect = (
     <Select
       name={modeName}
       value={mode}
-      onValueChange={(next) => onModeChange(next as DeveloperTokenFileSyncMode)}
+      onValueChange={onModeChange}
     >
       <SelectTrigger aria-label={label}><SelectValue /></SelectTrigger>
       <SelectContent>
-        <SelectItem value="fixed">{t("system.developerToken.fileSync.modes.fixed")}</SelectItem>
-        <SelectItem value="dynamic">{t("system.developerToken.fileSync.modes.dynamic")}</SelectItem>
+        {options.map((option) => (
+          <SelectItem key={option.value} value={option.value} disabled={option.disabled}>
+            {option.label}
+          </SelectItem>
+        ))}
       </SelectContent>
     </Select>
   )

@@ -40,11 +40,17 @@ def _service(repository: SimpleNamespace) -> FilelibSyncService:
     )
 
 
+def _token_user():
+    return SimpleNamespace(user_id=1, user_name="caller", external_id="caller-ext")
+
+
 @pytest.mark.asyncio
 async def test_missing_department_id_uses_caller_primary_department() -> None:
     caller_department = _department(10, "调用人部门")
     repository = SimpleNamespace(
+        find_user_by_id=AsyncMock(return_value=_token_user()),
         find_primary_departments=AsyncMock(return_value=[UserDepartment(user_id=1, department_id=10, is_primary=1)]),
+        find_department_by_id=AsyncMock(return_value=caller_department),
         find_department_mapping_by_external_department_id=AsyncMock(),
         find_department_by_external_id=AsyncMock(),
     )
@@ -70,7 +76,9 @@ async def test_department_id_resolves_through_mapping_and_org_code() -> None:
         org_code="ORG-200",
     )
     repository = SimpleNamespace(
+        find_user_by_id=AsyncMock(return_value=_token_user()),
         find_primary_departments=AsyncMock(return_value=[UserDepartment(user_id=1, department_id=10, is_primary=1)]),
+        find_department_by_id=AsyncMock(return_value=caller_department),
         find_department_mapping_by_external_department_id=AsyncMock(return_value=mapping),
         find_department_by_external_id=AsyncMock(return_value=mapped_department),
     )
@@ -79,7 +87,7 @@ async def test_department_id_resolves_through_mapping_and_org_code() -> None:
             {
                 "external_file_id": "ext-1",
                 "file_name": "a.pdf",
-                "department_id": 20,
+                "department_id": "20",
             }
         )
     )
@@ -95,7 +103,9 @@ async def test_department_id_resolves_through_mapping_and_org_code() -> None:
 async def test_missing_mapping_is_rejected() -> None:
     caller_department = _department(10, "调用人部门")
     repository = SimpleNamespace(
+        find_user_by_id=AsyncMock(return_value=_token_user()),
         find_primary_departments=AsyncMock(return_value=[UserDepartment(user_id=1, department_id=10, is_primary=1)]),
+        find_department_by_id=AsyncMock(return_value=caller_department),
         find_department_mapping_by_external_department_id=AsyncMock(return_value=None),
         find_department_by_external_id=AsyncMock(),
     )
@@ -104,7 +114,7 @@ async def test_missing_mapping_is_rejected() -> None:
             {
                 "external_file_id": "ext-1",
                 "file_name": "a.pdf",
-                "department_id": 20,
+                "department_id": "20",
             }
         )
     )
@@ -115,6 +125,7 @@ async def test_missing_mapping_is_rejected() -> None:
 
 @pytest.mark.asyncio
 async def test_missing_department_for_org_code_is_rejected() -> None:
+    caller_department = _department(10, "调用人部门")
     mapping = FilelibDepartmentMapping(
         id=1,
         external_department_id="20",
@@ -122,7 +133,9 @@ async def test_missing_department_for_org_code_is_rejected() -> None:
         org_code="ORG-200",
     )
     repository = SimpleNamespace(
+        find_user_by_id=AsyncMock(return_value=_token_user()),
         find_primary_departments=AsyncMock(return_value=[UserDepartment(user_id=1, department_id=10, is_primary=1)]),
+        find_department_by_id=AsyncMock(return_value=caller_department),
         find_department_mapping_by_external_department_id=AsyncMock(return_value=mapping),
         find_department_by_external_id=AsyncMock(return_value=None),
     )
@@ -131,7 +144,7 @@ async def test_missing_department_for_org_code_is_rejected() -> None:
             {
                 "external_file_id": "ext-1",
                 "file_name": "a.pdf",
-                "department_id": 20,
+                "department_id": "20",
             }
         )
     )

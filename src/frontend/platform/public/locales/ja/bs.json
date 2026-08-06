@@ -188,10 +188,12 @@
         "selectBindingFirst": "設定対象テナントを確定するため、先に Token の紐づけユーザーを選択してください。",
         "optionsRequiredError": "ファイル同期の設定候補が読み込まれていません。再試行してから保存してください。",
         "invalidError": "ファイル同期設定の「{{field}}」が無効または失効しています。確認して再試行してください。",
+        "domainSpaceUnboundError": "固定の業務ドメインと固定の対象ナレッジスペースがポータル設定で绑定されていません。設定を見直すか、いずれかを動的モードに変更してください。",
         "category": "親カテゴリ",
         "subcategory": "子カテゴリ",
         "businessDomain": "業務ドメイン",
         "targetSpace": "対象ナレッジスペース",
+        "targetFolder": "対象フォルダー",
         "dynamicSource": "動的業務ソース",
         "select": "選択してください",
         "stale": "保存済みの値は失効しています。再選択するまで元の値を保持します。",
@@ -217,6 +219,20 @@
           "fixed": "固定設定",
           "dynamic": "実行時に動的取得"
         },
+        "folderModes": {
+          "none": "スペースルート",
+          "fixed": "固定フォルダー",
+          "dynamic": "動的フォルダー"
+        },
+        "folderDynamicSource": "子フォルダー命名ソース",
+        "folderPath": "フォルダーパス",
+        "folderPathPlaceholder": "例：政策ファイル/管理制度",
+        "parentFolderPath": "親フォルダーパス",
+        "parentFolderPathPlaceholder": "空欄はスペースルート、例：政策ファイル",
+        "folderSources": {
+          "departmentName": "同期部門名を使用（department_id マッピング）",
+          "callerMainDepartmentName": "Token バインドユーザーの主所属部署名を使用"
+        },
         "sources": {
           "departmentId": "department_id を使用",
           "responsiblePersonId": "responsible_person_id の主所属部署を使用"
@@ -226,16 +242,23 @@
           "subcategory": "子カテゴリ",
           "businessDomain": "業務ドメイン",
           "targetSpace": "対象ナレッジスペース",
+          "targetFolder": "対象フォルダー",
           "dynamicSource": "動的業務ソース",
           "businessDomainDynamicSource": "業務ドメインの動的ソース",
-          "targetSpaceDynamicSource": "対象スペースの動的ソース"
+          "targetSpaceDynamicSource": "対象スペースの動的ソース",
+          "targetFolderDynamicSource": "フォルダー動的命名ソース",
+          "businessDomainTargetBinding": "業務ドメインと対象スペースの绑定"
         },
         "summary": {
           "notConfigured": "未設定",
           "businessDomain": "業務ドメイン",
           "targetSpace": "対象",
+          "targetFolder": "フォルダー",
           "dynamicDepartment": "動的(department_id)",
-          "dynamicResponsiblePerson": "動的(responsible_person_id の主所属部署)"
+          "dynamicResponsiblePerson": "動的(responsible_person_id の主所属部署)",
+          "folderNone": "ルート",
+          "folderDynamicDepartmentName": "動的(同期部門名)",
+          "folderDynamicCallerMainDepartmentName": "動的(バインドユーザー主所属部署名)"
         }
       },
       "saveConfig": "設定を保存",

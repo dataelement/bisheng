@@ -189,10 +189,12 @@
         "selectBindingFirst": "请先选择 Token 绑定用户，以确定配置所属租户。",
         "optionsRequiredError": "文件同步配置选项尚未成功加载，请重试后再保存。",
         "invalidError": "文件同步配置中的“{{field}}”无效或已失效，请检查后重试。",
+        "domainSpaceUnboundError": "固定业务域与固定目标知识库未在门户配置中绑定，请调整配置或改为动态模式。",
         "category": "一级分类",
         "subcategory": "二级分类",
         "businessDomain": "业务域",
         "targetSpace": "目标知识库",
+        "targetFolder": "目标目录",
         "dynamicSource": "动态业务来源",
         "select": "请选择",
         "stale": "当前保存值已失效；该原值会保留，重新选择后才会替换。",
@@ -218,6 +220,20 @@
           "fixed": "固定配置",
           "dynamic": "运行时动态获取"
         },
+        "folderModes": {
+          "none": "空间根目录",
+          "fixed": "固定目录",
+          "dynamic": "动态目录"
+        },
+        "folderDynamicSource": "子目录命名来源",
+        "folderPath": "目录路径",
+        "folderPathPlaceholder": "例如：政策文件/管理制度",
+        "parentFolderPath": "父级目录路径",
+        "parentFolderPathPlaceholder": "留空表示空间根目录，例如：政策文件",
+        "folderSources": {
+          "departmentName": "使用同步部门名（department_id 映射部门）",
+          "callerMainDepartmentName": "使用 Token 绑定用户主责部门名"
+        },
         "sources": {
           "departmentId": "使用 department_id",
           "responsiblePersonId": "使用 responsible_person_id 的主部门"
@@ -227,16 +243,23 @@
           "subcategory": "二级分类",
           "businessDomain": "业务域",
           "targetSpace": "目标知识库",
+          "targetFolder": "目标目录",
           "dynamicSource": "动态业务来源",
           "businessDomainDynamicSource": "业务域动态来源",
-          "targetSpaceDynamicSource": "目标知识库动态来源"
+          "targetSpaceDynamicSource": "目标知识库动态来源",
+          "targetFolderDynamicSource": "目录动态命名来源",
+          "businessDomainTargetBinding": "业务域与目标知识库绑定"
         },
         "summary": {
           "notConfigured": "未配置",
           "businessDomain": "业务域",
           "targetSpace": "目标库",
+          "targetFolder": "目录",
           "dynamicDepartment": "动态(department_id)",
-          "dynamicResponsiblePerson": "动态(responsible_person_id 主部门)"
+          "dynamicResponsiblePerson": "动态(responsible_person_id 主部门)",
+          "folderNone": "根目录",
+          "folderDynamicDepartmentName": "动态(同步部门名)",
+          "folderDynamicCallerMainDepartmentName": "动态(绑定用户主责部门名)"
         }
       },
       "saveConfig": "保存配置",
