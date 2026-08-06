@@ -1,8 +1,8 @@
 # 看板数据集指标统计口径
 
-> 更新时间：2026-08-05  
+> 更新时间：2026-08-06
 > 适用范围：`DASHBOARD_DATASET` 当前注册的全部数据集  
-> 统计结果：14 个数据集、47 个指标
+> 统计结果：14 个数据集、48 个指标
 
 ## 1. 文档目的
 
@@ -27,7 +27,7 @@
 | 虚拟指标 | 聚合方式由后端数据集配置固定，看板组件中的聚合选项不改变其计算方式。 |
 | 实体指标 | 默认使用 `sum`；看板编辑器允许改为平均、计数、最大、最小或去重计数。 |
 | 比率指标 | 返回原始比值，例如 `0.25`；是否显示为 `25%` 由组件数字格式决定。分母为 `0` 时返回 `0`。 |
-| 指标过滤 | 指标固定过滤条件与组件过滤、联动过滤、服务端权限过滤、时间过滤按 AND 合并。 |
+| 指标过滤 | 指标固定过滤条件与组件过滤、联动过滤、时间过滤按 AND 合并；数据集查询不根据登录用户额外追加租户、部门或知识空间硬过滤。 |
 | 累计总量，有时间维度 | 先按所选时间粒度计算每个时间桶的新增量，再执行 `cumulative_sum`。 |
 | 累计总量，无时间维度 | 移除查询开始时间，保留结束时间，直接统计截至结束时间的总量。 |
 
@@ -45,7 +45,7 @@
 | 工具调用时长表 `mid_tool_call_dtl` | `tool_invoke` 埋点 | 一次工具调用事件 | 埋点发生时间 | [derived_events.py](../src/backend/bisheng/telemetry/domain/mid_table/derived_events.py#L359) |
 | 知识库存量表 `mid_knowledge_increment` | MySQL `knowledge` 表 | 一个知识库；ES ID 为 `knowledge_{knowledge_id}` | 知识库 `create_time` | [mid_table.py](../src/backend/bisheng/worker/telemetry/mid_table.py#L931) |
 | 知识库文件存量表 `mid_knowledge_file_increment` | MySQL `knowledgefile`、`qaknowledge` | 一个文档文件或一条 QA 数据；ES ID 分别为 `file-{id}`、`qa-{id}` | 文件或 QA 的 `create_time` | [knowledge_file_increment.py](../src/backend/bisheng/telemetry/domain/mid_table/knowledge_file_increment.py#L56) |
-| 知识空间内容统计 `mid_knowledge_space_content_stat` | 当前成功、未删除、主版本的知识空间文件；文件预览事件 | 文件是一条当前快照；预览是“文件＋中国自然日”一条累计记录 | 文件创建时间；预览日零点 | [mid_table.py](../src/backend/bisheng/worker/telemetry/mid_table.py#L372)、[knowledge_space_content.py](../src/backend/bisheng/telemetry/domain/mid_table/knowledge_space_content.py#L680) |
+| 知识空间内容统计 `mid_knowledge_space_content_stat` | 当前成功、未删除、主版本的知识空间文件；文件预览事件；门户水印文件成功下载事件 | 文件是一条当前快照；预览和下载分别是“文件＋中国自然日”一条累计记录 | 文件创建时间；预览和下载日零点 | [mid_table.py](../src/backend/bisheng/worker/telemetry/mid_table.py)、[knowledge_space_content.py](../src/backend/bisheng/telemetry/domain/mid_table/knowledge_space_content.py) |
 | 文件解析事件表 `mid_doc_parse_dtl` | `file_parse` 埋点 | 一次文件解析事件 | 埋点发生时间 | [derived_events.py](../src/backend/bisheng/telemetry/domain/mid_table/derived_events.py#L287) |
 | 模型调用事件表 `mid_model_call_dtl` | `model_invoke` 埋点 | 一次模型调用按开始至结束覆盖的每一分钟展开；没有完整起止时间时只生成一条 | 埋点时间；并发使用 `minute_ts` | [derived_events.py](../src/backend/bisheng/telemetry/domain/mid_table/derived_events.py#L399) |
 | 用户反馈指标表 `mid_user_interact_dtl` | `message_feedback` 埋点 | 一次点赞、点踩或复制操作 | 埋点发生时间 | [mid_table.py](../src/backend/bisheng/worker/telemetry/mid_table.py#L993) |
@@ -80,6 +80,7 @@
 | 知识空间内容统计 | 新增文件数 | `new_file_count` | 与“总文件数”相同 | `value_count(file_id)` | 查询周期或时间桶内创建、且当前仍有效的文件数量 | 文件创建时间；支持年/月/周/日 | 当前每个文件一条快照 |
 | 知识空间内容统计 | 内容贡献人数 | `contributor_count` | `record_type=file`、空间级别在允许集合内 | `cardinality(uploader_user_id)` | 上传过当前有效内容的不同用户数 | 文件创建时间；支持年/月/周/日 | 按上传人 ID 去重 |
 | 知识空间内容统计 | 预览次数 | `preview_count` | `record_type = preview_daily`、空间级别在允许集合内；排除“我的收藏” | `sum(preview_count)` | 各“文件＋自然日”记录中的预览计数之和 | 中国自然日零点；支持年/月/周/日 | 不按用户去重，每次成功预览均加 1 |
+| 知识空间内容统计 | 下载次数 | `download_count` | `record_type = download_daily`、空间级别在允许集合内；仅统计 `portal_document_download` 中 `source_app = shougang_portal`、`status = success` 的事件；排除“我的收藏”和同步时已删除或失效的文件 | `sum(download_count)` | 各“当前有效文件＋中国自然日”记录中的门户水印下载计数之和 | 中国自然日零点；支持年/月/周/日 | 不按用户去重，每次成功开始传输均计 1 次；每日 `00:30` 同步或手工重跑后更新，重复同步覆盖同一日汇总记录 |
 | 文件解析事件表 | 文档上传次数 | `doc_parse_count` | 无 | `value_count(event_id)` | 全部文件解析事件数量 | 解析事件时间；支持年/月/周/日 | 不额外去重 |
 | 文件解析事件表 | 文档入库成功次数 | `doc_parse_success_count` | `status = success` | `value_count(event_id)` | 解析成功事件数量 | 解析事件时间；支持年/月/周/日 | 不额外去重 |
 | 文件解析事件表 | 文档入库成功率 | `doc_parse_success_rate` | 分子：`status=success`；分母：全部解析事件 | 两次 `value_count(event_id)` | 解析成功次数 ÷ 全部解析次数 | 解析事件时间；支持年/月/周/日 | 不额外去重 |

@@ -94,6 +94,19 @@ def test_realtime_dashboard_seed_contains_three_target_datasets():
             "personal",
         ]
     assert knowledge_metrics["preview_count"]["aggregations"][0]["type"] == "sum"
+    assert knowledge_metrics["download_count"]["name"] == "下载次数"
+    assert knowledge_metrics["download_count"]["filter"]["filters"] == [
+        {"operator": "term", "field": "record_type", "value": "download_daily"},
+        {
+            "operator": "terms",
+            "field": "space_level",
+            "value": ["public", "department", "team", "team_ks", "personal"],
+        },
+    ]
+    download_aggregation = knowledge_metrics["download_count"]["aggregations"][0]
+    assert download_aggregation["name"] == "download_count"
+    assert download_aggregation["type"] == "sum"
+    assert download_aggregation["field"] == "download_count"
     knowledge_dimensions = {
         dimension["field"]: dimension["name"]
         for dimension in knowledge_dataset.schema_config["dimensions"]

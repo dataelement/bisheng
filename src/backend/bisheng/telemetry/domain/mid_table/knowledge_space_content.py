@@ -67,6 +67,13 @@ class KnowledgeSpaceContentRecord(BaseModel):
     uploader_department_infos: list[UserDepartmentInfo] = Field(default_factory=list)
 
 
+class KnowledgeSpaceDownloadDailyRecord(KnowledgeSpaceContentRecord):
+    """Daily portal download aggregate enriched with the current file dimensions."""
+
+    local_date: str
+    download_count: int = Field(ge=0)
+
+
 @dataclass(frozen=True)
 class ProjectionWorkItem:
     member: str
@@ -185,6 +192,7 @@ return 0
         },
         "local_date": {"type": "keyword"},
         "preview_count": {"type": "long"},
+        "download_count": {"type": "long"},
         "space_id": {"type": "keyword", "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}}},
         "space_name": {"type": "keyword", "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}}},
         "space_level": {"type": "keyword"},
@@ -740,6 +748,28 @@ return 0
                 file_id,
             )
 
+    @classmethod
+    def build_download_daily_record(
+        cls,
+        *,
+        file_record: KnowledgeSpaceContentRecord,
+        local_date: str,
+        download_count: int,
+        sync_run_id: str,
+    ) -> KnowledgeSpaceDownloadDailyRecord:
+        local_day = datetime.strptime(local_date, "%Y-%m-%d").date()
+        day_start = datetime.combine(local_day, datetime.min.time(), tzinfo=CHINA_STANDARD_TIME)
+        dimensions = {field: getattr(file_record, field) for field in cls.PREVIEW_DIMENSION_FIELDS}
+        return KnowledgeSpaceDownloadDailyRecord(
+            es_id=f"download_{file_record.file_id}_{local_date}",
+            record_type="download_daily",
+            sync_run_id=sync_run_id,
+            timestamp=int(day_start.timestamp()),
+            local_date=local_date,
+            download_count=download_count,
+            **dimensions,
+        )
+
     def delete_file_records_sync(self, file_ids: Iterable[int]) -> int:
         ids = self._normalize_ids(file_ids)
         if not ids:
@@ -776,6 +806,21 @@ return 0
             {
                 "bool": {
                     "filter": [{"term": {"record_type": "file"}}],
+                    "must_not": [{"term": {"sync_run_id": sync_run_id}}],
+                }
+            },
+            refresh=True,
+            conflicts="proceed",
+        )
+        return int(result.get("deleted", 0) or 0)
+
+    def delete_stale_download_daily_records_sync(self, sync_run_id: str) -> int:
+        self.ensure_index_exists_sync()
+        self._es_client_sync.indices.refresh(index=self._index_name)
+        result = self.delete_by_query_sync(
+            {
+                "bool": {
+                    "filter": [{"term": {"record_type": "download_daily"}}],
                     "must_not": [{"term": {"sync_run_id": sync_run_id}}],
                 }
             },

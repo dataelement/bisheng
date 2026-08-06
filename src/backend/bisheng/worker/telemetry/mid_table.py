@@ -1,6 +1,7 @@
 from datetime import date, datetime, timedelta
 from typing import Any, List
 
+from elasticsearch import exceptions as es_exceptions
 from elasticsearch import helpers
 from loguru import logger
 from sqlalchemy import exists, or_
@@ -596,6 +597,159 @@ def _is_file_content_stat_visible(file_record: KnowledgeFile, space: Knowledge) 
     )
 
 
+def _get_portal_download_aggregation_page(
+    *,
+    after_key: dict[str, Any] | None = None,
+    page_size: int = 1000,
+) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
+    composite: dict[str, Any] = {
+        "size": page_size,
+        "sources": [
+            {
+                "local_date": {
+                    "date_histogram": {
+                        "field": "timestamp",
+                        "calendar_interval": "1d",
+                        "time_zone": "+08:00",
+                        "format": "yyyy-MM-dd",
+                    }
+                }
+            },
+            {
+                "file_id": {
+                    "terms": {
+                        "field": "event_data.portal_document_download_file_id",
+                    }
+                }
+            },
+        ],
+    }
+    if after_key:
+        composite["after"] = after_key
+
+    try:
+        response = get_statistics_es_connection_sync().search(
+            index=telemetry_service.index_name,
+            body={
+                "size": 0,
+                "query": {
+                    "bool": {
+                        "filter": [
+                            {"term": {"event_type": BaseTelemetryTypeEnum.PORTAL_DOCUMENT_DOWNLOAD.value}},
+                            {
+                                "term": {
+                                    "event_data.portal_document_download_source_app.keyword": "shougang_portal"
+                                }
+                            },
+                            {
+                                "term": {
+                                    "event_data.portal_document_download_status.keyword": "success"
+                                }
+                            },
+                        ]
+                    }
+                },
+                "aggs": {
+                    "download_daily": {
+                        "composite": composite,
+                    }
+                },
+            },
+        )
+    except es_exceptions.NotFoundError:
+        logger.info("Portal download telemetry index does not exist; projecting zero download records")
+        return [], None
+    aggregation = response.get("aggregations", {}).get("download_daily", {})
+    buckets: list[dict[str, Any]] = []
+    for bucket in aggregation.get("buckets", []):
+        key = bucket.get("key") or {}
+        try:
+            file_id = int(key["file_id"])
+            local_date = str(key["local_date"])
+            datetime.strptime(local_date, "%Y-%m-%d")
+            download_count = int(bucket["doc_count"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(f"Invalid portal download aggregation bucket: {bucket}") from exc
+        if file_id <= 0 or download_count < 0:
+            raise ValueError(f"Invalid portal download aggregation bucket: {bucket}")
+        buckets.append(
+            {
+                "file_id": file_id,
+                "local_date": local_date,
+                "download_count": download_count,
+            }
+        )
+    return buckets, aggregation.get("after_key")
+
+
+def rebuild_knowledge_space_content_download_projection(
+    *,
+    owner_token: str,
+    mid_table: KnowledgeSpaceContentStat,
+    sync_run_id: str,
+) -> dict[str, int]:
+    after_key: dict[str, Any] | None = None
+    user_map: dict[int, Any] = {}
+    space_scope_map: dict[int, Any] = {}
+    space_department_map: dict[int, Any] = {}
+    primary_department_map: dict[int, Any] = {}
+    category_label_cache: dict[int, tuple[dict[str, str], dict[str, str]]] = {}
+    synced_count = 0
+
+    while True:
+        if not KnowledgeSpaceContentStat.renew_lock_sync(owner_token):
+            raise RuntimeError("Knowledge space content full projection owner lock lost during download query")
+        buckets, next_after_key = _get_portal_download_aggregation_page(after_key=after_key)
+        if not buckets:
+            break
+
+        file_ids = sorted({bucket["file_id"] for bucket in buckets})
+        rows = [
+            (file_record, space)
+            for file_record, space in _get_knowledge_space_content_rows_by_file_ids(file_ids)
+            if _is_file_content_stat_visible(file_record, space)
+        ]
+        file_records, user_map = _build_knowledge_space_content_records(
+            rows,
+            user_map,
+            sync_run_id=sync_run_id,
+            space_scope_map=space_scope_map,
+            space_department_map=space_department_map,
+            primary_department_map=primary_department_map,
+            category_label_cache=category_label_cache,
+        )
+        file_record_map = {record.file_id: record for record in file_records}
+        download_records = [
+            KnowledgeSpaceContentStat.build_download_daily_record(
+                file_record=file_record_map[bucket["file_id"]],
+                local_date=bucket["local_date"],
+                download_count=bucket["download_count"],
+                sync_run_id=sync_run_id,
+            )
+            for bucket in buckets
+            if bucket["file_id"] in file_record_map
+        ]
+        if download_records:
+            if not KnowledgeSpaceContentStat.renew_lock_sync(owner_token):
+                raise RuntimeError("Knowledge space content full projection owner lock lost before download write")
+            mid_table.insert_records_sync(download_records)
+            synced_count += len(download_records)
+
+        if not next_after_key:
+            break
+        if next_after_key == after_key:
+            raise RuntimeError("Portal download aggregation returned a repeated after_key")
+        after_key = next_after_key
+
+    if not KnowledgeSpaceContentStat.renew_lock_sync(owner_token):
+        raise RuntimeError("Knowledge space content full projection owner lock lost before download cleanup")
+    deleted_count = mid_table.delete_stale_download_daily_records_sync(sync_run_id)
+    return {
+        "synced_download_daily": synced_count,
+        "deleted_stale_download_daily": deleted_count,
+    }
+
+
 def rebuild_knowledge_space_content_file_projection(owner_token: str) -> dict[str, Any]:
     """Rebuild current file snapshots while the caller owns the projection lock."""
     sync_started_ms = KnowledgeSpaceContentStat._now_ms()
@@ -637,9 +791,15 @@ def rebuild_knowledge_space_content_file_projection(owner_token: str) -> dict[st
     deleted_favorite_count = mid_table.delete_space_records_sync(
         _get_favorite_space_ids()
     )
+    download_result = rebuild_knowledge_space_content_download_projection(
+        owner_token=owner_token,
+        mid_table=mid_table,
+        sync_run_id=sync_run_id,
+    )
     queue_status = KnowledgeSpaceContentStat.queue_status_sync()
     return {
         **queue_status,
+        **download_result,
         "synced": synced_count,
         "deleted_stale": deleted_count,
         "deleted_favorite": deleted_favorite_count,

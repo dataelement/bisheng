@@ -388,6 +388,7 @@ def test_knowledge_space_content_mapping_excludes_tenant_and_common_user_context
         "type": "date",
         "format": "strict_date_optional_time||epoch_second",
     }
+    assert stat._mappings["download_count"] == {"type": "long"}
 
 
 @pytest.mark.parametrize(
@@ -472,6 +473,257 @@ def test_knowledge_space_content_delete_stale_file_records_uses_sync_run_id(monk
     assert call["conflicts"] == "proceed"
     assert call["body"]["query"]["bool"]["filter"] == [{"term": {"record_type": "file"}}]
     assert call["body"]["query"]["bool"]["must_not"] == [{"term": {"sync_run_id": "run-1"}}]
+
+
+def test_knowledge_space_content_builds_idempotent_download_daily_record():
+    from bisheng.telemetry.domain.mid_table import knowledge_space_content as module
+
+    file_record = module.KnowledgeSpaceContentStat.build_file_record(
+        file_record=SimpleNamespace(
+            id=11,
+            tenant_id=7,
+            user_id=9,
+            user_name="上传人",
+            create_time=None,
+            file_name="制度.pdf",
+            file_type=1,
+            split_rule=None,
+            file_subcategory_code=None,
+            file_encoding=None,
+        ),
+        space=SimpleNamespace(id=3, tenant_id=7, name="制度库"),
+        space_level="department",
+        space_department=SimpleNamespace(id=31, name="质量管理处"),
+    )
+
+    first = module.KnowledgeSpaceContentStat.build_download_daily_record(
+        file_record=file_record,
+        local_date="2026-08-03",
+        download_count=2,
+        sync_run_id="run-1",
+    )
+    second = module.KnowledgeSpaceContentStat.build_download_daily_record(
+        file_record=file_record,
+        local_date="2026-08-03",
+        download_count=5,
+        sync_run_id="run-2",
+    )
+
+    assert first.es_id == second.es_id == "download_11_2026-08-03"
+    assert first.record_type == "download_daily"
+    assert first.download_count == 2
+    assert first.timestamp == 1785686400
+    assert first.space_department_name == "质量管理处"
+    assert second.download_count == 5
+
+
+def test_delete_stale_download_daily_records_uses_sync_run_id(monkeypatch):
+    from bisheng.telemetry.domain.mid_table import knowledge_space_content as module
+
+    fake_client = _FakeSyncIndexClient()
+    monkeypatch.setattr("bisheng.telemetry.domain.mid_table.base.get_es_connection_sync", lambda: fake_client)
+
+    deleted = module.KnowledgeSpaceContentStat().delete_stale_download_daily_records_sync("run-1")
+
+    assert deleted == 3
+    call = fake_client.deleted_queries[0]
+    assert call["refresh"] is True
+    assert call["conflicts"] == "proceed"
+    assert call["body"]["query"]["bool"] == {
+        "filter": [{"term": {"record_type": "download_daily"}}],
+        "must_not": [{"term": {"sync_run_id": "run-1"}}],
+    }
+
+
+def test_portal_download_aggregation_query_filters_source_and_uses_after_key(monkeypatch):
+    worker_module = _import_worker_mid_table()
+    search_calls = []
+
+    class _FakeStatisticsEs:
+        def search(self, **kwargs):
+            search_calls.append(kwargs)
+            return {
+                "aggregations": {
+                    "download_daily": {
+                        "buckets": [
+                            {
+                                "key": {"local_date": "2026-08-03", "file_id": 11},
+                                "doc_count": 2,
+                            }
+                        ],
+                        "after_key": {"local_date": "2026-08-03", "file_id": 11},
+                    }
+                }
+            }
+
+    monkeypatch.setattr(worker_module, "get_statistics_es_connection_sync", lambda: _FakeStatisticsEs())
+    worker_module.telemetry_service.index_name = "base_telemetry_events"
+
+    buckets, after_key = worker_module._get_portal_download_aggregation_page(
+        after_key={"local_date": "2026-08-02", "file_id": 9},
+        page_size=200,
+    )
+
+    assert buckets[0]["download_count"] == 2
+    assert buckets[0]["file_id"] == 11
+    assert buckets[0]["local_date"] == "2026-08-03"
+    assert after_key == {"local_date": "2026-08-03", "file_id": 11}
+    call = search_calls[0]
+    assert call["index"] == "base_telemetry_events"
+    body = call["body"]
+    assert body["query"]["bool"]["filter"] == [
+        {"term": {"event_type": "portal_document_download"}},
+        {
+            "term": {
+                "event_data.portal_document_download_source_app.keyword": "shougang_portal"
+            }
+        },
+        {"term": {"event_data.portal_document_download_status.keyword": "success"}},
+    ]
+    composite = body["aggs"]["download_daily"]["composite"]
+    assert composite["size"] == 200
+    assert composite["after"] == {"local_date": "2026-08-02", "file_id": 9}
+    assert composite["sources"][0]["local_date"]["date_histogram"]["time_zone"] == "+08:00"
+
+
+def test_portal_download_aggregation_treats_missing_event_index_as_empty(monkeypatch):
+    worker_module = _import_worker_mid_table()
+
+    class _MissingIndexError(Exception):
+        pass
+
+    class _FakeStatisticsEs:
+        def search(self, **_kwargs):
+            raise _MissingIndexError
+
+    monkeypatch.setattr(worker_module.es_exceptions, "NotFoundError", _MissingIndexError)
+    monkeypatch.setattr(worker_module, "get_statistics_es_connection_sync", lambda: _FakeStatisticsEs())
+
+    assert worker_module._get_portal_download_aggregation_page() == ([], None)
+
+
+def test_rebuild_download_projection_skips_missing_files_and_cleans_after_write(monkeypatch):
+    from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFileStatus
+
+    worker_module = _import_worker_mid_table()
+    stat_cls = worker_module.KnowledgeSpaceContentStat
+    _stub_file_dimension_lookups(worker_module, monkeypatch)
+    file_record = SimpleNamespace(
+        id=11,
+        tenant_id=7,
+        user_id=9,
+        user_name="上传人",
+        create_time=None,
+        knowledge_id=3,
+        file_name="制度.pdf",
+        file_type=FileType.FILE.value,
+        status=KnowledgeFileStatus.SUCCESS.value,
+        deleted_at=None,
+        split_rule=None,
+        file_subcategory_code=None,
+        file_encoding=None,
+    )
+    space = SimpleNamespace(id=3, tenant_id=7, name="制度库", type=3, is_favorite=False)
+    pages = iter(
+        [
+            (
+                [
+                    {"file_id": 11, "local_date": "2026-08-03", "download_count": 2},
+                    {"file_id": 404, "local_date": "2026-08-03", "download_count": 7},
+                ],
+                {"local_date": "2026-08-03", "file_id": 404},
+            ),
+            ([], None),
+        ]
+    )
+    inserted = []
+    cleaned = []
+
+    monkeypatch.setattr(worker_module, "_get_portal_download_aggregation_page", lambda **_kwargs: next(pages))
+    monkeypatch.setattr(
+        worker_module,
+        "_get_knowledge_space_content_rows_by_file_ids",
+        lambda _file_ids: [(file_record, space)],
+    )
+    monkeypatch.setattr(worker_module, "get_user_from_ids_with_cache", lambda _ids, user_map: user_map)
+    monkeypatch.setattr(stat_cls, "renew_lock_sync", lambda _owner: True)
+    monkeypatch.setattr(stat_cls, "insert_records_sync", lambda self, records: inserted.extend(records))
+    monkeypatch.setattr(
+        stat_cls,
+        "delete_stale_download_daily_records_sync",
+        lambda self, sync_run_id: cleaned.append(sync_run_id) or 4,
+    )
+    monkeypatch.setattr(
+        "bisheng.telemetry.domain.mid_table.base.get_es_connection_sync",
+        lambda: _FakeSyncIndexClient(),
+    )
+
+    result = worker_module.rebuild_knowledge_space_content_download_projection(
+        owner_token="owner-a",
+        mid_table=stat_cls(),
+        sync_run_id="run-1",
+    )
+
+    assert [record.es_id for record in inserted] == ["download_11_2026-08-03"]
+    assert inserted[0].download_count == 2
+    assert cleaned == ["run-1"]
+    assert result == {"synced_download_daily": 1, "deleted_stale_download_daily": 4}
+
+
+def test_rebuild_download_projection_does_not_cleanup_after_failed_write(monkeypatch):
+    worker_module = _import_worker_mid_table()
+    stat_cls = worker_module.KnowledgeSpaceContentStat
+    cleaned = []
+
+    monkeypatch.setattr(
+        worker_module,
+        "_get_portal_download_aggregation_page",
+        lambda **_kwargs: ([{"file_id": 11, "local_date": "2026-08-03", "download_count": 1}], None),
+    )
+    monkeypatch.setattr(
+        worker_module,
+        "_get_knowledge_space_content_rows_by_file_ids",
+        lambda _file_ids: [
+            (
+                SimpleNamespace(id=11, file_type=1, status=2, deleted_at=None),
+                SimpleNamespace(id=3, type=3, is_favorite=False),
+            )
+        ],
+    )
+    monkeypatch.setattr(
+        worker_module,
+        "_build_knowledge_space_content_records",
+        lambda *_args, **_kwargs: ([SimpleNamespace(file_id=11)], {}),
+    )
+    monkeypatch.setattr(stat_cls, "renew_lock_sync", lambda _owner: True)
+    monkeypatch.setattr(
+        stat_cls,
+        "build_download_daily_record",
+        lambda **_kwargs: SimpleNamespace(es_id="download_11_2026-08-03"),
+    )
+    monkeypatch.setattr(
+        stat_cls,
+        "insert_records_sync",
+        lambda self, _records: (_ for _ in ()).throw(RuntimeError("es down")),
+    )
+    monkeypatch.setattr(
+        stat_cls,
+        "delete_stale_download_daily_records_sync",
+        lambda self, sync_run_id: cleaned.append(sync_run_id),
+    )
+    monkeypatch.setattr(
+        "bisheng.telemetry.domain.mid_table.base.get_es_connection_sync",
+        lambda: _FakeSyncIndexClient(),
+    )
+
+    with pytest.raises(RuntimeError, match="es down"):
+        worker_module.rebuild_knowledge_space_content_download_projection(
+            owner_token="owner-a",
+            mid_table=stat_cls(),
+            sync_run_id="run-1",
+        )
+
+    assert cleaned == []
 
 
 def test_delete_space_records_removes_file_and_preview_rows(monkeypatch):
