@@ -132,6 +132,11 @@ if TYPE_CHECKING:
 
 # Maximum number of Knowledge Spaces a user can create
 _MAX_SPACE_PER_USER = 30
+# Folder depth cap: product rule is "10 层". UI 第1层 = level 0, so the deepest
+# allowed FOLDER level is 9. Files inside a deepest-level folder don't count as
+# a layer. Existing level-10 folders (legacy over-deep data) stay accessible and
+# movable; they just can't gain children.
+MAX_FOLDER_LEVEL = 9
 SPACE_ADMIN_REVOKED_MESSAGE = "revoked_knowledge_space_admin"
 SPACE_MEMBER_REMOVED_MESSAGE = "removed_knowledge_space_member"
 SPACE_MADE_PRIVATE_MESSAGE = "knowledge_space_made_private"
@@ -2899,7 +2904,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if parent_id:
             parent_folder = await self._get_folder_for_action(knowledge_id, parent_id)
             level = parent_folder.level + 1
-            if level > 10:
+            if level > MAX_FOLDER_LEVEL:
                 raise SpaceFolderDepthError()
             file_level_path = f"{parent_folder.file_level_path}/{parent_id}"
             parent_type = "folder"
@@ -3583,11 +3588,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
             for depth in range(1, len(dir_parts) + 1):
                 dir_set.add(dir_parts[:depth])
 
-        # Depth: deepest created FOLDER must stay within the 10-layer limit
-        # (UI 第1层 = level 0 ⇒ deepest folder level 9). Files inside the
-        # deepest folder don't count as a layer.
+        # Depth: deepest created FOLDER must stay within MAX_FOLDER_LEVEL.
         max_chain = max((len(d) for d in dir_set), default=0)
-        if max_chain and base_child_level + max_chain - 1 > 9:
+        if max_chain and base_child_level + max_chain - 1 > MAX_FOLDER_LEVEL:
             raise SpaceFolderDepthError()
 
         # Duplicate check only for the top-level folder names (design 坑 U3):
@@ -3833,10 +3836,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         await self._require_read_permission(space_id)
         cross_space = target_space_id != space_id
-        # Depth limit counts FOLDER layers only (UI 第1层 = level 0, "10 层" ⇒
-        # deepest folder level 9). Files may sit inside a deepest-level folder,
-        # so file moves carry no depth check at all.
-        max_folder_level = 9
+        # Depth limit counts FOLDER layers only (see MAX_FOLDER_LEVEL). Files may
+        # sit inside a deepest-level folder, so file moves carry no depth check.
+        max_folder_level = MAX_FOLDER_LEVEL
 
         async with get_async_db_session() as session:
             source_space = await session.get(Knowledge, space_id)

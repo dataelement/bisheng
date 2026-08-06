@@ -381,8 +381,8 @@ export function MediaPlayer({ kind, src, allowDownload = false, onDownload }: Me
     /* Menus float over the media, so they stay translucent and open upward
        rather than covering the stage below the bar. */
     const menuSurfaceClass = onDarkStage
-        ? "border-0 bg-black/75 backdrop-blur-md"
-        : "bg-white/85 backdrop-blur-md";
+        ? "border-0 bg-black/75"
+        : "bg-white/85";
     /* The shared menu item forces a dark label while highlighted, which is
        unreadable on the dark surface — keep it white on hover/focus too. */
     const menuItemClass = onDarkStage
