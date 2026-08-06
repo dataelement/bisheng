@@ -62,12 +62,20 @@ const NARRATION_MIN_LEN = 4;
 // not a natural "colleague reporting" line — skip it for a shorter sentence.
 const NARRATION_MAX_LEN = 56;
 
-// Unit boundaries: CJK 。！？… and newlines ALWAYS split; an ASCII .!? only splits
-// when followed by whitespace/end-of-string — so a mid-token dot in a decimal /
-// abbreviation / ticker ("76.5%", "U.S.", "601138.SH") is NOT a false boundary.
-// Mirrors the boundary semantics firstLine already uses (kept as a separate const
-// on purpose — firstLine matches a prefix, this splits into all units).
-const UNIT_SPLIT = /(?<=[。！？…])|(?<=[.!?](?=\s|$))|\n+/;
+// Unit boundaries WITHIN one line: CJK 。！？… always split; an ASCII !? only splits
+// when followed by whitespace/end-of-string, and an ASCII "." additionally must NOT
+// follow a digit — so a decimal / ticker / list ordinal ("76.5%", "601138.SH", "14.")
+// is not a false sentence end. That last clause is why "13. 未来展望" + "14. 封底",
+// welded into one line, no longer splits into the bare fragment "未来展望14." — it was
+// the missing half of the boundary semantics firstLine has always used (this stays a
+// separate const on purpose: firstLine matches a prefix, this splits into all units).
+// Line breaks are handled by splitIntoUnits itself, which needs the line to tag list
+// membership.
+const UNIT_SPLIT = /(?<=[。！？…])|(?<=[!?](?=\s|$))|(?<=(?<!\d)\.(?=\s|$))/;
+
+// A leading list marker ("- ", "* ", "1. ", "1)", "(1) "). Trailing whitespace is
+// required so "-5%" / "3.5" are untouched.
+const LIST_MARKER = /^[ \t]*(?:[-*•‣◦]|\d+[.)]|[（(]\d+[）)])[ \t]+/;
 
 // A unit whose head is an ASCII lowercase letter / digit, or an English connective,
 // reads as a split-off continuation or a data tail ("confirmed, and …", "6T, … etc.")
@@ -88,15 +96,34 @@ function hasCJK(s: string): boolean {
     return /[一-鿿]/.test(s);
 }
 
+/** One thought unit plus where it came from. */
+interface Unit {
+    /** unit text, whitespace-collapsed, list marker removed */
+    text: string;
+    /** its source line opened with a list marker => the model was DRAFTING content */
+    listItem: boolean;
+}
+
 /**
  * Split a cleaned thinking passage into trimmed thought units. ASCII terminators
  * only break at real sentence ends (UNIT_SPLIT), so decimals / tickers stay whole.
+ *
+ * Splitting per LINE first is what makes `listItem` knowable: the marker is stripped
+ * (so the item text can still be judged as prose) but the fact that it was there is
+ * kept. Every unit cut from a list line inherits the flag — an item like
+ * "- PPT的用途是什么？（公司介绍、投资分析？）" splits into two units and the second one
+ * would otherwise slip through with no trace of its origin.
  */
-function splitIntoUnits(cleaned: string): string[] {
-    return cleaned
-        .split(UNIT_SPLIT)
-        .map((u) => u.replace(/\s+/g, ' ').trim())
-        .filter(Boolean);
+function splitIntoUnits(cleaned: string): Unit[] {
+    const out: Unit[] = [];
+    for (const line of cleaned.split('\n')) {
+        const listItem = LIST_MARKER.test(line);
+        for (const piece of line.replace(LIST_MARKER, '').split(UNIT_SPLIT)) {
+            const text = piece.replace(/\s+/g, ' ').trim();
+            if (text) out.push({ text, listItem });
+        }
+    }
+    return out;
 }
 
 // A numbered outline / agenda label line the model drafts INTO its reasoning while
@@ -104,6 +131,50 @@ function splitIntoUnits(cleaned: string): string[] {
 // content, not a narration aside. Shape: a short label CONTAINING A DIGIT, then a colon,
 // then a value. The digit requirement keeps prose label-values ("结论：…", "Note: …") safe.
 const OUTLINE_LABEL = /^[^。！？.!?,，、:：]{0,10}\d[^。！？.!?,，、:：]{0,3}[:：]\s*\S/;
+
+// Two outline items welded together by a LOST line break: "13. 未来展望" + "14. 封底"
+// arriving as one line leaves "未来展望14." — whose "14. " then reads as a sentence
+// terminator and wins the cleanest pass. The backend no longer drops the newline
+// (stream_event_mapper `_extract_thinking`), so this is the belt to that braces:
+// a word glued straight onto an ordinal marker is never a sentence.
+const FUSED_ORDINAL = /[一-鿿A-Za-z]\d{1,3}[.)]\s*$/;
+
+// A heading-shaped fragment the model drafts INTO a deliverable ("结尾页 - 感谢聆听",
+// "封面 — 公司名"): a short label, a dash, a value, and NO sentence terminator.
+const TITLE_DASH = /^[^。！？.!?]{1,20}\s[-–—]\s\S/;
+
+// First-person planning language — the "what am I about to do" voice that makes a good
+// aside, as opposed to the noun phrases the model drafts as CONTENT.
+//
+// English only, on purpose: this is consulted at exactly one place, to waive the
+// prefer-CJK demotion, and that branch is unreachable for a unit containing CJK. A
+// Chinese word list here would be dead code.
+//
+// It is a waiver, never its own scan pass: a pass would override POSITION, and position
+// is the stronger signal — given "Let me run it." early and "I just need to call the
+// export tool." last, the last line is the right aside even though only the first
+// matches the list.
+const INTENT_EN = /\b(let me|let's|i (?:need|should|can|have|will|am|'ll|'m)|i'(?:ll|m|ve)|now i|next,? i|first,? i|then i|so i)\b/i;
+
+/** Does this unit speak in the planning voice (vs. reading as drafted content)? */
+function hasIntent(bare: string): boolean {
+    return INTENT_EN.test(bare);
+}
+
+/**
+ * Hard rejects applied in EVERY pass — the "this is drafted content, not an aside"
+ * dimension the gates below have no way to see. The old rules were all structural
+ * (length / parenthetical / colon-list / tool name), so a noun phrase and a verb
+ * sentence scored identically and position alone decided; that is how outline
+ * fragments kept winning.
+ */
+function isDraftedContent(u: Unit, term: boolean): boolean {
+    if (u.listItem) return true; // came off a bulleted / numbered line
+    if (/[?？]\s*$/.test(u.text)) return true; // a question the model posed to itself
+    if (FUSED_ORDINAL.test(u.text)) return true; // "未来展望14."
+    if (!term && TITLE_DASH.test(u.text)) return true; // "结尾页 - 感谢聆听"
+    return false;
+}
 
 /**
  * Base prose gate — rejects what is STRUCTURALLY never a one-line aside, in EVERY
@@ -135,7 +206,11 @@ function isBaseProse(bare: string): boolean {
  */
 function isStrictProse(bare: string, cjk: boolean): boolean {
     if (!isBaseProse(bare)) return false;
-    if (cjk && !hasCJK(bare)) return false; // demote a lone English tail in a CJK passage
+    // demote a lone English tail in a CJK passage — UNLESS it speaks in the planning
+    // voice, which is what an aside is supposed to be. Without the waiver the demotion
+    // stopped preferring Chinese PROSE and started preferring Chinese OUTLINE ITEMS,
+    // since those are what a bilingual reasoning passage leaves as CJK candidates.
+    if (cjk && !hasCJK(bare) && !hasIntent(bare)) return false;
     if (/^[a-z0-9]/.test(bare) || CONNECTIVE_HEAD.test(bare)) return false;
     return true;
 }
@@ -143,7 +218,8 @@ function isStrictProse(bare: string, cjk: boolean): boolean {
 /**
  * (Narration §3) Extract a one-line natural-language narration (旁白) from a
  * thinking passage. Pipeline:
- *  - Clean: drop fenced/inline code, markdown markers, AND leading list bullets.
+ *  - Clean: drop fenced/inline code and markdown markers. List bullets survive to
+ *    splitIntoUnits, which strips them per line while recording that they were there.
  *  - Split into UNITS on sentence terminators (CJK always; ASCII only at a real
  *    sentence end) AND newlines. Drop a trailing un-terminated fragment (mid-stream)
  *    so streaming never shows a half-typed line.
@@ -154,21 +230,28 @@ function isStrictProse(bare: string, cjk: boolean): boolean {
  *         meaningful English sentence surfaces over CJK outline junk — but still a real
  *         sentence, not a newline-bounded heading fragment).
  *    Each pass walks from the last unit backward. Structural junk (parentheticals,
- *    lists, outline labels, leaked tool names, out-of-window lengths) is rejected in
- *    every pass.
+ *    lists, outline labels, leaked tool names, out-of-window lengths) and drafted
+ *    content (list items, self-posed questions, fused ordinals, dashed headings) are
+ *    rejected in every pass.
  *  - Nothing natural → '' (caller falls back to the activity-summary label; better
  *    blank than surfacing junk). The expanded thinking body is unaffected.
+ *
+ * NOTE the whole scan must hold up on every STREAMING PREFIX, not just the final
+ * text: NarrationTicker keeps the last non-empty result on screen, so one bad line
+ * that passes mid-stream stays pinned even after better text arrives.
  */
+// A sentence terminator at the very end. Same asymmetry as UNIT_SPLIT: a "." right
+// after a digit closes an ordinal or a decimal, not a sentence.
+const ENDS_TERM = /(?:[。！？…!?]|(?<!\d)\.)\s*$/;
+
 export function extractNarration(text: string | null | undefined): string {
     if (!text) return '';
-    const cleaned = stripMarkdownMarkers(text)
-        // leading list bullets on EVERY line ("- ", "* ", "1. ", "1)", "(1)") — keep
-        // the item text as a candidate sentence; require trailing whitespace so "-5%" /
-        // "3.5" are untouched
-        .replace(/^[ \t]*(?:[-*•‣◦]|\d+[.)]|[（(]\d+[）)])[ \t]+/gm, '');
+    // List markers are NOT stripped here — splitIntoUnits strips them per line so it
+    // can tag the unit as drafted content on the way past.
+    const cleaned = stripMarkdownMarkers(text);
     // A trailing unit is INCOMPLETE only when the text ends mid-sentence (no
     // terminator and no trailing newline) — drop it.
-    const endsClean = /[。！？.!?…]\s*$/.test(cleaned) || /\n\s*$/.test(cleaned);
+    const endsClean = ENDS_TERM.test(cleaned) || /\n\s*$/.test(cleaned);
     const units = splitIntoUnits(cleaned);
     if (!units.length) return '';
     const complete = endsClean ? units : units.slice(0, -1);
@@ -176,23 +259,27 @@ export function extractNarration(text: string | null | undefined): string {
 
     const cjk = hasCJK(cleaned);
     const bareOf = (u: string) => u.replace(/[。！？.!?…]+$/, '').trim();
-    const isTerm = (u: string) => /[。！？.!?…]\s*$/.test(u);
-    // Pass 1: a terminator-ended, strict-prose sentence.
-    for (let i = complete.length - 1; i >= 0; i--) {
-        if (isTerm(complete[i]) && isStrictProse(bareOf(complete[i]), cjk)) return complete[i];
-    }
-    // Pass 2: any strict-prose unit (newline-bounded lines have no terminator).
-    for (let i = complete.length - 1; i >= 0; i--) {
-        if (isStrictProse(bareOf(complete[i]), cjk)) return complete[i];
-    }
-    // Pass 3: a terminator-ended base-prose sentence — relax the CJK/head demotions so a
-    // meaningful English sentence (e.g. "Let me write out a solid plan now.") beats the
-    // CJK outline junk it sits among, while the terminator requirement keeps a
-    // newline-bounded English heading from surfacing.
-    for (let i = complete.length - 1; i >= 0; i--) {
-        if (isTerm(complete[i]) && isBaseProse(bareOf(complete[i]))) return complete[i];
-    }
-    return '';
+    const isTerm = (u: string) => ENDS_TERM.test(u);
+    const scan = (accept: (bare: string, term: boolean) => boolean): string => {
+        for (let i = complete.length - 1; i >= 0; i--) {
+            const unit = complete[i];
+            const term = isTerm(unit.text);
+            if (isDraftedContent(unit, term)) continue;
+            if (accept(bareOf(unit.text), term)) return unit.text;
+        }
+        return '';
+    };
+
+    return (
+        // Pass 1: a terminator-ended, strict-prose sentence.
+        scan((bare, term) => term && isStrictProse(bare, cjk)) ||
+        // Pass 2: any strict-prose unit (newline-bounded lines have no terminator).
+        scan((bare) => isStrictProse(bare, cjk)) ||
+        // Pass 3: a terminator-ended base-prose sentence — relax the CJK/head demotions
+        // so a meaningful English sentence beats the CJK outline junk it sits among,
+        // while the terminator requirement keeps a heading fragment from surfacing.
+        scan((bare, term) => term && isBaseProse(bare))
+    );
 }
 
 /**
