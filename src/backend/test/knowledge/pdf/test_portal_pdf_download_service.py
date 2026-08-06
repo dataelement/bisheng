@@ -43,7 +43,12 @@ from bisheng.knowledge.domain.services.portal_share_download_grant_service impor
     PortalShareDownloadGrantService,
 )
 from bisheng.knowledge.pdf.validator import validate_pdf
-from bisheng.knowledge.pdf.watermark_worker import PdfWatermarkWorkerTimeout
+from bisheng.shougang_portal_config.domain.schemas.portal_config_schema import (
+    DEFAULT_PORTAL_WATERMARK_HORIZONTAL_TEXT,
+)
+from bisheng.shougang_portal_config.domain.services.portal_config_service import (
+    ShougangPortalConfigService,
+)
 
 
 def _pdf_bytes() -> bytes:
@@ -604,7 +609,17 @@ async def test_watermark_identity_comes_from_server_user_record(
     tmp_path: Path,
     user,
     expected_identity: str,
+    monkeypatch,
 ) -> None:
+    async def fake_get_watermark_horizontal_text(*, tenant_id: int | None = None):
+        del tenant_id
+        return DEFAULT_PORTAL_WATERMARK_HORIZONTAL_TEXT
+
+    monkeypatch.setattr(
+        ShougangPortalConfigService,
+        "get_watermark_horizontal_text",
+        staticmethod(fake_get_watermark_horizontal_text),
+    )
     runner = CapturingRunner()
     service, _ = _build_service(tmp_path, user=user, runner=runner)
 
@@ -613,8 +628,30 @@ async def test_watermark_identity_comes_from_server_user_record(
     lines = runner.calls[0]["spec"].lines
     assert lines == (
         expected_identity,
-        "首钢股份内部资料，严禁外传，违者必究",  # noqa: RUF001
+        DEFAULT_PORTAL_WATERMARK_HORIZONTAL_TEXT,  # noqa: RUF001
     )
+    await prepared.close()
+
+
+@pytest.mark.asyncio
+async def test_watermark_second_line_uses_portal_config(tmp_path: Path, monkeypatch) -> None:
+    custom_text = "自定义水印第二行"
+
+    async def fake_get_watermark_horizontal_text(*, tenant_id: int | None = None):
+        del tenant_id
+        return custom_text
+
+    monkeypatch.setattr(
+        ShougangPortalConfigService,
+        "get_watermark_horizontal_text",
+        staticmethod(fake_get_watermark_horizontal_text),
+    )
+    runner = CapturingRunner()
+    service, _ = _build_service(tmp_path, runner=runner)
+
+    prepared = await service.prepare_download(_request(), _login_user())
+
+    assert runner.calls[0]["spec"].lines[1] == custom_text
     await prepared.close()
 
 

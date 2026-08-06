@@ -1,4 +1,5 @@
-import { act, render } from "@testing-library/react";
+import { act, render, type ReactElement } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { readFileSync } from "fs";
 import path from "path";
 import { RecoilRoot } from "recoil";
@@ -29,15 +30,35 @@ const currentUser = {
 
 let emitResize: (width: number, height: number) => void = () => {};
 
-function renderWatermark(user = currentUser) {
+function createQueryClient() {
+    return new QueryClient({
+        defaultOptions: {
+            queries: {
+                retry: false,
+            },
+        },
+    });
+}
+
+function renderWithProviders(ui: ReactElement, user?: typeof currentUser | null) {
+    const queryClient = createQueryClient();
     return render(
-        <RecoilRoot initializeState={({ set }) => set(store.user, user)}>
-            <KnowledgePreviewWatermarkProvider>
-                <div className="relative">
-                    <KnowledgePreviewWatermark />
-                </div>
-            </KnowledgePreviewWatermarkProvider>
-        </RecoilRoot>,
+        <QueryClientProvider client={queryClient}>
+            <RecoilRoot initializeState={user ? ({ set }) => set(store.user, user) : undefined}>
+                {ui}
+            </RecoilRoot>
+        </QueryClientProvider>,
+    );
+}
+
+function renderWatermark(user = currentUser) {
+    return renderWithProviders(
+        <KnowledgePreviewWatermarkProvider>
+            <div className="relative">
+                <KnowledgePreviewWatermark />
+            </div>
+        </KnowledgePreviewWatermarkProvider>,
+        user,
     );
 }
 
@@ -45,6 +66,12 @@ describe("KnowledgePreviewWatermark", () => {
     beforeEach(() => {
         jest.useFakeTimers();
         jest.setSystemTime(new Date("2026-07-21T04:05:06.000Z"));
+        global.fetch = jest.fn().mockResolvedValue({
+            ok: true,
+            json: async () => ({
+                data: { horizontal_text: "首钢股份内部资料，严禁外传，违者必究" },
+            }),
+        }) as jest.Mock;
         class MockResizeObserver {
             constructor(private readonly callback: ResizeObserverCallback) {
                 emitResize = (width, height) => {
@@ -74,14 +101,21 @@ describe("KnowledgePreviewWatermark", () => {
         jest.useRealTimers();
     });
 
-    test("uses the current Bisheng user and keeps the mount-time Beijing clock", () => {
+    test("uses the current Bisheng user and keeps the mount-time Beijing clock", async () => {
         expect(formatKnowledgePreviewWatermarkTime(new Date())).toBe("2026/07/21");
         expect(buildKnowledgePreviewWatermarkLines(currentUser, new Date())).toEqual([
             "设备管理部-张三-SG001-2026/07/21",
             "首钢股份内部资料，严禁外传，违者必究",
         ]);
+        expect(buildKnowledgePreviewWatermarkLines(currentUser, new Date(), "自定义水印文案")).toEqual([
+            "设备管理部-张三-SG001-2026/07/21",
+            "自定义水印文案",
+        ]);
 
         const { container, rerender } = renderWatermark();
+        await act(async () => {
+            await Promise.resolve();
+        });
         expect(container.querySelector('[aria-hidden="true"]')).toBeInTheDocument();
         expect(container.textContent).toContain("设备管理部-张三-SG001-2026/07/21");
         expect(container.textContent).toContain("2026/07/21");
@@ -90,48 +124,48 @@ describe("KnowledgePreviewWatermark", () => {
 
         jest.setSystemTime(new Date("2026-07-21T04:10:06.000Z"));
         rerender(
-            <RecoilRoot initializeState={({ set }) => set(store.user, currentUser)}>
-                <KnowledgePreviewWatermarkProvider>
-                    <div className="relative">
-                        <KnowledgePreviewWatermark />
-                    </div>
-                </KnowledgePreviewWatermarkProvider>
-            </RecoilRoot>,
+            <QueryClientProvider client={createQueryClient()}>
+                <RecoilRoot initializeState={({ set }) => set(store.user, currentUser)}>
+                    <KnowledgePreviewWatermarkProvider>
+                        <div className="relative">
+                            <KnowledgePreviewWatermark />
+                        </div>
+                    </KnowledgePreviewWatermarkProvider>
+                </RecoilRoot>
+            </QueryClientProvider>,
         );
         expect(container.textContent).toContain("2026/07/21");
         expect(container.textContent).not.toContain("12:10:06");
     });
 
-    test("keeps the reusable chat surface off by default and renders it for a current user", () => {
-        const disabled = render(
-            <RecoilRoot initializeState={({ set }) => set(store.user, currentUser)}>
-                <CurrentUserWatermarkSurface>
-                    <span>问答正文</span>
-                </CurrentUserWatermarkSurface>
-            </RecoilRoot>,
+    test("keeps the reusable chat surface off by default and renders it for a current user", async () => {
+        const disabled = renderWithProviders(
+            <CurrentUserWatermarkSurface>
+                <span>问答正文</span>
+            </CurrentUserWatermarkSurface>,
         );
         expect(disabled.container).toHaveTextContent("问答正文");
         expect(disabled.container.querySelector("[data-chat-watermark-surface]")).toBeNull();
         disabled.unmount();
 
-        const anonymous = render(
-            <RecoilRoot>
-                <CurrentUserWatermarkSurface enabled>
-                    <span>访客正文</span>
-                </CurrentUserWatermarkSurface>
-            </RecoilRoot>,
+        const anonymous = renderWithProviders(
+            <CurrentUserWatermarkSurface enabled>
+                <span>访客正文</span>
+            </CurrentUserWatermarkSurface>,
+            null,
         );
         expect(anonymous.container).toHaveTextContent("访客正文");
         expect(anonymous.container.querySelector("[data-chat-watermark-surface]")).toBeNull();
         anonymous.unmount();
 
-        const enabled = render(
-            <RecoilRoot initializeState={({ set }) => set(store.user, currentUser)}>
-                <CurrentUserWatermarkSurface enabled>
-                    <span>问答正文</span>
-                </CurrentUserWatermarkSurface>
-            </RecoilRoot>,
+        const enabled = renderWithProviders(
+            <CurrentUserWatermarkSurface enabled>
+                <span>问答正文</span>
+            </CurrentUserWatermarkSurface>,
         );
+        await act(async () => {
+            await Promise.resolve();
+        });
         expect(enabled.container.querySelector("[data-chat-watermark-surface]")).toBeInTheDocument();
         expect(enabled.container.querySelector('[aria-hidden="true"]')).toBeInTheDocument();
         expect(enabled.container.textContent).toContain("设备管理部-张三-SG001-2026/07/21");
@@ -177,6 +211,9 @@ describe("KnowledgePreviewWatermark", () => {
         ).toBeGreaterThan(positions.length);
 
         const { container } = renderWatermark();
+        await act(async () => {
+            await Promise.resolve();
+        });
         const overlay = container.querySelector('[aria-hidden="true"]');
         expect(overlay?.querySelectorAll("svg")).toHaveLength(1);
         expect(overlay?.querySelectorAll("pattern")).toHaveLength(0);

@@ -51,6 +51,9 @@ from bisheng.knowledge.pdf.watermark_worker import (
     PdfWatermarkWorkerTimeout,
     run_watermark_worker,
 )
+from bisheng.shougang_portal_config.domain.services.portal_config_service import (
+    ShougangPortalConfigService,
+)
 
 
 class PortalPdfDownloadProcessCapacity:
@@ -347,10 +350,13 @@ class PortalPdfDownloadService:
 
             deadline = self.monotonic() + float(self.config.timeout_seconds)
             watermark_date = self.now_provider().strftime("%Y/%m/%d")
+            horizontal_text = await ShougangPortalConfigService.get_watermark_horizontal_text(
+                tenant_id=tenant_id,
+            )
             spec = PdfWatermarkSpec(
                 lines=(
                     f"{identity_prefix}-{account}-{watermark_date}",
-                    "首钢股份内部资料，严禁外传，违者必究",  # noqa: RUF001
+                    horizontal_text,
                 )
             )
             remaining = self._remaining(deadline)
