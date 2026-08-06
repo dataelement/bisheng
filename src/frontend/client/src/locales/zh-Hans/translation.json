@@ -461,6 +461,7 @@
   "com_linsight_output_files": "已整理输出文件 {{0}}",
   "com_linsight_save_as": "另存为",
   "com_linsight_preview": "预览",
+  "com_linsight_opens_in_new_tab": "在新标签页打开",
   "com_linsight_workspace": "工作区",
   "com_linsight_workspace_empty": "暂无产物文件",
   "com_linsight_workspace_uploaded": "上传的文件",
