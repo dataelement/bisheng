@@ -9,6 +9,8 @@ import Markdown from '~/components/Chat/Messages/Content/Markdown';
 import { useLocalize } from '~/hooks';
 import '~/markdown.css';
 import { type ArtifactFile, resolveDeliverableLink, stripWorkspacePaths } from './artifactUtils';
+import { NewTabHint } from './NewTabHint';
+import { SaveAsButton } from './SaveAsButton';
 
 interface ResultSectionProps {
     /** output_result.answer — the run summary, markdown */
@@ -39,7 +41,7 @@ export function ResultSection({ answer, files, versionId, onPreview }: ResultSec
         <div className="space-y-3">
             {/* report link row */}
             {primaryFile && (
-                <div className="flex items-center gap-1.5 text-sm text-gray-800">
+                <div className="group/row flex items-center gap-1.5 text-sm text-gray-800">
                     <span className="shrink-0">
                         {multiple
                             ? localize('com_linsight_files_ready_prefix', { 0: fileCount })
@@ -52,6 +54,7 @@ export function ResultSection({ answer, files, versionId, onPreview }: ResultSec
                     >
                         <Outlined.File size={14} className="shrink-0" />
                         <span className="truncate">{primaryFile.file_name}</span>
+                        <NewTabHint file={primaryFile} className="text-blue-600/60" />
                     </button>
                     {/* shrink-0 so a long file name truncates but the "等 N 个文件"
                         count stays fully visible — otherwise the user never learns
@@ -61,6 +64,12 @@ export function ResultSection({ answer, files, versionId, onPreview }: ResultSec
                             {localize('com_linsight_files_ready_suffix', { 0: fileCount })}
                         </span>
                     )}
+                    {/* Sole deliverable → this sentence IS the whole hand-off (the
+                        file card below only renders for multi-file runs), so the
+                        download belongs here. With several files the card carries
+                        one per row; repeating it after "等 N 个文件" would read as
+                        "download all", which is not what it does. */}
+                    {!multiple && <SaveAsButton file={primaryFile} versionId={versionId} />}
                 </div>
             )}
 
@@ -110,24 +119,23 @@ export function ResultSection({ answer, files, versionId, onPreview }: ResultSec
                         gap 8 + header px-1 4) so names align under the title TEXT
                         while the hover background still spans the full row width.
                         Hover bg #f7f7f7 per design (node 12221-40681). */}
-                    <div className="space-y-2">
+                    <div className="space-y-1">
                         {files.map((file) => (
                             <div
                                 key={file.file_id || file.file_url}
-                                className="flex items-center justify-between rounded-lg py-1 pl-7 pr-1 transition-colors hover:bg-[#f7f7f7]"
+                                className="group/row flex items-center gap-2 rounded-lg py-1.5 pl-7 pr-1.5 transition-colors hover:bg-[#f7f7f7]"
                             >
+                                {/* Name = preview. The rail on the right = keep the
+                                    file. Two jobs, two targets, no double duty. */}
                                 <button
                                     type="button"
-                                    className="min-w-0 flex-1 truncate text-left text-[14px] text-[#1A1A1A] hover:text-blue-500 transition-colors"
+                                    className="flex min-w-0 flex-1 items-center gap-1.5 text-left text-[14px] text-[#1A1A1A] transition-colors hover:text-blue-500"
                                     onClick={() => onPreview(file)}
                                 >
-                                    {file.file_name}
+                                    <span className="truncate">{file.file_name}</span>
+                                    <NewTabHint file={file} />
                                 </button>
-                                {/* file-name click already previews, so the separate
-                                    preview icon is removed — only "另存为" remains. */}
-                                {/* <div className="flex shrink-0 items-center gap-1">
-                                    <SaveAsButton file={file} versionId={versionId} />
-                                </div> */}
+                                <SaveAsButton file={file} versionId={versionId} />
                             </div>
                         ))}
                     </div>

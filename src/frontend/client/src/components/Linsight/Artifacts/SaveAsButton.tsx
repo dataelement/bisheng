@@ -1,7 +1,17 @@
 /**
- * F035 Track H (P4): "save as" action for an artifact file. Markdown files
- * expand into a small menu (original md / pdf / docx via the backend convert
- * endpoint); every other type downloads the original file directly.
+ * F035 Track H (P4): the artifact hand-off action. Markdown files expand into a
+ * small menu (original md / pdf / docx via the backend convert endpoint); every
+ * other type downloads the original file directly — so the label is honest per
+ * type: "另存为" when there is a format choice, "下载" when there isn't.
+ *
+ * Two placements share the logic (`variant`):
+ *   - 'rail'    the fixed trailing gutter of a file row (result card, workspace
+ *               list). Reserved width, so the glyph never shifts the file name
+ *               on hover, and a resting grey rather than hover-only visibility —
+ *               a download you can't see until you hover is a download nobody
+ *               finds, which is exactly how HTML reports ended up with no
+ *               download entry at all (they open in a tab, never in the preview).
+ *   - 'toolbar' preview-panel toolbar icon button.
  */
 import { Outlined } from 'bisheng-icons';
 import { useState } from 'react';
@@ -16,6 +26,7 @@ import {
 } from '~/components/ui';
 import { useLocalize } from '~/hooks';
 import { useToastContext } from '~/Providers';
+import { cn } from '~/utils';
 import {
     type ArtifactFile,
     downloadArtifactFile,
@@ -23,12 +34,30 @@ import {
     saveConvertedBlob,
 } from './artifactUtils';
 
+type SaveAsVariant = 'rail' | 'toolbar';
+
 interface SaveAsButtonProps {
     file: ArtifactFile;
     versionId: string;
-    /** icon-only style for the preview panel toolbar; default is the text link */
-    iconOnly?: boolean;
+    /** Trigger placement — see the file header. Defaults to the row rail. */
+    variant?: SaveAsVariant;
+    className?: string;
 }
+
+const TRIGGER_BASE =
+    'flex shrink-0 items-center justify-center transition-colors focus-visible:outline-none ' +
+    'focus-visible:ring-2 focus-visible:ring-blue-500/40 disabled:cursor-not-allowed disabled:opacity-50';
+
+const TRIGGER_VARIANT: Record<SaveAsVariant, string> = {
+    // Three resting states, so the action reads as available without competing
+    // with the file name (which turns brand-blue on row hover):
+    //   at rest → faint grey · row hover → grey · own hover → brand + tint.
+    // `hover:!text-blue-500` is deliberate: the row-hover and self-hover rules are
+    // both :hover-based utilities on this element, so equal specificity makes CSS
+    // source order the tiebreaker — `!` pins the winner instead of hoping.
+    rail: 'size-6 rounded-md text-[#C0C4CC] group-hover/row:text-[#8C8C8C] hover:bg-blue-500/[0.07] hover:!text-blue-500',
+    toolbar: 'size-7 rounded-lg text-[#8C8C8C] hover:bg-gray-100 hover:text-blue-500',
+};
 
 /** Parse a JSON error blob returned by the convert endpoint (if any). */
 async function readBlobError(blob: Blob): Promise<string | null> {
@@ -44,10 +73,14 @@ async function readBlobError(blob: Blob): Promise<string | null> {
     return null;
 }
 
-export function SaveAsButton({ file, versionId, iconOnly = false }: SaveAsButtonProps) {
+export function SaveAsButton({ file, versionId, variant = 'rail', className }: SaveAsButtonProps) {
     const localize = useLocalize();
     const { showToast } = useToastContext();
     const [busy, setBusy] = useState(false);
+
+    // Markdown is the only type with a format choice (md / pdf / docx).
+    const isMarkdown = getFileExtension(file.file_name) === 'md';
+    const label = isMarkdown ? localize('com_linsight_save_as') : localize('com_ui_download');
 
     const handleDownloadOriginal = async () => {
         if (busy) return;
@@ -85,50 +118,50 @@ export function SaveAsButton({ file, versionId, iconOnly = false }: SaveAsButton
         }
     };
 
-    const trigger = iconOnly ? (
+    const trigger = (
         <button
             type="button"
             disabled={busy}
-            aria-label={localize('com_linsight_save_as')}
-            className="rounded-md p-1 text-[#8C8C8C] transition-colors hover:text-blue-500 disabled:opacity-50"
+            title={label}
+            aria-label={label}
+            className={cn(TRIGGER_BASE, TRIGGER_VARIANT[variant], className)}
+            // File rows are themselves clickable (row click = preview) and answer
+            // Enter, so the action must not bubble — otherwise downloading a file
+            // would also open it.
+            onClick={(e) => {
+                e.stopPropagation();
+                if (!isMarkdown) {
+                    handleDownloadOriginal();
+                }
+            }}
+            onKeyDown={(e) => e.stopPropagation()}
         >
-            <Outlined.Download className="size-[18px]" />
-        </button>
-    ) : (
-        <button
-            type="button"
-            disabled={busy}
-            className="flex shrink-0 items-center gap-1 whitespace-nowrap text-xs text-gray-500 transition-colors hover:text-blue-600 disabled:opacity-50"
-        >
-            <Outlined.Download className="size-4" />
-            {localize('com_linsight_save_as')}
+            {busy ? (
+                <Outlined.Loading className="size-4 animate-spin" />
+            ) : (
+                <Outlined.Download className="size-4" />
+            )}
         </button>
     );
 
-    // markdown: choose original / pdf / docx
-    if (getFileExtension(file.file_name) === 'md') {
-        return (
-            <DropdownMenu>
-                <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="min-w-[140px]">
-                    <DropdownMenuItem className="gap-2" onClick={handleDownloadOriginal}>
-                        <FileIcon type="md" className="size-4" /> Markdown
-                    </DropdownMenuItem>
-                    <DropdownMenuItem className="gap-2" onClick={() => handleExport('pdf')}>
-                        <FileIcon type="pdf" className="size-4" /> PDF
-                    </DropdownMenuItem>
-                    <DropdownMenuItem className="gap-2" onClick={() => handleExport('docx')}>
-                        <FileIcon type="docx" className="size-4" /> Docx
-                    </DropdownMenuItem>
-                </DropdownMenuContent>
-            </DropdownMenu>
-        );
+    if (!isMarkdown) {
+        return trigger;
     }
 
-    // other types: direct download
     return (
-        <span onClick={handleDownloadOriginal} role="presentation">
-            {trigger}
-        </span>
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="min-w-[140px]">
+                <DropdownMenuItem className="gap-2" onClick={handleDownloadOriginal}>
+                    <FileIcon type="md" className="size-4" /> Markdown
+                </DropdownMenuItem>
+                <DropdownMenuItem className="gap-2" onClick={() => handleExport('pdf')}>
+                    <FileIcon type="pdf" className="size-4" /> PDF
+                </DropdownMenuItem>
+                <DropdownMenuItem className="gap-2" onClick={() => handleExport('docx')}>
+                    <FileIcon type="docx" className="size-4" /> Docx
+                </DropdownMenuItem>
+            </DropdownMenuContent>
+        </DropdownMenu>
     );
 }

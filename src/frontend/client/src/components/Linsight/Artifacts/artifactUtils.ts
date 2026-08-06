@@ -235,6 +235,18 @@ export function stripEmptyHtmlPlaceholders(md: string): string {
 }
 
 /**
+ * True for a deliverable that opens in the standalone sandboxed viewer TAB
+ * instead of the in-place preview (see openHtmlArtifactViewer).
+ *
+ * Single source of truth for the two panel hooks that route the click and for
+ * the row hint that marks it, so the marker can never disagree with what the
+ * click actually does.
+ */
+export function isHtmlArtifact(file: ArtifactFile): boolean {
+    return getFileExtension(file.file_name) === 'html';
+}
+
+/**
  * Open an HTML artifact in the standalone sandboxed viewer tab (`/html`).
  *
  * `file.file_url` is a MinIO OBJECT KEY (e.g. `linsight/final_result/<svid>/x.html`),

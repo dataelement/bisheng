@@ -3,6 +3,7 @@ import {
     applyHtmlViewerTabIdentity,
     isAbsoluteImageSrc,
     isDeliverableLinkHref,
+    isHtmlArtifact,
     matchArtifactByRelPath,
     openHtmlArtifactViewer,
     resolveDeliverableLink,
@@ -164,6 +165,18 @@ describe('isDeliverableLinkHref', () => {
         expect(isDeliverableLinkHref('详细分析报告.md')).toBe(true);
         expect(isDeliverableLinkHref('https://example.com/x.md')).toBe(false);
         expect(isDeliverableLinkHref('charts/x.png')).toBe(false);
+    });
+});
+
+describe('isHtmlArtifact', () => {
+    // The panel hooks route the click and NewTabHint marks the row from this one
+    // predicate, so the marker can never disagree with what the click does.
+    it('is true only for .html deliverables, case-insensitively', () => {
+        expect(isHtmlArtifact(mkArtifact({ file_name: '分析报告.html' }))).toBe(true);
+        expect(isHtmlArtifact(mkArtifact({ file_name: '分析报告.HTML' }))).toBe(true);
+        expect(isHtmlArtifact(mkArtifact({ file_name: '分析报告.md' }))).toBe(false);
+        expect(isHtmlArtifact(mkArtifact({ file_name: 'html' }))).toBe(false);
+        expect(isHtmlArtifact(mkArtifact({ file_name: 'a.html.md' }))).toBe(false);
     });
 });
 
