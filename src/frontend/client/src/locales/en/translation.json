@@ -2349,6 +2349,15 @@
   "com_approval_section_business_content": "Business Content",
   "com_approval_search_placeholder": "Search applicant, scenario or file",
   "knowledge_qa_noVisibleContent": "No relevant content found in resources accessible to you.",
+  "com_share": {
+    "gate_eyebrow": "Shared link",
+    "gate_title": "Sign in to view this",
+    "gate_desc": "Taking you to sign in. You'll come back to this shared page.",
+    "gate_action": "Sign in and view",
+    "gate_blocked_title": "Still can't view this shared page",
+    "gate_blocked_desc": "Check whether the current account has access, or sign in again.",
+    "gate_blocked_action": "Sign in again"
+  },
   "workstation": {
     "messageExport": {
       "entry": "Export",

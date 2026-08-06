@@ -2278,6 +2278,15 @@
   "com_approval_section_business_content": "业务内容",
   "com_approval_search_placeholder": "搜索申请人、场景或文件",
   "knowledge_qa_noVisibleContent": "未在你有权访问的内容中找到相关信息",
+  "com_share": {
+    "gate_eyebrow": "分享链接",
+    "gate_title": "需要登录后查看",
+    "gate_desc": "正在前往登录页，登录后自动回到这条分享。",
+    "gate_action": "登录并查看",
+    "gate_blocked_title": "登录后仍无法查看这条分享",
+    "gate_blocked_desc": "请确认当前账号是否有权限，或重新登录。",
+    "gate_blocked_action": "重新登录"
+  },
   "workstation": {
     "messageExport": {
       "entry": "导出",
