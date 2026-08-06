@@ -2,11 +2,11 @@ import glob
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
 import uuid
-from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from hashlib import md5
 from os import DirEntry
 from pathlib import Path
@@ -25,12 +25,19 @@ DEFAULT_TIMEOUT = 600
 WIN32 = sys.platform == "win32"
 PATH_SEPARATOR = (WIN32 and "\\") or "/"
 WORKING_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)), "extensions")
-TIMEOUT_MSG = "Timeout"
+# A bare "Timeout" reads as an infrastructure hiccup and invites a verbatim retry.
+# Name the cause so the next attempt is narrower instead of identical.
+TIMEOUT_MSG = (
+    "Timeout: this script ran longer than {timeout}s and was killed. It did not finish, "
+    "so nothing it was about to write exists. Scope the next attempt down — an unbounded "
+    "loop, or a recursive scan rooted at / or another huge directory, cannot finish here."
+)
 UNKNOWN = "unknown"
 # A failing run's log goes straight into the model's context. Cap it, keeping the
 # TAIL: a traceback states its cause on the last lines.
 MAX_FAILURE_LOG_CHARS = 8000
 LOG_TRUNCATED_NOTICE = "[... earlier output truncated ...]\n"
+PARTIAL_OUTPUT_HEADER = "\nOutput captured before the kill:\n"
 
 LOCAL_DESCRIPTION = """Evaluates python code in native environment. \
 You must send the whole script every time and print your outputs. \
@@ -160,29 +167,37 @@ class LocalExecutor(BaseExecutor):
             sys.executable if lang.startswith("python") else cls._cmd(lang),
             f".\\{filename}" if WIN32 else filename,
         ]
-        if WIN32:
-            logger.warning("SIGALRM is not supported on Windows. No timeout will be enforced.")
-            result = subprocess.run(
-                cmd,
-                cwd=work_dir,
-                capture_output=True,
-                text=True,
-            )
-        else:
-            with ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(
-                    subprocess.run,
-                    cmd,
-                    cwd=work_dir,
-                    capture_output=True,
-                    text=True,
-                )
-                try:
-                    result = future.result(timeout=timeout)
-                except TimeoutError:
-                    return 1, TIMEOUT_MSG, ""
-        if result.returncode:
-            logs = result.stderr
+        # start_new_session makes the child its own process group leader, so a timeout
+        # can take down whatever it spawned as well (see _kill_process_tree).
+        proc = subprocess.Popen(
+            cmd,
+            cwd=work_dir,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            start_new_session=not WIN32,
+        )
+        try:
+            stdout, stderr = proc.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            # communicate() leaves the child alive on timeout — kill it, then reap the
+            # pipes. The second communicate() returns everything buffered before the
+            # kill, which is the only clue the model gets about where the script hung.
+            cls._kill_process_tree(proc)
+            stdout, stderr = proc.communicate()
+            logger.warning("code interpreter run exceeded {}s and was killed", timeout)
+            message = TIMEOUT_MSG.format(timeout=timeout)
+            partial = f"{stdout or ''}{stderr or ''}"
+            if not partial.strip():
+                return 1, message, ""
+            # Cap the partial output alone, never message+partial: _tail keeps the END
+            # of what it is given, and the notice sits at the START — capping the pair
+            # would drop the very line that explains the failure. _tail also prepends
+            # its own truncation notice, which counts against the cap as well.
+            budget = MAX_FAILURE_LOG_CHARS - len(message) - len(PARTIAL_OUTPUT_HEADER) - len(LOG_TRUNCATED_NOTICE)
+            return 1, f"{message}{PARTIAL_OUTPUT_HEADER}{cls._tail(partial, budget)}", ""
+        if proc.returncode:
+            logs = stderr
             if file_path is not None:
                 abs_path = str(Path(file_path).absolute())
                 logs = logs.replace(str(abs_path), "").replace(filename, "")
@@ -190,8 +205,25 @@ class LocalExecutor(BaseExecutor):
                 abs_path = str(Path(work_dir).absolute()) + PATH_SEPARATOR
                 logs = logs.replace(str(abs_path), "")
         else:
-            logs = result.stdout
-        return result.returncode, logs, ""
+            logs = stdout
+        return proc.returncode, logs, ""
+
+    @staticmethod
+    def _kill_process_tree(proc: subprocess.Popen) -> None:
+        """SIGKILL the run's whole process group, not just the direct child.
+
+        The interpreter runs model-written code that routinely shells out (LibreOffice,
+        pandoc, pip). Killing only ``proc`` leaves those grandchildren spinning, and a
+        runaway one keeps a CPU core and a worker slot pinned for good.
+        """
+        if WIN32:
+            proc.kill()
+            return
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            # already reaped, or start_new_session did not take — settle for the child
+            proc.kill()
 
     @classmethod
     def execute_code(
