@@ -11,6 +11,8 @@ const API = {
     // branches pre-collapsed server-side).
     agentMessages: (conversationId: string) =>
         `/api/v1/workstation/messages/${conversationId}/agent`,
+    sessionInfo: (conversationId: string) =>
+        `/api/v1/chat/info?chat_id=${encodeURIComponent(conversationId)}`,
     sseChat: () => `/api/v1/workstation/chat/completions`,
     abortChat: () => `/api/v1/workstation/chat/completions/abort`,
     deleteConversation: (id: string) => `/api/v1/chat/${id}`,
@@ -237,6 +239,25 @@ export async function getAgentMessages(
     const res = await http.get(API.agentMessages(conversationId), headers ? { headers } : undefined);
     const rows: any[] = res?.data ?? res ?? [];
     return rows.map(mapAgentResponseItem);
+}
+
+/**
+ * Read a conversation's stored name.
+ *
+ * The history endpoints return messages only, so opening an existing
+ * conversation by URL (deep link or share link) left the header on the
+ * "New Chat" fallback while the sidebar showed the real name.
+ */
+export async function getSessionName(
+    conversationId: string,
+    shareToken?: string,
+): Promise<string> {
+    if (!conversationId || conversationId === "new") {
+        return "";
+    }
+    const headers = shareToken ? { 'share-token': shareToken } : undefined;
+    const res = await http.get(API.sessionInfo(conversationId), headers ? { headers } : undefined);
+    return res?.data?.name ?? "";
 }
 
 function mapAgentResponseItem(row: any): ChatMessage {
