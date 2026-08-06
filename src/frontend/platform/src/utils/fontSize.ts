@@ -33,7 +33,40 @@ const DESKTOP_MEDIA_QUERY = '(min-width: 768px)';
 /** Presence of this attribute on <html> activates the scale CSS in index.css. */
 const SCALE_ATTRIBUTE = 'data-bs-font-size';
 
-const SCALE_VARIABLES = ['--bs-fs-zoom', '--bs-vh', '--bs-dvh', '--bs-vw'];
+const SCALE_VARIABLES = [
+  '--bs-fs-zoom',
+  '--bs-fs-popper-zoom',
+  '--bs-fs-popper-unzoom',
+  '--bs-vh',
+  '--bs-dvh',
+  '--bs-vw',
+];
+
+/**
+ * How much of the page zoom `getBoundingClientRect()` has already applied,
+ * measured rather than assumed.
+ *
+ * `zoom` predates its own specification, and engines disagree on this exact
+ * point: current Blink reports rects in visual pixels (the zoom is baked in),
+ * while older ones — the WeCom embedded browser among them — report the
+ * pre-zoom layout pixels. Floating UI measures the trigger with this API and
+ * writes the result back as a translate() on a wrapper that sits inside the
+ * zoomed body, so the wrapper has to cancel exactly the part of the zoom the
+ * measurement already carries: all of it on the newer engines, none of it on
+ * the older ones. Compensating unconditionally is what leaves every popup off
+ * by the zoom factor on the engines that never needed it.
+ *
+ * Returns the ratio of reported px to CSS px — the page zoom, or 1.
+ */
+function measureRectScale(): number {
+  const probe = document.createElement('div');
+  probe.style.cssText =
+    'position:absolute;top:0;left:0;width:100px;height:0;visibility:hidden;pointer-events:none';
+  document.body.appendChild(probe);
+  const reported = probe.getBoundingClientRect().width;
+  probe.remove();
+  return reported > 0 ? reported / 100 : 1;
+}
 
 function isFontSizeLevel(value: unknown): value is FontSizeLevel {
   return value === 'small' || value === 'standard' || value === 'large';
@@ -79,6 +112,14 @@ export function applyFontSizeLevel(level: FontSizeLevel) {
     const zoom = ZOOM_BY_LEVEL[level];
     html.setAttribute(SCALE_ATTRIBUTE, level);
     html.style.setProperty('--bs-fs-zoom', String(zoom));
+    // Probed only now that the zoom is live, so the probe gets the same
+    // treatment a popup trigger would. Written as plain numbers rather than a
+    // `calc(1 / var(--bs-fs-zoom))` in the stylesheet: older `zoom` parsers take
+    // a bare number but drop the whole declaration when handed a calc(), which
+    // would lose the compensation without a word.
+    const rectScale = measureRectScale();
+    html.style.setProperty('--bs-fs-popper-zoom', String(1 / rectScale));
+    html.style.setProperty('--bs-fs-popper-unzoom', String(rectScale));
     html.style.setProperty('--bs-vh', `calc(100vh / ${zoom})`);
     html.style.setProperty('--bs-dvh', `calc(100dvh / ${zoom})`);
     html.style.setProperty('--bs-vw', `calc(100vw / ${zoom})`);

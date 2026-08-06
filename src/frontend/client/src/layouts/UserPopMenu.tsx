@@ -1,6 +1,6 @@
 import { Check, ChevronRight } from "lucide-react";
 import { Outlined } from "bisheng-icons";
-import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type MouseEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type MouseEvent } from "react";
 import { useRecoilState } from "recoil";
 import { AccountInfoDialog } from "~/components/AccountInfoDialog";
 import { NotificationsDialog } from "~/components/NotificationsDialog";
@@ -27,7 +27,9 @@ import { useAuthContext, useLocalize } from "~/hooks";
 import { useToastContext } from "~/Providers";
 import {
     FONT_SIZE_LEVELS,
+    getDisplayScale,
     getFontSizeLevel,
+    getLogicalViewport,
     isFontSizeAvailable,
     saveFontSizeLevel,
     subscribeFontSizeAvailability,
@@ -299,6 +301,60 @@ function UserPopMenuDrawer() {
     );
 }
 
+/**
+ * Placement for this menu's flyouts, which depends on the page zoom.
+ *
+ * Under a zoom this browser reports element rectangles in the page's own
+ * coordinate space but pointer events in physical pixels, and the menu library
+ * builds its "the cursor is still on its way to the flyout" grace area out of
+ * both at once: the apex from the pointer, the far edges from the flyout's
+ * rectangle. The cursor therefore has to land inside a rectangle expressed in
+ * the other space for the flyout to survive the trip, which only happens when
+ * the alignment leans the same way the zoom does.
+ *
+ * Scaled down, the cursor's physical position reads *lower* than the space the
+ * rectangle is quoted in, so the flyout has to reach further down — anchor its
+ * bottom edge to the trigger. Scaled up it reads *higher*, so anchor the top
+ * edge instead. At the standard level the two spaces coincide and the library's
+ * own defaults are correct, hence the empty object.
+ *
+ * Collision avoidance is off whenever a zoom is active for the same underlying
+ * reason: it compares element geometry against a viewport size read in the
+ * physical space, and shifts the flyout by a difference that is not real. The
+ * flyout is three rows opening beside a row a couple of rows from the bottom,
+ * so there is nothing it needs to avoid.
+ */
+/**
+ * How far a top-anchored flyout hangs past the bottom of the window, in the
+ * page's own units: flyout height (three rows plus its padding, 112) less the
+ * room under the trigger's top edge (the trigger row, the row below it, the
+ * menu's padding and its 8px inset from the window, 80). Both terms are fixed
+ * by the menu's own CSS and neither moves with the zoom, so the spill is a
+ * constant — but it is a constant of *this* menu, and a row added or removed
+ * below the flyout's trigger changes it.
+ */
+const FLYOUT_BOTTOM_SPILL = 32;
+
+function useFlyoutPlacement(level: FontSizeLevel) {
+    return useMemo(() => {
+        const zoom = getDisplayScale();
+        if (zoom === 1) {
+            return {};
+        }
+        if (zoom < 1) {
+            return { align: 'end' as const, avoidCollisions: false };
+        }
+        // Top-anchored, the flyout's last row lands below the window: the trigger
+        // sits one row plus the menu's own inset above the bottom, and the flyout
+        // is taller than that. Lifting it by the difference puts its bottom edge
+        // on the window's, which is as far as it can go — any higher and the
+        // cursor no longer falls inside the rectangle the grace area is quoted
+        // in, which is what made this flyout unreachable in the first place.
+        return { align: 'start' as const, alignOffset: -FLYOUT_BOTTOM_SPILL, avoidCollisions: false };
+        // The level is what moves the zoom, so it is the honest dependency here.
+    }, [level]);
+}
+
 function UserPopMenuRail() {
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const [menuAlignOffset, setMenuAlignOffset] = useState(0);
@@ -327,6 +383,7 @@ function UserPopMenuRail() {
         () => false,
     );
     const [fontSizeLevel, setFontSizeLevel] = useState<FontSizeLevel>(() => getFontSizeLevel());
+    const flyoutPlacement = useFlyoutPlacement(fontSizeLevel);
     const changeFontSize = (level: FontSizeLevel) => {
         if (saveFontSizeLevel(level)) {
             setFontSizeLevel(level);
@@ -413,8 +470,14 @@ function UserPopMenuRail() {
             const marginX = 8;
             const marginBottom = 8;
             // 与视口：左缘 8px；底缘 8px（side=top + sideOffset 将菜单底侧锚到视口底上方）
+            // The rect is read in the page's own coordinate space, so the viewport
+            // it is measured against has to come from the same one — innerWidth /
+            // innerHeight are physical pixels and under a page zoom they disagree
+            // with the rect by the zoom factor, which floats the menu away from
+            // the edge it is supposed to hug.
+            const viewport = getLogicalViewport();
             setMenuAlignOffset(marginX - Math.round(r.left));
-            setMenuSideOffset(Math.round(r.top - (window.innerHeight - marginBottom)));
+            setMenuSideOffset(Math.round(r.top - (viewport.height - marginBottom)));
         };
         measure();
         window.addEventListener("resize", measure);
@@ -497,7 +560,10 @@ function UserPopMenuRail() {
                             <Outlined.Earth className={actionMenuItemIconClassName} />
                             <span className={cn(actionMenuLabelClassName, "flex-1")}>{localize('com_nav_language')}</span>
                         </DropdownMenuSubTrigger>
-                        <DropdownMenuSubContent className={cn(actionMenuSurfaceClassName, "z-[100] ml-2 min-w-[140px] gap-0 p-2")}>
+                        <DropdownMenuSubContent
+                            {...flyoutPlacement}
+                            className={cn(actionMenuSurfaceClassName, "z-[100] min-w-[140px] gap-0 p-2")}
+                        >
                             <ActionMenuItem onSelect={runMenuItemSelect(() => changeLang('zh-Hans'))}>
                                 <span className={cn(actionMenuLabelClassName, "flex-1")}>中文</span>
                                 {langcode === 'zh-Hans' && <Check className="ml-2 size-4 text-blue-500" />}
@@ -522,7 +588,10 @@ function UserPopMenuRail() {
                             <Outlined.FontSize className={actionMenuItemIconClassName} />
                             <span className={cn(actionMenuLabelClassName, "flex-1")}>{localize('com_nav_page_font_size')}</span>
                         </DropdownMenuSubTrigger>
-                        <DropdownMenuSubContent className={cn(actionMenuSurfaceClassName, "z-[100] ml-2 min-w-[140px] gap-0 p-2")}>
+                        <DropdownMenuSubContent
+                            {...flyoutPlacement}
+                            className={cn(actionMenuSurfaceClassName, "z-[100] min-w-[140px] gap-0 p-2")}
+                        >
                             {FONT_SIZE_LEVELS.map((level) => (
                                 <ActionMenuItem key={level} onSelect={runMenuItemSelect(() => changeFontSize(level))}>
                                     <span className={cn(actionMenuLabelClassName, "flex-1")}>

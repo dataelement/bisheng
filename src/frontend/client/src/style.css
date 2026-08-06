@@ -3568,17 +3568,18 @@ html[data-bs-font-size] #root {
   min-height: 0;
 }
 
-/* Floating UI measures the trigger in physical client coordinates and writes
-   the result as a translate() on this fixed wrapper — which, sitting inside the
-   zoomed body, would scale those coordinates a second time and throw the popup
-   off by the zoom factor. Cancel the zoom on the wrapper so the translate lands
-   on physical pixels, then restore it on the content so the popup itself still
-   scales with the page. */
+/* Floating UI measures the trigger with getBoundingClientRect() and writes the
+   result back as a translate() on this fixed wrapper, which sits inside the
+   zoomed body — so the wrapper must undo whatever part of the zoom the
+   measurement already carries, then the content puts the page scale back so the
+   popup itself still matches the rest of the UI. How much that is differs by
+   engine, so utils/fontSize measures it at runtime and writes both factors
+   here; the 1 fallbacks make this a no-op if it ever runs unset. */
 html[data-bs-font-size] [data-radix-popper-content-wrapper] {
-  zoom: calc(1 / var(--bs-fs-zoom));
+  zoom: var(--bs-fs-popper-zoom, 1);
 }
 
 html[data-bs-font-size] [data-radix-popper-content-wrapper] > * {
-  zoom: var(--bs-fs-zoom);
+  zoom: var(--bs-fs-popper-unzoom, 1);
 }
 
