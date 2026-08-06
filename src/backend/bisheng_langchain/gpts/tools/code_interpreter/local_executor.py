@@ -27,6 +27,10 @@ PATH_SEPARATOR = (WIN32 and "\\") or "/"
 WORKING_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)), "extensions")
 TIMEOUT_MSG = "Timeout"
 UNKNOWN = "unknown"
+# A failing run's log goes straight into the model's context. Cap it, keeping the
+# TAIL: a traceback states its cause on the last lines.
+MAX_FAILURE_LOG_CHARS = 8000
+LOG_TRUNCATED_NOTICE = "[... earlier output truncated ...]\n"
 
 LOCAL_DESCRIPTION = """Evaluates python code in native environment. \
 You must send the whole script every time and print your outputs. \
@@ -294,7 +298,6 @@ class LocalExecutor(BaseExecutor):
             work_dir=dir_path,
             lang=lang,
         )
-        logs += "\n" + logs
         file_list = []
         if exitcode != 0:
             return exitcode, logs, file_list
@@ -328,6 +331,13 @@ class LocalExecutor(BaseExecutor):
             self.sync_files_to_local(files_info, dir_path)
         return exitcode, logs, file_list
 
+    @staticmethod
+    def _tail(logs: str, limit: int = MAX_FAILURE_LOG_CHARS) -> str:
+        """Keep the last ``limit`` characters of a failing run's log."""
+        if len(logs) <= limit:
+            return logs
+        return LOG_TRUNCATED_NOTICE + logs[-limit:]
+
     def run(self, code: str) -> Any:
         original_code = code
         code_blocks = self.extract_code(code)
@@ -342,9 +352,14 @@ class LocalExecutor(BaseExecutor):
             else:
                 with tempfile.TemporaryDirectory() as temp_dir:
                     exit_code, logs, file_list = self.run_with_dir(code, dir_path=temp_dir, lang=lang)
-            if exit_code != 0:
-                return {"exitcode": exit_code, "log": logs_all}
             logs_all += "\n" + logs
+            if exit_code != 0:
+                # The traceback (or the timeout notice) lives in THIS block's log, so it
+                # has to be accumulated BEFORE the early return. Returning the not-yet
+                # accumulated prefix handed the model {"exitcode": 1, "log": ""} on every
+                # failure and forced it to debug blind.
+                logger.warning("code interpreter block {}/{} exited {}", i + 1, len(code_blocks), exit_code)
+                return {"exitcode": exit_code, "log": self._tail(logs_all)}
             all_file_list += file_list
 
         # Deterministic safety net: if the script wrote a deliverable to an absolute
