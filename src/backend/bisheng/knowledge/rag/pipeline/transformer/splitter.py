@@ -29,6 +29,9 @@ class SplitterTransformer(BaseDocumentTransformer):
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,
             is_separator_regex=True,
+            # Degrade separator-proof fragments to a character-level split instead
+            # of letting them reach the max_chunk_limit check below and fail the file.
+            hard_split_limit=max_chunk_limit,
             **kwargs,
         )
         self.max_chunk_limit = max_chunk_limit
