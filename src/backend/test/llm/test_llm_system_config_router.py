@@ -63,56 +63,58 @@ async def test_super_admin_passes_assertion_for_any_target():
     from bisheng.llm.api.router import _assert_can_write_system_config
 
     user = MagicMock(user_id=1)
-    user.has_tenant_admin = AsyncMock(return_value=False)  # never consulted
-    with patch("bisheng.llm.api.router._check_is_global_super", new=AsyncMock(return_value=True)):
+    admin_check = AsyncMock(return_value=False)
+    with (
+        patch("bisheng.llm.api.router._check_is_global_super", new=AsyncMock(return_value=True)),
+        patch("bisheng.permission.application.is_tenant_admin", admin_check),
+    ):
         # any target is fine for super
         await _assert_can_write_system_config(user, 1)
         await _assert_can_write_system_config(user, 5)
-    user.has_tenant_admin.assert_not_awaited()
+    admin_check.assert_not_awaited()
 
 
 @pytest.mark.asyncio
 async def test_child_admin_targeting_root_raises_19803():
     """AC-10 (defense): non-super caller cannot write Root."""
-    from fastapi import HTTPException
-
     from bisheng.common.errcode.llm_tenant import LLMSystemConfigForbiddenError
     from bisheng.llm.api.router import _assert_can_write_system_config
 
     user = MagicMock(user_id=42)
-    user.has_tenant_admin = AsyncMock(return_value=True)  # even with admin elsewhere
     with patch("bisheng.llm.api.router._check_is_global_super", new=AsyncMock(return_value=False)):
-        with pytest.raises(HTTPException) as exc_info:
+        with pytest.raises(LLMSystemConfigForbiddenError) as exc_info:
             await _assert_can_write_system_config(user, 1)
-    assert exc_info.value.status_code == 403
-    assert exc_info.value.detail["status_code"] == LLMSystemConfigForbiddenError.Code
+    assert exc_info.value.Code == LLMSystemConfigForbiddenError.Code
 
 
 @pytest.mark.asyncio
 async def test_child_admin_targeting_own_tenant_passes():
-    """AC-11 natural path: target == own leaf, has_tenant_admin returns True."""
+    """AC-11 natural path: the permission application confirms the admin relation."""
     from bisheng.llm.api.router import _assert_can_write_system_config
 
     user = MagicMock(user_id=42)
-    user.has_tenant_admin = AsyncMock(return_value=True)
-    with patch("bisheng.llm.api.router._check_is_global_super", new=AsyncMock(return_value=False)):
+    admin_check = AsyncMock(return_value=True)
+    with (
+        patch("bisheng.llm.api.router._check_is_global_super", new=AsyncMock(return_value=False)),
+        patch("bisheng.permission.application.is_tenant_admin", admin_check),
+    ):
         await _assert_can_write_system_config(user, 5)
-    user.has_tenant_admin.assert_awaited_once_with(5)
+    admin_check.assert_awaited_once_with(42, 5)
 
 
 @pytest.mark.asyncio
 async def test_caller_without_admin_grant_raises_19803():
-    from fastapi import HTTPException
-
     from bisheng.common.errcode.llm_tenant import LLMSystemConfigForbiddenError
     from bisheng.llm.api.router import _assert_can_write_system_config
 
     user = MagicMock(user_id=42)
-    user.has_tenant_admin = AsyncMock(return_value=False)
-    with patch("bisheng.llm.api.router._check_is_global_super", new=AsyncMock(return_value=False)):
-        with pytest.raises(HTTPException) as exc_info:
+    with (
+        patch("bisheng.llm.api.router._check_is_global_super", new=AsyncMock(return_value=False)),
+        patch("bisheng.permission.application.is_tenant_admin", AsyncMock(return_value=False)),
+    ):
+        with pytest.raises(LLMSystemConfigForbiddenError) as exc_info:
             await _assert_can_write_system_config(user, 5)
-    assert exc_info.value.detail["status_code"] == LLMSystemConfigForbiddenError.Code
+    assert exc_info.value.Code == LLMSystemConfigForbiddenError.Code
 
 
 # --- _redact_payload --------------------------------------------------------
@@ -235,7 +237,6 @@ async def test_post_knowledge_endpoint_routes_target_and_audits():
     from bisheng.llm.domain.schemas import KnowledgeLLMConfig
 
     fake_user = MagicMock(user_id=99)
-    fake_user.has_tenant_admin = AsyncMock(return_value=True)
     payload = KnowledgeLLMConfig(embedding_model_id=33)
 
     update_mock = AsyncMock(return_value=payload)
@@ -244,6 +245,7 @@ async def test_post_knowledge_endpoint_routes_target_and_audits():
 
     with (
         patch("bisheng.llm.api.router._check_is_global_super", new=AsyncMock(return_value=False)),
+        patch("bisheng.permission.application.is_tenant_admin", new=AsyncMock(return_value=True)),
         patch("bisheng.llm.api.router.get_current_tenant_id", return_value=5),
         patch("bisheng.llm.api.router.TenantSystemModelConfigDao.aget", aget_mock),
         patch("bisheng.llm.domain.services.llm.LLMService.update_knowledge_llm", update_mock),
@@ -272,23 +274,19 @@ async def test_post_knowledge_endpoint_routes_target_and_audits():
 async def test_post_knowledge_blocks_child_admin_targeting_root():
     """AC-10 surface end-to-end: a forged ContextVar=Root from a Child
     Admin context returns 403 + 19803."""
-    from fastapi import HTTPException
-
     from bisheng.common.errcode.llm_tenant import LLMSystemConfigForbiddenError
     from bisheng.llm.api.router import update_knowledge_llm
     from bisheng.llm.domain.schemas import KnowledgeLLMConfig
 
     fake_user = MagicMock(user_id=42)
-    fake_user.has_tenant_admin = AsyncMock(return_value=True)
-
     with (
         patch("bisheng.llm.api.router._check_is_global_super", new=AsyncMock(return_value=False)),
         patch("bisheng.llm.api.router.get_current_tenant_id", return_value=1),
     ):
-        with pytest.raises(HTTPException) as exc:
+        with pytest.raises(LLMSystemConfigForbiddenError) as exc:
             await update_knowledge_llm(
                 request=MagicMock(),
                 login_user=fake_user,
                 data=KnowledgeLLMConfig(embedding_model_id=1),
             )
-    assert exc.value.detail["status_code"] == LLMSystemConfigForbiddenError.Code
+    assert exc.value.Code == LLMSystemConfigForbiddenError.Code

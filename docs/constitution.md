@@ -6,7 +6,7 @@
 > - `scripts/arch-guard.sh` is the **machine-enforcement arm** of this document: each RULE maps to a clause below (see the anchor table).
 > - Violations are reported as **BLOCKER** during `/sdd-review design`.
 > - **Change governance**: editing this file requires PR review (a law change affects every feature). If a RULE is involved, sync the "→ Cx" note in `arch-guard.sh`.
-> - Last revised: 2026-07-29 (F048: verified targets and single action runtime).
+> - Last revised: 2026-08-06 (F048: lazy permission runtime and operational migration traffic control).
 
 ## Anchor Table (clause ↔ arch-guard RULE)
 
@@ -15,7 +15,7 @@
 | **C1** | DDD layered call chain | RULE-1 / 2 / 3 / 4 / 5 | VIOLATION (RULE-3 is WARNING during migration) |
 | **C2** | Dual-DB compatibility (MySQL + DM8) | — (review + CI) | — |
 | **C3** | Multi-tenancy auto-injection | — (review) | — |
-| **C4** | Permission unified entry point | RULE-8 | VIOLATION |
+| **C4** | Permission unified entry point | RULE-8 / 9 | VIOLATION |
 | **C5** | Error-code convention | — (review) | — |
 | **C6** | No hardcoded secrets | RULE-7 | WARNING |
 | **C7** | Frontend store must not call HTTP directly | RULE-6 | WARNING |
@@ -83,18 +83,23 @@ await require_business_action(
   `super_admin` → tenant mismatch deny → tenant admin → Catalog/action gate →
   OpenFGA. RBAC menu access remains a separate navigation/API-capability
   concern and is never a fallback ALLOW for resource actions.
+- Business modules depend only on application protocols exported by
+  `permission.application`. They must never import an OpenFGA client/manager,
+  construct transport tuples, or branch on OpenFGA-specific errors. Identity
+  checks, relation queries, grants, revokes, and projection mutations all pass
+  through the permission module; only permission infrastructure and explicit
+  operational migration tools may access OpenFGA directly (RULE-9).
 - Production resolves one unique OpenFGA Store by stable name and its latest
-  model at startup, then requires that Store/model/checksum to match the one
+  model on first permission-runtime access, then requires that Store/model/checksum to match the one
   ACTIVE authorization release referenced by the SQL CURRENT Catalog. Every
   Check/List/Write still sends that resolved model ID explicitly. Legacy/
   dual-model clients, runtime model writes, and fail-open behavior are
   forbidden. During an explicit version upgrade, a predecessor model or an
-  incomplete CURRENT Catalog may keep the process alive only in
-  `MIGRATION_REQUIRED/NOT_READY`: it must not install the F048 runtime, publish
-  a ready heartbeat, serve production authorization, or start data migration.
-  While in this state, the API gate rejects every HTTP/WebSocket request except
-  `/health`, and Celery/Linsight must not consume tasks; a successful explicit
-  migration and process restart removes the gate and resumes task consumption.
+  incomplete CURRENT Catalog must fail the lazy permission Context closed: it
+  must not publish a ready heartbeat, serve production authorization, or start
+  data migration. Migration traffic control belongs to deployment/ingress and
+  queue operations; application health checks and global HTTP/WebSocket/Celery/
+  Linsight gates must not encode the one-time migration procedure.
 
 ## C5. Error-Code Convention
 

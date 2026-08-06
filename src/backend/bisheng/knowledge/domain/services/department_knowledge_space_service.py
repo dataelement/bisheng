@@ -169,7 +169,8 @@ class DepartmentKnowledgeSpaceService:
         department_id: int,
         operator_user_id: int,
     ) -> None:
-        await get_f048_resource_adapter("knowledge_space").sync_department(
+        adapter = await get_f048_resource_adapter("knowledge_space")
+        await adapter.sync_department(
             resource_id=str(space_id),
             operator_user_id=operator_user_id,
             department_id=department_id,

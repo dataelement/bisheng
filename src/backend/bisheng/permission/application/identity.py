@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import inspect
 from typing import Protocol
 
 from bisheng.core.context.tenant import DEFAULT_TENANT_ID
@@ -16,8 +15,6 @@ class LoginPermissionIdentity(Protocol):
     tenant_id: int
     is_global_super: bool
 
-    async def has_tenant_admin(self, tenant_id: int) -> bool: ...
-
 
 async def resolve_permission_actor(
     login_user: LoginPermissionIdentity,
@@ -28,13 +25,10 @@ async def resolve_permission_actor(
     is_global_super = bool(getattr(login_user, "is_global_super", False))
     tenant_admin_tenant_ids: frozenset[int] = frozenset()
     if not is_global_super and tenant_id != DEFAULT_TENANT_ID:
-        has_tenant_admin = getattr(login_user, "has_tenant_admin", None)
-        if callable(has_tenant_admin):
-            result = has_tenant_admin(tenant_id)
-            if inspect.isawaitable(result):
-                result = await result
-            if result:
-                tenant_admin_tenant_ids = frozenset({tenant_id})
+        from bisheng.permission.application.relation_api import is_tenant_admin
+
+        if await is_tenant_admin(login_user.user_id, tenant_id):
+            tenant_admin_tenant_ids = frozenset({tenant_id})
 
     return PermissionActor(
         user_id=login_user.user_id,

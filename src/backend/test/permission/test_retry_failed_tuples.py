@@ -1,3 +1,4 @@
+import asyncio
 import importlib.util
 import sys
 from pathlib import Path
@@ -5,10 +6,10 @@ from types import SimpleNamespace
 
 
 def _load_retry_module():
-    fake_celery = SimpleNamespace(task=lambda *args, **kwargs: (lambda fn: fn))
-    sys.modules['bisheng.worker.main'] = SimpleNamespace(bisheng_celery=fake_celery)
-    path = Path(__file__).resolve().parents[2] / 'bisheng/worker/permission/retry_failed_tuples.py'
-    spec = importlib.util.spec_from_file_location('retry_failed_tuples_under_test', path)
+    fake_celery = SimpleNamespace(task=lambda *args, **kwargs: lambda fn: fn)
+    sys.modules["bisheng.worker.main"] = SimpleNamespace(bisheng_celery=fake_celery)
+    path = Path(__file__).resolve().parents[2] / "bisheng/worker/permission/retry_failed_tuples.py"
+    spec = importlib.util.spec_from_file_location("retry_failed_tuples_under_test", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -45,9 +46,9 @@ def _item(action: str):
     return SimpleNamespace(
         id=7,
         action=action,
-        fga_user='user:1',
-        relation='viewer',
-        object='workflow:1',
+        fga_user="user:1",
+        relation="viewer",
+        object="workflow:1",
         retry_count=0,
         max_retries=3,
     )
@@ -56,13 +57,11 @@ def _item(action: str):
 def test_retry_single_treats_duplicate_write_as_success():
     _FakeDao.reset()
 
-    fga = SimpleNamespace(
-        write_tuples_sync=lambda **kwargs: (_ for _ in ()).throw(
-            RuntimeError('cannot write a tuple which already exists')
-        )
-    )
+    async def duplicate(_relations):
+        raise RuntimeError("cannot write a tuple which already exists")
 
-    _retry_single(fga, _item('write'), 'write', _FakeDao)
+    permissions = SimpleNamespace(grant=duplicate)
+    _retry_single(permissions, _item("write"), "write", _FakeDao, lambda factory: asyncio.run(factory()))
 
     assert _FakeDao.succeeded == [7]
     assert _FakeDao.retries == []
@@ -72,13 +71,11 @@ def test_retry_single_treats_duplicate_write_as_success():
 def test_retry_single_treats_missing_delete_as_success():
     _FakeDao.reset()
 
-    fga = SimpleNamespace(
-        write_tuples_sync=lambda **kwargs: (_ for _ in ()).throw(
-            RuntimeError('cannot delete a tuple which does not exist')
-        )
-    )
+    async def missing(_relations):
+        raise RuntimeError("cannot delete a tuple which does not exist")
 
-    _retry_single(fga, _item('delete'), 'delete', _FakeDao)
+    permissions = SimpleNamespace(revoke=missing)
+    _retry_single(permissions, _item("delete"), "delete", _FakeDao, lambda factory: asyncio.run(factory()))
 
     assert _FakeDao.succeeded == [7]
     assert _FakeDao.retries == []

@@ -233,8 +233,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         return await resolve_permission_actor(self.login_user)
 
     @staticmethod
-    def _resource_adapter(resource_type: str):
-        return get_f048_resource_adapter(resource_type)
+    async def _resource_adapter(resource_type: str):
+        return await get_f048_resource_adapter(resource_type)
 
     async def _check_action(
         self,
@@ -657,7 +657,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
     ) -> list[KnowledgeFilePermissionRecord]:
         records: list[KnowledgeFilePermissionRecord] = []
         for resource_type, resource_id in resources:
-            adapter = self._resource_adapter(resource_type)
+            adapter = await self._resource_adapter(resource_type)
             record = await adapter.load_permission_record(
                 resource_type=resource_type,
                 resource_id=str(resource_id),
@@ -683,7 +683,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
             parent_type=parent_type,
             parent_id=parent_id,
         )
-        await self._resource_adapter(object_type).authorize_created(
+        adapter = await self._resource_adapter(object_type)
+        await adapter.authorize_created(
             record=record,
             actor=await self._permission_actor(),
         )
@@ -694,7 +695,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
     ) -> None:
         actor = await self._permission_actor()
         for record in records:
-            await self._resource_adapter(record.resource_type).project_delete(
+            adapter = await self._resource_adapter(record.resource_type)
+            await adapter.project_delete(
                 record=record,
                 actor=actor,
             )
@@ -719,7 +721,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         """Project one active business membership as a stable Grant source."""
 
         model_key = _SPACE_MEMBER_ROLE_TO_MODEL.get(user_role) if is_active and user_role is not None else None
-        adapter = get_f048_resource_adapter("knowledge_space")
+        adapter = await get_f048_resource_adapter("knowledge_space")
         await adapter.sync_membership(
             resource_id=str(space_id),
             operator_user_id=operator_user_id or user_id,
@@ -737,7 +739,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
     ) -> None:
         """Remove ordinary local sources while preserving creator and parents."""
 
-        container = get_f048_resource_adapter("knowledge_space")
+        container = await get_f048_resource_adapter("knowledge_space")
         record = await container.load_permission_record(
             resource_type="knowledge_space",
             resource_id=str(space.id),
@@ -755,7 +757,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 actor=actor,
                 action="manage_permission",
             )
-            outcome = await get_f048_runtime().remove_ordinary_sources(
+            runtime = await get_f048_runtime()
+            outcome = await runtime.remove_ordinary_sources(
                 actor=actor,
                 target=target,
                 idempotency_key=(f"space-private:{space.id}:{target.resource_version}"),
@@ -775,7 +778,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         )
 
         for resource_type, resource_id in child_resources:
-            adapter = get_f048_resource_adapter(resource_type)
+            adapter = await get_f048_resource_adapter(resource_type)
             while True:
                 target = await adapter.resolve_permission_target(
                     resource_type=resource_type,
@@ -783,7 +786,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     actor=actor,
                     action="manage_permission",
                 )
-                outcome = await get_f048_runtime().remove_ordinary_sources(
+                runtime = await get_f048_runtime()
+                outcome = await runtime.remove_ordinary_sources(
                     actor=actor,
                     target=target,
                     idempotency_key=(f"space-private:{resource_type}:{resource_id}:{target.resource_version}"),
@@ -1096,7 +1100,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 knowledge_space.auto_tag_library_id = resolved_library_id
                 knowledge_space = await KnowledgeDao.async_update_space(knowledge_space)
 
-        container_adapter = self._resource_adapter("knowledge_space")
+        container_adapter = await self._resource_adapter("knowledge_space")
         actor = await self._permission_actor()
         await container_adapter.authorize_created(
             record=KnowledgeContainerPermissionRecord(
@@ -1238,7 +1242,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         original_member_ids = {member.user_id for member in original_members}
         original_member_ids.update(await self._authorized_space_user_ids(space_id))
         child_permission_records = await self._load_resource_permission_records(child_resources)
-        container_adapter = self._resource_adapter("knowledge_space")
+        container_adapter = await self._resource_adapter("knowledge_space")
         container_record = await container_adapter.load_permission_record(
             resource_type="knowledge_space",
             resource_id=str(space_id),
@@ -1409,7 +1413,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             await SpaceChannelMemberDao.async_delete_rejected_members(space_id)
 
         if new_auth_type != AuthTypeEnum.PRIVATE and old_square_visible != new_square_visible:
-            container_adapter = self._resource_adapter("knowledge_space")
+            container_adapter = await self._resource_adapter("knowledge_space")
             current_record = await container_adapter.load_permission_record(
                 resource_type="knowledge_space",
                 resource_id=str(space_id),
@@ -1498,11 +1502,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 [row.id for row in rows],
                 (action,),
             )
-            result.extend(
-                int(row.id)
-                for row in rows
-                if action in action_map.get(str(row.id), frozenset())
-            )
+            result.extend(int(row.id) for row in rows if action in action_map.get(str(row.id), frozenset()))
             if len(rows) < 100:
                 break
             last = rows[-1]
@@ -3258,7 +3258,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
     ) -> None:
         """Project a business-validated parent change through the ledger."""
 
-        adapter = self._resource_adapter(object_type)
+        adapter = await self._resource_adapter(object_type)
         target = await adapter.load_permission_record(
             resource_type=object_type,
             resource_id=str(object_id),

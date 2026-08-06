@@ -46,18 +46,24 @@ async def test_approval_space_subscription_uses_approval_gate_pending():
             return_value=-1,
         ),
         patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_insert_member",
+            "bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_upsert_space_member_status",
             new_callable=AsyncMock,
-        ) as mock_insert,
+            return_value=SimpleNamespace(
+                business_id="12",
+                user_id=42,
+                user_role=UserRoleEnum.MEMBER,
+                status=MembershipStatusEnum.PENDING,
+            ),
+        ) as mock_upsert,
     ):
         result = await service.subscribe_space(12)
 
     assert result == {"status": "pending", "space_id": 12}
-    mock_insert.assert_awaited_once()
-    inserted = mock_insert.await_args.args[0]
-    assert inserted.business_id == "12"
-    assert inserted.user_role == UserRoleEnum.MEMBER
-    assert inserted.status == MembershipStatusEnum.PENDING
+    mock_upsert.assert_awaited_once_with(
+        space_id=12,
+        user_id=42,
+        status=MembershipStatusEnum.PENDING,
+    )
     service.approval_gate.request_or_pass.assert_awaited_once()
     service.message_service.send_generic_approval.assert_not_awaited()
 
@@ -104,21 +110,15 @@ async def test_approval_space_subscription_gate_failure_leaves_no_membership():
             return_value=-1,
         ),
         patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_insert_member",
+            "bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_upsert_space_member_status",
             new_callable=AsyncMock,
-        ) as mock_insert,
-        patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.update",
-            new_callable=AsyncMock,
-            side_effect=lambda row: row,
-        ) as mock_update,
+        ) as mock_upsert,
     ):
         with pytest.raises(ApprovalScenarioDisabledError):
             await service.subscribe_space(12)
 
     service.approval_gate.request_or_pass.assert_awaited_once()
-    mock_insert.assert_not_awaited()
-    mock_update.assert_not_awaited()
+    mock_upsert.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -160,10 +160,10 @@ async def test_approval_space_subscription_direct_pass_activates_member():
             return_value=-1,
         ),
         patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.update",
+            "bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_upsert_space_member_status",
             new_callable=AsyncMock,
-            side_effect=lambda row: row,
-        ) as mock_update,
+            return_value=membership,
+        ) as mock_upsert,
         patch(
             "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceService.sync_direct_space_user_permissions",
             new_callable=AsyncMock,
@@ -172,8 +172,11 @@ async def test_approval_space_subscription_direct_pass_activates_member():
         result = await service.subscribe_space(12)
 
     assert result == {"status": "subscribed", "space_id": 12}
-    assert membership.status == MembershipStatusEnum.ACTIVE
-    mock_update.assert_awaited()
+    mock_upsert.assert_awaited_once_with(
+        space_id=12,
+        user_id=42,
+        status=MembershipStatusEnum.ACTIVE,
+    )
     mock_sync.assert_awaited()
 
 

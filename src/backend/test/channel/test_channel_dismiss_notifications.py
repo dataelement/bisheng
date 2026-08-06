@@ -91,7 +91,7 @@ async def test_dismiss_channel_notifies_active_members():
         ),
         patch(
             "bisheng.channel.domain.services.channel_service.get_f048_resource_adapter",
-            return_value=adapter,
+            new=AsyncMock(return_value=adapter),
         ),
     ):
         await service.dismiss_channel("channel-1", _User())
@@ -130,7 +130,7 @@ async def test_dismiss_allowed_for_non_creator_with_delete_channel_permission():
         ),
         patch(
             "bisheng.channel.domain.services.channel_service.get_f048_resource_adapter",
-            return_value=adapter,
+            new=AsyncMock(return_value=adapter),
         ),
     ):
         await service.dismiss_channel("channel-1", _User())
@@ -176,7 +176,7 @@ async def test_dismiss_allowed_for_super_admin_without_delete_channel_permission
         ),
         patch(
             "bisheng.channel.domain.services.channel_service.get_f048_resource_adapter",
-            return_value=adapter,
+            new=AsyncMock(return_value=adapter),
         ),
     ):
         await service.dismiss_channel("channel-1", _SuperAdmin())
@@ -213,7 +213,7 @@ async def test_dismiss_denied_for_non_creator_without_delete_channel_permission(
         ),
         patch(
             "bisheng.channel.domain.services.channel_service.get_f048_resource_adapter",
-            return_value=adapter,
+            new=AsyncMock(return_value=adapter),
         ),
     ):
         with pytest.raises(ChannelPermissionDeniedError):

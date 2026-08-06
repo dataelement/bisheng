@@ -120,7 +120,7 @@ class LegacyRBACSyncService:
             PermissionService,
         )
 
-        fga = PermissionService._get_fga()
+        fga = await PermissionService._aget_fga()
         if fga is None:
             logger.warning(
                 "FGAClient not available for user_group subject cleanup: %s",

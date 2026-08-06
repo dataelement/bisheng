@@ -34,13 +34,15 @@ async def check_business_action(
     """Check one business-verified resource through the sole F048 facade."""
 
     actor = await resolve_permission_actor(login_user)
-    target = await get_f048_resource_registry().resolve(
+    registry = await get_f048_resource_registry()
+    target = await registry.resolve(
         resource_type=resource_type,
         resource_id=str(resource_id),
         actor=actor,
         action=action,
     )
-    return await get_f048_runtime().check_action(actor, target, action)
+    runtime = await get_f048_runtime()
+    return await runtime.check_action(actor, target, action)
 
 
 async def require_business_action(
@@ -74,9 +76,9 @@ async def batch_check_business_actions(
         return {}
 
     actor = await resolve_permission_actor(login_user)
-    registry = get_f048_resource_registry()
+    registry = await get_f048_resource_registry()
     result: dict[str, set[str]] = {resource_id: set() for resource_id in normalized_ids}
-    runtime = get_f048_runtime()
+    runtime = await get_f048_runtime()
     for action in normalized_actions:
         resolved = await asyncio.gather(
             *(

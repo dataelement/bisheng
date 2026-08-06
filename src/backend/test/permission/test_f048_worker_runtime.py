@@ -226,5 +226,5 @@ def test_worker_runtime_does_not_register_data_migration_task() -> None:
     worker_root = Path(__file__).parents[2] / "bisheng" / "worker"
     source = "\n".join(path.read_text(encoding="utf-8") for path in worker_root.rglob("*.py"))
     assert "migrate_f048_permission_data" not in source
-    assert 'readiness().get("migration_required")' in source
-    assert "Celery task consumption is paused" in source
+    assert "register_f048_permission_runtime_context" in source
+    assert "while True:\n            time.sleep(_WORKER_BEAT_SLEEP)" not in source

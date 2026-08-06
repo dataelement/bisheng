@@ -1,136 +1,65 @@
-"""Integration tests: ChangeHandler → PermissionService → OpenFGA (T14).
+"""Change handlers delegate only to the permission application protocol."""
 
-Tests that DepartmentChangeHandler and GroupChangeHandler execute_async()
-correctly write tuples to OpenFGA via PermissionService.batch_write_tuples().
-"""
-
-import pytest
 from unittest.mock import AsyncMock, patch
 
-from test.fixtures.mock_openfga import InMemoryOpenFGAClient
+import pytest
+
+from bisheng.department.domain.services.department_change_handler import DepartmentChangeHandler
+from bisheng.user_group.domain.services.group_change_handler import GroupChangeHandler
 
 
-@pytest.fixture
-def mock_fga():
-    return InMemoryOpenFGAClient()
+def _patch_permissions():
+    permissions = AsyncMock()
+    permissions.apply_changes = AsyncMock()
+    return permissions, patch(
+        "bisheng.permission.application.get_permission_relation_api",
+        new=AsyncMock(return_value=permissions),
+    )
 
 
-class TestDepartmentChangeHandlerIntegration:
-    @pytest.mark.asyncio
-    async def test_on_created_writes_parent_tuple(self, mock_fga):
-        from bisheng.department.domain.services.department_change_handler import DepartmentChangeHandler
-        from bisheng.permission.domain.services.permission_service import PermissionService
+@pytest.mark.parametrize(
+    "changes",
+    [
+        DepartmentChangeHandler.on_created(dept_id=5, parent_id=1),
+        DepartmentChangeHandler.on_members_added(dept_id=5, user_ids=[10, 11, 12]),
+        DepartmentChangeHandler.on_moved(dept_id=5, old_parent_id=1, new_parent_id=2),
+    ],
+)
+async def test_department_changes_use_crash_safe_permission_protocol(changes) -> None:
+    permissions, permissions_patch = _patch_permissions()
 
-        ops = DepartmentChangeHandler.on_created(dept_id=5, parent_id=1)
-        assert len(ops) == 1
+    with permissions_patch:
+        await DepartmentChangeHandler.execute_async(changes)
 
-        with patch.object(PermissionService, "_get_fga", return_value=mock_fga):
-            await DepartmentChangeHandler.execute_async(ops)
-
-        mock_fga.assert_tuple_exists("department:1", "parent", "department:5")
-
-    @pytest.mark.asyncio
-    async def test_on_members_added_writes_member_tuples(self, mock_fga):
-        from bisheng.department.domain.services.department_change_handler import DepartmentChangeHandler
-        from bisheng.permission.domain.services.permission_service import PermissionService
-
-        ops = DepartmentChangeHandler.on_members_added(dept_id=5, user_ids=[10, 11, 12])
-        assert len(ops) == 3
-
-        with patch.object(PermissionService, "_get_fga", return_value=mock_fga):
-            await DepartmentChangeHandler.execute_async(ops)
-
-        mock_fga.assert_tuple_count(3)
-        mock_fga.assert_tuple_exists("user:10", "member", "department:5")
-        mock_fga.assert_tuple_exists("user:11", "member", "department:5")
-        mock_fga.assert_tuple_exists("user:12", "member", "department:5")
-
-    @pytest.mark.asyncio
-    async def test_on_moved_deletes_old_adds_new(self, mock_fga):
-        from bisheng.department.domain.services.department_change_handler import DepartmentChangeHandler
-        from bisheng.permission.domain.services.permission_service import PermissionService
-
-        # Pre-populate old parent
-        await mock_fga.write_tuples(
-            writes=[{"user": "department:1", "relation": "parent", "object": "department:5"}],
-        )
-
-        ops = DepartmentChangeHandler.on_moved(dept_id=5, old_parent_id=1, new_parent_id=2)
-
-        with patch.object(PermissionService, "_get_fga", return_value=mock_fga):
-            await DepartmentChangeHandler.execute_async(ops)
-
-        mock_fga.assert_tuple_count(1)
-        mock_fga.assert_tuple_exists("department:2", "parent", "department:5")
+    permissions.apply_changes.assert_awaited_once_with(tuple(changes), crash_safe=True)
 
 
-class TestGroupChangeHandlerIntegration:
-    @pytest.mark.asyncio
-    async def test_on_created_writes_admin_tuple(self, mock_fga):
-        from bisheng.user_group.domain.services.group_change_handler import GroupChangeHandler
-        from bisheng.permission.domain.services.permission_service import PermissionService
+@pytest.mark.parametrize(
+    "changes",
+    [
+        GroupChangeHandler.on_created(group_id=3, creator_user_id=1),
+        GroupChangeHandler.on_members_added(group_id=3, user_ids=[10, 11]),
+        GroupChangeHandler.on_member_removed(group_id=3, user_id=10),
+    ],
+)
+async def test_group_changes_use_crash_safe_permission_protocol(changes) -> None:
+    permissions, permissions_patch = _patch_permissions()
 
-        ops = GroupChangeHandler.on_created(group_id=3, creator_user_id=1)
-        assert len(ops) == 1
+    with (
+        permissions_patch,
+        patch(
+            "bisheng.permission.domain.services.permission_cache.PermissionCache.invalidate_user",
+            new=AsyncMock(),
+        ),
+    ):
+        await GroupChangeHandler.execute_async(changes)
 
-        with patch.object(PermissionService, "_get_fga", return_value=mock_fga):
-            await GroupChangeHandler.execute_async(ops)
+    permissions.apply_changes.assert_awaited_once_with(tuple(changes), crash_safe=True)
 
-        mock_fga.assert_tuple_exists("user:1", "admin", "user_group:3")
 
-    @pytest.mark.asyncio
-    async def test_on_members_added_writes_member_tuples(self, mock_fga):
-        from bisheng.user_group.domain.services.group_change_handler import GroupChangeHandler
-        from bisheng.permission.domain.services.permission_service import PermissionService
+async def test_empty_changes_do_not_initialize_permission_runtime() -> None:
+    with patch("bisheng.permission.application.get_permission_relation_api") as get_permissions:
+        await DepartmentChangeHandler.execute_async([])
+        await GroupChangeHandler.execute_async([])
 
-        ops = GroupChangeHandler.on_members_added(group_id=3, user_ids=[10, 11])
-
-        with patch.object(PermissionService, "_get_fga", return_value=mock_fga):
-            await GroupChangeHandler.execute_async(ops)
-
-        mock_fga.assert_tuple_count(2)
-        mock_fga.assert_tuple_exists("user:10", "member", "user_group:3")
-        mock_fga.assert_tuple_exists("user:11", "member", "user_group:3")
-
-    @pytest.mark.asyncio
-    async def test_on_member_removed_deletes_tuple(self, mock_fga):
-        from bisheng.user_group.domain.services.group_change_handler import GroupChangeHandler
-        from bisheng.permission.domain.services.permission_service import PermissionService
-
-        # Pre-populate
-        await mock_fga.write_tuples(
-            writes=[{"user": "user:10", "relation": "member", "object": "user_group:3"}],
-        )
-
-        ops = GroupChangeHandler.on_member_removed(group_id=3, user_id=10)
-
-        with patch.object(PermissionService, "_get_fga", return_value=mock_fga):
-            await GroupChangeHandler.execute_async(ops)
-
-        mock_fga.assert_tuple_count(0)
-
-    @pytest.mark.asyncio
-    async def test_fga_unavailable_keeps_pre_recorded_failed_tuples(self):
-        """When FGA is unavailable, crash-safe pre-records remain pending."""
-        from bisheng.user_group.domain.services.group_change_handler import GroupChangeHandler
-        from bisheng.permission.domain.services.permission_service import PermissionService
-
-        ops = GroupChangeHandler.on_created(group_id=3, creator_user_id=1)
-
-        with patch.object(
-            PermissionService,
-            "_aget_fga",
-            new_callable=AsyncMock,
-            return_value=None,
-        ):
-            with patch.object(
-                PermissionService,
-                "_pre_record_failed_tuples",
-                new_callable=AsyncMock,
-                return_value=[41],
-            ) as mock_pre_record:
-                await GroupChangeHandler.execute_async(ops)
-                mock_pre_record.assert_awaited_once()
-                saved_ops = mock_pre_record.await_args.args[0]
-                assert len(saved_ops) == 1
-                assert saved_ops[0].user == "user:1"
+    get_permissions.assert_not_called()

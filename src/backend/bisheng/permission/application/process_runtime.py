@@ -3,12 +3,20 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Protocol
+from collections.abc import Awaitable, Callable
+from contextlib import suppress
+from dataclasses import dataclass
+from typing import Any, Protocol
 
 from loguru import logger
 
+from bisheng.common.errcode.permission import (
+    AuthorizationModelMismatchError,
+    PermissionPublishNotReadyError,
+)
+from bisheng.core.context import FunctionContextManager
+from bisheng.core.context.manager import app_context
 from bisheng.core.openfga.client import FGAClient
-from bisheng.permission.application.access import configure_f048_runtime
 from bisheng.permission.application.runtime import (
     F048PermissionRuntime,
     F048RuntimeComponents,
@@ -19,6 +27,7 @@ from bisheng.permission.application.sql_runtime import (
 )
 
 DEFAULT_F048_HEARTBEAT_INTERVAL_SECONDS = 15
+F048_PERMISSION_RUNTIME_CONTEXT = "permission_runtime"
 
 
 class F048ProcessManagerPort(Protocol):
@@ -29,7 +38,114 @@ class F048ProcessManagerPort(Protocol):
 
     async def heartbeat(self) -> bool: ...
 
+    async def mark_migration_required(self) -> None: ...
+
     def readiness(self) -> dict: ...
+
+
+RuntimeInitializer = Callable[[FGAClient], Awaitable[Any]]
+
+
+@dataclass(frozen=True, slots=True)
+class ProcessPermissionRuntime:
+    runtime: Any
+    heartbeat_task: asyncio.Task
+
+
+def _components(runtime: Any) -> F048RuntimeComponents:
+    components = getattr(runtime, "components", runtime)
+    if not isinstance(components, F048RuntimeComponents):
+        raise TypeError("Permission runtime initializer returned an invalid composition")
+    return components
+
+
+def register_f048_permission_runtime_context(
+    initializer: RuntimeInitializer,
+) -> None:
+    """Register the process permission composition without initializing it."""
+
+    from bisheng.common.permission_identity import configure_tenant_admin_checker
+    from bisheng.permission.application.relation_api import is_tenant_admin
+
+    configure_tenant_admin_checker(is_tenant_admin)
+
+    try:
+        app_context.get_context(F048_PERMISSION_RUNTIME_CONTEXT)
+        return
+    except KeyError:
+        pass
+
+    async def initialize() -> ProcessPermissionRuntime:
+        manager = app_context.get_context("openfga")
+        client = await manager.async_get_instance()
+        if manager.readiness().get("migration_required"):
+            raise PermissionPublishNotReadyError(msg="Permission data migration is required")
+        try:
+            runtime = await initializer(client)
+        except (
+            AuthorizationModelMismatchError,
+            PermissionPublishNotReadyError,
+        ):
+            await manager.mark_migration_required()
+            raise
+        await bind_f048_process_runtime(
+            manager,
+            _components(runtime).facade,
+        )
+        heartbeat_task = asyncio.create_task(
+            run_f048_process_heartbeat(manager),
+            name="permission-runtime-heartbeat",
+        )
+        return ProcessPermissionRuntime(
+            runtime=runtime,
+            heartbeat_task=heartbeat_task,
+        )
+
+    async def cleanup(context: ProcessPermissionRuntime) -> None:
+        if context.heartbeat_task is not None:
+            context.heartbeat_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await context.heartbeat_task
+        from bisheng.permission.application.access import clear_f048_runtime
+
+        clear_f048_runtime()
+
+    app_context.register_context(
+        FunctionContextManager(
+            name=F048_PERMISSION_RUNTIME_CONTEXT,
+            init_func=initialize,
+            cleanup_func=cleanup,
+        ),
+        dependencies=["openfga"],
+        lazy=True,
+    )
+
+
+async def get_f048_process_runtime() -> Any:
+    context: ProcessPermissionRuntime = await app_context.async_get_instance(F048_PERMISSION_RUNTIME_CONTEXT)
+    return context.runtime
+
+
+async def ensure_f048_process_runtime_ready(*, expected_role: str) -> dict:
+    """Return complete process readiness after forcing lazy initialization."""
+
+    await get_f048_process_runtime()
+    manager = app_context.get_context("openfga")
+    readiness = manager.readiness()
+    required = (
+        "store_id",
+        "model_id",
+        "model_checksum",
+        "catalog_release_id",
+        "catalog_checksum",
+    )
+    if (
+        not readiness.get("ready")
+        or readiness.get("instance_role") != expected_role
+        or any(readiness.get(field) in (None, "") for field in required)
+    ):
+        raise RuntimeError(f"{expected_role} permission runtime is not ready or has incomplete pins")
+    return readiness
 
 
 async def initialize_f048_background_runtime(
@@ -52,6 +168,8 @@ async def initialize_f048_background_runtime(
         client,
         external_scopes=external_scopes,
     )
+    from bisheng.permission.application.access import configure_f048_runtime
+
     configure_f048_runtime(components.facade)
     return components
 

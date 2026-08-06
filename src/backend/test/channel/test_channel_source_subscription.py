@@ -74,9 +74,7 @@ def _service(*, channel_repository, member_repository, info_source_repository):
 def _permission_adapter():
     return SimpleNamespace(
         authorize_created=AsyncMock(),
-        load_permission_record=AsyncMock(
-            return_value=SimpleNamespace(tenant_id=1)
-        ),
+        load_permission_record=AsyncMock(return_value=SimpleNamespace(tenant_id=1)),
         project_delete=AsyncMock(),
     )
 
@@ -117,7 +115,7 @@ async def test_create_subscribes_only_missing_sources():
     with (
         patch(
             f"{_CS}.get_f048_resource_adapter",
-            return_value=permission_adapter,
+            new=AsyncMock(return_value=permission_adapter),
         ),
         patch(f"{_CS}.get_bisheng_information_client", new=AsyncMock(return_value=info_client)),
     ):
@@ -167,7 +165,7 @@ async def test_create_skips_subscribe_when_all_present():
     with (
         patch(
             f"{_CS}.get_f048_resource_adapter",
-            return_value=permission_adapter,
+            new=AsyncMock(return_value=permission_adapter),
         ),
         patch(f"{_CS}.get_bisheng_information_client", new=AsyncMock(return_value=info_client)),
     ):
@@ -215,7 +213,7 @@ async def test_create_inserts_metadata_rows_for_new_sources():
     with (
         patch(
             f"{_CS}.get_f048_resource_adapter",
-            return_value=permission_adapter,
+            new=AsyncMock(return_value=permission_adapter),
         ),
         patch(f"{_CS}.get_bisheng_information_client", new=AsyncMock(return_value=info_client)),
     ):
@@ -261,7 +259,7 @@ async def test_create_aborts_before_persist_on_limit():
     with (
         patch(
             f"{_CS}.get_f048_resource_adapter",
-            return_value=permission_adapter,
+            new=AsyncMock(return_value=permission_adapter),
         ),
         patch(f"{_CS}.get_bisheng_information_client", new=AsyncMock(return_value=info_client)),
     ):
@@ -422,7 +420,7 @@ async def test_dismiss_does_not_unsubscribe():
     with (
         patch(
             f"{_CS}.get_f048_resource_adapter",
-            return_value=permission_adapter,
+            new=AsyncMock(return_value=permission_adapter),
         ),
         patch(f"{_CS}.require_business_action", new=AsyncMock()),
         patch(f"{_CS}.get_bisheng_information_client", new=AsyncMock(return_value=info_client)),
@@ -445,7 +443,7 @@ async def test_dismiss_shared_source_stays_subscribed():
     with (
         patch(
             f"{_CS}.get_f048_resource_adapter",
-            return_value=permission_adapter,
+            new=AsyncMock(return_value=permission_adapter),
         ),
         patch(f"{_CS}.require_business_action", new=AsyncMock()),
         patch(f"{_CS}.get_bisheng_information_client", new=AsyncMock(return_value=info_client)),

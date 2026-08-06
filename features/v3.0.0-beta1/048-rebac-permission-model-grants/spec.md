@@ -52,11 +52,10 @@
 - 完成历史动作、模型、绑定、主体来源、父子关系与资源权限模式的一次性升级。
 - 将 `permission_relation_models_v1` 与 `permission_relation_model_bindings_v1`
   从 Config 大 JSON 迁入规范化 MySQL/DM8 关系表，并退役其运行时读写。
-- 先按既有方式更新镜像并启动服务；旧 model 下进程进入 `MIGRATION_REQUIRED/NOT_READY`
-  运维态，不初始化 F048 权限运行时，应用迁移门禁除 `/health` 外统一拒绝 HTTP/WS。随后在
-  backend 容器内沿用现有 OpenFGA Store 发布一个新 Authorization Model ID，原地完成 tuple
-  转换和旧运行数据退役；校验通过后重启服务，让全部服务只使用新 model 和新业务逻辑并
-  自动恢复访问。
+- 由运维在部署/入口层停止业务流量并暂停队列消费，再更新镜像和完成 schema upgrade；随后
+  在 backend 容器内沿用现有 OpenFGA Store 发布一个新 Authorization Model ID，原地完成
+  tuple 转换和旧运行数据退役；校验通过后重启服务，让全部进程只使用新 model 和新业务逻辑。
+  应用 `/health` 仅表示进程存活，不承载一次性迁移流量控制。
 - 提供逐项映射、幂等断点续跑、迁移后校验、启服门禁、前向修复和旧路径退役。
 - 数据库结构变更只通过 DDL-only Alembic revision 完成；旧权限数据、Config 与 OpenFGA
   tuple 的读取、转换、回填、清理和校验由 `src/backend/scripts/` 下的专用数据迁移脚本完成。
@@ -98,7 +97,7 @@
 | `CUSTOM` | 当前资源形成权限边界，只使用本级普通 Grant；业务结构父级仍保留 |
 | 受保护授权 | 系统创建且不能被普通成员管理接口删除或降级的授权，例如按资源规则确定的所有者 |
 | Schema Migration | Alembic revision，只负责 MySQL/DM8 表、列、索引和约束等 DDL，不读取或转换旧业务数据 |
-| Permission Data Migration Script | `src/backend/scripts/` 下的一次性运维脚本；在服务已启动、F048 未就绪且 HTTP/WS 迁移门禁生效、schema upgrade 完成后，从 backend 容器内执行旧数据转换、OpenFGA tuple 更新、checkpoint、验证与退役 |
+| Permission Data Migration Script | `src/backend/scripts/` 下的一次性运维脚本；在运维已停止业务流量和队列消费、schema upgrade 完成后，从 backend 容器内执行旧数据转换、OpenFGA tuple 更新、checkpoint、验证与退役；脚本输出和退出码是迁移状态的权威来源 |
 
 ### 1.1 规范示例：同一资源上的直接授权与部门授权
 
@@ -310,19 +309,17 @@
 本次升级从 v2.5/v2.6 的四档静态关系、Config 中的 relation model/binding、
 既有 OpenFGA tuple 和资源父子关系迁移到本 Spec。升级必须遵守：
 
-1. 更新镜像并启动 API、Celery、Linsight 等进程；当 OpenFGA 最新 model 仍是旧版本时，
-   进程必须存活但处于 `MIGRATION_REQUIRED/NOT_READY`，不得初始化 F048 权限运行时或
-   发布 ready heartbeat；API 的 HTTP/WS 迁移门禁除 `/health` 外统一拒绝访问，Celery/
-   Linsight 暂停消费任务；
+1. 运维先在部署/入口层停止 HTTP/WS 业务流量并暂停 Celery/Linsight 消费，再更新镜像并完成
+   schema upgrade；应用不实现全局迁移中间件，也不把迁移状态编码进 `/health`；
 2. 由正常启动链完成 Alembic MySQL/DM8 schema DDL，再由运维人员进入 backend 容器，通过
    `src/backend/scripts/`
    专用脚本执行唯一一次正式权限数据迁移；两者不得互相 import 或混合职责；
 3. OpenFGA Store ID 保持不变；仍合法的 system/组织/shared/parent tuple 原地复用，新授权
    tuple 原地写入并在核对后删除已迁移资源的旧四档/废弃 relation tuple；
 4. 数据迁移脚本校验通过后重启 API、Celery、Linsight 等服务；重启后的全部权限读写只启用
-   新 model ID，不保留双 model client、运行时双写或 fallback；readiness 通过后迁移门禁
-   自动解除；
-5. 未映射、跨租户、孤儿、冲突和语义可能扩权的数据 fail closed；
+   新 model ID，不保留双 model client、运行时双写或 fallback；smoke 通过后由运维恢复流量；
+5. 未映射、跨租户、冲突和语义可能扩权的数据 fail closed；找不到业务资源/主体的孤儿 tuple
+   仍阻断或退休，仅缺少对应直接 tuple 的 Config binding 按 AC-124 只记审计且不恢复授权；
 6. 数据迁移脚本可重复执行、可断点续跑、可审计，但不提供独立 dry-run 或生产迁移预演；
 7. 数据迁移或启服验证失败时保持维护并在新 model 上前向修复，不恢复旧应用与旧权限运行时。
 
@@ -333,7 +330,7 @@
 
 | 旧动作族 | 新动作 | 建议初始等级 | 迁移要求 |
 |---------|--------|-------------:|---------|
-| `view_*` | 不再作为动作 | — | 模型仍有其他动作时由 Grant 自然保留可见性；仅含 `view_*` 的旧自定义模型按 AC-79 人工处理，不得自动赋予正文、下载或其他具体动作 |
+| `view_*` | 不再作为动作 | — | 模型仍有其他动作时由 Grant 自然保留可见性；仅含 `view_*` 且无未知动作的旧自定义模型按 AC-79/AC-133 保留为 active 仅可见模型，不得自动赋予正文、下载或其他具体动作 |
 | `manage_*` | `manage_permission` | 3 | 根据原模型可管理目标范围推导模型级同级策略；不能由新等级规则无损表达的记录进入人工清单，不得自动扩权 |
 | `rename_folder` / `rename_file` | `rename` | 2 | 保留适用资源范围 |
 | `edit_*` | `edit` | 2 | 按目标资源适用范围迁移 |
@@ -358,7 +355,7 @@
   Config binding、资源授权 tuple、直接/部门/用户组来源、受保护所有者、资源父级和异常记录。
 - **AC-73** — THE SYSTEM SHALL 输出旧动作到新动作、旧系统/自定义模型到新模型、旧授权到目标 Grant、资源到目标权限模式的可追溯映射。
 - **AC-74** — THE SYSTEM SHALL 分别统计已创建、复用、跳过、删除、去重和人工处理的数据量，并按租户、资源类型、模型、主体类型和来源拆分。
-- **AC-75** — WHEN 发现跨租户关系、不存在的资源/主体/模型、无效父级、循环父级、非法动作、空自定义模型或不能表达的 `manage_*` 范围, THE SYSTEM SHALL 将其列入阻断或人工处置清单，不得静默放行。
+- **AC-75** — WHEN 发现跨租户关系、不存在的资源/主体/模型、无效父级、循环父级、非法动作、非 AC-79/AC-133 迁移例外的空自定义模型或不能表达的 `manage_*` 范围, THE SYSTEM SHALL 将其列入阻断或人工处置清单，不得静默放行。
 - **AC-76** — IF 源校验或目标写入存在未关闭阻断项, THEN THE SYSTEM SHALL 停止后续批次并
   保持服务关闭；修复后只能基于 checkpoint 幂等续跑并重新校验，不得绕过阻断项启服。
 
@@ -366,7 +363,7 @@
 
 - **AC-77** — WHEN 普通资源的旧 viewer/editor/manager/owner 直接 tuple 没有匹配的自定义 binding, THE SYSTEM SHALL 分别映射到四个标准模型，保持原授权主体、资源范围和受保护属性；有 binding 时按 AC-118 使用其模型。平台超管、租户管理员等显式系统级身份不得被转换为普通 Grant，并继续遵守 Constitution C4。
 - **AC-78** — WHEN 迁移旧自定义模型, THE SYSTEM SHALL 按已确认的动作映射生成自定义模型，依据最高有效动作计算等级，保留原生效/停用状态和可追溯的旧模型标识。
-- **AC-79** — WHEN 旧自定义模型在移除 `view_*` 后没有任何有效动作, THE SYSTEM SHALL 禁止自动映射到可能扩权的标准模型，将其列入切换阻断清单，并要求管理员选择一个具有真实动作的目标模型；在完成选择前不得静默扩权或以空自定义模型进入生产。
+- **AC-79** — WHEN 旧自定义模型仅含已退役的 `view_*` 且无未知动作, THE SYSTEM SHALL 禁止自动映射到可能扩权的标准模型，并保留为 active 的仅可见模型；其 Grant 仍产生资源可见性，但 download、use、edit、delete、share、manage_permission 等具体动作均不得因此 ALLOW。该迁移兼容不改变新建或编辑普通自定义模型必须至少包含一个有效动作的约束。
 - **AC-80** — WHEN 旧模型包含任一 `manage_*`, THE SYSTEM SHALL 只在其目标范围能由新等级规则表达时自动迁移 `manage_permission` 与同级策略；非单调或可能扩权的范围必须人工确认。
 - **AC-81** — THE SYSTEM SHALL 把同一资源与同一新模型的授权主体归入同一逻辑 Grant，不为每个主体复制模型动作。
 - **AC-82** — THE SYSTEM SHALL 保留直接用户、部门、用户组和其他合法主体来源，并保留“包含子部门”等既有主体范围；部门或用户组不得按迁移时成员名单展开为用户。
@@ -436,34 +433,31 @@
 `parent` 等仍有效的系统关系。
 
 OpenFGA Authorization Model 不可原地修改；每次发布都会产生新的 model ID。
-因此本次采用“启动新镜像并自动拒绝业务访问、容器内同 Store 原地迁移、重启后只启用新 model”
+因此本次采用“运维停流、容器内同 Store 原地迁移、重启后只启用新 model”
 的单向迁移方式：
 
 | 阶段 | 服务状态 | 迁移行为 |
 |------|-----------------|---------|
-| D0 启动新镜像并自动阻断访问 | 进程存活、F048 不就绪 | 更新镜像并正常启动 API、Celery、Linsight；旧 model 只允许进程进入 `MIGRATION_REQUIRED/NOT_READY`，不初始化 F048 权限运行时、不发布 ready heartbeat；HTTP/WS 迁移门禁除 `/health` 外统一拒绝，Celery/Linsight 暂停消费任务；记录现有 Store、旧 model ID 与源数据 watermark |
+| D0 运维停流 | 无业务流量和任务消费 | 由部署/入口层停止 HTTP/WS 业务流量并暂停 Celery/Linsight 消费；记录现有 Store、旧 model ID 与源数据 watermark；应用 `/health` 仅用于进程存活检查 |
 | D1 Schema Migration | 进程存活、F048 不就绪 | 正常启动链中的 Alembic revision 只执行 MySQL/DM8 DDL并验证单 head；不创建 data migration run，不读写旧数据或 OpenFGA |
-| D2 Data Migration Script | backend 容器可进入、访问门禁生效 | 运维进入 backend 容器，从 `src/backend/` 运行专用脚本；脚本创建正式 run，在现有 Store 发布新 model，并校验/导入动作、模型、binding、Grant、assignee 和 mode |
-| D3 脚本转换并退役旧数据 | 访问门禁生效、F048 不就绪 | 同一脚本原地复用仍合法的组织/共享/parent/system tuple；写入新 Catalog/Grant/mode tuple，逐批核对后删除旧四档/废弃 tuple；两份旧 Config 原始行保留为只读排障证据 |
-| D4 脚本校验 | 访问门禁生效、尚未重启 | 专用脚本 verify 核对来源/目标计数、checksum、人工项和新模型高风险动作；已迁移类型旧 tuple 计数必须为零，旧 Config 保留数量仅审计、不阻断 |
-| D5 重启并自动发现 | 重启 → 新 model | 迁移成功后重启 API、Celery、Linsight 等进程；配置只保留连接信息与稳定 Store name；全部实例发现唯一同名 Store 的最新 model，并要求它与 SQL CURRENT Catalog 引用的 ACTIVE release 一致；dual/legacy model 关闭；readiness、heartbeat 与 smoke 100% 后迁移门禁自动解除 |
+| D2 Data Migration Script | backend 容器可进入、运维停流持续 | 运维进入 backend 容器，从 `src/backend/` 运行专用脚本；脚本创建正式 run，在现有 Store 发布新 model，并校验/导入动作、模型、binding、Grant、assignee 和 mode |
+| D3 脚本转换并退役旧数据 | 运维停流持续 | 同一脚本原地复用仍合法的组织/共享/parent/system tuple；写入新 Catalog/Grant/mode tuple，逐批核对后删除旧四档/废弃 tuple；两份旧 Config 原始行保留为只读排障证据 |
+| D4 脚本校验 | 运维停流持续、尚未重启 | 专用脚本 verify 核对来源/目标计数、checksum、人工项和新模型高风险动作；已迁移类型旧 tuple 计数必须为零，旧 Config 保留数量仅审计、不阻断 |
+| D5 重启并自动发现 | 重启 → 新 model | 迁移成功后重启 API、Celery、Linsight 等进程；全部实例通过首次权限访问延迟初始化 Permission Runtime，并验证 Store/model/Catalog 一致；dual/legacy model 关闭；smoke 通过后由运维恢复流量和任务消费 |
 | D6 前向运行 | 新 model | 异常只做前向修复；旧 model ID 仅作为 OpenFGA 不可删除的历史版本存在 |
 
-- **AC-108** — WHEN 正式数据迁移脚本开始, THE SYSTEM SHALL 证明 Alembic schema upgrade
-  已成功、API HTTP/WS 迁移门禁已生效且 ready F048 runtime heartbeat 为零。API、Celery、
-  Linsight 进程可以存活，但旧 model 下必须处于 `MIGRATION_REQUIRED/NOT_READY`，不得初始化
-  F048 权限运行时；任一实例仍 ready、业务访问未被拒绝或后台任务仍被消费时必须阻断迁移。
+- **AC-108** — WHEN 正式数据迁移脚本开始, THE OPERATOR SHALL 证明 Alembic schema upgrade
+  已成功、入口业务流量已停止且 Celery/Linsight 不消费任务；迁移脚本不得依赖应用 `/health`、
+  HTTP/WS 中间件或 worker runtime gate 来证明停流。
 - **AC-109** — WHEN 发布新 Authorization Model, THE SYSTEM SHALL 在现有 Store 中记录新的
   不可变 model ID，不得覆盖、伪装或复用旧 model ID，也不得创建或切换 Store。
-- **AC-110** — WHILE 迁移和启服门禁尚未完成, THE SYSTEM SHALL 不处理生产授权请求；
-  同一 Store 只由专用数据迁移脚本写入、删除和校验。应用进程可以为进入容器和执行运维而
-  保持启动，但不得因新 model 已发布而动态切换为 ready；必须等待迁移验证成功后统一重启。
+- **AC-110** — WHILE 迁移尚未完成, THE OPERATOR SHALL 保持业务停流和任务暂停；同一 Store
+  只由专用数据迁移脚本写入、删除和校验。迁移验证成功后统一重启，再恢复外部访问。
 - **AC-111** — WHEN 向现有 Store 写入新类型或关系 tuple, THE SYSTEM SHALL 显式指定新
   model ID 作为校验上下文；仍合法的基础 tuple 必须原地复用，不得复制到另一 Store。
 - **AC-112** — THE SYSTEM SHALL 通过“旧 tuple 转换为新 tuple”完成迁移，不得把形状相同的一份 tuple 同时写给旧/新 model 作为迁移方案；现有同 tuple shadow-write 机制不能替代本次模型转换。
-- **AC-113** — WHILE D0～D5 运行, THE SYSTEM SHALL 保持旧授权、模型、binding、父级和资源
-  模式写入冻结；迁移前启动的进程不得初始化 F048 权限运行时或发布 ready heartbeat；
-  任何迁移 watermark 之后的未记录变化必须阻断启服。
+- **AC-113** — WHILE D0～D5 运行, THE OPERATOR SHALL 保持旧授权、模型、binding、父级和资源
+  模式写入冻结；任何迁移 watermark 之后的未记录变化必须阻断启服。
 - **AC-114** — WHEN 执行迁移后语义校验, THE SYSTEM SHALL 使用经过批准的旧动作到新动作
   映射验证直接授权、继承、多来源并集和具体动作，不得仅比较 tuple 数量，也不得运行线上
   旧/新 model shadow 裁决。
@@ -662,8 +656,8 @@ MySQL/DM8 关系表是权限配置、模型定义和绑定关系的控制面真�
 - 对进入资源 ReBAC 的请求，OpenFGA 的具体动作结果是最终权限结论，不再由 Config 自定义模型做第二次裁决。
 - 模型 `active` 是可授权和可生效的总开关，不是业务动作。
 - 现有模型定义、模型动作和资源绑定迁入规范化关系表；Config 大 JSON 在切换后不再参与运行时。
-- Authorization Model 沿用现有 Store；启动新镜像并由迁移门禁自动拒绝业务访问后，从
-  backend 容器发布新 model、原地迁移并退役旧 tuple，校验后重启服务且只启用新 model。
+- Authorization Model 沿用现有 Store；运维停止业务流量和任务消费后，从 backend 容器发布
+  新 model、原地迁移并退役旧 tuple，校验后重启服务且只启用新 model，再由运维恢复访问。
   重启时允许按稳定
   Store name 自动发现唯一 Store 与最新 model，
   但必须再与 SQL CURRENT Catalog 的 ACTIVE release 严格匹配；禁止 dual/legacy client、
@@ -681,15 +675,15 @@ MySQL/DM8 关系表是权限配置、模型定义和绑定关系的控制面真�
 
 - 第 7 节所有产品决策已确认并回写。
 - 本 Spec 通过 `/sdd-review features/v3.0.0-beta1/048-rebac-permission-model-grants spec`，并获得用户 ★ 确认。
-- Design 完成 Authorization Model 升级、控制面、发布一致性、API、缓存、自动访问门禁直迁状态机和前向修复设计，并通过 Constitution Check。
+- Design 完成 Authorization Model 升级、控制面、发布一致性、API、缓存、运维停流迁移状态机和前向修复设计，并通过 Constitution Check。
 - 动作映射和 `manage_*` 转换规则由产品、后端、安全和测试共同签署。
 - 标准模型、自定义模型、模型停用、同级策略、多来源并集、模式切换和受保护授权均有自动化验收。
 - 直接授权 + 部门授权 + 撤销直接授权的规范示例通过端到端测试。
 - OpenFGA 故障注入证明不存在 Config、creator 或旧关系的 ALLOW fallback，且系统级身份策略不会因故障被临时启用。
 - Alembic 单 head、DDL-only 和 MySQL/DM8 schema upgrade 验证通过；revision 不包含 DML、
   业务 import 或 OpenFGA 调用。
-- `src/backend/scripts/` 专用权限数据迁移脚本在新镜像 backend 容器内完成，HTTP/WS 迁移
-  门禁生效、ready F048 runtime heartbeat 为零，所有阻断项为零，其他差异均有批准记录。
+- `src/backend/scripts/` 专用权限数据迁移脚本在运维停流的新镜像 backend 容器内完成，
+  所有阻断项为零，其他差异均有批准记录；脚本输出和退出码已归档。
 - MySQL、DM8、Platform、Client、频道入口、后台任务及既有高频列表性能回归通过。
 - 同 Store 新 model 启服、前向故障处置和旧运行数据退役均完成验证。
 

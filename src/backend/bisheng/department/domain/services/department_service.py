@@ -38,6 +38,7 @@ from bisheng.common.errcode.department import (
     DepartmentSourceReadonlyError,
 )
 from bisheng.common.errcode.permission import PermissionInvalidResourceError
+from bisheng.common.services.config_service import settings
 from bisheng.core.database import get_async_db_session
 from bisheng.database.models.department import (
     Department,
@@ -79,21 +80,8 @@ logger = logging.getLogger(__name__)
 _ADMIN_ROLE_ID = 1
 
 
-async def _aget_fga_client_with_fallback():
-    """Return the async FGA client, with sync fallback for degraded contexts."""
-    from bisheng.core.openfga.manager import aget_fga_client, get_fga_client
-
-    fga = await aget_fga_client()
-    if fga is not None:
-        return fga
-    return get_fga_client()
-
-
 def _is_admin(login_user) -> bool:
-    """Temporary admin check — F004 will replace with PermissionService.check().
-
-    Checks if AdminRole (id=1) is in login_user.user_role.
-    """
+    """Check the legacy system-admin identity on the login payload."""
     if bool(getattr(login_user, "is_global_super", False)):
         return True
     if hasattr(login_user, "user_role") and isinstance(login_user.user_role, list):
@@ -105,41 +93,38 @@ async def _check_permission(
     login_user,
     dept_internal_id: int | None = None,
 ) -> None:
-    """Two-tier permission check: system admin OR department admin via OpenFGA.
+    """Check system, department, then tenant administration.
 
     Args:
         login_user: Current user payload.
         dept_internal_id: Database ID of the target department. When provided,
-            checks if the user is an admin of that department (or any ancestor
-            via OpenFGA's parent-admin inheritance).
+            checks if the user is an admin of that department or an ancestor.
 
-    When OpenFGA is missing ``department:parent#parent department:child`` tuples,
-    inherited ``admin`` checks on the child can fail while MySQL ``path`` still
-    places the node under an admin's subtree (left tree vs member API mismatch).
-    In that case we walk ``parent_id`` in DB and re-use ``PermissionService.check``
-    on each ancestor — same outcome as a fully synced FGA graph without widening
-    scope beyond the org tree.
+    The DB parent walk is a compatibility fallback for incomplete historical
+    department projection data and never widens scope beyond the org tree.
     """
     # L1: System admin → pass
     if _is_admin(login_user):
         return
-    # L2: Department admin → check via OpenFGA
+    # L2: Department admin through the permission application.
     if dept_internal_id is not None:
         try:
-            from bisheng.permission.domain.services.permission_service import (
-                PermissionService,
+            from bisheng.permission.application import (
+                PermissionObject,
+                PermissionSubject,
+                get_permission_relation_api,
             )
 
-            is_dept_admin = await PermissionService.check(
-                user_id=login_user.user_id,
+            permissions = await get_permission_relation_api()
+            subject = PermissionSubject("user", str(login_user.user_id))
+            is_dept_admin = await permissions.check(
+                subject=subject,
                 relation="admin",
-                object_type="department",
-                object_id=str(dept_internal_id),
-                login_user=login_user,
+                resource=PermissionObject("department", str(dept_internal_id)),
             )
             if is_dept_admin:
                 return
-            # L2b: DB parent chain — tolerate missing FGA ``parent`` edges on some nodes
+            # L2b: tolerate incomplete historical parent projection.
             seen: set[int] = {int(dept_internal_id)}
             row = await DepartmentDao.aget_by_id(int(dept_internal_id))
             while row is not None and row.parent_id is not None:
@@ -147,18 +132,16 @@ async def _check_permission(
                 if pid in seen:
                     break
                 seen.add(pid)
-                if await PermissionService.check(
-                    user_id=login_user.user_id,
+                if await permissions.check(
+                    subject=subject,
                     relation="admin",
-                    object_type="department",
-                    object_id=str(pid),
-                    login_user=login_user,
+                    resource=PermissionObject("department", str(pid)),
                 ):
                     return
                 row = await DepartmentDao.aget_by_id(pid)
         except Exception:
             logger.warning(
-                "PermissionService.check failed for dept admin, user=%d dept=%d",
+                "Permission check failed for dept admin, user=%d dept=%d",
                 login_user.user_id,
                 dept_internal_id,
             )
@@ -181,20 +164,12 @@ async def _is_tenant_admin(login_user) -> bool:
     if tenant_id is None:
         return False
     try:
-        from bisheng.permission.domain.services.permission_service import (
-            PermissionService,
-        )
+        from bisheng.permission.application import is_tenant_admin
 
-        return await PermissionService.check(
-            user_id=login_user.user_id,
-            relation="admin",
-            object_type="tenant",
-            object_id=str(tenant_id),
-            login_user=login_user,
-        )
+        return await is_tenant_admin(login_user.user_id, int(tenant_id))
     except Exception as e:
         logger.warning(
-            "PermissionService.check failed for tenant admin, user=%s tenant=%s: %s",
+            "Permission check failed for tenant admin, user=%s tenant=%s: %s",
             getattr(login_user, "user_id", None),
             tenant_id,
             e,
@@ -476,11 +451,9 @@ class _PreparedDepartmentProjection:
 
 
 def _uses_f048_department_projection() -> bool:
-    """Use the ledger after this process has initialized the F048 runtime."""
+    """Use the lazy projection context whenever OpenFGA is enabled."""
 
-    from bisheng.permission.application.access import has_f048_runtime
-
-    return has_f048_runtime()
+    return settings.openfga.enabled
 
 
 async def _prepare_department_projection(
@@ -503,8 +476,9 @@ async def _prepare_department_projection(
     )
     from bisheng.permission.application.access import get_f048_runtime
 
-    runtime = get_department_projection_runtime()
-    catalog = await get_f048_runtime().current_catalog()
+    runtime = await get_department_projection_runtime()
+    permission_runtime = await get_f048_runtime()
+    catalog = await permission_runtime.current_catalog()
     operator_id = int(getattr(login_user, "user_id", 0) or 0)
     if operator_id < 0:
         raise PermissionInvalidResourceError(msg="Department projection operator is invalid")
@@ -580,7 +554,8 @@ async def _resume_department_projection_if_needed(
         get_department_projection_runtime,
     )
 
-    outcome = await get_department_projection_runtime().reconcile_operation(
+    runtime = await get_department_projection_runtime()
+    outcome = await runtime.reconcile_operation(
         int(department.permission_projection_operation_id),
     )
     department.permission_projection_version = outcome.target_version
@@ -1474,28 +1449,20 @@ class DepartmentService:
             await session.delete(dept)
             await session.commit()
 
-        # Collect admin user_ids from OpenFGA
+        # Collect direct department admins through the permission application.
         admin_user_ids: list[int] = []
-        from bisheng.core.openfga.manager import aget_fga_client
+        try:
+            from bisheng.permission.application import PermissionObject, get_permission_relation_api
 
-        fga = await aget_fga_client()
-        if fga is not None:
-            try:
-                tuples = await fga.read_tuples(
-                    relation="admin",
-                    object=f"department:{dept_internal_id}",
-                )
-                for t in tuples:
-                    user_str = t.get("user", "") if isinstance(t, dict) else ""
-                    if not user_str and isinstance(t.get("key"), dict):
-                        user_str = t["key"].get("user", "")
-                    if user_str.startswith("user:"):
-                        try:
-                            admin_user_ids.append(int(user_str.split(":", 1)[1]))
-                        except ValueError:
-                            continue
-            except Exception:
-                logger.warning("FGA read_tuples failed during purge of department %s", dept_id)
+            permissions = await get_permission_relation_api()
+            admin_ids = await permissions.list_subject_ids(
+                resource=PermissionObject("department", str(dept_internal_id)),
+                relation="admin",
+                subject_type="user",
+            )
+            admin_user_ids = [int(user_id) for user_id in admin_ids if user_id.isdigit()]
+        except Exception:
+            logger.warning("Permission lookup failed during purge of department %s", dept_id)
 
         # Clean up OpenFGA tuples
         ops = DepartmentChangeHandler.on_purged(dept_internal_id, member_user_ids, admin_user_ids)
@@ -1943,22 +1910,19 @@ class DepartmentService:
 
     @classmethod
     async def _aget_department_admin_user_ids(cls, dept_internal_id: int) -> set[int]:
-        """OpenFGA：在 department:{id} 上具有 admin 关系的用户 ID 集合。"""
-        fga = await _aget_fga_client_with_fallback()
-        if fga is None:
-            return set(
-                await DepartmentAdminGrantDao.aget_user_ids_by_department(
-                    int(dept_internal_id),
-                )
-            )
+        """Return direct department admins from the permission application."""
         try:
-            tuples = await fga.read_tuples(
+            from bisheng.permission.application import PermissionObject, get_permission_relation_api
+
+            permissions = await get_permission_relation_api()
+            user_ids = await permissions.list_subject_ids(
+                resource=PermissionObject("department", str(dept_internal_id)),
                 relation="admin",
-                object=f"department:{dept_internal_id}",
+                subject_type="user",
             )
         except Exception:
             logger.warning(
-                "FGA read_tuples failed for department admin ids dept=%s",
+                "Permission lookup failed for department admin ids dept=%s",
                 dept_internal_id,
             )
             return set(
@@ -1966,17 +1930,7 @@ class DepartmentService:
                     int(dept_internal_id),
                 )
             )
-        user_ids: set[int] = set()
-        for t in tuples:
-            user_str = t.get("user", "") if isinstance(t, dict) else ""
-            if not user_str and isinstance(t.get("key"), dict):
-                user_str = t["key"].get("user", "")
-            if user_str.startswith("user:"):
-                try:
-                    user_ids.add(int(user_str.split(":", 1)[1]))
-                except ValueError:
-                    continue
-        return user_ids
+        return {int(user_id) for user_id in user_ids if user_id.isdigit()}
 
     @classmethod
     async def aget_admins(
@@ -1984,7 +1938,7 @@ class DepartmentService:
         dept_id: str,
         login_user,
     ) -> list[dict]:
-        """Get admin users of a department from OpenFGA."""
+        """Get admin users of a department from the permission service."""
         async with get_async_db_session() as session:
             dept = await _get_dept_and_check_permission(session, dept_id, login_user)
 

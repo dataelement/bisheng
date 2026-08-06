@@ -151,10 +151,14 @@ knowledge_library、folder、knowledge_file 逐类执行：
 - [ ] D2/D3 通过 `src/backend/scripts/migrate_f048_permission_data.py`
   写入并验证规范化控制面和显式新 model tuple。
 - [ ] 中断脚本后从 checkpoint 恢复，结果 checksum 相同；第二个脚本实例被 lease 拒绝。
-- [ ] 旧模型/binding JSON 非法、孤儿、跨租户、循环 parent、空模型等样本均阻断，
-  不静默猜测或扩权。
+- [ ] 旧模型/binding JSON 非法、未知动作、真实跨租户、循环 parent、无法表达的 manage
+  边界等样本均阻断，不静默猜测或扩权。
+- [ ] 仅含旧 `view_*` 的合法模型迁为 active 仅可见模型，具体动作全部 DENY；仅缺少对应
+  直接 tuple 的孤儿 binding 只记审计、不创建 Grant 且不阻断迁移。
 - [ ] D4 门禁满足：blocker=0、人工项签署、受保护 owner 完整、跨租户=0、
   悬空 parent=0、关键动作无未批准扩权。
+- [ ] D4 source checksum 在 MySQL/DM8 不同 collation 返回顺序下保持一致；preserved tuple
+  核对排除计划退休的 `STALE_RESOURCE_TUPLE` 和 `CANONICAL_IDENTITY_STATE=false` tuple。
 - [ ] D4 只激活一个 Catalog release 和一个 authorization model release，
   Store ID 不变。
 - [ ] D5 启服后所有进程自动发现同一 Store/latest model，且 heartbeat 与 SQL CURRENT

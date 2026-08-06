@@ -140,9 +140,12 @@ def configure_catalog_api(api: CatalogApiPort) -> None:
     _catalog_api = api
 
 
-def get_catalog_api() -> CatalogApiPort:
+async def get_catalog_api() -> CatalogApiPort:
     """Return the configured Catalog adapter."""
 
+    from bisheng.permission.application.process_runtime import get_f048_process_runtime
+
+    await get_f048_process_runtime()
     if _catalog_api is None:
         raise RuntimeError("F048 Catalog API adapter is not configured")
     return _catalog_api
@@ -155,9 +158,12 @@ def configure_resource_permission_api(api: ResourcePermissionApiPort) -> None:
     _resource_permission_api = api
 
 
-def get_resource_permission_api() -> ResourcePermissionApiPort:
+async def get_resource_permission_api() -> ResourcePermissionApiPort:
     """Return the configured resource permission adapter."""
 
+    from bisheng.permission.application.process_runtime import get_f048_process_runtime
+
+    await get_f048_process_runtime()
     if _resource_permission_api is None:
         raise RuntimeError("F048 resource permission API is not configured")
     return _resource_permission_api
@@ -170,9 +176,12 @@ def configure_permission_decision_api(api: PermissionDecisionApiPort) -> None:
     _permission_decision_api = api
 
 
-def get_permission_decision_api() -> PermissionDecisionApiPort:
+async def get_permission_decision_api() -> PermissionDecisionApiPort:
     """Return the configured decision adapter."""
 
+    from bisheng.permission.application.process_runtime import get_f048_process_runtime
+
+    await get_f048_process_runtime()
     if _permission_decision_api is None:
         raise RuntimeError("F048 permission decision API is not configured")
     return _permission_decision_api

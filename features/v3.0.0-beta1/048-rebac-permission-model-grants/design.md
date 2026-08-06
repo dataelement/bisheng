@@ -54,7 +54,7 @@ MySQL/DM8 中可审计、可版本化的 Action/Model/Grant 控制面，以及�
   - Config 大 JSON 不再是运行时真相；
   - 生产 Check/List/Write 必须显式固定 Authorization Model ID；
   - 标准模型累计，自定义模型不因派生等级补齐动作；
-  - 正式迁移必须在 HTTP/WS 迁移门禁生效、ready F048 runtime heartbeat 为零后执行；
+  - 正式迁移必须在运维已停止入口业务流量并暂停 Celery/Linsight 消费后执行；
     进程可保持 `MIGRATION_REQUIRED/NOT_READY` 以供容器内运维，沿用现有 Store，重启后
     只允许新 model ID。
 - 本文严格区分两类“迁移”：
@@ -98,7 +98,7 @@ MySQL/DM8 中可审计、可版本化的 Action/Model/Grant 控制面，以及�
 | OQ-05 | viewer=false、editor=false、manager=false、owner=true | 无 `manage_permission` 的模型该值不产生能力；owner 可授同级 |
 | OQ-06 | 文件预览不设置 PermissionAction | 预览不调用动作鉴权；只有原件/打包下载检查 `download`；知识库 RAG 仍检查库 `use` |
 | OQ-07 | 选择 A：退役既有 F018 owner 交接 | F048 启服时移除该 API，本期不实现 protected owner transfer；其他 ordinary owner 仍可并存 |
-| 迁移发布 | 启动新镜像并由应用自动拒绝业务访问后，在 backend 容器内对现有 Store 直接迁移，不支持预演和回滚 | 旧 model 下进程保持 `MIGRATION_REQUIRED/NOT_READY`，HTTP/WS 除 `/health` 外返回 503/关闭；发布一个新不可变 model ID，源校验、tuple 转换、旧 tuple 退役和目标校验在同一正式 run 完成；迁移后重启并只运行新 model |
+| 迁移发布 | 由部署平台或入口层停止业务流量后，在 backend 容器内对现有 Store 直接迁移，不支持预演和回滚 | API、Celery、Linsight 只注册 lazy Permission Runtime Context，首次权限调用才校验 Store/model/Catalog 并初始化；部门投影作为依赖 Permission Runtime 的独立 lazy Context。旧 model 下首次权限调用 fail closed，但应用不把迁移状态耦合到 `/health` 或全局 HTTP/WS/Worker 门禁；迁移脚本输出和退出码是运维状态的权威来源。发布一个新不可变 model ID，源校验、tuple 转换、旧 tuple 退役和目标校验在同一正式 run 完成；迁移后重启并只运行新 model |
 | 数据升级职责 | Alembic 仅执行 DDL；`src/backend/scripts/` 专用脚本执行数据迁移 | 先完成 schema upgrade，再由 `migrate_f048_permission_data.py --apply` 创建/续跑正式 data migration run；服务启动不自动迁数据 |
 
 确认本文即确认上表；若任一项变化，必须先更新 Spec/Design 并重新做 Design ★。
@@ -215,9 +215,8 @@ MySQL/DM8 中可审计、可版本化的 Action/Model/Grant 控制面，以及�
     隔离强，但引入 Store 切换、基础事实复制和双 Store 对账，本期没有需要。
   - B. 在同一 Store 同时维护旧、新 model client，做 shadow/灰度或兼容期双写。
     能在线比较，但正是用户明确不要的两套运行模型。
-  - C. 让新镜像进程以 `MIGRATION_REQUIRED/NOT_READY` 启动并自动拒绝 HTTP/WS，在现有 Store
-    发布新的不可变 model ID；迁移 tuple、删除已迁移资源的旧四档 tuple，校验后重启所有
-    实例并只固定新 model ID。
+  - C. 由运维停止入口业务流量和任务消费，在现有 Store 发布新的不可变 model ID；迁移
+    tuple、删除已迁移资源的旧四档 tuple，校验后重启所有实例并只固定新 model ID。
 - **选定**：C。
 - **原因**：
   - OpenFGA Store 本来就是全部 relation tuple 的命名空间，没有理由搬迁仍有效的组织、
@@ -330,21 +329,20 @@ reader 同时检查三个 marker scope：Catalog publish 用 global；tenant/dep
   不对通用 HTTP API 开放。
 - **何时重新考虑**：出现无法同版本升级的外部正式 API 消费者；需另立兼容 Spec 和下线日期。
 
-### 决策 11：应用自动阻断访问后执行单向正式迁移，失败只做前向修复
+### 决策 11：运维停流后执行单向正式迁移，失败只做前向修复
 
 - **备选**：
   - A. 运行旧 model 的同时先做独立 dry-run、影子旧/新对比，再灰度切流。验证充分，但形成双版本
     运行和用户已明确不需要的迁移预演。
   - B. 切换后保留回滚窗口与新→旧 down-conversion journal。能恢复旧逻辑，但新语义未必能
     无损表达为旧模型，会把实现和运维复杂度长期绑在旧系统上。
-  - C. 更新镜像并让进程以 `MIGRATION_REQUIRED/NOT_READY` 启动，由应用自动拒绝 HTTP/WS，
-    在 backend
+  - C. 运维在部署/入口层停止 HTTP/WS 业务流量并暂停 Celery/Linsight 消费，在 backend
     容器内对现有 Store 的一个正式 migration run 完成源校验、新 tuple 写入、旧 tuple 退役
     和目标校验；通过后重启全部服务并只启用新 model。失败保持维护，修复迁移器/数据后
     checkpoint 续跑或用新 model 执行 durable forward-fix operation。
 - **选定**：C。
-- **原因**：这是用户明确选择的部署合同；应用访问门禁以及 F048 runtime 不就绪消除了
-  迁移中的增量追平和双裁决问题，
+- **原因**：这是用户明确选择的部署合同；运维停流和暂停任务消费消除了迁移中的增量追平
+  和双裁决问题，
   同一 Store 中先写新 tuple、核对后删旧 tuple的 checkpoint 流程消除了半清理风险。
   checkpoint 只服务同一次正式迁移的幂等续跑，不是预演或回滚。
 - **何时重新考虑**：只有业务无法接受完整不可用窗口或监管明确要求应用级回退时，重新立 Spec，
@@ -352,11 +350,10 @@ reader 同时检查三个 marker scope：Catalog publish 用 global；tenant/dep
 
 失败处理固定为：
 
-1. D0～D4 任一步失败：保持应用访问门禁以及 API/Celery/Linsight 的 F048 runtime 不就绪，
-   保留 migration run/item 与 checkpoint；
+1. D0～D4 任一步失败：运维保持入口停流和任务暂停，保留 migration run/item 与 checkpoint；
 2. 修复数据或迁移代码后，从最后一个已验证批次继续，重复执行得到同一 Store/新 model 结果；
 3. D5 启服 smoke 失败：立即重新进入维护，停止权限写，并在新控制面/新 model 前向修复；
-4. 修复通过完整 D4 校验和 D5 全实例 readiness 后，访问门禁才自动解除；
+4. 修复通过完整 D4 校验和 D5 smoke 后，运维才恢复流量和任务消费；
 5. 任何场景都不得重新 pin 旧 model、恢复 Config 第二 PDP、逐请求询问旧 model 或静默丢弃已成功写入。
 
 ### 决策 12：Alembic 只做结构变更，权限数据迁移由 scripts 专用脚本执行
@@ -366,7 +363,7 @@ reader 同时检查三个 marker scope：Catalog publish 用 global；tenant/dep
     部署命令少，但数据量不可控、无法安全断点续跑，还会把 API 启动绑定到跨系统数据变更。
   - B. 由 API lifespan、Celery 或权限运行时 Service 在新版本启动后自动迁移。
     可复用应用上下文，但服务会在新旧数据混合期间对外运行，多实例还可能并发执行。
-  - C. Alembic revision 仅提交幂等、MySQL/DM8 兼容的 DDL；启动新镜像且应用访问门禁生效后，
+  - C. Alembic revision 仅提交幂等、MySQL/DM8 兼容的 DDL；运维停流后，
     运维进入 backend 容器，由 `src/backend/scripts/migrate_f048_permission_data.py` 初始化
     完整应用上下文并执行数据迁移，`permission_migration_run/item` 只作为该脚本的
     checkpoint/审计存储。
@@ -922,7 +919,7 @@ dry-run 必须先核对 ledger、CURRENT Catalog 的 Store/model pin 与 scope f
 | `telemetry_search/.../DashboardService` | dashboard 业务加载、preset/status/组件规则、verified target 与 lifecycle projection | 不再调旧 AccessType/DASHBOARD relation |
 | `core/database/alembic/versions/<f048_revision>.py` | 新表、列、索引、约束等 MySQL/DM8 schema DDL | 不读取/转换/回填/清理业务数据，不访问 Config/OpenFGA，不 import 数据迁移脚本 |
 | `scripts/migrate_f048_permission_data.py` | 唯一数据迁移入口；初始化 app context，执行 source validation→publish-new-model→控制面/tuple 转换→retire legacy→checkpoint；`migrate` 必须显式 `--apply` | 不创建/修改 schema，不注册 API/Celery/startup，不直接使用业务 ORM，不提供 inventory/dry-run/rollback |
-| `scripts/README.md` | 记录更新镜像并启动、自动访问门禁、脚本前置 schema head/ready heartbeat=0、容器内正式命令、verify、重启、退出码和失败续跑方式 | 不保存凭据或生产数据 |
+| `scripts/README.md` | 记录运维停流/暂停任务、schema head、容器内正式命令、verify、重启、退出码、恢复流量和失败续跑方式 | 不保存凭据或生产数据 |
 | permission notification adapter | 从 assignee/source/model 生成通知 | 不再解析 relation/binding |
 | Platform permission components | Catalog 配置、资源授权 | store 不直接 HTTP |
 | Client permission components | 资源模式、成员/来源、频道 adapter | 不复制 Catalog 管理能力 |
@@ -1375,7 +1372,7 @@ direct member、department member 和无权限用户；文档/日志不保存固
 
 ---
 
-## 8. 自动访问门禁直迁、重启与前向修复 runbook
+## 8. 运维停流直迁、重启与前向修复 runbook
 
 ### 8.1 来源映射
 
@@ -1432,12 +1429,12 @@ protected owner transfer 不再是开放项：F048 启服构建必须退役 F018
 
 | 阶段 | 服务状态 | 操作与退出门禁 |
 |---|---|---|
-| D0 启动新镜像并自动阻断访问 | 进程存活、F048 不就绪 | 执行既有镜像更新与 `docker compose up -d`；API、Celery、Linsight 发现旧 model 后只进入 `MIGRATION_REQUIRED/NOT_READY`，不初始化 F048 runtime、不发布 ready heartbeat；HTTP/WS 门禁除 `/health` 外统一拒绝，Celery/Linsight 暂停消费任务；记录现有 Store ID、旧 model ID、Config/业务表 watermark 与 environment fingerprint |
+| D0 运维停流 | 无业务流量和任务消费 | 由部署/入口层停止 HTTP/WS 业务流量并暂停 Celery/Linsight 消费；记录现有 Store ID、旧 model ID、Config/业务表 watermark 与 environment fingerprint；应用 `/health` 只表示进程存活 |
 | D1 Schema Migration | 进程存活、F048 不就绪 | 正常启动链只执行 `alembic upgrade head` 的 MySQL/DM8 DDL；验证单 head 与新表/索引/约束存在；revision 不创建 run、不读取或写入业务数据、不访问 OpenFGA |
-| D2 Data Migration Script 初始化与控制面转换 | backend 容器可进入、访问门禁生效 | 运维进入 backend 容器，从 `src/backend/` 以 live `config` 执行 `scripts/migrate_f048_permission_data.py migrate ... --apply`；脚本验证 D1/schema fingerprint 与 ready heartbeat=0，创建唯一正式 run，在**同一 Store**发布新 model 并跑 model tests，再导入 Action/Catalog/标准及自定义 Model、binding→Grant/assignee、mode 和人工项 |
-| D3 迁移并退役旧数据 | 访问门禁生效、F048 不就绪 | 原地复用仍合法的 tenant/department/user_group/system/shared/parent tuple；按 item/checkpoint 写新 Catalog/Grant/mode tuple，逐批核对后删除已迁移资源的旧四档/废弃 relation tuple；旧 Config 大 JSON 原始行只读保留供排障，不再参与运行时 |
-| D4 数据脚本 verify | 访问门禁生效、尚未重启 | 执行同一脚本的 `verify --run-id`；blocker=0；来源/目标计数和 checksum 一致；source item 必须在应用层按 `(source_kind, source_locator)` 排序，不能依赖 MySQL/DM8 collation；已迁移类型 legacy tuple 计数为零；preserved 核对排除已审计的 stale tuple 与 canonical identity=false tuple；旧 Config 保留数只作为审计证据；新 model 高风险 Check/List、owner、mode、多来源、dashboard、download 语义通过；run 转 `READY_TO_START` |
-| D5 重启并自动发现 | 重启→新 model | 数据迁移成功后重启 API、Celery、Linsight 等服务；配置只保留 OpenFGA 连接信息、稳定 Store name，`dual_model_mode=false` 且无 `legacy_model_id`；全部实例发现唯一同名 Store/latest model，并要求它与 SQL CURRENT Catalog 的 ACTIVE release 一致；readiness/heartbeat 100% 且 smoke 通过后访问门禁自动解除 |
+| D2 Data Migration Script 初始化与控制面转换 | backend 容器可进入、运维停流持续 | 运维进入 backend 容器，从 `src/backend/` 以 live `config` 执行 `scripts/migrate_f048_permission_data.py migrate ... --apply`；脚本验证 D1/schema fingerprint，创建唯一正式 run，在**同一 Store**发布新 model 并跑 model tests，再导入 Action/Catalog/标准及自定义 Model、binding→Grant/assignee、mode 和人工项 |
+| D3 迁移并退役旧数据 | 运维停流持续 | 原地复用仍合法的 tenant/department/user_group/system/shared/parent tuple；按 item/checkpoint 写新 Catalog/Grant/mode tuple，逐批核对后删除已迁移资源的旧四档/废弃 relation tuple；旧 Config 大 JSON 原始行只读保留供排障，不再参与运行时 |
+| D4 数据脚本 verify | 运维停流持续、尚未重启 | 执行同一脚本的 `verify --run-id`；blocker=0；来源/目标计数和 checksum 一致；source item 必须在应用层按 `(source_kind, source_locator)` 排序；已迁移类型 legacy tuple 计数为零；新 model 高风险语义通过；run 转 `READY_TO_START` |
+| D5 重启并自动发现 | 重启→新 model | 数据迁移成功后重启 API、Celery、Linsight 等服务；全部实例在首次权限调用时延迟初始化 Permission Runtime，发现唯一同名 Store/latest model，并验证它与 SQL CURRENT Catalog 的 ACTIVE release 一致；smoke 通过后由运维恢复流量和任务消费 |
 | D6 前向运行 | 新 model | 正常读写只走新 model + projection ledger；问题只做前向修复；旧 model ID 仅作为 OpenFGA 不可删除的历史版本存在 |
 
 Alembic 在 D1 成功退出后即完成职责，不写入以下状态。正式 permission data migration
@@ -1508,8 +1505,7 @@ relation tuple。
 
 D5 必须同时满足：
 
-- D0～D4 应用访问门禁保持生效，启动的 API、Celery、Linsight 不初始化 F048 runtime，
-  Celery/Linsight 不消费任务，ready heartbeat=0，且 source watermark 自 D0 起未变化；
+- D0～D4 运维入口停流和任务暂停保持生效，且 source watermark 自 D0 起未变化；
 - migration run、SQL CURRENT Catalog 和启动时发现的 OpenFGA 实际 Store ID 三者相同，
   且与 D0 前 Store ID 完全一致；
 - 新 model ID/checksum 与 release 记录一致；旧 model ID 未出现在任何 runtime 配置、
@@ -1541,11 +1537,11 @@ D5 必须同时满足：
 
 | 失败时点 | 唯一处置 |
 |---|---|
-| D0 | 保持应用访问门禁；修复镜像/启动问题，确认进程存活但 F048 不就绪后重新核对，尚不执行数据迁移 |
-| D1 Alembic | 保持应用访问门禁和 F048 不就绪；修复 DDL/单 head/双库兼容后重跑 `alembic upgrade head`；此时不得已有 permission data migration run |
-| D2 数据脚本 | 保持应用访问门禁和 F048 不就绪；修复源数据/映射或脚本后，以同一 run/checkpoint 续跑 `migrate --apply` |
-| D3～D4 | 保持应用访问门禁和 F048 不就绪；按 migration item 对 SQL/同一 Store 的新 tuple 与 legacy delete 做幂等前向修正，重跑完整 D4 |
-| D5 重启或 smoke | 立即保持/恢复应用访问门禁并停止全部权限写；新 model 仍是唯一目标，修复配置/代码/投影后重跑 D4+D5 |
+| D0 | 保持运维停流和任务暂停；修复部署问题后重新核对，尚不执行数据迁移 |
+| D1 Alembic | 保持运维停流；修复 DDL/单 head/双库兼容后重跑 `alembic upgrade head`；此时不得已有 permission data migration run |
+| D2 数据脚本 | 保持运维停流；修复源数据/映射或脚本后，以同一 run/checkpoint 续跑 `migrate --apply` |
+| D3～D4 | 保持运维停流；按 migration item 对 SQL/同一 Store 的新 tuple 与 legacy delete 做幂等前向修正，重跑完整 D4 |
+| D5 重启或 smoke | 立即保持/恢复运维停流并停止全部权限写；新 model 仍是唯一目标，修复配置/代码/投影后重跑 D4+D5 |
 | D6 运行中 | 由新业务 Service + `permission_projection_operation/tuple` 执行 forward-fix；`FAILED_CLOSED` 资源保持 fenced，修复并 higher-consistency 验证后再开放 |
 
 禁止重新 pin 旧 model、恢复 Config 第二 PDP、把新授权 down-convert 成四档 tuple、
@@ -1580,7 +1576,7 @@ D3 已完成全部旧运行数据退役，D6 没有延后的 cleanup 窗口。�
 - 文件预览明确不设置 PermissionAction；原件/打包下载使用 `download`，知识库 RAG 使用库
   `use`，且 `use` 不得直接换取原始文件 URL。以后若产品要求控制预览，必须新增独立
   PermissionAction、Authorization Model release 和迁移 Spec，不能把既有 `download` 偷作别名。
-- 自动访问门禁直迁会带来明确不可用窗口，并且 F048 不提供应用级回滚；这由用户明确选择。
+- 运维停流直迁会带来明确不可用窗口，并且 F048 不提供应用级回滚；这由用户明确选择。
   若未来不可接受不可用窗口或必须回退，需要新 Feature 设计在线增量同步/恢复合同，不能在本期
   临时加旧/新 model 影子、down-converter 或旧 Config fallback。
 - 权限数据升级是 `src/backend/scripts/` 中的人工运维步骤，不随 Alembic 或服务启动自动
@@ -1598,6 +1594,7 @@ D3 已完成全部旧运行数据退役，D6 没有延后的 cleanup 窗口。�
 
 | 日期 | 改动 | 触发原因 |
 |---|---|---|
+| 2026-08-06 | 迁移流量控制归属运维部署/入口和队列操作；删除应用全局 HTTP/WS/Worker 迁移门禁假设，`/health` 仅表示进程存活；Permission Runtime 与部门投影改为首次权限调用延迟初始化 | 用户明确迁移期间无人使用平台由运维保证，业务代码不承载一次性运维流程 |
 | 2026-08-05 | 增加 `reconcile_f048_projection_operations.py` dry-run/apply 运维入口，以 durable ledger 和 live Store/model/scope fence 恢复指定 operation | 116 环境需要安全恢复 11/15/18，并为后续同类 in-flight publish blocker 提供可重复执行的前向修复入口 |
 | 2026-08-05 | projection 恢复 PREPARED 时以 higher consistency 过滤已满足的 STAGE tuple，只补写缺失项后再 commit | 116 环境 `CUSTOM→INHERIT→CUSTOM` 往返时保留 Grant link，重复 WRITE 被 OpenFGA 拒绝并留下 3 条 PREPARED operation |
 | 2026-08-05 | 允许模型在特定资源类型上形成仅可见 Grant；资源级 effective actions 变空仅计入撤权影响，不阻断 Catalog 发布 | `visible` 独立于可配置业务 action，动作等级调整不应阻止合法的仅可见授权 |

@@ -24,26 +24,32 @@ def configure_f048_runtime(
     _resource_registry = resource_registry
 
 
-def get_f048_runtime() -> F048PermissionRuntime:
+async def _ensure_f048_runtime() -> None:
+    from bisheng.permission.application.process_runtime import get_f048_process_runtime
+
+    # The initializer publishes process-local adapters while composing the
+    # runtime. Always wait for the Context to reach READY so a concurrent call
+    # cannot observe those adapters before Catalog binding and heartbeat pass.
+    await get_f048_process_runtime()
+
+
+async def get_f048_runtime() -> F048PermissionRuntime:
+    await _ensure_f048_runtime()
     if _runtime is None:
         raise RuntimeError("F048 permission runtime is not configured")
     return _runtime
 
 
-def has_f048_runtime() -> bool:
-    """Return whether this process has completed F048 runtime initialization."""
-
-    return _runtime is not None
-
-
-def get_f048_resource_adapter(resource_type: str):
+async def get_f048_resource_adapter(resource_type: str):
+    await _ensure_f048_runtime()
     adapter = _resource_adapters.get(resource_type)
     if adapter is None:
         raise RuntimeError(f"F048 resource adapter is not configured: {resource_type}")
     return adapter
 
 
-def get_f048_resource_registry() -> ResourceAuthorizationRegistry:
+async def get_f048_resource_registry() -> ResourceAuthorizationRegistry:
+    await _ensure_f048_runtime()
     if _resource_registry is None:
         raise RuntimeError("F048 resource registry is not configured")
     return _resource_registry

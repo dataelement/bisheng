@@ -415,7 +415,7 @@ async def test_grant_department_members_viewer_writes_exact_department_tuple():
 
     with patch(
         "bisheng.knowledge.domain.services.department_knowledge_space_service.get_f048_resource_adapter",
-        return_value=adapter,
+        new=AsyncMock(return_value=adapter),
     ):
         await DepartmentKnowledgeSpaceService._grant_department_members_viewer(
             space_id=101,

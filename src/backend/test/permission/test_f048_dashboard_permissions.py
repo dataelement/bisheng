@@ -320,7 +320,7 @@ async def test_copy_preset_creates_custom_dashboard_owned_by_copier(
     )
     monkeypatch.setattr(
         "bisheng.telemetry_search.domain.services.dashboard.get_f048_resource_adapter",
-        lambda resource_type: adapter,
+        AsyncMock(return_value=adapter),
     )
     service = DashboardService(
         login_user=UserPayload(
@@ -400,7 +400,7 @@ async def test_copy_projection_failure_removes_committed_dashboard(
     )
     monkeypatch.setattr(
         "bisheng.telemetry_search.domain.services.dashboard.get_f048_resource_adapter",
-        lambda resource_type: adapter,
+        AsyncMock(return_value=adapter),
     )
     service = DashboardService(
         login_user=UserPayload(

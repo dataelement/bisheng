@@ -11,7 +11,6 @@ Four-level permission check for role management:
 from __future__ import annotations
 
 import logging
-from typing import List, Optional
 
 from sqlalchemy import func
 from sqlmodel import delete, select
@@ -39,7 +38,7 @@ logger = logging.getLogger(__name__)
 
 # Built-in roles that cannot be deleted (AdminRole=1, DefaultRole=2)
 BUILTIN_ROLE_IDS = {1, 2}
-SYSTEM_PRESET_CREATOR_NAME = '系统预设'
+SYSTEM_PRESET_CREATOR_NAME = "系统预设"
 
 
 class RoleService:
@@ -64,7 +63,7 @@ class RoleService:
             QuotaService.validate_quota_config(req.quota_config)
 
         # Determine role_type
-        role_type = 'global' if login_user.is_admin() else 'tenant'
+        role_type = "global" if login_user.is_admin() else "tenant"
 
         # Check duplicate name (AC-09)
         existing = await RoleDao.aget_role_by_name(
@@ -99,7 +98,7 @@ class RoleService:
         try:
             return await RoleDao.ainsert_role(role)
         except Exception as e:
-            if 'Duplicate entry' in str(e) or 'IntegrityError' in type(e).__name__:
+            if "Duplicate entry" in str(e) or "IntegrityError" in type(e).__name__:
                 raise RoleNameDuplicateError()
             raise
 
@@ -114,7 +113,7 @@ class RoleService:
         if req.quota_config:
             QuotaService.validate_quota_config(req.quota_config)
 
-        role_type = 'global' if login_user.is_admin() else 'tenant'
+        role_type = "global" if login_user.is_admin() else "tenant"
         existing = await RoleDao.aget_role_by_name(
             tenant_id=login_user.tenant_id,
             role_type=role_type,
@@ -156,7 +155,7 @@ class RoleService:
     @classmethod
     async def list_roles(
         cls,
-        keyword: Optional[str],
+        keyword: str | None,
         page: int,
         limit: int,
         login_user,
@@ -167,7 +166,7 @@ class RoleService:
         Returns {data: List[RoleListResponse], total: int}.
         """
         department_ids = None
-        permission_level = 'admin'
+        permission_level = "admin"
         dept_subtree_ids: set[int] | None = None
         tenant_custom_roles_only = False
 
@@ -180,25 +179,26 @@ class RoleService:
                 )
             except Exception:
                 logger.exception(
-                    'list_roles: aget_user_admin_departments failed user=%s',
-                    getattr(login_user, 'user_id', None),
+                    "list_roles: aget_user_admin_departments failed user=%s",
+                    getattr(login_user, "user_id", None),
                 )
                 admin_depts = []
 
             if admin_depts:
-                permission_level = 'dept_admin'
+                permission_level = "dept_admin"
                 subtree_ids: set[int] = set()
                 for d in admin_depts:
-                    path = getattr(d, 'path', None) or ''
+                    path = getattr(d, "path", None) or ""
                     if not path:
-                        if getattr(d, 'id', None):
+                        if getattr(d, "id", None):
                             subtree_ids.add(int(d.id))
                         continue
                     try:
                         rows = await DepartmentDao.aget_subtree_ids(path)
                     except Exception:
                         logger.exception(
-                            'list_roles: aget_subtree_ids failed path=%s', path,
+                            "list_roles: aget_subtree_ids failed path=%s",
+                            path,
                         )
                         rows = []
                     for row in rows or []:
@@ -207,32 +207,28 @@ class RoleService:
                         else:
                             subtree_ids.add(int(row))
                 if not subtree_ids:
-                    subtree_ids = {int(d.id) for d in admin_depts if getattr(d, 'id', None)}
+                    subtree_ids = {int(d.id) for d in admin_depts if getattr(d, "id", None)}
                 department_ids = list(subtree_ids)
                 dept_subtree_ids = subtree_ids
             else:
                 try:
-                    from bisheng.permission.domain.services.permission_service import (
-                        PermissionService,
-                    )
-                    is_tenant_admin = await PermissionService.check(
-                        user_id=login_user.user_id,
-                        relation='admin',
-                        object_type='tenant',
-                        object_id=str(login_user.tenant_id),
-                        login_user=login_user,
+                    from bisheng.permission.application import is_tenant_admin
+
+                    tenant_admin = await is_tenant_admin(
+                        login_user.user_id,
+                        int(login_user.tenant_id),
                     )
                 except Exception:
                     logger.exception(
-                        'list_roles: tenant admin check failed user=%s',
-                        getattr(login_user, 'user_id', None),
+                        "list_roles: tenant admin check failed user=%s",
+                        getattr(login_user, "user_id", None),
                     )
                     is_tenant_admin = False
-                if is_tenant_admin:
-                    permission_level = 'tenant_admin'
+                if tenant_admin:
+                    permission_level = "tenant_admin"
                     tenant_custom_roles_only = not include_global_for_binding
                 else:
-                    permission_level = 'regular'
+                    permission_level = "regular"
 
         roles = await RoleDao.aget_visible_roles(
             tenant_id=login_user.tenant_id,
@@ -269,23 +265,25 @@ class RoleService:
                 dept_subtree_ids,
                 creator_user_id=creator_ids.get(role.id),
             )
-            items.append(RoleListResponse(
-                id=role.id,
-                role_name=role.role_name,
-                role_type=role.role_type,
-                department_id=role.department_id,
-                department_name=dept_names.get(role.department_id),
-                department_scope_path=scope_paths.get(role.department_id) if role.department_id else None,
-                quota_config=role.quota_config,
-                remark=role.remark,
-                user_count=user_counts.get(role.id, 0),
-                creator_name=creator_names.get(role.id),
-                is_readonly=is_readonly,
-                create_time=role.create_time,
-                update_time=role.update_time,
-            ))
+            items.append(
+                RoleListResponse(
+                    id=role.id,
+                    role_name=role.role_name,
+                    role_type=role.role_type,
+                    department_id=role.department_id,
+                    department_name=dept_names.get(role.department_id),
+                    department_scope_path=scope_paths.get(role.department_id) if role.department_id else None,
+                    quota_config=role.quota_config,
+                    remark=role.remark,
+                    user_count=user_counts.get(role.id, 0),
+                    creator_name=creator_names.get(role.id),
+                    is_readonly=is_readonly,
+                    create_time=role.create_time,
+                    update_time=role.update_time,
+                )
+            )
 
-        return {'data': items, 'total': total}
+        return {"data": items, "total": total}
 
     # ── Get ──
 
@@ -303,7 +301,9 @@ class RoleService:
             raise RoleNotFoundError()
 
         await cls._ensure_role_scope_access(
-            role, login_user, for_mutation=False,
+            role,
+            login_user,
+            for_mutation=False,
         )
 
         user_counts = await RoleDao.aget_user_count_by_role_ids([role_id])
@@ -314,7 +314,7 @@ class RoleService:
 
         permission_level = await cls._get_permission_level(login_user)
         dept_subtree_ids = None
-        if permission_level == 'dept_admin':
+        if permission_level == "dept_admin":
             dept_subtree_ids = set(await cls._get_dept_subtree_ids(login_user) or [])
         is_readonly = cls._is_readonly(
             role,
@@ -355,8 +355,8 @@ class RoleService:
             raise RoleNotFoundError()
 
         # AC-06: tenant admin cannot update global role
-        if not login_user.is_admin() and role.role_type == 'global':
-            raise RolePermissionDeniedError(msg='Cannot modify global role')
+        if not login_user.is_admin() and role.role_type == "global":
+            raise RolePermissionDeniedError(msg="Cannot modify global role")
 
         await cls._check_role_permission(login_user)
         await cls._ensure_role_mutation_access(role, login_user)
@@ -367,7 +367,7 @@ class RoleService:
 
         # Check duplicate name if changing name (AC-09)
         if req.role_name and req.role_name != role.role_name:
-            target_department_id = req.department_id if 'department_id' in req.model_fields_set else role.department_id
+            target_department_id = req.department_id if "department_id" in req.model_fields_set else role.department_id
             existing = await RoleDao.aget_role_by_name(
                 tenant_id=login_user.tenant_id,
                 role_type=role.role_type,
@@ -389,7 +389,7 @@ class RoleService:
         if req.remark is not None:
             role.remark = req.remark
         # 允许显式清空为全局作用域（null）；不能仅用 ``is not None`` 否则无法从部门改回全局
-        if 'department_id' in req.model_fields_set:
+        if "department_id" in req.model_fields_set:
             role.department_id = req.department_id
 
         return await RoleDao.update_role(role)
@@ -405,8 +405,8 @@ class RoleService:
         if not role:
             raise RoleNotFoundError()
 
-        if not login_user.is_admin() and role.role_type == 'global':
-            raise RolePermissionDeniedError(msg='Cannot modify global role')
+        if not login_user.is_admin() and role.role_type == "global":
+            raise RolePermissionDeniedError(msg="Cannot modify global role")
 
         await cls._check_role_permission(login_user)
         await cls._ensure_role_mutation_access(role, login_user)
@@ -415,7 +415,7 @@ class RoleService:
             QuotaService.validate_quota_config(req.quota_config)
 
         if req.role_name and req.role_name != role.role_name:
-            target_department_id = req.department_id if 'department_id' in req.model_fields_set else role.department_id
+            target_department_id = req.department_id if "department_id" in req.model_fields_set else role.department_id
             existing = await RoleDao.aget_role_by_name(
                 tenant_id=login_user.tenant_id,
                 role_type=role.role_type,
@@ -442,7 +442,7 @@ class RoleService:
                 db_role.quota_config = req.quota_config
             if req.remark is not None:
                 db_role.remark = req.remark
-            if 'department_id' in req.model_fields_set:
+            if "department_id" in req.model_fields_set:
                 db_role.department_id = req.department_id
             # Use database time so the role timestamp stays aligned with MySQL,
             # even when the app host clock drifts.
@@ -472,13 +472,14 @@ class RoleService:
             raise RoleNotFoundError()
 
         # Permission check (AC-06 equivalent)
-        if not login_user.is_admin() and role.role_type == 'global':
-            raise RolePermissionDeniedError(msg='Cannot delete global role')
+        if not login_user.is_admin() and role.role_type == "global":
+            raise RolePermissionDeniedError(msg="Cannot delete global role")
 
         await cls._check_role_permission(login_user)
         await cls._ensure_role_mutation_access(role, login_user)
 
         from bisheng.permission.domain.services.legacy_rbac_sync_service import LegacyRBACSyncService
+
         await LegacyRBACSyncService.sync_role_deleted(role_id)
 
         # AC-08: Cascade delete (UserRole + RoleAccess handled in DAO)
@@ -491,7 +492,7 @@ class RoleService:
     async def update_menu(
         cls,
         role_id: int,
-        menu_ids: List[str],
+        menu_ids: list[str],
         login_user,
     ) -> None:
         """Update role menu permissions (AC-11)."""
@@ -499,8 +500,8 @@ class RoleService:
         if not role:
             raise RoleNotFoundError()
 
-        if not login_user.is_admin() and role.role_type == 'global':
-            raise RolePermissionDeniedError(msg='Cannot modify global role menu')
+        if not login_user.is_admin() and role.role_type == "global":
+            raise RolePermissionDeniedError(msg="Cannot modify global role menu")
 
         await cls._check_role_permission(login_user)
         await cls._ensure_role_mutation_access(role, login_user)
@@ -524,7 +525,7 @@ class RoleService:
         cls,
         role_id: int,
         login_user,
-    ) -> List[str]:
+    ) -> list[str]:
         """Get role menu permissions (AC-12). Requires admin/tenant-admin/dept-admin."""
         await cls._check_role_permission(login_user)
 
@@ -533,7 +534,9 @@ class RoleService:
             raise RoleNotFoundError()
 
         await cls._ensure_role_scope_access(
-            role, login_user, for_mutation=False,
+            role,
+            login_user,
+            for_mutation=False,
         )
 
         records = await RoleAccessDao.aget_role_access(
@@ -541,7 +544,7 @@ class RoleService:
             access_type=AccessType.WEB_MENU,
         )
         # system_config 仅超管/部门管理员通过身份下发，不可通过自定义角色分配
-        return [r.third_id for r in records if r.third_id != 'system_config']
+        return [r.third_id for r in records if r.third_id != "system_config"]
 
     # ── Permission helpers ──
 
@@ -555,27 +558,25 @@ class RoleService:
         会拿到租户级角色列表（全租户自定义角色可编辑），与「按部门子树管理角色」PRD 冲突。
         """
         if login_user.is_admin():
-            return 'admin'
+            return "admin"
 
         dept_ids = await cls._get_user_admin_dept_ids(login_user)
         if dept_ids:
-            return 'dept_admin'
+            return "dept_admin"
 
         try:
-            from bisheng.permission.domain.services.permission_service import PermissionService
-            is_tenant_admin = await PermissionService.check(
-                user_id=login_user.user_id,
-                relation='admin',
-                object_type='tenant',
-                object_id=str(login_user.tenant_id),
-                login_user=login_user,
-            )
-            if is_tenant_admin:
-                return 'tenant_admin'
-        except Exception as e:
-            logger.warning('PermissionService.check failed for user %d: %s', login_user.user_id, e)
+            from bisheng.permission.application import is_tenant_admin
 
-        return 'regular'
+            tenant_admin = await is_tenant_admin(
+                login_user.user_id,
+                int(login_user.tenant_id),
+            )
+            if tenant_admin:
+                return "tenant_admin"
+        except Exception as e:
+            logger.warning("Permission check failed for user %d: %s", login_user.user_id, e)
+
+        return "regular"
 
     @classmethod
     async def _check_role_permission(cls, login_user) -> None:
@@ -584,7 +585,7 @@ class RoleService:
         Raises RolePermissionDeniedError for regular users.
         """
         level = await cls._get_permission_level(login_user)
-        if level == 'regular':
+        if level == "regular":
             raise RolePermissionDeniedError()
 
     @classmethod
@@ -598,11 +599,11 @@ class RoleService:
         role,
         login_user,
         permission_level: str,
-        dept_subtree_ids: Optional[set[int]] = None,
-        creator_user_id: Optional[int] = None,
+        dept_subtree_ids: set[int] | None = None,
+        creator_user_id: int | None = None,
     ) -> bool:
         """Determine if role is read-only for current user."""
-        if permission_level == 'regular':
+        if permission_level == "regular":
             return True
         return not cls._can_mutate_role(
             role,
@@ -618,25 +619,25 @@ class RoleService:
         role,
         login_user,
         permission_level: str,
-        dept_subtree_ids: Optional[set[int]] = None,
-        creator_user_id: Optional[int] = None,
+        dept_subtree_ids: set[int] | None = None,
+        creator_user_id: int | None = None,
     ) -> bool:
-        if permission_level == 'regular':
+        if permission_level == "regular":
             return False
-        if role.role_type == 'global' and not login_user.is_admin():
+        if role.role_type == "global" and not login_user.is_admin():
             return False
         # The creator-only restriction below is intentionally scoped to dept_admin;
         # system admin bypasses it.
-        if permission_level == 'admin':
+        if permission_level == "admin":
             return True
-        if permission_level == 'tenant_admin':
-            role_tenant_id = getattr(role, 'tenant_id', None)
-            login_tenant_id = getattr(login_user, 'tenant_id', None)
+        if permission_level == "tenant_admin":
+            role_tenant_id = getattr(role, "tenant_id", None)
+            login_tenant_id = getattr(login_user, "tenant_id", None)
             if role_tenant_id is not None and login_tenant_id is not None:
                 if int(role_tenant_id) != int(login_tenant_id):
                     return False
-            return role.role_type == 'tenant'
-        if permission_level == 'dept_admin' and role.department_id is not None:
+            return role.role_type == "tenant"
+        if permission_level == "dept_admin" and role.department_id is not None:
             if dept_subtree_ids is None or role.department_id not in dept_subtree_ids:
                 return False
         if creator_user_id is None:
@@ -652,36 +653,38 @@ class RoleService:
         cls,
         role,
         permission_level: str,
-        dept_subtree_ids: Optional[set[int]] = None,
+        dept_subtree_ids: set[int] | None = None,
     ) -> bool:
         # Missing creator metadata is treated as readonly for non-admins.
-        return permission_level == 'admin'
+        return permission_level == "admin"
 
     @classmethod
-    async def _get_user_admin_dept_ids(cls, login_user) -> List[int]:
+    async def _get_user_admin_dept_ids(cls, login_user) -> list[int]:
         """Get department IDs where user is admin."""
         try:
             from bisheng.database.models.department import DepartmentDao
+
             depts = await DepartmentDao.aget_user_admin_departments(login_user.user_id)
             return [int(d.id) for d in depts] if depts else []
         except Exception:
             logger.exception(
-                'Failed to query admin departments for user %s',
-                getattr(login_user, 'user_id', None),
+                "Failed to query admin departments for user %s",
+                getattr(login_user, "user_id", None),
             )
             return []
 
     @classmethod
-    async def _get_dept_subtree_ids(cls, login_user) -> Optional[List[int]]:
+    async def _get_dept_subtree_ids(cls, login_user) -> list[int] | None:
         """Get department subtree IDs for department admin filtering."""
         try:
             from bisheng.database.models.department import DepartmentDao
+
             admin_depts = await DepartmentDao.aget_user_admin_departments(login_user.user_id)
             if not admin_depts:
                 return None
             all_ids: set[int] = set()
             for dept in admin_depts:
-                path = getattr(dept, 'path', None) or ''
+                path = getattr(dept, "path", None) or ""
                 if not path:
                     continue
                 subtree = await DepartmentDao.aget_subtree_ids(path)
@@ -693,8 +696,8 @@ class RoleService:
             return list(all_ids)
         except Exception:
             logger.exception(
-                'Failed to query dept subtree for user %s',
-                getattr(login_user, 'user_id', None),
+                "Failed to query dept subtree for user %s",
+                getattr(login_user, "user_id", None),
             )
             return None
 
@@ -706,10 +709,11 @@ class RoleService:
             return {}
         try:
             from bisheng.database.models.department import DepartmentDao
+
             depts = await DepartmentDao.aget_by_ids(list(set(dept_ids)))
             return {d.id: d.name for d in depts} if depts else {}
         except Exception as e:
-            logger.debug('Failed to query department names: %s', e)
+            logger.debug("Failed to query department names: %s", e)
             return {}
 
     @classmethod
@@ -721,12 +725,13 @@ class RoleService:
             return {}
         try:
             from bisheng.database.models.department import DepartmentDao
+
             depts = await DepartmentDao.aget_by_ids(unique)
             if not depts:
                 return {}
             seg_ids: set[int] = set()
             for d in depts:
-                for seg in (getattr(d, 'path', None) or '').strip('/').split('/'):
+                for seg in (getattr(d, "path", None) or "").strip("/").split("/"):
                     if seg.isdigit():
                         seg_ids.add(int(seg))
             id_to_name = {d.id: d.name for d in depts}
@@ -737,38 +742,37 @@ class RoleService:
                     id_to_name[d.id] = d.name
             out: dict = {}
             for d in depts:
-                ids = [
-                    int(s) for s in (getattr(d, 'path', None) or '').strip('/').split('/')
-                    if s.isdigit()
-                ]
+                ids = [int(s) for s in (getattr(d, "path", None) or "").strip("/").split("/") if s.isdigit()]
                 parts = [id_to_name.get(i) for i in ids if id_to_name.get(i)]
-                out[d.id] = ' / '.join(parts) if parts else (d.name or '')
+                out[d.id] = " / ".join(parts) if parts else (d.name or "")
             return out
         except Exception as e:
-            logger.debug('Failed to build department scope paths: %s', e)
+            logger.debug("Failed to build department scope paths: %s", e)
             return {}
 
     @classmethod
     async def _validate_department(cls, department_id: int) -> None:
         """Validate department_id exists and is active."""
         from bisheng.common.errcode.role import QuotaConfigInvalidError
+
         try:
             from bisheng.database.models.department import DepartmentDao
+
             dept = await DepartmentDao.aget_by_id(department_id)
-            if not dept or dept.status != 'active':
-                raise QuotaConfigInvalidError(msg=f'Department {department_id} not found or inactive')
+            if not dept or dept.status != "active":
+                raise QuotaConfigInvalidError(msg=f"Department {department_id} not found or inactive")
         except QuotaConfigInvalidError:
             raise
         except Exception as e:
-            logger.warning('Failed to validate department %d: %s', department_id, e)
+            logger.warning("Failed to validate department %d: %s", department_id, e)
 
     @classmethod
-    def _normalize_menu_ids(cls, menu_ids: List[str]) -> List[str]:
+    def _normalize_menu_ids(cls, menu_ids: list[str]) -> list[str]:
         """Deduplicate menu keys; strip system_config (reserved for super-admin / dept-admin)."""
         out: list[str] = []
         for menu_id in menu_ids:
             s = str(menu_id)
-            if s == 'system_config':
+            if s == "system_config":
                 continue
             if s not in out:
                 out.append(s)
@@ -776,7 +780,10 @@ class RoleService:
 
     @classmethod
     async def _replace_menu_access_in_session(
-        cls, session, role_id: int, menu_ids: List[str],
+        cls,
+        session,
+        role_id: int,
+        menu_ids: list[str],
     ) -> None:
         await session.exec(
             delete(RoleAccess).where(
@@ -785,34 +792,41 @@ class RoleService:
             ),
         )
         for menu_id in menu_ids:
-            session.add(RoleAccess(
-                role_id=role_id,
-                third_id=menu_id,
-                type=AccessType.WEB_MENU.value,
-            ))
+            session.add(
+                RoleAccess(
+                    role_id=role_id,
+                    third_id=menu_id,
+                    type=AccessType.WEB_MENU.value,
+                )
+            )
 
     @classmethod
     async def _ensure_create_scope(
-        cls, login_user, department_id: Optional[int],
+        cls,
+        login_user,
+        department_id: int | None,
     ) -> None:
         """Department admins may only create roles inside their managed subtree."""
         permission_level = await cls._get_permission_level(login_user)
-        if permission_level != 'dept_admin':
+        if permission_level != "dept_admin":
             return
 
         subtree_ids = set(await cls._get_dept_subtree_ids(login_user) or [])
         if department_id is None or department_id not in subtree_ids:
             raise RolePermissionDeniedError(
-                msg='Department admin may only create roles within managed departments',
+                msg="Department admin may only create roles within managed departments",
             )
 
     @classmethod
     async def _ensure_role_scope_access(
-        cls, role, login_user, for_mutation: bool,
+        cls,
+        role,
+        login_user,
+        for_mutation: bool,
     ) -> None:
         """Department admins may only view global/global-scope roles or subtree roles."""
         permission_level = await cls._get_permission_level(login_user)
-        if permission_level != 'dept_admin':
+        if permission_level != "dept_admin":
             return
 
         subtree_ids = set(await cls._get_dept_subtree_ids(login_user) or [])
@@ -820,19 +834,19 @@ class RoleService:
             if role.department_id is not None and role.department_id in subtree_ids:
                 return
         else:
-            if role.role_type == 'global' or role.department_id is None or role.department_id in subtree_ids:
+            if role.role_type == "global" or role.department_id is None or role.department_id in subtree_ids:
                 return
 
-        action = 'modify' if for_mutation else 'view'
+        action = "modify" if for_mutation else "view"
         raise RolePermissionDeniedError(
-            msg=f'Department admin cannot {action} roles outside managed departments',
+            msg=f"Department admin cannot {action} roles outside managed departments",
         )
 
     @classmethod
     async def _ensure_role_mutation_access(cls, role, login_user) -> None:
         permission_level = await cls._get_permission_level(login_user)
         dept_subtree_ids = None
-        if permission_level == 'dept_admin':
+        if permission_level == "dept_admin":
             dept_subtree_ids = set(await cls._get_dept_subtree_ids(login_user) or [])
 
         creator_ids = await cls._get_role_creator_ids([role])
@@ -847,13 +861,13 @@ class RoleService:
             return
 
         if creator_user_id is not None and int(creator_user_id) != int(login_user.user_id):
-            raise RolePermissionDeniedError(msg='Only the role creator can edit or delete this role')
+            raise RolePermissionDeniedError(msg="Only the role creator can edit or delete this role")
         raise RolePermissionDeniedError()
 
     @classmethod
     async def _get_role_creator_ids(cls, roles) -> dict[int, int]:
         """Resolve role_id -> creator user ID from role table, then audit-log fallback."""
-        role_ids = [int(r.id) for r in roles if getattr(r, 'id', None)]
+        role_ids = [int(r.id) for r in roles if getattr(r, "id", None)]
         if not role_ids:
             return {}
 
@@ -874,14 +888,14 @@ class RoleService:
         try:
             from sqlalchemy import text
 
-            placeholders = ', '.join([f':rid_{i}' for i in range(len(role_ids))])
-            params = {f'rid_{i}': rid for i, rid in enumerate(role_ids)}
-            sql = text(f'SELECT id, create_user FROM role WHERE id IN ({placeholders})')
+            placeholders = ", ".join([f":rid_{i}" for i in range(len(role_ids))])
+            params = {f"rid_{i}": rid for i, rid in enumerate(role_ids)}
+            sql = text(f"SELECT id, create_user FROM role WHERE id IN ({placeholders})")
 
             async with get_async_db_session() as session:
                 rows = (await session.execute(sql, params)).all()
         except Exception as e:
-            logger.debug('Skip role creator query: %s', e)
+            logger.debug("Skip role creator query: %s", e)
             return {}
 
         role_to_uid: dict[int, int] = {}
@@ -900,31 +914,31 @@ class RoleService:
         try:
             from sqlalchemy import text
 
-            placeholders = ', '.join([f':rid_{i}' for i in range(len(role_ids))])
+            placeholders = ", ".join([f":rid_{i}" for i in range(len(role_ids))])
             params = {
-                'system_id': 'system',
-                'event_type': 'create_role',
-                'object_type': 'role_conf',
+                "system_id": "system",
+                "event_type": "create_role",
+                "object_type": "role_conf",
             }
-            params.update({f'rid_{i}': str(rid) for i, rid in enumerate(role_ids)})
+            params.update({f"rid_{i}": str(rid) for i, rid in enumerate(role_ids)})
             sql = text(
-                'SELECT t.object_id, t.operator_id '
-                'FROM ('
-                '  SELECT object_id, operator_id, '
-                '         ROW_NUMBER() OVER (PARTITION BY object_id ORDER BY create_time ASC, id ASC) AS rn '
-                '  FROM auditlog '
-                '  WHERE system_id = :system_id '
-                '    AND event_type = :event_type '
-                '    AND object_type = :object_type '
-                f'    AND object_id IN ({placeholders})'
-                ') t '
-                'WHERE t.rn = 1'
+                "SELECT t.object_id, t.operator_id "
+                "FROM ("
+                "  SELECT object_id, operator_id, "
+                "         ROW_NUMBER() OVER (PARTITION BY object_id ORDER BY create_time ASC, id ASC) AS rn "
+                "  FROM auditlog "
+                "  WHERE system_id = :system_id "
+                "    AND event_type = :event_type "
+                "    AND object_type = :object_type "
+                f"    AND object_id IN ({placeholders})"
+                ") t "
+                "WHERE t.rn = 1"
             )
 
             async with get_async_db_session() as session:
                 rows = (await session.execute(sql, params)).all()
         except Exception as e:
-            logger.debug('Skip role creator audit-log fallback query: %s', e)
+            logger.debug("Skip role creator audit-log fallback query: %s", e)
             return {}
 
         role_to_uid: dict[int, int] = {}
@@ -949,11 +963,7 @@ class RoleService:
         user_name_map = {u.user_id: u.user_name for u in users}
         system_admin_ids = await cls._get_system_admin_user_ids(user_ids)
         return {
-            rid: (
-                SYSTEM_PRESET_CREATOR_NAME
-                if uid in system_admin_ids
-                else user_name_map.get(uid)
-            )
+            rid: (SYSTEM_PRESET_CREATOR_NAME if uid in system_admin_ids else user_name_map.get(uid))
             for rid, uid in creator_ids.items()
             if uid in system_admin_ids or user_name_map.get(uid)
         }
@@ -973,5 +983,5 @@ class RoleService:
                 )
                 return {int(uid) for uid in result.all() if uid is not None}
         except Exception as e:
-            logger.debug('Skip system admin creator lookup: %s', e)
+            logger.debug("Skip system admin creator lookup: %s", e)
             return set()

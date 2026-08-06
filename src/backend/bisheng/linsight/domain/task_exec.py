@@ -18,7 +18,6 @@ from bisheng.core.cache.utils import CACHE_DIR, create_cache_folder_async
 from bisheng.core.context.tenant import bypass_tenant_filter, current_tenant_id, set_current_tenant_id
 from bisheng.core.external.http_client.http_client_manager import get_http_client
 from bisheng.core.logger import trace_id_var
-from bisheng.core.openfga.worker_runtime import ensure_linsight_fga_runtime
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.linsight.domain import utils as linsight_execute_utils
 from bisheng.linsight.domain.models.linsight_execute_task import (
@@ -72,19 +71,17 @@ async def ensure_linsight_permission_runtime(manager=None) -> dict:
 
     if manager is None:
         if not settings.openfga.enabled:
-            raise RuntimeError("linsight F048 OpenFGA runtime is disabled")
-        from bisheng.core.context.manager import app_context
-        from bisheng.core.openfga.manager import FGAManager
+            raise RuntimeError("linsight permission runtime is disabled")
+        from bisheng.permission.application.process_runtime import ensure_f048_process_runtime_ready
 
-        try:
-            manager = app_context.get_context("openfga")
-        except KeyError:
-            manager = FGAManager(
-                openfga_config=settings.openfga,
-                instance_role="linsight",
-            )
-            app_context.register_context(manager, optional=False)
-    return await ensure_linsight_fga_runtime(manager)
+        return await ensure_f048_process_runtime_ready(expected_role="linsight")
+
+    instance = await manager.async_get_instance()
+    healthy = bool(instance) and await manager.heartbeat()
+    readiness = manager.readiness()
+    if not healthy or not readiness.get("ready") or readiness.get("instance_role") != "linsight":
+        raise RuntimeError("linsight permission runtime is not ready")
+    return readiness
 
 
 # Apology preamble prepended to a salvaged partial result (L3 tool-loop breaker /
@@ -236,9 +233,7 @@ class LinsightWorkflowTask:
         try:
             payload_tenant_id = int(task_tenant_id)
         except (TypeError, ValueError) as exc:
-            raise TaskExecutionError(
-                "Linsight task tenant_id must be a positive integer"
-            ) from exc
+            raise TaskExecutionError("Linsight task tenant_id must be a positive integer") from exc
         if payload_tenant_id <= 0:
             raise TaskExecutionError("Linsight task tenant_id must be a positive integer")
 
@@ -257,16 +252,9 @@ class LinsightWorkflowTask:
         try:
             persisted_tenant_id = int(persisted_tenant_id)
         except (TypeError, ValueError) as exc:
-            raise TaskExecutionError(
-                f"Session version {session_version_id} has invalid tenant_id"
-            ) from exc
-        if (
-            persisted_tenant_id <= 0
-            or persisted_tenant_id != payload_tenant_id
-        ):
-            raise TaskExecutionError(
-                f"Linsight task tenant mismatch for session {session_version_id}"
-            )
+            raise TaskExecutionError(f"Session version {session_version_id} has invalid tenant_id") from exc
+        if persisted_tenant_id <= 0 or persisted_tenant_id != payload_tenant_id:
+            raise TaskExecutionError(f"Linsight task tenant mismatch for session {session_version_id}")
         return set_current_tenant_id(payload_tenant_id)
 
     # ==================== Resume (park-and-release, Track B) ====================

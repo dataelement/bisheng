@@ -3,7 +3,6 @@ import asyncio
 import logging
 import pickle
 import socket
-import time
 import uuid
 from functools import partial
 from multiprocessing import Manager, Process, set_start_method
@@ -444,96 +443,36 @@ class ScheduleCenterProcess(Process):
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
-        fga_manager = None
-        f048_migration_required = False
         if settings.openfga.enabled:
-            from bisheng.core.context.manager import app_context
-            from bisheng.core.openfga.manager import FGAManager
-            from bisheng.linsight.domain.task_exec import (
-                ensure_linsight_permission_runtime,
+            from bisheng.api.services.f048_permission_runtime import (
+                initialize_f048_worker_runtime,
+            )
+            from bisheng.core.context import initialize_app_context
+            from bisheng.department.domain.services.department_projection_scope import (
+                get_department_projection_scope,
+                register_department_projection_runtime_context,
+            )
+            from bisheng.permission.application.process_runtime import (
+                register_f048_permission_runtime_context,
             )
 
-            fga_manager = FGAManager(
-                openfga_config=settings.openfga,
-                instance_role="linsight",
-            )
-            try:
-                app_context.register_context(fga_manager, optional=False)
-            except ValueError:
-                fga_manager = app_context.get_context("openfga")
-            fga_client = loop.run_until_complete(fga_manager.async_get_instance())
-            if fga_manager.readiness().get("migration_required"):
-                logger.warning(
-                    "F048 data migration is required; Linsight starts without "
-                    "the permission runtime until migration completes and the worker restarts"
-                )
-                fga_manager = None
-                f048_migration_required = True
-            else:
-                # The worker runs business code (ToolExecutor tool init on every
-                # task), so it needs the resource registry the bare background
-                # runtime leaves unset — hence the API-side composition root.
-                from bisheng.api.services.f048_permission_runtime import (
-                    initialize_f048_worker_runtime,
-                )
-                from bisheng.common.errcode.permission import (
-                    AuthorizationModelMismatchError,
-                    PermissionPublishNotReadyError,
-                )
-                from bisheng.department.domain.services.department_projection_scope import (
-                    configure_department_projection_runtime,
-                    get_department_projection_scope,
-                )
-                from bisheng.permission.application.process_runtime import (
-                    bind_f048_process_runtime,
+            loop.run_until_complete(initialize_app_context(settings, instance_role="linsight"))
+
+            async def initialize(client):
+                return await initialize_f048_worker_runtime(
+                    client,
+                    external_scopes={
+                        "department": get_department_projection_scope(),
+                    },
                 )
 
-                try:
-                    f048_components = loop.run_until_complete(
-                        initialize_f048_worker_runtime(
-                            fga_client,
-                            external_scopes={
-                                "department": get_department_projection_scope(),
-                            },
-                        )
-                    )
-                except (
-                    AuthorizationModelMismatchError,
-                    PermissionPublishNotReadyError,
-                ) as exc:
-                    loop.run_until_complete(fga_manager.mark_migration_required())
-                    logger.warning(
-                        "F048 permission data is not ready; Linsight starts without "
-                        "the permission runtime until migration completes and the "
-                        "worker restarts: %s",
-                        exc,
-                    )
-                    fga_manager = None
-                    f048_migration_required = True
-                else:
-                    configure_department_projection_runtime(f048_components.projection)
-                    loop.run_until_complete(
-                        bind_f048_process_runtime(
-                            fga_manager,
-                            f048_components.facade,
-                        )
-                    )
-                    loop.run_until_complete(ensure_linsight_permission_runtime(fga_manager))
-
-        if f048_migration_required:
-            logger.warning(
-                "Linsight task consumption is paused until the explicit F048 "
-                "migration completes and this worker is restarted"
-            )
-            # Stay alive for container orchestration, but only a deliberate
-            # post-migration restart may begin consuming queued work.
-            while True:
-                time.sleep(5)
+            register_f048_permission_runtime_context(initialize)
+            register_department_projection_runtime_context()
 
         # 启动心跳
         self.node_manager = NodeManager.get_instance(
             self.node_id.value,
-            fga_manager=fga_manager,
+            fga_manager=None,
         )
         self.heartbeat_task = loop.create_task(self.node_manager.start_heartbeat())
 
@@ -543,6 +482,9 @@ class ScheduleCenterProcess(Process):
                 loop.run_until_complete(self.async_run())
             except Exception as e:
                 logger.error(f"Unhandled exception in main loop: {e}")
+        from bisheng.core.context import close_app_context
+
+        loop.run_until_complete(close_app_context())
         loop.close()
 
 

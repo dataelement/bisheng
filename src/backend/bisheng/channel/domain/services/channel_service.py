@@ -271,7 +271,11 @@ class ChannelService:
         if await _check_is_global_super(login_user.user_id):
             return True
         tenant_id = ChannelService._current_tenant_id(login_user)
-        return bool(tenant_id and await login_user.has_tenant_admin(tenant_id))
+        if not tenant_id:
+            return False
+        from bisheng.permission.application import is_tenant_admin
+
+        return await is_tenant_admin(login_user.user_id, tenant_id)
 
     @staticmethod
     def _article_review_text(article: ArticleSearchResultItem | ArticleFullDocument) -> str:
@@ -482,7 +486,8 @@ class ChannelService:
         channel_model = await self.channel_repository.save(channel_model)
 
         tenant_id = int(channel_model.tenant_id or self._current_tenant_id(login_user))
-        await get_f048_resource_adapter("channel").authorize_created(
+        adapter = await get_f048_resource_adapter("channel")
+        await adapter.authorize_created(
             record=ChannelPermissionRecord(
                 tenant_id=tenant_id,
                 resource_id=str(channel_model.id),
@@ -1121,7 +1126,7 @@ class ChannelService:
         channel_id: str,
         action: str,
     ) -> bool:
-        adapter = get_f048_resource_adapter("channel")
+        adapter = await get_f048_resource_adapter("channel")
         record = await adapter.load_permission_record(channel_id)
         if record is None:
             return False
@@ -1636,7 +1641,7 @@ class ChannelService:
                 # by its owner(s): square subscribers, directly authorized users,
                 # and department/user_group grants alike.
                 if new_visibility == ChannelVisibilityEnum.PRIVATE:
-                    adapter = get_f048_resource_adapter("channel")
+                    adapter = await get_f048_resource_adapter("channel")
                     record = await adapter.load_permission_record(channel_id)
                     if record is None:
                         raise ChannelNotFoundError()
@@ -2067,7 +2072,7 @@ class ChannelService:
             channel_name=channel.name,
             navigable=False,
         )
-        adapter = get_f048_resource_adapter("channel")
+        adapter = await get_f048_resource_adapter("channel")
         record = await adapter.load_permission_record(channel_id)
         if record is None:
             raise ChannelNotFoundError()
@@ -2148,7 +2153,8 @@ class ChannelService:
         desired_model = None
         if is_active and user_role is not None:
             desired_model = CHANNEL_MEMBERSHIP_MODEL.get(UserRoleEnum(user_role))
-        await get_f048_resource_adapter("channel").sync_membership(
+        adapter = await get_f048_resource_adapter("channel")
+        await adapter.sync_membership(
             resource_id=str(channel_id),
             operator_user_id=operator_user_id or user_id,
             subject_user_id=user_id,

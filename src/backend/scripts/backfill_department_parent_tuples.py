@@ -90,9 +90,7 @@ async def run(apply: bool) -> int:
     from bisheng.department.domain.services.department_change_handler import (
         DepartmentChangeHandler,
     )
-    from bisheng.permission.domain.services.permission_service import (
-        PermissionService,
-    )
+    from bisheng.permission.application import get_permission_relation_api
 
     with bypass_tenant_filter():
         edges = await _collect_parent_edges()
@@ -117,7 +115,8 @@ async def run(apply: bool) -> int:
             logger.info("[dry-run] 未写 FGA。确认后追加 --apply 执行。")
             return 0
 
-        await PermissionService.batch_write_tuples(ops, crash_safe=False)
+        permissions = await get_permission_relation_api()
+        await permissions.apply_changes(tuple(ops))
         logger.info("完成。已写入 {} 条 department#parent 边。", len(ops))
         return 0
 

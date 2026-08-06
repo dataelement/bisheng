@@ -279,9 +279,7 @@ class LoginUser(BaseModel):
         Falls back to legacy RoleAccessDao for unmapped types (backward compat).
         """
         if access_type in _F048_RETIRED_ACCESS_TYPES:
-            raise RuntimeError(
-                "Business-resource AccessType checks were retired by F048"
-            )
+            raise RuntimeError("Business-resource AccessType checks were retired by F048")
         if self.is_admin():
             return True
         rebac_targets = self._rebac_targets_for_access_type(access_type)
@@ -303,9 +301,7 @@ class LoginUser(BaseModel):
     async def async_access_check(self, owner_user_id: int, target_id: str, access_type: AccessType) -> bool:
         """Async permission check — delegates to ReBAC for mapped types."""
         if access_type in _F048_RETIRED_ACCESS_TYPES:
-            raise RuntimeError(
-                "Business-resource AccessType checks were retired by F048"
-            )
+            raise RuntimeError("Business-resource AccessType checks were retired by F048")
         if self.is_admin():
             return True
         rebac_targets = self._rebac_targets_for_access_type(access_type)
@@ -399,13 +395,8 @@ class LoginUser(BaseModel):
         F008 adapter: delegates to ReBAC list_accessible for mapped AccessType.
         Falls back to legacy RoleAccessDao for unmapped types.
         """
-        if any(
-            access_type in _F048_RETIRED_ACCESS_TYPES
-            for access_type in access_types
-        ):
-            raise RuntimeError(
-                "Business-resource AccessType lists were retired by F048"
-            )
+        if any(access_type in _F048_RETIRED_ACCESS_TYPES for access_type in access_types):
+            raise RuntimeError("Business-resource AccessType lists were retired by F048")
         rebac_targets = self._rebac_targets_for_access_types(access_types)
         if rebac_targets:
             from bisheng.permission.domain.services.owner_service import _run_async_safe
@@ -423,13 +414,8 @@ class LoginUser(BaseModel):
 
     async def aget_user_access_resource_ids(self, access_types: list[AccessType]) -> list[str]:
         """Async version — delegates to ReBAC for mapped types."""
-        if any(
-            access_type in _F048_RETIRED_ACCESS_TYPES
-            for access_type in access_types
-        ):
-            raise RuntimeError(
-                "Business-resource AccessType lists were retired by F048"
-            )
+        if any(access_type in _F048_RETIRED_ACCESS_TYPES for access_type in access_types):
+            raise RuntimeError("Business-resource AccessType lists were retired by F048")
         rebac_targets = self._rebac_targets_for_access_types(access_types)
         if rebac_targets:
             merged: dict[str, None] = {}
@@ -448,19 +434,22 @@ class LoginUser(BaseModel):
     # ── Identity/LLM compatibility methods ──────────────────────
 
     async def rebac_check(self, relation: str, object_type: str, object_id: str) -> bool:
-        """Check an identity/LLM relation through the legacy compatibility port.
+        """Check an identity/LLM relation through the permission application.
 
-        F048 business resources are rejected by ``PermissionService`` and must
+        F048 business resources are rejected by the caller contract and must
         use their business-owned verified target plus a concrete action.
         """
-        from bisheng.permission.domain.services.permission_service import PermissionService
+        from bisheng.permission.application import (
+            PermissionObject,
+            PermissionSubject,
+            get_permission_relation_api,
+        )
 
-        return await PermissionService.check(
-            user_id=self.user_id,
+        permissions = await get_permission_relation_api()
+        return await permissions.check(
+            subject=PermissionSubject("user", str(self.user_id)),
             relation=relation,
-            object_type=object_type,
-            object_id=object_id,
-            login_user=self,
+            resource=PermissionObject(object_type, object_id),
         )
 
     async def rebac_list_accessible(self, relation: str, object_type: str) -> list[str] | None:
@@ -468,14 +457,15 @@ class LoginUser(BaseModel):
 
         F048 business-resource enumeration is intentionally unavailable here.
         """
-        from bisheng.permission.domain.services.permission_service import PermissionService
+        from bisheng.permission.application import PermissionSubject, get_permission_relation_api
 
-        return await PermissionService.list_accessible_ids(
-            user_id=self.user_id,
+        permissions = await get_permission_relation_api()
+        resource_ids = await permissions.list_resource_ids(
+            subject=PermissionSubject("user", str(self.user_id)),
             relation=relation,
-            object_type=object_type,
-            login_user=self,
+            resource_type=object_type,
         )
+        return list(resource_ids)
 
     @staticmethod
     def _rebac_targets_for_access_type(access_type: AccessType) -> tuple[tuple[str, str], ...]:
