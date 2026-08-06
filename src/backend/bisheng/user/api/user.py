@@ -201,11 +201,15 @@ async def get_info(login_user: LoginUser = Depends(LoginUser.get_login_user)):
     leaf_tenant_id: int | None = None
     leaf_tenant_name: str | None = None
     try:
-        from bisheng.core.openfga.manager import aget_fga_client
         from bisheng.database.models.tenant import (
             ROOT_TENANT_ID,
             TenantDao,
             UserTenantDao,
+        )
+        from bisheng.permission.application import (
+            PermissionObject,
+            PermissionSubject,
+            get_permission_relation_api,
         )
         from bisheng.utils.http_middleware import _check_is_global_super
 
@@ -217,13 +221,12 @@ async def get_info(login_user: LoginUser = Depends(LoginUser.get_login_user)):
         leaf_tenant = await TenantDao.aget_by_id(leaf_tenant_id)
         leaf_tenant_name = leaf_tenant.tenant_name if leaf_tenant else ""
         if leaf_tenant_id != ROOT_TENANT_ID and not is_global_super:
-            fga = await aget_fga_client()
-            if fga is not None:
-                is_child_admin = await fga.check(
-                    user=f"user:{user_id}",
-                    relation="admin",
-                    object=f"tenant:{leaf_tenant_id}",
-                )
+            permissions = await get_permission_relation_api()
+            is_child_admin = await permissions.check(
+                subject=PermissionSubject("user", str(user_id)),
+                relation="admin",
+                resource=PermissionObject("tenant", str(leaf_tenant_id)),
+            )
     except Exception as exc:
         logger.debug("admin-flag detection failed: %s", exc)
 
@@ -306,21 +309,13 @@ async def _tenant_admin_scoped_user_ids(
     Root 租户由 super_admin 负责（``is_admin()`` 已短路），此 helper 直接返回 None。
     """
     from bisheng.database.models.tenant import ROOT_TENANT_ID, TenantDao
-    from bisheng.permission.domain.services.permission_service import (
-        PermissionService,
-    )
+    from bisheng.permission.application import is_tenant_admin
 
     tenant_id = getattr(login_user, "tenant_id", None)
     if tenant_id is None or int(tenant_id) == ROOT_TENANT_ID:
         return None
     try:
-        is_tenant_admin = await PermissionService.check(
-            user_id=login_user.user_id,
-            relation="admin",
-            object_type="tenant",
-            object_id=str(tenant_id),
-            login_user=login_user,
-        )
+        tenant_admin = await is_tenant_admin(login_user.user_id, int(tenant_id))
     except Exception:
         logger.exception(
             "tenant admin scope check failed user=%s tenant=%s",
@@ -328,7 +323,7 @@ async def _tenant_admin_scoped_user_ids(
             tenant_id,
         )
         return None
-    if not is_tenant_admin:
+    if not tenant_admin:
         return None
 
     tenant = await TenantDao.aget_by_id(int(tenant_id))
@@ -616,21 +611,13 @@ async def _tenant_admin_can_manage_member_account_status(
     """
     from bisheng.database.models.department import Department
     from bisheng.database.models.tenant import ROOT_TENANT_ID, TenantDao
-    from bisheng.permission.domain.services.permission_service import (
-        PermissionService,
-    )
+    from bisheng.permission.application import is_tenant_admin
 
     tenant_id = getattr(login_user, "tenant_id", None)
     if tenant_id is None or int(tenant_id) == ROOT_TENANT_ID:
         return False
     try:
-        is_tenant_admin = await PermissionService.check(
-            user_id=login_user.user_id,
-            relation="admin",
-            object_type="tenant",
-            object_id=str(tenant_id),
-            login_user=login_user,
-        )
+        tenant_admin = await is_tenant_admin(login_user.user_id, int(tenant_id))
     except Exception:
         logger.exception(
             "tenant admin check failed user=%s tenant=%s",
@@ -638,7 +625,7 @@ async def _tenant_admin_can_manage_member_account_status(
             tenant_id,
         )
         return False
-    if not is_tenant_admin:
+    if not tenant_admin:
         return False
 
     tenant = await TenantDao.aget_by_id(int(tenant_id))
@@ -901,7 +888,7 @@ async def user_addrole(
 
     if not login_user.is_admin():
         from bisheng.database.models.department import DepartmentDao
-        from bisheng.permission.domain.services.permission_service import PermissionService
+        from bisheng.permission.application import is_tenant_admin
         from bisheng.role.domain.services.role_service import RoleService
 
         # Determine which user groups you have administrative access to
@@ -921,21 +908,15 @@ async def user_addrole(
             )
             admin_depts = []
         try:
-            is_tenant_admin = await PermissionService.check(
-                user_id=login_user.user_id,
-                relation="admin",
-                object_type="tenant",
-                object_id=str(login_user.tenant_id),
-                login_user=login_user,
-            )
+            tenant_admin = await is_tenant_admin(login_user.user_id, int(login_user.tenant_id))
         except Exception:
             logger.exception(
                 "user_addrole: tenant admin check failed user=%s",
                 getattr(login_user, "user_id", None),
             )
-            is_tenant_admin = False
+            tenant_admin = False
 
-        if admin_depts or is_tenant_admin:
+        if admin_depts or tenant_admin:
             visible_roles = await RoleService.list_roles(
                 keyword=None,
                 page=1,
@@ -1137,9 +1118,6 @@ async def has_mark_access(*, request: Request, login_user: LoginUser = Depends(L
     """
     Get whether the current user has annotation permission,Determine if the current user isadmin Or a user group administrator
     """
-    user_groups = UserGroupDao.get_user_group(login_user.user_id)
-    user_group_ids = [one.group_id for one in user_groups]
-
     has_mark_access = False
     # Check if there are administrative permissions for the group
     task = MarkTaskDao.get_task(login_user.user_id)

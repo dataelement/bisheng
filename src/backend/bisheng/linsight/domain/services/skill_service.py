@@ -74,10 +74,11 @@ class LinsightSkillOwnerProjectionPort(Protocol):
 
 class _ConfiguredOwnerProjection:
     async def authorize_created(self, **kwargs):
+        from bisheng.permission.application.process_runtime import get_f048_process_runtime
+
+        await get_f048_process_runtime()
         if _owner_projection is None:
-            raise RuntimeError(
-                "F048 Linsight skill owner projection is not configured"
-            )
+            raise RuntimeError("F048 Linsight skill owner projection is not configured")
         return await _owner_projection.authorize_created(**kwargs)
 
 
@@ -317,8 +318,6 @@ class SkillService:
             owner_user_id=user_id,
             resource_version=0,
             context_version=f"{SKILL_OBJECT_TYPE}:{skill.id}:v0",
-            idempotency_key=(
-                f"{SKILL_OBJECT_TYPE}:create:{tenant_id}:{skill.id}"
-            ),
+            idempotency_key=(f"{SKILL_OBJECT_TYPE}:create:{tenant_id}:{skill.id}"),
         )
         return await self.get_detail(tenant_id, name)

@@ -1,7 +1,7 @@
 # 用户、菜单与资源权限架构
 
 > 现状版本：v3.0.0-beta1 / F048
-> 最后更新：2026-07-29
+> 最后更新：2026-08-06
 > 规范来源：`features/v3.0.0-beta1/048-rebac-permission-model-grants/`
 
 BiSheng 的权限体系分为三个互不替代的层面：
@@ -69,10 +69,11 @@ flowchart LR
     A["HTTP / Worker / Linsight 调用"] --> B["业务 Service / 业务权限 Adapter"]
     B --> C["查询租户、状态、parent、业务版本"]
     C --> D["VerifiedPermissionTarget"]
-    D --> E["F048PermissionRuntime"]
-    E --> F["Catalog/action gate"]
-    F --> G["OpenFGA Check / BatchCheck"]
-    G --> H["ALLOW / DENY"]
+    D --> E["permission.application 协议"]
+    E --> F["Lazy Permission Runtime"]
+    F --> G["Catalog/action gate"]
+    G --> H["OpenFGA adapter"]
+    H --> I["ALLOW / DENY"]
 ```
 
 资源动作的短路顺序固定为：
@@ -87,6 +88,27 @@ global super admin
 
 菜单 RBAC 不参与该链，也不能在 OpenFGA 拒绝或异常时提供 fallback
 ALLOW。
+
+### 1.4 对外权限应用协议
+
+业务模块只能依赖 `bisheng.permission.application` 导出的应用协议：
+
+- 资源动作：`ResourceAuthorizationPort`、`PermissionDecisionApplication`；
+- 身份/平台关系查询：`PermissionRelationQueryPort`；
+- 授权变更：`PermissionRelationMutationPort`；
+- 语义值对象：`PermissionSubject`、`PermissionObject`、
+  `PermissionRelation`、`PermissionRelationChange`。
+
+协议只表达 `check`、`batch_check`、`list_resource_ids`、
+`list_subject_ids`、`grant`、`revoke`、`apply_changes` 等权限意图。
+`is_tenant_admin` 等语义化查询同样只是该应用协议的便捷入口。
+业务代码不得获取 OpenFGA client、调用 `read_tuples/write_tuples`、构造
+transport tuple 或处理 OpenFGA 专有异常。底层编码、错误翻译和历史
+`failed_tuple` 补偿兼容全部留在权限模块内部。
+
+Permission Runtime、OpenFGA client 和部门投影都是 lazy Context。首次权限
+调用等待整个 Permission Context 进入 READY 后才返回协议实例；API、Celery、
+Linsight 不需要各自复制初始化逻辑。
 
 ---
 

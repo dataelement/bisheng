@@ -289,7 +289,7 @@ class OwnerService:
             )
         from bisheng.permission.domain.services.permission_service import PermissionService
 
-        fga = PermissionService._get_fga()
+        fga = await PermissionService._aget_fga()
         if fga is None:
             logger.warning("FGAClient not available for tuple cleanup: %s:%s", object_type, object_id)
             return

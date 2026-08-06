@@ -1,20 +1,14 @@
-import asyncio
 import os
-from contextlib import asynccontextmanager, suppress
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from loguru import logger
-from starlette.types import ASGIApp, Receive, Scope, Send
 
 from bisheng.api.router import router, router_rpc
 from bisheng.common.errcode import BaseErrorCode
-from bisheng.common.errcode.permission import (
-    AuthorizationModelMismatchError,
-    PermissionPublishNotReadyError,
-)
 from bisheng.common.exceptions.auth import AuthJWTException
 from bisheng.common.init_data import init_default_data
 from bisheng.common.middleware.admin_scope import AdminScopeMiddleware
@@ -57,138 +51,37 @@ _EXCEPTION_HANDLERS = {
 }
 
 
-class F048MigrationGateMiddleware:
-    """Keep the process reachable for operators while rejecting user traffic."""
-
-    def __init__(self, app: ASGIApp) -> None:
-        self.app = app
-
-    async def __call__(
-        self,
-        scope: Scope,
-        receive: Receive,
-        send: Send,
-    ) -> None:
-        if scope["type"] not in {"http", "websocket"}:
-            await self.app(scope, receive, send)
-            return
-        fastapi_app = scope.get("app")
-        state = getattr(fastapi_app, "state", None)
-        manager = getattr(state, "f048_manager", None)
-        migration_required = manager is not None and manager.readiness().get("migration_required") is True
-        if not migration_required:
-            await self.app(scope, receive, send)
-            return
-        if scope["type"] == "http":
-            if scope.get("path") == "/health":
-                await self.app(scope, receive, send)
-                return
-            response = JSONResponse(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                content={
-                    "status": "ERROR",
-                    "status_code": status.HTTP_503_SERVICE_UNAVAILABLE,
-                    "status_message": (
-                        "F048 permission data migration is required; restart the service after migration"
-                    ),
-                },
-            )
-            await response(scope, receive, send)
-            return
-        await send(
-            {
-                "type": "websocket.close",
-                "code": 1013,
-                "reason": "F048 permission data migration is required",
-            }
-        )
-
-
-async def _initialize_f048_api_process(app: FastAPI) -> None:
+def _register_permission_runtime_contexts() -> None:
     if not settings.openfga.enabled:
         return
     from bisheng.api.services.f048_permission_runtime import (
         initialize_f048_api_runtime,
     )
-    from bisheng.core.context.manager import app_context
     from bisheng.department.domain.services.department_projection_scope import (
-        configure_department_projection_runtime,
         get_department_projection_scope,
+        register_department_projection_runtime_context,
     )
     from bisheng.permission.application.process_runtime import (
-        bind_f048_process_runtime,
-        run_f048_process_heartbeat,
+        register_f048_permission_runtime_context,
     )
 
-    manager = app_context.get_context("openfga")
-    client = await manager.async_get_instance()
-    app.state.f048_manager = manager
-    readiness = manager.readiness()
-    if readiness.get("migration_required"):
-        logger.warning(
-            "F048 data migration is required before permission runtime startup; "
-            "API remains not-ready until migration completes and the service restarts"
-        )
-        return
-    try:
-        runtime = await initialize_f048_api_runtime(
+    async def initialize(client):
+        return await initialize_f048_api_runtime(
             client,
             external_scopes={
                 "department": get_department_projection_scope(),
             },
         )
-    except (
-        AuthorizationModelMismatchError,
-        PermissionPublishNotReadyError,
-    ) as exc:
-        await manager.mark_migration_required()
-        logger.warning(
-            "F048 permission data is not ready; API remains available only for operator migration until restart: {}",
-            exc,
-        )
-        return
-    configure_department_projection_runtime(runtime.components.projection)
-    readiness = await bind_f048_process_runtime(
-        manager,
-        runtime.components.facade,
-    )
-    app.state.f048_runtime = runtime
-    app.state.f048_heartbeat_task = asyncio.create_task(
-        run_f048_process_heartbeat(manager),
-        name="f048-api-runtime-heartbeat",
-    )
-    logger.info(
-        "F048 API runtime initialized: store={} model={} catalog={}",
-        readiness["store_id"],
-        readiness["model_id"],
-        readiness["catalog_release_id"],
-    )
 
-
-async def _close_f048_api_process(app: FastAPI) -> None:
-    heartbeat_task = getattr(
-        app.state,
-        "f048_heartbeat_task",
-        None,
-    )
-    if heartbeat_task is not None:
-        heartbeat_task.cancel()
-        with suppress(asyncio.CancelledError):
-            await heartbeat_task
-    from bisheng.department.domain.services.department_projection_scope import (
-        clear_department_projection_runtime,
-    )
-    from bisheng.permission.application.access import clear_f048_runtime
-
-    clear_department_projection_runtime()
-    clear_f048_runtime()
+    register_f048_permission_runtime_context(initialize)
+    register_department_projection_runtime_context()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await initialize_app_context(config=settings)
+    _register_permission_runtime_contexts()
     try:
-        await _initialize_f048_api_process(app)
         await init_default_data()
         # F035 task-mode compatibility data remains unrelated to F048 resource
         # authorization and is safe to maintain independently.
@@ -211,7 +104,6 @@ async def lifespan(app: FastAPI):
         # LangfuseInstance.update()
         yield
     finally:
-        await _close_f048_api_process(app)
         thread_pool.tear_down()
         await close_app_context()
 
@@ -242,20 +134,7 @@ def create_app():
 
     @app.get("/health")
     def get_health():
-        manager = getattr(app.state, "f048_manager", None)
-        if manager is None:
-            return {"status": "OK"}
-        readiness = manager.readiness()
-        response = {
-            "status": "OK" if readiness.get("ready") else "ERROR",
-            "openfga": readiness,
-        }
-        if readiness.get("ready"):
-            return response
-        return JSONResponse(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            content=response,
-        )
+        return {"status": "OK"}
 
     app.add_middleware(
         CORSMiddleware,
@@ -273,9 +152,6 @@ def create_app():
     app.add_middleware(AdminScopeMiddleware)
     app.add_middleware(CustomMiddleware)
     app.add_middleware(WebSocketLoggingMiddleware)
-    # Added last so migration-required HTTP/WS requests are rejected before
-    # authentication, tenant loading, or business handlers run.
-    app.add_middleware(F048MigrationGateMiddleware)
 
     @app.exception_handler(AuthJWTException)
     def authjwt_exception_handler(request: Request, exc: AuthJWTException):

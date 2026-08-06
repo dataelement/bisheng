@@ -360,7 +360,11 @@ async def test_delete_tool_checks_delete_then_projects_lifecycle(
     )
     monkeypatch.setattr(
         "bisheng.tool.domain.services.tool.get_f048_resource_adapter",
-        lambda resource_type: adapter,
+        AsyncMock(return_value=adapter),
+    )
+    monkeypatch.setattr(
+        "bisheng.permission.application.relation_api.is_tenant_admin",
+        AsyncMock(return_value=False),
     )
     monkeypatch.setattr(ToolServices, "delete_tool_hook", AsyncMock())
     login_user = UserPayload(

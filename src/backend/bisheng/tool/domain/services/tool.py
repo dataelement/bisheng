@@ -168,7 +168,8 @@ class ToolServices(BaseModel):
     @classmethod
     async def add_gpts_tools_hook(cls, request: Request, user: UserPayload, gpts_tool_type: GptsToolsTypeRead) -> bool:
         """After adding custom toolshookFunction"""
-        await get_f048_resource_adapter("tool").authorize_created(
+        adapter = await get_f048_resource_adapter("tool")
+        await adapter.authorize_created(
             record=cls._new_permission_record(gpts_tool_type),
             actor=await resolve_permission_actor(user),
         )
@@ -185,7 +186,12 @@ class ToolServices(BaseModel):
             raise NotFoundError()
 
         current_tid = get_current_tenant_id() or DEFAULT_TENANT_ID
-        tenant_admin = current_tid != DEFAULT_TENANT_ID and await self.login_user.has_tenant_admin(current_tid)
+        from bisheng.permission.application import is_tenant_admin
+
+        tenant_admin = current_tid != DEFAULT_TENANT_ID and await is_tenant_admin(
+            self.login_user.user_id,
+            current_tid,
+        )
         if not (self.login_user.is_admin() or tenant_admin):
             raise UnAuthorizedError()
 
@@ -424,7 +430,7 @@ class ToolServices(BaseModel):
             resource_id=exist_tool_type.id,
             action="delete",
         )
-        adapter = get_f048_resource_adapter("tool")
+        adapter = await get_f048_resource_adapter("tool")
         record = await adapter.load_permission_record(resource_id=str(exist_tool_type.id))
         if record is None:
             raise ToolTypeNotExistsError()

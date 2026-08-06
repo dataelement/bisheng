@@ -490,29 +490,27 @@ class LLMDao:
 
     @classmethod
     async def aget_shared_server_ids_for_leaf(cls, leaf_id: int) -> list[int]:
-        """Root llm_server ids shared to the given leaf. Reads
-        ``shared_with → tenant:{leaf}`` tuples; returns [] when the
-        caller is Root or OpenFGA is unavailable (fail-closed)."""
-        from bisheng.core.openfga.manager import aget_fga_client
+        """Return Root LLM server IDs shared to the given leaf.
+
+        Returns [] for Root callers or when permissions are unavailable.
+        """
+        from bisheng.permission.application import PermissionSubject, get_permission_relation_api
 
         if leaf_id == _ROOT_TENANT_ID:
             return []
-        fga = await aget_fga_client()
-        if fga is None:
-            return []
         try:
-            objects = await fga.list_objects(
-                user=f"tenant:{leaf_id}",
+            permissions = await get_permission_relation_api()
+            objects = await permissions.list_resource_ids(
+                subject=PermissionSubject("tenant", str(leaf_id)),
                 relation="shared_with",
-                type="llm_server",
+                resource_type="llm_server",
             )
         except Exception:
-            _LOG.exception("list_objects for leaf=%s failed", leaf_id)
+            _LOG.exception("Permission resource lookup for leaf=%s failed", leaf_id)
             return []
 
         result: list[int] = []
-        for obj in objects:
-            _, _, tail = obj.rpartition(":")
-            if tail.isdigit():
-                result.append(int(tail))
+        for resource_id in objects:
+            if resource_id.isdigit():
+                result.append(int(resource_id))
         return result

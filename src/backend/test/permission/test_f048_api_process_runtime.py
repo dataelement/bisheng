@@ -10,24 +10,10 @@ import pytest
 
 from bisheng import main
 from bisheng.api.services import f048_permission_runtime as api_runtime_module
-from bisheng.common.errcode.permission import PermissionPublishNotReadyError
-from bisheng.core.context import manager as context_module
-from bisheng.permission.application import process_runtime as process_module
+from bisheng.core.context.manager import ApplicationContextManager
+from bisheng.department.domain.services import department_projection_scope
+from bisheng.permission.application import process_runtime
 from bisheng.permission.domain.schemas import VerifiedPermissionTarget
-
-
-class _Manager:
-    def __init__(self, *, migration_required: bool = False) -> None:
-        self._migration_required = migration_required
-
-    async def async_get_instance(self):
-        return object()
-
-    async def mark_migration_required(self):
-        self._migration_required = True
-
-    def readiness(self):
-        return {"migration_required": self._migration_required}
 
 
 class _PermissionFacade:
@@ -48,236 +34,109 @@ class _ModeState:
         return self.mode
 
 
+class _LazyManager:
+    name = "openfga"
+
+    def __init__(self) -> None:
+        self.initializations = 0
+        self.bindings = 0
+        self.heartbeats = 0
+
+    async def async_get_instance(self):
+        self.initializations += 1
+        return object()
+
+    def readiness(self):
+        return {"migration_required": False, "ready": True}
+
+    async def bind_catalog_runtime(self, resolver):
+        del resolver
+        self.bindings += 1
+
+    async def heartbeat(self):
+        self.heartbeats += 1
+        return True
+
+    async def mark_migration_required(self):
+        raise AssertionError("migration must not be marked for a valid runtime")
+
+    async def async_close(self):
+        return None
+
+
+def test_api_process_registers_permission_and_department_contexts_lazily(monkeypatch) -> None:
+    registered = []
+    monkeypatch.setattr(main.settings.openfga, "enabled", True)
+    monkeypatch.setattr(
+        "bisheng.permission.application.process_runtime.register_f048_permission_runtime_context",
+        lambda initializer: registered.append(("permission", initializer)),
+    )
+    monkeypatch.setattr(
+        "bisheng.department.domain.services.department_projection_scope.register_department_projection_runtime_context",
+        lambda: registered.append(("department", None)),
+    )
+
+    main._register_permission_runtime_contexts()
+
+    assert [name for name, _ in registered] == ["permission", "department"]
+    assert callable(registered[0][1])
+
+
 @pytest.mark.asyncio
-async def test_api_process_binds_runtime_before_starting_heartbeat(
-    monkeypatch,
-) -> None:
-    manager = _Manager()
-    facade = object()
+async def test_permission_and_department_contexts_initialize_on_separate_first_access(monkeypatch) -> None:
+    context = ApplicationContextManager()
+    manager = _LazyManager()
+    context.register_context(manager)
+    context._initialized = True
+    facade = SimpleNamespace(current_catalog=AsyncMock())
     projection = object()
-    api_runtime = SimpleNamespace(
+    runtime = SimpleNamespace(
         components=SimpleNamespace(
             facade=facade,
             projection=projection,
         ),
     )
-    calls = []
+    initialize_calls = 0
 
-    async def initialize(client, *, external_scopes):
-        calls.append(
-            (
-                "initialize",
-                client,
-                external_scopes,
-            )
-        )
-        return api_runtime
-
-    async def bind(bound_manager, runtime):
-        calls.append(
-            (
-                "bind",
-                bound_manager,
-                runtime,
-            )
-        )
-        return {
-            "store_id": "store-live",
-            "model_id": "model-f048",
-            "catalog_release_id": 12,
-        }
+    async def initialize(client):
+        nonlocal initialize_calls
+        assert client is not None
+        initialize_calls += 1
+        return runtime
 
     async def heartbeat(bound_manager):
-        calls.append(("heartbeat", bound_manager))
+        assert bound_manager is manager
         await asyncio.Event().wait()
 
-    monkeypatch.setattr(main.settings.openfga, "enabled", True)
-    monkeypatch.setattr(
-        context_module.app_context,
-        "get_context",
-        lambda name: manager,
-    )
-    monkeypatch.setattr(
-        api_runtime_module,
-        "initialize_f048_api_runtime",
-        initialize,
-    )
-    monkeypatch.setattr(
-        process_module,
-        "bind_f048_process_runtime",
-        bind,
-    )
-    monkeypatch.setattr(
-        process_module,
-        "run_f048_process_heartbeat",
-        heartbeat,
-    )
-    app = SimpleNamespace(state=SimpleNamespace())
+    monkeypatch.setattr(process_runtime, "app_context", context)
+    monkeypatch.setattr(department_projection_scope, "app_context", context)
+    monkeypatch.setattr(process_runtime, "_components", lambda value: value.components)
+    monkeypatch.setattr(process_runtime, "run_f048_process_heartbeat", heartbeat)
 
-    await main._initialize_f048_api_process(app)
-    await asyncio.sleep(0)
+    process_runtime.register_f048_permission_runtime_context(initialize)
+    department_projection_scope.register_department_projection_runtime_context()
 
-    assert calls[0][0] == "initialize"
-    assert set(calls[0][2]) == {"department"}
-    assert calls[1] == ("bind", manager, facade)
-    assert calls[2] == ("heartbeat", manager)
-    assert app.state.f048_manager is manager
-    assert app.state.f048_runtime is api_runtime
+    assert initialize_calls == 0
+    assert manager.initializations == 0
 
-    await main._close_f048_api_process(app)
-    assert app.state.f048_heartbeat_task.cancelled()
+    assert await process_runtime.get_f048_process_runtime() is runtime
+    assert initialize_calls == 1
+    assert manager.bindings == 1
+    assert manager.heartbeats == 1
+
+    department_runtime = await department_projection_scope.get_department_projection_runtime()
+    assert department_runtime._ledger is projection
+    assert initialize_calls == 1
+
+    await context.async_close()
 
 
-@pytest.mark.asyncio
-async def test_api_process_starts_not_ready_before_f048_migration(
-    monkeypatch,
-) -> None:
-    manager = _Manager(migration_required=True)
+def test_health_is_not_coupled_to_f048_migration_state() -> None:
+    app = main.create_app()
+    health_route = next(route for route in app.routes if getattr(route, "path", None) == "/health")
 
-    monkeypatch.setattr(main.settings.openfga, "enabled", True)
-    monkeypatch.setattr(
-        context_module.app_context,
-        "get_context",
-        lambda name: manager,
-    )
-    initialize = AsyncMock()
-    monkeypatch.setattr(
-        api_runtime_module,
-        "initialize_f048_api_runtime",
-        initialize,
-    )
-    app = SimpleNamespace(state=SimpleNamespace())
-
-    await main._initialize_f048_api_process(app)
-
-    assert app.state.f048_manager is manager
-    assert not hasattr(app.state, "f048_runtime")
-    assert not hasattr(app.state, "f048_heartbeat_task")
-    initialize.assert_not_awaited()
-
-
-@pytest.mark.asyncio
-async def test_api_process_starts_not_ready_when_f048_catalog_is_incomplete(
-    monkeypatch,
-) -> None:
-    manager = _Manager()
-
-    monkeypatch.setattr(main.settings.openfga, "enabled", True)
-    monkeypatch.setattr(
-        context_module.app_context,
-        "get_context",
-        lambda name: manager,
-    )
-    initialize = AsyncMock(
-        side_effect=PermissionPublishNotReadyError(msg="Permission Catalog must have exactly one CURRENT release")
-    )
-    monkeypatch.setattr(
-        api_runtime_module,
-        "initialize_f048_api_runtime",
-        initialize,
-    )
-    app = SimpleNamespace(state=SimpleNamespace())
-
-    await main._initialize_f048_api_process(app)
-
-    assert app.state.f048_manager is manager
-    assert manager.readiness()["migration_required"] is True
-    assert not hasattr(app.state, "f048_runtime")
-    assert not hasattr(app.state, "f048_heartbeat_task")
-    initialize.assert_awaited_once()
-
-
-@pytest.mark.asyncio
-async def test_migration_gate_rejects_user_http_but_allows_health() -> None:
-    manager = _Manager(migration_required=True)
-    downstream_scopes = []
-    sent = []
-
-    async def downstream(scope, receive, send):
-        downstream_scopes.append(scope)
-
-    async def receive():
-        return {"type": "http.request", "body": b"", "more_body": False}
-
-    async def send(message):
-        sent.append(message)
-
-    gate = main.F048MigrationGateMiddleware(downstream)
-    app = SimpleNamespace(
-        state=SimpleNamespace(f048_manager=manager),
-    )
-    await gate(
-        {
-            "type": "http",
-            "asgi": {"version": "3.0"},
-            "http_version": "1.1",
-            "method": "GET",
-            "scheme": "http",
-            "path": "/api/v1/env",
-            "raw_path": b"/api/v1/env",
-            "query_string": b"",
-            "root_path": "",
-            "headers": [],
-            "client": ("127.0.0.1", 1),
-            "server": ("test", 80),
-            "app": app,
-        },
-        receive,
-        send,
-    )
-
-    assert downstream_scopes == []
-    assert sent[0]["status"] == 503
-
-    await gate(
-        {
-            "type": "http",
-            "path": "/health",
-            "app": app,
-        },
-        receive,
-        send,
-    )
-    assert len(downstream_scopes) == 1
-    assert downstream_scopes[0]["path"] == "/health"
-
-
-@pytest.mark.asyncio
-async def test_migration_gate_rejects_websocket_connections() -> None:
-    manager = _Manager(migration_required=True)
-    downstream_scopes = []
-    sent = []
-
-    async def downstream(scope, receive, send):
-        downstream_scopes.append(scope)
-
-    async def receive():
-        return {"type": "websocket.connect"}
-
-    async def send(message):
-        sent.append(message)
-
-    gate = main.F048MigrationGateMiddleware(downstream)
-    await gate(
-        {
-            "type": "websocket",
-            "path": "/api/v1/workflow/chat/1",
-            "app": SimpleNamespace(
-                state=SimpleNamespace(f048_manager=manager),
-            ),
-        },
-        receive,
-        send,
-    )
-
-    assert downstream_scopes == []
-    assert sent == [
-        {
-            "type": "websocket.close",
-            "code": 1013,
-            "reason": "F048 permission data migration is required",
-        }
-    ]
+    assert health_route.endpoint() == {"status": "OK"}
+    assert "F048MigrationGateMiddleware" not in {middleware.cls.__name__ for middleware in app.user_middleware}
 
 
 @pytest.mark.asyncio

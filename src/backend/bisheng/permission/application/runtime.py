@@ -24,6 +24,7 @@ from bisheng.permission.application.control_state import (
     SqlPermissionControlState,
     require_owner_model,
 )
+from bisheng.permission.application.relation_api import PermissionRelationApplication
 from bisheng.permission.application.sql_runtime import (
     DenyListObjectsPolicy,
     ExternalProjectionScopePort,
@@ -92,6 +93,7 @@ class F048RuntimeComponents:
     state: SqlPermissionControlState
     projection: ProjectionService
     marker: RedisConsistencyMarker
+    relations: PermissionRelationApplication
 
 
 class F048PermissionRuntime:
@@ -1144,4 +1146,5 @@ async def build_f048_permission_runtime(
         state=state,
         projection=projection,
         marker=sql_projection.marker,
+        relations=PermissionRelationApplication(client),
     )

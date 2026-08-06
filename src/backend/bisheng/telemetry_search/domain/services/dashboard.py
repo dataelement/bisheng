@@ -185,9 +185,8 @@ class DashboardService(BaseModel):
 
         dashboard = await DashboardDao.insert(dashboard)
         try:
-            await get_f048_resource_adapter(
-                "dashboard",
-            ).authorize_created(
+            adapter = await get_f048_resource_adapter("dashboard")
+            await adapter.authorize_created(
                 record=self._new_permission_record(dashboard),
                 actor=await resolve_permission_actor(self.login_user),
             )
@@ -220,7 +219,7 @@ class DashboardService(BaseModel):
         if dashboard.dashboard_type == DashboardType.PRESET_OSS.value:
             raise UnAuthorizedError()
         await self._require_action(dashboard, "delete")
-        adapter = get_f048_resource_adapter("dashboard")
+        adapter = await get_f048_resource_adapter("dashboard")
         record = await adapter.load_permission_record(str(dashboard.id))
         if record is None:
             raise NotFoundError()
@@ -320,7 +319,7 @@ class DashboardService(BaseModel):
         if not dashboard:
             raise NotFoundError()
         await self._require_action(dashboard, "visible")
-        adapter = get_f048_resource_adapter("dashboard")
+        adapter = await get_f048_resource_adapter("dashboard")
         source_permission = await adapter.load_permission_record(str(dashboard.id))
         if source_permission is None:
             raise NotFoundError()

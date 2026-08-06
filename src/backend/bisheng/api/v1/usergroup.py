@@ -1,6 +1,6 @@
 # build router
 import logging
-from typing import Annotated, List
+from typing import Annotated
 
 import anyio
 from fastapi import APIRouter, Body, Depends, Query, Request
@@ -23,7 +23,7 @@ async def _can_use_v25_role_catalog(user: UserPayload) -> bool:
         return True
 
     from bisheng.database.models.department import DepartmentDao
-    from bisheng.permission.domain.services.permission_service import PermissionService
+    from bisheng.permission.application import is_tenant_admin
 
     try:
         admin_depts = await DepartmentDao.aget_user_admin_departments(user.user_id)
@@ -37,13 +37,7 @@ async def _can_use_v25_role_catalog(user: UserPayload) -> bool:
         return True
 
     try:
-        return await PermissionService.check(
-            user_id=user.user_id,
-            relation="admin",
-            object_type="tenant",
-            object_id=str(user.tenant_id),
-            login_user=user,
-        )
+        return await is_tenant_admin(user.user_id, int(user.tenant_id))
     except Exception:
         logger.exception(
             "get_group_roles: tenant admin check failed user=%s",
@@ -114,7 +108,7 @@ async def delete_group(request: Request, group_id: int, login_user: UserPayload 
 async def set_user_group(
     request: Request,
     user_id: Annotated[int, Body(embed=True)],
-    group_id: Annotated[List[int], Body(embed=True)],
+    group_id: Annotated[list[int], Body(embed=True)],
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     """
@@ -157,7 +151,7 @@ async def get_group_user(
 @router.post("/set_group_admin")
 async def set_group_admin(
     request: Request,
-    user_ids: Annotated[List[int], Body(embed=True)],
+    user_ids: Annotated[list[int], Body(embed=True)],
     group_id: Annotated[int, Body(embed=True)],
     login_user: UserPayload = Depends(UserPayload.get_admin_user),
 ):
@@ -177,7 +171,7 @@ async def set_group_admin(
 @router.post("/set_group_members")
 async def set_group_members(
     request: Request,
-    user_ids: Annotated[List[int], Body(embed=True)],
+    user_ids: Annotated[list[int], Body(embed=True)],
     group_id: Annotated[int, Body(embed=True)],
     login_user: UserPayload = Depends(UserPayload.get_admin_user),
 ):
@@ -207,7 +201,7 @@ async def set_update_user(
 @router.get("/roles")
 async def get_group_roles(
     *,
-    group_id: List[int] = Query(..., description="User GroupsIDVertical"),
+    group_id: list[int] = Query(..., description="User GroupsIDVertical"),
     keyword: str = Query(None, description="Search keyword ..."),
     page: int = 0,
     limit: int = 0,

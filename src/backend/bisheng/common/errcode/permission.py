@@ -12,9 +12,13 @@ class PermissionCheckFailedError(BaseErrorCode):
     Msg: str = "Permission check failed"
 
 
-class PermissionFGAUnavailableError(BaseErrorCode):
+class PermissionServiceUnavailableError(BaseErrorCode):
     Code: int = 19002
     Msg: str = "Authorization service unavailable"
+
+
+# Backward-compatible symbol for the historical infrastructure-specific name.
+PermissionFGAUnavailableError = PermissionServiceUnavailableError
 
 
 class PermissionInvalidResourceError(BaseErrorCode):

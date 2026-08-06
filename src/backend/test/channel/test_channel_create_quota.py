@@ -129,9 +129,8 @@ async def test_create_channel_unlimited_allows_beyond_legacy_ten():
     with (
         patch(_QUOTA_PATCH, new=AsyncMock(return_value=-1)),
         patch(
-            "bisheng.channel.domain.services.channel_service."
-            "get_f048_resource_adapter",
-            return_value=SimpleNamespace(authorize_created=AsyncMock()),
+            "bisheng.channel.domain.services.channel_service.get_f048_resource_adapter",
+            new=AsyncMock(return_value=SimpleNamespace(authorize_created=AsyncMock())),
         ),
         patch(
             "bisheng.channel.domain.services.channel_service.get_bisheng_information_client",
@@ -171,9 +170,8 @@ async def test_create_channel_ignores_orphan_membership():
     with (
         patch(_QUOTA_PATCH, new=AsyncMock(return_value=2)),
         patch(
-            "bisheng.channel.domain.services.channel_service."
-            "get_f048_resource_adapter",
-            return_value=SimpleNamespace(authorize_created=AsyncMock()),
+            "bisheng.channel.domain.services.channel_service.get_f048_resource_adapter",
+            new=AsyncMock(return_value=SimpleNamespace(authorize_created=AsyncMock())),
         ),
         patch(
             "bisheng.channel.domain.services.channel_service.get_bisheng_information_client",

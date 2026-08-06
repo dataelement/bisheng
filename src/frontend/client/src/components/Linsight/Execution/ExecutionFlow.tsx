@@ -299,6 +299,7 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
                 open={artifactsPanel.workspaceOpen}
                 onOpenChange={artifactsPanel.setWorkspaceOpen}
                 files={workspaceFiles}
+                versionId={versionId}
                 onPreview={(file) => artifactsPanel.openPreview(file, true)}
             />
             <FilePreviewPanel

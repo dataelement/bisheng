@@ -18,9 +18,10 @@ def test_legacy_model_id_default_none():
 def test_existing_defaults_preserved():
     conf = OpenFGAConf()
     assert conf.enabled is True
-    assert conf.api_url == 'http://openfga:8080'
-    assert conf.store_name == 'bisheng'
+    assert conf.api_url == "http://openfga:8080"
+    assert conf.store_name == "bisheng"
     assert conf.timeout == 5
+    assert conf.failed_tuple_succeeded_retention_days == 30
 
 
 def test_runtime_identifiers_are_not_configuration_fields():

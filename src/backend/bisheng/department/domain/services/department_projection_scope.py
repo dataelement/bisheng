@@ -13,6 +13,8 @@ from bisheng.common.errcode.permission import (
     PermissionPublishNotReadyError,
     PermissionVersionConflictError,
 )
+from bisheng.core.context import FunctionContextManager
+from bisheng.core.context.manager import app_context
 from bisheng.core.database import get_async_db_session
 from bisheng.database.models.department import Department
 from bisheng.permission.domain.models import PermissionProjectionOperation
@@ -290,30 +292,44 @@ class DepartmentProjectionRuntime:
 
 
 _scope = SqlDepartmentProjectionScope()
-_runtime: DepartmentProjectionRuntime | None = None
+DEPARTMENT_PROJECTION_RUNTIME_CONTEXT = "department_projection_runtime"
 
 
 def get_department_projection_scope() -> SqlDepartmentProjectionScope:
     return _scope
 
 
-def configure_department_projection_runtime(
-    ledger: DepartmentProjectionLedgerPort,
-) -> DepartmentProjectionRuntime:
-    global _runtime
-    _runtime = DepartmentProjectionRuntime(
-        ledger=ledger,
-        scope=_scope,
+def register_department_projection_runtime_context() -> None:
+    """Register department projection without constructing it eagerly."""
+
+    try:
+        app_context.get_context(DEPARTMENT_PROJECTION_RUNTIME_CONTEXT)
+        return
+    except KeyError:
+        pass
+
+    async def initialize() -> DepartmentProjectionRuntime:
+        from bisheng.permission.application.process_runtime import get_f048_process_runtime
+
+        process_runtime = await get_f048_process_runtime()
+        components = getattr(process_runtime, "components", process_runtime)
+        ledger = getattr(components, "projection", None)
+        if ledger is None:
+            raise PermissionPublishNotReadyError(msg="Permission projection ledger is unavailable")
+        return DepartmentProjectionRuntime(
+            ledger=ledger,
+            scope=_scope,
+        )
+
+    app_context.register_context(
+        FunctionContextManager(
+            name=DEPARTMENT_PROJECTION_RUNTIME_CONTEXT,
+            init_func=initialize,
+        ),
+        dependencies=["permission_runtime"],
+        lazy=True,
     )
-    return _runtime
 
 
-def get_department_projection_runtime() -> DepartmentProjectionRuntime:
-    if _runtime is None:
-        raise PermissionPublishNotReadyError(msg="Department projection runtime is not configured")
-    return _runtime
-
-
-def clear_department_projection_runtime() -> None:
-    global _runtime
-    _runtime = None
+async def get_department_projection_runtime() -> DepartmentProjectionRuntime:
+    return await app_context.async_get_instance(DEPARTMENT_PROJECTION_RUNTIME_CONTEXT)

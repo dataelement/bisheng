@@ -230,7 +230,7 @@ async def test_projecting_department_resumes_its_durable_operation(
     monkeypatch.setattr(
         department_projection_scope,
         "get_department_projection_runtime",
-        lambda: runtime,
+        AsyncMock(return_value=runtime),
     )
     department = SimpleNamespace(
         permission_projection_state="PROJECTING",

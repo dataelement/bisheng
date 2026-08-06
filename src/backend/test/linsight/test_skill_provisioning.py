@@ -8,7 +8,7 @@
 
 - ``selected=["a"]``  → only governance-enabled selected names copied;
 - ``selected=[]``     → nothing copied (UI disabled all);
-- ``selected=None``   → every enabled skill copied (non-UI fallback);
+- ``selected=None``   → nothing copied (``None ≡ []``; skills are strictly opt-in);
 - a DB-disabled skill is never copied even if selected;
 - bundle bytes (incl. binary assets) are copied losslessly;
 - the on-disk source is tenant-scoped (cross-tenant read yields nothing).
@@ -199,3 +199,31 @@ class TestEnumerationLoop:
         # The path the model is told to read_file is the same one the workspace
         # backend resolves back to the copied bundle (cross-backend loop closed).
         assert normalize_workspace_path(injected_path) == "skills/biao-shu-zhuan-xie/SKILL.md"
+
+
+class TestProvisioningLog:
+    """The summary line must actually carry its arguments.
+
+    loguru formats with ``str.format`` ({}), not printf (%s). This line used to
+    use printf placeholders, so every production log read literally
+    ``tenant=%s selected=%r enabled=%s -> materialized %s`` with all four values
+    dropped — the one record that says which skills a run loaded was useless
+    exactly when a "my skill did not trigger" report had to be diagnosed.
+    """
+
+    async def test_summary_line_renders_its_arguments(self, monkeypatch, store, backend):
+        from loguru import logger
+
+        _patch_enabled(monkeypatch, ENABLED)
+        captured: list[str] = []
+        sink_id = logger.add(captured.append, level="INFO", format="{message}")
+        try:
+            await materialize_session_skills(backend, TENANT, ["biao-shu-zhuan-xie"], store=store)
+        finally:
+            logger.remove(sink_id)
+
+        summary = next(line for line in captured if "skill provisioning" in line)
+        assert "%s" not in summary and "%r" not in summary
+        assert "tenant=1" in summary
+        assert "selected=['biao-shu-zhuan-xie']" in summary
+        assert "materialized ['biao-shu-zhuan-xie']" in summary

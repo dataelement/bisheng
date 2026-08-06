@@ -114,20 +114,12 @@ class AssistantService(BaseService, AssistantUtils):
             resource_ids=(one.id for one in res),
             actions=(action, "edit"),
         )
-        res = [
-            one
-            for one in res
-            if action in permission_map.get(str(one.id), frozenset())
-        ]
+        res = [one for one in res if action in permission_map.get(str(one.id), frozenset())]
         total = len(res)
         start_index = (page - 1) * limit
         end_index = start_index + limit
         res = res[start_index:end_index]
-        editable_ids = {
-            resource_id
-            for resource_id, actions in permission_map.items()
-            if "edit" in actions
-        }
+        editable_ids = {resource_id for resource_id, actions in permission_map.items() if "edit" in actions}
 
         assistant_ids = [one.id for one in res]
 
@@ -187,16 +179,9 @@ class AssistantService(BaseService, AssistantUtils):
                 resource_ids=(one.id for one in batch),
                 actions=(action, "edit"),
             )
-            kept = [
-                one
-                for one in batch
-                if action
-                in permission_map.get(str(one.id), frozenset())
-            ]
+            kept = [one for one in batch if action in permission_map.get(str(one.id), frozenset())]
             editable_ids |= {
-                resource_id
-                for resource_id, action_codes in permission_map.items()
-                if "edit" in action_codes
+                resource_id for resource_id, action_codes in permission_map.items() if "edit" in action_codes
             }
 
             for item in kept:
@@ -416,7 +401,8 @@ class AssistantService(BaseService, AssistantUtils):
         on the running event loop.
         """
         record = cls._new_permission_record(assistant)
-        await get_f048_resource_adapter("assistant").authorize_created(
+        adapter = await get_f048_resource_adapter("assistant")
+        await adapter.authorize_created(
             record=record,
             actor=await resolve_permission_actor(user_payload),
         )
@@ -443,7 +429,7 @@ class AssistantService(BaseService, AssistantUtils):
             resource_id=assistant.id,
             action="delete",
         )
-        adapter = get_f048_resource_adapter("assistant")
+        adapter = await get_f048_resource_adapter("assistant")
         record = await adapter.load_permission_record(
             resource_type="assistant",
             resource_id=str(assistant.id),
@@ -598,11 +584,7 @@ class AssistantService(BaseService, AssistantUtils):
         assistant = AssistantDao.get_one_assistant(assistant_id)
         if not assistant:
             raise AssistantNotExistsError()
-        required_action = (
-            "publish"
-            if status == AssistantStatus.ONLINE.value
-            else "unpublish"
-        )
+        required_action = "publish" if status == AssistantStatus.ONLINE.value else "unpublish"
         await require_business_action(
             login_user,
             resource_type="assistant",
@@ -687,10 +669,7 @@ class AssistantService(BaseService, AssistantUtils):
         assistant: Assistant,
     ) -> ApplicationPermissionRecord:
         context_version = sha256(
-            (
-                f"assistant|{assistant.id}|{assistant.tenant_id}|"
-                f"{assistant.user_id}|{assistant.status}"
-            ).encode()
+            (f"assistant|{assistant.id}|{assistant.tenant_id}|{assistant.user_id}|{assistant.status}").encode()
         ).hexdigest()
         return ApplicationPermissionRecord(
             tenant_id=int(assistant.tenant_id or 0),
@@ -811,10 +790,7 @@ class AssistantService(BaseService, AssistantUtils):
                 actions=("visible",),
             )
             visible_ids.extend(
-                str(row["id"])
-                for row in candidates
-                if "visible"
-                in action_map.get(str(row["id"]), frozenset())
+                str(row["id"]) for row in candidates if "visible" in action_map.get(str(row["id"]), frozenset())
             )
             if len(visible_ids) >= 50 or not has_more:
                 break
@@ -822,15 +798,8 @@ class AssistantService(BaseService, AssistantUtils):
             candidate_cursor = [last["update_time"], last["id"]]
 
         ordered_ids = visible_ids[:50]
-        flow_by_id = {
-            str(flow.id): flow
-            for flow in await FlowDao.aget_flow_by_ids(ordered_ids)
-        }
-        all_flow = [
-            flow_by_id[flow_id]
-            for flow_id in ordered_ids
-            if flow_id in flow_by_id
-        ]
+        flow_by_id = {str(flow.id): flow for flow in await FlowDao.aget_flow_by_ids(ordered_ids)}
+        all_flow = [flow_by_id[flow_id] for flow_id in ordered_ids if flow_id in flow_by_id]
         flow_dict = {}
         flow_list = []
         for one in all_flow:

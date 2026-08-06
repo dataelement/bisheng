@@ -14,24 +14,25 @@ from bisheng.database.models.flow import FlowDao
 from bisheng.database.models.group import Group, GroupCreate, GroupDao, GroupRead
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
 from bisheng.database.models.user_group import UserGroupCreate, UserGroupDao, UserGroupRead
+from bisheng.permission.application import PermissionRelationChange
 from bisheng.permission.domain.services.legacy_rbac_sync_service import LegacyRBACSyncService
 from bisheng.permission.domain.services.owner_service import OwnerService, _run_async_safe
 from bisheng.user.domain.models.user import User, UserDao
 from bisheng.user.domain.models.user_role import UserRoleDao
 from bisheng.user.domain.services.user import UserService
-from bisheng.user_group.domain.services.group_change_handler import GroupChangeHandler, TupleOperation
+from bisheng.user_group.domain.services.group_change_handler import GroupChangeHandler
 from bisheng.utils import get_request_ip
 
 
 class RoleGroupService:
     @staticmethod
-    def _execute_group_change_ops(operations: List[TupleOperation]) -> None:
+    def _execute_group_change_ops(operations: List[PermissionRelationChange]) -> None:
         if not operations:
             return
         try:
             _run_async_safe(GroupChangeHandler.execute_async(operations))
         except Exception as exc:
-            logger.warning("Failed to sync legacy user_group change to OpenFGA: %s", exc)
+            logger.warning("Failed to sync legacy user-group permissions: {}", exc)
 
     @staticmethod
     def _cleanup_group_fga(group_id: int) -> None:
@@ -203,7 +204,7 @@ class RoleGroupService:
             UserGroupDao.delete_user_groups(user_id, need_delete_group)
         if need_add_group:
             UserGroupDao.add_user_groups(user_id, need_add_group)
-        ops: List[TupleOperation] = []
+        ops: List[PermissionRelationChange] = []
         for group_id in need_delete_group:
             ops.extend(GroupChangeHandler.on_member_removed(group_id, user_id))
         for group_id in need_add_group:
@@ -254,7 +255,7 @@ class RoleGroupService:
                 res.append(UserGroupDao.insert_user_group_admin(user_id, group_id))
         if need_delete_admin:
             UserGroupDao.delete_group_admins(group_id, need_delete_admin)
-        ops: List[TupleOperation] = []
+        ops: List[PermissionRelationChange] = []
         if need_add_admin:
             ops.extend(GroupChangeHandler.on_admin_set(group_id, need_add_admin))
         if need_delete_admin:
@@ -277,7 +278,7 @@ class RoleGroupService:
 
         UserGroupDao.batch_add_group_members(group_id, need_add)
         UserGroupDao.batch_delete_group_members(group_id, need_delete)
-        ops: List[TupleOperation] = []
+        ops: List[PermissionRelationChange] = []
         if need_add:
             ops.extend(GroupChangeHandler.on_members_added(group_id, need_add))
         for user_id in need_delete:

@@ -13,8 +13,10 @@ import FileIcon from '~/components/ui/icon/File';
 import { useLocalize } from '~/hooks';
 import { EmptyStateIllustration } from '~/components/illustrations';
 import { cn } from '~/utils';
-import { type ArtifactFile, downloadArtifactFile, getFileExtension } from './artifactUtils';
+import { type ArtifactFile, getFileExtension } from './artifactUtils';
+import { NewTabHint } from './NewTabHint';
 import { PreviewBody } from './PreviewBody';
+import { SaveAsButton } from './SaveAsButton';
 
 interface WorkspacePanelProps {
     files: ArtifactFile[];
@@ -52,27 +54,22 @@ export function WorkspacePanel({
             key={file.file_id || file.file_url}
             role="button"
             tabIndex={0}
-            className="group flex cursor-pointer items-center gap-2.5 rounded-lg px-1 py-2 hover:bg-[#F7F7F7]"
+            className="group/row flex cursor-pointer items-center gap-2 rounded-lg py-2 pl-1 pr-1.5 hover:bg-[#F7F7F7]"
             onClick={() => onPreview(file)}
             onKeyDown={(e) => e.key === 'Enter' && onPreview(file)}
         >
             {/* File-type icon hidden for now; keep for an easy future re-enable. */}
             {/* eslint-disable-next-line @typescript-eslint/no-explicit-any -- FileIcon accepts more types than its union */}
             {/* <FileIcon type={getFileExtension(file.file_name) as any} className="size-5 min-w-5" /> */}
-            <span className="min-w-0 flex-1 truncate text-sm text-[#212121] group-hover:text-blue-500">
+            <span className="min-w-0 flex-1 truncate text-sm text-[#212121] group-hover/row:text-blue-500">
                 {file.file_name}
             </span>
+            <NewTabHint file={file} />
+            {/* Downloading a listed file no longer requires opening it first —
+                which HTML reports never allowed, since they leave for a new tab. */}
+            <SaveAsButton file={file} versionId={versionId} />
         </div>
     );
-
-    const handleDownload = async () => {
-        if (!previewFile) return;
-        try {
-            await downloadArtifactFile(previewFile, versionId);
-        } catch (e) {
-            console.error('artifact download failed:', e);
-        }
-    };
 
     return (
         <div
@@ -96,9 +93,10 @@ export function WorkspacePanel({
                         >
                             {previewFile.file_name || localize('com_linsight_preview_file')}
                         </span>
-                        <button type="button" aria-label={localize('com_linsight_download_to_view')} className={iconBtn} onClick={handleDownload}>
-                            <Outlined.Download className="size-4" />
-                        </button>
+                        {/* Same action as the file rows, so a markdown deliverable
+                            offers md / PDF / Docx here too instead of only the raw
+                            source — the two surfaces are one click apart. */}
+                        <SaveAsButton file={previewFile} versionId={versionId} variant="toolbar" />
                         {!hideFullscreenToggle && (
                             <button
                                 type="button"

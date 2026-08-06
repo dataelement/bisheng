@@ -1,4 +1,10 @@
-"""API-process composition root for the F048 permission runtime."""
+"""Composition roots for the F048 permission runtime.
+
+Two entries share one business resource composition: ``initialize_f048_api_runtime``
+(API process — also installs the HTTP dependency wiring) and
+``initialize_f048_worker_runtime`` (Celery / Linsight worker — same resource
+registry, no HTTP wiring).
+"""
 
 from __future__ import annotations
 
@@ -33,6 +39,9 @@ from bisheng.permission.application.catalog_api import (
     OpenFGACatalogProjector,
     SqlCatalogImpact,
     SqlCatalogState,
+)
+from bisheng.permission.application.process_runtime import (
+    initialize_f048_background_runtime,
 )
 from bisheng.permission.application.resource_api import (
     F048ResourcePermissionApi,
@@ -117,18 +126,16 @@ class F048IdentityOwnerProjection:
         )
 
 
-async def initialize_f048_api_runtime(
-    client: FGAClient,
-    *,
-    external_scopes: dict[str, ExternalProjectionScopePort] | None = None,
-) -> F048ApiRuntime:
-    """Build and install the sole API permission composition."""
+def build_f048_resource_composition(
+    runtime: F048PermissionRuntime,
+) -> tuple[dict[str, object], ResourceAuthorizationRegistry]:
+    """Bind every business resource adapter to ``runtime`` and index them.
 
-    components = await build_f048_permission_runtime(
-        client,
-        external_scopes=external_scopes,
-    )
-    runtime = components.facade
+    Shared by BOTH composition roots (API + background workers). Keeping it in
+    one place is the point: it is the piece a process must install before any
+    ``check_business_action`` call — i.e. before ToolExecutor initializes a tool,
+    which every Linsight/Celery task does.
+    """
 
     application = F048ApplicationPermissionAdapter(
         loader=ApplicationDaoPermissionLoader(runtime),
@@ -186,6 +193,26 @@ async def initialize_f048_api_runtime(
     registry.register("channel", channel)
     registry.register("tool", tool)
     registry.register("dashboard", dashboard)
+    return adapters, registry
+
+
+async def initialize_f048_api_runtime(
+    client: FGAClient,
+    *,
+    external_scopes: dict[str, ExternalProjectionScopePort] | None = None,
+) -> F048ApiRuntime:
+    """Build and install the API process's permission composition.
+
+    Sole composition for THIS process; ``initialize_f048_worker_runtime`` is the
+    background-process counterpart and shares the same resource registry build.
+    """
+
+    components = await build_f048_permission_runtime(
+        client,
+        external_scopes=external_scopes,
+    )
+    runtime = components.facade
+    adapters, registry = build_f048_resource_composition(runtime)
 
     decision_api = PermissionDecisionApplication(
         resources=registry,
@@ -223,3 +250,43 @@ async def initialize_f048_api_runtime(
         adapters=adapters,
         catalog=catalog_api,
     )
+
+
+async def initialize_f048_worker_runtime(
+    client: FGAClient,
+    *,
+    external_scopes: dict[str, ExternalProjectionScopePort] | None = None,
+) -> F048RuntimeComponents:
+    """Composition root for background processes (Celery + Linsight worker).
+
+    ``initialize_f048_background_runtime`` alone is NOT enough for a process that
+    runs business code: it installs the permission runtime but leaves the resource
+    registry unset, so the first ``check_business_action`` raises
+    ``RuntimeError("F048 resource registry is not configured")``. That is exactly
+    what silently disabled the Linsight code interpreter — ``ToolExecutor``
+    ``_ensure_use_permission_async`` -> ``check_business_action`` blew up inside a
+    best-effort ``except``, so every task ran without the tool the user had picked
+    (and any non-code-interpreter tool selection failed the task outright, since
+    ``init_by_tool_ids`` has no such guard).
+
+    Background processes therefore install the same business resource composition
+    the API does; only the HTTP dependency wiring (catalog / decision / resource
+    APIs) stays API-only.
+    """
+
+    components = await initialize_f048_background_runtime(
+        client,
+        external_scopes=external_scopes,
+    )
+    runtime = components.facade
+    adapters, registry = build_f048_resource_composition(runtime)
+    # Re-configure with the resource composition attached. The background call
+    # above already installed `runtime`; this call is the same runtime plus the
+    # adapters/registry, so it upgrades the process-global rather than swapping it.
+    configure_f048_runtime(
+        runtime,
+        resource_adapters=adapters,
+        resource_registry=registry,
+    )
+    configure_linsight_skill_owner_projection(F048IdentityOwnerProjection(runtime))
+    return components

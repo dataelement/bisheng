@@ -17,9 +17,10 @@ from bisheng.core.context.tenant import (
 )
 
 F048_PERMISSION_TASK_PREFIX = "bisheng.worker.permission."
-# The pre-F048 failed_tuple queue is Store-scoped and has no tenant column.
+# The legacy failed_tuple compensation queue is processed Store-wide.
 TENANT_AGNOSTIC_LEGACY_PERMISSION_TASKS = frozenset(
     {
+        "bisheng.worker.permission.retry_failed_tuples.cleanup_succeeded_failed_tuples",
         "bisheng.worker.permission.retry_failed_tuples.retry_failed_tuples",
     }
 )

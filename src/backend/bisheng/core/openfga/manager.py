@@ -326,14 +326,21 @@ _fga_client: FGAClient | None = None
 
 
 def get_fga_client() -> FGAClient | None:
-    """Get the initialized process-local FGA client."""
+    """Return the client only after the permission runtime is READY.
+
+    Synchronous callers never initialize OpenFGA independently. Async callers
+    must use :func:`aget_fga_client` to trigger the lazy permission runtime.
+    """
 
     global _fga_client
-    if _fga_client is not None:
-        return _fga_client
     try:
         from bisheng.core.context.manager import app_context
 
+        permission_context = app_context.get_context("permission_runtime")
+        if not permission_context.is_ready():
+            return None
+        if _fga_client is not None:
+            return _fga_client
         context = app_context.get_context("openfga")
         _fga_client = context.sync_get_instance()
         return _fga_client
@@ -342,14 +349,16 @@ def get_fga_client() -> FGAClient | None:
 
 
 async def aget_fga_client() -> FGAClient | None:
-    """Async version of :func:`get_fga_client`."""
+    """Initialize the permission runtime and return its OpenFGA client."""
 
     global _fga_client
-    if _fga_client is not None:
-        return _fga_client
     try:
         from bisheng.core.context.manager import app_context
+        from bisheng.permission.application.process_runtime import get_f048_process_runtime
 
+        await get_f048_process_runtime()
+        if _fga_client is not None:
+            return _fga_client
         _fga_client = await app_context.async_get_instance("openfga")
         return _fga_client
     except Exception:

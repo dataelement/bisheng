@@ -1,28 +1,19 @@
-"""F017 ResourceShareService — Root→Child resource sharing via OpenFGA tuples.
+"""F017 Root-to-Child resource sharing application service.
 
-Implements the DSL v2.0.1 tuple scheme (spec §5.1 + release-contract):
-
-- **Resource-level** ``{resource}#shared_with → tenant:{child_id}`` — one tuple
-  per Child; makes the resource visible via the viewer tupleToUserset chain.
-- **Tenant-level**  ``tenant:{child_id}#shared_to → tenant:{root_id}`` — one
-  tuple per Child; preserves the explicit F017 tenant-sharing identity fact.
-
-These two tuples together implement the PRD §7.2 intent
-``{resource}#viewer → tenant:{root}#shared_to#member`` (which OpenFGA protobuf
-rejects due to the nested ``#`` restriction on ``directly_related_user_types``).
-See DSL v2.0.1 redesign in ``core/openfga/authorization_model.py`` v2.0.1 notes.
+The service expresses sharing through the permission application's relation
+protocol. Storage-model encoding and the authorization backend stay inside the
+permission module.
 
 Usage scenarios:
 
 1. ``enable_sharing / disable_sharing`` — toggle share on a single Root
    resource; fan out writes/deletes over all active Children.
 2. ``distribute_to_child / revoke_from_child`` — on Child mount/unmount,
-   write/revoke the Tenant-level ``shared_to`` identity tuple.
+   grant/revoke the Tenant-level ``shared_to`` identity relation.
 3. ``list_sharing_children`` — introspect which Children a given resource is
    currently shared with (UI / audit / unmount cleanup).
 
-FGA write failures surface as ``FGAWriteError`` and are expected to be
-captured by the upstream compensator (``failed_tuples`` table from F013).
+Permission backend failures surface as ``PermissionServiceUnavailableError``.
 """
 
 from __future__ import annotations
@@ -33,10 +24,16 @@ from typing import Protocol
 from bisheng.common.errcode.permission import (
     InvalidCatalogActionError,
     PermissionInvalidResourceError,
+    PermissionServiceUnavailableError,
 )
-from bisheng.core.openfga.exceptions import FGAClientError
 from bisheng.database.models.audit_log import AuditLogDao
 from bisheng.database.models.tenant import ROOT_TENANT_ID, TenantDao
+from bisheng.permission.application import (
+    PermissionObject,
+    PermissionRelation,
+    PermissionSubject,
+    get_permission_relation_api,
+)
 from bisheng.permission.domain.schemas import VerifiedPermissionTarget
 from bisheng.permission.domain.services.permission_action_service import (
     PermissionActor,
@@ -49,39 +46,37 @@ from bisheng.utils.async_utils import run_async_safe
 
 logger = logging.getLogger(__name__)
 
-# Resource types that currently support group-sharing via FGA fan-out.
+# Resource types that currently support Root-to-Child sharing fan-out.
 # Business resources (knowledge_space / workflow / assistant / channel / tool)
 # were removed in v2.6.0-beta2: owners now grant access through ReBAC (per-user)
 # instead of bulk Root→Child default-share. Only llm_server keeps the
 # write path because it backs F020 platform-level LLM inheritance.
-# Must stay aligned with the DSL (authorization_model.py) — adding a new type
-# here without updating the model causes OpenFGA to reject writes with
-# "unknown object type".
+# Must stay aligned with the permission catalog.
 SUPPORTED_SHAREABLE_TYPES: set[str] = {
-    'llm_server',
+    "llm_server",
 }
 
-# Resource types that historically wrote ``shared_with`` tuples and may still
-# have stale tuples in production OpenFGA stores. Used by the revoke-side APIs
+# Resource types that historically wrote ``shared_with`` relations and may
+# still have stale permission data. Used by the revoke-side APIs
 # (disable_sharing / list_sharing_children / set_is_shared) so the cleanup
 # script can purge legacy tuples without re-enabling business-resource sharing.
 LEGACY_SHAREABLE_TYPES: set[str] = SUPPORTED_SHAREABLE_TYPES | {
-    'knowledge_space',
-    'workflow',
-    'assistant',
-    'channel',
-    'tool',
+    "knowledge_space",
+    "workflow",
+    "assistant",
+    "channel",
+    "tool",
 }
 
 F048_SHARED_ACTIONS: dict[str, frozenset[str]] = {
-    'knowledge_space': frozenset({'visible', 'download'}),
-    'knowledge_library': frozenset({'visible', 'use'}),
-    'folder': frozenset({'visible', 'download'}),
-    'knowledge_file': frozenset({'visible', 'download'}),
-    'workflow': frozenset({'visible', 'use'}),
-    'assistant': frozenset({'visible', 'use'}),
-    'tool': frozenset({'visible', 'use'}),
-    'channel': frozenset({'visible'}),
+    "knowledge_space": frozenset({"visible", "download"}),
+    "knowledge_library": frozenset({"visible", "use"}),
+    "folder": frozenset({"visible", "download"}),
+    "knowledge_file": frozenset({"visible", "download"}),
+    "workflow": frozenset({"visible", "use"}),
+    "assistant": frozenset({"visible", "use"}),
+    "tool": frozenset({"visible", "use"}),
+    "channel": frozenset({"visible"}),
 }
 
 
@@ -104,7 +99,7 @@ class TenantShareTopologyPort(Protocol):
 
 
 class ResourceShareService:
-    """FGA tuple wrapper for Root→Child resource sharing (F017)."""
+    """Root-to-Child resource sharing through the permission application."""
 
     def __init__(
         self,
@@ -129,14 +124,8 @@ class ResourceShareService:
 
         allowed_actions = F048_SHARED_ACTIONS.get(resource_type)
         if allowed_actions is None or action not in allowed_actions:
-            raise InvalidCatalogActionError(
-                msg=f"Shared {resource_type} does not support action: {action}"
-            )
-        if (
-            self._repository is None
-            or self._system_permission is None
-            or self._topology is None
-        ):
+            raise InvalidCatalogActionError(msg=f"Shared {resource_type} does not support action: {action}")
+        if self._repository is None or self._system_permission is None or self._topology is None:
             raise RuntimeError("F048 shared resource adapters are not configured")
 
         allowed = await self._system_permission.check_system_action(
@@ -162,7 +151,7 @@ class ResourceShareService:
         )
         if (
             row.resource_id != resource_id
-            or row.status != 'ACTIVE'
+            or row.status != "ACTIVE"
             or not row.shareable
             or row.owner_tenant_id == actor.current_tenant_id
             or not topology_valid
@@ -176,28 +165,6 @@ class ResourceShareService:
             resource_version=row.permission_version,
             context_version=row.context_version,
         )
-
-    # ── FGA client acquisition ───────────────────────────────────
-
-    @staticmethod
-    def _get_fga():
-        """Return the singleton FGAClient or None when OpenFGA is disabled.
-
-        Mirrors ``PermissionService._get_fga``; returning None lets higher
-        layers degrade gracefully in local dev without OpenFGA configured.
-        """
-        from bisheng.core.openfga.manager import get_fga_client
-        return get_fga_client()
-
-    @classmethod
-    async def _aget_fga(cls):
-        """Async accessor matching the FGAManager lifecycle."""
-        from bisheng.core.openfga.manager import aget_fga_client
-
-        fga = await aget_fga_client()
-        if fga is not None:
-            return fga
-        return cls._get_fga()
 
     # ── Resource-level sharing (shared_with) ─────────────────────
 
@@ -215,44 +182,41 @@ class ResourceShareService:
         Raises ValueError for unsupported resource types.
         """
         cls._validate_type(object_type)
-        fga = await cls._aget_fga()
-        if fga is None:
-            logger.info('[F017] OpenFGA disabled; skip enable_sharing %s:%s', object_type, object_id)
-            return []
+        permissions = await get_permission_relation_api()
 
         child_ids = await TenantDao.aget_children_ids_active(root_tenant_id)
         if not child_ids:
-            logger.info('[F017] No active children to share %s:%s', object_type, object_id)
+            logger.info("[F017] No active children to share %s:%s", object_type, object_id)
             return []
 
-        # FGA's write_tuples raises 400 on duplicates, so read the current
-        # set first and only write the gap. Keeps enable_sharing idempotent
+        # Read the current set first and only write the gap. This keeps sharing idempotent
         # under retries and safe when called concurrently with a freshly-
         # mounted Child whose backfill already wrote a partial tuple set.
-        existing = await fga.read_tuples(
-            relation='shared_with',
-            object=f'{object_type}:{object_id}',
+        resource = PermissionObject(object_type, str(object_id))
+        existing = await permissions.list_subject_ids(
+            resource=resource,
+            relation="shared_with",
+            subject_type="tenant",
         )
-        already_shared_users = {
-            t['user'] for t in existing
-            if t.get('user', '').startswith('tenant:')
-        }
-        writes = [
-            {
-                'user': f'tenant:{cid}',
-                'relation': 'shared_with',
-                'object': f'{object_type}:{object_id}',
-            }
-            for cid in child_ids
-            if f'tenant:{cid}' not in already_shared_users
-        ]
-        if not writes:
-            logger.info('[F017] %s:%s already shared with all %d children — no-op',
-                        object_type, object_id, len(child_ids))
+        already_shared_tenants = set(existing)
+        grants = tuple(
+            PermissionRelation(
+                subject=PermissionSubject("tenant", str(child_id)),
+                relation="shared_with",
+                resource=resource,
+            )
+            for child_id in child_ids
+            if str(child_id) not in already_shared_tenants
+        )
+        if not grants:
+            logger.info(
+                "[F017] %s:%s already shared with all %d children — no-op", object_type, object_id, len(child_ids)
+            )
             return child_ids
-        await fga.write_tuples(writes=writes)
-        logger.info('[F017] Shared %s:%s with %d new children (total %d)',
-                    object_type, object_id, len(writes), len(child_ids))
+        await permissions.grant(grants)
+        logger.info(
+            "[F017] Shared %s:%s with %d new children (total %d)", object_type, object_id, len(grants), len(child_ids)
+        )
         return child_ids
 
     @classmethod
@@ -269,32 +233,28 @@ class ResourceShareService:
         Children were added mid-flight).
         """
         cls._validate_type(object_type, legacy=True)
-        fga = await cls._aget_fga()
-        if fga is None:
-            return []
+        permissions = await get_permission_relation_api()
 
-        # FGA server narrows to shared_with rows; we still filter the user
-        # prefix client-side to guard against any non-tenant subject that
-        # somehow got written under shared_with.
-        existing = await fga.read_tuples(
-            relation='shared_with',
-            object=f'{object_type}:{object_id}',
+        resource = PermissionObject(object_type, str(object_id))
+        existing = await permissions.list_subject_ids(
+            resource=resource,
+            relation="shared_with",
+            subject_type="tenant",
         )
-        deletes = [
-            {
-                'user': t['user'],
-                'relation': 'shared_with',
-                'object': f'{object_type}:{object_id}',
-            }
-            for t in existing
-            if t.get('user', '').startswith('tenant:')
-        ]
-        if not deletes:
+        revokes = tuple(
+            PermissionRelation(
+                subject=PermissionSubject("tenant", tenant_id),
+                relation="shared_with",
+                resource=resource,
+            )
+            for tenant_id in existing
+        )
+        if not revokes:
             return []
 
-        await fga.write_tuples(deletes=deletes)
-        revoked = [int(d['user'].split(':', 1)[1]) for d in deletes]
-        logger.info('[F017] Unshared %s:%s from %d children', object_type, object_id, len(revoked))
+        await permissions.revoke(revokes)
+        revoked = [int(tenant_id) for tenant_id in existing if tenant_id.isdigit()]
+        logger.info("[F017] Unshared %s:%s from %d children", object_type, object_id, len(revoked))
         return revoked
 
     @classmethod
@@ -303,25 +263,19 @@ class ResourceShareService:
         object_type: str,
         object_id: str,
     ) -> list[int]:
-        """Return the child tenant_ids this resource is currently shared with.
+        """Return the child tenant IDs this resource is shared with.
 
-        Reads the FGA side (ground truth), not the ``is_shared`` DB column —
-        useful for audit/UI and for reconciling after a manual tuple edit.
+        Reads the permission service (ground truth), not the ``is_shared`` DB
+        projection used to accelerate list queries.
         """
         cls._validate_type(object_type, legacy=True)
-        fga = await cls._aget_fga()
-        if fga is None:
-            return []
-
-        existing = await fga.read_tuples(
-            relation='shared_with',
-            object=f'{object_type}:{object_id}',
+        permissions = await get_permission_relation_api()
+        existing = await permissions.list_subject_ids(
+            resource=PermissionObject(object_type, str(object_id)),
+            relation="shared_with",
+            subject_type="tenant",
         )
-        return [
-            int(t['user'].split(':', 1)[1])
-            for t in existing
-            if t.get('user', '').startswith('tenant:')
-        ]
+        return [int(tenant_id) for tenant_id in existing if tenant_id.isdigit()]
 
     # ── Tenant-level distribution (shared_to) ────────────────────
 
@@ -335,19 +289,19 @@ class ResourceShareService:
 
         Called on Child mount (``TenantMountService._on_child_mounted``) to
         preserve the explicit Root-to-Child identity fact. Idempotent at the
-        FGA side (duplicate writes are no-ops).
+        permission service (duplicate grants are no-ops).
         """
-        fga = await cls._aget_fga()
-        if fga is None:
-            return
-        await fga.write_tuples(writes=[
-            {
-                'user': f'tenant:{child_id}',
-                'relation': 'shared_to',
-                'object': f'tenant:{root_tenant_id}',
-            },
-        ])
-        logger.info('[F017] distribute_to_child: tenant:%s → shared_to tenant:%s', child_id, root_tenant_id)
+        permissions = await get_permission_relation_api()
+        await permissions.grant(
+            (
+                PermissionRelation(
+                    subject=PermissionSubject("tenant", str(child_id)),
+                    relation="shared_to",
+                    resource=PermissionObject("tenant", str(root_tenant_id)),
+                ),
+            )
+        )
+        logger.info("[F017] distribute_to_child: tenant:%s → shared_to tenant:%s", child_id, root_tenant_id)
 
     @classmethod
     async def revoke_from_child(
@@ -360,59 +314,63 @@ class ResourceShareService:
         Called on Child unmount (``TenantMountService._on_child_unmounted``)
         to prevent dangling shared_to relations after the Child is removed.
         """
-        fga = await cls._aget_fga()
-        if fga is None:
-            return
-        await fga.write_tuples(deletes=[
-            {
-                'user': f'tenant:{child_id}',
-                'relation': 'shared_to',
-                'object': f'tenant:{root_tenant_id}',
-            },
-        ])
-        logger.info('[F017] revoke_from_child: tenant:%s → shared_to tenant:%s', child_id, root_tenant_id)
+        permissions = await get_permission_relation_api()
+        await permissions.revoke(
+            (
+                PermissionRelation(
+                    subject=PermissionSubject("tenant", str(child_id)),
+                    relation="shared_to",
+                    resource=PermissionObject("tenant", str(root_tenant_id)),
+                ),
+            )
+        )
+        logger.info("[F017] revoke_from_child: tenant:%s → shared_to tenant:%s", child_id, root_tenant_id)
 
-    # ── is_shared DB flag (mirror of FGA shared_with for list/UI speed) ─
+    # ── is_shared DB projection for list/UI speed ─────────────────
 
     @classmethod
     async def set_is_shared(
-        cls, object_type: str, object_id: str, is_shared: bool,
+        cls,
+        object_type: str,
+        object_id: str,
+        is_shared: bool,
     ) -> None:
         """Flip ``{resource}.is_shared`` in the backing table for the 5 types.
 
-        FGA ``shared_with`` is the source of truth for access decisions; this
-        column is a denormalized cache so list queries / list_root_shared
-        snapshots don't need an FGA scan per row. Callers that toggle sharing
-        must call this so the two views stay consistent.
+        The permission service is the source of truth for access decisions;
+        this column is a denormalized projection for list queries.
         """
         cls._validate_type(object_type, legacy=True)
-        if object_type == 'knowledge_space':
+        if object_type == "knowledge_space":
             from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
+
             rows = await KnowledgeDao.aget_list_by_ids([int(object_id)])
             if rows:
                 row = rows[0]
                 row.is_shared = is_shared
                 await KnowledgeDao.aupdate_one(row)
             return
-        if object_type == 'workflow':
+        if object_type == "workflow":
             from bisheng.database.models.flow import FlowDao
+
             row = await FlowDao.aget_flow_by_id(object_id)
             if row is not None:
                 row.is_shared = is_shared
                 await FlowDao.aupdate_flow(row)
             return
-        if object_type == 'assistant':
+        if object_type == "assistant":
             # AssistantDao exposes sync ``update_assistant``; wrap in a thread
             # so we don't block the event loop when called from async paths.
             import asyncio as _asyncio
 
             from bisheng.database.models.assistant import AssistantDao
+
             row = await AssistantDao.aget_one_assistant(object_id)
             if row is not None:
                 row.is_shared = is_shared
                 await _asyncio.to_thread(AssistantDao.update_assistant, row)
             return
-        if object_type == 'channel':
+        if object_type == "channel":
             from sqlmodel import select
 
             from bisheng.channel.domain.models.channel import Channel
@@ -428,8 +386,9 @@ class ResourceShareService:
                     session.add(row)
                     await session.commit()
             return
-        if object_type == 'tool':
+        if object_type == "tool":
             from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
+
             await GptsToolsDao.aset_tool_type_is_shared(int(object_id), is_shared)
             return
 
@@ -476,12 +435,16 @@ class ResourceShareService:
 
         try:
             shared_children = await cls.enable_sharing(
-                object_type, object_id, root_tenant_id=ROOT_TENANT_ID,
+                object_type,
+                object_id,
+                root_tenant_id=ROOT_TENANT_ID,
             )
-        except FGAClientError as e:
+        except PermissionServiceUnavailableError as e:
             logger.warning(
-                '[F017] share_on_create.enable_sharing failed for %s:%s: %s',
-                object_type, object_id, e,
+                "[F017] share_on_create.enable_sharing failed for %s:%s: %s",
+                object_type,
+                object_id,
+                e,
             )
             return []
 
@@ -492,8 +455,10 @@ class ResourceShareService:
             await cls.set_is_shared(object_type, object_id, True)
         except Exception as e:
             logger.warning(
-                '[F017] share_on_create.set_is_shared failed for %s:%s: %s',
-                object_type, object_id, e,
+                "[F017] share_on_create.set_is_shared failed for %s:%s: %s",
+                object_type,
+                object_id,
+                e,
             )
 
         try:
@@ -504,12 +469,14 @@ class ResourceShareService:
                 action=TenantAuditAction.RESOURCE_SHARE_ENABLE.value,
                 target_type=object_type,
                 target_id=object_id,
-                metadata={'shared_children': shared_children, 'trigger': 'create'},
+                metadata={"shared_children": shared_children, "trigger": "create"},
             )
         except Exception as e:
             logger.warning(
-                '[F017] share_on_create.audit_log failed for %s:%s: %s',
-                object_type, object_id, e,
+                "[F017] share_on_create.audit_log failed for %s:%s: %s",
+                object_type,
+                object_id,
+                e,
             )
 
         return shared_children
@@ -531,17 +498,22 @@ class ResourceShareService:
         write fails — the resource itself has already been persisted.
         """
         try:
-            return run_async_safe(cls.share_on_create(
-                object_type, object_id,
-                creator_tenant_id=creator_tenant_id,
-                operator_id=operator_id,
-                operator_tenant_id=operator_tenant_id,
-                explicit=explicit,
-            ))
+            return run_async_safe(
+                cls.share_on_create(
+                    object_type,
+                    object_id,
+                    creator_tenant_id=creator_tenant_id,
+                    operator_id=operator_id,
+                    operator_tenant_id=operator_tenant_id,
+                    explicit=explicit,
+                )
+            )
         except Exception as e:
             logger.warning(
-                '[F017] share_on_create_sync failed for %s:%s: %s',
-                object_type, object_id, e,
+                "[F017] share_on_create_sync failed for %s:%s: %s",
+                object_type,
+                object_id,
+                e,
             )
             return []
 
@@ -558,7 +530,4 @@ class ResourceShareService:
         """
         allowed = LEGACY_SHAREABLE_TYPES if legacy else SUPPORTED_SHAREABLE_TYPES
         if object_type not in allowed:
-            raise ValueError(
-                f'Unsupported resource type for sharing: {object_type!r}; '
-                f'supported={sorted(allowed)}'
-            )
+            raise ValueError(f"Unsupported resource type for sharing: {object_type!r}; supported={sorted(allowed)}")

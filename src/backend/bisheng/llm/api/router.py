@@ -47,7 +47,9 @@ async def _assert_can_write_system_config(
         # Non-super caller targeting Root — disallowed regardless of
         # any partial admin grant they might hold elsewhere.
         raise LLMSystemConfigForbiddenError()
-    if await login_user.has_tenant_admin(target_tenant_id):
+    from bisheng.permission.application import is_tenant_admin
+
+    if await is_tenant_admin(login_user.user_id, target_tenant_id):
         return
     raise LLMSystemConfigForbiddenError()
 

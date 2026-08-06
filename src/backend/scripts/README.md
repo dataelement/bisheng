@@ -90,21 +90,26 @@ exit
 docker compose restart backend backend_worker
 ```
 
-No manual ingress switch is required. Before migration, the API process stays
-alive but `/health` returns HTTP 503 and the application gate rejects every
-other HTTP/WebSocket request. If the deployment splits Celery/Linsight into
-additional Compose services, include all backend process services in the final
-restart.
+Migration traffic control is an operator responsibility; the application does
+not couple `/health` or a global HTTP/WebSocket middleware to F048 migration
+state. If the deployment splits Celery/Linsight into additional Compose
+services, include all backend process services in the final restart.
+API, Celery, and Linsight register the permission runtime as a lazy application
+Context; Store/model/Catalog validation and the ready heartbeat begin only on
+the first permission operation in that process. Department projection is a
+separate lazy Context and initializes only on the first department mutation
+that needs an OpenFGA projection.
 
 #### D0/D1 prerequisites
 
-1. Update the backend image and start the normal Compose services. When the
-   latest OpenFGA model is still the predecessor model, the API process stays
-   alive but `/health` returns HTTP 503 with
-   `authorization_model_migration_required`; the application gate rejects all
-   other HTTP/WebSocket traffic, and API/Worker/Linsight do not initialize the
-   F048 permission runtime or publish a ready heartbeat. Celery/Linsight task
-   consumption remains paused until the post-migration restart.
+1. Update the backend image and start the normal Compose services. Before
+   migration, use the deployment platform or ingress to stop business traffic.
+   When the latest OpenFGA model is still the predecessor model,
+   API/Worker/Linsight do not initialize the F048 permission runtime or publish
+   a ready heartbeat. Celery/Linsight task consumption remains paused until the
+   post-migration restart. Use the migration command output and exit code as the
+   authoritative operational status; `/health` remains a process-liveness
+   check.
 2. Enter the backend container. Confirm the configured stable OpenFGA Store
    name. The script discovers the unique matching Store and latest source
    model, persists both IDs in the durable migration run, and prints them for

@@ -215,7 +215,7 @@ class KnowledgeService(KnowledgeUtils):
         login_user: UserPayload,
         knowledge: Knowledge,
     ) -> None:
-        adapter = get_f048_resource_adapter("knowledge_library")
+        adapter = await get_f048_resource_adapter("knowledge_library")
         await adapter.authorize_created(
             record=cls._new_library_permission_record(
                 knowledge,
@@ -262,7 +262,8 @@ class KnowledgeService(KnowledgeUtils):
         file: KnowledgeFile,
     ) -> None:
         record = cls._new_library_file_permission_record(knowledge, file)
-        await get_f048_resource_adapter(record.resource_type).authorize_created(
+        adapter = await get_f048_resource_adapter(record.resource_type)
+        await adapter.authorize_created(
             record=record,
             actor=await resolve_permission_actor(login_user),
         )
@@ -279,7 +280,7 @@ class KnowledgeService(KnowledgeUtils):
             if row is None:
                 raise NotFoundError(msg="knowledge file not found")
             resource_type = "folder" if row.file_type == FileType.DIR.value else "knowledge_file"
-            adapter = get_f048_resource_adapter(resource_type)
+            adapter = await get_f048_resource_adapter(resource_type)
             record = await adapter.load_permission_record(
                 resource_type=resource_type,
                 resource_id=str(file_id),
@@ -293,7 +294,8 @@ class KnowledgeService(KnowledgeUtils):
         cls,
         knowledge_id: int,
     ) -> KnowledgeContainerPermissionRecord:
-        record = await get_f048_resource_adapter("knowledge_library").load_permission_record(
+        adapter = await get_f048_resource_adapter("knowledge_library")
+        record = await adapter.load_permission_record(
             resource_type="knowledge_library",
             resource_id=str(knowledge_id),
         )
@@ -309,7 +311,8 @@ class KnowledgeService(KnowledgeUtils):
         source: KnowledgeContainerPermissionRecord,
         target: Knowledge,
     ) -> None:
-        await get_f048_resource_adapter("knowledge_library").project_copy(
+        adapter = await get_f048_resource_adapter("knowledge_library")
+        await adapter.project_copy(
             source=source,
             target=cls._new_library_permission_record(
                 target,
@@ -339,7 +342,7 @@ class KnowledgeService(KnowledgeUtils):
                 break
             for row in rows:
                 resource_type = "folder" if row.file_type == FileType.DIR.value else "knowledge_file"
-                adapter = get_f048_resource_adapter(resource_type)
+                adapter = await get_f048_resource_adapter(resource_type)
                 record = await adapter.load_permission_record(
                     resource_type=resource_type,
                     resource_id=str(row.id),
@@ -353,7 +356,8 @@ class KnowledgeService(KnowledgeUtils):
 
         if include_container:
             container = await cls._load_library_permission_record(knowledge_id)
-            await get_f048_resource_adapter("knowledge_library").project_delete(
+            adapter = await get_f048_resource_adapter("knowledge_library")
+            await adapter.project_delete(
                 record=container,
                 actor=actor,
             )
