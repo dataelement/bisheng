@@ -7,7 +7,7 @@ import copy
 import logging
 import re
 from collections import Counter
-from typing import (Any, Iterable, List, Optional)
+from typing import Any, Iterable, List, Optional
 
 from langchain_classic.docstore.document import Document
 from langchain_classic.text_splitter import RecursiveCharacterTextSplitter
@@ -15,14 +15,12 @@ from langchain_classic.text_splitter import RecursiveCharacterTextSplitter
 logger = logging.getLogger(__name__)
 
 
-def _split_text_with_regex(
-        text: str, separator: str, keep_separator: bool, separator_rule: str
-) -> List[str]:
+def _split_text_with_regex(text: str, separator: str, keep_separator: bool, separator_rule: str) -> List[str]:
     # Now that we have the separator, split the text
     if separator:
         if keep_separator:
             # The parentheses in the pattern keep the delimiters in the result.
-            _splits = re.split(f'({separator})', text)
+            _splits = re.split(f"({separator})", text)
 
             if separator_rule == "before":
                 splits = [_splits[i] + _splits[i + 1] for i in range(1, len(_splits), 2)]
@@ -36,7 +34,7 @@ def _split_text_with_regex(
             splits = re.split(separator, text)
     else:
         splits = list(text)
-    return [s for s in splits if s != '']
+    return [s for s in splits if s != ""]
 
 
 class IntervalSearch(object):
@@ -84,24 +82,22 @@ class ElemCharacterTextSplitter(RecursiveCharacterTextSplitter):
     """
 
     def __init__(
-            self,
-            separators: Optional[List[str]] = None,
-            separator_rule: Optional[List[str]] = None,
-            is_separator_regex: bool = False,
-            keep_separator: bool = True,
-            **kwargs: Any,
+        self,
+        separators: Optional[List[str]] = None,
+        separator_rule: Optional[List[str]] = None,
+        is_separator_regex: bool = False,
+        keep_separator: bool = True,
+        hard_split_limit: Optional[int] = None,
+        **kwargs: Any,
     ) -> None:
         """Create a new TextSplitter."""
-        super().__init__(
-            separators=separators,
-            keep_separator=keep_separator,
-            **kwargs
-        )
-        self._separators = separators or ['\n\n', '\n', ' ', '']
-        self._separator_rule = separator_rule or ['after' for _ in range(4)]
+        super().__init__(separators=separators, keep_separator=keep_separator, **kwargs)
+        self._separators = separators or ["\n\n", "\n", " ", ""]
+        self._separator_rule = separator_rule or ["after" for _ in range(4)]
         self.separator_rule = {one: self._separator_rule[index] for index, one in enumerate(separators)}
         self._is_separator_regex = is_separator_regex
-        self._chunk_overlap = kwargs.get('chunk_overlap', 0)
+        self._chunk_overlap = kwargs.get("chunk_overlap", 0)
+        self.hard_split_limit = hard_split_limit
 
     def split_documents(self, documents: Iterable[Document]) -> List[Document]:
         texts, metadatas = [], []
@@ -116,17 +112,17 @@ class ElemCharacterTextSplitter(RecursiveCharacterTextSplitter):
         final_chunks = []
         # Get appropriate separator to use
         separator = separators[-1]
-        separator_rule = 'after'
+        separator_rule = "after"
         new_separators = []
         for i, _s in enumerate(separators):
             _separator = _s if self._is_separator_regex else re.escape(_s)
-            separator_rule = self.separator_rule[_s]
-            if _s == '':
+            separator_rule = self.separator_rule.get(_s, "after")
+            if _s == "":
                 separator = _s
                 break
             if re.search(_separator, text):
                 separator = _s
-                new_separators = separators[i + 1:]
+                new_separators = separators[i + 1 :]
                 break
 
         _separator = separator if self._is_separator_regex else re.escape(separator)
@@ -134,7 +130,7 @@ class ElemCharacterTextSplitter(RecursiveCharacterTextSplitter):
 
         # Now go merging things, recursively splitting longer texts.
         _good_splits = []
-        _separator = '' if self._keep_separator else separator
+        _separator = "" if self._keep_separator else separator
         for s in splits:
             if self._length_function(s) < self._chunk_size:
                 _good_splits.append(s)
@@ -144,7 +140,7 @@ class ElemCharacterTextSplitter(RecursiveCharacterTextSplitter):
                     final_chunks.extend(merged_text)
                     _good_splits = []
                 if not new_separators:
-                    final_chunks.append(s)
+                    final_chunks.extend(self._force_split(s))
                 else:
                     other_info = self._split_text(s, new_separators)
                     final_chunks.extend(other_info)
@@ -153,20 +149,33 @@ class ElemCharacterTextSplitter(RecursiveCharacterTextSplitter):
             final_chunks.extend(merged_text)
         return final_chunks
 
+    def _force_split(self, text: str) -> List[str]:
+        """Last-resort character-level split for a fragment no separator can break.
+
+        Only kicks in past ``hard_split_limit``, so fragments that are over
+        chunk_size but still ingestible keep the boundaries they have today —
+        the caller's configured separators stay the only thing shaping ordinary
+        documents. Without this, a fragment carrying none of the configured
+        separators (an OCR'd 600-column markdown table row, a long digit run,
+        a base64 blob) survives as one oversized chunk and fails the whole file
+        downstream.
+        """
+        if not self.hard_split_limit or self._length_function(text) <= self.hard_split_limit:
+            return [text]
+        return self._merge_splits(list(text), "")
+
     def split_text(self, text: str) -> List[str]:
         return self._split_text(text, self._separators)
 
-    def create_documents(
-            self, texts: List[str], metadatas: Optional[List[dict]] = None
-    ) -> List[Document]:
+    def create_documents(self, texts: List[str], metadatas: Optional[List[dict]] = None) -> List[Document]:
         """Create documents from a list of texts."""
         documents = []
         for i, text in enumerate(texts):
             index = -1
-            indexes = metadatas[i].pop('indexes', [])
-            pages = metadatas[i].pop('pages', [])
-            types = metadatas[i].pop('types', [])
-            bboxes = metadatas[i].pop('bboxes', [])
+            indexes = metadatas[i].pop("indexes", [])
+            pages = metadatas[i].pop("pages", [])
+            types = metadatas[i].pop("types", [])
+            bboxes = metadatas[i].pop("bboxes", [])
             searcher = IntervalSearch(indexes)
             split_texts = self.split_text(text)
             for chunk in split_texts:
@@ -175,15 +184,14 @@ class ElemCharacterTextSplitter(RecursiveCharacterTextSplitter):
                     index = text.find(chunk, index + 1)
                     inter0 = [index, index + len(chunk) - 1]
                     norm_inter = searcher.find(inter0)
-                    new_metadata['chunk_bboxes'] = []
+                    new_metadata["chunk_bboxes"] = []
                     for j in range(norm_inter[0], norm_inter[1] + 1):
-                        new_metadata['chunk_bboxes'].append(
-                            {'page': pages[j], 'bbox': bboxes[j]})
+                        new_metadata["chunk_bboxes"].append({"page": pages[j], "bbox": bboxes[j]})
 
                     c = Counter([types[j] for j in norm_inter])
                     chunk_type = c.most_common(1)[0][0]
-                    new_metadata['chunk_type'] = chunk_type
-                    new_metadata['source'] = metadatas[i].get('source', '')
+                    new_metadata["chunk_type"] = chunk_type
+                    new_metadata["source"] = metadatas[i].get("source", "")
 
                 # for chunk in split_texts:
                 #     new_metadata = {}

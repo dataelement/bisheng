@@ -1295,6 +1295,7 @@
     "10024": "TTS model {{model_name}} under {{server_name}} is offline",
     "10025": "Failed to initialize TTS: {{exception}}",
     "10026": "Speech synthesis failed. Please try again later",
+    "10027": "Speech recognition failed, please try again later. Reason: {{exception}}",
     "10030": "System configuration cannot be empty",
     "10031": "Invalid system configuration: {{exception}}",
     "10040": "Uploaded file cannot be empty",
@@ -2349,7 +2350,20 @@
   "com_approval_section_business_content": "Business Content",
   "com_approval_search_placeholder": "Search applicant, scenario or file",
   "knowledge_qa_noVisibleContent": "No relevant content found in resources accessible to you.",
+  "com_share": {
+    "gate_eyebrow": "Shared link",
+    "gate_title": "Sign in to view this",
+    "gate_desc": "Taking you to sign in. You'll come back to this shared page.",
+    "gate_action": "Sign in and view",
+    "gate_blocked_title": "Still can't view this shared page",
+    "gate_blocked_desc": "Check whether the current account has access, or sign in again.",
+    "gate_blocked_action": "Sign in again"
+  },
   "workstation": {
+    "toc": {
+      "label": "Contents",
+      "open": "Show contents"
+    },
     "messageExport": {
       "entry": "Export",
       "exportAsWord": "Export as Word",

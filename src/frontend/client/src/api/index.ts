@@ -10,9 +10,16 @@ export async function getKnowledgeStatusApi(): Promise<any> {
 
 /**
  * 语音转文字
+ *
+ * skip403Redirect for the same reason as textToSpeech below: it routes a
+ * non-200 business error (recognition failure, code 10027) through the
+ * interceptor's translate-and-toast path. Without it the failure reaches the
+ * caller as a malformed success and the user is told nothing — or, when the
+ * backend still answered 500, the whole screen was replaced by the
+ * service-maintenance overlay for what was one unusable recording.
  */
 export async function getVoice2TextApi(data: any): Promise<any> {
-    return await request.postMultiPart(`/api/v1/llm/workbench/asr`, data)
+    return await request.postMultiPart(`/api/v1/llm/workbench/asr`, data, { skip403Redirect: true } as any)
     // return Promise.resolve({ data: '测试语音转文字内容' })
 }
 

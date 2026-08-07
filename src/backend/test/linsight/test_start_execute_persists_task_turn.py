@@ -54,11 +54,24 @@ def patched_endpoint(monkeypatch):
     monkeypatch.setattr(endpoint.MessageSessionDao, "touch_session", AsyncMock())
     monkeypatch.setattr(endpoint, "get_redis_client", AsyncMock(return_value=SimpleNamespace()))
 
-    # LinsightQueue is imported function-locally from bisheng.linsight.worker;
-    # inject a stub module so the heavy worker import chain is never loaded.
+    # LinsightQueue and encode_queue_item are imported function-locally from
+    # bisheng.linsight.worker; inject a stub module so the heavy worker import
+    # chain is never loaded.
+    #
+    # ⚠️ The stub must export everything the endpoint imports. ``encode_queue_item``
+    # was added to that import line (it stamps tenant_id onto the queue item) but
+    # not here, and since the import sits OUTSIDE the endpoint's try/except the
+    # resulting ImportError propagated and broke both enqueue tests. Asserting on
+    # the encoded payload below keeps the stub honest if the signature moves again.
     fake_worker = ModuleType("bisheng.linsight.worker")
-    fake_worker.LinsightQueue = lambda *a, **k: SimpleNamespace(put=AsyncMock())
+    queue_stub = SimpleNamespace(put=AsyncMock())
+    fake_worker.LinsightQueue = lambda *a, **k: queue_stub
+    fake_worker.encode_queue_item = lambda session_version_id, **kwargs: {
+        "session_version_id": session_version_id,
+        **kwargs,
+    }
     monkeypatch.setitem(sys.modules, "bisheng.linsight.worker", fake_worker)
+    captured["queue"] = queue_stub
 
     async def _fake_persist(session_model):
         captured["session"] = session_model
@@ -76,6 +89,12 @@ async def test_start_execute_persists_queued_task_turn(patched_endpoint):
     persisted = patched_endpoint.get("session")
     assert persisted is not None
     assert persisted.id == "SV-1"
+
+    # The queue item must carry tenant_id: the worker runs outside any request
+    # context, so this is the only way it can restore the tenant for the task.
+    queued = patched_endpoint["queue"].put.await_args.kwargs["data"]
+    assert queued["session_version_id"] == "SV-1"
+    assert queued["tenant_id"] == 1
 
 
 async def test_start_execute_persist_failure_does_not_break_enqueue(monkeypatch, patched_endpoint):

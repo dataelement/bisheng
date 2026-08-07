@@ -27,6 +27,7 @@ from bisheng.common.errcode.llm_tenant import (
 )
 from bisheng.common.errcode.server import (
     AsrModelConfigDeletedError,
+    AsrTranscriptionFailedError,
     NoAsrModelConfigError,
     NoTtsModelConfigError,
     TtsModelConfigDeletedError,
@@ -1553,7 +1554,21 @@ class LLMService:
             app_type=ApplicationTypeEnum.ASR,
             user_id=login_user.user_id,
         )
-        return await asr_client.ainvoke(file.file)
+        try:
+            return await asr_client.ainvoke(file.file)
+        except Exception as e:
+            # Provider-level recognition failure (rate limit, auth, an audio
+            # format the model will not take) — surface as a dedicated business
+            # code, not a raw 500, so the client shows a toast naming the reason
+            # instead of the global maintenance overlay claiming the platform is
+            # down. Same treatment as workbench TTS.
+            logger.exception("workbench asr transcription failed")
+            # Raised as an instance, not via http_exception: only this path puts
+            # the provider's own words into the envelope's `data`, which is where
+            # the client reads the {exception} its translated message leaves a
+            # slot for. http_exception would have replaced the whole message with
+            # the raw error instead, in English, whatever the user's language.
+            raise AsrTranscriptionFailedError(exception=e) from e
 
     @classmethod
     async def invoke_workbench_tts(cls, login_user: UserPayload, text: str) -> str:

@@ -12,7 +12,7 @@ import { addConversation, updateConvoFields } from "~/utils";
 import store from "~/store";
 import { useLocalize } from "~/hooks";
 import type { ChatMessage } from "~/api/chatApi";
-import { getAgentMessages } from "~/api/chatApi";
+import { getAgentMessages, getSessionName } from "~/api/chatApi";
 import useAiChatSSE, { type SSESubmission } from "~/hooks/useAiChatSSE";
 import { useGetBsConfig } from "~/hooks/queries/data-provider";
 import { useLinsightManager } from "~/hooks/useLinsightManager";
@@ -151,6 +151,32 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                 console.error("Failed to load messages:", err);
                 setIsLoading(false);
             });
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally exclude isStreaming
+    }, [conversationId, shareToken]);
+
+    // Load the conversation's stored name. The history endpoints return messages
+    // only, so opening an existing conversation by URL (deep link or share link)
+    // left `title` empty and HeaderTitle fell back to "New Chat" — even though
+    // the sidebar list showed the real name.
+    //
+    // Guarded against clobbering a freshly generated title: skip while streaming
+    // (a brand-new conversation's row still says "New Chat" until gen_title
+    // lands) and never overwrite a title we already hold.
+    useEffect(() => {
+        if (isStreaming) return;
+        if (!conversationId || conversationId === "new") return;
+        let cancelled = false;
+        getSessionName(conversationId, shareToken || undefined)
+            .then((name) => {
+                if (cancelled || !name) return;
+                setTitle((prev) => (prev ? prev : name));
+            })
+            .catch(() => {
+                // Non-critical: the header keeps the "New Chat" fallback.
+            });
+        return () => {
+            cancelled = true;
+        };
         // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally exclude isStreaming
     }, [conversationId, shareToken]);
 

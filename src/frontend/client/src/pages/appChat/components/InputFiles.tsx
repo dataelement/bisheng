@@ -226,6 +226,30 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
             return res;
         });
 
+        // Duration comes from the local file, so it is read as soon as the file
+        // is picked rather than after the upload returns: it is what the hover
+        // card shows while the upload is still running, and reading it here also
+        // means an upload that fails still leaves a labelled card behind.
+        // The state write and the parent notification are kept separate — doing
+        // the latter inside a setFiles updater makes React update the parent
+        // while this component is still rendering, and the update is dropped.
+        filesWithProgress.forEach(({ file, id }: any) => {
+            if (!file || !isMediaFileName(file.name)) {
+                return;
+            }
+            readMediaDurationFromFile(file).then((mediaDurationSec) => {
+                if (mediaDurationSec == null) {
+                    return;
+                }
+                const updated = filesRef.current.map((f) =>
+                    f.id === id ? { ...f, mediaDurationSec } : f,
+                );
+                filesRef.current = updated;
+                setFiles(updated);
+                onFilesStateChange?.(updated);
+            });
+        });
+
         // Keep track of the number of remaining uploads across concurrent batches.
         remainingUploadsRef.current += validFiles.length;
 
@@ -297,19 +321,8 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
                 setFiles(filesRef.current);
                 onFilesStateChange?.(filesRef.current);
 
-                if (isMediaFileName(file.name)) {
-                    readMediaDurationFromFile(file).then((mediaDurationSec) => {
-                        if (mediaDurationSec == null) return;
-                        setFiles((prevFiles) => {
-                            const updated = prevFiles.map((f) =>
-                                f.id === id ? { ...f, mediaDurationSec } : f,
-                            );
-                            filesRef.current = updated;
-                            onFilesStateChange?.(updated);
-                            return updated;
-                        });
-                    });
-                }
+                // Duration is read when the file is picked, not here — see the
+                // selection handler above.
 
                 remainingUploadsRef.current -= 1; // Decrease the remaining uploads count
                 notifyUploadedFiles(getUploadedFileIds, onChange);

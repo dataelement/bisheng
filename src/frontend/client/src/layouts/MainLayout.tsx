@@ -421,6 +421,11 @@ export default function MainLayout() {
   const cacheKey = (() => {
     if (pathname.startsWith('/menu-unavailable')) return 'menu_unavailable_tab';
     if (/^\/linsight(\/|$)/.test(pathname)) return 'linsight_tab';
+    // Media playback lives under /c but is a page of its own, so it needs a key
+    // of its own: sharing the chat key means opening a video replaces the cached
+    // chat tree under that key, and coming back rebuilds the chat from scratch —
+    // losing the attachments the user had staged but not yet sent.
+    if (pathname.startsWith('/c/media-playback')) return 'media_playback_tab';
     if (/^\/c(\/|$)/.test(pathname)) return 'chat_tab';
     if (/^\/(apps|app)(\/|$)/.test(pathname)) return 'apps_tab';
     if (/^\/channel(\/|$)/.test(pathname)) return 'channel_tab';

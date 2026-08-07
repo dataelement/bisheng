@@ -1219,6 +1219,7 @@
     "10024": "TTSモデルがオフラインです",
     "10025": "TTS初期化に失敗しました：{{exception}}",
     "10026": "音声合成に失敗しました。しばらくしてからもう一度お試しください",
+    "10027": "音声認識に失敗しました。しばらくしてからもう一度お試しください。原因：{{exception}}",
     "10030": "システム設定は必須です",
     "10031": "システム設定の形式が不正です：{{exception}}",
     "10040": "アップロードファイルが空です",
@@ -2272,7 +2273,20 @@
   "com_approval_section_business_content": "業務内容",
   "com_approval_search_placeholder": "申請者・シナリオ・ファイルを検索",
   "knowledge_qa_noVisibleContent": "アクセス権限のあるリソースに該当する内容が見つかりませんでした。",
+  "com_share": {
+    "gate_eyebrow": "共有リンク",
+    "gate_title": "ログインすると表示されます",
+    "gate_desc": "ログイン画面へ移動します。ログイン後この共有ページに戻ります。",
+    "gate_action": "ログインして表示",
+    "gate_blocked_title": "ログインしてもこの共有を表示できません",
+    "gate_blocked_desc": "現在のアカウントに権限があるかを確認するか、再度ログインしてください。",
+    "gate_blocked_action": "再ログイン"
+  },
   "workstation": {
+    "toc": {
+      "label": "目次",
+      "open": "目次を表示"
+    },
     "messageExport": {
       "entry": "エクスポート",
       "exportAsWord": "Word でエクスポート",

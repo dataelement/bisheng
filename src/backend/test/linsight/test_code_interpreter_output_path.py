@@ -25,7 +25,12 @@ from bisheng_langchain.gpts.tools.code_interpreter.base_executor import (
     ABSOLUTE_PATH_NOTICE,
     BaseExecutor,
 )
-from bisheng_langchain.gpts.tools.code_interpreter.local_executor import LocalExecutor
+from bisheng_langchain.gpts.tools.code_interpreter.local_executor import (
+    LOG_TRUNCATED_NOTICE,
+    MAX_FAILURE_LOG_CHARS,
+    TIMEOUT_MSG,
+    LocalExecutor,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -110,9 +115,74 @@ def test_run_failure_path_returns_without_notice(monkeypatch):
     monkeypatch.setattr(exe, "run_with_dir", lambda code, dir_path, lang: (1, "boom\n", []))
     result = exe.run("open('/output/x.pdf', 'wb')")
     assert result["exitcode"] == 1
-    assert "log" in result
+    # The failing block's stderr MUST reach the model. Asserting only `"log" in result`
+    # (the previous assertion) passed while the value was a bare "" — which is exactly
+    # how the swallow-the-traceback regression shipped: the early return handed back the
+    # not-yet-accumulated `logs_all`, so every failure reported {"exitcode": 1, "log": ""}
+    # and the model had to debug blind.
+    assert "boom" in result["log"]
     # failure path returns early — no file_list, no notice appended
     assert "file_list" not in result
+
+
+def test_run_failure_keeps_earlier_blocks_and_appends_the_failing_one(monkeypatch):
+    """A multi-block script reports the successful prefix AND the block that broke."""
+    exe = LocalExecutor(minio={})
+    exe.local_sync_path = None
+    monkeypatch.setattr(exe, "insert_set_font_code", lambda code: code)
+    outcomes = iter([(0, "first-ok\n", []), (1, "Traceback: NameError\n", [])])
+    monkeypatch.setattr(exe, "run_with_dir", lambda code, dir_path, lang: next(outcomes))
+    result = exe.run("```python\nprint(1)\n```\n```python\nboom\n```")
+    assert result["exitcode"] == 1
+    assert "first-ok" in result["log"]
+    assert "NameError" in result["log"]
+
+
+def test_run_does_not_duplicate_the_log(tmp_path):
+    """``run_with_dir`` used to do ``logs += "\\n" + logs`` (a typo for ``logs_all``),
+    returning every line to the model twice. Real subprocess — a stubbed
+    ``run_with_dir`` cannot catch this, the duplication happened inside it."""
+    exe = LocalExecutor(minio={})
+    exe.local_sync_path = str(tmp_path)
+    result = exe.run("print('only-once')")
+    assert result["exitcode"] == 0
+    assert result["log"].count("only-once") == 1
+
+
+def test_run_surfaces_a_real_traceback(tmp_path):
+    """End-to-end guard on the swallowed-stderr regression: a script that raises must
+    hand its traceback back to the model, not ``{"exitcode": 1, "log": ""}``."""
+    exe = LocalExecutor(minio={})
+    exe.local_sync_path = str(tmp_path)
+    result = exe.run("raise RuntimeError('boom-from-subprocess')")
+    assert result["exitcode"] != 0
+    assert "RuntimeError" in result["log"]
+    assert "boom-from-subprocess" in result["log"]
+
+
+def test_run_failure_log_is_tail_truncated(monkeypatch):
+    """An oversized failure log is capped from the FRONT — a traceback names its cause
+    on the last lines, so the tail is the part worth spending context on."""
+    exe = LocalExecutor(minio={})
+    exe.local_sync_path = None
+    monkeypatch.setattr(exe, "insert_set_font_code", lambda code: code)
+    noise = "x" * (MAX_FAILURE_LOG_CHARS + 5000)
+    monkeypatch.setattr(exe, "run_with_dir", lambda code, dir_path, lang: (1, noise + "\nValueError: the cause\n", []))
+    result = exe.run("boom")
+    assert "ValueError: the cause" in result["log"]
+    assert LOG_TRUNCATED_NOTICE in result["log"]
+    assert len(result["log"]) <= MAX_FAILURE_LOG_CHARS + len(LOG_TRUNCATED_NOTICE)
+
+
+def test_run_surfaces_the_timeout_notice(monkeypatch):
+    """A killed-on-timeout run also exits non-zero, so it rode the same swallow path —
+    the model could not tell a timeout apart from a silent failure."""
+    exe = LocalExecutor(minio={})
+    exe.local_sync_path = None
+    monkeypatch.setattr(exe, "insert_set_font_code", lambda code: code)
+    monkeypatch.setattr(exe, "run_with_dir", lambda code, dir_path, lang: (1, TIMEOUT_MSG, []))
+    result = exe.run("while True: pass")
+    assert TIMEOUT_MSG in result["log"]
 
 
 # ---------------------------------------------------------------------------
