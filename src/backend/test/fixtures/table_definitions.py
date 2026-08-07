@@ -176,6 +176,82 @@ CREATE TABLE IF NOT EXISTS knowledge_tag_library_link (
     UNIQUE(knowledge_id, tag_library_id)
 )"""
 
+# F079: tag console operates directly on the approved/pending tag tables.
+# reviewer_id / review_time are the audit-trail columns added by F079.
+TABLE_TAG = """\
+CREATE TABLE IF NOT EXISTS tag (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name VARCHAR(255),
+    business_type VARCHAR(64) DEFAULT 'application',
+    business_id VARCHAR(36),
+    user_id INTEGER DEFAULT 0,
+    tenant_id INTEGER NOT NULL DEFAULT 1,
+    resource_type VARCHAR(64) DEFAULT 'manual_tag',
+    reviewer_id INTEGER,
+    review_time DATETIME,
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
+)"""
+
+TABLE_TAG_LINK = """\
+CREATE TABLE IF NOT EXISTS taglink (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tag_id INTEGER NOT NULL,
+    resource_id VARCHAR(255) NOT NULL,
+    resource_type INTEGER NOT NULL,
+    user_id INTEGER DEFAULT 0,
+    tenant_id INTEGER NOT NULL DEFAULT 1,
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    UNIQUE(resource_id, resource_type, tag_id)
+)"""
+
+TABLE_REVIEW_TAG = """\
+CREATE TABLE IF NOT EXISTS review_tag (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name VARCHAR(255),
+    business_type VARCHAR(64) DEFAULT 'application',
+    business_id VARCHAR(36),
+    user_id INTEGER DEFAULT 0,
+    tenant_id INTEGER NOT NULL DEFAULT 1,
+    resource_type VARCHAR(64) DEFAULT 'manual_tag',
+    is_deleted INTEGER NOT NULL DEFAULT 0,
+    review_status INTEGER NOT NULL DEFAULT 0,
+    reject_reason VARCHAR(256),
+    review_time DATETIME,
+    reviewer_id INTEGER,
+    remark VARCHAR(256),
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
+)"""
+
+TABLE_REVIEW_TAG_LINK = """\
+CREATE TABLE IF NOT EXISTS review_tag_link (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tag_id INTEGER NOT NULL,
+    resource_id VARCHAR(255) NOT NULL,
+    resource_type INTEGER NOT NULL,
+    user_id INTEGER DEFAULT 0,
+    tenant_id INTEGER NOT NULL DEFAULT 1,
+    is_deleted INTEGER NOT NULL DEFAULT 0,
+    remark VARCHAR(256),
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    UNIQUE(resource_id, resource_type, tag_id)
+)"""
+
+TABLE_KNOWLEDGE_SPACE_TAG_LIBRARY = """\
+CREATE TABLE IF NOT EXISTS knowledge_space_tag_library (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id INTEGER NOT NULL DEFAULT 1,
+    name VARCHAR(64) NOT NULL,
+    description VARCHAR(1024),
+    is_builtin INTEGER NOT NULL DEFAULT 0,
+    user_id INTEGER,
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
+)"""
+
 TABLE_KNOWLEDGE = """\
 CREATE TABLE IF NOT EXISTS knowledge (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -805,6 +881,12 @@ TABLE_DEFINITIONS: dict[str, str] = {
     "knowledge": TABLE_KNOWLEDGE,
     "knowledge_space_scope": TABLE_KNOWLEDGE_SPACE_SCOPE,
     "knowledge_tag_library_link": TABLE_KNOWLEDGE_TAG_LIBRARY_LINK,
+    # F079: tag management console.
+    "tag": TABLE_TAG,
+    "taglink": TABLE_TAG_LINK,
+    "review_tag": TABLE_REVIEW_TAG,
+    "review_tag_link": TABLE_REVIEW_TAG_LINK,
+    "knowledge_space_tag_library": TABLE_KNOWLEDGE_SPACE_TAG_LIBRARY,
     "department": TABLE_DEPARTMENT,
     "user_department": TABLE_USER_DEPARTMENT,
     "auditlog": TABLE_AUDIT_LOG,

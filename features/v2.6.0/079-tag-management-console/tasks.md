@@ -14,7 +14,7 @@
 | spec-discovery.md | ✅ 已确认 | 2026-08-07，含 D11 推翻记录 |
 | spec.md | ✅ 已评审 | 两轮 `/sdd-review spec` 共 16 条问题全部处理，用户 2026-08-07 确认 |
 | tasks.md | ✅ 已拆解 | `/sdd-review tasks` 第 1 轮 7 条问题已修复，第 2 轮 LGTM |
-| 实现 | 🚧 进行中 | 5 / 23 完成 |
+| 实现 | 🚧 进行中 | 15 / 23 完成（后端完成，前端进行中） |
 
 ---
 
@@ -115,7 +115,7 @@
 
 ### 后端 — 模式 A：已入库标签查询（Test-First 配对）
 
-- [ ] **T006**: 模式 A 查询测试
+- [x] **T006**: 模式 A 查询测试
   **文件**: `src/backend/test/workstation/test_tag_console_search.py`（新建）
   **逻辑**: 造多个标签库 + 多条 `tag` + `tag_link`，覆盖各筛选组合。
   **测试**:
@@ -130,7 +130,7 @@
   **覆盖 AC**: AC-03, AC-04, AC-05, AC-10, AC-11, AC-12, AC-13, AC-14, AC-16, AC-38
   **依赖**: T003
 
-- [ ] **T007**: 模式 A 查询实现
+- [x] **T007**: 模式 A 查询实现
   **文件**:
   `src/backend/bisheng/workstation/domain/repositories/tag_console_repository.py`（新建），
   `src/backend/bisheng/workstation/domain/services/tag_console_service.py`（新建 `search`）
@@ -149,7 +149,7 @@
 
 ### 后端 — 模式 B：待审核/已驳回查询（Test-First 配对）
 
-- [ ] **T008**: 模式 B 查询测试
+- [x] **T008**: 模式 B 查询测试
   **文件**: `src/backend/test/workstation/test_tag_console_review_search.py`（新建）
   **逻辑**: 造 pending / rejected `review_tag` + link，含"同名跨多空间"和两类应被排除的数据。
   **测试**:
@@ -166,7 +166,7 @@
   **覆盖 AC**: AC-02, AC-16, AC-25, AC-26, AC-27, AC-28, AC-38, AC-41
   **依赖**: T003
 
-- [ ] **T009**: 模式 B 查询实现
+- [x] **T009**: 模式 B 查询实现
   **文件**: `tag_console_repository.py`（加 review 查询）、`tag_console_service.py`（加 `review_search` / `pending_count`）
   **逻辑**: `GROUP BY name, resource_type` 聚合 `review_tag`，
   排序 `ORDER BY MAX(create_time) DESC, name ASC, resource_type ASC`（分组查询下用不了 id 做 tiebreak）。
@@ -186,7 +186,7 @@
 
 ### 后端 — 写操作（Test-First 配对）
 
-- [ ] **T010**: 模式 A 写操作测试
+- [x] **T010**: 模式 A 写操作测试
   **文件**: `src/backend/test/workstation/test_tag_console_write.py`（新建）
   **测试**:
   - `test_create_tag_success` — 写入 `tag`，`business_type='tag_library'` → AC-20
@@ -202,7 +202,7 @@
   **覆盖 AC**: AC-20, AC-21, AC-22, AC-23, AC-24, AC-36, AC-37
   **依赖**: T007
 
-- [ ] **T011**: 模式 A 写操作实现
+- [x] **T011**: 模式 A 写操作实现
   **文件**: `tag_console_service.py`（`create_tag` / `batch_delete` / `batch_move`）
   **逻辑**: 逐条执行，失败计入 `failed` 明细而**不整批回滚**（AD-08）。
   **关键约束**:
@@ -215,7 +215,7 @@
   **覆盖 AC**: 同 T010
   **依赖**: T002, T007, T010
 
-- [ ] **T012**: 审核操作测试
+- [x] **T012**: 审核操作测试
   **文件**: `src/backend/test/workstation/test_tag_console_review_action.py`（新建）
   **测试**:
   - `test_review_detail_returns_all_source_files` — 同名跨多空间时列出全部文件 → AC-30
@@ -229,7 +229,7 @@
   **覆盖 AC**: AC-30, AC-31, AC-32, AC-33, AC-34, AC-35, AC-37
   **依赖**: T009
 
-- [ ] **T013**: 审核操作实现
+- [x] **T013**: 审核操作实现
   **文件**: `tag_console_service.py`（`review_detail` / `batch_approve` / `batch_reject`）
   **逻辑**: 逐项复用 `WorkstationTagsService.approve_or_reject_review_tag`。
   **关键约束**:
@@ -248,7 +248,7 @@
 
 ### 后端 — API 层（Test-First 配对）
 
-- [ ] **T014**: 端点集成测试
+- [x] **T014**: 端点集成测试
   **文件**: `src/backend/test/workstation/test_tag_console_api.py`（新建）
   **逻辑**: 用 `test_client` fixture 打 9 个端点，覆盖 happy path + 主要 error path。
   **测试**:
@@ -260,7 +260,7 @@
   **覆盖 AC**: AC-39
   **依赖**: T011（模式 A 写操作实现）, T013（审核操作实现）——本任务要打全部 9 个端点，两边 Service 都得先就位
 
-- [ ] **T015**: 端点定义 + Router 注册
+- [x] **T015**: 端点定义 + Router 注册
   **文件**:
   `src/backend/bisheng/workstation/api/endpoints/tag_console.py`（新建），
   `src/backend/bisheng/workstation/api/router.py`（改）
