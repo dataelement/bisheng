@@ -114,7 +114,30 @@ describe('stepUtils — firstLine (A)', () => {
     it('cuts a numbered-enumeration goal to its lead-in (no dangling "1.")', () => {
         // a delegation goal "<lead-in>：1. … 2. …" — keep the instruction, drop the list
         const goal = '研究首尔美食探店攻略，请搜索并整理以下信息：\n1. 必吃餐厅\n2. 人均消费\n3. 交通方式';
-        expect(firstLine(goal, 48)).toBe('研究首尔美食探店攻略，请搜索并整理以下信息');
+        // "请搜索并整理以下信息" only announced the list we just cut, so it goes too —
+        // keeping it left the title reading as though it had stopped mid-thought.
+        expect(firstLine(goal, 48)).toBe('研究首尔美食探店攻略');
+    });
+
+    it('drops the clause that only announced the enumeration', () => {
+        // Both goals are verbatim from a captured session; both used to render as
+        // "…，包括" in the subagent header — dangling, and with no ellipsis to hint
+        // at it, because what survived fit the 48-char budget.
+        const a = '研究 Transformer 的核心架构与原理，包括：1) 原始论文 "Attention Is All You Need" 的核心贡献；2) Self-Attention 机制、Multi-Head Attention 的数学原理。';
+        expect(firstLine(a, 48)).toBe('研究 Transformer 的核心架构与原理');
+
+        const b = '研究 Transformer 的主要变体与应用进展，包括：1) 仅编码器模型：BERT 及其变体；2) 仅解码器模型：GPT 系列、LLaMA 等。';
+        expect(firstLine(b, 48)).toBe('研究 Transformer 的主要变体与应用进展');
+    });
+
+    it('keeps a lead-in whose last clause is NOT an announcement', () => {
+        // the clause carries its own meaning — cutting it would lose content
+        expect(firstLine('调研新易盛，重点看毛利率：1. 2024 年 2. 2025 年', 48)).toBe('调研新易盛，重点看毛利率');
+    });
+
+    it('never empties a lead-in that is entirely an announcement', () => {
+        // "包括" is the whole lead-in; dropping it would leave no title at all
+        expect(firstLine('包括：1. 调研 2. 写作', 24)).toBe('包括');
     });
 
     it('does not treat a list ordinal "1." as a sentence boundary', () => {
