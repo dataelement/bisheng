@@ -34,7 +34,10 @@ import { useMarkdownOutline } from './useMarkdownOutline';
 
 /** How close to the right edge the pointer must come to reveal the outline. */
 const EDGE_ZONE = 56;
-const OPEN_DELAY = 80;
+/** Opening is immediate — the right edge of the panel is a terminus rather than
+ *  a corridor, so there is no sweep-through to debounce away, and any delay here
+ *  stacks on top of the fade and reads as lag. Closing stays lazy so the pointer
+ *  has time to travel from the rail onto the card. */
 const CLOSE_DELAY = 200;
 /** Below this an outline isn't navigation, it's noise. */
 const MIN_HEADINGS = 2;
@@ -85,9 +88,19 @@ export function MarkdownOutline({ contentRef, contentKey }: MarkdownOutlineProps
         [listRef, revealListRef],
     );
 
-    const schedule = useCallback((next: boolean, delay: number) => {
+    const openNow = useCallback(() => {
         clearTimeout(timerRef.current);
-        timerRef.current = setTimeout(() => setOpen(next), delay);
+        setOpen(true);
+    }, []);
+
+    const closeSoon = useCallback(() => {
+        clearTimeout(timerRef.current);
+        timerRef.current = setTimeout(() => setOpen(false), CLOSE_DELAY);
+    }, []);
+
+    /** Cancel a pending close without opening — used while the pointer is on the card. */
+    const holdOpen = useCallback(() => {
+        clearTimeout(timerRef.current);
     }, []);
 
     useEffect(() => () => clearTimeout(timerRef.current), []);
@@ -109,21 +122,24 @@ export function MarkdownOutline({ contentRef, contentKey }: MarkdownOutlineProps
             return undefined;
         }
         const onMove = (event: PointerEvent) => {
-            const near = scroller.getBoundingClientRect().right - event.clientX <= EDGE_ZONE;
-            if (near) {
-                schedule(true, OPEN_DELAY);
-            } else if (openRef.current && !cardRef.current?.contains(event.target as Node)) {
-                schedule(false, CLOSE_DELAY);
+            if (scroller.getBoundingClientRect().right - event.clientX <= EDGE_ZONE) {
+                openNow();
+            } else if (cardRef.current?.contains(event.target as Node)) {
+                // On the card but left of the edge zone: stay open for as long as
+                // the pointer rests there, however far it is from the rail.
+                holdOpen();
+            } else if (openRef.current) {
+                closeSoon();
             }
         };
-        const onLeave = () => schedule(false, CLOSE_DELAY);
+        const onLeave = () => closeSoon();
         scroller.addEventListener('pointermove', onMove, { passive: true });
         scroller.addEventListener('pointerleave', onLeave);
         return () => {
             scroller.removeEventListener('pointermove', onMove);
             scroller.removeEventListener('pointerleave', onLeave);
         };
-    }, [coarsePointer, contentRef, headings.length, schedule]);
+    }, [closeSoon, coarsePointer, contentRef, headings.length, holdOpen, openNow]);
 
     // Tap-outside and Esc both dismiss; Esc hands focus back to the rail.
     useEffect(() => {
@@ -204,7 +220,7 @@ export function MarkdownOutline({ contentRef, contentKey }: MarkdownOutlineProps
                         }
                     }}
                     className={cn(
-                        'pointer-events-auto flex flex-col items-end py-2 pl-2 outline-none transition-opacity duration-200',
+                        'pointer-events-auto flex flex-col items-end py-2 pl-2 outline-none transition-opacity duration-100',
                         // Two-stage reveal: the ticks wake when the pointer is
                         // anywhere over the document, then hand off to the card.
                         'opacity-60 group-hover/mk:opacity-100 focus-visible:opacity-100',
@@ -233,11 +249,13 @@ export function MarkdownOutline({ contentRef, contentKey }: MarkdownOutlineProps
                     className={cn(
                         'absolute right-0 top-1/2 w-[240px] -translate-y-1/2 overflow-hidden rounded-[10px]',
                         'border border-[#ebecf0] bg-white shadow-[0px_4px_16px_rgba(0,0,0,0.08)]',
-                        'transition-[opacity,transform] duration-150 ease-out motion-reduce:transition-none',
+                        'transition-[opacity,transform] ease-out motion-reduce:transition-none',
                         'coarse-pointer:w-[min(260px,68vw)]',
+                        // Opens fast enough to feel like a direct response to the
+                        // pointer; closes a touch slower so it doesn't snap away.
                         open
-                            ? 'pointer-events-auto translate-x-0 opacity-100'
-                            : 'pointer-events-none translate-x-1.5 opacity-0',
+                            ? 'pointer-events-auto translate-x-0 opacity-100 duration-100'
+                            : 'pointer-events-none translate-x-1 opacity-0 duration-150',
                     )}
                 >
                     <div
