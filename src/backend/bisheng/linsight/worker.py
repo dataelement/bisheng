@@ -245,6 +245,11 @@ class ScheduleCenterProcess(Process):
         self.semaphore: asyncio.Semaphore | None = None
         self.node_manager: NodeManager | None = None
         self.heartbeat_task: asyncio.Task | None = None
+        # Strong refs to the fire-and-forget stranded-session repair tasks. asyncio
+        # only holds a weak reference to a running task, so without this the loop is
+        # free to garbage-collect a repair mid-flight and the session it was meant
+        # to force-fail stays IN_PROGRESS forever — the exact state the repair exists
+        # to clear.
         self.repair_tasks: set[asyncio.Task] = set()
         self.max_concurrency: Union[int, ValueProxy] | None = max_concurrency
         self.node_id: ValueProxy | None = node_id
@@ -260,11 +265,8 @@ class ScheduleCenterProcess(Process):
             # the frontend spins on it forever.
             if session_version_id:
                 repair_task = asyncio.create_task(self._force_fail_stranded_session(session_version_id, e))
-                repair_tasks = getattr(self, "repair_tasks", None)
-                if repair_tasks is None:
-                    repair_tasks = self.repair_tasks = set()
-                repair_tasks.add(repair_task)
-                repair_task.add_done_callback(repair_tasks.discard)
+                self.repair_tasks.add(repair_task)
+                repair_task.add_done_callback(self.repair_tasks.discard)
         finally:
             # Release semaphore
             if self.semaphore:
