@@ -24,7 +24,6 @@ interface ChannelSidebarProps {
     onChannelSelect: (channel: Channel | null) => void;
     onCreateChannel: () => void;
     onChannelSquare: () => void;
-    onManageMembers: (channel: Channel) => void;
     onChannelSettings: (channel: Channel) => void;
     /** Report created channel count back to parent so it doesn't need a duplicate query */
     onCreatedCountChange?: (count: number) => void;
@@ -41,7 +40,6 @@ export function ChannelSidebar({
     onChannelSelect,
     onCreateChannel,
     onChannelSquare,
-    onManageMembers,
     onChannelSettings,
     onCreatedCountChange,
     suppressAutoSelect,
@@ -243,7 +241,6 @@ export function ChannelSidebar({
                                             onDelete={handleDeleteChannel}
                                             onUnsubscribe={handleUnsubscribeChannel}
                                             onPin={handlePinChannel}
-                                            onManageMembers={onManageMembers}
                                             onChannelSettings={onChannelSettings}
                                         />
                                     ))}
@@ -274,7 +271,6 @@ export function ChannelSidebar({
                                             onDelete={handleDeleteChannel}
                                             onUnsubscribe={handleUnsubscribeChannel}
                                             onPin={handlePinChannel}
-                                            onManageMembers={onManageMembers}
                                             onChannelSettings={onChannelSettings}
                                         />
                                     ))}

@@ -99,10 +99,10 @@ async def test_unsubscribe_direct_user_source_removes_source_and_revokes_fga():
         'bisheng.permission.domain.services.fine_grained_permission_service._get_bindings',
         new=AsyncMock(return_value=[]),
     ), patch(
-        'bisheng.permission.api.endpoints.resource_permission._get_bindings',
+        'bisheng.permission.domain.services.relation_model_store.get_bindings',
         new=AsyncMock(return_value=existing_bindings),
     ), patch(
-        'bisheng.permission.api.endpoints.resource_permission._save_bindings',
+        'bisheng.permission.domain.services.relation_model_store.save_bindings',
         new=save_mock,
     ):
         result = await service.unsubscribe_channel('channel-1', _User())
@@ -142,10 +142,10 @@ async def test_unsubscribe_self_subscribe_source_revokes_fga_and_binding():
         'bisheng.permission.domain.services.fine_grained_permission_service._get_bindings',
         new=AsyncMock(return_value=[]),
     ), patch(
-        'bisheng.permission.api.endpoints.resource_permission._get_bindings',
+        'bisheng.permission.domain.services.relation_model_store.get_bindings',
         new=AsyncMock(return_value=[]),
     ), patch(
-        'bisheng.permission.api.endpoints.resource_permission._save_bindings',
+        'bisheng.permission.domain.services.relation_model_store.save_bindings',
         new=save_mock,
     ):
         result = await service.unsubscribe_channel('channel-1', _User())
@@ -280,10 +280,10 @@ async def test_unsubscribe_member_management_user_grant_without_membership_revok
         'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_binding_department_paths',
         new=AsyncMock(return_value={}),
     ), patch(
-        'bisheng.permission.api.endpoints.resource_permission._get_bindings',
+        'bisheng.permission.domain.services.relation_model_store.get_bindings',
         new=AsyncMock(return_value=existing_bindings),
     ), patch(
-        'bisheng.permission.api.endpoints.resource_permission._save_bindings',
+        'bisheng.permission.domain.services.relation_model_store.save_bindings',
         new=save_mock,
     ):
         result = await service.unsubscribe_channel('channel-1', _User())
@@ -307,7 +307,7 @@ async def test_unsubscribe_without_membership_or_grant_raises_not_subscribed():
         'bisheng.permission.domain.services.fine_grained_permission_service._get_bindings',
         new=AsyncMock(return_value=[]),
     ), patch(
-        'bisheng.permission.api.endpoints.resource_permission._get_bindings',
+        'bisheng.permission.domain.services.relation_model_store.get_bindings',
         new=AsyncMock(return_value=[]),
     ):
         with pytest.raises(ValueError, match='not subscribed'):

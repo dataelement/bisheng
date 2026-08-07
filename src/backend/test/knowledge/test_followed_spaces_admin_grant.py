@@ -15,7 +15,7 @@ import pytest
 from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
 
 _KS = "bisheng.knowledge.domain.services.knowledge_space_service"
-_RP = "bisheng.permission.api.endpoints.resource_permission._get_bindings"
+_RP = "bisheng.permission.domain.services.relation_model_store.get_bindings"
 
 
 class _Admin:

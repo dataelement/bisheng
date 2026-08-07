@@ -716,9 +716,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
     async def _get_relation_models_map(self) -> dict[str, dict]:
         if hasattr(self, "_relation_models_map_cache"):
             return self._relation_models_map_cache
-        from bisheng.permission.api.endpoints.resource_permission import (
-            _get_relation_models,
-            _normalize_model_dict,
+        from bisheng.permission.domain.services.relation_model_store import (
+            get_relation_models as _get_relation_models,
+        )
+        from bisheng.permission.domain.services.relation_model_store import (
+            normalize_model_dict as _normalize_model_dict,
         )
 
         raw_models = await _get_relation_models()
@@ -728,7 +730,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
     async def _get_relation_bindings(self) -> list[dict]:
         if hasattr(self, "_relation_bindings_cache"):
             return self._relation_bindings_cache
-        from bisheng.permission.api.endpoints.resource_permission import _get_bindings
+        from bisheng.permission.domain.services.relation_model_store import (
+            get_bindings as _get_bindings,
+        )
 
         self._relation_bindings_cache = await _get_bindings()
         return self._relation_bindings_cache
@@ -749,7 +753,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         since ``list_accessible_ids`` returns None (can-read-all) for admins and would
         otherwise hide spaces the admin was granted but is not a member of.
         """
-        from bisheng.permission.api.endpoints.resource_permission import _get_bindings
+        from bisheng.permission.domain.services.relation_model_store import (
+            get_bindings as _get_bindings,
+        )
 
         bindings = await _get_bindings()
         return [
@@ -770,10 +776,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
         is_active: bool,
     ) -> None:
         """Keep direct space memberships and ReBAC grants in sync."""
-        from bisheng.permission.api.endpoints.resource_permission import (
-            _binding_key_with_scope,
-            _get_bindings,
-            _save_bindings,
+        from bisheng.permission.domain.services.relation_model_store import (
+            binding_key_with_scope as _binding_key_with_scope,
+        )
+        from bisheng.permission.domain.services.relation_model_store import (
+            get_bindings as _get_bindings,
+        )
+        from bisheng.permission.domain.services.relation_model_store import (
+            save_bindings as _save_bindings,
         )
 
         desired_relation = None
@@ -864,12 +874,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
         child_resources: list[tuple[str, int]],
     ) -> None:
         """Remove non-owner space permissions when a space becomes private."""
-        from bisheng.permission.api.endpoints.resource_permission import (
-            _get_bindings,
-            _save_bindings,
+        from bisheng.permission.domain.services.relation_model_store import (
+            get_bindings as _get_bindings,
+        )
+        from bisheng.permission.domain.services.relation_model_store import (
+            save_bindings as _save_bindings,
         )
 
-        resources = [("knowledge_space", int(space.id))] + list(child_resources)
+        resources = [("knowledge_space", int(space.id)), *child_resources]
         resource_keys = {(resource_type, str(resource_id)) for resource_type, resource_id in resources}
 
         bindings = await _get_bindings()
@@ -1745,11 +1757,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
             space.auto_tag_enabled = resolved_enabled
             space.auto_tag_library_id = resolved_library_id
 
-        space = await KnowledgeDao.async_update_space(space)
-        new_auth_type = space.auth_type
-
-        # When switching to PRIVATE, remove all non-creator members
-        if old_auth_type != AuthTypeEnum.PRIVATE and new_auth_type == AuthTypeEnum.PRIVATE:
+        private_cleanup_requested = auth_type == AuthTypeEnum.PRIVATE
+        removed_user_ids: set[int] = set()
+        if private_cleanup_requested:
             removed_members = await SpaceChannelMemberDao.async_get_members_by_space(space_id)
             removed_user_ids = {
                 member.user_id for member in removed_members if member.user_role != UserRoleEnum.CREATOR
@@ -1761,6 +1771,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 child_resources=child_resources,
             )
             await SpaceChannelMemberDao.async_delete_non_creator_members(space_id)
+
+        space = await KnowledgeDao.async_update_space(space)
+        new_auth_type = space.auth_type
+
+        if private_cleanup_requested:
             final_removed_user_ids = []
             for user_id in removed_user_ids:
                 if not await self._user_can_read_space(user_id, space_id):

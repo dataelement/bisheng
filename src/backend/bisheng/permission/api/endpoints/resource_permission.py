@@ -5,7 +5,6 @@ GET  /api/v1/resources/{resource_type}/{resource_id}/permissions — List resour
 """
 
 import asyncio
-import json
 import logging
 import uuid
 from dataclasses import dataclass
@@ -13,38 +12,25 @@ from dataclasses import dataclass
 from fastapi import APIRouter, Depends, Query
 
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.errcode.permission import (
     PermissionDeniedError,
     PermissionInvalidResourceError,
-    PermissionLastOwnerError,
     PermissionRelationModelNameExistsError,
     PermissionTupleWriteError,
 )
-from bisheng.common.models.config import ConfigDao
 from bisheng.common.schemas.api import resp_200
 from bisheng.permission.domain.application_permission_template import (
     APPLICATION_PERMISSION_TEMPLATE,
 )
-from bisheng.permission.domain.application_permission_template import (
-    default_permission_ids_for_relation as default_application_permissions,
-)
 from bisheng.permission.domain.channel_permission_template import (
     CHANNEL_PERMISSION_TEMPLATE,
-)
-from bisheng.permission.domain.channel_permission_template import (
-    default_permission_ids_for_relation as default_channel_permissions,
 )
 from bisheng.permission.domain.knowledge_library_permission_template import (
     KNOWLEDGE_LIBRARY_PERMISSION_TEMPLATE,
 )
-from bisheng.permission.domain.knowledge_library_permission_template import (
-    default_permission_ids_for_relation as default_knowledge_library_permissions,
-)
 from bisheng.permission.domain.knowledge_space_permission_template import (
     KNOWLEDGE_SPACE_PERMISSION_TEMPLATE,
-)
-from bisheng.permission.domain.knowledge_space_permission_template import (
-    default_permission_ids_for_relation as default_knowledge_space_permissions,
 )
 from bisheng.permission.domain.schemas.permission_schema import (
     VALID_RESOURCE_TYPES,
@@ -55,11 +41,47 @@ from bisheng.permission.domain.schemas.permission_schema import (
     RelationModelUpdateRequest,
     ResourcePermissionItem,
 )
-from bisheng.permission.domain.tool_permission_template import (
-    TOOL_PERMISSION_TEMPLATE,
+from bisheng.permission.domain.services.grant_subject_query_service import (
+    GrantSubjectQueryService,
+)
+from bisheng.permission.domain.services.relation_model_store import (
+    binding_key_with_scope as _store_binding_key_with_scope,
+)
+from bisheng.permission.domain.services.relation_model_store import (
+    build_bindings as _store_build_bindings,
+)
+from bisheng.permission.domain.services.relation_model_store import (
+    build_relation_models as _store_build_relation_models,
+)
+from bisheng.permission.domain.services.relation_model_store import (
+    default_relation_models as _store_default_relation_models,
+)
+from bisheng.permission.domain.services.relation_model_store import (
+    get_bindings as _store_get_bindings,
+)
+from bisheng.permission.domain.services.relation_model_store import (
+    get_relation_models as _store_get_relation_models,
+)
+from bisheng.permission.domain.services.relation_model_store import (
+    migrate_legacy_knowledge_library_bindings as _store_migrate_legacy_bindings,
+)
+from bisheng.permission.domain.services.relation_model_store import (
+    normalize_model_dict as _store_normalize_model_dict,
+)
+from bisheng.permission.domain.services.relation_model_store import (
+    normalize_relation_model_name as _store_normalize_relation_model_name,
+)
+from bisheng.permission.domain.services.relation_model_store import (
+    roster_cache_tenant_id as _store_roster_cache_tenant_id,
+)
+from bisheng.permission.domain.services.relation_model_store import (
+    save_bindings as _store_save_bindings,
+)
+from bisheng.permission.domain.services.relation_model_store import (
+    save_relation_models as _store_save_relation_models,
 )
 from bisheng.permission.domain.tool_permission_template import (
-    default_permission_ids_for_relation as default_tool_permissions,
+    TOOL_PERMISSION_TEMPLATE,
 )
 
 router = APIRouter()
@@ -148,8 +170,6 @@ _PERMISSION_LEVEL_TO_RELATION = {
     PermissionLevel.can_edit.value: "editor",
     PermissionLevel.can_read.value: "viewer",
 }
-_RELATION_MODELS_KEY = "permission_relation_models_v1"
-_RELATION_MODEL_BINDINGS_KEY = "permission_relation_model_bindings_v1"
 _PERMISSION_TEMPLATES = (
     KNOWLEDGE_SPACE_PERMISSION_TEMPLATE,
     APPLICATION_PERMISSION_TEMPLATE,
@@ -188,11 +208,7 @@ def _is_invalid_owner_subject(subject_type: str | None, relation: str | None) ->
 
 
 def _normalize_relation_model_name(name: str | None) -> str:
-    text = (name or "").strip()
-    for title, label in _RELATION_MODEL_NAME_PREFIX_PAIRS:
-        if title and label and text == f"{title}{label}":
-            return label
-    return text
+    return _store_normalize_relation_model_name(name)
 
 
 def _relation_model_name_exists(models: list[dict], name: str | None, exclude_model_id: str | None = None) -> bool:
@@ -206,67 +222,15 @@ def _relation_model_name_exists(models: list[dict], name: str | None, exclude_mo
 
 
 def _normalize_model_dict(m: dict) -> dict:
-    out = dict(m)
-    out["name"] = _normalize_relation_model_name(out.get("name"))
-    gt = out.get("grant_tier")
-    if gt not in _GRANT_TIER_VALUES:
-        out["grant_tier"] = _infer_grant_tier_from_relation(out.get("relation") or "")
-    if not _validate_tier_relation(out["grant_tier"], out.get("relation") or ""):
-        out["grant_tier"] = _infer_grant_tier_from_relation(out.get("relation") or "")
-    if "permissions_explicit" not in out:
-        permissions = out.get("permissions") or []
-        if out.get("is_system"):
-            out["permissions_explicit"] = False
-        else:
-            out["permissions_explicit"] = bool(permissions)
-    return out
+    return _store_normalize_model_dict(m)
 
 
 def _default_relation_models() -> list[dict]:
-    return [
-        {
-            "id": "owner",
-            "name": "所有者",
-            "relation": "owner",
-            "grant_tier": "owner",
-            "permissions": [],
-            "permissions_explicit": False,
-            "is_system": True,
-        },
-        {
-            "id": "manager",
-            "name": "可管理",
-            "relation": "manager",
-            "grant_tier": "manager",
-            "permissions": [],
-            "permissions_explicit": False,
-            "is_system": True,
-        },
-        {
-            "id": "editor",
-            "name": "可编辑",
-            "relation": "editor",
-            "grant_tier": "usage",
-            "permissions": [],
-            "permissions_explicit": False,
-            "is_system": True,
-        },
-        {
-            "id": "viewer",
-            "name": "可查看",
-            "relation": "viewer",
-            "grant_tier": "usage",
-            "permissions": [],
-            "permissions_explicit": False,
-            "is_system": True,
-        },
-    ]
+    return _store_default_relation_models()
 
 
 def _roster_cache_tenant_id() -> int:
-    from bisheng.core.context.tenant import get_current_tenant_id
-
-    return get_current_tenant_id() or 0
+    return _store_roster_cache_tenant_id()
 
 
 async def _get_relation_models() -> list[dict]:
@@ -275,41 +239,15 @@ async def _get_relation_models() -> list[dict]:
     F040 (E): served from a process-local cache keyed by the config row's
     ``update_time``; on a version match the parse is skipped. Version unavailable
     (``None``, e.g. first init) → rebuild + no caching (fail-safe)."""
-    from bisheng.permission.domain.services import relation_roster_cache
-
-    version = await ConfigDao.aget_config_version(_RELATION_MODELS_KEY)
-    return await relation_roster_cache.get_or_build(
-        name="relation_models",
-        tenant_id=_roster_cache_tenant_id(),
-        version=version,
-        build=_build_relation_models,
-    )
+    return await _store_get_relation_models()
 
 
 async def _build_relation_models() -> list[dict]:
-    row = await ConfigDao.aget_config_by_key(_RELATION_MODELS_KEY)
-    if not row or not (row.value or "").strip():
-        models = _default_relation_models()
-        await _save_relation_models(models)
-        return models
-    try:
-        models = json.loads(row.value or "[]")
-    except Exception:
-        models = _default_relation_models()
-        await _save_relation_models(models)
-        return models
-    if not models:
-        models = _default_relation_models()
-        await _save_relation_models(models)
-        return models
-    return models
+    return await _store_build_relation_models()
 
 
 async def _save_relation_models(models: list[dict]) -> None:
-    await ConfigDao.insert_or_update_config(
-        _RELATION_MODELS_KEY,
-        json.dumps(models, ensure_ascii=False),
-    )
+    await _store_save_relation_models(models)
 
 
 async def _get_bindings() -> list[dict]:
@@ -320,71 +258,19 @@ async def _get_bindings() -> list[dict]:
     scan that every ReBAC read (esp. ``/children`` deep-expansion) otherwise pays.
     Version unavailable (``None``) → rebuild + no caching (fail-safe). The list is
     treated as read-only by all callers, matching the existing per-request memo."""
-    from bisheng.permission.domain.services import relation_roster_cache
-
-    version = await ConfigDao.aget_config_version(_RELATION_MODEL_BINDINGS_KEY)
-    return await relation_roster_cache.get_or_build(
-        name="relation_bindings",
-        tenant_id=_roster_cache_tenant_id(),
-        version=version,
-        build=_build_bindings,
-    )
+    return await _store_get_bindings()
 
 
 async def _build_bindings() -> list[dict]:
-    row = await ConfigDao.aget_config_by_key(_RELATION_MODEL_BINDINGS_KEY)
-    if not row or not (row.value or "").strip():
-        return []
-    try:
-        bindings = json.loads(row.value or "[]")
-    except Exception:
-        return []
-    normalized = await _migrate_legacy_knowledge_library_bindings(bindings)
-    if normalized != bindings:
-        await _save_bindings(normalized)
-    return normalized
+    return await _store_build_bindings()
 
 
 async def _save_bindings(bindings: list[dict]) -> None:
-    await ConfigDao.insert_or_update_config(
-        _RELATION_MODEL_BINDINGS_KEY,
-        json.dumps(bindings, ensure_ascii=False),
-    )
+    await _store_save_bindings(bindings)
 
 
 async def _migrate_legacy_knowledge_library_bindings(bindings: list[dict]) -> list[dict]:
-    legacy_ids = {
-        int(binding.get("resource_id"))
-        for binding in bindings
-        if binding.get("resource_type") == "knowledge_space" and str(binding.get("resource_id", "")).isdigit()
-    }
-    if not legacy_ids:
-        return bindings
-
-    from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
-
-    knowledge_rows = await KnowledgeDao.aget_list_by_ids(sorted(legacy_ids))
-    knowledge_type_map = {row.id: row.type for row in knowledge_rows}
-
-    normalized: list[dict] = []
-    for binding in bindings:
-        migrated = dict(binding)
-        resource_type = migrated.get("resource_type")
-        resource_id = migrated.get("resource_id")
-        if resource_type == "knowledge_space" and str(resource_id).isdigit():
-            knowledge_type = knowledge_type_map.get(int(resource_id))
-            if knowledge_type is not None and knowledge_type != KnowledgeTypeEnum.SPACE.value:
-                migrated["resource_type"] = "knowledge_library"
-                migrated["key"] = _binding_key_with_scope(
-                    "knowledge_library",
-                    str(resource_id),
-                    migrated.get("subject_type"),
-                    int(migrated.get("subject_id")),
-                    migrated.get("relation"),
-                    migrated.get("include_children"),
-                )
-        normalized.append(migrated)
-    return normalized
+    return await _store_migrate_legacy_bindings(bindings)
 
 
 def _normalize_binding_include_children(subject_type: str, include_children) -> bool | None:
@@ -401,9 +287,14 @@ def _binding_key_with_scope(
     relation: str,
     include_children,
 ) -> str:
-    normalized = _normalize_binding_include_children(subject_type, include_children)
-    scope = "-" if normalized is None else ("1" if normalized else "0")
-    return f"{resource_type}:{resource_id}:{subject_type}:{subject_id}:{relation}:{scope}"
+    return _store_binding_key_with_scope(
+        resource_type,
+        resource_id,
+        subject_type,
+        subject_id,
+        relation,
+        include_children,
+    )
 
 
 def _binding_key(resource_type: str, resource_id: str, subject_type: str, subject_id: int, relation: str) -> str:
@@ -557,75 +448,6 @@ def _tuple_signature(item) -> tuple:
             getattr(item, "include_children", None),
         ),
     )
-
-
-def _default_permission_ids_for_relation(resource_type: str, relation: str) -> set[str]:
-    if resource_type in {"workflow", "assistant"}:
-        return default_application_permissions(relation)
-    if resource_type == "tool":
-        return default_tool_permissions(relation)
-    if resource_type == "channel":
-        return default_channel_permissions(relation)
-    if resource_type == "knowledge_library":
-        return default_knowledge_library_permissions(relation)
-    if resource_type in {"knowledge_space", "folder", "knowledge_file"}:
-        return default_knowledge_space_permissions(relation)
-    return set()
-
-
-def _resource_permission_universe(resource_type: str) -> set[str]:
-    # The owner defaults cover the full canonical permission set for each
-    # resource type, so they can be used as the scope filter for explicit
-    # relation-model permissions persisted in DB.
-    return _default_permission_ids_for_relation(resource_type, "owner")
-
-
-def _permission_ids_for_model(resource_type: str, relation: str, model: dict | None) -> set[str]:
-    if model is None:
-        return _default_permission_ids_for_relation(resource_type, relation)
-    scope = _resource_permission_universe(resource_type)
-    permissions = model.get("permissions") or []
-    if model.get("permissions_explicit") is True:
-        return set(permissions) & scope
-    if model.get("is_system"):
-        return _default_permission_ids_for_relation(resource_type, model.get("relation") or relation)
-    return set(permissions)
-
-
-def _model_matches_relation(relation: str, model: dict | None) -> bool:
-    return model is None or model.get("relation") == relation
-
-
-def _can_grant_relation_model(
-    *,
-    resource_type: str,
-    relation: str,
-    model: dict | None,
-    caller_permission_ids: set[str],
-) -> bool:
-    if not _model_matches_relation(relation, model):
-        return False
-
-    tier_map = _MANAGE_PERMISSION_BY_RESOURCE_TIER.get(resource_type)
-    if tier_map:
-        grant_tier = (
-            model.get("grant_tier")
-            if model and model.get("grant_tier") in _GRANT_TIER_VALUES
-            else _infer_grant_tier_from_relation(relation)
-        )
-        required_manage_permissions = {permission_id for tier, permission_id in tier_map.items() if tier == grant_tier}
-
-        # Custom or explicitly edited models may themselves carry management
-        # permissions. Require the caller to already hold those management
-        # capabilities so a "usage" grant cannot smuggle owner-management power.
-        if model and (not model.get("is_system") or model.get("permissions_explicit") is True):
-            model_permission_ids = _permission_ids_for_model(resource_type, relation, model)
-            required_manage_permissions.update(model_permission_ids & set(tier_map.values()))
-
-        return bool(required_manage_permissions) and required_manage_permissions.issubset(caller_permission_ids)
-
-    model_permission_ids = _permission_ids_for_model(resource_type, relation, model)
-    return model_permission_ids.issubset(caller_permission_ids)
 
 
 def _management_permission_ids(resource_type: str) -> set[str]:
@@ -801,469 +623,45 @@ async def _list_knowledge_space_grant_users(
     page_size: int,
     restrict_dept_path: str | None = None,
 ) -> list[dict]:
-    from sqlmodel import select
-
-    from bisheng.core.context.tenant import bypass_tenant_filter
-    from bisheng.core.database import get_async_db_session
-    from bisheng.database.models.department import Department, DepartmentDao, UserDepartment, UserDepartmentDao
-    from bisheng.database.models.tenant import UserTenant
-    from bisheng.user.domain.models.user import User
-
-    with bypass_tenant_filter():
-        async with get_async_db_session() as session:
-            active_tenant_member = (
-                select(UserTenant.id)
-                .where(
-                    UserTenant.user_id == User.user_id,
-                    UserTenant.tenant_id == tenant_id,
-                    UserTenant.status == "active",
-                )
-                .exists()
-            )
-            stmt = (
-                select(User.user_id, User.user_name, User.external_id)
-                .where(User.delete == 0, active_tenant_member)
-                .order_by(User.user_id.desc())
-            )
-            # F033: department knowledge space -> only members of the bound
-            # department subtree (a user is visible if ANY of their departments
-            # is in the subtree). Correlate by path instead of expanding the whole
-            # subtree into a large IN list; EXISTS also avoids duplicate user rows.
-            if restrict_dept_path is not None:
-                in_department_subtree = (
-                    select(UserDepartment.id)
-                    .join(Department, Department.id == UserDepartment.department_id)
-                    .where(
-                        UserDepartment.user_id == User.user_id,
-                        Department.path.like(f"{restrict_dept_path}%"),
-                        Department.status == "active",
-                    )
-                    .exists()
-                )
-                stmt = stmt.where(in_department_subtree)
-            if keyword:
-                # Prefix match (``keyword%``) so the user_name index (Field(index=True))
-                # can be used — a leading-wildcard ``%keyword%`` forces a full scan of the
-                # users table (~160ms over 150k rows on the DM8 load-test tenant).
-                stmt = stmt.where(User.user_name.like(f"{keyword}%"))
-            if page and page_size:
-                stmt = stmt.offset((page - 1) * page_size).limit(page_size)
-            result = await session.exec(stmt)
-            active_users = list(result.all())
-
-    if not active_users:
-        return []
-
-    user_ids = [int(user.user_id) for user in active_users if getattr(user, "user_id", None) is not None]
-    dept_rows = await UserDepartmentDao.aget_by_user_ids(user_ids)
-    primary_rows = [row for row in dept_rows if int(getattr(row, "is_primary", 0) or 0) == 1]
-    # F038 perf: resolve the full-path label for ONLY the primary departments shown on
-    # this page (+ their ancestors), never the whole tenant department table. On the 50k-
-    # department load-test tenant, aget_active_by_tenant loaded ~50k rows in ~2.8s on DM8
-    # and was ~94% of this endpoint's latency — yet dept_map only labels <= page_size users.
-    primary_dept_ids = {
-        int(row.department_id) for row in primary_rows if getattr(row, "department_id", None) is not None
-    }
-    primary_depts = await DepartmentDao.aget_by_ids(list(primary_dept_ids)) if primary_dept_ids else []
-    dept_map = {int(dept.id): dept for dept in primary_depts if getattr(dept, "id", None) is not None}
-    ancestor_ids = {
-        i for dept in primary_depts for i in _grant_path_ids(getattr(dept, "path", None)) if i not in dept_map
-    }
-    if ancestor_ids:
-        for ancestor in await DepartmentDao.aget_by_ids(list(ancestor_ids)) or []:
-            if getattr(ancestor, "id", None) is not None:
-                dept_map[int(ancestor.id)] = ancestor
-    primary_by_user = {
-        int(row.user_id): dept_map.get(int(row.department_id))
-        for row in primary_rows
-        if getattr(row, "user_id", None) is not None and getattr(row, "department_id", None) is not None
-    }
-
-    def _department_display_path(dept) -> str | None:
-        if dept is None:
-            return None
-        path_ids: list[int] = []
-        for part in str(getattr(dept, "path", "") or "").split("/"):
-            part = part.strip()
-            if part.isdigit():
-                path_ids.append(int(part))
-        labels = [getattr(dept_map.get(dept_id), "name", f"#{dept_id}") for dept_id in path_ids]
-        current_name = getattr(dept, "name", None)
-        if current_name and current_name not in labels:
-            labels.append(current_name)
-        return "/".join(labels) if labels else current_name
-
-    return [
-        {
-            "user_id": int(user.user_id),
-            "user_name": user.user_name,
-            "external_id": getattr(user, "external_id", None),
-            "primary_department_path": _department_display_path(
-                primary_by_user.get(int(user.user_id)),
-            ),
-        }
-        for user in active_users
-    ]
-
-
-# --------------------------------------------------------------------------- #
-# F038: lazy variants of the grant-subject department tree (browse one layer /
-# search / locate). Visible scope = the TENANT ROOT SUBTREE minus child-tenant
-# mount subtrees, optionally clamped
-# to a bound department's subtree (F033) — but never loads the whole tree. The
-# F033 restriction is passed as a PATH PREFIX (``restrict_root_path``) rather than
-# an id set, so it stays a ``path LIKE`` predicate and never hits DM8's large
-# ``.in_()`` serialization trap (design §5 #1). The channel picker is the
-# ``restrict_root_path=None`` case (decision 3: same scope helper, no admin scope).
-# --------------------------------------------------------------------------- #
-
-
-@dataclass(frozen=True)
-class _GrantDeptScope:
-    """Resolved browse scope for the grant-subject department tree.
-
-    ``positive_prefix`` — materialized-path prefix of the visible subtree root
-    (tenant root, or the F033 bound department); ``None`` falls back to a
-    ``tenant_id`` filter when the tenant has no root department.
-    ``exclude_prefixes`` — child-tenant mount subtrees carved out (ROOT tenant only).
-    """
-
-    positive_prefix: str | None
-    exclude_prefixes: tuple[str, ...]
-    tenant_id: int
-
-
-def _grant_path_ids(path: str | None) -> list[int]:
-    """Ancestor→self id chain from a materialized path ``/10/11/12/`` → ``[10, 11, 12]``."""
-    out: list[int] = []
-    for part in (path or "").split("/"):
-        part = part.strip()
-        if part:
-            try:
-                out.append(int(part))
-            except ValueError:
-                continue
-    return out
-
-
-def _grant_in_scope(dept, scope: "_GrantDeptScope") -> bool:
-    """Whether ``dept`` is inside the visible scope (positive prefix / tenant
-    fallback, and not under any excluded child-mount subtree)."""
-    path = getattr(dept, "path", None)
-    if scope.positive_prefix is not None:
-        if not (path and path.startswith(scope.positive_prefix)):
-            return False
-    elif int(getattr(dept, "tenant_id", 0) or 0) != scope.tenant_id:
-        return False
-    return not any(path and path.startswith(ex) for ex in scope.exclude_prefixes)
-
-
-def _apply_grant_scope(stmt, scope: "_GrantDeptScope", Department):
-    """Push the visible scope into a ``select(Department...)`` statement."""
-    if scope.positive_prefix is not None:
-        stmt = stmt.where(Department.path.like(f"{scope.positive_prefix}%"))
-    else:
-        stmt = stmt.where(Department.tenant_id == scope.tenant_id)
-    for ex in scope.exclude_prefixes:
-        stmt = stmt.where(~Department.path.like(f"{ex}%"))
-    return stmt
-
-
-def _grant_dept_node(dept, *, has_children: bool = False, matched: bool = False) -> dict:
-    return {
-        "id": int(dept.id),
-        "dept_id": dept.dept_id,
-        "name": dept.name,
-        "parent_id": int(dept.parent_id) if getattr(dept, "parent_id", None) is not None else None,
-        "path": dept.path,
-        "sort_order": int(getattr(dept, "sort_order", 0) or 0),
-        "source": dept.source,
-        "status": dept.status,
-        "has_children": has_children,
-        "matched": matched,
-        "children": [],
-    }
-
-
-async def _resolve_grant_dept_scope(session, tenant_id: int, restrict_root_path: str | None):
-    """Resolve ``_GrantDeptScope`` for ``tenant_id``; ``None`` when the tenant is
-    missing/inactive (callers return empty). Scope = tenant root subtree minus
-    child-tenant mount subtrees (the canonical grant-subject visible set)."""
-    from sqlmodel import select
-
-    from bisheng.database.models.department import Department
-    from bisheng.database.models.tenant import ROOT_TENANT_ID, Tenant
-
-    tenant = (await session.exec(select(Tenant).where(Tenant.id == tenant_id, Tenant.status == "active"))).first()
-    if tenant is None:
-        return None
-
-    root_dept = None
-    if getattr(tenant, "root_dept_id", None):
-        root_dept = (
-            await session.exec(
-                select(Department).where(
-                    Department.id == int(tenant.root_dept_id),
-                    Department.status == "active",
-                )
-            )
-        ).first()
-
-    exclude: list[str] = []
-    if root_dept is not None and tenant_id == ROOT_TENANT_ID:
-        child_roots = (
-            await session.exec(
-                select(Department.path).where(
-                    Department.is_tenant_root == 1,
-                    Department.mounted_tenant_id.is_not(None),
-                    Department.mounted_tenant_id != ROOT_TENANT_ID,
-                    Department.status == "active",
-                )
-            )
-        ).all()
-        exclude = [p for p in child_roots if p]
-
-    if root_dept is not None:
-        positive = restrict_root_path or root_dept.path
-    else:
-        positive = restrict_root_path  # may be None → tenant_id fallback
-    return _GrantDeptScope(positive_prefix=positive, exclude_prefixes=tuple(exclude), tenant_id=tenant_id)
-
-
-async def _grant_children_existence(session, parent_ids: list[int], scope: "_GrantDeptScope", Department) -> set[int]:
-    """Which of ``parent_ids`` (one rendered layer) have ≥1 visible child — one
-    ``DISTINCT parent_id`` query, no N+1. ``parent_ids`` is a single layer so the
-    ``.in_()`` stays small."""
-    if not parent_ids:
-        return set()
-    from sqlmodel import select
-
-    stmt = select(Department.parent_id).where(
-        Department.parent_id.in_(parent_ids),
-        Department.status == "active",
+    return await GrantSubjectQueryService().list_users(
+        tenant_id=tenant_id,
+        keyword=keyword,
+        page=page,
+        page_size=page_size,
+        restrict_dept_path=restrict_dept_path,
     )
-    stmt = _apply_grant_scope(stmt, scope, Department).distinct()
-    rows = (await session.exec(stmt)).all()
-    out: set[int] = set()
-    for r in rows:
-        val = r[0] if isinstance(r, (list, tuple)) else r
-        if val is not None:
-            out.add(int(val))
-    return out
-
-
-async def _grant_build_pruned(
-    session, seeds, matched_ids: set[int], scope: "_GrantDeptScope", Department
-) -> list[dict]:
-    """Minimal forest of ``seeds`` + their in-scope ancestors (clamped to the
-    positive prefix so names above it never leak); ``matched_ids`` flagged."""
-    if not seeds:
-        return []
-    from sqlmodel import select
-
-    needed: set[int] = set()
-    for d in seeds:
-        needed.update(_grant_path_ids(d.path))
-    if not needed:
-        return []
-    rows = list(
-        (
-            await session.exec(select(Department).where(Department.id.in_(list(needed)), Department.status == "active"))
-        ).all()
-    )
-    visible = [d for d in rows if _grant_in_scope(d, scope)]
-    if not visible:
-        return []
-    existence = await _grant_children_existence(session, [int(d.id) for d in visible], scope, Department)
-    nodes = {
-        int(d.id): _grant_dept_node(d, has_children=int(d.id) in existence, matched=int(d.id) in matched_ids)
-        for d in visible
-    }
-    roots: list[dict] = []
-    for d in visible:
-        pid = int(d.parent_id) if getattr(d, "parent_id", None) is not None else None
-        if pid is not None and pid in nodes:
-            nodes[pid]["children"].append(nodes[int(d.id)])
-        else:
-            roots.append(nodes[int(d.id)])
-
-    def _sort(layer: list[dict]):
-        layer.sort(key=lambda n: (n["sort_order"], n["id"]))
-        for n in layer:
-            _sort(n["children"])
-
-    _sort(roots)
-    return roots
 
 
 async def _grant_departments_children(
     *, tenant_id: int, parent_id: int | None = None, restrict_root_path: str | None = None
 ) -> list[dict]:
-    """One visible layer of the grant-subject department tree (AC-24). No
-    ``parent_id`` → root layer (the scope root). Out-of-scope/missing parent →
-    empty (no leak)."""
-    from sqlmodel import select
-
-    from bisheng.core.context.tenant import bypass_tenant_filter
-    from bisheng.core.database import get_async_db_session
-    from bisheng.database.models.department import Department
-
-    with bypass_tenant_filter():
-        async with get_async_db_session() as session:
-            scope = await _resolve_grant_dept_scope(session, tenant_id, restrict_root_path)
-            if scope is None:
-                return []
-            if parent_id is None:
-                if scope.positive_prefix is not None:
-                    root_ids = _grant_path_ids(scope.positive_prefix)
-                    if not root_ids:
-                        return []
-                    root = (
-                        await session.exec(
-                            select(Department).where(Department.id == root_ids[-1], Department.status == "active")
-                        )
-                    ).first()
-                    depts = [root] if root is not None and _grant_in_scope(root, scope) else []
-                else:
-                    stmt = select(Department).where(Department.parent_id.is_(None), Department.status == "active")
-                    stmt = _apply_grant_scope(stmt, scope, Department)
-                    depts = list((await session.exec(stmt.order_by(Department.sort_order, Department.id))).all())
-            else:
-                parent = (
-                    await session.exec(
-                        select(Department).where(Department.id == parent_id, Department.status == "active")
-                    )
-                ).first()
-                if parent is None or not _grant_in_scope(parent, scope):
-                    return []
-                stmt = select(Department).where(Department.parent_id == parent_id, Department.status == "active")
-                stmt = _apply_grant_scope(stmt, scope, Department)
-                depts = list((await session.exec(stmt.order_by(Department.sort_order, Department.id))).all())
-
-            depts = [d for d in depts if d is not None]
-            if not depts:
-                return []
-            existence = await _grant_children_existence(session, [int(d.id) for d in depts], scope, Department)
-            return [_grant_dept_node(d, has_children=int(d.id) in existence) for d in depts]
+    return await GrantSubjectQueryService().list_departments_children(
+        tenant_id=tenant_id, parent_id=parent_id, restrict_root_path=restrict_root_path
+    )
 
 
 async def _grant_departments_search(
     *, tenant_id: int, keyword: str, limit: int = 50, restrict_root_path: str | None = None
 ) -> dict:
-    """Server-side name search within the grant scope → pruned tree (AC-26).
-    Blank keyword returns empty without a query; ``truncated`` set over ``limit``."""
-    kw = (keyword or "").strip()
-    if not kw:
-        return {"roots": [], "total_matches": 0, "truncated": False}
-    limit = max(1, min(limit, 200))
-
-    from sqlmodel import select
-
-    from bisheng.core.context.tenant import bypass_tenant_filter
-    from bisheng.core.database import get_async_db_session
-    from bisheng.database.models.department import Department
-
-    with bypass_tenant_filter():
-        async with get_async_db_session() as session:
-            scope = await _resolve_grant_dept_scope(session, tenant_id, restrict_root_path)
-            if scope is None:
-                return {"roots": [], "total_matches": 0, "truncated": False}
-            stmt = select(Department).where(Department.name.like(f"%{kw}%"), Department.status == "active")
-            stmt = _apply_grant_scope(stmt, scope, Department)
-            matched = list(
-                (await session.exec(stmt.order_by(Department.sort_order, Department.id).limit(limit + 1))).all()
-            )
-            truncated = len(matched) > limit
-            matched = matched[:limit]
-            matched_ids = {int(d.id) for d in matched}
-            roots = await _grant_build_pruned(session, matched, matched_ids, scope, Department)
-            return {"roots": roots, "total_matches": len(matched), "truncated": truncated}
+    return await GrantSubjectQueryService().search_departments(
+        tenant_id=tenant_id, keyword=keyword, limit=limit, restrict_root_path=restrict_root_path
+    )
 
 
-async def _grant_departments_path_tree(*, tenant_id: int, dept_id: int, restrict_root_path: str | None = None) -> dict:
-    """Locate/reveal a department within the grant scope (AC-26). Out-of-scope or
-    missing target → empty roots (no leak)."""
-    from sqlmodel import select
-
-    from bisheng.core.context.tenant import bypass_tenant_filter
-    from bisheng.core.database import get_async_db_session
-    from bisheng.database.models.department import Department
-
-    with bypass_tenant_filter():
-        async with get_async_db_session() as session:
-            scope = await _resolve_grant_dept_scope(session, tenant_id, restrict_root_path)
-            if scope is None:
-                return {"roots": [], "total_matches": 0, "truncated": False}
-            target = (
-                await session.exec(select(Department).where(Department.id == dept_id, Department.status == "active"))
-            ).first()
-            if target is None or not _grant_in_scope(target, scope):
-                return {"roots": [], "total_matches": 0, "truncated": False}
-            roots = await _grant_build_pruned(session, [target], {int(target.id)}, scope, Department)
-            return {"roots": roots, "total_matches": 1, "truncated": False}
+async def _grant_departments_path_tree(
+    *, tenant_id: int, dept_id: int, restrict_root_path: str | None = None
+) -> dict:
+    return await GrantSubjectQueryService().get_departments_path_tree(
+        tenant_id=tenant_id, dept_id=dept_id, restrict_root_path=restrict_root_path
+    )
 
 
 async def _list_knowledge_space_grant_user_groups(
-    *,
-    tenant_id: int,
-    keyword: str,
-    login_user,
+    *, tenant_id: int, keyword: str, login_user: UserPayload
 ) -> list[dict]:
-    from sqlmodel import select
-
-    from bisheng.core.context.tenant import bypass_tenant_filter
-    from bisheng.core.database import get_async_db_session
-    from bisheng.database.models.group import Group
-    from bisheng.database.models.tenant import Tenant
-    from bisheng.database.models.user_group import UserGroupDao
-    from bisheng.user_group.domain.services.user_group_service import (
-        _can_view_all_groups,
+    return await GrantSubjectQueryService().list_user_groups(
+        tenant_id=tenant_id, keyword=keyword, login_user=login_user
     )
-
-    viewer_group_ids: set[int] = set()
-    can_view_all = await _can_view_all_groups(login_user)
-    if not can_view_all:
-        raw_visible_group_ids = await UserGroupDao.aget_user_visible_group_ids(
-            login_user.user_id,
-        )
-        viewer_group_ids = {
-            int(x[0]) if isinstance(x, tuple) else int(x) for x in raw_visible_group_ids or [] if x is not None
-        }
-
-    with bypass_tenant_filter():
-        async with get_async_db_session() as session:
-            stmt = (
-                select(Group)
-                .join(Tenant, Tenant.id == Group.tenant_id)
-                .where(
-                    Group.tenant_id == tenant_id,
-                    Tenant.status == "active",
-                )
-                .order_by(Group.update_time.desc())
-                .limit(2000)
-            )
-            if not can_view_all:
-                if viewer_group_ids:
-                    stmt = stmt.where(
-                        (Group.visibility == "public")
-                        | (Group.create_user == login_user.user_id)
-                        | (Group.id.in_(viewer_group_ids))
-                    )
-                else:
-                    stmt = stmt.where((Group.visibility == "public") | (Group.create_user == login_user.user_id))
-            if keyword:
-                stmt = stmt.where(Group.group_name.like(f"%{keyword}%"))
-            result = await session.exec(stmt)
-            groups = list(result.all())
-    return [
-        {
-            "id": int(group.id),
-            "group_name": group.group_name,
-        }
-        for group in groups
-        if getattr(group, "id", None) is not None
-    ]
-
 
 async def _resolve_grant_subject_tenant_id(
     *,
@@ -1466,246 +864,54 @@ async def authorize_resource(
     调用方在资源上的档位需覆盖本次操作涉及的「关系模型授权级别」
     （所有者级 / 管理级 / 使用级），与 PRD 管理应用所有者/管理者/使用者对齐。
     """
-    if resource_type not in VALID_RESOURCE_TYPES:
-        return PermissionInvalidResourceError.return_resp()
-    if resource_type == "channel":
-        return PermissionDeniedError.return_resp()
-    if any(_is_invalid_owner_subject(grant.subject_type, grant.relation) for grant in (request.grants or [])):
-        return PermissionDeniedError.return_resp("部门或用户组无法成为所有者")
-
-    # F033: department knowledge space restricts grants to the bound department
-    # subtree / its members and forbids user-group grants. Applies to ALL
-    # identities (incl. super_admin), so it sits outside the is_admin() bypass.
-    department_scope = await _resolve_department_space_scope(resource_type, resource_id)
-    if department_scope is not None:
-        denial = await _validate_department_space_grants(department_scope, request.grants or [])
-        if denial is not None:
-            return denial
-
-    from bisheng.permission.domain.services.permission_service import PermissionService
-
-    if not login_user.is_admin():
-        raw_models = await _get_relation_models()
-        model_map = {m["id"]: _normalize_model_dict(m) for m in raw_models}
-        binding_map = {
-            b.get("key"): b
-            for b in await _get_bindings()
-            if b.get("resource_type") == resource_type and str(b.get("resource_id")) == str(resource_id)
-        }
-        management_permission_ids = _management_permission_ids(resource_type)
-        caller_permission_ids = set()
-        if management_permission_ids:
-            from bisheng.permission.domain.services.fine_grained_permission_service import FineGrainedPermissionService
-
-            caller_permission_ids = await FineGrainedPermissionService.get_effective_permission_ids_async(
-                login_user,
-                resource_type,
-                resource_id,
-                nearest_binding_wins=_lineage_binding_can_override(resource_type),
-            )
-
-        if management_permission_ids and not (management_permission_ids & caller_permission_ids):
-            return PermissionDeniedError.return_resp()
-
-        for grant in request.grants or []:
-            model = model_map.get(getattr(grant, "model_id", None)) if getattr(grant, "model_id", None) else None
-            if getattr(grant, "model_id", None) and model is None:
-                return PermissionDeniedError.return_resp()
-            if not _can_grant_relation_model(
-                resource_type=resource_type,
-                relation=grant.relation,
-                model=model,
-                caller_permission_ids=caller_permission_ids,
-            ):
-                return PermissionDeniedError.return_resp()
-
-        for revoke in request.revokes or []:
-            binding = _binding_from_map(
-                binding_map,
-                resource_type,
-                str(resource_id),
-                revoke.subject_type,
-                revoke.subject_id,
-                revoke.relation,
-                getattr(revoke, "include_children", None),
-            )
-            model = model_map.get(binding.get("model_id")) if binding and binding.get("model_id") else None
-            if binding and binding.get("model_id") and model is None:
-                return PermissionDeniedError.return_resp()
-            if not _can_grant_relation_model(
-                resource_type=resource_type,
-                relation=revoke.relation,
-                model=model,
-                caller_permission_ids=caller_permission_ids,
-            ):
-                return PermissionDeniedError.return_resp()
-
-    grant_signatures = {_tuple_signature(g) for g in (request.grants or [])}
-    revoke_signatures = {_tuple_signature(r) for r in (request.revokes or [])}
-    rebind_only_signatures = grant_signatures & revoke_signatures
-
-    # Same subject/relation changes are model rebinds. Do not delete the tuple,
-    # but still issue an idempotent write so stale DB-only bindings are repaired.
-    rebind_only_grants = [
-        grant for grant in (request.grants or []) if _tuple_signature(grant) in rebind_only_signatures
-    ]
-    tuple_grants = [
-        grant for grant in (request.grants or []) if _tuple_signature(grant) not in rebind_only_signatures
-    ] + rebind_only_grants
-    tuple_revokes = [
-        revoke
-        for revoke in (request.revokes or [])
-        if _tuple_signature(revoke) not in rebind_only_signatures
-        and not _is_invalid_owner_subject(revoke.subject_type, revoke.relation)
-    ]
-
-    # Users cannot modify their OWN permission in the member dialog: changing your
-    # own role (e.g. owner→editor) strips your management access and locks you out
-    # of the dialog on the next reload; removing yourself is likewise disallowed.
-    # Managing OTHERS is fine. Creator rows are already locked client-side via
-    # is_creator; this is the server-side backstop for every resource type.
-    self_subject_changes = [
-        item
-        for item in (tuple_grants + tuple_revokes)
-        if getattr(item, "subject_type", None) == "user"
-        and int(getattr(item, "subject_id", 0) or 0) == int(login_user.user_id)
-    ]
-    if self_subject_changes:
-        return PermissionDeniedError.return_resp("不能修改自己的权限")
-
-    # Owner and creator are decoupled: an owner may be revoked/downgraded as long
-    # as another owner survives, but removing the last owner would orphan the
-    # resource (INV-2). Applies to ALL owner revokes (self or someone else's), and
-    # same-request owner grants count as survivors (ownership transfer).
-    owner_revokes = [revoke for revoke in tuple_revokes if getattr(revoke, "relation", None) == "owner"]
-    if owner_revokes:
-        if resource_type == "knowledge_space":
-            # The knowledge_space creator is a permanent, non-removable owner:
-            # ownership is backed by the SpaceChannelMember CREATOR row +
-            # Knowledge.user_id (honored by "我创建的" and file read/write/delete)
-            # regardless of FGA tuples, so revoking/downgrading the creator's owner
-            # is refused. Any OTHER owner is always safe to remove — the creator
-            # backstops ownership, so the space can never be orphaned.
-            from bisheng.permission.domain.services.permission_service import PermissionService
-
-            creator_id = await PermissionService._get_resource_creator(resource_type, resource_id)
-            if creator_id is not None and any(
-                revoke.subject_type == "user" and int(revoke.subject_id) == int(creator_id) for revoke in owner_revokes
-            ):
-                return PermissionDeniedError.return_resp("知识空间创建者的所有者身份不可移除")
-        elif not await _can_remove_owner_relations(
-            resource_type=resource_type,
-            resource_id=resource_id,
-            revokes=owner_revokes,
-            grants=tuple_grants,
-        ):
-            return PermissionLastOwnerError.return_resp()
-
-    permission_notify_context = None
-    if tuple_grants or tuple_revokes:
-        from bisheng.permission.domain.services.resource_permission_notification_service import (
-            ResourcePermissionNotificationService,
-        )
-
-        permission_notify_context = await ResourcePermissionNotificationService.build_context(
-            resource_type=resource_type,
-            resource_id=resource_id,
-            grants=tuple_grants,
-            revokes=tuple_revokes,
-        )
-        logger.info(
-            "resource_authorize start actor=%s resource=%s:%s grants=%d revokes=%d",
-            login_user.user_id,
-            resource_type,
-            resource_id,
-            len(tuple_grants),
-            len(tuple_revokes),
-        )
-        try:
-            await PermissionService.authorize(
-                object_type=resource_type,
-                object_id=resource_id,
-                grants=tuple_grants,
-                revokes=tuple_revokes,
-                enforce_fga_success=True,
-            )
-        except Exception as e:
-            logger.error(
-                "resource_authorize failed actor=%s resource=%s:%s grants=%d revokes=%d error=%s",
-                login_user.user_id,
-                resource_type,
-                resource_id,
-                len(tuple_grants),
-                len(tuple_revokes),
-                e,
-            )
-            return PermissionTupleWriteError.return_resp(data={"exception": str(e)})
-
-    # Persist relation-model bindings for UI display and model deletion cascade.
-    bindings = await _get_bindings()
-    bindings_map = {b.get("key"): b for b in bindings if b.get("key")}
-    for revoke in request.revokes or []:
-        include_children = getattr(revoke, "include_children", None)
-        include_children_values = [include_children]
-        if revoke.subject_type == "department" and (
-            include_children is True or _is_invalid_owner_subject(revoke.subject_type, revoke.relation)
-        ):
-            include_children_values = [True, False]
-        for include_children in include_children_values:
-            for key in _binding_lookup_keys(
-                resource_type,
-                str(resource_id),
-                revoke.subject_type,
-                revoke.subject_id,
-                revoke.relation,
-                include_children,
-            ):
-                bindings_map.pop(key, None)
-    for grant in request.grants or []:
-        if not getattr(grant, "model_id", None):
-            continue
-        normalized_include_children = _normalize_binding_include_children(
-            grant.subject_type,
-            getattr(grant, "include_children", None),
-        )
-        key = _binding_key_with_scope(
-            resource_type,
-            str(resource_id),
-            grant.subject_type,
-            grant.subject_id,
-            grant.relation,
-            normalized_include_children,
-        )
-        bindings_map[key] = {
-            "key": key,
-            "resource_type": resource_type,
-            "resource_id": str(resource_id),
-            "subject_type": grant.subject_type,
-            "subject_id": grant.subject_id,
-            "relation": grant.relation,
-            "include_children": normalized_include_children,
-            "model_id": grant.model_id,
-        }
-    await _save_bindings(list(bindings_map.values()))
-
-    # Notification is not part of the authorize business result: dispatch it in
-    # the background so the per-member OpenFGA checks + inbox writes never block
-    # or fail the response. The pre-write snapshot lives in the context already.
-    _dispatch_authorize_notifications_in_background(
-        context=permission_notify_context,
-        operator_user_id=login_user.user_id,
-        operator_user_name=getattr(login_user, "user_name", None),
+    from bisheng.permission.domain.services.resource_authorization_service import (
+        ResourceAuthorizationService,
     )
-    logger.info(
-        "resource_authorize success actor=%s resource=%s:%s grants=%d revokes=%d bindings=%d",
-        login_user.user_id,
-        resource_type,
-        resource_id,
-        len(request.grants or []),
-        len(request.revokes or []),
-        len(bindings_map),
+
+    service = ResourceAuthorizationService(
+        get_relation_models=_get_relation_models,
+        get_bindings=_get_bindings,
+        save_bindings=_save_bindings,
+        dispatch_notifications=_dispatch_authorize_notifications_in_background,
     )
+    try:
+        await service.authorize(resource_type, resource_id, request, login_user)
+    except PermissionTupleWriteError as error:
+        return error.return_resp_instance()
+    except BaseErrorCode as error:
+        return error.__class__.return_resp(msg=error.message)
     return resp_200(None)
+
+@router.get("/creation-grant-subjects")
+async def get_creation_grant_subjects(
+    resource_type: str,
+    subject_type: str,
+    operation: str,
+    keyword: str = "",
+    page: int = Query(1, ge=1),
+    page_size: int = Query(1000, ge=1, le=2000),
+    parent_id: int | None = Query(None),
+    department_id: int | None = Query(None),
+    limit: int = Query(50, ge=1, le=200),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    """Return current-tenant grant subjects for a resource being created."""
+    try:
+        data = await GrantSubjectQueryService().query_creation_subjects(
+            resource_type=resource_type,
+            subject_type=subject_type,
+            operation=operation,
+            login_user=login_user,
+            keyword=keyword,
+            page=page,
+            page_size=page_size,
+            parent_id=parent_id,
+            department_id=department_id,
+            limit=limit,
+        )
+    except BaseErrorCode as error:
+        return error.return_resp_instance()
+    return resp_200(data)
 
 
 @router.get("/resources/{resource_type}/{resource_id}/grant-subjects/users")
@@ -1717,33 +923,18 @@ async def get_grant_subject_users(
     page_size: int = Query(1000, ge=1, le=2000),
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
-    if resource_type not in VALID_RESOURCE_TYPES:
-        return PermissionInvalidResourceError.return_resp()
-    if not await _has_resource_permission_management_access(
-        resource_type=resource_type,
-        resource_id=resource_id,
-        login_user=login_user,
-    ):
-        return PermissionDeniedError.return_resp()
-    tenant_id = await _resolve_grant_subject_tenant_id(
-        resource_type=resource_type,
-        resource_id=resource_id,
-        login_user=login_user,
-    )
-    if tenant_id is None:
-        return resp_200([])
-    scope = await _resolve_department_space_scope(resource_type, resource_id, load_subtree_ids=False)
-    if scope is not None and not scope.department_path:
-        return resp_200([])
-    return resp_200(
-        await _list_knowledge_space_grant_users(
-            tenant_id=tenant_id,
+    try:
+        data = await GrantSubjectQueryService().query_resource_users(
+            resource_type=resource_type,
+            resource_id=resource_id,
+            login_user=login_user,
             keyword=keyword,
             page=page,
             page_size=page_size,
-            restrict_dept_path=scope.department_path if scope else None,
         )
-    )
+    except BaseErrorCode as error:
+        return error.__class__.return_resp(msg=error.message)
+    return resp_200(data)
 
 
 # F038/T012: the eager full-tree ``GET .../grant-subjects/departments`` was
@@ -1802,16 +993,19 @@ async def get_grant_subject_departments_children(
     parent_id: int | None = Query(None),
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
-    err, tenant_id, restrict_root_path, empty = await _grant_dept_lazy_preamble(resource_type, resource_id, login_user)
-    if err is not None:
-        return err
-    if empty:
-        return resp_200(_EMPTY_DEPT_LAYER)
-    return resp_200(
-        await _grant_departments_children(
-            tenant_id=tenant_id, parent_id=parent_id, restrict_root_path=restrict_root_path
+    # GrantSubjectQueryService preserves the existing lazy department response,
+    # including each node's member_count field.
+    try:
+        data = await GrantSubjectQueryService().query_resource_departments(
+            resource_type=resource_type,
+            resource_id=resource_id,
+            login_user=login_user,
+            operation="children",
+            parent_id=parent_id,
         )
-    )
+    except BaseErrorCode as error:
+        return error.__class__.return_resp(msg=error.message)
+    return resp_200(data)
 
 
 @router.get("/resources/{resource_type}/{resource_id}/grant-subjects/departments/search")
@@ -1822,16 +1016,18 @@ async def search_grant_subject_departments(
     limit: int = Query(50, ge=1, le=200),
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
-    err, tenant_id, restrict_root_path, empty = await _grant_dept_lazy_preamble(resource_type, resource_id, login_user)
-    if err is not None:
-        return err
-    if empty:
-        return resp_200(dict(_EMPTY_DEPT_TREE))
-    return resp_200(
-        await _grant_departments_search(
-            tenant_id=tenant_id, keyword=keyword, limit=limit, restrict_root_path=restrict_root_path
+    try:
+        data = await GrantSubjectQueryService().query_resource_departments(
+            resource_type=resource_type,
+            resource_id=resource_id,
+            login_user=login_user,
+            operation="search",
+            keyword=keyword,
+            limit=limit,
         )
-    )
+    except BaseErrorCode as error:
+        return error.__class__.return_resp(msg=error.message)
+    return resp_200(data)
 
 
 @router.get("/resources/{resource_type}/{resource_id}/grant-subjects/departments/{dept_id:int}/path-tree")
@@ -1841,14 +1037,17 @@ async def get_grant_subject_departments_path_tree(
     dept_id: int,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
-    err, tenant_id, restrict_root_path, empty = await _grant_dept_lazy_preamble(resource_type, resource_id, login_user)
-    if err is not None:
-        return err
-    if empty:
-        return resp_200(dict(_EMPTY_DEPT_TREE))
-    return resp_200(
-        await _grant_departments_path_tree(tenant_id=tenant_id, dept_id=dept_id, restrict_root_path=restrict_root_path)
-    )
+    try:
+        data = await GrantSubjectQueryService().query_resource_departments(
+            resource_type=resource_type,
+            resource_id=resource_id,
+            login_user=login_user,
+            operation="path_tree",
+            department_id=dept_id,
+        )
+    except BaseErrorCode as error:
+        return error.__class__.return_resp(msg=error.message)
+    return resp_200(data)
 
 
 @router.get("/resources/{resource_type}/{resource_id}/grant-subjects/user-groups")
@@ -1858,31 +1057,16 @@ async def get_grant_subject_user_groups(
     keyword: str = "",
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
-    if resource_type not in VALID_RESOURCE_TYPES:
-        return PermissionInvalidResourceError.return_resp()
-    if not await _has_resource_permission_management_access(
-        resource_type=resource_type,
-        resource_id=resource_id,
-        login_user=login_user,
-    ):
-        return PermissionDeniedError.return_resp()
-    # F033: department knowledge spaces disable the user-group dimension.
-    if await _resolve_department_space_scope(resource_type, resource_id, load_subtree_ids=False) is not None:
-        return resp_200([])
-    tenant_id = await _resolve_grant_subject_tenant_id(
-        resource_type=resource_type,
-        resource_id=resource_id,
-        login_user=login_user,
-    )
-    if tenant_id is None:
-        return resp_200([])
-    return resp_200(
-        await _list_knowledge_space_grant_user_groups(
-            tenant_id=tenant_id,
-            keyword=keyword,
+    try:
+        data = await GrantSubjectQueryService().query_resource_user_groups(
+            resource_type=resource_type,
+            resource_id=resource_id,
             login_user=login_user,
+            keyword=keyword,
         )
-    )
+    except BaseErrorCode as error:
+        return error.__class__.return_resp(msg=error.message)
+    return resp_200(data)
 
 
 @router.get("/resources/{resource_type}/{resource_id}/permissions")
@@ -1966,20 +1150,49 @@ async def get_relation_models(
 @router.get("/relation-models/grantable")
 async def get_grantable_relation_models(
     object_type: str,
-    object_id: str,
+    object_id: str | None = None,
+    creation: bool = False,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     """返回当前用户在指定资源上「有权用于授权」的关系模型子集。"""
     if object_type not in VALID_RESOURCE_TYPES:
         return PermissionInvalidResourceError.return_resp()
 
-    raw = [_normalize_model_dict(m) for m in await _get_relation_models()]
-    if login_user.is_admin():
-        return resp_200([RelationModelItem(**m) for m in raw])
+    from bisheng.permission.domain.services.resource_authorization_service import (
+        ResourceAuthorizationService,
+    )
 
+    authorization_service = ResourceAuthorizationService(
+        get_relation_models=_get_relation_models,
+    )
+    relation_models = None
     management_permission_ids = _management_permission_ids(object_type)
-    caller_permission_ids = set()
-    if management_permission_ids:
+    if creation:
+        try:
+            query_service = GrantSubjectQueryService(
+                resource_authorization_service=authorization_service,
+            )
+            await query_service.resolve_creation_tenant_id(login_user)
+        except BaseErrorCode as error:
+            return error.__class__.return_resp(msg=error.message)
+        try:
+            relation_models = await authorization_service.get_relation_models()
+            caller_permission_ids = await query_service.require_creation_management_access(
+                object_type,
+                relation_models=relation_models,
+            )
+        except PermissionDeniedError:
+            return resp_200([])
+        except BaseErrorCode as error:
+            return error.__class__.return_resp(msg=error.message)
+    elif object_id is None:
+        return PermissionInvalidResourceError.return_resp()
+    elif login_user.is_admin():
+        raw = [_normalize_model_dict(m) for m in await _get_relation_models()]
+        return resp_200([RelationModelItem(**m) for m in raw])
+    else:
+        caller_permission_ids = set()
+    if not creation and management_permission_ids:
         from bisheng.permission.domain.services.fine_grained_permission_service import FineGrainedPermissionService
 
         caller_permission_ids = await FineGrainedPermissionService.get_effective_permission_ids_async(
@@ -1991,15 +1204,12 @@ async def get_grantable_relation_models(
     if management_permission_ids and not (management_permission_ids & caller_permission_ids):
         return resp_200([])
 
-    out = []
-    for m in raw:
-        if _can_grant_relation_model(
-            resource_type=object_type,
-            relation=m.get("relation") or "",
-            model=m,
-            caller_permission_ids=caller_permission_ids,
-        ):
-            out.append(RelationModelItem(**m))
+    grantable_models = await authorization_service.grantable_models_for_permissions(
+        object_type,
+        set(caller_permission_ids),
+        relation_models=relation_models,
+    )
+    out = [RelationModelItem(**_normalize_model_dict(model)) for model in grantable_models]
     return resp_200(out)
 
 

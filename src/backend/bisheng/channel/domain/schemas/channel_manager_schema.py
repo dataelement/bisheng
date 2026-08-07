@@ -2,9 +2,10 @@ from datetime import datetime
 from enum import Enum
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from bisheng.channel.domain.models.channel import ChannelFilterRules, ChannelVisibilityEnum
+from bisheng.channel.domain.schemas.channel_authorization_schema import ChannelGrantItem
 
 
 class SubscriptionStatusEnum(str, Enum):
@@ -49,6 +50,17 @@ class KnowledgeSyncConfig(BaseModel):
     subs: list[KnowledgeSyncSubConfig] = Field(default_factory=list)
 
 
+class ChannelInitialPermissions(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    grants: list[ChannelGrantItem] = Field(default_factory=list)
+
+
+class ChannelInitialPermissionResult(BaseModel):
+    status: Literal["success", "failed"]
+    error_code: int | None = None
+
+
 class CreateChannelRequest(BaseModel):
     name: str = Field(..., description="Channel Name")
     source_list: list[str] = Field(default_factory=list, description="Data Source List")
@@ -57,6 +69,10 @@ class CreateChannelRequest(BaseModel):
     filter_rules: list[ChannelFilterRules] | None = Field(default_factory=list, description="Filter Conditions")
     is_released: bool = Field(default=False, description="Whether the channel is released")
     knowledge_sync: KnowledgeSyncConfig | None = Field(None, description="Knowledge space sync configuration")
+    initial_permissions: ChannelInitialPermissions | None = Field(
+        None,
+        description="Permission grants applied after the channel is created",
+    )
 
 
 class UpdateChannelRequest(BaseModel):
@@ -159,9 +175,7 @@ class ChannelDetailResponse(BaseModel):
     # F040: per-sub-channel unread counts moved to GET /channel/manager/{id}/unread-counts
     # (lazy, in-channel only) — the dominant per-user ES cost no longer rides on detail.
     subscription_status: SubscriptionStatusEnum = Field(..., description="Current user subscription status")
-    relation: str | None = Field(
-        None, description="Current user channel relation: owner / manager / editor / viewer"
-    )
+    relation: str | None = Field(None, description="Current user channel relation: owner / manager / editor / viewer")
     permission_ids: list[str] = Field(default_factory=list, description="Effective channel permission IDs")
     knowledge_sync: KnowledgeSyncConfig | None = Field(
         None,

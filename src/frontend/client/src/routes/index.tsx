@@ -36,6 +36,16 @@ const Share = lazy(() => import('@/pages/share'));
 const Sop = lazy(() => import('@/components/Sop'));
 const Subscription = lazy(() => import('~/pages/Subscription'));
 const Knowledge = lazy(() => import('~/pages/knowledge'));
+const ChannelSettingsPage = lazy(() =>
+  import('~/pages/Subscription/ChannelSettings/ChannelSettingsPage').then((module) => ({
+    default: module.ChannelSettingsPage,
+  })),
+);
+const KnowledgeSpaceSettingsPage = lazy(() =>
+  import('~/pages/knowledge/SpaceSettings/KnowledgeSpaceSettingsPage').then((module) => ({
+    default: module.KnowledgeSpaceSettingsPage,
+  })),
+);
 const FilePreviewPage = lazy(() => import('~/pages/knowledge/FilePreview/FilePreviewPage'));
 const ArticlePage = lazy(() => import('~/pages/Subscription/Article/ArticlePage'));
 const DevLogin = lazy(() => import('~/pages/DevLogin'));
@@ -214,6 +224,16 @@ export const router = createBrowserRouter([
               <Subscription />
             </MenuApprovalPluginGate>
           )},
+          { path: 'channel/create', element: suspended(
+            <MenuApprovalPluginGate pluginId="subscription">
+              <ChannelSettingsPage />
+            </MenuApprovalPluginGate>
+          )},
+          { path: 'channel/:channelId/settings', element: suspended(
+            <MenuApprovalPluginGate pluginId="subscription">
+              <ChannelSettingsPage />
+            </MenuApprovalPluginGate>
+          )},
           { path: 'channel/share/:channelId', element: suspended(<Subscription />) },
           { path: 'channel/:channelId', element: suspended(
             <MenuApprovalPluginGate pluginId="subscription">
@@ -223,6 +243,16 @@ export const router = createBrowserRouter([
           { path: 'knowledge', element: suspended(
             <MenuApprovalPluginGate pluginId="knowledge_space">
               <Knowledge />
+            </MenuApprovalPluginGate>
+          )},
+          { path: 'knowledge/create', element: suspended(
+            <MenuApprovalPluginGate pluginId="knowledge_space">
+              <KnowledgeSpaceSettingsPage />
+            </MenuApprovalPluginGate>
+          )},
+          { path: 'knowledge/space/:spaceId/settings', element: suspended(
+            <MenuApprovalPluginGate pluginId="knowledge_space">
+              <KnowledgeSpaceSettingsPage />
             </MenuApprovalPluginGate>
           )},
           { path: 'knowledge/space/:spaceId', element: suspended(
