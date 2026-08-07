@@ -147,7 +147,7 @@ export function TagReviewDialog({ target, libraries, saving, onClose, onApprove,
                     <Button variant="outline" className="px-8" onClick={onClose}>
                         {t("cancel", { ns: "bs" })}
                     </Button>
-                    <Button variant="outline" className="px-8" disabled={saving || loading} onClick={handleReject}>
+                    <Button variant="destructive" className="px-8" disabled={saving || loading} onClick={handleReject}>
                         {t("build.tagConsole.reject", "驳回")}
                     </Button>
                     <Button className="px-8" disabled={saving || loading} onClick={handleApprove}>

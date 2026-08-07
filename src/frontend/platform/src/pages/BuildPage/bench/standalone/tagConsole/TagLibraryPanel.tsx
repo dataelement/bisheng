@@ -116,8 +116,8 @@ export function TagLibraryPanel({
     }
 
     return (
-        <div className="flex h-full w-[280px] min-w-[280px] flex-col border-r border-[#ECECEC] bg-background">
-            <div className="flex items-center gap-2 border-b border-[#ECECEC] p-3">
+        <div className="flex h-full w-[260px] min-w-[260px] flex-col border-r border-[#E5E6EB] bg-[#FAFBFC]">
+            <div className="flex items-center gap-2 border-b border-[#E5E6EB] p-3">
                 <SearchInput
                     className="min-w-0 flex-1"
                     placeholder={t("build.tagConsole.searchLibrary", "搜索标签库名")}
@@ -133,8 +133,10 @@ export function TagLibraryPanel({
                 type="button"
                 onClick={onSelectReviewEntry}
                 className={cname(
-                    "flex items-center justify-between border-b border-[#ECECEC] px-4 py-3 text-left text-sm transition-colors",
-                    mode === "review" ? "bg-primary/10 font-medium text-primary" : "hover:bg-muted",
+                    "flex items-center justify-between border-l-[3px] border-b border-b-[#E5E6EB] px-4 py-3 text-left text-sm transition-colors",
+                    mode === "review"
+                        ? "border-l-primary bg-primary/10 font-medium text-primary"
+                        : "border-l-transparent hover:bg-[#F2F3F5]",
                 )}
             >
                 <span className="flex items-center gap-2">
@@ -161,8 +163,10 @@ export function TagLibraryPanel({
                                 key={library.id}
                                 onClick={() => onSelectLibrary(library.id)}
                                 className={cname(
-                                    "group flex cursor-pointer items-center justify-between px-4 py-2.5 text-sm",
-                                    selected ? "bg-primary/10 text-primary" : "hover:bg-muted",
+                                    "group flex cursor-pointer items-center justify-between border-l-[3px] px-4 py-2.5 text-sm transition-colors",
+                                    selected
+                                        ? "border-l-primary bg-primary/10 font-medium text-primary"
+                                        : "border-l-transparent hover:bg-[#F2F3F5]",
                                 )}
                             >
                                 <TooltipProvider delayDuration={200}>

@@ -114,7 +114,7 @@ export function RejectReasonDialog({ open, saving, onOpenChange, onConfirm }: Re
                     <Button variant="outline" className="px-8" onClick={() => onOpenChange(false)}>
                         {t("cancel", { ns: "bs" })}
                     </Button>
-                    <Button className="px-8" disabled={saving || !reason.trim()} onClick={() => onConfirm(reason.trim())}>
+                    <Button variant="destructive" className="px-8" disabled={saving || !reason.trim()} onClick={() => onConfirm(reason.trim())}>
                         {t("confirm", { ns: "bs" })}
                     </Button>
                 </DialogFooter>

@@ -48,10 +48,12 @@ export default function KnowledgeTagLibraryPage() {
     }, [])
 
     return (
-        <div className="flex h-full flex-col">
-            <div className="border-b border-[#ECECEC] px-4 py-3">
-                <p className="text-lg font-bold">{t("build.tagLibraryManagementTitle", "标签管理")}</p>
-                <p className="mt-1 text-sm text-[#86909C]">
+        <div className="flex h-full flex-col bg-[#F5F6F8] p-3">
+            <div className="mb-3 flex items-baseline gap-3 px-1">
+                <h1 className="shrink-0 text-base font-semibold">
+                    {t("build.tagLibraryManagementTitle", "标签管理")}
+                </h1>
+                <p className="truncate text-xs text-[#86909C]">
                     {t(
                         "build.tagLibraryManagementDesc",
                         "维护平台标签库；知识空间可绑定一个或多个标签库，AI 打标从库中选取候选标签。",
@@ -59,7 +61,7 @@ export default function KnowledgeTagLibraryPage() {
                 </p>
             </div>
 
-            <div className="flex min-h-0 flex-1">
+            <div className="flex min-h-0 flex-1 overflow-hidden rounded-lg border border-[#E5E6EB] bg-background shadow-sm">
                 <TagLibraryPanel
                     mode={selection.mode}
                     selectedLibraryIds={selection.selectedLibraryIds}

@@ -1448,7 +1448,9 @@
       "deleteConfirm": "Delete the selected tags? Their file associations are removed as well.",
       "moreFiles": "{{count}} files in total",
       "reviewCounts": "(pending {{pending}} / rejected {{rejected}})",
-      "multiSpaceHint": "Produced in {{count}} knowledge spaces"
+      "multiSpaceHint": "Produced in {{count}} knowledge spaces",
+      "tagNamePlaceholder": "Enter a tag name",
+      "selectUser": "Select a user"
     }
   },
   "bench": {

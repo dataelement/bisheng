@@ -1431,7 +1431,9 @@
       "deleteConfirm": "選択したタグを削除しますか？ファイルとの関連も削除されます。",
       "moreFiles": "全 {{count}} ファイル",
       "reviewCounts": "（審査待ち {{pending}} / 却下済み {{rejected}}）",
-      "multiSpaceHint": "{{count}} 個のナレッジスペースで生成"
+      "multiSpaceHint": "{{count}} 個のナレッジスペースで生成",
+      "tagNamePlaceholder": "タグ名を入力",
+      "selectUser": "ユーザーを選択"
     }
   },
   "bench": {

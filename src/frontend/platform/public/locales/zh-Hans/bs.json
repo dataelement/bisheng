@@ -1437,7 +1437,9 @@
       "deleteConfirm": "确定删除选中的标签？删除后其与知识文件的关联也会一并移除。",
       "moreFiles": "等 {{count}} 个文件",
       "reviewCounts": "（待审核 {{pending}} / 已驳回 {{rejected}}）",
-      "multiSpaceHint": "该标签在 {{count}} 个知识空间中产生"
+      "multiSpaceHint": "该标签在 {{count}} 个知识空间中产生",
+      "tagNamePlaceholder": "请输入标签名称",
+      "selectUser": "请选择用户"
     }
   },
   "bench": {

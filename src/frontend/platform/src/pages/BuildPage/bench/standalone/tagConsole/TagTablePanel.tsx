@@ -122,7 +122,7 @@ export function TagTablePanel({ selectedLibraryIds, libraries, onLibraryContentC
                 onSearch={() => setAppliedFilters(filters)}
             />
 
-            <div className="flex flex-wrap items-center gap-2 border-b border-[#ECECEC] px-4 py-3">
+            <div className="flex flex-wrap items-center gap-2 border-b border-[#E5E6EB] bg-background px-4 py-2.5">
                 <span className="mr-auto text-sm font-medium">
                     {t("build.tagConsole.tagListTitle", "标签列表")}
                     <span className="ml-2 text-muted-foreground">({total})</span>
@@ -145,8 +145,8 @@ export function TagTablePanel({ selectedLibraryIds, libraries, onLibraryContentC
 
             <div className="min-h-0 flex-1 overflow-auto">
                 <table className="w-full min-w-[1200px] border-collapse text-sm">
-                    <thead className="sticky top-0 z-10 bg-background">
-                        <tr className="border-b text-left text-muted-foreground">
+                    <thead className="sticky top-0 z-10 bg-[#F7F8FA]">
+                        <tr className="border-b border-[#E5E6EB] text-left text-xs uppercase tracking-wide text-[#86909C]">
                             <th className="w-10 px-3 py-3">
                                 <Checkbox
                                     checked={allChecked}
@@ -183,7 +183,7 @@ export function TagTablePanel({ selectedLibraryIds, libraries, onLibraryContentC
                             </tr>
                         ) : (
                             rows.map((row, index) => (
-                                <tr key={row.id} className="border-b hover:bg-muted/40">
+                                <tr key={row.id} className="border-b border-[#F2F3F5] hover:bg-[#F7F8FA]">
                                     <td className="px-3 py-3">
                                         <Checkbox
                                             checked={selectedIds.includes(row.id)}
@@ -223,7 +223,7 @@ export function TagTablePanel({ selectedLibraryIds, libraries, onLibraryContentC
                 </table>
             </div>
 
-            <div className="flex justify-end border-t border-[#ECECEC] px-4 py-2">
+            <div className="flex justify-end border-t border-[#E5E6EB] bg-background px-4 py-2">
                 <AutoPagination
                     page={page}
                     pageSize={PAGE_SIZE}
