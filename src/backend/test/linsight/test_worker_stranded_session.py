@@ -27,6 +27,10 @@ def make_proc():
     proc = ScheduleCenterProcess.__new__(ScheduleCenterProcess)
     proc.semaphore = None
     proc.max_concurrency = 1
+    # Skipping __init__ means every attribute handle_task_result touches has to be
+    # stubbed here; repair_tasks is the strong-ref set that keeps the fire-and-forget
+    # repair alive.
+    proc.repair_tasks = set()
     return proc
 
 
