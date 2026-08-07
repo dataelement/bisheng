@@ -99,7 +99,7 @@ export function AppSwitcherDropdown() {
                 >
                   <div className="flex items-center gap-[8px] min-w-0 flex-1">
                     <AppAvator
-                      className="size-[20px] min-w-[20px] rounded-[4px]"
+                      className="size-[20px] min-w-[20px] rounded-sm"
                       iconClassName="w-3.5 h-3.5"
                       url={app.logo}
                       id={app.id as any}

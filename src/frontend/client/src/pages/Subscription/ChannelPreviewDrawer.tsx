@@ -308,7 +308,7 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onSubscrip
                                                 {channelDetail.source_infos.slice(0, 4).map((source: any, index: number) => (
                                                     <div
                                                         key={source.id}
-                                                        className="size-5 rounded-[4px] border border-white overflow-hidden bg-gray-100"
+                                                        className="size-5 rounded-sm border border-white overflow-hidden bg-gray-100"
                                                         style={{ zIndex: 4 - index }}
                                                     >
                                                         <img

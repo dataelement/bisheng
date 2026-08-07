@@ -119,7 +119,7 @@ function KeywordTagInput({ keywords, onChange }: KeywordTagInputProps) {
             {keywords.map((kw, idx) => (
                 <span
                     key={`${kw}-${idx}`}
-                    className="inline-flex items-center gap-[2px] rounded-[4px] bg-[#F2F3F5] pl-[8px] pr-[4px] py-[1px] text-[14px] leading-[22px] text-[#4E5969] max-w-[180px]"
+                    className="inline-flex items-center gap-[2px] rounded-sm bg-[#F2F3F5] pl-[8px] pr-[4px] py-[1px] text-[14px] leading-[22px] text-[#4E5969] max-w-[180px]"
                 >
                     <span className="truncate">{kw}</span>
                     <X
@@ -287,7 +287,7 @@ export function FilterConditionEditor({
                                     type="button"
                                     onClick={() => updateCondition(condIndex, { include: true })}
                                     className={cn(
-                                        "whitespace-nowrap rounded-[4px] px-[12px] py-[2px] text-center text-[14px] leading-[22px] transition-colors",
+                                        "whitespace-nowrap rounded-sm px-[12px] py-[2px] text-center text-[14px] leading-[22px] transition-colors",
                                         cond.include
                                             ? "bg-blue-500/15 text-blue-500 font-medium"
                                             : "bg-transparent text-[#818181] hover:bg-[#F2F3F5]"
@@ -299,7 +299,7 @@ export function FilterConditionEditor({
                                     type="button"
                                     onClick={() => updateCondition(condIndex, { include: false })}
                                     className={cn(
-                                        "whitespace-nowrap rounded-[4px] px-[12px] py-[2px] text-center text-[14px] leading-[22px] transition-colors",
+                                        "whitespace-nowrap rounded-sm px-[12px] py-[2px] text-center text-[14px] leading-[22px] transition-colors",
                                         !cond.include
                                             ? "bg-blue-500/15 text-blue-500 font-medium"
                                             : "bg-transparent text-[#818181] hover:bg-[#F2F3F5]"

@@ -244,7 +244,7 @@ const StatusBadge = ({ status, file }: { status: FileStatus; file?: KnowledgeFil
     return wrapWithReason(
         <div
             className={cn(
-                "inline-flex shrink-0 items-center justify-center gap-1 whitespace-nowrap rounded-[4px] px-2 text-xs leading-5",
+                "inline-flex shrink-0 items-center justify-center gap-1 whitespace-nowrap rounded-sm px-2 text-xs leading-5",
                 tone.bg,
                 tone.text,
             )}

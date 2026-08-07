@@ -402,7 +402,7 @@ export function MediaPlayer({ kind, src, allowDownload = false, onDownload }: Me
             className={cn(
                 "relative overflow-hidden",
                 onDarkStage ? "bg-black" : "bg-fill-2",
-                fullscreen ? "flex h-full w-full flex-col justify-center" : "rounded-[12px]",
+                fullscreen ? "flex h-full w-full flex-col justify-center" : "rounded-xl",
             )}
         >
             {isVideo ? (

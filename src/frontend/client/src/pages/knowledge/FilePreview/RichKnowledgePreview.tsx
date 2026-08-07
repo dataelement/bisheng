@@ -254,11 +254,11 @@ function MediaTranscriptTabs({ fileUrl }: { fileUrl: string }) {
             <div className="flex shrink-0 items-center px-3 pt-4">
                 {/* Segmented control — mirrors the include/exclude tabs in
                     Subscription/CreateChannel/FilterConditionEditor. */}
-                <div className="flex flex-shrink-0 rounded-[6px] bg-[#F8F8F8] p-[3px]">
+                <div className="flex flex-shrink-0 rounded-md bg-[#F8F8F8] p-[3px]">
                     <button
                         type="button"
                         onClick={() => setActiveTab("recognized")}
-                        className={`whitespace-nowrap rounded-[4px] px-[12px] py-[2px] text-center text-[14px] leading-[22px] transition-colors ${activeTab === "recognized"
+                        className={`whitespace-nowrap rounded-sm px-[12px] py-[2px] text-center text-[14px] leading-[22px] transition-colors ${activeTab === "recognized"
                             ? "bg-blue-500/15 font-medium text-blue-500"
                             : "bg-transparent text-[#818181] hover:bg-[#F2F3F5]"}`}
                     >
@@ -267,7 +267,7 @@ function MediaTranscriptTabs({ fileUrl }: { fileUrl: string }) {
                     <button
                         type="button"
                         onClick={() => setActiveTab("entry")}
-                        className={`whitespace-nowrap rounded-[4px] px-[12px] py-[2px] text-center text-[14px] leading-[22px] transition-colors ${activeTab === "entry"
+                        className={`whitespace-nowrap rounded-sm px-[12px] py-[2px] text-center text-[14px] leading-[22px] transition-colors ${activeTab === "entry"
                             ? "bg-blue-500/15 font-medium text-blue-500"
                             : "bg-transparent text-[#818181] hover:bg-[#F2F3F5]"}`}
                     >

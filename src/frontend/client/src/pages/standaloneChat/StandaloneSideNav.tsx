@@ -76,7 +76,7 @@ export function StandaloneSideNav({ sidebar, onCloseSidebar }: StandaloneSideNav
                 >
                   <div className="flex items-center gap-[8px]">
                     <AppAvator
-                      className="size-[32px] min-w-[32px] rounded-[4px]"
+                      className="size-[32px] min-w-[32px] rounded-sm"
                       url={flowData?.logo}
                       id={flowData?.id as any}
                       flowType={String(flowData?.flow_type || 5)}
@@ -144,7 +144,7 @@ export function StandaloneSideNav({ sidebar, onCloseSidebar }: StandaloneSideNav
                   <div className="flex flex-col gap-2">
                     <div className="flex items-center gap-2">
                       <AppAvator
-                        className="size-[32px] min-w-[32px] rounded-[4px]"
+                        className="size-[32px] min-w-[32px] rounded-sm"
                         url={flowData?.logo}
                         id={flowData?.id as any}
                         flowType={String(flowData?.flow_type || 5)}
@@ -171,7 +171,7 @@ export function StandaloneSideNav({ sidebar, onCloseSidebar }: StandaloneSideNav
           >
             <div className="flex items-center gap-[8px]">
               <AppAvator
-                className="size-[32px] min-w-[32px] rounded-[4px]"
+                className="size-[32px] min-w-[32px] rounded-sm"
                 url={flowData?.logo}
                 id={flowData?.id as any}
                 flowType={String(flowData?.flow_type || 5)}

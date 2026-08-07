@@ -152,7 +152,7 @@ export default function AppRoot() {
             >
                 <div
                     className={cn(
-                        "relative z-0 flex h-full w-full overflow-hidden rounded-[12px] touch-mobile:rounded-none",
+                        "relative z-0 flex h-full w-full overflow-hidden rounded-xl touch-mobile:rounded-none",
                         "bg-white p-0",
                     )}
                 >
@@ -198,7 +198,7 @@ export default function AppRoot() {
                     {/* Chat panel (routed) */}
                     <div className="relative flex h-full max-w-full min-w-0 flex-1 flex-col overflow-hidden">
                         {isAppSurface && isAppChatCompact && !mobileNavHidden && (
-                            <div className="shrink-0 overflow-hidden rounded-t-[12px] bg-white">
+                            <div className="shrink-0 overflow-hidden rounded-t-xl bg-white">
                                 <MobileNav
                                     variant="chat"
                                     navVisible={sidebarVisible}

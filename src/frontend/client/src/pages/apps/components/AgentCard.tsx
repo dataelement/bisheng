@@ -68,9 +68,9 @@ export function AgentCard({
   return (
     <div
       className={cn(
-        'group/card relative flex cursor-pointer flex-col overflow-hidden rounded-[12px] border border-solid p-2 transition-all',
+        'group/card relative flex cursor-pointer flex-col overflow-hidden rounded-xl border border-solid p-2 transition-all',
         'border-[#ebecf0] border-[0.5px] bg-white fine-pointer:hover:shadow-[0px_2.094px_8.796px_1.047px_rgba(117,145,212,0.12)]',
-        'after:pointer-events-none after:absolute after:inset-0 after:rounded-[12px] after:border after:border-blue-500 after:opacity-0 after:transition-opacity fine-pointer:group-hover/card:after:opacity-100',
+        'after:pointer-events-none after:absolute after:inset-0 after:rounded-xl after:border after:border-blue-500 after:opacity-0 after:transition-opacity fine-pointer:group-hover/card:after:opacity-100',
         'bg-[linear-gradient(135deg,_rgb(var(--brand-500)/0.04)_0%,_rgb(255,255,255)_50%,_rgb(var(--brand-500)/0.04)_100%)]',
       )}
       onClick={() => onStartChat(agent)}
@@ -198,7 +198,7 @@ export function AgentCard({
               {(agent.tags && agent.tags.length > 0 ? agent.tags : [{ name: '精选' }]).map((tag, idx) => (
                 <div
                   key={idx}
-                  className="shrink-0 rounded-[4px] bg-[#f2f3f5] px-2 py-0.5 text-[12px] font-normal leading-[20px] text-[#4e5969]"
+                  className="shrink-0 rounded-sm bg-[#f2f3f5] px-2 py-0.5 text-[12px] font-normal leading-[20px] text-[#4e5969]"
                 >
                   {tag.name}
                 </div>

@@ -1072,7 +1072,7 @@ const DailyFeaturedApps = ({ t }: { t: (k: string) => string }) => {
                       {appItem.tags && appItem.tags.map((tag: any) => (
                         <div
                           key={tag.id || tag.name || tag}
-                          className="bg-[#F2F3F5] text-[#4E5969] text-[12px] px-2 py-[2px] rounded-[4px] font-normal whitespace-nowrap"
+                          className="bg-[#F2F3F5] text-[#4E5969] text-[12px] px-2 py-[2px] rounded-sm font-normal whitespace-nowrap"
                         >
                           {tag.name || tag}
                         </div>

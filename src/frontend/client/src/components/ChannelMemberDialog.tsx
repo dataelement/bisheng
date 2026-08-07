@@ -438,7 +438,7 @@ export function ChannelMemberDialog({
                                                     "flex h-6 min-w-6 items-center justify-center px-1.5 text-[14px] transition-colors",
                                                     p === page
                                                         ? "rounded-lg border border-blue-500 text-blue-500"
-                                                        : "rounded-[4px] border border-transparent text-[#4E5969] hover:text-blue-500"
+                                                        : "rounded-sm border border-transparent text-[#4E5969] hover:text-blue-500"
                                                 )}
                                                 onClick={() => fetchMembers(p)}
                                             >

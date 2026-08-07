@@ -125,7 +125,7 @@ export function MobileAppHistoryDropdown({
                 >
                     <div className="flex items-center gap-2">
                         <AppAvator
-                            className="size-[32px] min-w-[32px] rounded-[4px]"
+                            className="size-[32px] min-w-[32px] rounded-sm"
                             url={flowData?.logo}
                             id={flowData?.id as any}
                             flowType={String(flowData?.flow_type || 5)}

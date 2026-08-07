@@ -114,7 +114,7 @@ const WebResultChip: FC<{ item: any; chip: string }> = ({ item, chip }) => {
 
     const content = (
         <span
-            className="inline-flex items-center gap-1 rounded-[4px] bg-[#F7F7F7] px-2 py-[2px] text-xs leading-5 text-[#1D2129]"
+            className="inline-flex items-center gap-1 rounded-sm bg-[#F7F7F7] px-2 py-[2px] text-xs leading-5 text-[#1D2129]"
             title={chip}
         >
             {showFavicon ? (
@@ -361,7 +361,7 @@ const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall, showConnecto
                                     <span
                                         key={kb.id || `${kb.name}-${i}`}
                                         className={cn(
-                                            "inline-flex items-center gap-1 rounded-[4px] px-2 py-[2px] text-xs leading-5",
+                                            "inline-flex items-center gap-1 rounded-sm px-2 py-[2px] text-xs leading-5",
                                             kb.error
                                                 ? "bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-300"
                                                 : "bg-[#F7F7F7] text-[#1D2129]",

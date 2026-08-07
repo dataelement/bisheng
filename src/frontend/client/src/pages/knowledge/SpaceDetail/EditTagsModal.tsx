@@ -244,7 +244,7 @@ export function EditTagsModal({
                         {selectedTags.map((tag) => (
                             <span
                                 key={tag.id}
-                                className="flex items-center justify-center bg-[#f2f3f5] text-[#4e5969] px-2 h-[22px] rounded-[4px] text-sm leading-[22px] whitespace-nowrap gap-1"
+                                className="flex items-center justify-center bg-[#f2f3f5] text-[#4e5969] px-2 h-[22px] rounded-sm text-sm leading-[22px] whitespace-nowrap gap-1"
                             >
                                 {tag.name}
                                 <button
@@ -293,7 +293,7 @@ export function EditTagsModal({
                                     <span
                                         key={tag.id}
                                         onClick={() => toggleTag(tag)}
-                                        className={`group h-5 flex items-center justify-center gap-1 px-2 text-[12px] leading-5 rounded-[4px] transition-colors ${isSelected
+                                        className={`group h-5 flex items-center justify-center gap-1 px-2 text-[12px] leading-5 rounded-sm transition-colors ${isSelected
                                             ? "text-blue-500 cursor-default bg-primary/10"
                                             : "bg-[#f2f3f5] text-[#4e5969] hover:bg-[#e5e6eb] cursor-pointer"
                                             }`}

@@ -42,7 +42,7 @@ const Chip = ({
     label: string;
     onRemove?: () => void;
 }) => (
-    <div className="group flex h-6 min-w-0 max-w-[160px] shrink-0 items-center rounded-[4px] bg-white px-2 text-xs text-slate-700 transition-colors duration-200 hover:bg-slate-50">
+    <div className="group flex h-6 min-w-0 max-w-[160px] shrink-0 items-center rounded-sm bg-white px-2 text-xs text-slate-700 transition-colors duration-200 hover:bg-slate-50">
         {icon}
         <span className="min-w-0 flex-1 truncate text-left" title={label}>
             {label}

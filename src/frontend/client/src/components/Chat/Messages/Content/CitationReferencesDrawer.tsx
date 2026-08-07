@@ -130,7 +130,7 @@ function CitationReferenceCard({
           type="button"
           onClick={() => onOpenDocumentPreview(item, detail!)}
           className={cn(
-            'flex w-full min-w-0 items-center gap-1 rounded-[4px] text-left',
+            'flex w-full min-w-0 items-center gap-1 rounded-sm text-left',
             nameRowTextClass,
             'transition-colors hover:text-blue-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/25',
           )}
@@ -153,7 +153,7 @@ function CitationReferenceCard({
             // Web links are generic external links, not a brand action — pin the
             // hover to a fixed blue (matches the web hover arrow #1B61E6) so it
             // doesn't follow the blue⇄green brand theme.
-            'flex w-full min-w-0 items-center gap-1 rounded-[4px] hover:text-[#1B61E6]',
+            'flex w-full min-w-0 items-center gap-1 rounded-sm hover:text-[#1B61E6]',
             nameRowTextClass,
           )}
           title={title}

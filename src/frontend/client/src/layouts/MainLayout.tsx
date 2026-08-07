@@ -506,7 +506,7 @@ export default function MainLayout() {
               !isMobile && 'rounded-xl',
               // Match the main panel: when the left system menu is revealed, round
               // the exposed left edge and clip content to it (parity with KeepAlive branch).
-              systemMenuRevealing && 'rounded-l-[24px]',
+              systemMenuRevealing && 'rounded-l-3xl',
               isMobile
                 ? 'h-auto min-h-[100dvh] overflow-visible'
                 : 'scrollbar-os h-[calc(100dvh-16px)] overflow-y-auto overscroll-y-none',
@@ -551,7 +551,7 @@ export default function MainLayout() {
               !isMobile && 'rounded-xl',
               // When the left system menu is revealed, the panel slides right and
               // exposes its left edge — round the left corners to 24px.
-              systemMenuRevealing && 'rounded-l-[24px]',
+              systemMenuRevealing && 'rounded-l-3xl',
               isMobile
                 ? innerScrollShell
                   ? 'flex h-[100dvh] min-h-0 w-full flex-col overflow-hidden'
