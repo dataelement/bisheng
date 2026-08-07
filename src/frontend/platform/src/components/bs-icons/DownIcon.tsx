@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 
 export default function DownIcon({ className = '', ...props }) {
     return (

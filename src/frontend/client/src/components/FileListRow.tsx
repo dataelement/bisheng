@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useState } from "react";
 import { Folder, FileText, Download, MoreVertical, Circle, Edit, Tag } from "lucide-react";
 import { KnowledgeFile, FileType, FileStatus, SpaceRole } from "~/api/knowledge";

@@ -279,11 +279,17 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
       setTaskMode(false);
       return;
     }
-    // On /c/new the mode is driven solely by the nav state: "新建任务" carries
-    // state.taskMode=true, "新建对话" carries none. Set explicitly both ways so
-    // switching from task → chat (or chat → task) actually flips the toggle
-    // instead of leaving a stale mode behind.
-    setTaskMode(!!(location.state as any)?.taskMode);
+    // On /c/new both sidebar entries set the atom themselves before navigating
+    // ("新建任务" → true, "新建对话" → false), so this only has to honour a
+    // navigation that actually declares a mode. Reading an absent state as
+    // "daily" used to drop the user's choice: `newConversation` runs an async
+    // chain that fires its own state-less `navigate('/c/new')` a tick after
+    // ours, and that second landing reset the toggle the button had just set —
+    // the intermittent "新建任务 opens a daily chat, click it again and it works".
+    const navTaskMode = (location.state as { taskMode?: boolean } | null)?.taskMode;
+    if (navTaskMode !== undefined) {
+      setTaskMode(!!navTaskMode);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.key, conversationId]);
 
@@ -1044,7 +1050,7 @@ const DailyFeaturedApps = ({ t }: { t: (k: string) => string }) => {
             {displayApps.map((appItem) => (
               <Card
                 key={appItem.id}
-                className="group flex flex-col py-0 rounded-[8px] shadow-[0_2px_4px_rgba(0,0,0,0.02)] border border-[#E5E6EB] overflow-hidden cursor-pointer hover:border-blue-500 hover:shadow-[0_4px_14px_rgb(var(--brand-500)/0.12)] transition-all duration-300 h-[142px] hover:-translate-y-1"
+                className="group flex flex-col py-0 rounded-lg shadow-[0_2px_4px_rgba(0,0,0,0.02)] border border-[#E5E6EB] overflow-hidden cursor-pointer hover:border-blue-500 hover:shadow-[0_4px_14px_rgb(var(--brand-500)/0.12)] transition-all duration-300 h-[142px] hover:-translate-y-1"
                 style={{ background: 'linear-gradient(135deg, rgb(var(--brand-500)/0.04) 0%, #fff 50%, rgb(var(--brand-500)/0.04) 100%)' }}
                 onClick={() => handleCardClick(appItem)}
               >
@@ -1054,7 +1060,7 @@ const DailyFeaturedApps = ({ t }: { t: (k: string) => string }) => {
                       id={appItem.name}
                       url={appItem.logo}
                       flowType={appItem.flow_type || appItem.type}
-                      className={`size-[32px] min-w-[32px] !rounded-[8px]`}
+                      className={`size-[32px] min-w-[32px] !rounded-lg`}
                       iconClassName="w-5 h-5"
                     />
                     <div className="text-[15px] font-medium text-[#1D2129] line-clamp-1 break-all">{appItem.name}</div>
@@ -1072,7 +1078,7 @@ const DailyFeaturedApps = ({ t }: { t: (k: string) => string }) => {
                         </div>
                       ))}
                     </div>
-                    <div className="absolute inset-x-0 bottom-0 top-1 flex items-center justify-center bg-blue-500 rounded-[6px] text-white text-[13px] font-medium opacity-0 fine-pointer:group-hover:opacity-100 transform translate-y-2 fine-pointer:group-hover:translate-y-0 transition-all duration-300 coarse-pointer:opacity-100 coarse-pointer:translate-y-0">
+                    <div className="absolute inset-x-0 bottom-0 top-1 flex items-center justify-center bg-blue-500 rounded-md text-white text-[13px] font-medium opacity-0 fine-pointer:group-hover:opacity-100 transform translate-y-2 fine-pointer:group-hover:translate-y-0 transition-all duration-300 coarse-pointer:opacity-100 coarse-pointer:translate-y-0">
                       开始对话
                     </div>
                   </div>

@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import ApiMainPage from "@/components/bs-comp/apiComponent";
 import { generateUUID } from "@/components/bs-ui/utils";
 import { copyReportTemplate } from "@/controllers/API/workflow";
@@ -274,7 +275,7 @@ const useFlow = (_reactFlowInstance, data, takeSnapshot) => {
             if (event.dataTransfer.types.some((t) => t === "flownodedata")) {
                 takeSnapshot();
                 const reactflowBounds = reactFlowWrapper.current.getBoundingClientRect();
-                let flowdata: { type: string; node?: WorkflowNode } = JSON.parse(
+                const flowdata: { type: string; node?: WorkflowNode } = JSON.parse(
                     event.dataTransfer.getData("flownodedata")
                 );
 
@@ -303,7 +304,7 @@ const useFlow = (_reactFlowInstance, data, takeSnapshot) => {
     const onEdgeSelect = (obj) => {
         takeSnapshot()
         const { node, edgeId, position } = obj
-        let flowdata: { type: string; node: WorkflowNode } = cloneDeep(node)
+        const flowdata: { type: string; node: WorkflowNode } = cloneDeep(node)
         const nodeId = `${flowdata.node.type}_${generateUUID(5)}`
         flowdata.node.id = nodeId
         // 增加节点
@@ -351,7 +352,7 @@ const useFlow = (_reactFlowInstance, data, takeSnapshot) => {
         // copy
         const handleCopy = async (event) => {
             const nodeIds = event.detail;
-            let nodes = _reactFlowInstance.getNodes();
+            const nodes = _reactFlowInstance.getNodes();
             // let edges = _reactFlowInstance.getEdges();
 
             const newNodes = await Promise.all(nodeIds.map(async nodeId => {
@@ -519,7 +520,7 @@ const useKeyBoard = (_reactFlowInstance, reactFlowWrapper) => {
 
     useCopyPasteNode(keyBoardPanneRef.current, lastSelection, (newSelectNode, position) => {
         if (newSelectNode.nodes.some(node => node.data.type === 'start')) return
-        let bounds = reactFlowWrapper.current.getBoundingClientRect();
+        const bounds = reactFlowWrapper.current.getBoundingClientRect();
         setNodes((nds) => {
             // TODO 合并到复制节点方法
             const newNodes = newSelectNode.nodes.map(node => {

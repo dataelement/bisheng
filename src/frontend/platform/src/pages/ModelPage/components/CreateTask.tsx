@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { HelpCircle } from "lucide-react";
 import { useContext, useEffect, useRef, useState } from "react";
 import { Button } from "../../../components/bs-ui/button";

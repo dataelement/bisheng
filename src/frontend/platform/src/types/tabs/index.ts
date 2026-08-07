@@ -31,7 +31,7 @@ export type TabsState = {
     isPending: boolean;
     formKeysData: {
       template?: string;
-      input_keys?: Object[];
+      input_keys?: object[];
       memory_keys?: Array<string>;
       handle_keys?: Array<string>;
     };

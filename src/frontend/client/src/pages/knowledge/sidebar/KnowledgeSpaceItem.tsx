@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { Outlined } from "bisheng-icons";
 import { useState, type MouseEvent } from "react";
 import { createPortal } from "react-dom";

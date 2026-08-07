@@ -95,7 +95,6 @@ class ChannelRepositoryImpl(BaseRepositoryImpl[Channel, str], ChannelRepository)
             like_pattern = f"%{keyword}%"
             query = query.where(or_(Channel.name.like(like_pattern), Channel.description.like(like_pattern)))
 
-        subscriber_count = func.coalesce(subscriber_subq.c.subscriber_count, 0)
         subscription_order = case(
             (SpaceChannelMember.status.is_(None), 0),
             (
@@ -107,7 +106,7 @@ class ChannelRepositoryImpl(BaseRepositoryImpl[Channel, str], ChannelRepository)
         )
         query = query.order_by(
             subscription_order.asc(),
-            subscriber_count.desc(),
+            subscriber_subq.c.subscriber_count.desc(),
             func.coalesce(Channel.update_time, Channel.create_time).desc(),
             Channel.id.asc(),
         )

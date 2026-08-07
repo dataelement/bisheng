@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import React, { useEffect, useContext } from 'react';
 import AnnouncerContext from '~/Providers/AnnouncerContext';
 

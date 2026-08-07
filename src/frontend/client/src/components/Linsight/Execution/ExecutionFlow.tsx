@@ -29,7 +29,7 @@ import { QueueCard } from './QueueCard';
 import { ExecutionTimeline } from './ExecutionTimeline';
 import { ResultPanel } from './ResultPanel';
 import { TaskPanel } from './TaskPanel';
-import { TaskErrorCard } from './TaskErrorCard';
+import { ChatErrorCard } from '~/components/ChatErrorCard';
 import { TaskStepRow, type ExecTask } from './TaskStepRow';
 import { ExecutionLiveContext } from './executionLive';
 import { findPendingUserInput, hasRenderableTimeline, isTaskRunning, isTaskStarted, splitSessionPseudoTask } from './stepUtils';
@@ -214,7 +214,7 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
 
                     {/* error / terminated banners */}
                     {linsight?.taskError && (
-                        <TaskErrorCard
+                        <ChatErrorCard
                             errorType={linsight.taskErrorInfo?.error_type}
                             detail={linsight.taskErrorInfo?.detail}
                             fallbackMessage={linsight.taskError}

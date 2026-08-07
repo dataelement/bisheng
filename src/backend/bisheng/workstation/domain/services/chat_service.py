@@ -7,8 +7,10 @@ from uuid import uuid4
 
 from fastapi import Request
 from fastapi.responses import StreamingResponse
+from json_repair import json_repair
 from langchain_core.messages import HumanMessage, SystemMessage
 from loguru import logger
+from pydantic import field_validator as PydanticFieldValidator
 
 from bisheng.api.services import knowledge_imp
 from bisheng.api.v1.schema.chat_schema import APIChatCompletion
@@ -23,6 +25,7 @@ from bisheng.common.errcode.knowledge import (
 )
 from bisheng.common.errcode.server import NoAsrModelConfigError
 from bisheng.common.errcode.workstation import (
+    ChatFileParseError,
     ConversationNotFoundError,
     DepartmentDailyChatConcurrentLimitError,
     LLMRateLimitError,
@@ -36,6 +39,7 @@ from bisheng.common.services import telemetry_service
 from bisheng.common.services.llm_error_classifier import ErrorType, label_error, unwrap
 from bisheng.core.cache.utils import async_file_download
 from bisheng.core.logger import trace_id_var
+from bisheng.core.storage.chat_attachment import promote_chat_attachments
 from bisheng.database.models.flow import FlowType
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
@@ -129,6 +133,11 @@ async def initialize_chat(data: APIChatCompletion, login_user: UserPayload):
     if not is_new_conversation:
         await MessageSessionDao.touch_session(conversation_id)
         conversation = await MessageSessionDao.async_get_one(conversation_id)
+
+    # Uploads land in the temp bucket, which clears itself every 3 days. Sending
+    # is the point where the file becomes part of the conversation, so that's
+    # where it gets copied somewhere permanent.
+    await promote_chat_attachments(data.files, login_user.user_id)
 
     if data.overrideParentMessageId:
         message = await ChatMessageDao.aget_message_by_id(int(data.overrideParentMessageId))
@@ -588,6 +597,35 @@ async def _build_web_search_tool(user_id: int, tool_id: int | None = None) -> tu
         return None, err
 
 
+def _parse_model_tool_argument(value: Any) -> Any:
+    """Best-effort decode nested structures stringified by tool-calling models."""
+    current = value
+    for _ in range(2):
+        if not isinstance(current, str):
+            break
+        text = current.strip()
+        if not text:
+            break
+        is_container = text.startswith(("{", "["))
+        is_json_string = len(text) >= 2 and text.startswith('"') and text.endswith('"')
+        if not (is_container or is_json_string):
+            break
+        try:
+            parsed = json.loads(text)
+        except (json.JSONDecodeError, ValueError):
+            if not is_container:
+                break
+            try:
+                parsed = json_repair.loads(text)
+            except Exception:
+                # Recovery is optional; field-specific coercion safely handles the original value.
+                break
+        if parsed == current:
+            break
+        current = parsed
+    return current
+
+
 async def _build_knowledge_search_tool(
     knowledge_bases_info: list[dict],
     login_user: UserPayload,
@@ -648,11 +686,44 @@ async def _build_knowledge_search_tool(
             description="ANY: match any tag; ALL: must carry every tag.",
         )
 
+        @PydanticFieldValidator("knowledge_base_id", mode="before")
+        @classmethod
+        def _coerce_knowledge_base_id(cls, value):
+            return value if value is None else str(value)
+
+        @PydanticFieldValidator("tags", mode="before")
+        @classmethod
+        def _coerce_tags(cls, value):
+            parsed = _parse_model_tool_argument(value)
+            if parsed in (None, ""):
+                return []
+            items = parsed if isinstance(parsed, (list, tuple, set)) else [parsed]
+            return [str(item) for item in items if isinstance(item, (str, int, float)) and str(item)]
+
+        @PydanticFieldValidator("tag_match_mode", mode="before")
+        @classmethod
+        def _coerce_tag_match_mode(cls, value):
+            return str(value or "ANY").upper()
+
     class _Filters(PydanticBaseModel):
         knowledge_base_filters: list[_KbFilter] | None = PydanticField(
             default=None,
             description="Per-KB tag filters.",
         )
+
+        @PydanticFieldValidator("knowledge_base_filters", mode="before")
+        @classmethod
+        def _coerce_knowledge_base_filters(cls, value):
+            parsed = _parse_model_tool_argument(value)
+            if parsed in (None, ""):
+                return None
+            items = parsed if isinstance(parsed, list) else [parsed]
+            normalized = []
+            for item in items:
+                item = _parse_model_tool_argument(item)
+                if isinstance(item, (_KbFilter, dict)):
+                    normalized.append(item)
+            return normalized or None
 
     class _SearchKbArgs(PydanticBaseModel):
         knowledge_base_ids: list[str] = PydanticField(
@@ -669,6 +740,33 @@ async def _build_knowledge_search_tool(
             default=None,
             description="Optional search filters (per-KB tag filters).",
         )
+
+        @PydanticFieldValidator("knowledge_base_ids", mode="before")
+        @classmethod
+        def _coerce_knowledge_base_ids(cls, value):
+            parsed = _parse_model_tool_argument(value)
+            if parsed in (None, ""):
+                return list(kb_id_whitelist)
+            items = parsed if isinstance(parsed, (list, tuple, set)) else [parsed]
+            normalized = [str(item) for item in items if isinstance(item, (str, int, float)) and str(item)]
+            return normalized or list(kb_id_whitelist)
+
+        @PydanticFieldValidator("query", mode="before")
+        @classmethod
+        def _coerce_query(cls, value):
+            return value if value is None or isinstance(value, str) else str(value)
+
+        @PydanticFieldValidator("filters", mode="before")
+        @classmethod
+        def _coerce_filters(cls, value):
+            parsed = _parse_model_tool_argument(value)
+            if parsed in (None, ""):
+                return None
+            if isinstance(parsed, (_Filters, dict)):
+                return parsed
+            if isinstance(parsed, list):
+                return {"knowledge_base_filters": parsed}
+            return None
 
     def _format_chunk(doc) -> str:
         # Shared formatter (unwrap stored wrapper + preserve citation_key + aligned
@@ -1120,6 +1218,10 @@ async def _agent_initialize_chat(data: APIChatCompletion, login_user: UserPayloa
         await MessageSessionDao.touch_session(conversation_id)
         conversation = await MessageSessionDao.async_get_one(conversation_id)
 
+    # Same as the legacy flow: the attachment becomes permanent at send time,
+    # not at upload time (see promote_chat_attachments).
+    await promote_chat_attachments(data.files, login_user.user_id)
+
     # Always insert a brand-new question row — Agent flow has no regenerate.
     message = await ChatMessageDao.ainsert_one(
         ChatMessage(
@@ -1150,6 +1252,36 @@ async def _agent_initialize_chat(data: APIChatCompletion, login_user: UserPayloa
     return ws_config, conversation, message, bisheng_llm, model_info, is_new_conversation
 
 
+# Parser failures that recover on their own (the OCR service is throttled or
+# briefly unreachable) read as "busy, try again"; everything else is a hard
+# parse failure. Mirrors the task-mode failure card's transient/terminal split.
+_TRANSIENT_PARSE_ERRORS = frozenset({ErrorType.RATE_LIMIT, ErrorType.NETWORK_TIMEOUT, ErrorType.SERVICE_UNAVAILABLE})
+
+
+async def _extract_doc_text(filepath: str, filename: str, invoke_user_id: int) -> str:
+    """Extract one attachment's text, turning a parser failure into a domain error.
+
+    Without this the raw ``EtlException`` reached the generic handler and the user
+    got an opaque 500. Re-raising as ``ChatFileParseError`` carries the offending
+    filename plus the parser's own message to the chat bubble, and lets a throttled
+    OCR service be told apart from a genuinely unparseable file.
+    """
+    try:
+        return await get_file_content(
+            filepath_local=filepath,
+            file_name=filename,
+            invoke_user_id=invoke_user_id,
+        )
+    except Exception as exc:
+        logger.exception(f"[process_agent_files] parse failed for {filename}")
+        transient = label_error(unwrap(exc)) in _TRANSIENT_PARSE_ERRORS
+        raise ChatFileParseError(
+            error_type="file_parse_busy" if transient else "file_parse_failed",
+            detail=f"{filename}: {exc}",
+            filename=filename,
+        ) from exc
+
+
 async def _process_agent_files(data: APIChatCompletion, model_info, login_user, ws_config):
     """Split uploaded files into visual (image base64 data URLs) and doc
     (extracted text chunks concatenated up to maxTokens).
@@ -1174,13 +1306,7 @@ async def _process_agent_files(data: APIChatCompletion, model_info, login_user, 
         if model_info.visual and ext in VISUAL_MODEL_FILE_TYPES:
             visual_tasks.append(read_image_as_data_url(filepath=filepath, filename=filename))
         else:
-            doc_tasks.append(
-                get_file_content(
-                    filepath_local=filepath,
-                    file_name=filename,
-                    invoke_user_id=login_user.user_id,
-                )
-            )
+            doc_tasks.append(_extract_doc_text(filepath, filename, login_user.user_id))
     visual_results, doc_results = await asyncio.gather(
         asyncio.gather(*visual_tasks),
         asyncio.gather(*doc_tasks),
@@ -1861,12 +1987,22 @@ async def _agent_stream_chat_completion(
             error_flag = True
             error_msg = str(exc)
             logger.exception("Agent chat execution error")
+            # The classified type + the raw provider text ride along in `data`
+            # so the bubble can render the same title/explanation/"view details"
+            # card task mode uses, instead of a bare "服务器错误".
+            error_type = label_error(unwrap(exc))
+            # `unknown` is deliberately renamed for this surface: the shared card's
+            # generic copy talks about a "task", which reads wrong on a chat turn.
+            classified = {
+                "error_type": "chat_unknown" if error_type == ErrorType.UNKNOWN else error_type.value,
+                "detail": str(exc),
+            }
             # Upstream LLM throttling (RPM/TPM/burst) → friendly "service busy"
             # copy instead of dumping the raw provider 500 on the user.
-            if label_error(unwrap(exc)) == ErrorType.RATE_LIMIT:
-                yield LLMRateLimitError().to_sse_event_instance_str()
+            if error_type == ErrorType.RATE_LIMIT:
+                yield LLMRateLimitError(**classified).to_sse_event_instance_str()
             else:
-                yield ServerError(exception=exc).to_sse_event_instance_str()
+                yield ServerError(exception=exc, **classified).to_sse_event_instance_str()
         except (asyncio.CancelledError, GeneratorExit):
             # The stream was torn down mid-flight — client navigated away, gateway
             # read timeout, worker restart. Neither is an `Exception`, so without

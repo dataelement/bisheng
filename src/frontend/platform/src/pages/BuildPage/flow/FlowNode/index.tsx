@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { LoadingIcon } from '@/components/bs-icons/loading';
 import { Card, CardContent } from '@/components/bs-ui/card';
 import { useToast } from '@/components/bs-ui/toast/use-toast';
@@ -206,7 +207,7 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
                 const targetParam = group.params.find(p => p.key === 'system_prompt');
 
                 if (targetParam) {
-                    let currentValue = targetParam.value || "";
+                    const currentValue = targetParam.value || "";
                     const map = {
                         'knowledge': t('kbQueryToolIntro'),
                         'sql': t('sqlAgentToolIntro')

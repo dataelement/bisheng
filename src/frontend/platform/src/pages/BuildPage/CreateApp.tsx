@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import AppAvator from "@/components/bs-comp/cardComponent/avatar";
 import { LoadIcon } from "@/components/bs-icons/loading";
 import { Accordion } from "@/components/bs-ui/accordion";
@@ -260,7 +261,7 @@ ${t('build.exampleTwo', { ns: 'bs' })}
                                 id="desc"
                                 name="desc"
                                 placeholder={appType === AppType.ASSISTANT ? t('build_forExample') : t('enterWorkflowDescription')}
-                                maxLength={appType === AppType.SKILL ? 200 : 1000}
+                                maxLength={1000}
                                 className="mt-3 min-h-32 pt-3"
                                 value={formData.desc}
                                 onChange={handleChange}

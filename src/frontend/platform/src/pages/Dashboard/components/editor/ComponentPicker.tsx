@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/bs-ui/popover';
 import { cn } from '@/utils';
 import React, { memo, useState } from 'react';

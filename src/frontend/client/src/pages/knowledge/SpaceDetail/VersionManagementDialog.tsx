@@ -80,7 +80,7 @@ export function VersionManagementDialog({
                     <Button
                         type="button"
                         variant="outline"
-                        className="h-8 rounded-[6px] px-4 font-normal"
+                        className="h-8 rounded-md px-4 font-normal"
                         onClick={() => onOpenChange(false)}
                     >
                         {localize("com_knowledge.cancel")}

@@ -597,8 +597,16 @@ export function useFileUpload({
                     setCreatingFolder(null);
                     // Keep the left-side folder tree in sync.
                     dispatchKnowledgeSpaceFilesRefresh(activeSpace.id);
-                } catch {
-                    showToast({ message: localize("com_knowledge.create_folder_failed"), severity: NotificationSeverity.ERROR });
+                } catch (e: any) {
+                    // Server-authoritative depth check: the breadcrumb-based
+                    // pre-check in handleCreateFolder can race a navigation
+                    // (async currentPath), so 18011 can still come back here.
+                    if (e?.status_code === 18011) {
+                        showToast({ message: localize("com_knowledge.max_folder_depth_reached", { 0: MAX_FOLDER_DEPTH }), severity: NotificationSeverity.WARNING } as any);
+                        setCreatingFolder(null);
+                    } else {
+                        showToast({ message: localize("com_knowledge.create_folder_failed"), severity: NotificationSeverity.ERROR });
+                    }
                 }
                 return;
             }

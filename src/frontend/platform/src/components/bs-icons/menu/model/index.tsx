@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import React, { forwardRef } from "react";
 import Model from "./Model.svg?react";
 

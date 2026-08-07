@@ -116,7 +116,7 @@ export const testToolApi = async (data: {
     auth_method: number
     auth_type: string
     api_key: string
-    request_params: Object
+    request_params: object
     api_location: string
     parameter_name: string
 }): Promise<any> => {

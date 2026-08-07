@@ -9,7 +9,7 @@ import ConvoIconURL from '~/components/Endpoints/ConvoIconURL';
 import { useGetBsConfig, useGetEndpointsQuery } from '~/hooks/queries/data-provider';
 import type { TConversation, TMessage } from '~/types/chat';
 import { Constants, QueryKeys } from '~/types/chat';
-import { useAuthContext, useLocalize, useNewConvo } from '~/hooks';
+import { useAuthContext, useLocalize, useNewConvo, useWorkbenchMenuNames } from '~/hooks';
 import store from '~/store';
 import { cn, getEndpointField, getIconEndpoint, getIconKey } from '~/utils';
 import { MobileSidebarHeaderTabs } from '~/components/Nav/MobileSidebarHeaderTabs';
@@ -83,6 +83,8 @@ export default function NewChat({
   const navigate = useNavigate();
   const setTaskMode = useSetRecoilState(taskModeState);
   const localize = useLocalize();
+  // Admin-configured 首页 name; falls back to the localized default.
+  const menuNames = useWorkbenchMenuNames();
   const { user } = useAuthContext();
 
   const { conversation } = store.useCreateConversationAtom(index);
@@ -156,7 +158,7 @@ export default function NewChat({
           <div>
             <div className="pb-0">
               <div className="flex items-center pl-3">
-                <span className="text-base font-bold leading-8 text-[#1A1A1A]">{localize('com_nav_home')}</span>
+                <span className="text-base font-bold leading-8 text-[#1A1A1A]">{menuNames.home}</span>
               </div>
               <div className="py-3 flex w-full flex-col gap-1">
                 {/* Create chat button */}
@@ -183,7 +185,7 @@ export default function NewChat({
                     aria-label={localize('com_nav_start_new_task')}
                     onClick={handleNewTask}
                   >
-                    <Outlined.Binoculars size={16} className='text-[#1A1A1A]' />
+                    <Outlined.ListSuccess size={16} className='text-[#1A1A1A]' />
                     <span className="text-[14px] leading-[20px] whitespace-nowrap">{localize('com_nav_start_new_task')}</span>
                   </Button>
                 )}
@@ -217,7 +219,7 @@ export default function NewChat({
                 aria-label={localize('com_nav_start_new_task')}
                 onClick={handleNewTask}
               >
-                <Outlined.Binoculars size={16} className='text-[#1A1A1A]' />
+                <Outlined.ListSuccess size={16} className='text-[#1A1A1A]' />
                 <span className="text-[13px] leading-[20px] whitespace-nowrap">{localize('com_nav_start_new_task')}</span>
               </Button>
             )}

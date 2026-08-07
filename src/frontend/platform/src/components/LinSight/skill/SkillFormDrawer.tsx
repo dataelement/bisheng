@@ -212,7 +212,7 @@ export function SkillFormDrawer({ open, editing, onOpenChange, onSaved }: SkillF
                 </div>
 
                 {/* footer — actions only */}
-                <div className="shrink-0 flex items-center justify-end gap-3 px-6 py-3.5 border-t bg-background/90 backdrop-blur">
+                <div className="shrink-0 flex items-center justify-end gap-3 px-6 py-3.5 border-t bg-background/90">
                     <Button variant="outline" onClick={() => onOpenChange(false)}>{t('skillManage.form.cancel')}</Button>
                     <Button onClick={handleSave} disabled={saving}>{t('skillManage.form.save')}</Button>
                 </div>

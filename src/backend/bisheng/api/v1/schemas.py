@@ -492,6 +492,19 @@ class WorkstationConfig(BaseModel):
     recommendedApps: list[str] | None = Field(
         default=None, description="Ordered list of recommended app IDs configured by admin"
     )
+    # Client workbench sidebar entry names. Empty means the client falls back to
+    # its localized default ("首页" / "应用"). The app-center name lives here
+    # because the 应用 tab shares this daily config record.
+    homeMenuDisplayName: str | None = Field(
+        default="",
+        max_length=20,
+        description="Home entry name in the client workbench sidebar; empty = client i18n default",
+    )
+    appCenterMenuDisplayName: str | None = Field(
+        default="",
+        max_length=20,
+        description="App-center entry name in the client workbench sidebar; empty = client i18n default",
+    )
 
 
 class SubscriptionConfig(BaseModel):
@@ -503,6 +516,12 @@ class SubscriptionConfig(BaseModel):
     # surface. Empty means the client falls back to its localized default ("AI 助手").
     assistant_name: str | None = Field(
         default="", description="AI assistant display name on the subscription surface; empty = client i18n default"
+    )
+    # Subscription entry name in the client workbench sidebar; empty = client i18n default ("订阅").
+    menu_display_name: str | None = Field(
+        default="",
+        max_length=20,
+        description="Subscription entry name in the client workbench sidebar; empty = client i18n default",
     )
 
 
@@ -518,6 +537,12 @@ class KnowledgeSpaceConfig(BaseModel):
     # Empty means the client falls back to its localized default ("AI 助手").
     assistant_name: str | None = Field(
         default="", description="AI assistant display name on the knowledge-space surface; empty = client i18n default"
+    )
+    # Knowledge-space entry name in the client workbench sidebar; empty = client i18n default ("知识空间").
+    menu_display_name: str | None = Field(
+        default="",
+        max_length=20,
+        description="Knowledge-space entry name in the client workbench sidebar; empty = client i18n default",
     )
 
 

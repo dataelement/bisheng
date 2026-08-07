@@ -20,14 +20,14 @@ export const knowledgeSpaceDropdownSurfaceClassName = actionMenuSurfaceClassName
 export const sidebarListMoreMenuContentClassName = actionMenuContentClassName;
 
 export const sidebarListMoreMenuItemClassName =
-    "flex w-full cursor-pointer items-center gap-2 rounded-[6px] px-2 py-[5px] text-sm leading-[22px] text-[#212121] data-[highlighted]:bg-[#f2f3f5] focus:bg-[#f2f3f5]";
+    "flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-[5px] text-sm leading-[22px] text-[#212121] data-[highlighted]:bg-[#f2f3f5] focus:bg-[#f2f3f5]";
 
 export const sidebarListMoreMenuIconClassName = "size-4 shrink-0 text-[#4E5969]";
 
 export const sidebarListMoreMenuLabelClassName = "text-sm leading-[22px] text-[#212121]";
 
 export const sidebarListMoreMenuDangerItemClassName =
-    "flex w-full cursor-pointer items-center gap-2 rounded-[6px] px-2 py-[5px] text-sm leading-[22px] text-[#F53F3F] data-[highlighted]:bg-[#F53F3F]/10 data-[highlighted]:text-[#F53F3F] focus:bg-[#F53F3F]/10 focus:text-[#F53F3F]";
+    "flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-[5px] text-sm leading-[22px] text-[#F53F3F] data-[highlighted]:bg-[#F53F3F]/10 data-[highlighted]:text-[#F53F3F] focus:bg-[#F53F3F]/10 focus:text-[#F53F3F]";
 
 export const sidebarListMoreMenuDangerIconClassName = "size-4 shrink-0 text-[#F53F3F]";
 

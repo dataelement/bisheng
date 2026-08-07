@@ -73,8 +73,8 @@ export function CopyShareLinkButton({
             onClick={handleClick}
             className={cn(
                 iconOnly
-                    ? "h-8 w-8 shrink-0 justify-center rounded-[6px] border border-[#EBECF0] bg-white p-0 transition-colors hover:bg-[#F7F8FA]"
-                    : "h-8 gap-1 px-4 font-normal transition-colors hover:bg-[#F7F8FA] touch-mobile:rounded-[6px] touch-mobile:border touch-mobile:border-[#EBECF0] touch-mobile:bg-white touch-mobile:px-4 touch-mobile:text-[#212121]",
+                    ? "h-8 w-8 shrink-0 justify-center rounded-md border border-[#EBECF0] bg-white p-0 transition-colors hover:bg-[#F7F8FA]"
+                    : "h-8 gap-1 px-4 font-normal transition-colors hover:bg-[#F7F8FA] touch-mobile:rounded-md touch-mobile:border touch-mobile:border-[#EBECF0] touch-mobile:bg-white touch-mobile:px-4 touch-mobile:text-[#212121]",
                 className,
             )}
         >

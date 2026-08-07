@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useTranslation } from "react-i18next"
 import { Badge } from "@/components/bs-ui/badge";
 import { Button } from "../../../components/bs-ui/button";

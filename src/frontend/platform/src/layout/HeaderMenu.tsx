@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { TabIcon } from "@/components/bs-icons";
 import { userContext } from "@/contexts/userContext";
 import { canManageWorkbenchConfig } from "@/pages/ModelPage/manage/permissions";

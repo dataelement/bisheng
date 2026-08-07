@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import cloneDeep from "lodash-es/cloneDeep";
 import uniqueId from "lodash-es/uniqueId";
 import { Suspense, useContext, useEffect, useMemo, useState } from "react";
@@ -20,7 +21,7 @@ import { useToast } from "./components/bs-ui/toast/use-toast";
 import { consumeLoginReturnTo } from "./utils/loginReturnTo";
 
 export default function App() {
-  let { setCurrent, setShowSideBar, setIsStackedOpen } = useContext(locationContext);
+  const { setCurrent, setShowSideBar, setIsStackedOpen } = useContext(locationContext);
   // let location = useLocation();
   useEffect(() => {
     setCurrent(location.pathname.replace(/\/$/g, "").split("/"));
@@ -62,7 +63,7 @@ export default function App() {
       }
       setErrorOpen(false);
       setAlertsList((old) => {
-        let newAlertsList = [
+        const newAlertsList = [
           ...old,
           { type: "error", data: cloneDeep(errorData), id: uniqueId() },
         ];
@@ -80,7 +81,7 @@ export default function App() {
       }
       setNoticeOpen(false);
       setAlertsList((old) => {
-        let newAlertsList = [
+        const newAlertsList = [
           ...old,
           { type: "notice", data: cloneDeep(noticeData), id: uniqueId() },
         ];
@@ -98,7 +99,7 @@ export default function App() {
       }
       setSuccessOpen(false);
       setAlertsList((old) => {
-        let newAlertsList = [
+        const newAlertsList = [
           ...old,
           { type: "success", data: cloneDeep(successData), id: uniqueId() },
         ];
@@ -124,7 +125,7 @@ export default function App() {
   useEffect(() => {
     window.errorAlerts = (errorList: string[]) => {
       setAlertsList((old) => {
-        let newAlertsList = [
+        const newAlertsList = [
           ...old,
           { type: "error", data: { title: '', list: errorList }, id: uniqueId() },
         ];
@@ -202,7 +203,7 @@ export default function App() {
   useEffect(() => {
     if (window.url_error) {
       toast({
-        description: t(`errors.${window.url_error}`, { defaultValue: String(window.url_error) }),
+        description: t(`api_errors:${window.url_error}`, { defaultValue: t('api_errors:fallback') }),
         variant: 'error',
       });
       delete window.url_error

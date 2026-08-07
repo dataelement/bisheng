@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 "use client"
 
 import { ChartType, ComponentConfig, ComponentStyleConfig } from '@/pages/Dashboard/types/dataConfig'

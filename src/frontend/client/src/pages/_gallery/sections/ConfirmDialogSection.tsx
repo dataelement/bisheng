@@ -89,7 +89,7 @@ export function ConfirmDialogSection() {
             [
               '遮罩',
               <>
-                <code>bg-gray-500/90</code> + <code>backdrop-blur-md</code>
+                <code>bg-gray-500/90</code> + <code></code>
               </>,
               '灰底毛玻璃',
             ],

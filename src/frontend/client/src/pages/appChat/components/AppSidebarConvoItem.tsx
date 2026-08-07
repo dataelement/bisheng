@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { Check, X } from 'lucide-react';
 import { Outlined } from 'bisheng-icons';

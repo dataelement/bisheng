@@ -20,6 +20,9 @@ declare const __APP_ENV__: {
 
 declare const __VCONSOLE_ENABLED__: boolean;
 
+/** Build stamp injected by vite.config, e.g. `v2.6.0 (20260806-1432)`. */
+declare const __APP_VERSION__: string;
+
 interface Window {
   /** Branding fields injected at runtime by brand-runtime.js (from /api/v1/brand/runtime-config, cached in localStorage). */
   BRAND_CONFIG?: {

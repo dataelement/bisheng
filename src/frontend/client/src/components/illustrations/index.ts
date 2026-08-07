@@ -13,4 +13,5 @@ export { NoPermissionIllustration } from './NoPermissionIllustration';
 export { CrawlingIllustration } from './CrawlingIllustration';
 export { EmptyStateIllustration } from './EmptyStateIllustration';
 export { SystemMaintenanceIllustration } from './SystemMaintenanceIllustration';
+export { SystemErrorIllustration } from './SystemErrorIllustration';
 export { KnowledgeSpaceIcon } from './KnowledgeSpaceIcon';

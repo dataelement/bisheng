@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { Plus } from 'lucide-react';
 import React, { useMemo, useCallback } from 'react';
 import { useWatch, useForm, FormProvider } from 'react-hook-form';

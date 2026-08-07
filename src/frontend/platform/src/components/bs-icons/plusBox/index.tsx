@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import React, { forwardRef } from "react";
 import PlusBox from "./PlusBox.svg?react";
 import PlusBoxDark from "./PlusBox-dark.svg?react";

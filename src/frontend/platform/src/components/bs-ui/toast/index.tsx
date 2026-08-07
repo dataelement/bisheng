@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { ToastIcon } from "../../bs-icons/toast"
 import {
     Toast,

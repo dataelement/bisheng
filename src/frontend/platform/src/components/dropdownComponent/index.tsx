@@ -15,7 +15,7 @@ export default function Dropdown({
 }: DropDownComponentType) {
   const { closePopUp } = useContext(PopUpContext);
 
-  let [internalValue, setInternalValue] = useState(
+  const [internalValue, setInternalValue] = useState(
     value === "" || !value ? "" : value
   );
 

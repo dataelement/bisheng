@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import React, { useMemo, memo } from 'react';
 import type { Assistant, Agent } from '~/types/chat';
 import type { TMessageIcon } from '~/common';

@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import React, { memo } from 'react';
 import type { TModelSpec, TEndpointsConfig } from '~/types/chat';
 import type { IconMapProps } from '~/common';

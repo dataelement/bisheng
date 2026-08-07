@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { create } from "zustand"
 import { generateUUID } from "@/components/bs-ui/utils"
 import { ChartType, createDefaultDataConfig, Dashboard, DashboardComponent, LayoutItem, QueryConfig } from "@/pages/Dashboard/types/dataConfig"

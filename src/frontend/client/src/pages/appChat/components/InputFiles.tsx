@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { uploadChatFile } from "~/api/apps";

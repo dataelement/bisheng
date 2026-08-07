@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 /**
  * F028 — Bottom-fixed operation bar that appears when the conversation
  * export selection mode is active.

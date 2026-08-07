@@ -1,0 +1,159 @@
+# 图标 Icon
+
+图标单一来源是 `bisheng-icons`（Figma 插件管理设计源 → 自动生成 React 组件 → semver 发版）。**Outlined 为主力**；`lucide-react` 只在库里没有对应语义时兜底（留 `// TODO(bisheng-icons)` 记号）；禁止新增手写 SVG 图标组件。规范全文见「文档 → 设计规范 → 图标 Icon」。
+
+## Outlined 全量（主力）
+
+线性风格，116 个，`import { Outlined } from 'bisheng-icons'` → `<Outlined.Delete />`。命名 PascalCase、按语义不按形状（`Delete` 而非 `Trash2`）。下方清单直接遍历库导出，升级版本后自动同步。
+
+```tsx
+import { Outlined } from 'bisheng-icons';
+
+export default () => (
+  <div
+    style={{
+      display: 'grid',
+      gridTemplateColumns: 'repeat(auto-fill, minmax(108px, 1fr))',
+      gap: 4,
+    }}
+  >
+    {Object.entries(Outlined).map(([name, Icon]: [string, any]) => (
+      <div
+        key={name}
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: 6,
+          padding: '12px 4px',
+          borderRadius: 6,
+          color: 'rgb(var(--text-2))',
+        }}
+      >
+        <Icon size={16} />
+        <span style={{ fontSize: 11, color: 'rgb(var(--text-3))', wordBreak: 'break-all', textAlign: 'center' }}>
+          {name}
+        </span>
+      </div>
+    ))}
+  </div>
+);
+```
+
+## Filled 与 Colored
+
+Filled（实心）与 Colored（多色，文件类型/文件夹）按图标自身语义选用；**Colored 自带固有色，不参与着色**。
+
+```tsx
+import { Filled, Colored } from 'bisheng-icons';
+
+const Row = ({ title, set }: { title: string; set: Record<string, any> }) => (
+  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+    <span style={{ width: 80, flexShrink: 0, fontSize: 13, color: 'rgb(var(--text-2))', paddingTop: 14 }}>
+      {title}
+    </span>
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+      {Object.entries(set).map(([name, Icon]) => (
+        <div
+          key={name}
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 6,
+            width: 96,
+            padding: '12px 4px',
+            color: 'rgb(var(--text-2))',
+          }}
+        >
+          <Icon size={20} />
+          <span style={{ fontSize: 11, color: 'rgb(var(--text-3))', textAlign: 'center' }}>{name}</span>
+        </div>
+      ))}
+    </div>
+  </div>
+);
+
+export default () => (
+  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <Row title="Filled" set={Filled} />
+    <Row title="Colored" set={Colored} />
+  </div>
+);
+```
+
+## 尺寸阶梯
+
+六档 12 / 14 / 16 / 20 / 24 / 32，**不自定义任意尺寸**。`strokeWidth` 只在阶梯两端补偿（12 → 2.5、32 → 1.5），14–24px 一律默认 2 不覆盖；补偿值写在场景组件一处，禁止业务页逐个自调。
+
+```tsx
+import { Outlined } from 'bisheng-icons';
+
+const STEPS = [
+  ['xs · 12px', 12, 2.5, '极小标记（badge 内、密集表格角标），仅纯展示；strokeWidth 补偿 2.5'],
+  ['sm · 14px', 14, undefined, 'small/medium 按钮的文字+icon'],
+  ['md · 16px（默认）', 16, undefined, '绝大多数场景：图标按钮、菜单项、输入框内、表格操作'],
+  ['lg · 20px', 20, undefined, '导航栏、侧边栏入口、页头操作'],
+  ['xl · 24px', 24, undefined, '独立展示、弹窗标题图标（原始画布尺寸）'],
+  ['2xl · 32px', 32, 1.5, '超大展示：空状态、引导页；strokeWidth 补偿 1.5'],
+] as const;
+
+export default () => (
+  <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+    {STEPS.map(([label, size, sw, desc]) => (
+      <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ width: 300, flexShrink: 0, fontSize: 13, color: 'rgb(var(--text-2))' }}>
+          <code>{label}</code>
+          <div style={{ fontSize: 12, color: 'rgb(var(--text-3))' }}>{desc}</div>
+        </div>
+        <span style={{ color: 'rgb(var(--text-2))', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <Outlined.Search size={size} strokeWidth={sw} />
+          <Outlined.Edit size={size} strokeWidth={sw} />
+          <Outlined.Delete size={size} strokeWidth={sw} />
+        </span>
+      </div>
+    ))}
+  </div>
+);
+```
+
+## 着色
+
+默认 `currentColor` **继承文字颜色**——优先用中性语义档；品牌色用 `text-blue-*` 类（自动换肤）；语义色用语义 token；**不写裸 hex**。SVG 展示属性里 `var()` 不生效，内联着色用 `style={{ color: 'rgb(var(--brand-500))' }}`。
+
+```tsx
+import { Outlined } from 'bisheng-icons';
+
+const rows = [
+  ['继承文字颜色（currentColor 默认行为）', <span style={{ color: 'rgb(var(--text-2))' }}><Outlined.Info size={16} /> 跟随所在容器的 text 色</span>],
+  ['品牌色 · text-blue-500（自动换肤）', <span className="text-blue-500"><Outlined.Pin size={16} /> 品牌色</span>],
+  ['品牌色 · 内联 var 写法', <span style={{ color: 'rgb(var(--brand-500))' }}><Outlined.Pin size={16} /> rgb(var(--brand-500))</span>],
+  ['语义色（成功/警告/危险，不换肤）', (
+    <span style={{ display: 'inline-flex', gap: 16 }}>
+      <span style={{ color: '#00b42a' }}><Outlined.CheckCircle size={16} /> 成功</span>
+      <span style={{ color: '#ff7d00' }}><Outlined.Attention size={16} /> 警告</span>
+      <span style={{ color: '#f53f3f' }}><Outlined.CloseCircle size={16} /> 危险</span>
+    </span>
+  )],
+  ['加载态 · Outlined.Loading + animate-spin', <span style={{ color: 'rgb(var(--text-2))' }}><Outlined.Loading size={16} className="animate-spin" /> 加载中（不混用 lucide Loader2）</span>],
+];
+
+export default () => (
+  <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+    {rows.map(([label, node]) => (
+      <div key={label as string} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <span style={{ width: 300, flexShrink: 0, fontSize: 13, color: 'rgb(var(--text-2))' }}>{label}</span>
+        {node}
+      </div>
+    ))}
+  </div>
+);
+```
+
+## 使用规则
+
+- 纯图标按钮必须带 Tooltip + `aria-label`；触屏热区 ≥44×44 由 Button 基座统一处理。
+- 方向语义用库内方向图标，**不用 CSS 旋转拼方向**；例外：展开/收起 chevron 的 `rotate-180` 过渡。
+- 图标与文字间距 8px（`gap-2`），small 档可收紧 4px。
+- 同一视图内同类图标同档；与文字混排时 icon 不大于行高。
+- **升级 bisheng-icons 后必须清 Vite 预构建缓存**：`npm run dev -- --force`，否则新图标白屏。

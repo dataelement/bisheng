@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 
 import FilterByApp from "@/components/bs-comp/filterTableDataComponent/FilterByApp";
 import FilterByDate from "@/components/bs-comp/filterTableDataComponent/FilterByDate";
@@ -135,8 +136,8 @@ export default function AppUseLog() {
 
         // Handle time range logic
         const dateRange = filters.dateRange || [];
-        let originalStart = dateRange[0];
-        let originalEnd = dateRange[1];
+        const originalStart = dateRange[0];
+        const originalEnd = dateRange[1];
 
         let adjustedStart = originalStart;
         let adjustedEnd = originalEnd;
@@ -302,8 +303,8 @@ export default function AppUseLog() {
                 </div>}
                 <Button onClick={() => {
                     const dateRange = filters.dateRange || [];
-                    let originalStart = dateRange[0];
-                    let originalEnd = dateRange[1];
+                    const originalStart = dateRange[0];
+                    const originalEnd = dateRange[1];
                     let adjustedStart = originalStart;
                     let adjustedEnd = originalEnd;
                     if (originalStart && !originalEnd) {

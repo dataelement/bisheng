@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { paramsSerializer } from ".";
 import { ROLE, User } from "../../types/api/user";
 import axios from "../request";

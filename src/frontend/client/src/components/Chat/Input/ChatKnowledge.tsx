@@ -1,17 +1,10 @@
 import {
   ChevronLeft,
   Glasses,
-  Loader2,
   PaperclipIcon,
-  SearchIcon,
 } from "lucide-react";
 import { Outlined } from "bisheng-icons";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import {
-  getMineSpacesApi,
-  getJoinedSpacesApi,
-  getDepartmentSpacesApi,
-} from "~/api/knowledge";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,26 +13,19 @@ import {
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
-  Input
 } from "~/components/ui";
-import { Checkbox } from "~/components/ui/Checkbox";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "~/components/ui/Tooltip2";
 import BookOpen from "~/components/ui/icon/BookOpen";
 import BooksIcon from "~/components/ui/icon/Books";
 import { useGetOrgToolList } from "~/hooks/queries/data-provider";
 import { BsConfig } from "~/types/chat";
-import { useLocalize, useMediaQuery, useScrollRevealRef } from "~/hooks";
+import { useCategorizedKnowledgeSpaces, useLocalize, useMediaQuery } from "~/hooks";
 import { useToastContext } from "~/Providers";
 import { cn } from "~/utils";
+import { KnowledgeListPanel } from "./KnowledgeListPanel";
+import type { KnowledgeItem, KnowledgeType } from "./knowledgeTypes";
 
-// --- 类型定义 ---
-export type KnowledgeType = 'org' | 'space';
-
-export interface KnowledgeItem {
-  id: string;
-  name: string;
-  type: KnowledgeType;
-}
+export type { KnowledgeItem, KnowledgeType } from "./knowledgeTypes";
 
 // --- Hooks ---
 function useDebounce<T>(value: T, delay: number): T {
@@ -161,148 +147,6 @@ function useSubMenuLayout(menuRef: React.RefObject<HTMLDivElement | null>, trigg
   return { alignOffset, maxH };
 }
 
-// --- 子组件：列表面板 ---
-const KnowledgeListPanel = ({
-  placeholder,
-  keyword,
-  setKeyword,
-  items,
-  selectedItems, // 这里接收的是筛选后的数组
-  onToggle,
-  isFetching,
-  hasMore,
-  onLoadMore,
-  emptyText,
-}: {
-  placeholder: string;
-  keyword: string;
-  setKeyword: (v: string) => void;
-  items: any[];
-  selectedItems: KnowledgeItem[];
-  onToggle: (item: any) => void;
-  isFetching: boolean;
-  hasMore: boolean;
-  onLoadMore: () => void;
-  emptyText: string;
-}) => {
-  const listScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
-  // Direct ref to the scroll container so we can read scroll metrics for the
-  // edge-shadow indicators (useScrollRevealRef is callback-only and only
-  // toggles a `data-scrolling` attribute).
-  const scrollNodeRef = useRef<HTMLDivElement | null>(null);
-  const setScrollRefs = useCallback(
-    (node: HTMLDivElement | null) => {
-      scrollNodeRef.current = node;
-      listScrollRevealRef(node);
-    },
-    [listScrollRevealRef],
-  );
-
-  // Edge shadows: visible only when there is content above / below the current
-  // viewport. Shadows fade out at the top/bottom boundary.
-  const [canScrollUp, setCanScrollUp] = useState(false);
-  const [canScrollDown, setCanScrollDown] = useState(false);
-  const updateScrollIndicators = useCallback(() => {
-    const el = scrollNodeRef.current;
-    if (!el) return;
-    const { scrollTop, scrollHeight, clientHeight } = el;
-    setCanScrollUp(scrollTop > 0);
-    setCanScrollDown(scrollTop + clientHeight < scrollHeight - 1);
-  }, []);
-  useEffect(() => {
-    updateScrollIndicators();
-  }, [items, updateScrollIndicators]);
-
-  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
-    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
-    if (scrollHeight - scrollTop <= clientHeight + 10 && !isFetching && hasMore) {
-      onLoadMore();
-    }
-    updateScrollIndicators();
-  };
-
-  return (
-    <div className="flex flex-col gap-1 min-h-0 flex-1">
-      {/* 搜索框 */}
-      <div className="relative shrink-0">
-        <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-        <Input
-          className="h-[28px] text-sm bg-white border border-[#ECECEC] rounded-[6px] pl-8 focus-visible:ring-1 focus-visible:ring-blue-500/20"
-          placeholder={placeholder}
-          value={keyword}
-          onChange={(e) => setKeyword(e.target.value)}
-          onClick={(e) => e.stopPropagation()}
-          onKeyDown={(e) => e.stopPropagation()}
-        />
-      </div>
-
-      {/* 滚动列表 — wrapped in a relative container so the top/bottom edge
-          shadows can be absolutely positioned over the scroll viewport. */}
-      <div className="relative flex min-h-0 flex-1 flex-col">
-        {/* Top edge fade — solid popup-white fades to transparent so list
-            content visually dissolves into the menu surface. */}
-        <div
-          aria-hidden
-          className={cn(
-            "pointer-events-none absolute left-0 right-0 top-0 h-3 z-10 transition-opacity duration-150",
-            "bg-gradient-to-b from-white to-transparent",
-            canScrollUp ? "opacity-100" : "opacity-0",
-          )}
-        />
-        {/* Bottom edge fade — same idea, mirrored. */}
-        <div
-          aria-hidden
-          className={cn(
-            "pointer-events-none absolute bottom-0 left-0 right-0 h-3 z-10 transition-opacity duration-150",
-            "bg-gradient-to-t from-white to-transparent",
-            canScrollDown ? "opacity-100" : "opacity-0",
-          )}
-        />
-        <div
-          ref={setScrollRefs}
-          className="overflow-y-auto flex flex-col gap-0 scrollbar-on-scroll min-h-0 flex-1 pb-2"
-          onScroll={handleScroll}
-        >
-        {items.map((item) => {
-          // 判断是否选中 — coerce both sides to string: list items arrive from
-          // API as numeric ids, while selected items may be strings (defaults
-          // seeded via `String(k.id)` or restored from localStorage).
-          const isChecked = selectedItems.some((s) => String(s.id) === String(item.id));
-          return (
-            <DropdownMenuItem
-              key={item.id}
-              onSelect={(e) => {
-                e.preventDefault();
-                onToggle(item);
-              }}
-              className="flex items-center gap-2 px-2 py-[5px] cursor-pointer rounded-[6px] data-[highlighted]:bg-[#f2f3f5] focus:bg-[#f2f3f5] outline-none transition-colors"
-            >
-              <Checkbox
-                checked={isChecked}
-                tabIndex={-1}
-                className="pointer-events-none shrink-0 border-[#D9D9D9] data-[state=checked]:border-primary data-[state=indeterminate]:border-primary"
-              />
-              <span className="truncate flex-1 text-[14px] text-slate-700 leading-[22px]">
-                {item.name}
-              </span>
-            </DropdownMenuItem>
-          );
-        })}
-
-        {isFetching && (
-          <div className="flex justify-center py-3">
-            <Loader2 size={16} className="animate-spin text-slate-300" />
-          </div>
-        )}
-        {!isFetching && items.length === 0 && (
-          <div className="text-center text-[12px] text-slate-400 py-10">{emptyText}</div>
-        )}
-        </div>
-      </div>
-    </div>
-  );
-};
-
 // --- main ---
 export const ChatKnowledge = ({
   variant = 'plus',
@@ -369,69 +213,25 @@ export const ChatKnowledge = ({
   const [allOrgKbs, setAllOrgKbs] = useState<any[]>([]);
   const [hasMoreOrg, setHasMoreOrg] = useState(true);
 
-  // --- Knowledge space data (load all on mount, no pagination) ---
+  // --- Knowledge space data (load all groups at once, no pagination) ---
   const [spaceKeyword, setSpaceKeyword] = useState("");
   const debouncedSpaceKeyword = useDebounce(spaceKeyword, 300);
-  const [allSpaces, setAllSpaces] = useState<any[]>([]);
-  const [spaceFetching, setSpaceFetching] = useState(false);
-
-  const loadSpaces = useCallback(async () => {
-    setSpaceFetching(true);
-    try {
-      // Fetch "mine" + "joined" + "department" in parallel and merge into a single list
-      const [mine, joined, department] = await Promise.all([
-        getMineSpacesApi(),
-        getJoinedSpacesApi(),
-        getDepartmentSpacesApi(),
-      ]);
-      // Dedupe by id (a space could in principle appear in more than one list)
-      const seen = new Set<string | number>();
-      const merged: any[] = [];
-      for (const s of [...mine, ...joined, ...department]) {
-        if (seen.has(s.id)) continue;
-        seen.add(s.id);
-        merged.push(s);
-      }
-      // Sort A–Z, English (ASCII-leading) names first, then Chinese names.
-      // Within each bucket, compare with the appropriate locale so that
-      // pinyin order is used for CJK and natural order for ASCII.
-      merged.sort((a, b) => {
-        const an = (a.name || "").trim();
-        const bn = (b.name || "").trim();
-        const aIsEn = an.length > 0 && an.charCodeAt(0) < 128;
-        const bIsEn = bn.length > 0 && bn.charCodeAt(0) < 128;
-        if (aIsEn !== bIsEn) return aIsEn ? -1 : 1;
-        return an.localeCompare(bn, aIsEn ? "en" : "zh-Hans-u-co-pinyin", {
-          sensitivity: "base",
-        });
-      });
-      setAllSpaces(merged);
-    } catch (err) {
-      console.error("[ChatKnowledge] Failed to load spaces:", err);
-    } finally {
-      setSpaceFetching(false);
-    }
-  }, []);
 
   // Spaces are only shown inside the open picker, so load them lazily on first
-  // open (and refresh on each reopen) instead of eagerly on mount. The eager
-  // mount-fetch fired knowledge/space/{mine,joined} every time the input box
-  // re-mounted (e.g. the send-triggered welcome→messages layout flip), causing
-  // duplicate requests on send.
+  // open instead of eagerly on mount. The eager mount-fetch fired
+  // knowledge/space/{mine,joined} every time the input box re-mounted (e.g. the
+  // send-triggered welcome→messages layout flip), causing duplicate requests on send.
   const [rootOpen, setRootOpen] = useState(false);
-  useEffect(() => {
-    if (rootOpen) loadSpaces();
-  }, [rootOpen, loadSpaces]);
 
-  // Client-side filter by keyword
-  const filteredSpaces = useMemo(
-    () =>
-      debouncedSpaceKeyword
-        ? allSpaces.filter((s) =>
-          s.name?.toLowerCase().includes(debouncedSpaceKeyword.toLowerCase())
-        )
-        : allSpaces,
-    [allSpaces, debouncedSpaceKeyword]
+  // Grouped as 部门知识空间 / 我创建的 / 我加入的, matching the 知识空间 page.
+  // Empty groups (including "no search hit in this group") are dropped by the hook.
+  const { groups: spaceGroups, isFetching: spaceFetching } = useCategorizedKnowledgeSpaces({
+    enabled: rootOpen,
+    keyword: debouncedSpaceKeyword,
+  });
+  const spaceListGroups = useMemo(
+    () => spaceGroups.map((group) => ({ key: group.key, label: group.label, items: group.spaces })),
+    [spaceGroups],
   );
 
   // Comma-separated ids of admin-configured org KBs. Passed to the backend so
@@ -649,7 +449,7 @@ export const ChatKnowledge = ({
         sticky={isMobile ? 'partial' : undefined}
         onCloseAutoFocus={(e) => e.preventDefault()}
         className={cn(
-          'flex flex-col gap-0 rounded-[8px] border-0 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]',
+          'flex flex-col gap-0 rounded-lg border-0 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]',
           // variant-aware width/padding: the pill (knowledge) shows a list
           // directly, so it needs the wider list layout; the "+" menu stays
           // compact for its short action items.
@@ -688,7 +488,7 @@ export const ChatKnowledge = ({
               if (fileUploadDisabled) return;
               onFileUploadClick?.();
             }}
-            className="flex cursor-pointer items-center gap-2 rounded-[6px] px-2 py-[5px] outline-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-40"
+            className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-[5px] outline-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-40"
           >
             <Outlined.Attachment size={16} className="text-[#999]" />
             <span className="text-[14px] font-normal text-slate-700">{localize('com_ui_upload_files')}</span>
@@ -707,7 +507,7 @@ export const ChatKnowledge = ({
               placeholder={localize('com_chat_knowledge_placeholder_search_space')}
               keyword={spaceKeyword}
               setKeyword={setSpaceKeyword}
-              items={filteredSpaces}
+              groups={spaceListGroups}
               selectedItems={selectedKnowledgeSpaces}
               onToggle={(item) => handleToggle(item, 'space')}
               isFetching={spaceFetching}
@@ -728,7 +528,7 @@ export const ChatKnowledge = ({
               placeholder={localize('com_chat_knowledge_placeholder_search_space')}
               keyword={spaceKeyword}
               setKeyword={setSpaceKeyword}
-              items={filteredSpaces}
+              groups={spaceListGroups}
               selectedItems={selectedKnowledgeSpaces}
               onToggle={(item) => handleToggle(item, 'space')}
               isFetching={spaceFetching}
@@ -752,13 +552,13 @@ export const ChatKnowledge = ({
             <DropdownMenuSubTrigger
               data-sub-key="org"
               className={cn(
-                'mt-0.5 flex cursor-pointer items-center justify-between rounded-[6px] px-2 py-[5px] outline-none',
+                'mt-0.5 flex cursor-pointer items-center justify-between rounded-md px-2 py-[5px] outline-none',
               )}
             >
               <div className="flex items-center gap-2">
                 <div className="relative">
                   {/* Icon turns brand-blue once an org KB is selected (no dot). */}
-                  <Outlined.Books size={16} className={selectedOrgKbs.length > 0 ? "text-blue-600" : "text-[#999]"} />
+                  <Outlined.Books size={16} className={selectedOrgKbs.length > 0 ? "text-blue-500" : "text-[#999]"} />
                 </div>
                 <span className="text-[14px] font-normal text-slate-700">
                   {localize('com_tools_org_knowledge')}
@@ -769,7 +569,7 @@ export const ChatKnowledge = ({
             <DropdownMenuSubContent
               alignOffset={orgLayout.alignOffset}
               collisionPadding={BOTTOM_GAP}
-              className="ml-2 flex w-[240px] flex-col overflow-hidden rounded-[8px] border-slate-100 bg-white pt-2 px-2 pb-0 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]"
+              className="ml-2 flex w-[240px] flex-col overflow-hidden rounded-lg border-slate-100 bg-white pt-2 px-2 pb-0 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]"
               style={
                 {
                   '--tw-enter-duration': '0.35s',
@@ -804,12 +604,12 @@ export const ChatKnowledge = ({
               e.preventDefault();
               setMobilePanel('org');
             }}
-            className="mt-0.5 flex cursor-pointer items-center justify-between gap-2 rounded-[6px] px-2 py-[5px] outline-none"
+            className="mt-0.5 flex cursor-pointer items-center justify-between gap-2 rounded-md px-2 py-[5px] outline-none"
           >
             <div className="flex min-w-0 items-center gap-2">
               <div className="relative shrink-0">
                 {/* Icon turns brand-blue once an org KB is selected (no dot). */}
-                <Outlined.Books size={16} className={selectedOrgKbs.length > 0 ? "text-blue-600" : "text-[#999]"} />
+                <Outlined.Books size={16} className={selectedOrgKbs.length > 0 ? "text-blue-500" : "text-[#999]"} />
               </div>
               <span className="truncate text-[14px] font-normal text-slate-700">
                 {localize('com_tools_org_knowledge')}
@@ -867,13 +667,13 @@ export const ChatKnowledge = ({
                 setRootOpen(false);
                 onEnterTaskMode?.();
               }}
-              className="flex cursor-pointer items-center gap-2 rounded-[6px] px-2 py-[5px] outline-none"
+              className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-[5px] outline-none"
             >
-              <Outlined.Binoculars size={16} className={taskModeActive ? 'text-blue-600' : 'text-[#999]'} />
-              <span className={cn('flex-1 text-[14px] font-normal', taskModeActive ? 'text-blue-600' : 'text-slate-700')}>
+              <Outlined.ListSuccess size={16} className={taskModeActive ? 'text-blue-500' : 'text-[#999]'} />
+              <span className={cn('flex-1 text-[14px] font-normal', taskModeActive ? 'text-blue-500' : 'text-slate-700')}>
                 {localize('com_linsight_task_mode')}
               </span>
-              {taskModeActive && <Outlined.Check size={14} className="text-blue-600" />}
+              {taskModeActive && <Outlined.Check size={14} className="text-blue-500" />}
             </DropdownMenuItem>
             {/* 添加 Skill — 桌面：悬停展开技能选择器；移动 root：下钻进技能面板。
                 选中技能即进入任务模式（由 renderSkillSubmenu 内部导航），故传入
@@ -883,18 +683,18 @@ export const ChatKnowledge = ({
                 <DropdownMenuSub>
                   <DropdownMenuSubTrigger
                     className={cn(
-                      'flex cursor-pointer items-center justify-between rounded-[6px] px-2 py-[5px] outline-none',
+                      'flex cursor-pointer items-center justify-between rounded-md px-2 py-[5px] outline-none',
                     )}
                   >
                     <div className="flex items-center gap-2">
-                      <Outlined.Newspaper size={16} className={skillSelected ? 'text-blue-600' : 'text-[#999]'} />
+                      <Outlined.Newspaper size={16} className={skillSelected ? 'text-blue-500' : 'text-[#999]'} />
                       <span className="text-[14px] font-normal text-slate-700">
                         {localize('com_linsight_add_skill')}
                       </span>
                     </div>
                   </DropdownMenuSubTrigger>
                   {/* Layout mirrors the knowledge panel shell (variant === 'knowledge' above). */}
-                  <DropdownMenuSubContent className="ml-2 flex max-h-[256px] w-[240px] flex-col gap-0 overflow-hidden rounded-[8px] border-0 bg-white px-2 pb-0 pt-2 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]">
+                  <DropdownMenuSubContent className="ml-2 flex max-h-[256px] w-[240px] flex-col gap-0 overflow-hidden rounded-lg border-0 bg-white px-2 pb-0 pt-2 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]">
                     {renderSkillSubmenu(() => setRootOpen(false))}
                   </DropdownMenuSubContent>
                 </DropdownMenuSub>
@@ -904,10 +704,10 @@ export const ChatKnowledge = ({
                     e.preventDefault();
                     setMobilePanel('skill');
                   }}
-                  className="flex cursor-pointer items-center justify-between gap-2 rounded-[6px] px-2 py-[5px] outline-none"
+                  className="flex cursor-pointer items-center justify-between gap-2 rounded-md px-2 py-[5px] outline-none"
                 >
                   <div className="flex min-w-0 items-center gap-2">
-                    <Outlined.Newspaper size={16} className={skillSelected ? 'text-blue-600' : 'text-[#999]'} />
+                    <Outlined.Newspaper size={16} className={skillSelected ? 'text-blue-500' : 'text-[#999]'} />
                     <span className="truncate text-[14px] font-normal text-slate-700">
                       {localize('com_linsight_add_skill')}
                     </span>

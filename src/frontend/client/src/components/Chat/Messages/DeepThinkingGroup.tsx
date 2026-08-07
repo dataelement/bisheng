@@ -130,27 +130,37 @@ const DeepThinkingGroup: FC<DeepThinkingGroupProps> = memo(
             setIsExpanded((prev) => !prev);
         }, []);
 
-        // Pull thinking content (concat) for the inner ThinkingContent block.
-        const reasoning = useMemo(
-            () =>
-                events
-                    .filter(
-                        (e): e is Extract<AgentEvent, { type: "thinking" }> =>
-                            e.type === "thinking",
-                    )
-                    .map((e) => e.content)
-                    .join("\n\n"),
-            [events],
-        );
-
-        const toolCalls = useMemo(
-            () =>
-                events.filter(
-                    (e): e is Extract<AgentEvent, { type: "tool_call" }> =>
-                        e.type === "tool_call",
-                ),
-            [events],
-        );
+        // Walk the events in arrival order, folding only ADJACENT thinking
+        // fragments into one passage. The wire and the DB already interleave
+        // thinking and tool calls truthfully (the backend closes the open
+        // thinking segment before every tool call), so the render must not
+        // regroup them: reasoning that happened after a search belongs below
+        // that search, not merged into the block above it. Mirrors task mode's
+        // DeepStepGroup.buildSegments.
+        const segments = useMemo(() => {
+            type Segment =
+                | { kind: "thinking"; key: string; content: string }
+                | { kind: "tool"; key: string; toolCall: Extract<AgentEvent, { type: "tool_call" }> };
+            const out: Segment[] = [];
+            events.forEach((ev, i) => {
+                if (ev.type === "thinking") {
+                    // A just-opened live segment has no text yet — skip it so the
+                    // connector chain never points at a row that renders nothing.
+                    if (!ev.content) return;
+                    const last = out[out.length - 1];
+                    if (last?.kind === "thinking") {
+                        // Adjacent rounds are distinct closed passages (unlike task
+                        // mode's per-frame chunks), so a paragraph break is right.
+                        last.content += `\n\n${ev.content}`;
+                    } else {
+                        out.push({ kind: "thinking", key: `think-${i}`, content: ev.content });
+                    }
+                } else if (ev.type === "tool_call") {
+                    out.push({ kind: "tool", key: ev.tool_call_id || `tc-${i}`, toolCall: ev });
+                }
+            });
+            return out;
+        }, [events]);
 
         return (
             <div className="flex w-full min-w-0 flex-col gap-3">
@@ -170,17 +180,23 @@ const DeepThinkingGroup: FC<DeepThinkingGroupProps> = memo(
                     style={{ gridTemplateRows: isExpanded ? "1fr" : "0fr" }}
                 >
                     <div className="overflow-hidden flex flex-col gap-2">
-                        <ThinkingContent
-                            reasoning={reasoning}
-                            showConnector={!!reasoning && toolCalls.length > 0}
-                        />
-                        {toolCalls.map((tc, i) => (
-                            <ToolCallDisplay
-                                key={tc.tool_call_id || `tc-${i}`}
-                                toolCall={tc}
-                                showConnector={i < toolCalls.length - 1}
-                            />
-                        ))}
+                        {segments.map((seg, i) => {
+                            // Connector runs to the next row, whatever kind it is.
+                            const hasNext = i < segments.length - 1;
+                            return seg.kind === "thinking" ? (
+                                <ThinkingContent
+                                    key={seg.key}
+                                    reasoning={seg.content}
+                                    showConnector={hasNext}
+                                />
+                            ) : (
+                                <ToolCallDisplay
+                                    key={seg.key}
+                                    toolCall={seg.toolCall}
+                                    showConnector={hasNext}
+                                />
+                            );
+                        })}
                     </div>
                 </div>
             </div>

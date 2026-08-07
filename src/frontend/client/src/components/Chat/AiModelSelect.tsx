@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { Rotate3DIcon } from "lucide-react";
 import { memo, useEffect, useMemo } from "react";
 import {

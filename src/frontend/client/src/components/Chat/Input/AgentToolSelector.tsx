@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 /**
  * AgentToolSelector — v2.5 Agent-mode tool picker for the daily chat input bar.
  *
@@ -139,7 +140,7 @@ export default function AgentToolSelector({ availableTools, disabled, compact = 
           )}
         </div>
       </SelectTrigger>
-      <SelectContent className="bg-white rounded-[8px] w-[200px] max-h-[320px] overflow-y-auto">
+      <SelectContent className="bg-white rounded-lg w-[200px] max-h-[320px] overflow-y-auto">
         {availableTools.map((group) => (
           <div key={group.id} className="flex justify-between items-center px-2 py-[5px]">
             <div className="flex gap-2 items-center min-w-0">

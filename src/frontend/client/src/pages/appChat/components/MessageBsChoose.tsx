@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { CheckIcon } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { ChatMessageType } from "~/@types/chat";

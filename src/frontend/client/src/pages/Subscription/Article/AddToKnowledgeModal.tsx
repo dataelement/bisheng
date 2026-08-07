@@ -779,7 +779,7 @@ export function AddToKnowledgeModal({
                         value={search}
                         onChange={e => setSearch(e.target.value)}
                         placeholder={localize("com_subscription.search_knowledge_space_placeholder")}
-                        className="w-full h-8 pl-8 pr-8 text-[14px] rounded-[6px] border border-[#ECECEC] focus:outline-none"
+                        className="w-full h-8 pl-8 pr-8 text-[14px] rounded-md border border-[#ECECEC] focus:outline-none"
                     />
                     {search && (
                         <button
@@ -808,9 +808,9 @@ export function AddToKnowledgeModal({
                     ref={treeScrollRevealRef}
                     className={
                         useFlexTree
-                            ? "scrollbar-gutter-stable flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden rounded-[6px] border border-[#ECECEC] p-3 scrollbar-on-scroll"
+                            ? "scrollbar-gutter-stable flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden rounded-md border border-[#ECECEC] p-3 scrollbar-on-scroll"
                             : cn(
-                                "scrollbar-gutter-stable h-[340px] max-h-full w-full overflow-y-auto overflow-x-hidden rounded-[6px] border border-[#ECECEC] p-3 scrollbar-on-scroll",
+                                "scrollbar-gutter-stable h-[340px] max-h-full w-full overflow-y-auto overflow-x-hidden rounded-md border border-[#ECECEC] p-3 scrollbar-on-scroll",
                                 mode === "article" && isH5 && "touch-mobile:h-[calc(100dvh-260px)]",
                             )
                     }

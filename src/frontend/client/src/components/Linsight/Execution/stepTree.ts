@@ -440,6 +440,8 @@ export function hasRenderableTimeline(history: ExecStepEventData[] | null | unde
 export function isTimelineNodeRunning(node: TimelineNode): boolean {
     if (node.kind === 'subagent_group') return node.agents.some((a) => a.step.running);
     if (node.kind === 'deep_step_group') return node.running;
+    // An intent node is an already-answered clarify — it carries no step to run.
+    if (node.kind === 'intent') return false;
     return node.step.running;
 }
 

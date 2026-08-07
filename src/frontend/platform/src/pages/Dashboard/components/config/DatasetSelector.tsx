@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 "use client"
 
 import { Input } from "@/components/bs-ui/input"

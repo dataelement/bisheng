@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { Button } from "@/components/bs-ui/button";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
@@ -83,7 +84,7 @@ export default function WebLinkImportDialog({
         }
 
         if (statusCode !== undefined && statusCode !== null) {
-            const translated = t(`bs:errors.${statusCode}`, { ...(error?.data || {}), defaultValue: "" });
+            const translated = t(`api_errors:${statusCode}`, { ...(error?.data || {}), defaultValue: "" });
             if (translated) return translated;
         }
 

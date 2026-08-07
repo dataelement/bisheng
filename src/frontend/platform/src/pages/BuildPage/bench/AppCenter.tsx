@@ -13,6 +13,7 @@ import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import ConfigInheritanceBanner, { resolveConfigEnvelope } from "./ConfigInheritanceBanner";
 import { FormInput } from "./FormInput";
+import { clampMenuName } from "./menuDisplayName";
 
 const MAX_LEN = 1000;
 
@@ -22,7 +23,9 @@ export function AppCenter({ scopeVersion = 0 }: { scopeVersion?: number }) {
     const { reloadConfig } = useContext(locationContext);
     const [welcome, setWelcome] = useState('');
     const [description, setDescription] = useState('');
-    const [errors, setErrors] = useState({ welcome: '', description: '' });
+    // Sidebar entry name for the app-center module — required, defaults to the tab name.
+    const [menuDisplayName, setMenuDisplayName] = useState(() => t('bench.appCenter'));
+    const [errors, setErrors] = useState({ welcome: '', description: '', menuDisplayName: '' });
     const [configMeta, setConfigMeta] = useState<any>(null);
     // Full loaded config — round-tripped on save so home-tab fields survive.
     const loadedCfgRef = useRef<any>(null);
@@ -35,8 +38,11 @@ export function AppCenter({ scopeVersion = 0 }: { scopeVersion?: number }) {
             loadedCfgRef.current = cfg || {};
             setWelcome(cfg?.applicationCenterWelcomeMessage ?? '');
             setDescription(cfg?.applicationCenterDescription ?? '');
+            // 空字符串同样视为「未配置」，回落到默认菜单名
+            const savedMenuName = (cfg?.appCenterMenuDisplayName ?? '').trim();
+            setMenuDisplayName(savedMenuName || t('bench.appCenter'));
         });
-    }, [scopeVersion]);
+    }, [scopeVersion, t]);
 
     const handleChange = (field: 'welcome' | 'description', value: string) => {
         (field === 'welcome' ? setWelcome : setDescription)(value);
@@ -47,8 +53,14 @@ export function AppCenter({ scopeVersion = 0 }: { scopeVersion?: number }) {
     };
 
     const handleSave = () => {
+        // 菜单显示名称必填（长度在输入时已截断）
+        if (!menuDisplayName.trim()) {
+            setErrors(prev => ({ ...prev, menuDisplayName: t('chatConfig.errors.required') }));
+            return;
+        }
         const dataToSave = {
             ...(loadedCfgRef.current || {}),
+            appCenterMenuDisplayName: menuDisplayName.trim(),
             applicationCenterWelcomeMessage: welcome.trim() || t('chatConfig.appCenterWelcomePlaceholder'),
             applicationCenterDescription: description.trim() || t('chatConfig.appCenterDescriptionPlaceholder'),
         };
@@ -67,6 +79,16 @@ export function AppCenter({ scopeVersion = 0 }: { scopeVersion?: number }) {
                 <CardContent className="pt-4 pb-0 relative">
                     <div className="w-full max-h-[calc(100vh-180px-var(--license-banner-h,0px))] overflow-y-scroll scrollbar-hide pb-10">
                         <ConfigInheritanceBanner meta={configMeta} />
+                        <FormInput
+                            label={t('chatConfig.menuDisplayName')}
+                            value={menuDisplayName}
+                            error={errors.menuDisplayName}
+                            placeholder={t('bench.appCenter')}
+                            onChange={(v) => {
+                                setMenuDisplayName(clampMenuName(v));
+                                setErrors(prev => ({ ...prev, menuDisplayName: '' }));
+                            }}
+                        />
                         <FormInput
                             label={t('chatConfig.appCenterWelcome')}
                             value={welcome}

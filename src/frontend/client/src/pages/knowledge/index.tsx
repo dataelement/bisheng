@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Plus } from "lucide-react";
@@ -40,7 +41,7 @@ import { KnowledgeSpacePreviewDrawer } from "./KnowledgeSpacePreviewDrawer";
 import KnowledgeSquare from "./KnowledgeSquare";
 import { useFileManager } from "./hooks/useFileManager";
 import { useFileUpload } from "./hooks/useFileUpload";
-import { useLocalize, useMediaQuery, usePrefersMobileLayout } from "~/hooks";
+import { useLocalize, useMediaQuery, usePrefersMobileLayout, useWorkbenchMenuNames } from "~/hooks";
 import { useEffectiveQuota } from "~/hooks/useEffectiveQuota";
 import { useAuthContext } from "~/hooks/AuthContext";
 import { cn } from "~/utils";
@@ -50,6 +51,8 @@ import { bishengConfState } from "~/pages/appChat/store/atoms";
 import { resolveUploadSizeLimits } from "./knowledgeUtils";
 export default function Knowledge() {
     const localize = useLocalize();
+    // 模块标题跟随后台配置的菜单显示名称
+    const menuNames = useWorkbenchMenuNames();
     const bishengConfig = useRecoilValue(bishengConfState);
     const uploadSizeLimits = useMemo(
         () => resolveUploadSizeLimits(bishengConfig),
@@ -705,7 +708,7 @@ export default function Knowledge() {
             {/* Drag and Drop Overlay */}
             {isDragging && (
                 <div
-                    className={`absolute inset-0.5 z-[100] rounded-[12px] backdrop-blur-[16px] flex flex-col items-center justify-center pointer-events-none transition-all duration-300 ${dragError ? "border border-dashed border-red-500 bg-[rgba(255,236,232,0.7)]" : "border border-dashed bg-[rgba(255,255,255,0.7)]"}`}
+                    className={`absolute inset-0.5 z-[100] rounded-[12px] flex flex-col items-center justify-center pointer-events-none transition-all duration-300 ${dragError ? "border border-dashed border-red-500 bg-[rgba(255,236,232,0.7)]" : "border border-dashed bg-[rgba(255,255,255,0.7)]"}`}
                 >
                     <div className={`flex flex-col items-center justify-center p-8 rounded-2xl ${dragError ? "bg-transparent" : "bg-white/50"}`}>
                         {dragError ? (
@@ -768,7 +771,7 @@ export default function Knowledge() {
                         role="dialog"
                         aria-modal="true"
                         aria-hidden={!spaceListDrawerOpen}
-                        aria-label={localize("com_knowledge.knowledge_space")}
+                        aria-label={menuNames.knowledge}
                     >
                         <div className="min-h-0 flex-1 overflow-hidden">
                             <KnowledgeSpaceSidebar
@@ -807,7 +810,7 @@ export default function Knowledge() {
                                     setShowKnowledgeSquare(true);
                                     setSpaceListDrawerOpen(false);
                                 }}
-                                className="h-8 flex-1 gap-1 rounded-[6px] border border-[#e3e3e3] bg-white px-3 py-[5px] text-sm font-normal leading-[22px] text-[#666666] hover:bg-[#F4F4F4]"
+                                className="h-8 flex-1 gap-1 rounded-md border border-[#e3e3e3] bg-white px-3 py-[5px] text-sm font-normal leading-[22px] text-[#666666] hover:bg-[#F4F4F4]"
                             >
                                 <Outlined.BlocksAndArrows className="size-4" />
                                 {localize("com_knowledge.go_to_square")}
@@ -818,7 +821,7 @@ export default function Knowledge() {
                                     handleCreateSpace();
                                     setSpaceListDrawerOpen(false);
                                 }}
-                                className="h-8 flex-1 gap-1 rounded-[6px] bg-blue-100 px-3 py-[5px] text-sm font-normal leading-[22px] text-blue-main hover:bg-blue-200"
+                                className="h-8 flex-1 gap-1 rounded-md bg-blue-100 px-3 py-[5px] text-sm font-normal leading-[22px] text-blue-main hover:bg-blue-200"
                             >
                                 <Plus className="size-4" />
                                 {localize("com_knowledge.create_knowledge_space")}
@@ -919,7 +922,7 @@ export default function Knowledge() {
                                 <Outlined.SidebarMenu className="size-5" />
                             </button>
                             <span className="min-w-0 flex-1 truncate text-center text-[16px] font-medium leading-6 text-[#212121]">
-                                {localize("com_knowledge.knowledge_space")}
+                                {menuNames.knowledge}
                             </span>
                             <span className="size-5 shrink-0" aria-hidden />
                         </div>
@@ -967,7 +970,7 @@ export default function Knowledge() {
                                 <Button
                                     variant="secondary"
                                     onClick={() => setShowKnowledgeSquare(true)}
-                                    className="h-8 w-full gap-1 rounded-[6px] border border-[#e3e3e3] bg-white px-3 py-[5px] text-sm font-normal leading-[22px] text-[#666666] hover:bg-[#F4F4F4]"
+                                    className="h-8 w-full gap-1 rounded-md border border-[#e3e3e3] bg-white px-3 py-[5px] text-sm font-normal leading-[22px] text-[#666666] hover:bg-[#F4F4F4]"
                                 >
                                     <Outlined.BlocksAndArrows className="size-4" />
                                     {localize("com_knowledge.go_to_square")}

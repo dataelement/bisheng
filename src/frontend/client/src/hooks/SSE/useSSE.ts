@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useEffect, useState } from 'react';
 import { useSetRecoilState } from 'recoil';
 import { SSE } from 'sse.js';
@@ -226,7 +227,7 @@ export default function useSSE(
 
       // localize
       const _data = {
-        text: localize(`api_errors.${data?.status_code}`, data?.data),
+        text: localize(`api_errors.${data?.status_code}`, { ...(data?.data || {}), defaultValue: localize('api_errors.fallback') }),
       }
       errorHandler({ data: _data, submission: { ...submission, userMessage } as EventSubmission });
     });

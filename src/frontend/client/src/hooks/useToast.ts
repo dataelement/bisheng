@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useRecoilState } from 'recoil';
 import { useRef, useEffect } from 'react';
 import type { TShowToast } from '~/common';

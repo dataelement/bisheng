@@ -75,7 +75,7 @@ export function SkillSelector({ selected, onChange }: SkillSelectorProps) {
             <div className="relative shrink-0">
                 <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
                 <Input
-                    className="h-[28px] rounded-[6px] border border-[#ECECEC] bg-white pl-8 text-sm focus-visible:ring-1 focus-visible:ring-blue-500/20"
+                    className="h-[28px] rounded-md border border-[#ECECEC] bg-white pl-8 text-sm focus-visible:ring-1 focus-visible:ring-blue-500/20"
                     placeholder={localize('com_linsight_skill_search')}
                     value={keyword}
                     onChange={(e) => setKeyword(e.target.value)}
@@ -127,7 +127,7 @@ export function SkillSelector({ selected, onChange }: SkillSelectorProps) {
                                     e.preventDefault();
                                     handleToggle(skill);
                                 }}
-                                className="flex cursor-pointer items-start gap-2 rounded-[6px] px-2 py-[5px] outline-none transition-colors data-[highlighted]:bg-[#f2f3f5] focus:bg-[#f2f3f5]"
+                                className="flex cursor-pointer items-start gap-2 rounded-md px-2 py-[5px] outline-none transition-colors data-[highlighted]:bg-[#f2f3f5] focus:bg-[#f2f3f5]"
                             >
                                 <div
                                     className={cn(

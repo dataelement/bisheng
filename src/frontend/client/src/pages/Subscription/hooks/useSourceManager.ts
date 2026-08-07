@@ -8,6 +8,7 @@ import {
     addWechatSourceApi
 } from "~/api/channels";
 import { useLocalize } from "~/hooks";
+import { useConfirm } from "~/Providers";
 import { extractApiStatusCode } from "../errorUtils";
 import { normalizeUrlForSearch } from "../urlNormalize";
 
@@ -38,6 +39,10 @@ export function useSourceManager(
 ) {
     const [activeTab, setActiveTab] = useState<SourceType>("official_account");
     const [searchKeyword, setSearchKeyword] = useState("");
+    // Bumped on every submit. Re-pressing Enter on an unchanged link leaves
+    // searchKeyword identical, so without this the effect below never re-runs
+    // and the retry silently does nothing.
+    const [submitSeq, setSubmitSeq] = useState(0);
     const [pendingSources, setPendingSources] = useState<InformationSource[]>([]);
     const [wechatSources, setWechatSources] = useState<InformationSource[]>([]);
     const [websiteSources, setWebsiteSources] = useState<InformationSource[]>([]);
@@ -56,8 +61,24 @@ export function useSourceManager(
     const processingWechatRef = useRef("");
     const wechatRequestTokenRef = useRef(0);
     const wechatAbortRef = useRef<AbortController | null>(null);
-    const [wechatAddError, setWechatAddError] = useState(false);
+    // Sticky until the next attempt: after the user dismisses the error dialog,
+    // the processing panel stays up but swaps its copy for "fix the link, then
+    // press Enter" guidance instead of the "adding…" spinner state.
+    const [wechatLinkFailed, setWechatLinkFailed] = useState(false);
     const localize = useLocalize();
+    const confirm = useConfirm();
+
+    // Dead-end notice when a pasted WeChat article URL cannot be read: single
+    // "back to edit" action, no cancel — the user's only move is to fix the link.
+    const showWechatLinkError = () => {
+        setWechatLinkFailed(true);
+        void confirm({
+            title: localize("com_subscription.wechat_link_unrecognized_title"),
+            description: localize("com_subscription.wechat_link_unrecognized_desc"),
+            confirmText: localize("com_subscription.back_to_edit"),
+            hideCancel: true,
+        });
+    };
 
     const abortWechatRequest = () => {
         wechatAbortRef.current?.abort();
@@ -292,13 +313,17 @@ export function useSourceManager(
             return;
         }
         const target = searchKeyword.trim();
-        if (!target || processingWechatRef.current === target) return;
-        processingWechatRef.current = target;
+        // Keyed by submit, not by the link: the same link submitted again is a
+        // deliberate retry, while a re-render mid-flight is not.
+        const attempt = `${submitSeq}:${target}`;
+        if (!target || processingWechatRef.current === attempt) return;
+        processingWechatRef.current = attempt;
         const token = ++wechatRequestTokenRef.current;
 
         const timer = setTimeout(() => {
             (async () => {
                 try {
+                    setWechatLinkFailed(false);
                     // Abort previous in-flight request (if any) and create a new controller for this run
                     abortWechatRequest();
                     const controller = new AbortController();
@@ -309,7 +334,7 @@ export function useSourceManager(
                     const root: any = res as any;
                     const statusCode = root?.status_code ?? root?.code;
                     if (statusCode && statusCode !== 200) {
-                        setWechatAddError(true);
+                        showWechatLinkError();
                         return;
                     }
                     const raw: any = root?.data ?? root ?? {};
@@ -334,7 +359,7 @@ export function useSourceManager(
                     if (wechatRequestTokenRef.current !== token) return;
                     const code = extractApiStatusCode(error);
                     if (code == null) {
-                        setWechatAddError(true);
+                        showWechatLinkError();
                     }
                 } finally {
                     if (wechatRequestTokenRef.current !== token) return;
@@ -350,7 +375,7 @@ export function useSourceManager(
             // If effect is cleaned up (keyword changes/unmount), abort request
             abortWechatRequest();
         };
-    }, [expanded, viewMode, searchKeyword]);
+    }, [expanded, viewMode, searchKeyword, submitSeq]);
 
     const toggleSource = (source: InformationSource) => {
         if (selectedIds.has(source.id)) {
@@ -369,6 +394,7 @@ export function useSourceManager(
         wechatRequestTokenRef.current++;
         processingWechatRef.current = "";
         abortWechatRequest();
+        setWechatLinkFailed(false);
         setSearchKeyword("");
     };
 
@@ -388,9 +414,20 @@ export function useSourceManager(
         setSearchKeyword("");
     };
 
+    /** Submit the box's contents. Re-submitting the same link counts as a
+     *  fresh attempt, which is what makes "fix nothing and press Enter" retry. */
+    const submitSearch = (value: string) => {
+        // Clear the failure copy here rather than waiting for the debounced
+        // request to start, so the panel reacts on the keypress.
+        setWechatLinkFailed(false);
+        setSearchKeyword(value);
+        setSubmitSeq((n) => n + 1);
+    };
+
     return {
         activeTab, setActiveTab,
         searchKeyword, setSearchKeyword,
+        submitSearch,
         pendingSources,
         loadingSources,
         filteredSources,
@@ -403,7 +440,6 @@ export function useSourceManager(
         handleClearSearch,
         handleConfirm,
         handleCancel,
-        wechatAddError,
-        setWechatAddError,
+        wechatLinkFailed,
     };
 }

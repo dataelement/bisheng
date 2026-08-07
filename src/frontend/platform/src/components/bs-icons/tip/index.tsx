@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import React, { forwardRef } from "react";
 import Tip from "./icon.svg?react";
 

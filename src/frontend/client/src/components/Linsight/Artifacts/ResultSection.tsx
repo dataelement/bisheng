@@ -84,7 +84,7 @@ export function ResultSection({ answer, files, versionId, onPreview }: ResultSec
                         isLatestMessage={true}
                         webContent={false}
                         resolveArtifactLink={resolveArtifactLink}
-                        onArtifactPreview={onPreview}
+                        onArtifactPreview={(file) => onPreview(file as ArtifactFile)}
                     />
                 </div>
             )}

@@ -88,14 +88,15 @@ export function AiAssistantPanel({
         title: chatTitle,
         isLoading,
         isStreaming,
-        isParsingMedia: workstationIsParsingMedia,
         sendMessage,
         stopGenerating,
         clearConversation,
         regenerate,
     } = activeChat;
 
-    const isParsingMedia = isSimpleMode ? false : workstationIsParsingMedia;
+    // Media parsing state only exists on the workstation hook; channel/file chat
+    // never upload media, so they have no such flag to read off activeChat.
+    const isParsingMedia = isSimpleMode ? false : workstationChat.isParsingMedia;
 
     const { data: bsConfig } = useGetBsConfig();
     const { user } = useAuthContext();

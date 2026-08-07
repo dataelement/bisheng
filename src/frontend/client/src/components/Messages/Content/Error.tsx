@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 // file deepcode ignore HardcodedNonCryptoSecret: No hardcoded secrets
 import { ViolationTypes, ErrorTypes } from '~/types/chat';
 import type { TOpenAIMessage } from '~/types/chat';
