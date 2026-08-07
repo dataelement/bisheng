@@ -1,0 +1,450 @@
+"""积分仓储：集中持有 ORM 读写，服务层不直接拼装查询。"""
+
+from datetime import datetime
+
+from sqlalchemy import and_, delete, func, or_
+from sqlmodel import select
+
+from bisheng.points.domain.models import (
+    PointCopy,
+    PointFavoriteTierAward,
+    PointRankSnapshot,
+    PointRule,
+    PointSyncOutbox,
+    UserPointAccount,
+    UserPointLog,
+)
+
+
+class PointsRepository:
+    """在调用方事务中执行积分账户、流水、规则与快照读写。"""
+
+    def __init__(self, session):
+        self.session = session
+
+    async def lock_or_create_account(self, tenant_id: int, user_id: int) -> UserPointAccount:
+        """锁定用户账户；并发首建通过嵌套事务吸收唯一键竞争。"""
+        row = (
+            await self.session.exec(
+                select(UserPointAccount)
+                .where(UserPointAccount.tenant_id == tenant_id, UserPointAccount.user_id == user_id)
+                .with_for_update()
+            )
+        ).first()
+        if row:
+            return row
+        try:
+            async with self.session.begin_nested():
+                row = UserPointAccount(tenant_id=tenant_id, user_id=user_id)
+                self.session.add(row)
+                await self.session.flush()
+        except Exception:
+            # 并发首建撞唯一键时回读并重新加锁。
+            row = (
+                await self.session.exec(
+                    select(UserPointAccount)
+                    .where(UserPointAccount.tenant_id == tenant_id, UserPointAccount.user_id == user_id)
+                    .with_for_update()
+                )
+            ).one()
+        return row
+
+    async def find_account(self, tenant_id: int, user_id: int) -> UserPointAccount | None:
+        """按租户与用户读取账户；无账户时返回 None。"""
+        return (
+            await self.session.exec(
+                select(UserPointAccount).where(
+                    UserPointAccount.tenant_id == tenant_id,
+                    UserPointAccount.user_id == user_id,
+                )
+            )
+        ).first()
+
+    async def get_log_by_idempotency(self, tenant_id: int, key: str) -> UserPointLog | None:
+        """按幂等键获取已写入流水。"""
+        return (
+            await self.session.exec(
+                select(UserPointLog).where(
+                    UserPointLog.tenant_id == tenant_id,
+                    UserPointLog.idempotency_key == key,
+                )
+            )
+        ).first()
+
+    async def get_log_by_id(self, log_id: int) -> UserPointLog | None:
+        """按主键读取流水。"""
+        return (await self.session.exec(select(UserPointLog).where(UserPointLog.id == log_id))).first()
+
+    async def sum_earn_today(self, tenant_id: int, user_id: int, rule_code: str, start: datetime) -> int:
+        """汇总上海业务日内同规则已获得分数。"""
+        value = (
+            await self.session.exec(
+                select(func.coalesce(func.sum(UserPointLog.delta), 0)).where(
+                    UserPointLog.tenant_id == tenant_id,
+                    UserPointLog.user_id == user_id,
+                    UserPointLog.rule_code == rule_code,
+                    UserPointLog.direction == "earn",
+                    UserPointLog.occurred_at >= start,
+                )
+            )
+        ).one()
+        return int(value[0] if isinstance(value, tuple) else value or 0)
+
+    async def sum_user_delta(
+        self,
+        tenant_id: int,
+        user_id: int,
+        *,
+        direction: str,
+        start: datetime,
+        end: datetime,
+    ) -> int:
+        """汇总用户在时间窗内某方向的 delta 合计。"""
+        value = (
+            await self.session.exec(
+                select(func.coalesce(func.sum(UserPointLog.delta), 0)).where(
+                    UserPointLog.tenant_id == tenant_id,
+                    UserPointLog.user_id == user_id,
+                    UserPointLog.direction == direction,
+                    UserPointLog.occurred_at >= start,
+                    UserPointLog.occurred_at < end,
+                )
+            )
+        ).one()
+        return int(value[0] if isinstance(value, tuple) else value or 0)
+
+    async def append_log(self, log: UserPointLog) -> UserPointLog:
+        """追加账本流水并刷新主键。"""
+        self.session.add(log)
+        await self.session.flush()
+        return log
+
+    async def add_outbox(self, tenant_id: int, log_id: int, payload: dict) -> None:
+        """为已写流水建立待同步记录。"""
+        self.session.add(PointSyncOutbox(tenant_id=tenant_id, log_id=log_id, payload=payload))
+
+    async def list_logs(
+        self,
+        tenant_id: int,
+        user_id: int,
+        direction: str | None,
+        page: int,
+        page_size: int,
+        *,
+        from_time: datetime | None = None,
+        to_time: datetime | None = None,
+    ):
+        """分页查询用户流水，按发生时间倒序。"""
+        filters = [
+            UserPointLog.tenant_id == tenant_id,
+            UserPointLog.user_id == user_id,
+        ]
+        if direction:
+            filters.append(UserPointLog.direction == direction)
+        if from_time is not None:
+            filters.append(UserPointLog.occurred_at >= from_time)
+        if to_time is not None:
+            filters.append(UserPointLog.occurred_at < to_time)
+        total = (
+            await self.session.exec(select(func.count()).select_from(UserPointLog).where(*filters))
+        ).one()
+        rows = (
+            await self.session.exec(
+                select(UserPointLog)
+                .where(*filters)
+                .order_by(UserPointLog.occurred_at.desc(), UserPointLog.id.desc())
+                .offset((page - 1) * page_size)
+                .limit(page_size)
+            )
+        ).all()
+        return list(rows), int(total[0] if isinstance(total, tuple) else total)
+
+    async def get_rule(self, tenant_id: int, rule_code: str) -> PointRule | None:
+        """按编码读取规则。"""
+        return (
+            await self.session.exec(
+                select(PointRule).where(PointRule.tenant_id == tenant_id, PointRule.rule_code == rule_code)
+            )
+        ).first()
+
+    async def get_rule_by_id(self, rule_id: int) -> PointRule | None:
+        """按主键读取规则。"""
+        return (await self.session.exec(select(PointRule).where(PointRule.id == rule_id))).first()
+
+    async def list_rules(
+        self,
+        tenant_id: int,
+        *,
+        rule_type: str | None = None,
+        status: str | None = None,
+    ) -> list[PointRule]:
+        """列出租户规则，按 sort_order、id 排序。"""
+        stmt = select(PointRule).where(PointRule.tenant_id == tenant_id)
+        if rule_type:
+            stmt = stmt.where(PointRule.rule_type == rule_type)
+        if status:
+            stmt = stmt.where(PointRule.status == status)
+        rows = (await self.session.exec(stmt.order_by(PointRule.sort_order, PointRule.id))).all()
+        return list(rows)
+
+    async def save_rule(self, rule: PointRule) -> PointRule:
+        """持久化规则并刷新。"""
+        self.session.add(rule)
+        await self.session.flush()
+        await self.session.refresh(rule)
+        return rule
+
+    async def list_copies(self, tenant_id: int) -> list[PointCopy]:
+        """列出租户说明文案。"""
+        rows = (
+            await self.session.exec(
+                select(PointCopy)
+                .where(PointCopy.tenant_id == tenant_id)
+                .order_by(PointCopy.sort_order, PointCopy.id)
+            )
+        ).all()
+        return list(rows)
+
+    async def upsert_copies(self, tenant_id: int, items: list[dict]) -> list[PointCopy]:
+        """按 copy_key 批量更新文案内容；不存在则创建。"""
+        result: list[PointCopy] = []
+        for item in items:
+            key = item["copy_key"]
+            row = (
+                await self.session.exec(
+                    select(PointCopy).where(PointCopy.tenant_id == tenant_id, PointCopy.copy_key == key)
+                )
+            ).first()
+            if row is None:
+                row = PointCopy(
+                    tenant_id=tenant_id,
+                    copy_key=key,
+                    content=item["content"],
+                    sort_order=int(item.get("sort_order") or 0),
+                )
+            else:
+                row.content = item["content"]
+                if "sort_order" in item and item["sort_order"] is not None:
+                    row.sort_order = int(item["sort_order"])
+            self.session.add(row)
+            result.append(row)
+        await self.session.flush()
+        return result
+
+    async def sum_total_issued(self, tenant_id: int) -> int:
+        """租户累计发放（earn 方向 delta 之和）。"""
+        value = (
+            await self.session.exec(
+                select(func.coalesce(func.sum(UserPointLog.delta), 0)).where(
+                    UserPointLog.tenant_id == tenant_id,
+                    UserPointLog.direction == "earn",
+                )
+            )
+        ).one()
+        return int(value[0] if isinstance(value, tuple) else value or 0)
+
+    async def sum_total_balance(self, tenant_id: int) -> int:
+        """租户当前余额合计。"""
+        value = (
+            await self.session.exec(
+                select(func.coalesce(func.sum(UserPointAccount.balance), 0)).where(
+                    UserPointAccount.tenant_id == tenant_id
+                )
+            )
+        ).one()
+        return int(value[0] if isinstance(value, tuple) else value or 0)
+
+    async def sum_violation_deducted(self, tenant_id: int) -> int:
+        """违规扣减合计：manual_deduct + 负向 manual_adjust 的绝对值。"""
+        value = (
+            await self.session.exec(
+                select(func.coalesce(func.sum(UserPointLog.delta), 0)).where(
+                    UserPointLog.tenant_id == tenant_id,
+                    UserPointLog.direction == "deduct",
+                    or_(
+                        UserPointLog.source == "manual_deduct",
+                        and_(UserPointLog.source == "manual_adjust", UserPointLog.delta < 0),
+                    ),
+                )
+            )
+        ).one()
+        raw = int(value[0] if isinstance(value, tuple) else value or 0)
+        return abs(raw)
+
+    async def find_user_rank(
+        self,
+        tenant_id: int,
+        period: str,
+        scope: str,
+        scope_id: int | None,
+        period_key: str,
+        user_id: int,
+    ) -> PointRankSnapshot | None:
+        """读取用户在指定榜单桶中的排名快照。"""
+        stmt = select(PointRankSnapshot).where(
+            PointRankSnapshot.tenant_id == tenant_id,
+            PointRankSnapshot.period == period,
+            PointRankSnapshot.scope == scope,
+            PointRankSnapshot.period_key == period_key,
+            PointRankSnapshot.user_id == user_id,
+        )
+        if scope_id is None:
+            stmt = stmt.where(PointRankSnapshot.scope_id.is_(None))
+        else:
+            stmt = stmt.where(PointRankSnapshot.scope_id == scope_id)
+        return (await self.session.exec(stmt)).first()
+
+    async def list_top_ranks(
+        self,
+        tenant_id: int,
+        period: str,
+        scope: str,
+        scope_id: int | None,
+        period_key: str,
+        *,
+        limit: int = 10,
+    ) -> list[PointRankSnapshot]:
+        """读取 TOP N 排名快照。"""
+        stmt = select(PointRankSnapshot).where(
+            PointRankSnapshot.tenant_id == tenant_id,
+            PointRankSnapshot.period == period,
+            PointRankSnapshot.scope == scope,
+            PointRankSnapshot.period_key == period_key,
+        )
+        if scope_id is None:
+            stmt = stmt.where(PointRankSnapshot.scope_id.is_(None))
+        else:
+            stmt = stmt.where(PointRankSnapshot.scope_id == scope_id)
+        rows = (
+            await self.session.exec(stmt.order_by(PointRankSnapshot.rank_no).limit(limit))
+        ).all()
+        return list(rows)
+
+    async def latest_rank_refreshed_at(
+        self, tenant_id: int, period: str, period_key: str
+    ) -> datetime | None:
+        """返回指定榜单最近刷新时间。"""
+        value = (
+            await self.session.exec(
+                select(func.max(PointRankSnapshot.refreshed_at)).where(
+                    PointRankSnapshot.tenant_id == tenant_id,
+                    PointRankSnapshot.period == period,
+                    PointRankSnapshot.period_key == period_key,
+                )
+            )
+        ).one()
+        if value is None:
+            return None
+        return value[0] if isinstance(value, tuple) else value
+
+    async def get_favorite_tier_award(
+        self, tenant_id: int, file_id: int
+    ) -> PointFavoriteTierAward | None:
+        """读取文档已发放的 G3 最高档记录。"""
+        return (
+            await self.session.exec(
+                select(PointFavoriteTierAward).where(
+                    PointFavoriteTierAward.tenant_id == tenant_id,
+                    PointFavoriteTierAward.file_id == file_id,
+                )
+            )
+        ).first()
+
+    async def upsert_favorite_tier_award(
+        self,
+        tenant_id: int,
+        file_id: int,
+        *,
+        highest_tier: int,
+        points_granted_total: int,
+    ) -> PointFavoriteTierAward:
+        """更新或创建 G3 档位发放进度，取消收藏后也不回退。"""
+        row = await self.get_favorite_tier_award(tenant_id, file_id)
+        if row is None:
+            row = PointFavoriteTierAward(
+                tenant_id=tenant_id,
+                file_id=file_id,
+                highest_tier=highest_tier,
+                points_granted_total=points_granted_total,
+            )
+        else:
+            # 仅抬升已授分数/档位，避免收藏人数回落后被重复补发。
+            row.highest_tier = max(int(row.highest_tier), highest_tier)
+            row.points_granted_total = max(int(row.points_granted_total), points_granted_total)
+        self.session.add(row)
+        await self.session.flush()
+        return row
+
+    async def list_accounts(self, tenant_id: int) -> list[UserPointAccount]:
+        """列出租户全部积分账户。"""
+        rows = (
+            await self.session.exec(
+                select(UserPointAccount).where(UserPointAccount.tenant_id == tenant_id)
+            )
+        ).all()
+        return list(rows)
+
+    async def list_tenant_ids_with_accounts(self) -> list[int]:
+        """返回存在积分账户的租户 id（Beat 扫租户用）。"""
+        rows = (await self.session.exec(select(UserPointAccount.tenant_id).distinct())).all()
+        return sorted({int(r[0] if isinstance(r, tuple) else r) for r in rows})
+
+    async def sum_deltas_by_user(
+        self,
+        tenant_id: int,
+        *,
+        start: datetime,
+        end: datetime,
+    ) -> dict[int, int]:
+        """按用户汇总时间窗内全部 delta（月/年净变动）。"""
+        rows = (
+            await self.session.exec(
+                select(UserPointLog.user_id, func.coalesce(func.sum(UserPointLog.delta), 0)).where(
+                    UserPointLog.tenant_id == tenant_id,
+                    UserPointLog.occurred_at >= start,
+                    UserPointLog.occurred_at < end,
+                ).group_by(UserPointLog.user_id)
+            )
+        ).all()
+        result: dict[int, int] = {}
+        for row in rows:
+            user_id, total = row[0], row[1]
+            result[int(user_id)] = int(total or 0)
+        return result
+
+    async def clear_dept_rank_snapshots(self, tenant_id: int, period: str, period_key: str) -> None:
+        """删除某 period_key 下全部部门桶快照（刷新前清僵尸桶）。"""
+        await self.session.exec(
+            delete(PointRankSnapshot).where(
+                PointRankSnapshot.tenant_id == tenant_id,
+                PointRankSnapshot.period == period,
+                PointRankSnapshot.scope == "dept",
+                PointRankSnapshot.period_key == period_key,
+            )
+        )
+
+    async def replace_rank_snapshots(
+        self,
+        tenant_id: int,
+        period: str,
+        scope: str,
+        scope_id: int | None,
+        period_key: str,
+        rows: list[PointRankSnapshot],
+    ) -> int:
+        """删除同一榜单维度后写入新快照；返回写入行数。"""
+        stmt = delete(PointRankSnapshot).where(
+            PointRankSnapshot.tenant_id == tenant_id,
+            PointRankSnapshot.period == period,
+            PointRankSnapshot.scope == scope,
+            PointRankSnapshot.period_key == period_key,
+        )
+        if scope_id is None:
+            stmt = stmt.where(PointRankSnapshot.scope_id.is_(None))
+        else:
+            stmt = stmt.where(PointRankSnapshot.scope_id == scope_id)
+        await self.session.exec(stmt)
+        for row in rows:
+            self.session.add(row)
+        await self.session.flush()
+        return len(rows)

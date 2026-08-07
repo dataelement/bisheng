@@ -1,0 +1,19 @@
+{
+  "name": "bisheng-points-gates",
+  "private": true,
+  "version": "0.0.1",
+  "description": "F070 points system Playwright acceptance gates (headless)",
+  "scripts": {
+    "test": "playwright test",
+    "test:list": "playwright test --list",
+    "test:gm1": "playwright test gates/gm1.spec.ts",
+    "test:gm2": "playwright test gates/gm2.spec.ts",
+    "test:gm3": "playwright test gates/gm3.spec.ts",
+    "test:gm4": "playwright test gates/gm4.spec.ts",
+    "test:gm5": "playwright test gates/gm5.spec.ts",
+    "install:browsers": "playwright install chromium"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.54.2"
+  }
+}
