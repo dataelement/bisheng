@@ -250,3 +250,72 @@ export async function getDeveloperTokenFileSyncTargetChildrenApi(params: {
     }
   )
 }
+
+export type AutomotiveSheetIntroSyncApiMethod = "GET" | "POST"
+export type AutomotiveSheetIntroSyncTriggerType = "manual" | "scheduled"
+export type AutomotiveSheetIntroSyncRunStatus = "running" | "success" | "failed" | "skipped"
+
+export interface AutomotiveSheetIntroSyncConfig {
+  enabled: boolean
+  api_url: string | null
+  api_method: AutomotiveSheetIntroSyncApiMethod
+  api_timeout_seconds: number
+  developer_token_id: number | null
+  file_name: string
+  external_file_id: string
+}
+
+export interface AutomotiveSheetIntroSyncRun {
+  id: number
+  job_code: string
+  trigger_type: AutomotiveSheetIntroSyncTriggerType
+  status: AutomotiveSheetIntroSyncRunStatus
+  file_id: number | null
+  knowledge_id: number | null
+  file_name: string | null
+  error_message: string | null
+  start_time: string
+  end_time: string | null
+  duration_ms: number | null
+}
+
+export interface AutomotiveSheetIntroSyncRunPage {
+  data: AutomotiveSheetIntroSyncRun[]
+  total: number
+}
+
+export interface AutomotiveSheetIntroSyncTestResponse {
+  run_id: number | null
+  status: AutomotiveSheetIntroSyncRunStatus | null
+  error_message?: string | null
+  skip_reason?: string | null
+  file_id?: number | null
+  scope: "tenant"
+  tenant_id: number
+  message: string
+}
+
+const AUTOMOTIVE_SHEET_INTRO_SYNC_BASE = "/api/v1/admin/developer-tokens/automotive-sheet-intro-sync"
+
+export async function getAutomotiveSheetIntroSyncConfigApi(): Promise<AutomotiveSheetIntroSyncConfig> {
+  return await axios.get(AUTOMOTIVE_SHEET_INTRO_SYNC_BASE)
+}
+
+export async function updateAutomotiveSheetIntroSyncConfigApi(
+  data: AutomotiveSheetIntroSyncConfig,
+): Promise<AutomotiveSheetIntroSyncConfig> {
+  return await axios.put(AUTOMOTIVE_SHEET_INTRO_SYNC_BASE, data)
+}
+
+export async function testAutomotiveSheetIntroSyncApi(): Promise<AutomotiveSheetIntroSyncTestResponse> {
+  return await axios.post(`${AUTOMOTIVE_SHEET_INTRO_SYNC_BASE}/test`)
+}
+
+export async function listAutomotiveSheetIntroSyncRunsApi(params: {
+  page?: number
+  limit?: number
+} = {}): Promise<AutomotiveSheetIntroSyncRunPage> {
+  return await axios.get(`${AUTOMOTIVE_SHEET_INTRO_SYNC_BASE}/runs`, {
+    params: { page: 1, limit: 5, ...params },
+  })
+}

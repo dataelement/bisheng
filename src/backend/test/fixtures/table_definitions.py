@@ -796,6 +796,28 @@ INDEX_PHSC_TENANT_BATCH = """\
 CREATE INDEX IF NOT EXISTS ix_phsc_tenant_batch
     ON portal_hot_search_candidate (tenant_id, batch_id)"""
 
+TABLE_FILELIB_SCHEDULED_SYNC_RUN_LOG = """\
+CREATE TABLE IF NOT EXISTS filelib_scheduled_sync_run_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id INTEGER NOT NULL DEFAULT 1,
+    job_code VARCHAR(64) NOT NULL,
+    trigger_type VARCHAR(16) NOT NULL,
+    status VARCHAR(16) NOT NULL DEFAULT 'running',
+    developer_token_id INTEGER,
+    file_id INTEGER,
+    knowledge_id INTEGER,
+    file_name VARCHAR(200),
+    error_message VARCHAR(500),
+    start_time DATETIME NOT NULL,
+    end_time DATETIME,
+    duration_ms INTEGER,
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
+)"""
+
+INDEX_FSSRL_TENANT_JOB_ID = """\
+CREATE INDEX IF NOT EXISTS ix_fssrl_tenant_job_id
+    ON filelib_scheduled_sync_run_log (tenant_id, job_code, id)"""
+
 TABLE_DEPARTMENT_TRANSFER_PERMISSION_CLEANUP_EVENT = """\
 CREATE TABLE IF NOT EXISTS department_transfer_permission_cleanup_event (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -913,6 +935,7 @@ TABLE_DEFINITIONS: dict[str, str] = {
     "portal_hot_search_snapshot": TABLE_PORTAL_HOT_SEARCH_SNAPSHOT,
     "portal_hot_search_batch_run": TABLE_PORTAL_HOT_SEARCH_BATCH_RUN,
     "portal_hot_search_candidate": TABLE_PORTAL_HOT_SEARCH_CANDIDATE,
+    "filelib_scheduled_sync_run_log": TABLE_FILELIB_SCHEDULED_SYNC_RUN_LOG,
     "department_transfer_permission_cleanup_event": TABLE_DEPARTMENT_TRANSFER_PERMISSION_CLEANUP_EVENT,
     "department_transfer_permission_cleanup_item": TABLE_DEPARTMENT_TRANSFER_PERMISSION_CLEANUP_ITEM,
 }
@@ -937,6 +960,7 @@ INDEX_DEFINITIONS: list[str] = [
     INDEX_PHSBR_TENANT_TIME,
     INDEX_PHSBR_TENANT_BATCH,
     INDEX_PHSC_TENANT_BATCH,
+    INDEX_FSSRL_TENANT_JOB_ID,
     INDEX_DTPC_STATUS_RETRY,
     INDEX_DTPC_USER_CHANGED,
     INDEX_DTPC_ITEM_USER_STATUS,
@@ -987,3 +1011,5 @@ def create_tables(engine: Engine, *table_names: str) -> None:
             conn.execute(text(INDEX_PHSBR_TENANT_BATCH))
         if "portal_hot_search_candidate" in table_names:
             conn.execute(text(INDEX_PHSC_TENANT_BATCH))
+        if "filelib_scheduled_sync_run_log" in table_names:
+            conn.execute(text(INDEX_FSSRL_TENANT_JOB_ID))

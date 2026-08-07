@@ -646,7 +646,7 @@ async def test_sync_orchestration_skips_business_domain_when_dynamic_resolution_
     knowledge_space_service = SimpleNamespace(
         get_preview_cache_key=Mock(return_value="cache-key"),
         add_file=AsyncMock(return_value=[SimpleNamespace(id=9, status=5)]),
-        enqueue_file_title_extraction=Mock(),
+        enqueue_file_title_extraction=AsyncMock(),
     )
     service = _service(repository, knowledge_space_service)
     service.file_sync_rule = DeveloperTokenFileSyncRule.model_validate(

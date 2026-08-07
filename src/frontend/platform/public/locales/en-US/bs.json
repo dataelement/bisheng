@@ -262,6 +262,63 @@
           "folderDynamicCallerMainDepartmentName": "Dynamic(bound user primary department name)"
         }
       },
+      "automotiveSheetIntro": {
+        "title": "Automotive sheet intro sync",
+        "description": "Pulls the upstream PDF daily at 00:00 and overwrites the fixed file using the bound token's file sync rule. You can also run a manual test sync.",
+        "loading": "Loading automotive sheet intro sync config…",
+        "summaryEnabled": "Enabled",
+        "summaryDisabled": "Disabled",
+        "enabled": "Enable scheduled sync",
+        "apiUrl": "API URL",
+        "apiUrlPlaceholder": "https://example.com/automotive-sheet-intro.pdf",
+        "apiMethod": "HTTP method",
+        "developerToken": "Bound token",
+        "selectToken": "Select a token",
+        "selectTokenFirst": "Select a bound token first. Sync will use that token's file sync rule.",
+        "tokenFileSyncRule": "Token file sync rule",
+        "tokenFileSyncRuleHint": "Target space, file type, business domain, and target folder come from the selected token. Edit them in the token list below.",
+        "tokenFileSyncRuleMissing": "The selected token has no file sync rule configured. Edit and save it in the token list below first.",
+        "noTokensAvailable": "No tokens available. Create and enable a token in the list below first.",
+        "fileName": "Fixed file name",
+        "testSync": "Test sync",
+        "testSyncRunning": "Running test…",
+        "testRunning": "Running test sync. Please wait…",
+        "testFinished": "Test run finished with status: {{status}}",
+        "testFinishedWithDetail": "Test finished with status: {{status}}. Reason: {{detail}}",
+        "refreshRuns": "Refresh",
+        "refreshingRuns": "Refreshing…",
+        "optionsRequiredError": "Target configuration options have not loaded successfully. Retry before saving.",
+        "invalidError": "The \"{{field}}\" field in the automotive sheet intro sync config is invalid or missing.",
+        "recentRuns": "Recent runs ({{total}} total)",
+        "noRuns": "No run history yet",
+        "errorFields": {
+          "enabled": "Enable switch",
+          "apiUrl": "API URL",
+          "apiMethod": "HTTP method",
+          "developerToken": "Bound token",
+          "fileName": "Fixed file name",
+          "tokenFileSyncRule": "Token file sync rule"
+        },
+        "triggerTypes": {
+          "manual": "Manual",
+          "scheduled": "Scheduled"
+        },
+        "statuses": {
+          "running": "Running",
+          "success": "Success",
+          "failed": "Failed",
+          "skipped": "Skipped"
+        },
+        "runColumns": {
+          "id": "ID",
+          "trigger": "Trigger",
+          "status": "Status",
+          "fileName": "File name",
+          "startTime": "Start time",
+          "duration": "Duration",
+          "error": "Error"
+        }
+      },
       "saveConfig": "Save config",
       "search": "Search",
       "create": "Create token",
