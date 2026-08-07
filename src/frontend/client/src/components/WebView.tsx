@@ -17,6 +17,10 @@ export default function WebView() {
     // object key can be resolved into a presigned share link (the key itself is
     // not directly servable).
     const vid = searchParams.get('vid');
+    // This tab lives at /html, not under /share/:token, so the share token cannot
+    // be derived from our own location — the opener forwards it here. Without it
+    // a share recipient's resolve call 403s (they are neither owner nor admin).
+    const share = searchParams.get('share') || '';
 
     const [content, setContent] = useState('');
     const [loading, setLoading] = useState(true);
@@ -34,7 +38,7 @@ export default function WebView() {
                 // BASE_URL join, guarding the leading slash so we never produce
                 // `/workspacelinsight/...` (the old missing-slash 404).
                 const fetchUrl = vid
-                    ? await resolveArtifactUrl(fileUrl, vid)
+                    ? await resolveArtifactUrl(fileUrl, vid, share)
                     : `${__APP_ENV__.BASE_URL}/${fileUrl.replace(/^\/+/, '')}`;
 
                 const response = await fetch(fetchUrl);
@@ -65,7 +69,7 @@ export default function WebView() {
         return () => {
             cancelled = true;
         };
-    }, [url, vid]);
+    }, [url, vid, share]);
 
     return (
         <div className="fixed inset-0">
