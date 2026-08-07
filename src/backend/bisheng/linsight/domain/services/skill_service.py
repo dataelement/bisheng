@@ -11,7 +11,7 @@ existence is not leaked (design §7.5).
 
 from __future__ import annotations
 
-from typing import Protocol
+from typing import NamedTuple, Protocol
 
 from loguru import logger
 
@@ -47,11 +47,27 @@ from bisheng.linsight.domain.services.skill_store import (
     SkillStore,
     compose_skill_md,
     parse_skill_md,
+    render_skill_md,
+    slugify_pinyin,
     unpack_zip_bytes,
     validate_skill_name,
 )
 
 _ARCHIVE_SUFFIXES = (".zip", ".skill")
+
+
+class SkillMeta(NamedTuple):
+    """Frontmatter fields extracted from an imported bundle.
+
+    ``normalized_from`` carries the original frontmatter name when it was
+    auto-normalized to a spec-legal skill ID, so the API can tell the user.
+    """
+
+    name: str
+    display_name: str
+    description: str
+    normalized_from: str | None = None
+
 
 SKILL_OBJECT_TYPE = "linsight_skill"
 
@@ -165,8 +181,10 @@ class SkillService:
         return await self._create(tenant_id, user_id, form.name, form.display_name, form.description, files)
 
     async def create_from_upload(self, tenant_id: int, user_id: int, filename: str, data: bytes) -> SkillDetail:
-        name, display_name, description, files = self._parse_upload(filename, data)
-        return await self._create(tenant_id, user_id, name, display_name, description, files)
+        meta, files = self._parse_upload(filename, data)
+        detail = await self._create(tenant_id, user_id, meta.name, meta.display_name, meta.description, files)
+        detail.normalized_from = meta.normalized_from
+        return detail
 
     async def create_from_github(self, tenant_id: int, user_id: int, url: str) -> SkillDetail:
         """Import a skill from a public GitHub directory URL.
@@ -176,8 +194,10 @@ class SkillService:
         """
         target = parse_github_url(url)
         files = await fetch_skill_files(target)
-        name, display_name, description = self._extract_meta(files)
-        return await self._create(tenant_id, user_id, name, display_name, description, files)
+        meta = self._extract_meta(files)
+        detail = await self._create(tenant_id, user_id, meta.name, meta.display_name, meta.description, files)
+        detail.normalized_from = meta.normalized_from
+        return detail
 
     async def update_from_form(self, tenant_id: int, name: str, form: SkillCreateForm) -> SkillDetail:
         skill = await self._get_or_404(name)
@@ -197,16 +217,18 @@ class SkillService:
         return await self.get_detail(tenant_id, name)
 
     async def update_from_upload(self, tenant_id: int, name: str, filename: str, data: bytes) -> SkillDetail:
-        """Whole-bundle replacement; frontmatter name must equal the path name."""
+        """Whole-bundle replacement; frontmatter name (after normalization) must equal the path name."""
         skill = await self._get_or_404(name)
-        new_name, display_name, description, files = self._parse_upload(filename, data)
-        if new_name != name:
-            raise SkillValidationError(msg=f"frontmatter name '{new_name}' must equal skill ID '{name}'")
-        await self._check_duplicate(name, display_name, exclude_id=skill.id)
+        meta, files = self._parse_upload(filename, data)
+        if meta.name != name:
+            raise SkillValidationError(msg=f"frontmatter name '{meta.name}' must equal skill ID '{name}'")
+        await self._check_duplicate(name, meta.display_name, exclude_id=skill.id)
         size = self.store.write_bundle(tenant_id, name, files)
-        skill.display_name, skill.description, skill.size = display_name, description, size
+        skill.display_name, skill.description, skill.size = meta.display_name, meta.description, size
         await LinsightSkillDao.update(skill)
-        return await self.get_detail(tenant_id, name)
+        detail = await self.get_detail(tenant_id, name)
+        detail.normalized_from = meta.normalized_from
+        return detail
 
     async def set_status(self, name: str, enabled: bool) -> None:
         if not await LinsightSkillDao.set_enabled(name, enabled):
@@ -226,7 +248,7 @@ class SkillService:
             raise SkillNotFoundError()
         return skill
 
-    def _parse_upload(self, filename: str, data: bytes) -> tuple[str, str, str, dict[str, bytes]]:
+    def _parse_upload(self, filename: str, data: bytes) -> tuple[SkillMeta, dict[str, bytes]]:
         if len(data) > MAX_BUNDLE_SIZE:
             raise SkillFileTooLargeError()
         lower = (filename or "").lower()
@@ -241,18 +263,22 @@ class SkillService:
             files = {SKILL_MD: data}
         else:
             raise SkillValidationError(msg="unsupported file type: expecting .md, .zip or .skill")
-        name, display_name, description = self._extract_meta(files)
-        return name, display_name, description, files
+        return self._extract_meta(files), files
 
-    def _extract_meta(self, files: dict[str, bytes]) -> tuple[str, str, str]:
-        """Parse SKILL.md frontmatter from a bundle into (name, display_name, description).
+    def _extract_meta(self, files: dict[str, bytes]) -> SkillMeta:
+        """Parse SKILL.md frontmatter from a bundle into a SkillMeta.
 
         Shared by the upload and GitHub-import paths so both validate identically.
+        A frontmatter ``name`` that violates the skill-ID spec (external skills
+        commonly ship capitalized names, e.g. ``Presentations``) is normalized via
+        ``slugify_pinyin`` instead of rejected: SKILL.md is rewritten in place so
+        the stored frontmatter still equals the bundle directory name (deepagents
+        hard constraint), and the original name becomes the display name.
         """
         if SKILL_MD not in files:
             raise SkillValidationError(msg="SKILL.md not found")
         try:
-            meta, _ = parse_skill_md(files[SKILL_MD].decode("utf-8", errors="replace"))
+            meta, body = parse_skill_md(files[SKILL_MD].decode("utf-8", errors="replace"))
         except ValueError as exc:
             raise SkillValidationError(msg=str(exc))
         name = str(meta.get("name") or "").strip()
@@ -261,8 +287,19 @@ class SkillService:
         display_name = str(metadata.get(DISPLAY_NAME_META_KEY) or "").strip() or name
         if not description:
             raise SkillValidationError(msg="frontmatter 'description' is required")
+        normalized_from: str | None = None
+        if name and validate_skill_name(name):
+            slug = slugify_pinyin(name)
+            if not validate_skill_name(slug):
+                normalized_from, name = name, slug
+                display_name = str(metadata.get(DISPLAY_NAME_META_KEY) or "").strip() or normalized_from
+                meta["name"] = slug
+                if not metadata.get(DISPLAY_NAME_META_KEY):
+                    metadata[DISPLAY_NAME_META_KEY] = normalized_from
+                    meta["metadata"] = metadata
+                files[SKILL_MD] = render_skill_md(meta, body).encode("utf-8")
         self._validate_fields(name, display_name, description)
-        return name, display_name, description
+        return SkillMeta(name, display_name, description, normalized_from)
 
     def _validate_fields(self, name: str, display_name: str, description: str) -> None:
         if err := validate_skill_name(name):

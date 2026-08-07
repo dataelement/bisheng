@@ -2627,7 +2627,8 @@
       "githubReqHost": "仅支持 github.com 公共仓库",
       "githubReqDir": "链接须指向含 SKILL.md 的技能目录；分支名暂不支持包含斜杠",
       "unsupported": "不支持的文件类型，请导入 .md / .zip / .skill",
-      "confirm": "确认导入"
+      "confirm": "确认导入",
+      "normalized": "导入成功，技能 ID 已自动规范化为 {{to}}（原名 {{from}}）"
     },
     "detailSheet": {
       "files": "文件",
@@ -2636,7 +2637,8 @@
       "readonlyAsset": "附属文件只读，更新需重新上传整包"
     },
     "errors": {
-      "validation": "校验失败：frontmatter 或技能 ID 不合规（压缩包须含 SKILL.md）",
+      "validation": "校验失败：frontmatter 或技能 ID 不合规",
+      "validationDetail": "校验失败：{{detail}}",
       "tooLarge": "上传文件超过 10MB 上限，请精简后重传",
       "bundleTooLarge": "压缩包解压后内容超过 100MB 上限，请精简附属文件后重传",
       "notFound": "技能不存在",
