@@ -153,15 +153,19 @@ def test_enqueue_one_file_skips_records_that_are_no_longer_eligible(
     assert published == []
 
 
-def test_publish_retry_task_uses_explicit_queue_and_isolates_tenant_headers():
+def test_publish_retry_task_uses_unified_dispatch_and_isolates_tenant_headers(monkeypatch):
     calls: list[tuple[dict, int | None]] = []
 
-    class FakeTask:
-        def apply_async(self, **kwargs):
-            calls.append((kwargs, get_current_tenant_id()))
-            return SimpleNamespace(id=f"task-{len(calls)}")
+    def fake_dispatch(**kwargs):
+        calls.append((kwargs, get_current_tenant_id()))
+        return f"task-{len(calls)}"
 
-    task = FakeTask()
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.services.knowledge_parse_dispatch_service.dispatch_knowledge_parse_task_sync",
+        fake_dispatch,
+    )
+
+    task = object()
     outer_token = set_current_tenant_id(99)
     try:
         first_id = script_mod.publish_retry_task(100, 7, task=task)
@@ -175,17 +179,17 @@ def test_publish_retry_task_uses_explicit_queue_and_isolates_tenant_headers():
     assert calls == [
         (
             {
-                "args": [100],
-                "queue": "knowledge_celery",
-                "headers": {"tenant_id": 7},
+                "stage": "retry",
+                "file_id": 100,
+                "task": task,
             },
             7,
         ),
         (
             {
-                "args": [200],
-                "queue": "knowledge_celery",
-                "headers": {"tenant_id": 9},
+                "stage": "retry",
+                "file_id": 200,
+                "task": task,
             },
             9,
         ),

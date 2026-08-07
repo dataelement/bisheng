@@ -220,9 +220,11 @@ class FilelibSyncService:
             created_file = await asyncio.to_thread(KnowledgeFileDao.update, created_file)
             file_persisted = True
 
-            self.knowledge_space_service.enqueue_file_title_extraction(
+            await self.knowledge_space_service.enqueue_file_title_extraction(
                 [created_file],
                 [preview_cache_key],
+                operator_user_id=self.login_user.user_id,
+                operator_is_global_super=bool(getattr(self.login_user, "is_global_super", False)),
             )
             logger.info(
                 "filelib sync queued token_id={} external_file_id={} file_id={} knowledge_id={} folder_id={} token_user_id={} responsible_user_id={} personal_fallback={}",

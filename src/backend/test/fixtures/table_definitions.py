@@ -330,6 +330,7 @@ CREATE TABLE IF NOT EXISTS knowledgefile (
     file_size INTEGER,
     md5 VARCHAR(255),
     parse_type VARCHAR(32),
+    parse_priority VARCHAR(16),
     split_rule TEXT,
     preview_file_object_name VARCHAR(512),
     bbox_object_name VARCHAR(512) DEFAULT '',

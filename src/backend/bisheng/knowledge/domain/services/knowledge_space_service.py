@@ -349,18 +349,6 @@ if TYPE_CHECKING:
     from bisheng.message.domain.services.message_service import MessageService
 
 
-def _get_parse_knowledge_file_task() -> Any:
-    from bisheng.worker.knowledge.file_worker import parse_knowledge_file_celery
-
-    return parse_knowledge_file_celery
-
-
-def _get_retry_knowledge_file_task() -> Any:
-    from bisheng.worker.knowledge.file_worker import retry_knowledge_file_celery
-
-    return retry_knowledge_file_celery
-
-
 def _get_space_migrate_task() -> Any:
     from bisheng.worker.knowledge.space_migrate_worker import space_migrate_celery
 
@@ -3375,6 +3363,19 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if "view_space" not in effective_permissions:
             raise SpacePermissionDeniedError()
         return space
+
+    async def require_parse_queue_read(self, space_id: int) -> Knowledge:
+        """Public authorization boundary for parse queue position queries."""
+        return await self._require_read_permission(space_id)
+
+    async def filter_visible_files(
+        self,
+        *,
+        space_id: int,
+        files: list[KnowledgeFile],
+    ) -> list[KnowledgeFile]:
+        """Expose the same batched effective visibility used by file listings."""
+        return await self._filter_visible_child_items(files, space_id=space_id)
 
     @staticmethod
     def _is_square_preview_space(space: Knowledge) -> bool:
@@ -14444,7 +14445,18 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         KnowledgeService.audit_telemetry_service.telemetry_new_knowledge_file(self.login_user)
         preview_cache_key = self.get_preview_cache_key(knowledge_id, result.final_url, md5_value=result.content_hash)
-        _get_parse_knowledge_file_task().delay(db_file.id, preview_cache_key)
+        from bisheng.knowledge.domain.services.knowledge_parse_dispatch_service import (
+            KnowledgeParseStage,
+            dispatch_knowledge_parse_task,
+        )
+
+        await dispatch_knowledge_parse_task(
+            stage=KnowledgeParseStage.PARSE,
+            file_id=db_file.id,
+            preview_cache_key=preview_cache_key,
+            operator_user_id=self.login_user.user_id,
+            operator_is_global_super=bool(getattr(self.login_user, "is_global_super", False)),
+        )
         await self.update_folder_update_time(file_level_path)
         await KnowledgeDao.async_update_knowledge_update_time_by_id(knowledge_id)
         return db_file
@@ -14540,7 +14552,18 @@ class KnowledgeSpaceService(KnowledgeUtils):
             result.final_url,
             md5_value=result.content_hash,
         )
-        _get_retry_knowledge_file_task().delay(db_file.id, preview_cache_key)
+        from bisheng.knowledge.domain.services.knowledge_parse_dispatch_service import (
+            KnowledgeParseStage,
+            dispatch_knowledge_parse_task,
+        )
+
+        await dispatch_knowledge_parse_task(
+            stage=KnowledgeParseStage.RETRY,
+            file_id=db_file.id,
+            preview_cache_key=preview_cache_key,
+            operator_user_id=self.login_user.user_id,
+            operator_is_global_super=bool(getattr(self.login_user, "is_global_super", False)),
+        )
         await KnowledgeSpaceContentStat.enqueue_file_stat_async([db_file.id])
         await self.update_folder_update_time(old_file_level_path)
         if file_level_path != old_file_level_path:
@@ -14838,7 +14861,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 logger.warning(f"Failed to cleanup files after knowledge space upload error: {cleanup_exc}")
             raise
         if enqueue_processing:
-            self.enqueue_file_title_extraction(process_files, preview_cache_keys)
+            await self.enqueue_file_title_extraction(
+                process_files,
+                preview_cache_keys,
+                operator_user_id=self.login_user.user_id,
+                operator_is_global_super=bool(getattr(self.login_user, "is_global_super", False)),
+            )
         if not enqueue_processing:
             for process_file in process_files:
                 await enqueue_current_pdf_artifact(
@@ -14850,35 +14878,47 @@ class KnowledgeSpaceService(KnowledgeUtils):
         return failed_files + process_files
 
     @staticmethod
-    def enqueue_file_title_extraction(
+    async def enqueue_file_title_extraction(
         process_files: list[KnowledgeFile],
         preview_cache_keys: list[str],
+        *,
+        operator_user_id: int | None = None,
+        operator_is_global_super: bool | None = None,
     ) -> None:
         """Enqueue title extraction and AI alias generation before formal parsing."""
-        from bisheng.worker.knowledge.file_title_worker import (
-            extract_knowledge_file_title_celery,
+        from bisheng.knowledge.domain.services.knowledge_parse_dispatch_service import (
+            KnowledgeParseStage,
+            dispatch_knowledge_parse_task,
         )
 
         if len(process_files) != len(preview_cache_keys):
             raise ValueError("process_files and preview_cache_keys length mismatch")
         for index, knowledge_file in enumerate(process_files):
-            extract_knowledge_file_title_celery.delay(
-                knowledge_file.id,
-                preview_cache_keys[index],
+            await dispatch_knowledge_parse_task(
+                stage=KnowledgeParseStage.TITLE,
+                file_id=knowledge_file.id,
+                preview_cache_key=preview_cache_keys[index],
+                operator_user_id=operator_user_id,
+                operator_is_global_super=operator_is_global_super,
             )
 
     @staticmethod
-    def enqueue_file_processing(
+    async def enqueue_file_processing(
         process_files: list[KnowledgeFile],
         preview_cache_keys: list[str],
     ) -> None:
+        from bisheng.knowledge.domain.services.knowledge_parse_dispatch_service import (
+            KnowledgeParseStage,
+            dispatch_knowledge_parse_task,
+        )
+
         if len(process_files) != len(preview_cache_keys):
             raise ValueError("process_files and preview_cache_keys length mismatch")
-        parse_knowledge_file_task = _get_parse_knowledge_file_task()
         for index, knowledge_file in enumerate(process_files):
-            parse_knowledge_file_task.delay(
-                knowledge_file.id,
-                preview_cache_keys[index],
+            await dispatch_knowledge_parse_task(
+                stage=KnowledgeParseStage.PARSE,
+                file_id=knowledge_file.id,
+                preview_cache_key=preview_cache_keys[index],
             )
 
     async def cleanup_unqueued_files(self, created_files: list[KnowledgeFile]) -> None:
@@ -16165,7 +16205,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
         from bisheng.knowledge.domain.services.knowledge_pdf_artifact_service import (
             request_pdf_artifact_generation,
         )
-        from bisheng.worker import retry_knowledge_file_celery
+        from bisheng.knowledge.domain.services.knowledge_parse_dispatch_service import (
+            KnowledgeParseStage,
+            dispatch_knowledge_parse_task,
+        )
 
         space = await KnowledgeDao.aquery_by_id(space_id)
         if not space:
@@ -16220,7 +16263,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
             for file_id in all_file_ids:
                 await request_pdf_artifact_generation(retry_file_map[file_id])
             for file_id in all_file_ids:
-                retry_knowledge_file_celery.delay(file_id)
+                await dispatch_knowledge_parse_task(
+                    stage=KnowledgeParseStage.RETRY,
+                    file_id=file_id,
+                    operator_user_id=self.login_user.user_id,
+                    operator_is_global_super=bool(getattr(self.login_user, "is_global_super", False)),
+                )
             await KnowledgeSpaceContentStat.enqueue_file_stat_async(all_file_ids)
             await KnowledgeDao.async_update_knowledge_update_time_by_id(space_id)
         for one in all_file_level_path:

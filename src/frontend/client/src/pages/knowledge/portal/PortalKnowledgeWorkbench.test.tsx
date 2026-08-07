@@ -40,6 +40,7 @@ import {
     getPortalSpaceChildrenApi,
     getFileStatsApi,
     getGroupedSpacesApi,
+    getKnowledgeParseQueuePositionsApi,
     getJoinedSpacesApi,
     getSimilarCandidatesApi,
     getMineSpacesApi,
@@ -436,6 +437,7 @@ jest.mock("~/api/knowledge", () => ({
     },
     isPendingReviewTagStatus: (reviewStatus?: number | null) => reviewStatus === 0,
     getGroupedSpacesApi: jest.fn(),
+    getKnowledgeParseQueuePositionsApi: jest.fn(),
     getCreateSpaceOptionsApi: jest.fn(),
     createSpaceApi: jest.fn(),
     createFolderApi: jest.fn(),
@@ -766,6 +768,12 @@ describe("PortalKnowledgeWorkbench", () => {
         jest.mocked(addFilesApi).mockResolvedValue([] as any);
         jest.mocked(recommendUploadFoldersApi).mockResolvedValue({ items: [] } as any);
         jest.mocked(listMyUploadedFilesApi).mockResolvedValue({ data: [], total: 0 } as any);
+        jest.mocked(getKnowledgeParseQueuePositionsApi).mockResolvedValue({
+            items: [],
+            activeCount: 0,
+            approximate: true,
+            asOf: "2026-08-06T10:00:00Z",
+        });
         jest.mocked(listPortalFavoritesApi).mockResolvedValue({ data: [], total: 0 } as any);
         jest.mocked(removePortalFavoriteApi).mockResolvedValue(undefined as any);
         jest.mocked(moveUploadedFileFolderApi).mockResolvedValue(makeFile("501", "测试文档.pdf") as any);
@@ -5069,6 +5077,151 @@ describe("PortalKnowledgeWorkbench", () => {
         await waitFor(() => {
             expect(moveUploadedFileFolderApi).toHaveBeenCalledWith("personal-1", "501", "38");
         });
+    });
+
+    test("groups pending upload records by knowledge space and shows compact queue positions", async () => {
+        const uploadedRecords = [
+            {
+                ...makeFile("501", "等待文档.pdf", { type: FileType.PDF, status: FileStatus.WAITING }),
+                spaceId: "10",
+                spaceName: "设备知识库",
+                folderPathName: "根目录",
+                tags: [],
+            },
+            {
+                ...makeFile("502", "解析文档.pdf", { type: FileType.PDF, status: FileStatus.PROCESSING }),
+                spaceId: "10",
+                spaceName: "设备知识库",
+                folderPathName: "根目录",
+                tags: [],
+            },
+            {
+                ...makeFile("601", "重试文档.pdf", { type: FileType.PDF, status: FileStatus.REBUILDING }),
+                spaceId: "20",
+                spaceName: "安全知识库",
+                folderPathName: "根目录",
+                tags: [],
+            },
+        ];
+        jest.mocked(listMyUploadedFilesApi).mockResolvedValue({ data: uploadedRecords, total: 3 } as any);
+        jest.mocked(getKnowledgeParseQueuePositionsApi).mockImplementation(async (knowledgeId) => {
+            if (knowledgeId === 10) {
+                return {
+                    items: [
+                        { fileId: 501, state: "queued", stage: "parse", aheadWaitingCount: 7 },
+                        { fileId: 502, state: "processing", stage: "title", aheadWaitingCount: null },
+                    ],
+                    activeCount: 2,
+                    approximate: true,
+                    asOf: "2026-08-06T10:00:00Z",
+                };
+            }
+            return {
+                items: [
+                    { fileId: 601, state: "queued", stage: "retry", aheadWaitingCount: 1 },
+                ],
+                activeCount: 2,
+                approximate: true,
+                asOf: "2026-08-06T10:00:00Z",
+            };
+        });
+
+        renderWorkbench();
+        openMyUploadsFromPortalShell();
+        const drawer = await screen.findByTestId("portal-uploaded-files-drawer");
+
+        await waitFor(() => {
+            expect(getKnowledgeParseQueuePositionsApi).toHaveBeenCalledWith(10, [501, 502]);
+            expect(getKnowledgeParseQueuePositionsApi).toHaveBeenCalledWith(20, [601]);
+        });
+        expect(await within(drawer).findByText("排队中，前方约 7 个等待任务")).toBeInTheDocument();
+        expect(within(drawer).getByText("排队中，前方约 1 个等待任务")).toBeInTheDocument();
+        expect(within(drawer).getByText("解析中")).toBeInTheDocument();
+        expect(within(drawer).queryByText(/标题提取|正式解析|重试解析|当前运行/)).not.toBeInTheDocument();
+    });
+
+    test("keeps upload rows visible and merges refreshed fields in place", async () => {
+        const uploadedRecord = {
+            ...makeFile("501", "刷新前文档.pdf", { type: FileType.PDF, status: FileStatus.SUCCESS }),
+            spaceId: "10",
+            spaceName: "设备知识库",
+            folderPathName: "根目录",
+            tags: [],
+        };
+        let resolveRefresh: ((value: any) => void) | undefined;
+        const refreshResponse = new Promise((resolve) => {
+            resolveRefresh = resolve;
+        });
+        jest.mocked(listMyUploadedFilesApi)
+            .mockResolvedValueOnce({ data: [uploadedRecord], total: 1 } as any)
+            .mockImplementationOnce(() => refreshResponse as any)
+            .mockResolvedValue({
+                data: [{ ...uploadedRecord, name: "刷新后文档.pdf", status: FileStatus.FAILED }],
+                total: 1,
+            } as any);
+
+        renderWorkbench();
+        openMyUploadsFromPortalShell();
+        const drawer = await screen.findByTestId("portal-uploaded-files-drawer");
+        expect(await within(drawer).findByText("刷新前文档.pdf")).toBeInTheDocument();
+
+        fireEvent.click(within(drawer).getByRole("button", { name: "刷新" }));
+
+        expect(within(drawer).getByText("刷新前文档.pdf")).toBeInTheDocument();
+        expect(within(drawer).queryByText("正在加载上传记录...")).not.toBeInTheDocument();
+
+        await act(async () => {
+            resolveRefresh?.({
+                data: [{ ...uploadedRecord, name: "刷新后文档.pdf", status: FileStatus.FAILED }],
+                total: 1,
+            });
+            await refreshResponse;
+        });
+
+        expect(await within(drawer).findByText("刷新后文档.pdf")).toBeInTheDocument();
+        expect(within(drawer).getByText("解析失败")).toBeInTheDocument();
+        expect(within(drawer).queryByText("刷新前文档.pdf")).not.toBeInTheDocument();
+    });
+
+    test("keeps the original upload status when queue positions are unavailable", async () => {
+        const uploadedRecord = {
+            ...makeFile("501", "等待文档.pdf", { type: FileType.PDF, status: FileStatus.WAITING }),
+            spaceId: "10",
+            spaceName: "设备知识库",
+            folderPathName: "根目录",
+            tags: [],
+        };
+        jest.mocked(listMyUploadedFilesApi).mockResolvedValue({ data: [uploadedRecord], total: 1 } as any);
+        jest.mocked(getKnowledgeParseQueuePositionsApi).mockRejectedValue(new Error("queue unavailable"));
+
+        renderWorkbench();
+        openMyUploadsFromPortalShell();
+        const drawer = await screen.findByTestId("portal-uploaded-files-drawer");
+
+        await waitFor(() => {
+            expect(getKnowledgeParseQueuePositionsApi).toHaveBeenCalledWith(10, [501]);
+        });
+        expect(within(drawer).getByText("等待解析")).toBeInTheDocument();
+        expect(within(drawer).queryByText(/前方约/)).not.toBeInTheDocument();
+        expect(mockShowToast).not.toHaveBeenCalledWith(expect.objectContaining({ message: "queue unavailable" }));
+    });
+
+    test("does not query queue positions for terminal upload records", async () => {
+        const uploadedRecord = {
+            ...makeFile("501", "完成文档.pdf", { type: FileType.PDF, status: FileStatus.SUCCESS }),
+            spaceId: "10",
+            spaceName: "设备知识库",
+            folderPathName: "根目录",
+            tags: [],
+        };
+        jest.mocked(listMyUploadedFilesApi).mockResolvedValue({ data: [uploadedRecord], total: 1 } as any);
+
+        renderWorkbench();
+        openMyUploadsFromPortalShell();
+        const drawer = await screen.findByTestId("portal-uploaded-files-drawer");
+
+        expect(await within(drawer).findByText("解析完成")).toBeInTheDocument();
+        expect(getKnowledgeParseQueuePositionsApi).not.toHaveBeenCalled();
     });
 
     test("keeps the uploaded file current folder selected when editing upload records", async () => {

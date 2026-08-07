@@ -29,6 +29,9 @@ from bisheng.knowledge.domain.repositories.implementations.knowledge_migration_r
 from bisheng.knowledge.domain.repositories.implementations.knowledge_migration_source_repository_impl import (
     KnowledgeMigrationSourceRepositoryImpl,
 )
+from bisheng.knowledge.domain.repositories.implementations.knowledge_parse_queue_redis_repository import (
+    KnowledgeParseQueueRedisRepository,
+)
 from bisheng.knowledge.domain.repositories.implementations.knowledge_repository_impl import KnowledgeRepositoryImpl
 from bisheng.knowledge.domain.repositories.interfaces.department_file_view_grant_repository import (
     DepartmentFileViewGrantRepository,
@@ -58,6 +61,13 @@ from bisheng.knowledge.domain.services.department_file_view_lifecycle_service im
 )
 from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import KnowledgeAuditTelemetryService
 from bisheng.knowledge.domain.services.knowledge_metadata_service import KnowledgeMetadataService
+from bisheng.knowledge.domain.services.knowledge_file_visibility_service import (
+    KnowledgeFileVisibilityService,
+)
+from bisheng.knowledge.domain.services.knowledge_parse_queue_service import (
+    KnowledgeParseQueueQueryService,
+    KnowledgeParseQueueService,
+)
 from bisheng.knowledge.domain.services.knowledge_permission_service import KnowledgePermissionService
 from bisheng.message.api.dependencies import get_message_service as _get_message_service
 
@@ -84,6 +94,10 @@ async def get_knowledge_file_repository(
     """DapatkanKnowledgeFileRepositoryInstance Dependencies"""
 
     return KnowledgeFileRepositoryImpl(session)
+
+
+async def get_knowledge_parse_queue_repository() -> KnowledgeParseQueueRedisRepository:
+    return KnowledgeParseQueueRedisRepository()
 
 
 async def get_department_file_view_grant_repository(
@@ -285,6 +299,30 @@ async def get_knowledge_space_service(
         )
     )
     return service
+
+
+async def get_knowledge_parse_queue_query_service(
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    file_repository: KnowledgeFileRepository = Depends(get_knowledge_file_repository),
+    authorization_service: "KnowledgeSpaceService" = Depends(get_knowledge_space_service),
+    department_access_service: DepartmentFileViewAccessService = Depends(
+        get_department_file_view_access_service
+    ),
+    queue_repository: KnowledgeParseQueueRedisRepository = Depends(
+        get_knowledge_parse_queue_repository
+    ),
+) -> KnowledgeParseQueueQueryService:
+    visibility_service = KnowledgeFileVisibilityService(
+        authorization_service=authorization_service,
+        department_access_service=department_access_service,
+    )
+    return KnowledgeParseQueueQueryService(
+        file_repository=file_repository,
+        visibility_service=visibility_service,
+        authorization_service=authorization_service,
+        queue_service=KnowledgeParseQueueService(queue_repository),
+        login_user=login_user,
+    )
 
 
 async def get_portal_pdf_download_service(

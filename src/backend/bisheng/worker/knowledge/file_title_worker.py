@@ -11,6 +11,10 @@ from bisheng.knowledge.domain.services.file_alias_name_generator import (
     FileAliasNameGeneratorService,
 )
 from bisheng.knowledge.domain.services.file_title_extractor import FileTitleExtractorService
+from bisheng.knowledge.domain.schemas.knowledge_parse_queue_schema import KnowledgeParseStage
+from bisheng.knowledge.domain.services.knowledge_parse_processing_lease import (
+    track_knowledge_parse_delivery,
+)
 from bisheng.utils.file import download_minio_file
 from bisheng.worker.main import bisheng_celery
 
@@ -101,7 +105,8 @@ def extract_and_generate_alias(file_id: int) -> str | None:
     return None
 
 
-@bisheng_celery.task(acks_late=True)
+@bisheng_celery.task(acks_late=True, priority=3)
+@track_knowledge_parse_delivery(KnowledgeParseStage.TITLE)
 def extract_knowledge_file_title_celery(
     file_id: int,
     preview_cache_key: str | None = None,
@@ -134,9 +139,17 @@ def extract_knowledge_file_title_celery(
         )
     finally:
         try:
-            from bisheng.worker.knowledge.file_worker import parse_knowledge_file_celery
+            from bisheng.knowledge.domain.services.knowledge_parse_dispatch_service import (
+                KnowledgeParseStage,
+                dispatch_knowledge_parse_task_sync,
+            )
 
-            parse_knowledge_file_celery.delay(file_id, preview_cache_key, callback_url)
+            dispatch_knowledge_parse_task_sync(
+                stage=KnowledgeParseStage.PARSE,
+                file_id=file_id,
+                preview_cache_key=preview_cache_key,
+                callback_url=callback_url,
+            )
             logger.info(
                 "enqueued parse task after title extraction file_id={}",
                 file_id,

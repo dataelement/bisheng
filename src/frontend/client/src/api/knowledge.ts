@@ -595,6 +595,23 @@ export interface UploadedFileRecord extends KnowledgeFile {
     businessDomainCodes?: string[];
 }
 
+export type KnowledgeParseQueueStage = "title" | "parse" | "retry";
+export type KnowledgeParseQueuePositionState = "queued" | "processing" | "not_queued" | "unavailable";
+
+export interface KnowledgeParseQueuePositionItem {
+    fileId: number;
+    state: KnowledgeParseQueuePositionState;
+    stage: KnowledgeParseQueueStage | null;
+    aheadWaitingCount: number | null;
+}
+
+export interface KnowledgeParseQueuePositionsResponse {
+    items: KnowledgeParseQueuePositionItem[];
+    activeCount: number;
+    approximate: true;
+    asOf: string;
+}
+
 export interface UploadFolderRecommendationFileReq {
     client_file_id: string;
     file_name: string;
@@ -2728,6 +2745,38 @@ export async function listMyUploadedFilesApi(params: {
                 : [],
         })),
         total: Number(payload?.total ?? list.length),
+    };
+}
+
+export async function getKnowledgeParseQueuePositionsApi(
+    knowledgeId: string | number,
+    fileIds: number[],
+): Promise<KnowledgeParseQueuePositionsResponse> {
+    const res = await request.get<ApiResponse<{
+        items: Array<{
+            file_id: number;
+            state: KnowledgeParseQueuePositionState;
+            stage: KnowledgeParseQueueStage | null;
+            ahead_waiting_count: number | null;
+        }>;
+        active_count: number;
+        approximate: true;
+        as_of: string;
+    }>>(`/api/v1/knowledge/${knowledgeId}/parse-queue-positions`, {
+        params: { file_ids: fileIds },
+        paramsSerializer: request.paramsSerializer,
+    });
+    const payload = res.data;
+    return {
+        items: payload.items.map((item) => ({
+            fileId: item.file_id,
+            state: item.state,
+            stage: item.stage,
+            aheadWaitingCount: item.ahead_waiting_count,
+        })),
+        activeCount: payload.active_count,
+        approximate: payload.approximate,
+        asOf: payload.as_of,
     };
 }
 

@@ -24,7 +24,13 @@ export interface Progress {
     file: File,
     fileName: string,
     progress: ProgressStatus,
-    error: boolean
+    error: boolean,
+    queuePosition?: {
+        state: 'queued' | 'processing' | 'not_queued' | 'unavailable',
+        stage: 'title' | 'parse' | 'retry' | null,
+        aheadWaitingCount: number | null,
+        activeCount: number,
+    }
 }
 
 export const enum ProgressStatus {

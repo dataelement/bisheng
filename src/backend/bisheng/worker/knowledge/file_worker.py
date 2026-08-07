@@ -26,6 +26,10 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFileEntryType,
     KnowledgeFileStatus,
 )
+from bisheng.knowledge.domain.schemas.knowledge_parse_queue_schema import KnowledgeParseStage
+from bisheng.knowledge.domain.services.knowledge_parse_processing_lease import (
+    track_knowledge_parse_delivery,
+)
 from bisheng.telemetry.domain.mid_table.knowledge_space_content import KnowledgeSpaceContentStat
 from bisheng.utils import generate_uuid
 from bisheng.worker.main import bisheng_celery
@@ -530,7 +534,8 @@ def _complete_filelib_sync_version_link_if_needed(file_id: int) -> None:
         )
 
 
-@bisheng_celery.task(acks_late=True)
+@bisheng_celery.task(acks_late=True, priority=3)
+@track_knowledge_parse_delivery(KnowledgeParseStage.PARSE)
 def parse_knowledge_file_celery(file_id: int, preview_cache_key: str = None, callback_url: str = None):
     """ Asynchronously parse one incoming successful file """
     trace_id_var.set(f'parse_file_{file_id}')
@@ -597,7 +602,8 @@ def _parse_knowledge_file(file_id: int, preview_cache_key: str = None, callback_
     return db_knowledge
 
 
-@bisheng_celery.task(acks_late=True)
+@bisheng_celery.task(acks_late=True, priority=3)
+@track_knowledge_parse_delivery(KnowledgeParseStage.RETRY)
 def retry_knowledge_file_celery(file_id: int, preview_cache_key: str = None, callback_url: str = None):
     """ Retry parsing a file that failed to enter the repository or has a different name """
     trace_id_var.set(f'retry_knowledge_file_{file_id}')

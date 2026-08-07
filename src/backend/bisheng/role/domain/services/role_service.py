@@ -60,7 +60,7 @@ class RoleService:
 
         # Validate quota_config (AC-10c)
         if req.quota_config:
-            QuotaService.validate_quota_config(req.quota_config)
+            QuotaService.validate_role_quota_config(req.quota_config)
 
         # Determine role_type
         role_type = 'global' if login_user.is_admin() else 'tenant'
@@ -111,7 +111,7 @@ class RoleService:
         await cls._check_role_permission(login_user)
 
         if req.quota_config:
-            QuotaService.validate_quota_config(req.quota_config)
+            QuotaService.validate_role_quota_config(req.quota_config)
 
         role_type = 'global' if login_user.is_admin() else 'tenant'
         existing = await RoleDao.aget_role_by_name(
@@ -362,7 +362,7 @@ class RoleService:
 
         # Validate quota_config (AC-10c)
         if req.quota_config is not None:
-            QuotaService.validate_quota_config(req.quota_config)
+            QuotaService.validate_role_quota_config(req.quota_config)
 
         # Check duplicate name if changing name (AC-09)
         if req.role_name and req.role_name != role.role_name:
@@ -411,7 +411,7 @@ class RoleService:
         await cls._ensure_role_mutation_access(role, login_user)
 
         if req.quota_config is not None:
-            QuotaService.validate_quota_config(req.quota_config)
+            QuotaService.validate_role_quota_config(req.quota_config)
 
         if req.role_name and req.role_name != role.role_name:
             target_department_id = req.department_id if 'department_id' in req.model_fields_set else role.department_id

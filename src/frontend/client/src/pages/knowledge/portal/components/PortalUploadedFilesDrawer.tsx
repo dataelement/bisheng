@@ -1,10 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ChevronDown, ChevronRight, Folder, PencilLine } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Folder, PencilLine } from "lucide-react";
 import {
     FileStatus,
     SpaceLevel,
     listKnowledgeFolders,
-    listMyUploadedFilesApi,
     moveUploadedFileFolderApi,
     updateFileEncoding,
     type FileTag,
@@ -14,10 +13,14 @@ import { NotificationSeverity } from "~/common";
 import { Button, Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "~/components/ui";
 import { EditTagsModal } from "../../SpaceDetail/EditTagsModal";
 import TagGroup from "../../SpaceDetail/TagGroup";
-import { isKnowledgeItemPending } from "../../knowledgeUtils";
 import type { PortalFileCategoryGroupOption } from "../types";
 import { DEFAULT_PORTAL_FILE_CATEGORY_GROUPS } from "../constants";
 import { PortalFileCategoryDropdown } from "./PortalFileCategoryDropdown";
+import {
+    PortalUploadFolderTreeNode, createFolderTreeNode, updateFolderTreeNode, type FolderTreeNode,
+} from "./PortalUploadFolderTree";
+import { PortalUploadQueueStatus, usePortalUploadQueuePositions } from "./PortalUploadQueueStatus";
+import { usePortalUploadedFiles } from "./usePortalUploadedFiles";
 import {
     DEFAULT_ENCODING_PREFIX,
     type BusinessDomainOptionItem,
@@ -30,51 +33,11 @@ import {
 } from "../uploadMetadata";
 import s from "../PortalKnowledgeWorkbench.module.css";
 
-const PAGE_SIZE = 20;
 const EMPTY_FIELD_PLACEHOLDER = "--";
 
 function displayText(value?: string | null): string {
     const text = String(value ?? "").trim();
     return text || EMPTY_FIELD_PLACEHOLDER;
-}
-
-function uploadStatusLabel(status?: FileStatus): string {
-    switch (status) {
-        case FileStatus.PROCESSING:
-            return "解析中";
-        case FileStatus.SUCCESS:
-            return "解析完成";
-        case FileStatus.WAITING:
-            return "等待解析";
-        case FileStatus.FAILED:
-            return "解析失败";
-        case FileStatus.REBUILDING:
-            return "重新解析";
-        case FileStatus.TIMEOUT:
-            return "解析超时";
-        case FileStatus.VIOLATION:
-            return "内容违规";
-        default:
-            return EMPTY_FIELD_PLACEHOLDER;
-    }
-}
-
-function uploadStatusClassName(status?: FileStatus): string {
-    switch (status) {
-        case FileStatus.SUCCESS:
-            return `${s.uploadRecordStatusBadge} ${s.uploadRecordStatusSuccess}`;
-        case FileStatus.FAILED:
-        case FileStatus.TIMEOUT:
-        case FileStatus.VIOLATION:
-            return `${s.uploadRecordStatusBadge} ${s.uploadRecordStatusDanger}`;
-        case FileStatus.UPLOADING:
-        case FileStatus.PROCESSING:
-        case FileStatus.WAITING:
-        case FileStatus.REBUILDING:
-            return `${s.uploadRecordStatusBadge} ${s.uploadRecordStatusInfo}`;
-        default:
-            return s.uploadRecordStatusBadge;
-    }
 }
 
 function spaceLevelLabel(spaceLevel?: SpaceLevel): string {
@@ -108,94 +71,6 @@ function uploadRecordTags(record: UploadedFileRecord): FileTag[] {
     return (record.tags ?? []).filter((tag) => String(tag.name ?? "").trim());
 }
 
-type FolderTreeNode = {
-    id: string;
-    name: string;
-    children: FolderTreeNode[];
-    expanded: boolean;
-    loaded: boolean;
-    loading: boolean;
-};
-
-function createFolderTreeNode(item: any): FolderTreeNode {
-    return {
-        id: String(item.id),
-        name: String(item.file_name ?? item.name ?? ""),
-        children: [],
-        expanded: false,
-        loaded: false,
-        loading: false,
-    };
-}
-
-function updateFolderTreeNode(
-    nodes: FolderTreeNode[],
-    nodeId: string,
-    updater: (node: FolderTreeNode) => FolderTreeNode,
-): FolderTreeNode[] {
-    return nodes.map((node) => {
-        if (node.id === nodeId) return updater(node);
-        if (!node.children.length) return node;
-        return { ...node, children: updateFolderTreeNode(node.children, nodeId, updater) };
-    });
-}
-
-function FolderPickerNode({
-    node,
-    depth,
-    recordName,
-    targetFolderId,
-    onToggle,
-    onSelect,
-}: {
-    node: FolderTreeNode;
-    depth: number;
-    recordName: string;
-    targetFolderId: string | null;
-    onToggle: (node: FolderTreeNode) => void;
-    onSelect: (folderId: string, folderName: string) => void;
-}): ReactNode {
-    return (
-        <div key={node.id}>
-            <div className={s.uploadRecordFolderRow} style={{ paddingLeft: `${8 + depth * 16}px` }}>
-                <button
-                    type="button"
-                    className={s.uploadRecordFolderExpandButton}
-                    aria-label={`${node.expanded ? "收起" : "展开"}${recordName}目标目录${node.name}`}
-                    onClick={() => onToggle(node)}
-                >
-                    {node.expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-                </button>
-                <button
-                    type="button"
-                    className={`${s.uploadRecordFolderSelectButton} ${targetFolderId === node.id ? s.uploadRecordFolderSelectButtonActive : ""}`}
-                    aria-label={`选择${recordName}目标目录${node.name}`}
-                    onClick={() => onSelect(node.id, node.name)}
-                >
-                    <Folder size={14} />
-                    <span>{node.name}</span>
-                </button>
-            </div>
-            {node.expanded && node.loading ? (
-                <div className={s.uploadRecordFolderLoading} style={{ paddingLeft: `${30 + (depth + 1) * 16}px` }}>
-                    加载中...
-                </div>
-            ) : null}
-            {node.expanded ? node.children.map((child) => (
-                <FolderPickerNode
-                    key={child.id}
-                    node={child}
-                    depth={depth + 1}
-                    recordName={recordName}
-                    targetFolderId={targetFolderId}
-                    onToggle={onToggle}
-                    onSelect={onSelect}
-                />
-            )) : null}
-        </div>
-    );
-}
-
 interface PortalUploadedFilesDrawerProps {
     open: boolean;
     /** Increment after each upload so the drawer reloads even when already open. */
@@ -222,10 +97,16 @@ export function PortalUploadedFilesDrawer({
     // Body portals are treated as Radix "outside" clicks and break selection,
     // especially when the upload list has only one short row.
     const [menuPortalContainer, setMenuPortalContainer] = useState<HTMLDivElement | null>(null);
-    const [records, setRecords] = useState<UploadedFileRecord[]>([]);
-    const [total, setTotal] = useState(0);
-    const [page, setPage] = useState(1);
-    const [loading, setLoading] = useState(false);
+    const {
+        records,
+        setRecords,
+        total,
+        page,
+        setPage,
+        loading,
+        totalPages,
+        refreshRecords,
+    } = usePortalUploadedFiles({ open, refreshKey, showToast });
     const [editingFileId, setEditingFileId] = useState<string | null>(null);
     const [folderTreeNodes, setFolderTreeNodes] = useState<FolderTreeNode[]>([]);
     const [targetFolderId, setTargetFolderId] = useState<string | null>(null);
@@ -235,56 +116,16 @@ export function PortalUploadedFilesDrawer({
     const [savingEncodingFileId, setSavingEncodingFileId] = useState<string | null>(null);
     const [editingTagsRecord, setEditingTagsRecord] = useState<UploadedFileRecord | null>(null);
     const [encodingDrafts, setEncodingDrafts] = useState<Record<string, EncodingDraft>>({});
-    const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-
-    // Keep prop identities out of loadRecords' deps so it stays stable across parent
-    // re-renders. Otherwise a churned showToast rebuilds loadRecords, which makes the
-    // fetch effect re-run and refetch the whole list, flickering the dialog.
-    const openRef = useRef(open);
-    openRef.current = open;
-    const showToastRef = useRef(showToast);
-    showToastRef.current = showToast;
-
-    const loadRecords = useCallback(async (pageToLoad: number) => {
-        if (!openRef.current) return;
-        setLoading(true);
-        try {
-            const res = await listMyUploadedFilesApi({ page: pageToLoad, pageSize: PAGE_SIZE });
-            setRecords(res.data);
-            setTotal(res.total);
-            setPage(pageToLoad);
-        } catch {
-            setRecords([]);
-            setTotal(0);
-            showToastRef.current({ message: "上传记录加载失败", severity: NotificationSeverity.ERROR });
-        } finally {
-            setLoading(false);
-        }
-    }, []);
-
     useEffect(() => {
         if (!open) {
-            setPage(1);
             setEditingFileId(null);
             setFolderTreeNodes([]);
             setEditingTagsRecord(null);
             setEncodingDrafts({});
-            return;
         }
-        void loadRecords(page);
-    }, [loadRecords, open, page, refreshKey]);
+    }, [open]);
 
-    useEffect(() => {
-        if (!open) return;
-        const hasPending = records.some((record) => isKnowledgeItemPending(record));
-        if (!hasPending) return;
-
-        const timer = setInterval(() => {
-            void loadRecords(page);
-        }, 5000);
-
-        return () => clearInterval(timer);
-    }, [loadRecords, open, page, records]);
+    const getQueuePosition = usePortalUploadQueuePositions(open, records);
 
     const editingRecord = useMemo(
         () => records.find((record) => record.id === editingFileId) ?? null,
@@ -366,7 +207,7 @@ export function PortalUploadedFilesDrawer({
         setSavingFileId(editingRecord.id);
         try {
             await moveUploadedFileFolderApi(editingRecord.spaceId, editingRecord.id, targetFolderId);
-            await loadRecords(page);
+            await refreshRecords();
             await onRecordsChanged?.();
             setEditingFileId(null);
             setFolderTreeNodes([]);
@@ -376,7 +217,7 @@ export function PortalUploadedFilesDrawer({
         } finally {
             setSavingFileId(null);
         }
-    }, [editingRecord, loadRecords, onRecordsChanged, page, showToast, targetFolderId]);
+    }, [editingRecord, onRecordsChanged, refreshRecords, showToast, targetFolderId]);
 
     const handleEncodingPartChange = useCallback(async (
         record: UploadedFileRecord,
@@ -467,10 +308,10 @@ export function PortalUploadedFilesDrawer({
     }, []);
 
     const handleTagsSaved = useCallback(async () => {
-        await loadRecords(page);
+        await refreshRecords();
         await onRecordsChanged?.();
         setEditingTagsRecord(null);
-    }, [loadRecords, onRecordsChanged, page]);
+    }, [onRecordsChanged, refreshRecords]);
 
     return (
         <>
@@ -505,7 +346,7 @@ export function PortalUploadedFilesDrawer({
                             >
                                 下一页
                             </button>
-                            <button type="button" className={s.secondaryButton} onClick={() => void loadRecords(page)}>
+                            <button type="button" className={s.secondaryButton} onClick={() => void refreshRecords()}>
                                 刷新
                             </button>
                         </div>
@@ -526,7 +367,6 @@ export function PortalUploadedFilesDrawer({
                         ) : records.length ? records.map((record) => {
                             const recordName = displayText(record.name);
                             const spaceName = uploadRecordSpaceName(record);
-                            const statusText = uploadStatusLabel(record.status);
                             const folderPathName = record.folderPathName?.trim() || "根目录";
                             const encodingText = displayText(record.fileEncoding);
                             const parsedEncoding = parseFileEncoding(record.fileEncoding, encodingPrefix);
@@ -561,7 +401,10 @@ export function PortalUploadedFilesDrawer({
                                 <div key={record.id} className={s.uploadRecordsRow}>
                                     <span title={recordName}>{recordName}</span>
                                     <span title={spaceName}>{spaceName}</span>
-                                    <span className={uploadStatusClassName(record.status)}>{statusText}</span>
+                                    <PortalUploadQueueStatus
+                                        status={record.status}
+                                        position={getQueuePosition(record)}
+                                    />
                                     <span>
                                         <button
                                             type="button"
@@ -659,7 +502,7 @@ export function PortalUploadedFilesDrawer({
                                     <div className={s.uploadRecordFolderLoading}>目录加载中...</div>
                                 ) : folderTreeNodes.length ? (
                                     folderTreeNodes.map((node) => (
-                                        <FolderPickerNode
+                                        <PortalUploadFolderTreeNode
                                             key={node.id}
                                             node={node}
                                             depth={0}

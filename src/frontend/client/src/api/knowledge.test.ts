@@ -9,6 +9,7 @@ import {
   deleteFolderApi,
   deleteSpaceApi,
   downloadWatermarkedKnowledgeFileApi,
+  getKnowledgeParseQueuePositionsApi,
   getSpaceInfoApi,
   getPortalDiscoverableSpacesApi,
   getPortalFilePreviewApi,
@@ -644,6 +645,54 @@ describe("listMyUploadedFilesApi", () => {
       fileEncoding: "SGGF-STD-EM-20260600000001",
       fileSubcategoryCode: "STD",
       businessDomainCode: "EM",
+    });
+  });
+});
+
+describe("getKnowledgeParseQueuePositionsApi", () => {
+  beforeEach(() => {
+    mockGet.mockReset();
+  });
+
+  it("queries repeated file_ids and maps the queue snapshot", async () => {
+    mockGet.mockResolvedValue({
+      status_code: 200,
+      data: {
+        items: [
+          {
+            file_id: 501,
+            state: "queued",
+            stage: "parse",
+            ahead_waiting_count: 7,
+          },
+        ],
+        active_count: 3,
+        approximate: true,
+        as_of: "2026-08-06T10:00:00Z",
+      },
+    });
+
+    const result = await getKnowledgeParseQueuePositionsApi(10, [501, 502]);
+
+    expect(mockGet).toHaveBeenCalledWith(
+      "/api/v1/knowledge/10/parse-queue-positions",
+      expect.objectContaining({
+        params: { file_ids: [501, 502] },
+        paramsSerializer: request.paramsSerializer,
+      }),
+    );
+    expect(result).toEqual({
+      items: [
+        {
+          fileId: 501,
+          state: "queued",
+          stage: "parse",
+          aheadWaitingCount: 7,
+        },
+      ],
+      activeCount: 3,
+      approximate: true,
+      asOf: "2026-08-06T10:00:00Z",
     });
   });
 });

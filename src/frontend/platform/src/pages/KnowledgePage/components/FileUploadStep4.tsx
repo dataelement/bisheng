@@ -2,7 +2,10 @@ import CardComponent from "@/components/bs-comp/cardComponent";
 import ProgressItem from "@/components/bs-comp/knowledgeUploadComponent/ProgressItem";
 import { Button } from "@/components/bs-ui/button";
 import { generateUUID } from "@/components/bs-ui/utils";
-import { readFileByLibDatabase } from "@/controllers/API";
+import {
+    getKnowledgeParseQueuePositions,
+    readFileByLibDatabase,
+} from "@/controllers/API";
 import { getLlmDefaultModel } from "@/controllers/API/finetune";
 import { createWorkflowApi, getWorkflowNodeTemplate } from "@/controllers/API/workflow";
 import { useKnowledgeDetails } from "@/controllers/hooks/knowledge";
@@ -41,7 +44,9 @@ export default function FileUploadStep4({ data, kId, hasRepeat }) {
             setFiles(initialFiles);
 
             // Key: fileIdsRef and processingRef both store frontend file IDs (ensure data consistency)
-            const frontEndFileIds = initialFiles.map(file => file.fileId);
+            const frontEndFileIds = initialFiles
+                .map(file => Number(file.fileId || file.id))
+                .filter(fileId => Number.isInteger(fileId) && fileId > 0);
             fileIdsRef.current = frontEndFileIds;
             processingRef.current.clear();
             frontEndFileIds.forEach(id => processingRef.current.add(id)); // Use same batch of IDs
@@ -66,7 +71,7 @@ export default function FileUploadStep4({ data, kId, hasRepeat }) {
             try {
                 // Fix pending file ID exception (previously was [0], should actually take frontend file ID)
                 const pendingFileIds = Array.from(processingRef.current);
-                console.log("Correct pending file IDs:", pendingFileIds); // Should now be ['fe9d1b', 'd3b66c', ...]
+                console.log("Correct pending file IDs:", pendingFileIds);
 
                 // Keep API parameters unchanged (backend may filter by knowledge_id, file_ids can pass frontend IDs or leave empty)
                 const res = await readFileByLibDatabase({
@@ -75,6 +80,21 @@ export default function FileUploadStep4({ data, kId, hasRepeat }) {
                     pageSize: 0,
                     file_ids: pendingFileIds
                 });
+                let positionMap = new Map();
+                let activeCount = 0;
+                if (pendingFileIds.length > 0) {
+                    try {
+                        const positions = await getKnowledgeParseQueuePositions(
+                            kid || kId,
+                            pendingFileIds.map(Number),
+                        );
+                        positionMap = new Map(positions.items.map(item => [item.file_id, item]));
+                        activeCount = positions.active_count;
+                    } catch (error) {
+                        // Queue visibility is best-effort and must not interrupt status polling.
+                        console.debug("Queue position unavailable", error);
+                    }
+                }
 
                 // setFiles status update logic in polling function (add logs after cleanup)
                 setFiles(prev => {
@@ -83,19 +103,31 @@ export default function FileUploadStep4({ data, kId, hasRepeat }) {
 
                     updatedFiles.forEach((file, index) => {
                         const resItem = resMap.get(file.fileName.toLowerCase().trim());
+                        const backendFileId = Number(file.fileId || file.id);
                         if (resItem && resItem.status === 2) {
                             // Double confirmation: remove current file id from processingRef
-                            if (processingRef.current.has(file.id)) {
-                                processingRef.current.delete(file.id);
-                                console.log(`移除待处理ID: ${file.id}，剩余待处理: ${processingRef.current.size}`);
+                            if (processingRef.current.has(backendFileId)) {
+                                processingRef.current.delete(backendFileId);
+                                console.log(`移除待处理ID: ${backendFileId}，剩余待处理: ${processingRef.current.size}`);
                             }
-                            updatedFiles[index] = { ...file, progress: 'end' };
+                            updatedFiles[index] = { ...file, progress: 'end', queuePosition: undefined };
                         } else if (resItem && resItem.status === 3) {
-                            if (processingRef.current.has(file.id)) {
-                                processingRef.current.delete(file.id);
-                                console.log(`移除待处理ID: ${file.id}（失败），剩余待处理: ${processingRef.current.size}`);
+                            if (processingRef.current.has(backendFileId)) {
+                                processingRef.current.delete(backendFileId);
+                                console.log(`移除待处理ID: ${backendFileId}（失败），剩余待处理: ${processingRef.current.size}`);
                             }
-                            updatedFiles[index] = { ...file, progress: 'end', error: true, reason: resItem.remark || t('parseFailed') };
+                            updatedFiles[index] = { ...file, progress: 'end', error: true, reason: resItem.remark || t('parseFailed'), queuePosition: undefined };
+                        } else {
+                            const queuePosition = positionMap.get(backendFileId);
+                            updatedFiles[index] = {
+                                ...file,
+                                queuePosition: queuePosition ? {
+                                    state: queuePosition.state,
+                                    stage: queuePosition.stage,
+                                    aheadWaitingCount: queuePosition.ahead_waiting_count,
+                                    activeCount,
+                                } : undefined,
+                            };
                         }
                     });
 

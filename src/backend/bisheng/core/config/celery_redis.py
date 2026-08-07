@@ -2,11 +2,23 @@ import ast
 from typing import Any, Mapping
 from urllib.parse import quote
 
+from bisheng.common.constants.enums.knowledge_parse_priority import (
+    KNOWLEDGE_PARSE_PRIORITY_STEPS,
+)
+
+_PRIORITY_TRANSPORT_OPTIONS = {
+    "priority_steps": list(KNOWLEDGE_PARSE_PRIORITY_STEPS),
+    "queue_order_strategy": "round_robin",
+}
+
 
 def build_celery_redis_config(redis_config: str | Mapping[str, Any] | None) -> dict[str, Any]:
     """Build Celery broker settings from single-node or sentinel Redis config."""
     if redis_config is None or isinstance(redis_config, str):
-        return {'broker_url': redis_config}
+        return {
+            "broker_url": redis_config,
+            "broker_transport_options": dict(_PRIORITY_TRANSPORT_OPTIONS),
+        }
 
     redis_conf = dict(redis_config)
     mode = str(redis_conf.pop('mode', 'single')).lower()
@@ -15,7 +27,10 @@ def build_celery_redis_config(redis_config: str | Mapping[str, Any] | None) -> d
         broker_url = redis_conf.pop('url', None)
         if not broker_url:
             raise ValueError('Single Redis mode requires `url` in `celery_redis_url`.')
-        return {'broker_url': broker_url}
+        return {
+            "broker_url": broker_url,
+            "broker_transport_options": dict(_PRIORITY_TRANSPORT_OPTIONS),
+        }
 
     if mode != 'sentinel':
         raise ValueError(f'Unsupported celery redis mode: {mode}')
@@ -42,7 +57,10 @@ def _build_sentinel_config(redis_conf: dict[str, Any]) -> dict[str, Any]:
         for host_item in sentinel_hosts
     )
 
-    broker_transport_options: dict[str, Any] = {'master_name': sentinel_master}
+    broker_transport_options: dict[str, Any] = {
+        **_PRIORITY_TRANSPORT_OPTIONS,
+        'master_name': sentinel_master,
+    }
     sentinel_kwargs = {}
     if sentinel_username:
         sentinel_kwargs['username'] = sentinel_username

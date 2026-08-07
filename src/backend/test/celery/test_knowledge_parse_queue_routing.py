@@ -137,11 +137,13 @@ def test_worker_entrypoints_keep_default_queue_consumers_enabled():
         source = path.read_text(encoding="utf-8")
         assert "start_default" in source
         assert "-Q celery" in source
+        assert "--prefetch-multiplier=1" in source
 
 
 def test_non_parse_production_dispatches_do_not_target_knowledge_queue():
     allowed_files = {
-        BACKEND_DIR / "scripts/enqueue_reparse_knowledge_space_files.py",
+        BACKEND_DIR
+        / "bisheng/knowledge/domain/services/knowledge_parse_dispatch_service.py",
     }
     violations: list[str] = []
 

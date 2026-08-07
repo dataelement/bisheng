@@ -512,7 +512,7 @@ async def test_sync_orchestration_allows_repeated_external_id_and_writes_source_
     knowledge_space_service = SimpleNamespace(
         get_preview_cache_key=Mock(return_value="cache-key"),
         add_file=AsyncMock(return_value=[SimpleNamespace(id=9, status=5)]),
-        enqueue_file_title_extraction=Mock(),
+        enqueue_file_title_extraction=AsyncMock(),
     )
     events = Mock()
     events.attach_mock(knowledge_space_service.enqueue_file_title_extraction, "enqueue")
@@ -595,7 +595,7 @@ async def test_sync_orchestration_allows_repeated_external_id_and_writes_source_
     service._ensure_domain_bound.assert_not_called()
     assert persist_update.call_count == 2
     assert knowledge_space_service.add_file.await_count == 2
-    assert knowledge_space_service.enqueue_file_title_extraction.call_count == 2
+    assert knowledge_space_service.enqueue_file_title_extraction.await_count == 2
     add_kwargs = knowledge_space_service.add_file.await_args_list[0].kwargs
     assert add_kwargs == {
         "knowledge_id": 8,
@@ -612,8 +612,18 @@ async def test_sync_orchestration_allows_repeated_external_id_and_writes_source_
     }
     assert persist_update.call_args_list == [call(knowledge_file), call(knowledge_file)]
     assert events.method_calls == [
-        call.enqueue([knowledge_file], ["cache-key"]),
-        call.enqueue([knowledge_file], ["cache-key"]),
+        call.enqueue(
+            [knowledge_file],
+            ["cache-key"],
+            operator_user_id=1,
+            operator_is_global_super=False,
+        ),
+        call.enqueue(
+            [knowledge_file],
+            ["cache-key"],
+            operator_user_id=1,
+            operator_is_global_super=False,
+        ),
     ]
     assert "token_id" not in knowledge_file.user_metadata
     assert result.file_encoding == "SGGF-POL-IT-20260700000001"

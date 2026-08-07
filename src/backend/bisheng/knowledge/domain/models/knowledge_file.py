@@ -122,6 +122,11 @@ class KnowledgeFileBase(SQLModelSerializable):
     file_size: int | None = Field(default=None, index=False, description="File size inbytes")
     md5: str | None = Field(default=None, index=False)
     parse_type: str | None = Field(default=ParseType.LOCAL.value, index=False, description="Files parsed in what mode")
+    parse_priority: str | None = Field(
+        default=None,
+        sa_column=Column(String(16), nullable=True),
+        description="Immutable file parsing priority snapshot",
+    )
     split_rule: str | None = Field(default=None, sa_column=Column(Text), description="Files parsed in what mode")
     preview_file_object_name: str | None = Field(default=None, index=True, description="Preview File Object name")
     bbox_object_name: str | None = Field(default="", description="bboxFiles inminioStored object name")

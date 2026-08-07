@@ -137,6 +137,15 @@
   "uploadHint": "まずファイルをアップロードしてください",
   "nameRequired": "ナレッジベース名は必須です",
   "documentDataParsingCompleted": "ドキュメントデータの解析が完了しました",
+  "parseQueueAhead": "{{stage}}の待機中です。前に約 {{count}} 件のタスクがあります",
+  "parseQueueProcessing": "{{stage}}を処理中です",
+  "parseQueueUnavailable": "ドキュメントデータを準備中です",
+  "parseQueueActiveCount": "現在 {{count}} 件のタスクを実行中",
+  "parseQueueStage": {
+    "title": "タイトル抽出",
+    "parse": "ファイル解析",
+    "retry": "再解析"
+  },
   "documentDataBeingPrepared": "ドキュメントデータを準備中",
   "youCanReturn": "ナレッジベースファイル一覧に戻り解析状態を確認できます",
   "returnToKnowledgeBase": "ナレッジベースに戻る",

@@ -212,7 +212,7 @@ async def test_fixed_folder_upload_passes_parent_id_and_keeps_response_contract(
     knowledge_service = SimpleNamespace(
         get_preview_cache_key=MagicMock(return_value="preview-key"),
         add_file=AsyncMock(return_value=[SimpleNamespace(id=9, status=KnowledgeFileStatus.WAITING.value)]),
-        enqueue_file_title_extraction=MagicMock(),
+        enqueue_file_title_extraction=AsyncMock(),
     )
     service = _service(
         _rule(folder_id=4096),
