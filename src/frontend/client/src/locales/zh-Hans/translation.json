@@ -472,6 +472,8 @@
   "com_linsight_exit_fullscreen": "退出全屏",
   "com_linsight_download_to_view": "下载查看",
   "com_linsight_preview_unsupported": "该文件类型暂不支持在线预览",
+  "com_linsight_deliverable_not_generated": "（未生成）",
+  "com_linsight_deliverable_not_generated_hint": "模型提到了这个文件，但并未真正生成，因此无法预览或下载。",
   "com_linsight_preview_load_failed": "文件加载失败",
   "com_linsight_download_failed": "下载失败，请稍后重试",
   "com_linsight_exporting": "正在导出，请稍候…",
