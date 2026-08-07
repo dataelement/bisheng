@@ -5,8 +5,24 @@
 | 关联 spec | [spec.md](./spec.md) |
 | 产品决议 | [积分系统需求分析-V1.1.md §11](../../../docs/PRD/积分系统/积分系统需求分析-V1.1.md) |
 | 模块 | `bisheng/points`，错误码 **182** |
-| Alembic | 建议 revision `f077_points_system`（**勿用 f070**：仓库已有 `f070_department_transfer_permission_cleanup`） |
+| Alembic | revision `f078_points_system`（**勿用 f070/f077**：已被占用） |
 | 设计原则 | Append-only 流水 + 余额缓存 + 幂等键（对齐 Open edX Ledger / Sylius Loyalty / 通用 loyalty LLD）；**本期不做**规则版本状态机、FIFO 过期、兑换核销、延迟入账反作弊（§7 二期预留） |
+
+---
+
+## 0.1 产品拍板与 PRD 偏差（2026-08-06）
+
+相对 PRD 原文的收权/纠错，以本表为准；实现不得回退到未拍板语义。
+
+| # | 议题 | 拍板 | 说明 |
+|---|------|------|------|
+| P1 | 管理写权限 + 前台 R* | **仅平台超管** | 对应 spec **AD-10 = B**。不给公共库管理员 / space admin 规则配置、调分、审计写权限；文档列表/阅读页/问答弹窗的 R* 按钮亦仅超管可见。相对 PRD §2.1 为有意收权。 |
+| P2 | 月奖登录窗口 | **次月 1 日发上月奖；校验上月登录 ≥1** | PRD 场景四「当月」为笔误；Beat 不得查发放当月登录。 |
+| P3 | G3 配置 | **阈值 / 档位分 / `lifetime_cap` 表单可配**；终身上限走 `score_expr.lifetime_cap`，**禁止**把终身 15 填进 `daily_cap` | 运营表单对 `mode=tier` 须暴露 tiers + lifetime_cap；`daily_cap` 仅表示日累计分上限（G3 种子默认 `daily_cap=NULL`）。 |
+| P4 | 日 cap | **超限整笔不发**（不截断部分发放）；skip 不写流水 | 与「部分入账」伪代码决裂；幂等键仅在实际入账时占用（skip 后同业务事件次日可能再试——接受）。 |
+| P5 | 违规扣减概览 | **`manual_deduct` + 负向 `manual_adjust`** 的 \|delta\| 之和 | 不含正向调分、不含自动 earn 冲正以外的渠道。 |
+| P6 | 规则「删除」 | **无 DELETE API**；固定目录 + `status=disabled` | PRD「可删除」本期语义 = 停用。有流水规则禁止物理删。 |
+| P7 | 豁免判断主体 | **B：按受益人** | 解析出的**入账用户**若为目标库（及 G7 时目标/源库）的 `creator`/`admin`，则 skip，无论操作人是谁。例：管理员上传、他人发布、受益人为 uploader（管理员）→ 不发分。平台超管入账仍一律 skip。 |
 
 ---
 
@@ -126,13 +142,15 @@ erDiagram
 {"mode": "tier", "tiers": [{"threshold": 75, "score": 5}, {"threshold": 150, "score": 10}, {"threshold": 300, "score": 15}], "lifetime_cap": 15}
 ```
 
+> **G3 表单（P3）**：`mode=tier` 时后台必须可编辑 `tiers[].threshold` / `tiers[].score` / `lifetime_cap`；`daily_cap` 与终身上限分离，不得用「每日上限」字段承载终身 15。
+
 **唯一/索引**
 
 | 名 | 列 | |
 |---|---|---|
 | uk_pr_tenant_code | (tenant_id, rule_code) | UNIQUE（同编码一条，启停靠 status） |
 
-> 产品「已占用编码不可再新增」：同 `rule_code` 已存在则拒绝 create；删除为软禁用或硬删需谨慎——**建议禁止物理删除已产生流水的规则，仅 disable**；从未产生流水的可删。
+> 产品「已占用编码不可再新增」：同 `rule_code` 已存在则拒绝 create。**无 DELETE 接口（P6）**：规则只能 `enabled`/`disabled`；已产生流水的规则禁止物理删除。
 
 #### 1.2.3.1 积分受益主体 `beneficiary`（可配置）
 
@@ -306,6 +324,7 @@ UK: `(tenant_id, file_id)`
 按租户（至少 default tenant）插入：
 
 - 规则：G1–G4、R1–R3、M1/M4/M6（enabled）；G5/G6/G7、其余 M* **不预插入**，后台「新增」时可选编码列表由代码常量提供。
+- G3 种子：`score_expr.lifetime_cap=15`，`daily_cap=NULL`（P3）。
 - 文案 5 条（申诉改为线下）。
 - 站内信文案：代码常量，无需种子。
 
@@ -313,7 +332,7 @@ UK: `(tenant_id, file_id)`
 
 ### 1.5 数据迁移方案（Alembic）
 
-**单文件建议**：`v2_6_0_f077_points_system.py`
+**单文件**：`v2_6_0_f078_points_system.py`
 
 ```
 upgrade:
@@ -342,8 +361,10 @@ downgrade:
 
 > 统一包装：`{ status_code, status_message, data }`。  
 > 分页：`PageData` → `data: { data: T[], total: number }`。  
-> 认证：Cookie/JWT 登录用户；管理写接口校验平台超管。  
-> 时间：ISO8601，业务日界 **Asia/Shanghai**。
+> 认证：Cookie/JWT 登录用户。  
+> **权限（P1 / AD-10）**：规则 CRUD/启停、文案、调分、扣减、审计、概览写读中的管理写接口 → **仅平台超管**；前台 R* 扣减入口同此。  
+> 时间：ISO8601，业务日界 **Asia/Shanghai**。  
+> **规则无 DELETE（P6）**：仅 `PUT` 改 `status` / 可变配置。
 
 ### 2.1 公共类型
 
@@ -470,7 +491,8 @@ interface PointRuleDTO {
 {
   total_issued: number;       // 历史 earn 之和
   total_balance: number;      // sum(account.balance)
-  total_violation_deducted: number; // |manual_deduct + R*| 之和
+  // P5：违规扣减 = |manual_deduct 全部 delta| + |manual_adjust 且 delta<0|
+  total_violation_deducted: number;
 }
 ```
 
@@ -642,15 +664,16 @@ sequenceDiagram
 
   Biz->>Facade: on_space_file_ready(user, file, space)
   Facade->>Facade: 过滤 personal/favorite
-  Facade->>Facade: 若 user 为 space creator/admin → skip
-  Facade->>Facade: 若 user 为平台超管 → skip
+  Facade->>Facade: 解析 beneficiary → payee
+  Facade->>Facade: 若 payee 为目标库 creator/admin → skip（P7=B）
+  Facade->>Facade: 若 payee 为平台超管 → skip
   Facade->>Rule: 按 space.level 取启用规则 G*
   alt 无规则或 disabled
     Facade-->>Biz: ok(skipped)
   else 有规则
-    Facade->>Ledger: award(idempotency_key, delta, ...)
+    Facade->>Ledger: award(payee, idempotency_key, delta, ...)
     Ledger->>DB: BEGIN; SELECT account FOR UPDATE
-    Ledger->>DB: 查当日同 rule 已得分; 若+delta>cap → clamp或skip
+    Ledger->>DB: 查当日同 rule 已得分; 剩余不足本次 delta → 整笔 skip（P4）
     alt 幂等键已存在
       Ledger-->>Facade: existing
     else
@@ -663,7 +686,8 @@ sequenceDiagram
   end
 ```
 
-> 业务主路径：Facade **不抛**导致上传失败的异常；内部记日志即可（AC-11）。
+> 业务主路径：Facade **不抛**导致上传失败的异常；内部记日志即可（AC-11）。  
+> **P7=B**：豁免只看**受益人（payee）**是否管辖相关库，不看操作人。
 
 ### 3.2.1 G7 库间分享时序（本期）
 
@@ -708,15 +732,17 @@ sequenceDiagram
 
 ```mermaid
 stateDiagram-v2
-  [*] --> ScanEligible: Beat 每月1日 00:05
-  ScanEligible --> CheckLogin: 聚合空间角色 → 最高 M*
-  CheckLogin --> SkipNoLogin: 当月无登录
-  CheckLogin --> Award: 当月登录≥1
+  [*] --> ScanEligible: Beat 每月1日 00:05 Asia/Shanghai
+  ScanEligible --> CheckLogin: 聚合上月角色 → 最高 M*
+  CheckLogin --> SkipNoLogin: 上月无登录
+  CheckLogin --> Award: 上月登录≥1
   Award --> Done: 幂等写入成功
   Award --> Done: 幂等已存在
   SkipNoLogin --> Done
   Done --> [*]
 ```
+
+> **P2**：例如 8 月 1 日 00:05 发放的是 **7 月**月奖，登录条件查 **7 月**（≥1 次），不得查 8 月。幂等键含结算月 `yyyy-mm`（上月）。
 
 ### 3.5 排行刷新
 
@@ -855,12 +881,11 @@ async def award(...):
         if await repo.exists_idem(tenant_id, key):
             return existing
         granted = await repo.sum_earn_today(tenant_id, user_id, rule_code, day_start_shanghai)
-        if daily_cap is not None:
-            delta = min(delta, max(0, daily_cap - granted))
-            if delta <= 0:
-                return skipped_cap
+        # P4：剩余额度不足本次 delta → 整笔不发，不截断；不写流水/不占幂等键
+        if daily_cap is not None and daily_cap - granted < delta:
+            return skipped_cap
         new_balance = account.balance + delta
-        await repo.insert_log(...)
+        await repo.insert_log(...)  # occurred_at 显式写入业务时区
         account.balance = new_balance
         if delta > 0:
             account.lifetime_earned += delta
@@ -918,7 +943,7 @@ AC 变更时同步改两处相关章节；实现以本设计字段名为准。
 | **不是** | 门户外链 / `create_shougang_portal_share_link` |
 | **与发布** | `PUBLISH` ≠ `SHARE`；G1/G2/G5/G6 走入库/发布；G7 仅分享成功；幂等键 `earn:G7:{share_entry_id}` |
 | **获益人** | 规则可配：文档上传人 / 分享操作人 |
-| **豁免 / cap** | 分享人或获益人为目标/源库 `creator`/`admin` 时按产品「管辖库不叠加 G*」豁免；日 cap 按分 |
+| **豁免 / cap** | **P7=B**：解析后的受益人（uploader/sharer 等）若为**目标库或源库**的 `creator`/`admin` → skip；不看分享操作人本人是否管理员（除非其恰为受益人）。日 cap 按分且整笔 skip（P4） |
 | **挂钩** | `share_approved` 成功且 entry ACTIVE 后 → `PointsAwardFacade.on_document_shared(...)`；Facade 失败不影响分享成功 |
 | **消息** | 可用模板如 `earn_share`（可配） |
 
