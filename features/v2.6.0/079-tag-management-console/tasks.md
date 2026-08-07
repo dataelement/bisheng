@@ -14,7 +14,7 @@
 | spec-discovery.md | ✅ 已确认 | 2026-08-07，含 D11 推翻记录 |
 | spec.md | ✅ 已评审 | 两轮 `/sdd-review spec` 共 16 条问题全部处理，用户 2026-08-07 确认 |
 | tasks.md | ✅ 已拆解 | `/sdd-review tasks` 第 1 轮 7 条问题已修复，第 2 轮 LGTM |
-| 实现 | 🚧 进行中 | 3 / 23 完成 |
+| 实现 | 🚧 进行中 | 5 / 23 完成 |
 
 ---
 
@@ -85,7 +85,7 @@
 
 ### 后端 — 审核留痕写入（Test-First 配对）
 
-- [ ] **T004**: 审核留痕写入测试
+- [x] **T004**: 审核留痕写入测试
   **文件**: `src/backend/test/workstation/test_review_tag_audit_fields.py`（新建）
   **逻辑**: 用 `async_db_session` fixture 造一条 pending `review_tag` + link，
   走 `WorkstationTagsService.approve_or_reject_review_tag`。
@@ -97,7 +97,7 @@
   **覆盖 AC**: AC-19, AC-31, AC-32
   **依赖**: T001
 
-- [ ] **T005**: 审核留痕写入实现
+- [x] **T005**: 审核留痕写入实现
   **文件**:
   `src/backend/bisheng/workstation/domain/repositories/tags_repository.py`（改 `approve_tag_to_move`，L17-39），
   `src/backend/bisheng/workstation/domain/repositories/review_tags_repository.py`（改 `approve_review_tag` / `reject_review_tag`），

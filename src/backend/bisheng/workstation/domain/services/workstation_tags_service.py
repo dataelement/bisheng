@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from fastapi import Request
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -185,7 +187,12 @@ class WorkStationTagsService(BaseService):
             if not pending:
                 raise ReviewTagNotFoundError.http_exception()
             await self.review_tags_repository.reject_review_tag(
-                data.tag_name, data.reject_reason, data.resource_type, tenant_id, space_ids=space_ids
+                data.tag_name,
+                data.reject_reason,
+                data.resource_type,
+                tenant_id,
+                space_ids=space_ids,
+                reviewer_id=getattr(self.login_user, "user_id", None),
             )
             await self.session.commit()
             from bisheng.knowledge.domain.services.tag_library_tag_service import TagLibraryTagService
@@ -233,6 +240,10 @@ class WorkStationTagsService(BaseService):
         existed_tag_list = []
         if not review_tag_list:
             raise ReviewTagNotFoundError.http_exception()
+        # Approve hard-deletes the review_tag row, so the audit trail has to be
+        # stamped onto the tag row during the move (F079).
+        reviewer_id = getattr(self.login_user, "user_id", None)
+        reviewed_at = datetime.now()
         for review_tag in review_tag_list:
             existed_tag = await self.review_tags_repository.query_existed_tag_by_review_tag(review_tag)
             if existed_tag:
@@ -258,6 +269,8 @@ class WorkStationTagsService(BaseService):
                 review_tag,
                 review_tag_link,
                 skip_library_add=skip_library_add,
+                reviewer_id=reviewer_id,
+                review_time=reviewed_at,
             )
         return existed_tag_list
 
