@@ -29,11 +29,9 @@ import {
 import { useLocalize, useScrollRevealRef } from '~/hooks';
 import { cn } from '~/utils';
 import { useScrollFade } from '../Execution/useScrollFade';
-import { TICK_LENGTHS, getScrollParent } from './markdownOutlineUtils';
+import { TICK_LENGTHS, getScrollParent, isPointerNearRail } from './markdownOutlineUtils';
 import { useMarkdownOutline } from './useMarkdownOutline';
 
-/** How close to the right edge the pointer must come to reveal the outline. */
-const EDGE_ZONE = 56;
 /** Opening is immediate — the right edge of the panel is a terminus rather than
  *  a corridor, so there is no sweep-through to debounce away, and any delay here
  *  stacks on top of the fade and reads as lag. Closing stays lazy so the pointer
@@ -122,7 +120,7 @@ export function MarkdownOutline({ contentRef, contentKey }: MarkdownOutlineProps
             return undefined;
         }
         const onMove = (event: PointerEvent) => {
-            if (scroller.getBoundingClientRect().right - event.clientX <= EDGE_ZONE) {
+            if (isPointerNearRail(railRef.current, event.clientX, event.clientY)) {
                 openNow();
             } else if (cardRef.current?.contains(event.target as Node)) {
                 // On the card but left of the edge zone: stay open for as long as
