@@ -5,6 +5,7 @@
  * legacy task flow but kept here so P5 can delete the Sop components.
  */
 import { getLinsightFileDownloadApi } from '~/api/chat/data-service';
+import { getShareTokenFromPath } from '~/utils/shareToken';
 
 /** Output file shape of `output_result.final_files` (= store `file_list`). */
 export interface ArtifactFile {
@@ -115,10 +116,21 @@ export function toUploadedArtifacts(files: any[] | undefined): ArtifactFile[] {
         });
 }
 
-/** Resolve a MinIO share url into a same-origin fetchable path. */
-export async function resolveArtifactUrl(fileUrl: string, versionId: string): Promise<string> {
+/**
+ * Resolve a MinIO share url into a same-origin fetchable path.
+ *
+ * `shareToken` defaults to the one in the current route: on a share page the
+ * viewer is neither the owner nor an admin, and the backend grants them only
+ * through the `share-token` header. Pass it explicitly from surfaces that run
+ * outside the share route (the standalone `/html` viewer tab).
+ */
+export async function resolveArtifactUrl(
+    fileUrl: string,
+    versionId: string,
+    shareToken: string = getShareTokenFromPath(),
+): Promise<string> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- backend returns {data:{file_path}}, not typed
-    const res: any = await getLinsightFileDownloadApi(fileUrl, versionId);
+    const res: any = await getLinsightFileDownloadApi(fileUrl, versionId, shareToken);
     return `${__APP_ENV__.BASE_URL}${res.data.file_path}`;
 }
 
@@ -259,9 +271,17 @@ export function isHtmlArtifact(file: ArtifactFile): boolean {
  * with URLSearchParams also fixes the old bug where the raw key was concatenated
  * straight onto BASE_URL (`/workspace` + `linsight/...` → `/workspacelinsight/...`,
  * a missing-slash 404).
+ *
+ * The viewer opens as its OWN tab at `/html`, so it cannot derive the share
+ * token from its location the way in-page surfaces do — carry it in the query
+ * when we are on a share route, or a share recipient's HTML report 403s.
  */
 export function openHtmlArtifactViewer(file: ArtifactFile, versionId: string): void {
     const params = new URLSearchParams({ url: file.file_url, vid: versionId || '' });
+    const shareToken = getShareTokenFromPath();
+    if (shareToken) {
+        params.set('share', shareToken);
+    }
     window.open(`${__APP_ENV__.BASE_URL}/html?${params.toString()}`, '_blank');
 }
 

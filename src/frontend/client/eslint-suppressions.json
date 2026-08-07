@@ -1016,6 +1016,11 @@
       "count": 4
     }
   },
+  "src/components/Linsight/Artifacts/resolveArtifactUrl.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 9
+    }
+  },
   "src/components/Linsight/Execution/ConversationRound.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 1
@@ -3784,6 +3789,11 @@
   "src/utils/resetConvo.ts": {
     "no-console": {
       "count": 1
+    }
+  },
+  "src/utils/shareToken.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 4
     }
   },
   "src/vite-env.d.ts": {

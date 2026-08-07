@@ -2046,7 +2046,8 @@
       "githubReqHost": "Public github.com repositories only",
       "githubReqDir": "URL must point to a directory containing SKILL.md; branch names with slashes are not supported",
       "unsupported": "Unsupported file type — please import .md / .zip / .skill",
-      "confirm": "Import"
+      "confirm": "Import",
+      "normalized": "Imported — skill ID was normalized to {{to}} (originally {{from}})"
     },
     "detailSheet": {
       "files": "Files",
@@ -2055,7 +2056,8 @@
       "readonlyAsset": "Assets are read-only; re-upload the bundle to update"
     },
     "errors": {
-      "validation": "Validation failed: invalid frontmatter or skill ID (archive must contain SKILL.md)",
+      "validation": "Validation failed: invalid frontmatter or skill ID",
+      "validationDetail": "Validation failed: {{detail}}",
       "tooLarge": "Uploaded file exceeds the 10MB limit, please trim it and retry",
       "bundleTooLarge": "Unpacked bundle contents exceed the 100MB limit, please trim the bundled assets and retry",
       "notFound": "Skill not found",

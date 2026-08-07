@@ -184,7 +184,20 @@ class TestErrorCodes:
 
     def test_zip_without_skill_md_11051(self, client):
         resp = client.post(BASE, files={"file": ("x.zip", _zip_bytes({"readme.md": b"r"}), "application/zip")})
-        assert resp.json()["status_code"] == 11051
+        body = resp.json()
+        assert body["status_code"] == 11051
+        # the per-cause detail must reach the client — the frontend renders it verbatim
+        assert "SKILL.md" in body["status_message"]
+
+    def test_uppercase_frontmatter_name_normalized(self, client):
+        # external skills commonly ship capitalized names — import must succeed
+        # and report the normalization instead of answering 11051.
+        md = b"---\nname: Presentations\ndescription: demo\n---\n\nbody"
+        resp = client.post(BASE, files={"file": ("p.md", md, "text/markdown")})
+        data = resp.json()["data"]
+        assert data["name"] == "presentations"
+        assert data["display_name"] == "Presentations"
+        assert data["normalized_from"] == "Presentations"
 
     def test_oversize_11052(self, client):
         big = b"x" * (MAX_BUNDLE_SIZE + 1)

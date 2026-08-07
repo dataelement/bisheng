@@ -1040,6 +1040,29 @@ export function deleteKnowledge(id: string): Promise<t.TConversationTagResponse>
 export async function getFilePathApi(file_id: string) {
   return request.get(`/api/v1/knowledge/file_share`, { params: { file_id } });
 }
-export function getLinsightFileDownloadApi(fileUrl: string, vid: string): Promise<f.TFile> {
-  return request.post('/api/v1/linsight/workbench/file_download', { file_url: fileUrl, session_version_id: vid });
+/**
+ * Resolve a linsight workspace object key into a presigned MinIO link.
+ *
+ * `shareToken` is REQUIRED when the viewer is a share recipient: the endpoint
+ * grants a non-owner only through the `share-token` header (backend
+ * `linsight_file_download`). Callers normally let `resolveArtifactUrl` fill it
+ * in from the route.
+ *
+ * `skip403Redirect` keeps a single unreachable file from ejecting the whole
+ * document — the default 403 handling is `location.href = /c/new?error=11403`,
+ * which reads as "this share link is dead" when only one preview failed.
+ */
+export function getLinsightFileDownloadApi(fileUrl: string, vid: string, shareToken?: string): Promise<f.TFile> {
+  // _post spreads `config` AFTER its default headers, so a `headers` key here
+  // replaces them wholesale — carry Content-Type along explicitly.
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(shareToken ? { 'share-token': shareToken } : {}),
+  };
+  return request.post(
+    '/api/v1/linsight/workbench/file_download',
+    { file_url: fileUrl, session_version_id: vid },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- skip403Redirect is an ErrorOptions extra, not on AxiosRequestConfig
+    { headers, skip403Redirect: true } as any,
+  );
 }

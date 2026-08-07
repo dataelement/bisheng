@@ -226,6 +226,8 @@ describe('openHtmlArtifactViewer', () => {
     afterEach(() => {
         (global as any).__APP_ENV__ = origEnv;
         openSpy.mockRestore();
+        // The share-token cases navigate; leave the location as they found it.
+        window.history.pushState({}, '', '/');
     });
 
     // Regression: file_url is a MinIO object key (no leading slash). The old code
@@ -263,6 +265,30 @@ describe('openHtmlArtifactViewer', () => {
         const qs = new URLSearchParams(opened.split('?')[1]);
         expect(qs.get('vid')).toBe('');
         expect(qs.get('url')).toBe('linsight/final_result/x/a.html');
+    });
+
+    // The viewer opens as its own tab at /html, so it cannot read the share
+    // token off its own location — without forwarding it here, a share
+    // recipient's HTML report 403s on resolve.
+    it('forwards the share token when opened from a share page', () => {
+        window.history.pushState({}, '', '/workspace/share/tok-1/SV-9');
+        openHtmlArtifactViewer(
+            { file_id: '3', file_name: 'r.html', file_url: 'linsight/final_result/y/r.html' },
+            'SV-9',
+        );
+        const qs = new URLSearchParams((openSpy.mock.calls[0][0] as string).split('?')[1]);
+        expect(qs.get('share')).toBe('tok-1');
+        expect(qs.get('vid')).toBe('SV-9');
+    });
+
+    it('omits the share param outside a share page', () => {
+        window.history.pushState({}, '', '/workspace/c/abc');
+        openHtmlArtifactViewer(
+            { file_id: '4', file_name: 'r.html', file_url: 'linsight/final_result/y/r.html' },
+            'SV-9',
+        );
+        const qs = new URLSearchParams((openSpy.mock.calls[0][0] as string).split('?')[1]);
+        expect(qs.has('share')).toBe(false);
     });
 });
 

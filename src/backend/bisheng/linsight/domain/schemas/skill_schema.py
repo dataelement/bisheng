@@ -56,6 +56,9 @@ class SkillDetail(SkillBrief):
     preview: str = ""
     source_text: str = ""
     files: list[SkillFileEntry] = Field(default_factory=list)
+    # Import-time only: original frontmatter name when it was auto-normalized
+    # to a spec-legal skill ID (e.g. "Presentations" -> "presentations").
+    normalized_from: str | None = None
 
 
 class SkillFileContent(BaseModel):
