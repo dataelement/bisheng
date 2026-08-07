@@ -186,7 +186,8 @@ export function isDeliverableLinkHref(href: string): boolean {
 
 /**
  * Resolve a markdown link in the task result answer to a previewable artifact.
- * Falls back to the sole deliverable when the model names a file it never wrote.
+ * Returns undefined when the link names no file this run produced — the caller
+ * renders that as 未生成 rather than guessing which artifact was meant.
  */
 export function resolveDeliverableLink(
     fileList: ArtifactFile[] | undefined,
@@ -197,12 +198,14 @@ export function resolveDeliverableLink(
     if (!fileList?.length || !isDeliverableLinkHref(href)) return undefined;
     const norm = decodeSafe(href).replace(/\\/g, '/').replace(/^\.?\//, '').replace(/^output\//, '');
     if (fileList.length === 1) {
+        // Case-insensitive retry only: matchArtifactByRelPath compares exactly, so a
+        // model that got just the casing wrong should still resolve. A link naming a
+        // DIFFERENT file must not resolve — this used to map any unmatched name onto a
+        // sole 报告.md, which opened a file with other contents under another name and
+        // hid the fact that the claimed file was never written.
         const sole = fileList[0];
         const hrefBase = (norm.split('/').pop() ?? norm).toLowerCase();
-        const fileBase = sole.file_name.toLowerCase();
-        // Only map a mismatched link to the sole deliverable when it is the generic
-        // fallback name; otherwise two claimed filenames would both open the same file.
-        if (hrefBase === fileBase || fileBase === '报告.md') {
+        if (hrefBase === sole.file_name.toLowerCase()) {
             return sole;
         }
     }
