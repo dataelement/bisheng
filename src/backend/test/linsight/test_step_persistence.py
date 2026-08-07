@@ -343,6 +343,50 @@ async def test_direct_answer_collects_output_deliverables_without_planned_todos(
     assert called["fallback"] is False
 
 
+async def test_direct_answer_upload_qa_synthesizes_fallback_without_planned_todos(monkeypatch):
+    """Substantive Q&A over uploaded sources must get a backstop report even when
+    the model answers directly without write_todos/write_file.
+    """
+    from bisheng.linsight.domain import task_exec as te
+
+    exec_task = te.LinsightWorkflowTask()
+    exec_task.session_version_id = "svid"
+    exec_task._last_assistant_text = "该产品主要面向企业协作场景，强调智能编排与任务交付能力。" * 3
+    exec_task.file_dir = "/tmp/nonexistent-linsight"
+    exec_task._baseline_files = {"/tmp/ws/uploads/briefing.md"}
+
+    sm = MagicMock()
+    sm.set_session_version_info = AsyncMock()
+    sm.get_execution_tasks = AsyncMock(return_value=[_pseudo([])])
+    sm.update_execution_task_status = AsyncMock()
+    sm.push_message = AsyncMock()
+    exec_task._state_manager = sm
+
+    fallback = [{"file_name": "报告.md", "file_path": "/x/output/报告.md", "file_id": "i", "file_url": "u"}]
+    called = {"fallback": False}
+
+    async def _final(*a, **k):
+        return []
+
+    async def _fallback(*a, **k):
+        called["fallback"] = True
+        return fallback
+
+    monkeypatch.setattr(te.linsight_execute_utils, "get_final_result_file", _final)
+    monkeypatch.setattr(te.linsight_execute_utils, "build_fallback_report_file", _fallback)
+    monkeypatch.setattr(te.linsight_execute_utils, "read_file_directory", AsyncMock(return_value=[]))
+    monkeypatch.setattr(te.linsight_execute_utils, "persist_task_turn_message", AsyncMock())
+
+    session = MagicMock()
+    session.id = "svid"
+    session.model_dump = MagicMock(return_value={})
+
+    await exec_task._handle_direct_answer_completion(session)
+
+    assert called["fallback"] is True
+    assert session.output_result["final_files"] == fallback
+
+
 def _pseudo(history):
     return LinsightExecuteTask(
         id="svid",

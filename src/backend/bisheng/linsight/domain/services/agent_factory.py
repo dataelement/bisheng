@@ -127,6 +127,7 @@ __SKILL_DELIVERABLE_LINE__   - 3a（始终）：write_file 写 output/<name>.md�
    - 3c（仅当选了 docx）：export_docx(source_path="output/<name>.md")，必须在 3a 之后。
    - 3d（仅当选了 pdf）：export_pdf(source_path="output/<name>.md")，必须在 3a 之后。
    最终交付物的撰写与拼装必须由你（主智能体）亲自完成，不得委派给子代理；中间产物写 scratch/。
+   **禁止**在未调用 write_file 写入 output/ 的情况下，在回复中声称「已保存为 xxx.md / 已写入 xxx」——用户界面只会展示真实写入 output/ 的交付物；口头提及的文件名无法被预览或下载。
 
 4. 【收尾】用 1-2 句话概括交付物的核心内容或结论（例如“已梳理出近一年的市场变化并给出三条关键建议”）；不要复述文件名、工作区路径（如 output/…）或“已完成”之类的状态字样——完成状态与可下载的文件由界面单独呈现，正文里无需重复。
 
@@ -165,6 +166,7 @@ __KB_TOOL_LINE__- write_file / read_file / edit_file / ls：工作区文件工�
 
 - 简洁，工具调用之间不加多余解释性文字。
 - 不要凭空编造事实；交付内容应基于检索到的资料/依据。
+- 凡需要在回复中引用可下载/可预览的交付物，必须先 write_file 写入 output/；不得仅口头描述文件名。
 """
 
 # search_knowledge_base is the ONLY tool whose presence is conditional on the
