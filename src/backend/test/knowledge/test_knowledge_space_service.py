@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from bisheng.common.errcode.knowledge_space import (
+    SpaceFolderDepthError,
     SpaceNotFoundError,
     SpacePermissionDeniedError,
 )
@@ -231,3 +232,102 @@ async def test_unsubscribe_space_blocks_creator(
             await service.unsubscribe_space(1)
 
     mock_delete_member.assert_not_awaited()
+
+
+async def test_add_folder_under_level_9_parent_raises_depth_error(
+    service: KnowledgeSpaceService,
+) -> None:
+    """The 10-layer cap applies to add_folder, not only to batch upload.
+
+    Batch upload has its own depth coverage in test_knowledge_space_folder_upload;
+    this pins the single-folder path, whose check lives in add_folder itself.
+    """
+    from bisheng.knowledge.domain.services.knowledge_space_service import (
+        MAX_FOLDER_LEVEL,
+    )
+
+    # Parent at MAX_FOLDER_LEVEL (level 9 = UI 第10层): a child would be the
+    # 11th layer, which the product rule forbids.
+    parent_folder = _make_file(
+        file_id=70,
+        knowledge_id=1,
+        file_type=FileType.DIR.value,
+        file_name="deepest",
+        file_level_path="/1/2/3/4/5/6/7/8/9",
+        level=MAX_FOLDER_LEVEL,
+    )
+
+    with (
+        patch.object(service, "_require_action", new_callable=AsyncMock),
+        patch.object(
+            service,
+            "_get_folder_for_action",
+            new_callable=AsyncMock,
+            return_value=parent_folder,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service."
+            "KnowledgeFileDao.aadd_file",
+            new_callable=AsyncMock,
+        ) as mock_add_file,
+    ):
+        with pytest.raises(SpaceFolderDepthError) as exc_info:
+            await service.add_folder(1, "too-deep", parent_id=70)
+
+    assert exc_info.value.Code == 18011
+    mock_add_file.assert_not_awaited()
+
+
+async def test_add_folder_under_level_8_parent_creates_level_9_child(
+    service: KnowledgeSpaceService,
+) -> None:
+    """The layer right at the cap is still allowed — the check is >, not >=."""
+    from bisheng.knowledge.domain.services.knowledge_space_service import (
+        MAX_FOLDER_LEVEL,
+    )
+
+    parent_folder = _make_file(
+        file_id=60,
+        knowledge_id=1,
+        file_type=FileType.DIR.value,
+        file_name="ninth",
+        file_level_path="/1/2/3/4/5/6/7/8",
+        level=MAX_FOLDER_LEVEL - 1,
+    )
+
+    with (
+        patch.object(service, "_require_action", new_callable=AsyncMock),
+        patch.object(
+            service,
+            "_get_folder_for_action",
+            new_callable=AsyncMock,
+            return_value=parent_folder,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service."
+            "SpaceFileDao.count_folder_by_name",
+            new_callable=AsyncMock,
+            return_value=0,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service."
+            "KnowledgeFileDao.aadd_file",
+            new_callable=AsyncMock,
+            side_effect=lambda folder: folder,
+        ) as mock_add_file,
+        patch.object(
+            service,
+            "_initialize_child_resource_permissions",
+            new_callable=AsyncMock,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service."
+            "KnowledgeDao.async_update_knowledge_update_time_by_id",
+            new_callable=AsyncMock,
+        ),
+    ):
+        created = await service.add_folder(1, "still-allowed", parent_id=60)
+
+    mock_add_file.assert_awaited_once()
+    assert mock_add_file.await_args.args[0].level == MAX_FOLDER_LEVEL
+    assert created.level == MAX_FOLDER_LEVEL
