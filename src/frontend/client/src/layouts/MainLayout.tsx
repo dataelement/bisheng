@@ -538,8 +538,14 @@ export default function MainLayout() {
         >
           <div
             ref={!isMobile && !innerScrollShell ? outletScrollRevealRef : undefined}
+            // Anchor + handle for panels that must cover the conversation while
+            // leaving the rail alone — media playback is the one today. They
+            // portal in here and lay themselves out against this box, so they
+            // follow the panel's own geometry instead of guessing at the rail's
+            // width.
+            data-workbench-panel
             className={cn(
-              'bg-white shadow-[0px_0px_20px_0px_#07225808]',
+              'relative bg-white shadow-[0px_0px_20px_0px_#07225808]',
               !isMobile && 'rounded-xl',
               // When the left system menu is revealed, the panel slides right and
               // exposes its left edge — round the left corners to 24px.

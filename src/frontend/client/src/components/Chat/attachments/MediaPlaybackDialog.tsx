@@ -1,15 +1,23 @@
+import { ArrowLeft } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import MediaPlaybackView, { type MediaPlaybackSource } from '~/pages/media/MediaPlaybackView';
-import { OGDialog, OGDialogContent } from '~/components/ui';
+import { Button } from '~/components/ui';
+import useLocalize from '~/hooks/useLocalize';
 
 /**
- * Playback in a dialog, for pointer devices.
+ * Playback laid over the conversation, for pointer devices.
  *
- * Same chrome as the phone's full-screen page — header strip with the file
- * name, player centred on the page tint — so the two read as one feature. It
- * is a dialog rather than a route because leaving the conversation tears down
- * the composer with it: attachments staged but not yet sent, the draft, the
- * chosen knowledge spaces. Watching a clip you are about to send should not
- * cost you the message you were writing.
+ * It fills the workbench panel and nothing else: the rail stays put, so the
+ * app still looks like itself and the way back is the same arrow the old page
+ * had. It is not a centred dialog — a video framed inside a floating card over
+ * a dimmed page reads as a detour, when this is meant to feel like the page it
+ * replaces.
+ *
+ * A panel rather than a route because leaving the conversation tears down the
+ * composer with it: attachments staged but not yet sent, the draft, the chosen
+ * knowledge spaces. Watching a clip you are about to send should not cost you
+ * the message you were writing.
  */
 export function MediaPlaybackDialog({
     open,
@@ -20,29 +28,59 @@ export function MediaPlaybackDialog({
     onOpenChange: (open: boolean) => void;
     source: MediaPlaybackSource;
 }) {
-    return (
-        <OGDialog open={open} onOpenChange={onOpenChange}>
-            <OGDialogContent
-                className="flex h-[80vh] w-[min(960px,92vw)] max-w-none flex-col overflow-hidden bg-[#f7f8fa] p-0"
-                disableScroll={false}
-            >
-                <header className="flex shrink-0 items-center gap-3 border-b bg-white px-4 py-3">
-                    {/* pr-8 keeps the name clear of the dialog's own close control. */}
-                    <h1
-                        className="min-w-0 flex-1 truncate pr-8 text-base font-medium text-[#1d2129]"
-                        title={source.name}
-                    >
-                        {source.name}
-                    </h1>
-                </header>
+    const localize = useLocalize();
+    const [panel, setPanel] = useState<HTMLElement | null>(null);
 
-                <main className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 p-4">
-                    {/* Remounted per source: a <video> handed a new src mid-playback
-                        keeps the previous frame until the new one decodes. */}
-                    {open ? <MediaPlaybackView key={source.url || source.filepath || source.name} {...source} /> : null}
-                </main>
-            </OGDialogContent>
-        </OGDialog>
+    // Resolved on open rather than on mount: the chip lives inside the panel, so
+    // by the time playback is asked for the ancestor is certainly there.
+    useEffect(() => {
+        setPanel(open ? document.querySelector<HTMLElement>('[data-workbench-panel]') : null);
+    }, [open]);
+
+    // Escape closes it, as it would a dialog.
+    useEffect(() => {
+        if (!open) {
+            return;
+        }
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                onOpenChange(false);
+            }
+        };
+        window.addEventListener('keydown', onKeyDown);
+        return () => window.removeEventListener('keydown', onKeyDown);
+    }, [open, onOpenChange]);
+
+    if (!open || !panel) {
+        return null;
+    }
+
+    return createPortal(
+        <div className="absolute inset-0 z-30 flex flex-col overflow-hidden rounded-xl bg-[#f7f8fa]">
+            <header className="flex shrink-0 items-center gap-3 border-b bg-white px-4 py-3">
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => onOpenChange(false)}
+                    aria-label={localize('com_ui_go_back')}
+                >
+                    <ArrowLeft className="size-5" />
+                </Button>
+                <h1
+                    className="min-w-0 flex-1 truncate text-base font-medium text-[#1d2129]"
+                    title={source.name}
+                >
+                    {source.name}
+                </h1>
+            </header>
+
+            <main className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 p-4">
+                {/* Keyed per source: a <video> handed a new src mid-playback keeps
+                    the previous frame until the new one decodes. */}
+                <MediaPlaybackView key={source.url || source.filepath || source.name} {...source} />
+            </main>
+        </div>,
+        panel,
     );
 }
 

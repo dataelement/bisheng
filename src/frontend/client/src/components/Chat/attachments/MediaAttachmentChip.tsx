@@ -153,6 +153,17 @@ export function MediaAttachmentChip({
                             {durationLabel && <span>{durationLabel}</span>}
                         </div>
                     )}
+
+                    {/* No cover yet — a video the user has only just picked, since
+                        the poster comes back from the server. The duration is
+                        known regardless (it is read off the local file), so it
+                        goes top-right, opposite the extension label, rather than
+                        over the file name at the bottom. */}
+                    {!coverUrl && durationLabel && (
+                        <span className="absolute right-3 top-3 z-[1] text-sm text-[#666]">
+                            {durationLabel}
+                        </span>
+                    )}
                 </UploadAttachmentThumbnailShell>
                 {playbackDialog}
             </>
@@ -197,6 +208,13 @@ export function MediaAttachmentChip({
                                 {displayName}
                             </span>
                         </>
+                    )}
+                    {/* Audio has no poster at all, so the duration always sits
+                        here — opposite the extension label, clear of the name. */}
+                    {durationLabel && (
+                        <span className="absolute right-3 top-3 z-[1] text-sm text-[#666]">
+                            {durationLabel}
+                        </span>
                     )}
                 </UploadAttachmentThumbnailShell>
                 {playbackDialog}
