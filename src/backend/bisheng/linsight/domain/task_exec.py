@@ -1664,14 +1664,9 @@ class LinsightWorkflowTask:
         final_files = await linsight_execute_utils.get_final_result_file(
             session_model=session_model, file_details=file_details, baseline_paths=self._baseline_files
         )
-        # Synthesize a fallback report when the model planned work, wrote a long
-        # direct answer, or answered substantively about uploaded sources — but
-        # never for a trivial greeting one-liner with no output/.
-        if not final_files and linsight_execute_utils.should_synthesize_direct_answer_report(
-            answer,
-            planned_tasks=planned_tasks,
-            baseline_paths=self._baseline_files,
-        ):
+        # Synthesize a fallback report ONLY when the model actually planned work but
+        # produced no deliverable — never for a trivial greeting/Q&A with no output.
+        if not final_files and planned_tasks:
             final_files = await linsight_execute_utils.build_fallback_report_file(
                 session_model=session_model, answer=answer, file_dir=self.file_dir
             )
