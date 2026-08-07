@@ -320,72 +320,73 @@ async def get_final_result_file(
 # Filename of the synthesized fallback report (design §9.3.2 output/ zone).
 FALLBACK_REPORT_NAME = "报告.md"
 
-# Direct-answer sessions that produced no ``output/`` file still deserve a
-# deliverable when the reply is substantive or the user uploaded sources to analyze.
-DIRECT_ANSWER_FALLBACK_MIN_CHARS = 200
-# Shorter Q&A about uploaded files (e.g. "这个视频说了啥") may still warrant a report.
-DIRECT_ANSWER_UPLOAD_QA_MIN_CHARS = 80
+
+# --- Phantom deliverable detection ------------------------------------------
+# A model sometimes signs off with "已保存为 详细分析报告.md" having never called
+# write_file. That is a MODEL defect, and the kernel prompt already forbids it
+# (agent_factory §3 and §风格). What the platform owes is evidence, not a repair:
+# an earlier revision of this module answered the false claim by creating the
+# file, which left the run looking healthy and made the defect unmeasurable.
+
+# Extensions the delivery contract can actually produce. Deliberately the same set
+# the client treats as a deliverable link (artifactUtils.DELIVERABLE_LINK_EXT) so a
+# link rendered "未生成" in the UI and a phantom logged here can never disagree.
+# .md alone would miss the likeliest claim of all: steps 3c/3d make export_docx /
+# export_pdf the closing action, so "已导出 报告.docx" is exactly where a run that
+# ran out of turns stops.
+_DELIVERABLE_EXTS = (".md", ".markdown", ".html", ".htm", ".docx", ".pdf")
+_DELIVERABLE_EXT_RE = "(?:md|markdown|html?|docx|pdf)"
+
+# Markdown link, captured as a PAIR: the visible text and the target. Only the
+# target carries the path, so only the target can decide the zone — see
+# _is_deliverable_claim.
+_CLAIMED_LINK_RE = re.compile(
+    rf"\[([^\]\n]+\.{_DELIVERABLE_EXT_RE})\]\(([^)\n]+)\)|\[[^\]\n]*\]\(([^)\n]+\.{_DELIVERABLE_EXT_RE})\)",
+    re.IGNORECASE,
+)
+# Prose claim. The save verb is load-bearing: without it a bare mention
+# ("整理成 总结.md 交给团队") is a plan, not a claim.
+_CLAIMED_PROSE_RE = re.compile(
+    r"(?:已(?:将)?(?:保存|写入|生成|导出)|保存至|保存为|导出为|内容已保存至)"
+    rf"\s*[「\"'`【\[]?((?:[^\s。，,；;\n「」\"'`】\]<>]+/)*[^\s。，,；;\n「」\"'`】\]<>/]+\.{_DELIVERABLE_EXT_RE})",
+    re.IGNORECASE,
+)
+# Bare output/ path anywhere in the answer.
+_CLAIMED_OUTPUT_PATH_RE = re.compile(
+    rf"(?<![\w/])({OUTPUT_ZONE}/[^\s。，,；;\n「」\"'`】\]<>()]+\.{_DELIVERABLE_EXT_RE})",
+    re.IGNORECASE,
+)
+
+# Anything with a URL scheme (http:, https:, //cdn…, data:) is a citation, not a
+# claim about this run's workspace.
+_URL_SCHEME_RE = re.compile(r"^(?:[a-z][a-z0-9+.-]*:)?//|^[a-z][a-z0-9+.-]*:", re.IGNORECASE)
 
 
-def has_uploaded_sources(baseline_paths: set[str] | None) -> bool:
-    """True when the task workspace already contained user uploads at run start."""
-    if not baseline_paths:
-        return False
-    marker = f"/{UPLOADS_ZONE}/"
-    return any(marker in p.replace("\\", "/") for p in baseline_paths)
+def _is_deliverable_claim(ref: str) -> bool:
+    """Whether a captured reference is a claim about THIS run's deliverables.
 
-
-def should_synthesize_direct_answer_report(
-    answer: str,
-    *,
-    planned_tasks: list,
-    baseline_paths: set[str] | None,
-) -> bool:
-    """Whether to materialise a fallback ``output/`` report for a direct answer.
-
-    Greetings and other trivial one-liners stay file-less. Planned work, long
-    answers, and substantive Q&A over uploaded sources get a backstop deliverable
-    so the result panel can preview/download even when the model skipped
-    ``write_file``.
+    A model may legitimately cite an external URL ending in .pdf, quote back an
+    uploaded source under uploads/, or point at an intermediate note in scratch/.
+    None of those are deliverables — select_deliverables excludes those zones
+    outright — so counting them as claims would make the detector fire on nearly
+    every turn that reads a user file, and the signal would be worthless inside a
+    week. Only a bare filename (which the delivery contract reads as output/) or
+    an explicit output/ path qualifies.
     """
-    if planned_tasks:
-        return True
-    text = (answer or "").strip()
-    if not text:
+    ref = (ref or "").strip().replace("\\", "/")
+    if not ref or _URL_SCHEME_RE.match(ref):
         return False
-    if len(text) >= DIRECT_ANSWER_FALLBACK_MIN_CHARS:
-        return True
-    return has_uploaded_sources(baseline_paths) and len(text) >= DIRECT_ANSWER_UPLOAD_QA_MIN_CHARS
-
-
-# Patterns for filenames the model *claims* to have written without calling write_file.
-_CLAIMED_MD_LINK_TEXT = re.compile(
-    r"\[(?:output/)?([^\]\n]+\.md)\]\((?:/?output/)?[^)\n]+\)",
-    re.IGNORECASE,
-)
-_CLAIMED_MD_LINK_TARGET = re.compile(
-    r"\]\((?:/?output/)?([^)\n]+\.md)\)",
-    re.IGNORECASE,
-)
-_CLAIMED_MD_PROSE = re.compile(
-    r"(?:已(?:将)?(?:保存|写入|生成)|保存至|保存为|内容已保存至)"
-    r"\s*[「\"'`【\[]?(?:output/)?([^\s。，,；;\n「」\"'`】\]\<>]+\.md)",
-    re.IGNORECASE,
-)
-_CLAIMED_MD_OUTPUT_PATH = re.compile(
-    r"(?:^|[\s(（【\[])(?:/?output/)([^\s\]<>]+\.md)",
-    re.IGNORECASE,
-)
+    return _zone_of(ref.lstrip("/")) in ("", OUTPUT_ZONE)
 
 
 def _sanitize_deliverable_filename(name: str | None) -> str | None:
-    """Keep only a safe markdown basename for a synthesized deliverable."""
+    """Keep only a safe deliverable basename from a model-supplied reference."""
     if not name:
         return None
     cleaned = os.path.basename(name.replace("\\", "/").strip())
     if not cleaned or cleaned in {".", ".."} or ".." in cleaned:
         return None
-    if not cleaned.lower().endswith(".md"):
+    if not cleaned.lower().endswith(_DELIVERABLE_EXTS):
         return None
     if len(cleaned) > 200:
         return None
@@ -393,191 +394,57 @@ def _sanitize_deliverable_filename(name: str | None) -> str | None:
 
 
 def extract_claimed_deliverable_filenames(answer: str) -> list[str]:
-    """All unique markdown basenames the model mentioned but did not write."""
+    """Deliverable filenames the answer claims to have produced, in order.
+
+    Detection only — nothing here materialises anything.
+    """
     text = (answer or "").strip()
     if not text:
         return []
+    refs: list[str] = []
+    for match in _CLAIMED_LINK_RE.finditer(text):
+        text_ref, target, target_only = match.group(1), match.group(2), match.group(3)
+        # The target decides the zone for both halves: a link written
+        # [briefing.md](uploads/briefing.md) has a bare-looking text but is a
+        # reference to the user's own upload, not a claim.
+        if text_ref is not None:
+            if _is_deliverable_claim(target):
+                refs.append(text_ref)
+        elif target_only is not None:
+            refs.append(target_only)
+    for pattern in (_CLAIMED_PROSE_RE, _CLAIMED_OUTPUT_PATH_RE):
+        refs.extend(match.group(1) for match in pattern.finditer(text))
+
     seen: set[str] = set()
     names: list[str] = []
-    for pattern in (
-        _CLAIMED_MD_LINK_TEXT,
-        _CLAIMED_MD_LINK_TARGET,
-        _CLAIMED_MD_PROSE,
-        _CLAIMED_MD_OUTPUT_PATH,
-    ):
-        for match in pattern.finditer(text):
-            safe = _sanitize_deliverable_filename(match.group(1))
-            if safe and safe not in seen:
-                seen.add(safe)
-                names.append(safe)
+    for ref in refs:
+        if not _is_deliverable_claim(ref):
+            continue
+        name = _sanitize_deliverable_filename(ref)
+        if not name or name.lower() in seen:
+            continue
+        seen.add(name.lower())
+        names.append(name)
     return names
 
 
-def extract_claimed_deliverable_filename(answer: str) -> str | None:
-    """Best-effort filename the model mentioned but did not actually write."""
-    names = extract_claimed_deliverable_filenames(answer)
-    return names[0] if names else None
+def detect_phantom_deliverables(answer: str, final_files: list[dict] | None) -> list[str]:
+    """Deliverables the answer claims exist that the run never actually produced.
 
+    Compared against the REAL file list rather than only running when it is empty,
+    so "wrote a.md, claimed a.md and b.md" is caught too — that is the common
+    shape, and the one a fabricating fallback could never have surfaced.
 
-_DELIVERABLES_BLOCK_RE = re.compile(
-    r"(?:\n---\n)?\n#{1,3}\s*(?:\*\*)?交付物(?:\*\*)?\s*[\s\S]*$",
-    re.IGNORECASE,
-)
-_INLINE_DELIVERABLE_LINE_RE = re.compile(
-    r"\n(?:\*\*)?交付物(?:\*\*)?[：:][^\n]*",
-    re.IGNORECASE,
-)
-
-
-def _strip_deliverables_block(text: str) -> str:
-    """Remove trailing deliverable link lists — they are chat UI, not file body."""
-    if not text:
-        return text
-    without_footer = _DELIVERABLES_BLOCK_RE.sub("", text)
-    return _INLINE_DELIVERABLE_LINE_RE.sub("", without_footer).strip()
-
-
-# A claimed filename is rarely one word: "音频转录_访谈.md", "brandx-视频解析.md".
-# Splitting the stem into latin runs and CJK runs gives the tokens that actually
-# carry topic, so a section can be matched on a PART of the name when the whole
-# name isn't quoted.
-_STEM_TOKEN_RE = re.compile(r"[A-Za-z]{2,}|\d{2,}|[一-鿿]{2,}")
-_CJK_RUN_RE = re.compile(r"[一-鿿]+")
-
-# Tokens too generic to discriminate between sections — every report contains them,
-# so scoring on them would pull an arbitrary section toward every filename.
-_STEM_TOKEN_STOPWORDS = frozenset(
-    {
-        "report",
-        "output",
-        "final",
-        "doc",
-        "docs",
-        "file",
-        "报告",
-        "文档",
-        "结果",
-        "内容",
-        "分析",
-    }
-)
-
-
-def _split_answer_sections(answer: str) -> list[str]:
-    return [s.strip() for s in re.split(r"\n(?=###\s)|\n---\n", answer) if s.strip()]
-
-
-def _split_section_heading(section: str) -> tuple[str, str]:
-    """(heading, body) for one section. The leading paragraph has no heading."""
-    head, _, rest = section.partition("\n")
-    if head.lstrip().startswith("#"):
-        return head, rest
-    return "", section
-
-
-def _stem_tokens(stem: str) -> list[str]:
-    """Topic-bearing tokens of a filename stem, lowercased and de-duplicated.
-
-    CJK runs are additionally emitted as sliding bigrams. Chinese writes no word
-    separator, so "音频转录" arrives as one run — without the bigrams it would
-    only ever match a section quoting all four characters together, and the
-    section that actually discusses 转录 would score zero.
+    Case-insensitive on purpose: a case-only mismatch is a resolver problem, not
+    evidence that the model lied, and a false accusation is worse than a miss in
+    something whose only job is diagnosis.
     """
-    seen: list[str] = []
-
-    def _add(token: str) -> None:
-        if token not in _STEM_TOKEN_STOPWORDS and token not in seen:
-            seen.append(token)
-
-    for token in _STEM_TOKEN_RE.findall(stem.lower()):
-        _add(token)
-        if len(token) > 2 and _CJK_RUN_RE.fullmatch(token):
-            for i in range(len(token) - 1):
-                _add(token[i : i + 2])
-    return seen
-
-
-def _section_relevance_score(section: str, filename: str) -> int:
-    """How strongly a direct-answer section belongs to a claimed deliverable.
-
-    Kept domain-free on purpose. The 3.0 original carried a hand-written keyword
-    table seeded from one customer demo (somna / 索娜 / 宣传片 / 乔布斯), which
-    scored nothing for anybody else and would have been dead weight the moment
-    that demo stopped mattering. Token overlap between the filename stem and the
-    section text expresses the same intent — 「音频转录.md」 still finds the
-    section that talks about 转录 — without naming anyone's data.
-    """
-    stem = os.path.splitext(filename)[0]
-    score = 0
-    if filename in section or f"output/{filename}" in section:
-        score += 100
-    if stem and stem in section:
-        score += 50
-
-    # A hit in the section's own heading outranks one in its prose. Without this
-    # the leading paragraph — which has no heading and tends to restate the whole
-    # ask ("综合摘要如下：") — ties with the section that is actually about the
-    # file, and the tie goes to whichever came first in the document.
-    heading, body = _split_section_heading(section)
-    heading_lower, body_lower = heading.lower(), body.lower()
-    for token in _stem_tokens(stem):
-        if token in heading_lower:
-            score += 15
-        elif token in body_lower:
-            score += 10
-    return score
-
-
-def _assign_answer_sections_to_deliverables(answer: str, filenames: list[str]) -> dict[str, str]:
-    """Map each claimed deliverable to the answer section that references it."""
-    if not filenames:
-        return {}
-    cleaned_answer = _strip_deliverables_block(answer)
-    if len(filenames) == 1:
-        return {filenames[0]: cleaned_answer}
-
-    sections = _split_answer_sections(cleaned_answer)
-    mapping: dict[str, str] = {}
-    used_sections: set[str] = set()
-
-    for filename in filenames:
-        stem = os.path.splitext(filename)[0]
-        hits = [
-            sec
-            for sec in sections
-            if sec not in used_sections and (filename in sec or f"output/{filename}" in sec or (stem and stem in sec))
-        ]
-        if hits:
-            mapping[filename] = _strip_deliverables_block(hits[0])
-            used_sections.add(hits[0])
-
-    remaining_files = [name for name in filenames if name not in mapping]
-    remaining_sections = [sec for sec in sections if sec not in used_sections]
-    for filename in remaining_files:
-        if remaining_sections:
-            best = max(remaining_sections, key=lambda sec: _section_relevance_score(sec, filename))
-            if _section_relevance_score(best, filename) > 0:
-                mapping[filename] = _strip_deliverables_block(best)
-                used_sections.add(best)
-                remaining_sections = [sec for sec in sections if sec not in used_sections]
-                continue
-        if any(key in filename for key in ("综合", "摘要", "总结")):
-            mapping[filename] = cleaned_answer.split("###", 1)[0].strip() or cleaned_answer
-        else:
-            mapping[filename] = cleaned_answer
-
-    if len(mapping) == len(filenames):
-        return mapping
-
-    unused_sections = [sec for sec in sections if sec not in used_sections]
-    for filename in filenames:
-        if filename in mapping:
-            continue
-        if unused_sections:
-            mapping[filename] = _strip_deliverables_block(unused_sections.pop(0))
-        else:
-            mapping[filename] = cleaned_answer
-    return mapping
+    claimed = extract_claimed_deliverable_filenames(answer)
+    if not claimed:
+        return []
+    real = {(f.get("file_name") or "").strip().lower() for f in (final_files or [])}
+    real.discard("")
+    return [name for name in claimed if name.lower() not in real]
 
 
 async def build_fallback_report_file(session_model: LinsightSessionVersion, answer: str, file_dir: str) -> list[dict]:
@@ -598,39 +465,30 @@ async def build_fallback_report_file(session_model: LinsightSessionVersion, answ
     try:
         output_dir = os.path.join(file_dir, "output")
         os.makedirs(output_dir, exist_ok=True)
-        report_names = extract_claimed_deliverable_filenames(answer) or [FALLBACK_REPORT_NAME]
-        content_by_name = _assign_answer_sections_to_deliverables(answer, report_names)
-        minio_client = await get_minio_storage()
-        final_files: list[dict] = []
-        for report_name in report_names:
-            body = _strip_deliverables_block(content_by_name.get(report_name, answer))
-            local_path = os.path.join(output_dir, report_name)
-            with open(local_path, "w", encoding="utf-8") as f:
-                f.write(body)
-            file_md5 = await util.async_calculate_md5(local_path)
+        local_path = os.path.join(output_dir, FALLBACK_REPORT_NAME)
+        with open(local_path, "w", encoding="utf-8") as f:
+            f.write(answer)
+        file_md5 = await util.async_calculate_md5(local_path)
 
-            # ASCII-only object key (file_id + ext): display names may be non-ASCII
-            # ("报告.md", "视频内容摘要.md") and break presigned signatures on some
-            # S3-compatible backends (Huawei OBS → 403). The Chinese name is kept as the
-            # display/download file_name.
-            file_id = uuid.uuid4().hex[:8]
-            ext = os.path.splitext(report_name)[1]
-            object_name = f"linsight/final_result/{session_model.id}/{file_id}{ext}"
-            await minio_client.put_object(bucket_name=minio_client.bucket, object_name=object_name, file=local_path)
-            final_files.append(
-                {
-                    "file_name": report_name,
-                    "file_path": local_path,
-                    "file_md5": file_md5,
-                    "file_id": file_id,
-                    "file_url": object_name,
-                }
-            )
-        logger.info(
-            "Fallback report synthesized from answer (no output/ deliverable was produced) names={}",
-            ",".join(report_names),
-        )
-        return final_files
+        # ASCII-only object key (file_id + ext): FALLBACK_REPORT_NAME is Chinese
+        # ("报告.md"), and a non-ASCII key breaks presigned signatures on some
+        # S3-compatible backends (Huawei OBS → 403). The Chinese name is kept as the
+        # display/download file_name.
+        file_id = uuid.uuid4().hex[:8]
+        ext = os.path.splitext(FALLBACK_REPORT_NAME)[1]
+        object_name = f"linsight/final_result/{session_model.id}/{file_id}{ext}"
+        minio_client = await get_minio_storage()
+        await minio_client.put_object(bucket_name=minio_client.bucket, object_name=object_name, file=local_path)
+        logger.info("Fallback report synthesized from answer (no output/ deliverable was produced)")
+        return [
+            {
+                "file_name": FALLBACK_REPORT_NAME,
+                "file_path": local_path,
+                "file_md5": file_md5,
+                "file_id": file_id,
+                "file_url": object_name,
+            }
+        ]
     except Exception as e:
         logger.warning(f"fallback report generation failed: {e}")
         return []

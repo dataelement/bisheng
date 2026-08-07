@@ -240,7 +240,18 @@ const ArtifactLinkAnchor = memo(({
   resolveArtifactLink,
   onArtifactPreview,
 }: ArtifactLinkAnchorProps) => {
+  const localize = useLocalize();
   const matched = useMemo(() => resolveArtifactLink(href), [href, resolveArtifactLink]);
+  const isPhantom = !matched && typeof href === 'string' && isDeliverableLinkHref(href);
+  // Once per link rather than per render (the component is memo'd but still
+  // re-renders with its parent): support needs to tell "the model claimed a file
+  // it never wrote" from "our resolver failed to match a real one".
+  useEffect(() => {
+    if (isPhantom) {
+      console.warn('[Linsight] deliverable link matches no artifact of this run:', href);
+    }
+  }, [isPhantom, href]);
+
   if (matched) {
     return (
       <button
@@ -252,12 +263,16 @@ const ArtifactLinkAnchor = memo(({
       </button>
     );
   }
-  // Phantom deliverable links (model claimed a file it never wrote) must not
-  // navigate the browser to a broken relative output/ path.
-  if (typeof href === 'string' && isDeliverableLinkHref(href)) {
+  // The model named a deliverable this run never produced. Don't navigate (the
+  // relative output/ path is not a route), and don't keep it blue either — a blue
+  // span that does nothing reads as a broken app rather than as a model that
+  // overstated itself. Muted + an explicit badge, the same treatment an
+  // unresolvable image ref gets below.
+  if (isPhantom) {
     return (
-      <span className="text-blue-600" title={href}>
+      <span className="text-gray-400" title={localize('com_linsight_deliverable_not_generated_hint')}>
         {children}
+        <span className="ml-1 text-xs">{localize('com_linsight_deliverable_not_generated')}</span>
       </span>
     );
   }

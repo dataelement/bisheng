@@ -131,9 +131,17 @@ describe('resolveDeliverableLink', () => {
         file_path: '/w/output/报告.md',
     });
 
-    it('falls back to the sole generic report when the model names a phantom file', () => {
-        expect(resolveDeliverableLink([report], '视频内容摘要.md')).toBe(report);
-        expect(resolveDeliverableLink([report], 'output/视频内容摘要.md')).toBe(report);
+    it('does not map a phantom name onto the sole generic report', () => {
+        // Used to return `report`: any unmatched name opened 报告.md, which served a
+        // file with other contents under another name and hid the fact that the
+        // claimed file was never written. The caller now renders this as 未生成.
+        expect(resolveDeliverableLink([report], '视频内容摘要.md')).toBeUndefined();
+        expect(resolveDeliverableLink([report], 'output/视频内容摘要.md')).toBeUndefined();
+    });
+
+    it('still resolves the sole deliverable when only the casing differs', () => {
+        const named = mkArtifact({ file_name: 'Report.md', file_path: '/w/output/Report.md' });
+        expect(resolveDeliverableLink([named], 'report.md')).toBe(named);
     });
 
     it('does not map a different phantom name to a specifically named sole deliverable', () => {
