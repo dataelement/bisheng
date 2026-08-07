@@ -68,7 +68,10 @@ from bisheng.worker.permission.department_transfer_cleanup import (
     scan_due_events,
 )
 from bisheng.worker.permission.retry_failed_tuples import retry_failed_tuples
-from bisheng.worker.points.tasks import refresh_points_rank_snapshots
+from bisheng.worker.points.tasks import (
+    refresh_points_rank_snapshots,
+    run_monthly_admin_rewards,
+)
 from bisheng.worker.portal_course.tasks import (
     process_portal_course_media_cleanup,
     scan_portal_course_media_cleanup,

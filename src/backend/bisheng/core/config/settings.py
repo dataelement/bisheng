@@ -395,6 +395,12 @@ class CeleryConf(BaseModel):
                 "schedule": crontab.from_string("5 * * * *"),
             }
 
+        # F070: 管理员月奖，每月 1 日 00:05 Asia/Shanghai（结算上月；受 monthly_reward_enabled 控制）。
+        if "points_monthly_admin_rewards" not in self.beat_schedule:
+            self.beat_schedule["points_monthly_admin_rewards"] = {
+                "task": "bisheng.worker.points.tasks.run_monthly_admin_rewards",
+                "schedule": crontab.from_string("5 0 1 * *"),
+            }
 
         # convert str to crontab
         for key, task_info in self.beat_schedule.items():
