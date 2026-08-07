@@ -1295,6 +1295,7 @@
     "10024": "TTS model {{model_name}} under {{server_name}} is offline",
     "10025": "Failed to initialize TTS: {{exception}}",
     "10026": "Speech synthesis failed. Please try again later",
+    "10027": "Speech recognition failed, please try again later. Reason: {{exception}}",
     "10030": "System configuration cannot be empty",
     "10031": "Invalid system configuration: {{exception}}",
     "10040": "Uploaded file cannot be empty",

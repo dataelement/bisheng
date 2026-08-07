@@ -6,6 +6,7 @@ import { cloneDeep } from "lodash-es";
 import { ChevronRight } from "lucide-react";
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import useFlowStore from "../../flowStore";
+import { acceptsImages } from "@/util/fileAcceptUtils";
 import NodeLogo from "../NodeLogo";
 
 // 全选 半选 未选
@@ -39,7 +40,7 @@ const getSpecialVar = ({ obj, group, onlyImg = false }) => {
                 const modes = Array.isArray(file_parse_mode)
                     ? file_parse_mode
                     : (file_parse_mode ? [file_parse_mode] : []);
-                const isImageCapable = file_type === 'all' || file_type === 'image';
+                const isImageCapable = acceptsImages(file_type);
                 const isParse = modes.includes('extract_text');
                 const isIngest = modes.includes('ingest_to_temp_kb');
 
@@ -258,8 +259,12 @@ const SelectVar = forwardRef(({
                     if (key === 'dialog_files_content' && !isExtract) {
                         return false;
                     }
-                    // Image variable only when the upload type allows images
-                    if (key === 'dialog_image_files' && acceptType === 'file') {
+                    // Image variable only when the upload type allows images.
+                    // Read through normalizeFileAccept: dialog_file_accept became a
+                    // multi-select and holds an array now, so comparing it to a bare
+                    // string never matched and left the image variable on offer for a
+                    // document-only node.
+                    if (key === 'dialog_image_files' && !acceptsImages(acceptType)) {
                         return false;
                     }
                     // dialog_file_paths is always exposed (path 恒暴露) — never filtered

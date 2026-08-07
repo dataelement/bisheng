@@ -83,32 +83,32 @@ class InitLlmError(BaseErrorCode):
 
 class NoAsrModelConfigError(BaseErrorCode):
     Code: int = 10014
-    Msg: str = 'Knowledge base ASR model is not configured'
+    Msg: str = "Knowledge base ASR model is not configured"
 
 
 class AsrModelConfigDeletedError(BaseErrorCode):
     Code: int = 10015
-    Msg: str = 'Knowledge base ASR model configuration has been deleted'
+    Msg: str = "Knowledge base ASR model configuration has been deleted"
 
 
 class AsrProviderDeletedError(BaseErrorCode):
     Code: int = 10016
-    Msg: str = 'Knowledge base ASR provider has been deleted'
+    Msg: str = "Knowledge base ASR provider has been deleted"
 
 
 class AsrModelTypeError(BaseErrorCode):
     Code: int = 10017
-    Msg: str = 'Only ASR-type models are supported for knowledge base media transcription, got {model_type}'
+    Msg: str = "Only ASR-type models are supported for knowledge base media transcription, got {model_type}"
 
 
 class AsrModelOfflineError(BaseErrorCode):
     Code: int = 10018
-    Msg: str = 'Knowledge base ASR model {model_name} under {server_name} is offline'
+    Msg: str = "Knowledge base ASR model {model_name} under {server_name} is offline"
 
 
 class InitAsrError(BaseErrorCode):
     Code: int = 10019
-    Msg: str = 'Failed to initialize knowledge base ASR. Error: {exception}'
+    Msg: str = "Failed to initialize knowledge base ASR. Error: {exception}"
 
 
 class NoTtsModelConfigError(BaseErrorCode):
@@ -148,6 +148,15 @@ class TtsSynthesisFailedError(BaseErrorCode):
     # instead of raising the global service-maintenance overlay for a TTS failure.
     Code: int = 10026
     Msg: str = "Speech synthesis failed, please try again later"
+
+
+class AsrTranscriptionFailedError(BaseErrorCode):
+    # Distinct business code (not HTTP 500) so the client shows a localized toast
+    # instead of raising the global service-maintenance overlay: a provider that
+    # rejects one recording is not the platform being down, and telling the user
+    # it is leaves them with nothing to act on. Mirrors TtsSynthesisFailedError.
+    Code: int = 10027
+    Msg: str = "Speech recognition failed, please try again later. Reason: {exception}"
 
 
 class SystemConfigEmptyError(BaseErrorCode):

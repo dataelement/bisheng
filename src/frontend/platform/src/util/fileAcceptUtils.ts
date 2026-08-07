@@ -42,6 +42,23 @@ export function normalizeFileAccept(
     return kinds;
 }
 
+/**
+ * Whether an upload-type setting includes images.
+ *
+ * The setting (`dialog_file_accept` on dialog input, `file_type` on a form item)
+ * became a multi-select and holds an array of kinds now, where it used to hold
+ * one of the strings 'all' / 'file' / 'image'. Comparing it to a bare string
+ * still compiles and still runs — it just never matches, which is how the image
+ * variable stayed on offer for a document-only node and stopped being named
+ * when the type was changed. Ask through here so both shapes answer the same.
+ *
+ * Media stays enabled while normalizing: this asks about images, and whether
+ * the deployment offers audio/video has no bearing on the answer.
+ */
+export function acceptsImages(value: unknown): boolean {
+    return normalizeFileAccept(value, { mediaEnabled: true }).includes('image');
+}
+
 /** Build `<input accept="">` value from normalized kinds. */
 export function fileAcceptToInputAccept(kinds: UploadFileKind[]): string {
     const parts: string[] = [];
