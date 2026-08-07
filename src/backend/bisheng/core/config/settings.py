@@ -388,6 +388,13 @@ class CeleryConf(BaseModel):
                 "schedule": crontab.from_string("0 2 * * *"),
             }
 
+        # F070: 积分排行快照，每小时第 5 分钟刷新（受 points.rank_cron_enabled 控制）。
+        if "points_refresh_rank_snapshots" not in self.beat_schedule:
+            self.beat_schedule["points_refresh_rank_snapshots"] = {
+                "task": "bisheng.worker.points.tasks.refresh_points_rank_snapshots",
+                "schedule": crontab.from_string("5 * * * *"),
+            }
+
 
         # convert str to crontab
         for key, task_info in self.beat_schedule.items():
