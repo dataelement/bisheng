@@ -25,11 +25,34 @@ function stripMarkdownMarkers(text: string): string {
 const FIRST_LINE_MAX = 24;
 // A structured-enumeration goal ("<lead-in>：1. … 2. …") — the lead-in instruction
 // IS the gist; the numbered list is detail. Cut at the first list ordinal so the
-// title reads "研究首尔美食探店攻略，请搜索并整理以下信息" instead of trailing a dangling
-// "1.". A list ordinal = a short number + "." / ")" at a list position (preceded by
-// a colon / comma / whitespace) whose marker is followed by whitespace/end — so a
-// decimal ("3.5", marker not space-followed) or a mid-token ("601138.SH") never trips it.
+// title reads "研究首尔美食探店攻略" instead of trailing a dangling "1.". A list ordinal
+// = a short number + "." / ")" at a list position (preceded by a colon / comma /
+// whitespace) whose marker is followed by whitespace/end — so a decimal ("3.5",
+// marker not space-followed) or a mid-token ("601138.SH") never trips it.
 const ENUM_ORDINAL = /[：:，,\s]\d{1,3}[.)](?=\s|$)/;
+
+// The last clause of an enumeration lead-in often exists ONLY to announce the list
+// ("…，包括：", "…，请搜索并整理以下信息："). Cutting the list strands it: the header
+// then reads as if it stopped mid-thought, and there is no ellipsis to hint at it
+// because the survivor fits the budget. Dropping that clause is what turns
+// "研究 Transformer 的核心架构与原理，包括" back into a complete title.
+const LIST_INTRODUCER_CN = /(包括|包含|涵盖|覆盖|如下|以下|下列|分别[是为]|例如|比如|譬如)/;
+const LIST_INTRODUCER_EN = /\b(including|includes?|such as|as follows|the following|namely)\b/i;
+// The last comma/semicolon-delimited clause, captured for the introducer test.
+const TRAILING_CLAUSE = /[，,;；]\s*([^，,;；]*)$/;
+
+/**
+ * Drop the trailing clause of an enumeration lead-in when its only job was to
+ * introduce the enumeration. Never returns empty: a lead-in that is ENTIRELY an
+ * introducer keeps its original text rather than vanishing.
+ */
+function dropTrailingIntroducer(lead: string): string {
+    const match = TRAILING_CLAUSE.exec(lead);
+    if (!match) return lead;
+    const last = match[1].trim();
+    if (!last || !(LIST_INTRODUCER_CN.test(last) || LIST_INTRODUCER_EN.test(last))) return lead;
+    return lead.slice(0, match.index).trim() || lead;
+}
 export function firstLine(text: string | null | undefined, max: number = FIRST_LINE_MAX): string {
     if (!text) return '';
     // strip markdown markers FIRST (so a goal/thinking that opens with `code`, **bold**,
@@ -44,7 +67,7 @@ export function firstLine(text: string | null | undefined, max: number = FIRST_L
     // through to normal truncation).
     const enumStart = flat.search(ENUM_ORDINAL);
     if (enumStart > 0) {
-        const lead = flat.slice(0, enumStart).replace(/[：:，,\s]+$/, '').trim();
+        const lead = dropTrailingIntroducer(flat.slice(0, enumStart).replace(/[：:，,\s]+$/, '').trim());
         if (lead) flat = lead;
     }
     // prefer the first sentence boundary when it lands inside the budget, otherwise
