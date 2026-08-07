@@ -66,16 +66,73 @@ class TaskAlreadyInProgressError(Exception):
     pass
 
 
-# Apology preamble prepended to a salvaged partial result (L3 tool-loop breaker /
-# L4 recursion ceiling). Followed by the model's intermediate analysis so the
-# user still gets meaningful output instead of a raw recursion error.
-_PARTIAL_RESULT_PREAMBLE = "抱歉，在生成报告文件时遇到问题，模型未能正确调用写入工具。以下是已完成的分析内容："
+# Apology preambles prepended to a salvaged partial result, keyed to the REAL
+# abort cause. Followed by the model's intermediate analysis so the user still
+# gets meaningful output instead of a raw error.
+#
+# Why two: a single "模型未能正确调用写入工具" string used to cover both causes,
+# and it was wrong every time it shipped — in the whole worker log the salvage
+# path fired only on GraphRecursionError, never once on the tool-loop breaker.
+# Blaming the write tool for a step-budget exhaustion sent everyone (users and
+# us) down the wrong diagnostic path.
+_PARTIAL_RESULT_PREAMBLE_TOOL_LOOP = (
+    "抱歉，在生成报告文件时遇到问题，模型未能正确调用写入工具。以下是已完成的分析内容："
+)
+_PARTIAL_RESULT_PREAMBLE_STEP_LIMIT = "抱歉，任务执行步骤数已达上限，未能完全收尾。以下是已完成的内容："
 
 # Friendly failure copy when the abort left nothing salvageable (no analysis text
 # and no captured answer) — still a classified friendly card, never a raw dump.
-_PARTIAL_NO_SALVAGE_MESSAGE = (
+# Same two-cause split as the preambles above.
+_PARTIAL_NO_SALVAGE_TOOL_LOOP = (
     "任务未能完成：模型多次未能正确调用工具，且没有可供返回的中间结果。建议简化任务范围，或更换能力更强的模型后重试。"
 )
+# Appended to a NORMAL (successful) result when the turn budget made the agent
+# wrap up ahead of schedule. Not an apology — the deliverables are real; the user
+# just deserves to know the content was closed out on the materials already
+# gathered rather than everything the task might have explored.
+_SOFT_LANDING_NOTE = "任务步骤已接近模型调用次数上限，内容基于现有材料收尾。"
+
+_PARTIAL_NO_SALVAGE_STEP_LIMIT = (
+    "任务未能完成：任务执行步骤数已达上限，且没有可供返回的中间结果。建议简化任务范围，或拆成多轮执行。"
+)
+
+
+# Super-steps consumed per model turn on the main graph. Measured, not guessed:
+# replaying a real run's Redis checkpoints yields the node cycle
+#   model -> LinsightToolLoopBreakerMain.after_model -> TodoListMiddleware.after_model -> tools
+# (213 checkpoints / 53 model turns, step counter ending at 211). Every middleware
+# that implements before_model/after_model becomes its OWN graph node — and its own
+# super-step — so adding one raises this number.
+_STEPS_PER_MODEL_TURN = 4
+# Headroom for the once-per-run before_agent nodes and the closing turn.
+_RECURSION_LIMIT_MARGIN = 20
+
+
+def _resolve_recursion_limit(linsight_conf) -> int:
+    """LangGraph ``recursion_limit`` for one task run — always above the turn budget.
+
+    ``max_steps`` is only a fuse; ``max_model_turns`` is the real gate, and the
+    soft-landing ladder can only work if the fuse blows LATER than the budget.
+    That is not automatic: ``get_linsight_conf()`` overlays values from the DB
+    (``initdb_config``), which on any pre-existing deployment still holds the old
+    ``max_steps: 200`` — far below the ~460 super-steps 115 turns needs. Raising
+    the floor here means existing installs get the new behaviour without a DBA
+    touching the config; an operator who deliberately raises ``max_steps`` still
+    wins, since we only ever take the max.
+    """
+    configured = int(getattr(linsight_conf, "max_steps", 500) or 0)
+    turn_limit = int(getattr(linsight_conf, "max_model_turns", 115) or 0)
+    floor = turn_limit * _STEPS_PER_MODEL_TURN + _RECURSION_LIMIT_MARGIN
+    if configured >= floor:
+        return configured
+    logger.warning(
+        "linsight max_steps={} is below the {} super-steps needed by max_model_turns={}; "
+        "raising the recursion ceiling so the turn budget stays the effective gate",
+        configured,
+        floor,
+        turn_limit,
+    )
+    return floor
 
 
 class LinsightWorkflowTask:
@@ -106,6 +163,17 @@ class LinsightWorkflowTask:
         self._partial_pending: bool = False
         self._partial_salvage: str | None = None
         self._partial_error: BaseException | None = None
+        # Whether the LAST AIMessage of the most recent values snapshot still had
+        # tool calls waiting to run. False means the model produced its closing
+        # answer, so an abort raised right after it (a recursion ceiling hit on
+        # the very step that would have ended the graph) must NOT be rendered as
+        # a failed/partial run. Defaults True (conservative: assume mid-loop).
+        self._last_ai_has_pending_tool_calls: bool = True
+        # Shared with the MAIN graph's resilience middleware, which sets
+        # ``soft_landing`` when the turn budget forced the run to wrap up early.
+        # The result then carries a one-line note so the user knows the content
+        # was closed out on the materials already gathered.
+        self._turn_budget: dict = {}
         self.file_dir: str | None = None
         # Files present in ``file_dir`` before the agent ran (set by
         # _init_file_directory); the deliverable scan diffs against it.
@@ -331,7 +399,7 @@ class LinsightWorkflowTask:
         mapper = StreamEventMapper(svid=session_model.id)
         config = {
             "configurable": {"thread_id": session_model.id},
-            "recursion_limit": getattr(linsight_conf, "max_steps", 200),
+            "recursion_limit": _resolve_recursion_limit(linsight_conf),
         }
         try:
             async for chunk in agent.astream(
@@ -342,9 +410,7 @@ class LinsightWorkflowTask:
             ):
                 mode, raw, namespace = self._unpack_stream_chunk(chunk)
                 if mode == "values" and not namespace and isinstance(raw, dict):
-                    text = self._extract_last_message_text(raw.get("messages"))
-                    if text:
-                        self._last_assistant_text = text
+                    self._capture_values_snapshot(raw)
                 for event in mapper.normalize(mode, raw, namespace=namespace):
                     await self._handle_event(agent, event, session_model)
         except (LinsightToolLoopError, GraphRecursionError) as e:
@@ -424,7 +490,7 @@ class LinsightWorkflowTask:
         mapper = StreamEventMapper(svid=session_model.id)
         config = {
             "configurable": {"thread_id": session_model.id},
-            "recursion_limit": getattr(linsight_conf, "max_steps", 200),
+            "recursion_limit": _resolve_recursion_limit(linsight_conf),
         }
         # Prepend the current-time block (same rationale as _build_agent_input):
         # per-task time awareness without busting the static system-prompt cache.
@@ -440,9 +506,7 @@ class LinsightWorkflowTask:
             ):
                 mode, raw, namespace = self._unpack_stream_chunk(chunk)
                 if mode == "values" and not namespace and isinstance(raw, dict):
-                    text = self._extract_last_message_text(raw.get("messages"))
-                    if text:
-                        self._last_assistant_text = text
+                    self._capture_values_snapshot(raw)
                 for event in mapper.normalize(mode, raw, namespace=namespace):
                     await self._handle_event(agent, event, session_model)
         except (LinsightToolLoopError, GraphRecursionError) as e:
@@ -717,6 +781,7 @@ class LinsightWorkflowTask:
             checkpointer=checkpointer,
             backend=backend,
             skills_present=bool(copied_skills),
+            turn_budget_sink=self._turn_budget,
         )
 
     async def _seed_workspace_from_previous(self, session_model: LinsightSessionVersion) -> None:
@@ -941,7 +1006,7 @@ class LinsightWorkflowTask:
             config = {
                 "configurable": {"thread_id": self.session_version_id},
                 # max_steps -> recursion_limit (design §2.5)
-                "recursion_limit": getattr(linsight_conf, "max_steps", 200),
+                "recursion_limit": _resolve_recursion_limit(linsight_conf),
             }
             # subgraphs=True so subagent (子图) events冒泡父流 with a namespace
             # prefix the mapper uses to归并 nested step cards (design §3.1/§3.7).
@@ -959,11 +1024,10 @@ class LinsightWorkflowTask:
                 mode, raw, namespace = self._unpack_stream_chunk(chunk)
                 # Capture the agent's latest top-level reply as a fallback
                 # answer for the no-TaskEnd case (e.g. a greeting the planner
-                # answers directly without spawning sub-tasks).
+                # answers directly without spawning sub-tasks), plus whether it
+                # left tool calls pending (drives the abort classification).
                 if mode == "values" and not namespace and isinstance(raw, dict):
-                    text = self._extract_last_message_text(raw.get("messages"))
-                    if text:
-                        self._last_assistant_text = text
+                    self._capture_values_snapshot(raw)
                 for event in mapper.normalize(mode, raw, namespace=namespace):
                     await self._handle_event(agent, event, session_model)
             return True
@@ -1215,6 +1279,41 @@ class LinsightWorkflowTask:
                 return text
         return None
 
+    @staticmethod
+    def _last_ai_pending_tool_calls(messages) -> bool:
+        """True when the LAST AIMessage still has tool calls waiting to run.
+
+        This is the "did the model actually finish?" test. It must look at the
+        *last* AIMessage — NOT the last one carrying text, which is what
+        ``_extract_last_message_text`` walks back to. A closing turn ends with a
+        text-only AIMessage (no tool_calls); a run cut off mid-loop ends with a
+        ToolMessage whose preceding AIMessage still carries the pending call. If
+        we reused the text-based walk, a tool-call-only AIMessage would be
+        skipped and an unfinished run would look finished.
+
+        Returns True (assume mid-loop) when no AIMessage exists at all, so the
+        conservative partial-salvage path stays the default.
+        """
+        for msg in reversed(messages or []):
+            if not LinsightWorkflowTask._is_assistant_message(msg):
+                continue
+            tool_calls = msg.get("tool_calls") if isinstance(msg, dict) else getattr(msg, "tool_calls", None)
+            return bool(tool_calls)
+        return True
+
+    def _capture_values_snapshot(self, raw: dict) -> None:
+        """Record what the agent's latest top-level ``values`` snapshot tells us.
+
+        Two things, both consumed only on the completion paths: the last
+        assistant text (fallback answer when no TaskEnd is emitted) and whether
+        that turn left tool calls pending (see ``_last_ai_pending_tool_calls``).
+        """
+        messages = raw.get("messages")
+        text = self._extract_last_message_text(messages)
+        if text:
+            self._last_assistant_text = text
+        self._last_ai_has_pending_tool_calls = self._last_ai_pending_tool_calls(messages)
+
     # ==================== Event processing ====================
 
     async def _handle_event(self, agent, event: BaseEvent, session_model: LinsightSessionVersion):
@@ -1421,11 +1520,25 @@ class LinsightWorkflowTask:
             logger.info("Task parked on user input; skipping completion handling")
             return
 
-        if self._partial_pending:
-            # L3/L4: aborted by the tool-loop breaker or recursion ceiling.
-            # Render the salvaged intermediate result instead of a raw failure.
+        if self._partial_pending and self._last_ai_has_pending_tool_calls:
+            # L3/L4: aborted by the tool-loop breaker or recursion ceiling while
+            # the model was still mid-loop. Render the salvaged intermediate
+            # result instead of a raw failure.
             await self._handle_task_partial(session_model)
             return
+
+        if self._partial_pending:
+            # The abort landed AFTER the model had already produced its closing
+            # answer: LangGraph's ``tick()`` checks ``step > stop`` BEFORE it
+            # computes whether any task remains, so the very step that would have
+            # ended the graph raises GraphRecursionError instead. Falling through
+            # here hands the run to the normal completion paths below (TaskEnd ->
+            # success, otherwise direct-answer), which collect the ``output/``
+            # deliverables the model did write. No apology: nothing failed.
+            logger.info(
+                "Step ceiling hit after the model had already closed out "
+                f"({type(self._partial_error).__name__}); completing normally"
+            )
 
         if not self._final_result:
             # No TaskEnd was emitted — the agent answered directly without
@@ -1459,6 +1572,7 @@ class LinsightWorkflowTask:
         if not answer:
             await self._handle_task_failure(session_model, "Task produced no result")
             return
+        answer = self._with_soft_landing_note(answer)
 
         session_model.status = SessionVersionStatusEnum.COMPLETED
         # A direct-answer completion with NO sub-tasks is a genuine trivial reply
@@ -1485,9 +1599,14 @@ class LinsightWorkflowTask:
         final_files = await linsight_execute_utils.get_final_result_file(
             session_model=session_model, file_details=file_details, baseline_paths=self._baseline_files
         )
-        # Synthesize a fallback report ONLY when the model actually planned work but
-        # produced no deliverable — never for a trivial greeting/Q&A with no output.
-        if not final_files and planned_tasks:
+        # Synthesize a fallback report when the model planned work, wrote a long
+        # direct answer, or answered substantively about uploaded sources — but
+        # never for a trivial greeting one-liner with no output/.
+        if not final_files and linsight_execute_utils.should_synthesize_direct_answer_report(
+            answer,
+            planned_tasks=planned_tasks,
+            baseline_paths=self._baseline_files,
+        ):
             final_files = await linsight_execute_utils.build_fallback_report_file(
                 session_model=session_model, answer=answer, file_dir=self.file_dir
             )
@@ -1506,6 +1625,16 @@ class LinsightWorkflowTask:
             MessageData(event_type=MessageEventType.FINAL_RESULT, data=session_model.model_dump())
         )
         logger.info(f"Task completed via direct-answer fallback ({len(final_files)} report files)")
+
+    def _with_soft_landing_note(self, answer: str) -> str:
+        """Append the wrap-up note when the turn budget cut the run short.
+
+        Applied to the NORMAL completion paths only: the partial-salvage path
+        already carries its own step-limit preamble.
+        """
+        if not self._turn_budget.get("soft_landing"):
+            return answer
+        return f"{answer}\n\n{_SOFT_LANDING_NOTE}" if answer else _SOFT_LANDING_NOTE
 
     def _stash_partial_abort(self, e: BaseException) -> None:
         """Record an L3/L4 abort so ``_handle_task_completion`` renders a salvaged
@@ -1529,12 +1658,18 @@ class LinsightWorkflowTask:
         ``_handle_direct_answer_completion``. If nothing is salvageable, degrade to
         a friendly classified failure (never a raw dump).
         """
+        # Copy follows the REAL cause: only the tool-loop breaker means "the model
+        # kept calling a tool wrong"; a recursion ceiling means the step budget ran
+        # out, which has nothing to do with the write tools.
+        is_tool_loop = isinstance(self._partial_error, LinsightToolLoopError)
         body = (self._partial_salvage or "").strip() or (self._last_assistant_text or "").strip()
         if not body:
-            await self._handle_task_failure(session_model, _PARTIAL_NO_SALVAGE_MESSAGE, exc=self._partial_error)
+            no_salvage = _PARTIAL_NO_SALVAGE_TOOL_LOOP if is_tool_loop else _PARTIAL_NO_SALVAGE_STEP_LIMIT
+            await self._handle_task_failure(session_model, no_salvage, exc=self._partial_error)
             return
 
-        answer = f"{_PARTIAL_RESULT_PREAMBLE}\n\n{body}"
+        preamble = _PARTIAL_RESULT_PREAMBLE_TOOL_LOOP if is_tool_loop else _PARTIAL_RESULT_PREAMBLE_STEP_LIMIT
+        answer = f"{preamble}\n\n{body}"
         session_model.status = SessionVersionStatusEnum.COMPLETED
         # Collect any output/ deliverable the model managed to write before looping;
         # otherwise synthesize a report from the salvaged answer (same backstop as
@@ -1575,6 +1710,7 @@ class LinsightWorkflowTask:
             # the last streamed assistant text so the answer field — and the
             # synthesized report below — still carry the real content.
             answer = (self._final_result.answer or "").strip() or (self._last_assistant_text or "").strip()
+            answer = self._with_soft_landing_note(answer)
 
             final_result_files = await linsight_execute_utils.get_final_result_file(
                 session_model=session_model, file_details=file_details, baseline_paths=self._baseline_files

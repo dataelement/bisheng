@@ -461,6 +461,7 @@
   "com_linsight_output_files": "已整理输出文件 {{0}}",
   "com_linsight_save_as": "另存为",
   "com_linsight_preview": "预览",
+  "com_linsight_opens_in_new_tab": "在新标签页打开",
   "com_linsight_workspace": "工作区",
   "com_linsight_workspace_empty": "暂无产物文件",
   "com_linsight_workspace_uploaded": "上传的文件",
@@ -2273,6 +2274,10 @@
   "com_approval_search_placeholder": "搜索申请人、场景或文件",
   "knowledge_qa_noVisibleContent": "未在你有权访问的内容中找到相关信息",
   "workstation": {
+    "toc": {
+      "label": "目录",
+      "open": "展开目录"
+    },
     "messageExport": {
       "entry": "导出",
       "exportAsWord": "导出为 Word",

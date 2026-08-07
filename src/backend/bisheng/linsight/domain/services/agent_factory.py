@@ -117,16 +117,17 @@ _LINSIGHT_SYSTEM_PROMPT_TEMPLATE_ZH = """你是深度研究任务智能体，负
 1. 【规划】调用 write_todos 写出有编号的待办清单（通常 3-6 项，含一个“产出交付物”收尾项）。
 
 2. 【执行】按清单逐项推进，选用合适工具：
-__KB_EXEC_LINE__
+__SKILL_EXEC_LINE____KB_EXEC_LINE__
    - 对“独立、需多轮检索/阅读、产出可蒸馏为一段摘要”的子任务，可用 task 委派给 "general-purpose" 子代理做隔离调研（它在独立上下文检索/阅读，只把蒸馏后的有出处摘要回传给你）；同一时刻并行委派不超过 2~3 个。
 __KB_DELEGATE_LINE__   更新待办时只翻转 status（pending/in_progress/completed），不改写已有文案，以保证任务标识稳定。
 
 3. 【产出交付物】按用户在澄清时选择的输出格式产出，markdown 是唯一规范源：
-   - 3a（始终）：write_file 写 output/<name>.md（结构化 markdown，其它格式由它派生）。图表/图片一律用 markdown 图片语法 `![说明](相对路径)` 引用（如 `![季节性走势](output/charts/x.png)`）；不要在 markdown 里写 `<div>`/`<img>`/`<table>` 等原始 HTML 标签——markdown 预览不渲染原始 HTML，会以纯文本泄漏。（HTML 交付物走 3b，不受此约束。）
+__SKILL_DELIVERABLE_LINE__   - 3a（始终）：write_file 写 output/<name>.md（结构化 markdown，其它格式由它派生）。图表/图片一律用 markdown 图片语法 `![说明](相对路径)` 引用（如 `![季节性走势](output/charts/x.png)`）；不要在 markdown 里写 `<div>`/`<img>`/`<table>` 等原始 HTML 标签——markdown 预览不渲染原始 HTML，会以纯文本泄漏。（HTML 交付物走 3b，不受此约束。）
    - 3b（仅当选了 html）：write_file 写 output/<name>.html（完整自包含 HTML，内联样式，无外部脚本/CDN）。
    - 3c（仅当选了 docx）：export_docx(source_path="output/<name>.md")，必须在 3a 之后。
    - 3d（仅当选了 pdf）：export_pdf(source_path="output/<name>.md")，必须在 3a 之后。
    最终交付物的撰写与拼装必须由你（主智能体）亲自完成，不得委派给子代理；中间产物写 scratch/。
+   **禁止**在未调用 write_file 写入 output/ 的情况下，在回复中声称「已保存为 xxx.md / 已写入 xxx」——用户界面只会展示真实写入 output/ 的交付物；口头提及的文件名无法被预览或下载。
 
 4. 【收尾】用 1-2 句话概括交付物的核心内容或结论（例如“已梳理出近一年的市场变化并给出三条关键建议”）；不要复述文件名、工作区路径（如 output/…）或“已完成”之类的状态字样——完成状态与可下载的文件由界面单独呈现，正文里无需重复。
 
@@ -165,6 +166,7 @@ __KB_TOOL_LINE__- write_file / read_file / edit_file / ls：工作区文件工�
 
 - 简洁，工具调用之间不加多余解释性文字。
 - 不要凭空编造事实；交付内容应基于检索到的资料/依据。
+- 凡需要在回复中引用可下载/可预览的交付物，必须先 write_file 写入 output/；不得仅口头描述文件名。
 """
 
 # search_knowledge_base is the ONLY tool whose presence is conditional on the
@@ -231,7 +233,11 @@ class _LanguageTailMiddleware(AgentMiddleware):
         return await handler(self._append(request))
 
 
-def _build_linsight_system_prompt(has_knowledge_base: bool) -> str:
+def _build_linsight_system_prompt(
+    has_knowledge_base: bool,
+    skills_present: bool = False,
+    has_code_interpreter: bool = False,
+) -> str:
     """Resolve the main system prompt, toggling search_knowledge_base mentions.
 
     When no KB / knowledge space is selected the tool is NOT injected (the empty
@@ -239,6 +245,27 @@ def _build_linsight_system_prompt(has_knowledge_base: bool) -> str:
     the model to call a tool that isn't bound — exactly the
     ``knowledge_id: Field required`` failure. Keep the prompt and the tool list in
     lockstep: the search_knowledge_base lines appear IFF the tool is present.
+
+    ``skills_present`` follows the same lockstep rule for SkillsMiddleware: the
+    skill lines are injected IFF at least one bundle was materialized (so the
+    "Available Skills" section actually exists in the system message). They exist
+    because the deliverable workflow below is an ORDER ("markdown 是唯一规范源"
+    -> 3c export_docx) that outranks the middleware's progressive disclosure:
+    observed in production, the model wrote the md, then emitted read_file(
+    "/skills/docx/SKILL.md") and export_docx in the SAME parallel tool-call batch
+    — the skill body arrived after the deliverable was already produced, so the
+    selected skill had zero effect on it. These lines force the read to happen
+    before producing anything, and hand the skill priority over 3b-3d.
+
+    ``has_code_interpreter`` hardens the deliverable rule. With the skill read
+    early but the default path merely deprioritised, a run was still observed
+    taking ``write_file`` + ``export_docx`` (the cheap path) instead of the
+    skill's script route. When a code executor IS bound, the fallback exports are
+    therefore forbidden outright rather than "deprioritised" — a prohibition the
+    model cannot satisfy by doing the easy thing. Without an executor the skill's
+    route is unrunnable, so the ban would be a dead end: the softer wording (fall
+    back to 3b-3d) is kept for that case. Same lockstep discipline as everywhere
+    else in this prompt — never forbid the only tool a run actually has.
     """
     if has_knowledge_base:
         exec_line = (
@@ -266,10 +293,50 @@ def _build_linsight_system_prompt(has_knowledge_base: bool) -> str:
         )
         tool_line = ""
         delegate_line = ""
+    if skills_present:
+        skill_exec_line = (
+            "   - 【技能优先】系统提示的 “Available Skills” 列出了本次可用的技能。动手前先对照每个技能的"
+            "描述判断是否与任务匹配；一旦匹配，**必须先** read_file 读完它的 SKILL.md，"
+            "**且必须传 limit=1000 一次读完**（默认 100 行、或自己改小成 200 都只能读到开头，"
+            "关键的生成步骤在后面），再按它的指引执行。"
+            "严禁一边产出一边读，更不要把“读 SKILL.md”和“产出交付物”放进同一轮并行工具调用"
+            "——技能内容返回时交付物已经生成，等于没读。\n"
+        )
+        if has_code_interpreter:
+            # Hard prohibition: the fallback exports are the cheap path the model
+            # keeps drifting back to, so remove them from the option set entirely
+            # (a code executor is bound, i.e. the skill's route IS runnable).
+            skill_deliverable_line = (
+                "   - 3z（优先级最高，覆盖下面的 3b-3d）：若上一步命中了与交付格式相关的技能"
+                "（如 docx / xlsx / pptx），交付物本体**必须**按该技能 SKILL.md 指定的做法生成——"
+                "用 bisheng_code_interpreter 执行技能给出的脚本/库（技能正文若用的语言本环境跑不了，"
+                "就用 Python 等价库实现同样的排版要求），把成品直接写进 output/。"
+                "此时**禁止**调用 export_docx / export_pdf 从 markdown 派生同一份交付物——"
+                "那条路径丢掉技能规定的全部排版细节，等于没用技能；"
+                "只有代码执行连续失败、确实产不出成品时，才允许退回 export_docx / export_pdf 兜底，"
+                "并在收尾里说明退化。3a 的 markdown 规范源仍然要写（界面预览依赖它）。"
+                "注意：代码执行器直接写在工作区本地目录，它生成的文件**不会**出现在 ls / glob 的结果里"
+                "（那两个工具读的是对象存储视图）。只要执行返回 exitcode 0 且日志显示写成功，"
+                "就视为交付物已产出，继续下一步；不要反复 ls / glob 找它，也不要因为“找不到”而重新生成。\n"
+            )
+        else:
+            # No executor bound: the skill's route cannot run, so banning the
+            # exports would leave no way to produce the file at all.
+            skill_deliverable_line = (
+                "   - 3z（优先级最高）：若上一步命中了与交付格式相关的技能（如 docx / xlsx / pptx），"
+                "交付物内容与排版尽量遵循该技能 SKILL.md 的要求。"
+                "本次没有可用的代码执行工具，技能里需要执行脚本的做法无法落地，"
+                "因此交付物仍按下面的 3b-3d 生成。3a 的 markdown 规范源仍然要写。\n"
+            )
+    else:
+        skill_exec_line = ""
+        skill_deliverable_line = ""
     return (
         _LINSIGHT_SYSTEM_PROMPT_TEMPLATE_ZH.replace("__KB_EXEC_LINE__", exec_line)
         .replace("__KB_TOOL_LINE__", tool_line)
         .replace("__KB_DELEGATE_LINE__", delegate_line)
+        .replace("__SKILL_EXEC_LINE__", skill_exec_line)
+        .replace("__SKILL_DELIVERABLE_LINE__", skill_deliverable_line)
     )
 
 
@@ -632,6 +699,7 @@ async def create_linsight_agent(
     backend=None,
     checkpointer=None,
     skills_present: bool = False,
+    turn_budget_sink: dict | None = None,
 ):
     """Build the deepagents-backed Linsight agent (design §2.1).
 
@@ -646,6 +714,9 @@ async def create_linsight_agent(
             FakeWorkspaceBackend is constructed (stub default).
         checkpointer: LangGraph checkpointer. When None an InMemorySaver is used
             (Wave1; real run injects PlainRedisCheckpointer, C5).
+        turn_budget_sink: mutable dict the MAIN graph's resilience middleware flags
+            when the run had to wrap up early on its turn budget, so the caller can
+            tell the user. Main graph only — a subagent landing early is internal.
 
     Returns:
         ``CompiledStateGraph`` to be driven by ``agent.astream(...)``.
@@ -685,7 +756,7 @@ async def create_linsight_agent(
     # client-side ValueError for video, and silent mojibake for docx/xlsx.
     has_code_interpreter = any(getattr(t, "name", None) == CODE_INTERPRETER_TOOL for t in tools)
     middlewares: list = [
-        build_resilience_middleware(linsight_conf, is_subagent=False),
+        build_resilience_middleware(linsight_conf, is_subagent=False, budget_sink=turn_budget_sink),
         build_tool_loop_breaker_middleware(linsight_conf, is_subagent=False),
         *build_binary_guards(has_code_interpreter),
     ]
@@ -703,7 +774,8 @@ async def create_linsight_agent(
     # in deepagents 0.6.8); the model reads the same /skills/<name>/SKILL.md paths back
     # through the WorkspaceBackend. The copy is the whitelist gate — no per-run
     # active_skills config is threaded.
-    if skills_present and file_dir:
+    skills_advertised = bool(skills_present and file_dir)
+    if skills_advertised:
         from deepagents.backends.filesystem import FilesystemBackend
         from deepagents.middleware.skills import SkillsMiddleware
 
@@ -772,10 +844,19 @@ async def create_linsight_agent(
     # model is never told to call a tool that isn't there (root cause of the
     # "knowledge_id: Field required" error when no KB is selected).
     has_kb = any(t.name == _KB_TOOL_NAME for t in tools)
+    # Same lockstep for skills: the skill-priority lines are advertised IFF
+    # SkillsMiddleware was actually attached above (``skills_advertised``), so the
+    # prompt never points at an "Available Skills" section that does not exist.
     return create_deep_agent(
         model=model,
         tools=[*tools, ask_user, *export_tools],
-        system_prompt=_build_linsight_system_prompt(has_kb),
+        system_prompt=_build_linsight_system_prompt(
+            has_kb,
+            skills_present=skills_advertised,
+            # Gates the hard "no export_docx/export_pdf" rule: only meaningful
+            # when the skill's script route can actually run in this session.
+            has_code_interpreter=has_code_interpreter,
+        ),
         middleware=middlewares,
         subagents=[researcher],
         backend=backend,

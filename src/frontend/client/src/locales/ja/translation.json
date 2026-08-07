@@ -458,6 +458,7 @@
   "com_linsight_output_files": "出力ファイル {{0}}",
   "com_linsight_save_as": "名前を付けて保存",
   "com_linsight_preview": "プレビュー",
+  "com_linsight_opens_in_new_tab": "新しいタブで開きます",
   "com_linsight_workspace": "ワークスペース",
   "com_linsight_workspace_empty": "出力ファイルはまだありません",
   "com_linsight_workspace_uploaded": "アップロードしたファイル",
@@ -2267,6 +2268,10 @@
   "com_approval_search_placeholder": "申請者・シナリオ・ファイルを検索",
   "knowledge_qa_noVisibleContent": "アクセス権限のあるリソースに該当する内容が見つかりませんでした。",
   "workstation": {
+    "toc": {
+      "label": "目次",
+      "open": "目次を表示"
+    },
     "messageExport": {
       "entry": "エクスポート",
       "exportAsWord": "Word でエクスポート",

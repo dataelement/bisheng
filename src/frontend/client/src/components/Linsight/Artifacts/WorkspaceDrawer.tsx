@@ -3,21 +3,24 @@
  * titled "Workspace" listing every output artifact; clicking a row switches
  * the right area to the file preview panel (handled by useArtifactsPanel).
  */
-import { Eye } from 'lucide-react';
 import FileIcon from '~/components/ui/icon/File';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '~/components/ui/Sheet';
 import { useLocalize } from '~/hooks';
 import { EmptyStateIllustration } from '~/components/illustrations';
 import { type ArtifactFile, getFileExtension } from './artifactUtils';
+import { NewTabHint } from './NewTabHint';
+import { SaveAsButton } from './SaveAsButton';
 
 interface WorkspaceDrawerProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     files: ArtifactFile[];
+    /** Session version — resolves an artifact's MinIO key for the download action. */
+    versionId: string;
     onPreview: (file: ArtifactFile) => void;
 }
 
-export function WorkspaceDrawer({ open, onOpenChange, files, onPreview }: WorkspaceDrawerProps) {
+export function WorkspaceDrawer({ open, onOpenChange, files, versionId, onPreview }: WorkspaceDrawerProps) {
     const localize = useLocalize();
 
     // Split into the two product zones: user-uploaded sources vs agent deliverables.
@@ -29,14 +32,18 @@ export function WorkspaceDrawer({ open, onOpenChange, files, onPreview }: Worksp
             key={file.file_id || file.file_url}
             role="button"
             tabIndex={0}
-            className="group flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-2.5 hover:bg-gray-50"
+            className="group/row flex cursor-pointer items-center gap-2.5 rounded-lg py-2.5 pl-2 pr-1.5 hover:bg-gray-50"
             onClick={() => onPreview(file)}
             onKeyDown={(e) => e.key === 'Enter' && onPreview(file)}
         >
             {/* eslint-disable-next-line @typescript-eslint/no-explicit-any -- FileIcon accepts more types than its union */}
             <FileIcon type={getFileExtension(file.file_name) as any} className="size-5 min-w-5" />
             <span className="min-w-0 flex-1 truncate text-sm text-gray-800">{file.file_name}</span>
-            <Eye size={15} className="invisible shrink-0 text-gray-400 group-hover:visible" />
+            <NewTabHint file={file} />
+            {/* The trailing gutter used to hold a hover-only eye that just repeated
+                the row's own click. It now holds the one action the row couldn't
+                otherwise reach: keeping the file. */}
+            <SaveAsButton file={file} versionId={versionId} />
         </div>
     );
 

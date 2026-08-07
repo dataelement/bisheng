@@ -281,6 +281,47 @@ class TestThinking:
 
         assert id_a != id_b
 
+    def test_newline_only_delta_keeps_the_segment_and_its_line_break(self, mapper: StreamEventMapper):
+        # A "\n" delta is the model's own line break. Dropping it (the old
+        # ``.strip()`` guard) both closed the segment — ``normalize`` keeps a segment
+        # open only while thinking chunks keep arriving — and lost the newline, since
+        # the frontend re-joins segments with "". Outline items then fused into
+        # "13. 未来展望14. 封底", whose "14. " reads as a sentence terminator; that is
+        # how the narration ended up showing the bare fragment "未来展望14.".
+        deltas = ["13. 未来展望", "\n", "14. 封底"]
+        steps = []
+        for d in deltas:
+            chunk = AIMessageChunk(content="", additional_kwargs={"reasoning_content": d})
+            steps.extend(e for e in mapper.normalize("messages", (chunk, {})) if isinstance(e, ExecStep))
+
+        assert len(steps) == 3, "the newline delta must produce a step of its own"
+        assert len({s.call_id for s in steps}) == 1, "it must stay in the SAME segment"
+        assert "".join(s.output or "" for s in steps) == "13. 未来展望\n14. 封底"
+
+    def test_whitespace_delta_does_not_open_a_new_segment(self, mapper: StreamEventMapper):
+        # Whitespace arriving with no segment open would mint a thinking row holding
+        # nothing but a line break. Forward it only into an already-open segment.
+        chunk = AIMessageChunk(content="", additional_kwargs={"reasoning_content": "\n"})
+        assert [e for e in mapper.normalize("messages", (chunk, {})) if isinstance(e, ExecStep)] == []
+
+    def test_thinking_call_ids_never_repeat_across_mapper_instances(self):
+        # A mapper is built fresh per RUN of the same session version: first execute,
+        # ask_user resume, follow-up turn — all three share one svid. ``thinking_seq``
+        # restarts at 0 each time, so without a per-instance discriminator the resumed
+        # run's first segment reused the first run's call_id. The persistence layer
+        # treats an identical call_id as the SAME segment and concatenates onto it,
+        # rewriting the row IN PLACE: reasoning from two runs welded into one block,
+        # new text spliced into the middle of old text, and history left ordered
+        # against its own timestamps.
+        def _first_thinking_id(m: StreamEventMapper) -> str:
+            chunk = AIMessageChunk(content="", additional_kwargs={"reasoning_content": "先想一下"})
+            return [e for e in m.normalize("messages", (chunk, {})) if isinstance(e, ExecStep)][0].call_id
+
+        run_1 = _first_thinking_id(StreamEventMapper(svid=SVID))
+        run_2 = _first_thinking_id(StreamEventMapper(svid=SVID))
+
+        assert run_1 != run_2, f"same svid must not reuse a thinking call_id across runs: {run_1}"
+
     def test_parallel_thinking_streams_do_not_interleave(self, mapper: StreamEventMapper):
         # Parallel subagents (subgraphs=True) interleave their token streams. With a
         # single shared thinking call_id every subagent's reasoning collapsed into one

@@ -473,6 +473,7 @@
   "com_linsight_output_files": "Output files {{0}}",
   "com_linsight_save_as": "Save as",
   "com_linsight_preview": "Preview",
+  "com_linsight_opens_in_new_tab": "Opens in a new tab",
   "com_linsight_workspace": "Workspace",
   "com_linsight_workspace_empty": "No output files yet",
   "com_linsight_workspace_uploaded": "Uploaded files",
@@ -2344,6 +2345,10 @@
   "com_approval_search_placeholder": "Search applicant, scenario or file",
   "knowledge_qa_noVisibleContent": "No relevant content found in resources accessible to you.",
   "workstation": {
+    "toc": {
+      "label": "Contents",
+      "open": "Show contents"
+    },
     "messageExport": {
       "entry": "Export",
       "exportAsWord": "Export as Word",

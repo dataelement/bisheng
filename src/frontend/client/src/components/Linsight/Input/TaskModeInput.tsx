@@ -43,7 +43,7 @@ import {
     type TaskModeToolItem,
 } from '~/store/linsight';
 import { cn, removeFocusRings } from '~/utils';
-import { ContextChips } from './ContextChips';
+import { ContextChips, type ContextAttachmentFile } from './ContextChips';
 import { KnowledgeSpaceSelect } from './KnowledgeSpaceSelect';
 import { ModelSelector } from './ModelSelector';
 import { PlusMenu } from './PlusMenu';
@@ -91,7 +91,7 @@ export function TaskModeInput({ conversationId = 'new', disabled = false, onFoll
     const [model, setModel] = useState('');
     const [confirmStopOpen, setConfirmStopOpen] = useState(false);
     const [fileUploading, setFileUploading] = useState(false);
-    const [uploadingFiles, setUploadingFiles] = useState<{ id: string; name: string }[]>([]);
+    const [attachmentFiles, setAttachmentFiles] = useState<ContextAttachmentFile[]>([]);
     const textAreaRef = useRef<HTMLTextAreaElement>(null);
     const inputFilesRef = useRef<any>(null);
 
@@ -190,7 +190,7 @@ export function TaskModeInput({ conversationId = 'new', disabled = false, onFoll
     const clearInputAfterSend = useCallback(() => {
         setText('');
         setContext((prev) => ({ ...prev, files: [] }));
-        setUploadingFiles([]);
+        setAttachmentFiles([]);
         inputFilesRef.current?.clear();
         if (textAreaRef.current) textAreaRef.current.style.height = 'auto';
     }, [setContext]);
@@ -237,7 +237,7 @@ export function TaskModeInput({ conversationId = 'new', disabled = false, onFoll
 
         setText('');
         setContext((prev) => ({ ...prev, files: [] }));
-        setUploadingFiles([]);
+        setAttachmentFiles([]);
         inputFilesRef.current?.clear();
         if (textAreaRef.current) textAreaRef.current.style.height = 'auto';
         if (!location.pathname.includes('/linsight')) navigate('/linsight/new');
@@ -293,10 +293,17 @@ export function TaskModeInput({ conversationId = 'new', disabled = false, onFoll
                     uploadMode="linsight"
                     size={(envConfig as any)?.uploaded_files_maximum_size || 50}
                     onFilesStateChange={(currentFiles: any[] = []) => {
-                        setUploadingFiles(
-                            currentFiles
-                                .filter((f) => f?.isUploading)
-                                .map((f) => ({ id: String(f.id), name: String(f.name || '') })),
+                        setAttachmentFiles(
+                            currentFiles.map((f) => ({
+                                clientId: String(f.id),
+                                name: String(f.name || ''),
+                                isUploading: !!f?.isUploading,
+                                file_id: f.fileId,
+                                filepath: f.filePath,
+                                filename: f.name,
+                                file_name: f.name,
+                                parsing_status: f.parsingStatus,
+                            })),
                         );
                     }}
                     onChange={(files: any) => {
@@ -309,8 +316,7 @@ export function TaskModeInput({ conversationId = 'new', disabled = false, onFoll
                 <ContextChips
                     skills={skills}
                     knowledge={context.knowledge}
-                    files={context.files}
-                    uploadingFiles={uploadingFiles}
+                    attachmentFiles={attachmentFiles}
                     onRemoveSkill={handleRemoveSkill}
                     onRemoveKnowledge={handleRemoveKnowledge}
                     onRemoveFile={handleRemoveFile}

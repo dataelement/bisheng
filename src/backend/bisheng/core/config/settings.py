@@ -366,7 +366,31 @@ class LinsightConf(BaseModel):
     tool_buffer: int = Field(
         default=100000, description="Maximum Tool Execution Historytoken, you need to summarize your history after"
     )
-    max_steps: int = Field(default=200, description="Maximum number of steps per task to prevent infinite loops")
+    max_steps: int = Field(
+        default=500,
+        description="LangGraph ``recursion_limit`` for a task graph — a runaway FUSE, not the business "
+        "budget. It counts SUPER-STEPS, not model turns: one model turn costs ~4 super-steps "
+        "(model -> tool-loop-breaker.after_model -> TodoList.after_model -> tools), so 500 ~= 115 turns. "
+        "To bound how long a task may work, tune ``max_model_turns`` instead; task_exec raises this "
+        "value automatically if it would trip before the turn budget.",
+    )
+    max_model_turns: int = Field(
+        default=115,
+        description="Turn budget for the MAIN graph: how many model calls one task run may make before "
+        "the soft-landing ladder forces it to wrap up. This is the real business gate (see max_steps). "
+        "Reset on every ask_user resume, since the middleware instance is rebuilt with the agent.",
+    )
+    max_model_turns_subagent: int = Field(
+        default=30,
+        description="Turn budget for the researcher subagent's own graph (counted separately — a subgraph "
+        "runs its own Pregel loop with its own step counter).",
+    )
+    soft_landing_turns: int = Field(
+        default=8,
+        description="How many turns before the budget runs out to start nudging the model to wrap up. "
+        "Within the last 2 turns the tool set is narrowed to the write/export tools; at zero the model "
+        "is offered no tools at all, so it must answer in text and the graph ends normally.",
+    )
     tool_failure_soft_limit: int = Field(
         default=3,
         description="L3 tool-loop breaker: after this many consecutive same-tool failures, append a "

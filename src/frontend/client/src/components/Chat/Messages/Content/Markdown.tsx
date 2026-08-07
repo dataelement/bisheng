@@ -46,6 +46,7 @@ import {
 } from './citationUtils';
 import type { CitationReferencesDesktopPayload } from './CitationReferencesDrawer';
 import CitationDocumentPreviewDrawer, { type CitationDocumentPreviewState } from './CitationDocumentPreviewDrawer';
+import { isDeliverableLinkHref } from '~/components/Linsight/Artifacts/artifactUtils';
 import { CitationSourceIcon } from './CitationSourceIcon';
 import MermaidBlock from './Mermaid'
 import Echarts from './Echarts'
@@ -223,6 +224,44 @@ export const a: React.ElementType = memo(({ href, children }: TAnchorProps) => {
       {children}
     </a>
   );
+});
+
+type ArtifactLinkResolver = (href: string) => unknown | undefined;
+
+type ArtifactLinkAnchorProps = TAnchorProps & {
+  resolveArtifactLink: ArtifactLinkResolver;
+  onArtifactPreview: (file: unknown) => void;
+};
+
+/** Linsight deliverable preview: map markdown file links to workspace artifacts. */
+const ArtifactLinkAnchor = memo(({
+  href,
+  children,
+  resolveArtifactLink,
+  onArtifactPreview,
+}: ArtifactLinkAnchorProps) => {
+  const matched = useMemo(() => resolveArtifactLink(href), [href, resolveArtifactLink]);
+  if (matched) {
+    return (
+      <button
+        type="button"
+        className="text-blue-600 underline transition-colors hover:text-blue-700"
+        onClick={() => onArtifactPreview(matched)}
+      >
+        {children}
+      </button>
+    );
+  }
+  // Phantom deliverable links (model claimed a file it never wrote) must not
+  // navigate the browser to a broken relative output/ path.
+  if (typeof href === 'string' && isDeliverableLinkHref(href)) {
+    return (
+      <span className="text-blue-600" title={href}>
+        {children}
+      </span>
+    );
+  }
+  return React.createElement(a, { href, children });
 });
 
 type TParagraphProps = {
@@ -778,6 +817,8 @@ const Markdown = memo(({
   messageId,
   onOpenCitationPanel,
   resolveImageSrc,
+  resolveArtifactLink,
+  onArtifactPreview,
 }: TContentProps & {
   webContent: any;
   /**
@@ -787,6 +828,10 @@ const Markdown = memo(({
    * default <img> (chat bubbles — unchanged).
    */
   resolveImageSrc?: (src: string) => Promise<string | null>;
+  /** Map markdown file links (e.g. output/report.md) to a workspace artifact. */
+  resolveArtifactLink?: ArtifactLinkResolver;
+  /** Open the matched artifact in the Linsight preview panel. */
+  onArtifactPreview?: (file: unknown) => void;
 }) => {
   const LaTeXParsing = useRecoilValue<boolean>(store.LaTeXParsing);
   const isMobileLayout = usePrefersMobileLayout();
@@ -1054,7 +1099,17 @@ const Markdown = memo(({
           components={
             {
               code,
-              a,
+              a: resolveArtifactLink && onArtifactPreview
+                ? ({ href, children }: TAnchorProps) => (
+                    <ArtifactLinkAnchor
+                      href={href}
+                      resolveArtifactLink={resolveArtifactLink}
+                      onArtifactPreview={onArtifactPreview}
+                    >
+                      {children}
+                    </ArtifactLinkAnchor>
+                  )
+                : a,
               p,
               artifact: Artifact,
               // Resolve relative image refs (Linsight deliverable preview) only when
