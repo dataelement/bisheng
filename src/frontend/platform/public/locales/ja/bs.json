@@ -261,6 +261,63 @@
           "folderDynamicCallerMainDepartmentName": "動的(バインドユーザー主所属部署名)"
         }
       },
+      "automotiveSheetIntro": {
+        "title": "自動車板紹介同期",
+        "description": "毎日 00:00 に上流 API から PDF を取得し、関連 Token のファイル同期ルールに従って固定ファイル名で上書き同期します。手動テスト同期も可能です。",
+        "loading": "自動車板紹介同期設定を読み込み中…",
+        "summaryEnabled": "有効",
+        "summaryDisabled": "無効",
+        "enabled": "定期同期を有効化",
+        "apiUrl": "API URL",
+        "apiUrlPlaceholder": "https://example.com/automotive-sheet-intro.pdf",
+        "apiMethod": "HTTP メソッド",
+        "developerToken": "関連 Token",
+        "selectToken": "Token を選択",
+        "selectTokenFirst": "先に関連 Token を選択してください。同期はその Token のファイル同期ルールを使用します。",
+        "tokenFileSyncRule": "Token ファイル同期ルール",
+        "tokenFileSyncRuleHint": "対象スペース、ファイル種別、業務ドメイン、対象フォルダーは選択した Token の設定から取得されます。下の Token 一覧で編集してください。",
+        "tokenFileSyncRuleMissing": "選択した Token にファイル同期ルールが未設定です。下の Token 一覧で編集・保存してください。",
+        "noTokensAvailable": "利用可能な Token がありません。下の一覧で Token を作成・有効化してください。",
+        "fileName": "固定ファイル名",
+        "testSync": "テスト同期",
+        "testSyncRunning": "テスト実行中…",
+        "testRunning": "テスト同期を実行中です。しばらくお待ちください…",
+        "testFinished": "テスト実行が完了しました。状態：{{status}}",
+        "testFinishedWithDetail": "テスト完了。状態：{{status}}。理由：{{detail}}",
+        "refreshRuns": "更新",
+        "refreshingRuns": "更新中…",
+        "optionsRequiredError": "対象設定オプションの読み込みに失敗しました。保存前にもう一度お試しください。",
+        "invalidError": "自動車板紹介同期設定の「{{field}}」が無効または未入力です。",
+        "recentRuns": "最近の実行（全 {{total}} 件）",
+        "noRuns": "実行履歴はありません",
+        "errorFields": {
+          "enabled": "有効化スイッチ",
+          "apiUrl": "API URL",
+          "apiMethod": "HTTP メソッド",
+          "developerToken": "関連 Token",
+          "fileName": "固定ファイル名",
+          "tokenFileSyncRule": "Token ファイル同期ルール"
+        },
+        "triggerTypes": {
+          "manual": "手動",
+          "scheduled": "定期"
+        },
+        "statuses": {
+          "running": "実行中",
+          "success": "成功",
+          "failed": "失敗",
+          "skipped": "スキップ"
+        },
+        "runColumns": {
+          "id": "ID",
+          "trigger": "トリガー",
+          "status": "状態",
+          "fileName": "ファイル名",
+          "startTime": "開始時刻",
+          "duration": "所要時間",
+          "error": "エラー"
+        }
+      },
       "saveConfig": "設定を保存",
       "search": "検索",
       "create": "Token を作成",

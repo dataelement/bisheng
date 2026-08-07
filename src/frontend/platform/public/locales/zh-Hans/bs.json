@@ -262,6 +262,63 @@
           "folderDynamicCallerMainDepartmentName": "动态(绑定用户主责部门名)"
         }
       },
+      "automotiveSheetIntro": {
+        "title": "汽车板介绍同步",
+        "description": "每天 00:00 自动从上游接口拉取 PDF 并覆盖同步到关联 Token 的文件同步目标；也可手动测试同步。",
+        "loading": "正在加载汽车板介绍同步配置…",
+        "summaryEnabled": "已启用",
+        "summaryDisabled": "未启用",
+        "enabled": "启用定时同步",
+        "apiUrl": "接口地址",
+        "apiUrlPlaceholder": "https://example.com/automotive-sheet-intro.pdf",
+        "apiMethod": "HTTP 方法",
+        "developerToken": "关联 Token",
+        "selectToken": "请选择 Token",
+        "selectTokenFirst": "请先选择关联 Token，同步将使用该 Token 的文件同步规则。",
+        "tokenFileSyncRule": "Token 文件同步规则",
+        "tokenFileSyncRuleHint": "目标知识库、文件类型、业务域与目标目录均来自所选 Token 的配置，请在下方的 Token 列表中编辑。",
+        "tokenFileSyncRuleMissing": "所选 Token 尚未配置文件同步规则，请先在下方 Token 列表中编辑并保存。",
+        "noTokensAvailable": "暂无可用 Token，请先在下方列表创建并启用 Token。",
+        "fileName": "固定文件名",
+        "testSync": "测试同步",
+        "testSyncRunning": "测试执行中…",
+        "testRunning": "正在执行测试同步，请稍候…",
+        "testFinished": "测试任务已完成，状态：{{status}}",
+        "testFinishedWithDetail": "测试完成，状态：{{status}}。原因：{{detail}}",
+        "refreshRuns": "刷新",
+        "refreshingRuns": "刷新中…",
+        "optionsRequiredError": "目标配置选项尚未成功加载，请重试后再保存。",
+        "invalidError": "汽车板介绍同步配置中的“{{field}}”无效或未填写，请检查后重试。",
+        "recentRuns": "最近执行（共 {{total}} 条）",
+        "noRuns": "暂无执行记录",
+        "errorFields": {
+          "enabled": "启用开关",
+          "apiUrl": "接口地址",
+          "apiMethod": "HTTP 方法",
+          "developerToken": "关联 Token",
+          "fileName": "固定文件名",
+          "tokenFileSyncRule": "Token 文件同步规则"
+        },
+        "triggerTypes": {
+          "manual": "手动",
+          "scheduled": "定时"
+        },
+        "statuses": {
+          "running": "执行中",
+          "success": "成功",
+          "failed": "失败",
+          "skipped": "跳过"
+        },
+        "runColumns": {
+          "id": "ID",
+          "trigger": "触发方式",
+          "status": "状态",
+          "fileName": "文件名",
+          "startTime": "开始时间",
+          "duration": "耗时",
+          "error": "错误信息"
+        }
+      },
       "saveConfig": "保存配置",
       "search": "搜索",
       "create": "新建 Token",

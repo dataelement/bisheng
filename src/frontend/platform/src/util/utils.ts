@@ -94,13 +94,23 @@ export function formatDate(date: Date, format: string): string {
     return format.replace(/yyyy|MM|dd|HH|mm|ss/g, (match) => replacements[match])
 }
 
+// Backend stores UTC datetimes without a timezone suffix; treat those as UTC before display.
+export function normalizeServerUtcDateTime(iso: string): string {
+    const trimmed = iso.trim()
+    if (!trimmed) return trimmed
+    if (/[zZ]$/.test(trimmed) || /[+-]\d{2}:\d{2}$/.test(trimmed)) {
+        return trimmed
+    }
+    return `${trimmed}Z`
+}
+
 // Parse an ISO-8601 string and render via toLocaleString; returns "-" for null,
 // original input for unparseable strings. Used by admin tables that show
 // backend-provided timestamps without a fixed format spec.
 export function formatIsoDateTime(iso: string | null | undefined): string {
     if (!iso) return "-"
     try {
-        const d = new Date(iso)
+        const d = new Date(normalizeServerUtcDateTime(iso))
         if (Number.isNaN(d.getTime())) return iso
         return d.toLocaleString()
     } catch {
