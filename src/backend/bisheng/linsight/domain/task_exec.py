@@ -1610,6 +1610,7 @@ class LinsightWorkflowTask:
             "final_files": final_files,
             "all_from_session_files": [],
         }
+        self._flag_phantom_deliverables(session_model, answer, final_files)
         await self._state_manager.set_session_version_info(session_model)
         # F035 problem 2: finalize the session pseudo task carrying any
         # planning/direct-answer steps so it isn't left stuck in_progress.
@@ -1620,6 +1621,26 @@ class LinsightWorkflowTask:
             MessageData(event_type=MessageEventType.FINAL_RESULT, data=session_model.model_dump())
         )
         logger.info(f"Task completed via direct-answer fallback ({len(final_files)} report files)")
+
+    def _flag_phantom_deliverables(self, session_model, answer: str, final_files: list[dict]) -> None:
+        """Record deliverables the answer claims but the run never produced.
+
+        Diagnosis only — deliberately does NOT repair. The prompt already forbids
+        claiming a save without write_file, so a phantom means the model ignored
+        it, and that is worth measuring: an earlier revision answered the false
+        claim by creating the file, which made the run look healthy and left no
+        trace of how often it happens.
+        """
+        phantom = linsight_execute_utils.detect_phantom_deliverables(answer, final_files)
+        if not phantom:
+            return
+        logger.warning(
+            "[linsight-phantom-deliverable] session={} answer claims {} file(s) the run never wrote: {}",
+            session_model.id,
+            len(phantom),
+            ", ".join(phantom),
+        )
+        session_model.output_result["phantom_deliverables"] = phantom
 
     def _with_soft_landing_note(self, answer: str) -> str:
         """Append the wrap-up note when the turn budget cut the run short.
@@ -1685,6 +1706,7 @@ class LinsightWorkflowTask:
             # even though it renders as a normal result (no frontend change required).
             "partial": True,
         }
+        self._flag_phantom_deliverables(session_model, answer, final_files)
         await self._state_manager.set_session_version_info(session_model)
         await self._complete_session_pseudo_task(session_model)
         await linsight_execute_utils.persist_task_turn_message(session_model)
@@ -1729,6 +1751,7 @@ class LinsightWorkflowTask:
                 "final_files": final_result_files,
                 "all_from_session_files": all_from_session_files,
             }
+            self._flag_phantom_deliverables(session_model, answer, final_result_files)
 
             # Save session information and push messages
             await self._state_manager.set_session_version_info(session_model)
