@@ -175,6 +175,40 @@ export function matchArtifactByRelPath(
     return fileList.find((f) => norm(f.file_name) === base);
 }
 
+const DELIVERABLE_LINK_EXT = /\.(md|markdown|html|htm|docx|pdf)$/i;
+
+/** True when href looks like an internal workspace deliverable reference. */
+export function isDeliverableLinkHref(href: string): boolean {
+    if (!href || isAbsoluteImageSrc(href)) return false;
+    const norm = decodeSafe(href).replace(/\\/g, '/').replace(/^\.?\//, '').replace(/^output\//, '');
+    return DELIVERABLE_LINK_EXT.test(norm);
+}
+
+/**
+ * Resolve a markdown link in the task result answer to a previewable artifact.
+ * Falls back to the sole deliverable when the model names a file it never wrote.
+ */
+export function resolveDeliverableLink(
+    fileList: ArtifactFile[] | undefined,
+    href: string,
+): ArtifactFile | undefined {
+    const matched = matchArtifactByRelPath(fileList, href);
+    if (matched) return matched;
+    if (!fileList?.length || !isDeliverableLinkHref(href)) return undefined;
+    const norm = decodeSafe(href).replace(/\\/g, '/').replace(/^\.?\//, '').replace(/^output\//, '');
+    if (fileList.length === 1) {
+        const sole = fileList[0];
+        const hrefBase = (norm.split('/').pop() ?? norm).toLowerCase();
+        const fileBase = sole.file_name.toLowerCase();
+        // Only map a mismatched link to the sole deliverable when it is the generic
+        // fallback name; otherwise two claimed filenames would both open the same file.
+        if (hrefBase === fileBase || fileBase === '报告.md') {
+            return sole;
+        }
+    }
+    return undefined;
+}
+
 /**
  * Remove empty raw-HTML block placeholders (e.g. the styled `<div ...></div>`
  * comment/figure boxes some report templates emit) from a markdown deliverable

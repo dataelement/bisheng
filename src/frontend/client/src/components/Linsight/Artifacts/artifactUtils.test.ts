@@ -2,8 +2,10 @@ import {
     type ArtifactFile,
     applyHtmlViewerTabIdentity,
     isAbsoluteImageSrc,
+    isDeliverableLinkHref,
     matchArtifactByRelPath,
     openHtmlArtifactViewer,
+    resolveDeliverableLink,
     stripEmptyHtmlPlaceholders,
     stripWorkspacePaths,
 } from './artifactUtils';
@@ -119,6 +121,49 @@ describe('matchArtifactByRelPath', () => {
         expect(matchArtifactByRelPath([], 'charts/ch1_brazil.png')).toBeUndefined();
         expect(matchArtifactByRelPath(undefined, 'charts/ch1_brazil.png')).toBeUndefined();
         expect(matchArtifactByRelPath(list, '')).toBeUndefined();
+    });
+});
+
+describe('resolveDeliverableLink', () => {
+    const report = mkArtifact({
+        file_name: '报告.md',
+        file_path: '/w/output/报告.md',
+    });
+
+    it('falls back to the sole generic report when the model names a phantom file', () => {
+        expect(resolveDeliverableLink([report], '视频内容摘要.md')).toBe(report);
+        expect(resolveDeliverableLink([report], 'output/视频内容摘要.md')).toBe(report);
+    });
+
+    it('does not map a different phantom name to a specifically named sole deliverable', () => {
+        const audio = mkArtifact({
+            file_name: '音频转录结果.md',
+            file_path: '/w/output/音频转录结果.md',
+        });
+        expect(resolveDeliverableLink([audio], '视频内容摘要.md')).toBeUndefined();
+        expect(resolveDeliverableLink([audio], '音频转录结果.md')).toBe(audio);
+    });
+
+    it('prefers an exact match when the filename exists', () => {
+        const named = mkArtifact({
+            file_name: '视频内容摘要.md',
+            file_path: '/w/output/视频内容摘要.md',
+        });
+        expect(resolveDeliverableLink([named], '视频内容摘要.md')).toBe(named);
+    });
+
+    it('does not guess when several deliverables exist', () => {
+        const other = mkArtifact({ file_name: 'other.md', file_path: '/w/output/other.md' });
+        expect(resolveDeliverableLink([report, other], 'phantom.md')).toBeUndefined();
+    });
+});
+
+describe('isDeliverableLinkHref', () => {
+    it('detects workspace deliverable paths', () => {
+        expect(isDeliverableLinkHref('output/详细分析报告.md')).toBe(true);
+        expect(isDeliverableLinkHref('详细分析报告.md')).toBe(true);
+        expect(isDeliverableLinkHref('https://example.com/x.md')).toBe(false);
+        expect(isDeliverableLinkHref('charts/x.png')).toBe(false);
     });
 });
 
