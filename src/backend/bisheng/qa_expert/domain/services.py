@@ -486,6 +486,28 @@ class QuestionService:
         # 发送采纳通知
         await self._send_adoption_notification(question, answer)
 
+        # 积分旁路：给回答者发 G4；expert.user_id 才是平台用户 ID。
+        try:
+            from bisheng.core.context.tenant import DEFAULT_TENANT_ID, get_current_tenant_id
+            from bisheng.points.domain.services.points_award_hooks import notify_answer_adopted
+
+            answerer_id = None
+            if getattr(answer, "expert_id", None):
+                expert = await self.expert_repo.get_by_id(answer.expert_id)
+                if expert is not None and getattr(expert, "user_id", None) is not None:
+                    answerer_id = int(expert.user_id)
+            if answerer_id:
+                await notify_answer_adopted(
+                    tenant_id=int(get_current_tenant_id() or DEFAULT_TENANT_ID),
+                    answer_id=int(answer_id),
+                    answerer_id=answerer_id,
+                )
+        except Exception:
+            logger.exception(
+                "points.award.hooks adopt notify failed answer_id=%s",
+                answer_id,
+            )
+
         logger.info(f"Answer {answer_id} adopted for question {question_id}")
         return question
 

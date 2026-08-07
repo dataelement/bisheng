@@ -388,6 +388,7 @@ class CeleryConf(BaseModel):
                 "schedule": crontab.from_string("0 2 * * *"),
             }
 
+
         # convert str to crontab
         for key, task_info in self.beat_schedule.items():
             if isinstance(task_info["schedule"], str):
@@ -891,6 +892,16 @@ class PortalHotSearchConf(BaseModel):
     llm_sample_max_chars: int = Field(default=2000, description="Max chars of LLM I/O persisted for diagnostics")
 
 
+class PointsConf(BaseModel):
+    """积分自动发放与旁路任务开关。"""
+
+    enabled: bool = Field(default=False, description="是否允许业务事件自动发放积分")
+    notify_enabled: bool = Field(default=True, description="是否发送积分变动站内信")
+    sync_outbox_enabled: bool = Field(default=False, description="是否消费外部同步发件箱")
+    rank_cron_enabled: bool = Field(default=True, description="是否刷新积分榜快照")
+    monthly_reward_enabled: bool = Field(default=True, description="是否执行月度管理员奖励")
+
+
 class Settings(BaseModel):
     """Application Settings"""
 
@@ -955,6 +966,7 @@ class Settings(BaseModel):
     in_app_message_forwarding: InAppMessageForwardingConf = InAppMessageForwardingConf()
     database_pool: DatabasePoolConf = Field(default_factory=DatabasePoolConf)
     portal_hot_search: PortalHotSearchConf = Field(default_factory=PortalHotSearchConf)
+    points: PointsConf = Field(default_factory=PointsConf)
 
     @field_validator("database_url")
     @classmethod
