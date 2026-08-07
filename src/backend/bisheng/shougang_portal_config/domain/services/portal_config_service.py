@@ -13,6 +13,7 @@ from bisheng.shougang_portal_config.domain.repositories.implementations.portal_a
 )
 from bisheng.shougang_portal_config.domain.schemas.portal_config_schema import (
     ShougangPortalAdminConfig,
+    resolve_portal_watermark_horizontal_text,
 )
 from bisheng.shougang_portal_config.domain.services.department_business_domain_service import (
     DepartmentBusinessDomainService,
@@ -47,6 +48,13 @@ class ShougangPortalConfigService:
         if settings.multi_tenant.enabled:
             raise NoTenantContextError()
         return DEFAULT_TENANT_ID
+
+    @classmethod
+    async def get_watermark_horizontal_text(cls, *, tenant_id: int | None = None) -> str:
+        config = await cls.get_config(tenant_id=tenant_id)
+        if config is None:
+            return resolve_portal_watermark_horizontal_text(None)
+        return resolve_portal_watermark_horizontal_text(config.portal.watermark)
 
     @classmethod
     async def get_config(cls, *, tenant_id: int | None = None) -> ShougangPortalAdminConfig | None:

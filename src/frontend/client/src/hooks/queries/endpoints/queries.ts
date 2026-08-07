@@ -91,6 +91,45 @@ export interface PortalMetadataConfig {
   business_domain_options: PortalConfigOption[];
 }
 
+export const DEFAULT_PORTAL_WATERMARK_HORIZONTAL_TEXT =
+  '首钢股份内部资料，严禁外传，违者必究';
+
+export interface PortalWatermarkConfig {
+  horizontal_text: string;
+}
+
+async function fetchPortalWatermarkConfig(): Promise<PortalWatermarkConfig> {
+  try {
+    const res = await fetch('/api/v1/shougang-portal/config/watermark');
+    if (!res.ok) {
+      return { horizontal_text: DEFAULT_PORTAL_WATERMARK_HORIZONTAL_TEXT };
+    }
+    const json = await res.json();
+    const data = json?.data ?? json;
+    const text = String(data?.horizontal_text ?? '').trim();
+    return {
+      horizontal_text: text || DEFAULT_PORTAL_WATERMARK_HORIZONTAL_TEXT,
+    };
+  } catch {
+    return { horizontal_text: DEFAULT_PORTAL_WATERMARK_HORIZONTAL_TEXT };
+  }
+}
+
+export const useGetPortalWatermarkConfig = (): QueryObserverResult<PortalWatermarkConfig> => {
+  const queriesEnabled = useRecoilValue<boolean>(store.queriesEnabled);
+  return useQuery<PortalWatermarkConfig>(
+    ['portalWatermarkConfig'],
+    fetchPortalWatermarkConfig,
+    {
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
+      refetchOnMount: 'always',
+      staleTime: 60_000,
+      enabled: queriesEnabled,
+    },
+  );
+};
+
 async function fetchPortalMetadataConfig(): Promise<PortalMetadataConfig> {
   const res = await fetch('/api/v1/knowledge/config');
   if (!res.ok) throw new Error('Failed to fetch portal config');

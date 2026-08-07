@@ -8,8 +8,11 @@ from pydantic import ValidationError
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.shougang_portal_config.api.endpoints.portal_config import router
 from bisheng.shougang_portal_config.domain.schemas.portal_config_schema import (
+    DEFAULT_PORTAL_WATERMARK_HORIZONTAL_TEXT,
+    PortalWatermarkConfig,
     ShougangPortalAdminConfig,
     redact_portal_admin_config,
+    resolve_portal_watermark_horizontal_text,
 )
 from bisheng.shougang_portal_config.domain.services.portal_config_service import (
     ShougangPortalConfigService,
@@ -293,6 +296,70 @@ def test_portal_config_rejects_invalid_url_application():
             bisheng={"base_url": "http://bisheng.example.com"},
             unified_auth={},
         )
+
+
+def test_resolve_portal_watermark_horizontal_text_uses_default_when_missing():
+    assert resolve_portal_watermark_horizontal_text(None) == DEFAULT_PORTAL_WATERMARK_HORIZONTAL_TEXT
+    assert resolve_portal_watermark_horizontal_text(PortalWatermarkConfig()) == DEFAULT_PORTAL_WATERMARK_HORIZONTAL_TEXT
+    assert resolve_portal_watermark_horizontal_text(PortalWatermarkConfig(horizontal_text="  ")) == (
+        DEFAULT_PORTAL_WATERMARK_HORIZONTAL_TEXT
+    )
+
+
+def test_resolve_portal_watermark_horizontal_text_uses_custom_value():
+    custom = "自定义水印第二行"
+    assert resolve_portal_watermark_horizontal_text(PortalWatermarkConfig(horizontal_text=custom)) == custom
+    assert resolve_portal_watermark_horizontal_text(PortalWatermarkConfig(horizontal_text=f"  {custom}  ")) == custom
+
+
+def test_portal_config_persists_watermark_horizontal_text():
+    raw_config = _minimal_portal_config()
+    raw_config["watermark"] = {"horizontal_text": "自定义水印第二行"}
+    config = ShougangPortalAdminConfig(
+        portal=raw_config,
+        bisheng={"base_url": "http://bisheng.example.com"},
+        unified_auth={},
+    )
+    assert config.portal.watermark.horizontal_text == "自定义水印第二行"
+    assert resolve_portal_watermark_horizontal_text(config.portal.watermark) == "自定义水印第二行"
+
+
+def test_watermark_config_endpoint_returns_default_when_config_missing(monkeypatch):
+    async def fake_get_config(*, tenant_id: int | None = None):
+        del tenant_id
+        return None
+
+    monkeypatch.setattr(ShougangPortalConfigService, "get_config", staticmethod(fake_get_config))
+    app = FastAPI()
+    app.include_router(router)
+
+    response = TestClient(app).get("/shougang-portal/config/watermark")
+
+    assert response.status_code == 200
+    assert response.json()["data"]["horizontal_text"] == DEFAULT_PORTAL_WATERMARK_HORIZONTAL_TEXT
+
+
+def test_watermark_config_endpoint_returns_custom_text(monkeypatch):
+    raw_config = _minimal_portal_config()
+    raw_config["watermark"] = {"horizontal_text": "自定义水印第二行"}
+    config = ShougangPortalAdminConfig(
+        portal=raw_config,
+        bisheng={"base_url": "http://bisheng.example.com"},
+        unified_auth={},
+    )
+
+    async def fake_get_config(*, tenant_id: int | None = None):
+        del tenant_id
+        return config
+
+    monkeypatch.setattr(ShougangPortalConfigService, "get_config", staticmethod(fake_get_config))
+    app = FastAPI()
+    app.include_router(router)
+
+    response = TestClient(app).get("/shougang-portal/config/watermark")
+
+    assert response.status_code == 200
+    assert response.json()["data"]["horizontal_text"] == "自定义水印第二行"
 
 
 def test_internal_config_endpoint_is_open(monkeypatch):
