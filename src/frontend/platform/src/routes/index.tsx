@@ -1,6 +1,7 @@
 import { lazy, useEffect } from "react";
 import { Navigate, createBrowserRouter } from "react-router-dom";
 import MainLayout from "../layout/MainLayout";
+import StandaloneLayout from "../layout/StandaloneLayout";
 import { LoginPage } from "../pages/LoginPage/login";
 import { ResetPwdPage } from "../pages/LoginPage/resetPwd";
 import Page403 from "../pages/Page403";
@@ -8,6 +9,7 @@ import Page404 from "../pages/Page404";
 import MenuPermissionPlaceholder from "../pages/MenuPermissionPlaceholder";
 import { AppNumType } from "../types/app";
 import RouteErrorBoundary from "./RouteErrorBoundary";
+import { STANDALONE_PREFIX } from "./standalone";
 import EditorPage from "@/pages/Dashboard/editor";
 import SharePage from "@/pages/Dashboard/share";
 
@@ -50,6 +52,8 @@ const ResoucePage = lazy(() => import("@/pages/resoucePage"));
 const Dashboard = lazy(() => import("@/pages/Dashboard"));
 const TenantPage = lazy(() => import("@/pages/TenantPage"));
 const TenantSelect = lazy(() => import("@/pages/LoginPage/TenantSelect"));
+const KnowledgeTagLibraryPage = lazy(() => import("@/pages/BuildPage/bench/standalone/KnowledgeTagLibraryPage"));
+const KnowledgeSensitivePage = lazy(() => import("@/pages/BuildPage/bench/standalone/KnowledgeSensitivePage"));
 
 const baseConfig = {
   //@ts-ignore
@@ -117,6 +121,25 @@ const privateRouter = [
       { path: "tenant", element: <TenantPage />, permission: 'sys' },
       { path: "department", element: <Navigate to="/sys" replace /> },
       { path: "menu-pending", element: <MenuPermissionPlaceholder /> },
+    ],
+  },
+  // Shell-less pages for embedding into other systems (iframe). Login is still
+  // required (App falls back to publicRouter without a session), but these are
+  // deliberately not gated by `web_menu` — see routes/standalone.ts.
+  {
+    path: STANDALONE_PREFIX.slice(1),
+    element: <StandaloneLayout />,
+    errorElement: <RouteErrorBoundary />,
+    children: [
+      { path: "dashboard", element: <Dashboard /> },
+      { path: "dashboard/:id", element: <EditorPage /> },
+      { path: "log", element: <LogPage /> },
+      { path: "log/chatlog/:fid/:cid/:type", element: <AppChatDetail /> },
+      { path: "log/chatlog/:cid", element: <DailyChatDetail /> },
+      { path: "approval", element: <ApprovalPage /> },
+      { path: "sys", element: <SystemPage /> },
+      { path: "knowledge-tag-library", element: <KnowledgeTagLibraryPage /> },
+      { path: "content-security", element: <KnowledgeSensitivePage /> },
     ],
   },
   { path: "dashboard/:id", element: <EditorPage />, errorElement: <RouteErrorBoundary />, permission: 'board', },

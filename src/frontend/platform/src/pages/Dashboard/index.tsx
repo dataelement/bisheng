@@ -14,6 +14,7 @@ import { useContext, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useMutation, useQuery, useQueryClient } from "react-query"
 import { useNavigate } from "react-router-dom"
+import { useStandalonePrefix } from "@/routes/standalone"
 import { DashboardDetail } from "./components/dashboard/DashboardDetail"
 import { DashboardSidebar } from "./components/dashboard/DashboardSidebar"
 import { DashboardQueryKey, DashboardsQueryKey } from "./hook"
@@ -103,8 +104,10 @@ export default function DashboardPage() {
     }
 
     const navigator = useNavigate()
+    // Keep the shell-less chrome when this page is opened as a standalone/embedded route
+    const routePrefix = useStandalonePrefix()
     const handleEdit = (id: string) => {
-        navigator(`/dashboard/${id}`)
+        navigator(`${routePrefix}/dashboard/${id}`)
     }
 
     const { data: selectedDashboard, isLoading } = useQuery({
