@@ -84,6 +84,8 @@ class ResolvedFileSyncTarget:
 FILELIB_SYNC_PERSONAL_FALLBACK_METADATA_KEY = "filelib_sync_target_fallback"
 FILELIB_SYNC_PERSONAL_FALLBACK_METADATA_VALUE = "token_user_personal"
 FILELIB_SYNC_PERSONAL_FALLBACK_LEVEL2_FOLDER = "业务接口未分配"
+FILELIB_SYNC_DEVELOPER_TOKEN_ID_METADATA_KEY = "developer_token_id"
+FILELIB_SYNC_DEVELOPER_TOKEN_NAME_METADATA_KEY = "developer_token_name"
 
 
 class FilelibSyncService:
@@ -204,6 +206,8 @@ class FilelibSyncService:
                 "responsible_person": identity.responsible_user_external_id,
                 "responsible_person_id": identity.responsible_user_id,
                 "filelib_sync_endpoint": "sync",
+                FILELIB_SYNC_DEVELOPER_TOKEN_ID_METADATA_KEY: self.token_id,
+                FILELIB_SYNC_DEVELOPER_TOKEN_NAME_METADATA_KEY: self._developer_token_display_name(),
             }
             if target.used_personal_fallback:
                 user_metadata[FILELIB_SYNC_PERSONAL_FALLBACK_METADATA_KEY] = (
@@ -548,6 +552,9 @@ class FilelibSyncService:
         )
 
     def _personal_fallback_token_folder_name(self) -> str:
+        return self._developer_token_display_name()
+
+    def _developer_token_display_name(self) -> str:
         if self.token_name:
             return self.token_name
         return f"token-{self.token_id}"

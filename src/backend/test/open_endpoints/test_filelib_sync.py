@@ -332,6 +332,14 @@ def test_build_personal_fallback_folder_path_uses_token_name_and_configured_targ
     )
 
 
+def test_developer_token_display_name_uses_token_name_or_fallback_id():
+    service = _service()
+    assert service._developer_token_display_name() == "token-42"
+
+    service.token_name = "联调Token"
+    assert service._developer_token_display_name() == "联调Token"
+
+
 def test_unbound_business_domain_is_rejected():
     space = Knowledge(id=8, name="信息库", type=3, business_domain_codes=["PP"])
     domain = SimpleNamespace(code="IT", name="信息", space_ids=[8])
@@ -587,6 +595,8 @@ async def test_sync_orchestration_allows_repeated_external_id_and_writes_source_
         "responsible_person": "owner-ext",
         "responsible_person_id": 2,
         "filelib_sync_endpoint": "sync",
+        "developer_token_id": 42,
+        "developer_token_name": "token-42",
     }
     assert knowledge_file.user_id == 2
     assert knowledge_file.user_name == "owner"
