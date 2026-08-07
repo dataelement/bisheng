@@ -1563,7 +1563,12 @@ class LLMService:
             # instead of the global maintenance overlay claiming the platform is
             # down. Same treatment as workbench TTS.
             logger.exception("workbench asr transcription failed")
-            raise AsrTranscriptionFailedError.http_exception(str(e)) from e
+            # Raised as an instance, not via http_exception: only this path puts
+            # the provider's own words into the envelope's `data`, which is where
+            # the client reads the {exception} its translated message leaves a
+            # slot for. http_exception would have replaced the whole message with
+            # the raw error instead, in English, whatever the user's language.
+            raise AsrTranscriptionFailedError(exception=e) from e
 
     @classmethod
     async def invoke_workbench_tts(cls, login_user: UserPayload, text: str) -> str:

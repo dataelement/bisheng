@@ -56,6 +56,13 @@ export function normalizeFileAccept(
  * the deployment offers audio/video has no bearing on the answer.
  */
 export function acceptsImages(value: unknown): boolean {
+    // Unset means the flow predates the setting, and back then everything was
+    // accepted — answering "no images" here would retire a variable an old flow
+    // is already wired to. An empty array is different: that is a user who has
+    // ticked nothing, and it means what it says.
+    if (value === undefined || value === null || value === '') {
+        return true;
+    }
     return normalizeFileAccept(value, { mediaEnabled: true }).includes('image');
 }
 
