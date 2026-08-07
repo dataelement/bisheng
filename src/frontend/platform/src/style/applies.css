@@ -620,7 +620,7 @@
   }
 
   .send-message-modal-transition {
-    @apply fixed inset-0 bg-black bg-opacity-80 backdrop-blur-sm transition-opacity
+    @apply fixed inset-0 bg-black bg-opacity-80 transition-opacity
   }
   .chat-modal-box {
     @apply fixed inset-0 z-10 overflow-y-auto

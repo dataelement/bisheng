@@ -66,7 +66,7 @@ const VARIANT_STYLES: Record<TagVariant, {
         tag: 'text-xs leading-5 text-[#999999] whitespace-nowrap',
         tagHighlighted: 'text-xs leading-5 font-semibold text-blue-500 whitespace-nowrap',
         tagFirst: 'min-w-[20px] truncate flex-shrink',
-        moreBadge: 'bg-[#F2F3F5] text-[#999999] text-xs leading-5 px-1.5 rounded-[4px] cursor-pointer flex-shrink-0',
+        moreBadge: 'bg-[#F2F3F5] text-[#999999] text-xs leading-5 px-1.5 rounded-sm cursor-pointer flex-shrink-0',
         measure: 'text-xs leading-5',
         moreBadgeReserve: 34,
     },
@@ -158,7 +158,7 @@ const TagGroup = ({ tags, actionButton, variant = 'pill', highlightedTagIds }: T
                             </DropdownMenuTrigger>
                             <DropdownMenuContent
                                 align="end"
-                                className="min-w-[96px] rounded-[8px] border border-gray-100 bg-white p-2 shadow-md"
+                                className="min-w-[96px] rounded-lg border border-gray-100 bg-white p-2 shadow-md"
                                 onClick={(e) => e.stopPropagation()}
                             >
                                 <div className="flex flex-col gap-1">

@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useContext, useEffect, useState } from "react";
 import { PopUpContext } from "../../contexts/popUpContext";
 import { InputComponentType } from "../../types/components";

@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import KnowledgeSelect from "@/components/bs-comp/selectComponent/knowledge";
 import { LoadIcon } from "@/components/bs-icons";
 import { Button } from "@/components/bs-ui/button";

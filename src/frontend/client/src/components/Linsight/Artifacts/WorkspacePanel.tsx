@@ -54,14 +54,16 @@ export function WorkspacePanel({
             key={file.file_id || file.file_url}
             role="button"
             tabIndex={0}
-            className="group/row flex cursor-pointer items-center gap-2 rounded-lg py-2 pl-1 pr-1.5 hover:bg-[#F7F7F7]"
+            className="group/row flex cursor-pointer items-center gap-1 rounded-lg py-2 pl-1 pr-2 hover:bg-[#F7F7F7]"
             onClick={() => onPreview(file)}
             onKeyDown={(e) => e.key === 'Enter' && onPreview(file)}
         >
             {/* File-type icon hidden for now; keep for an easy future re-enable. */}
-            {/* eslint-disable-next-line @typescript-eslint/no-explicit-any -- FileIcon accepts more types than its union */}
+            { }
             {/* <FileIcon type={getFileExtension(file.file_name) as any} className="size-5 min-w-5" /> */}
-            <span className="min-w-0 flex-1 truncate text-sm text-[#212121] group-hover/row:text-blue-500">
+            {/* min-w-0 without flex-1 so the action stays next to the NAME, not
+                pushed to the panel edge; the name truncates only when it must. */}
+            <span className="min-w-0 truncate text-sm text-[#212121] group-hover/row:text-blue-500">
                 {file.file_name}
             </span>
             <NewTabHint file={file} />

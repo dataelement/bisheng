@@ -48,7 +48,8 @@ async def get_recommended_apps(login_user=LoginUserDep):
     app_order = {app_id: idx for idx, app_id in enumerate(app_ids)}
     data.sort(key=lambda x: app_order.get(x["id"], len(app_ids)))
 
-    data = WorkFlowService.add_extra_field(login_user, data)
+    writeable_ids = await WorkFlowService.aget_writeable_app_ids(login_user, data)
+    data = WorkFlowService.add_extra_field(login_user, data, writeable_ids=writeable_ids)
     data = await WorkFlowService.aenrich_apps_can_share(login_user, data)
     return resp_200(data=data)
 

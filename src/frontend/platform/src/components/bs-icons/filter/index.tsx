@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import React, { forwardRef } from "react";
 import Filter from "./Filter.svg?react";
 

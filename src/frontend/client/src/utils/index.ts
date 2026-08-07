@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import axios from 'axios';
 import React from 'react';
 import { stripCitationMarkers } from '~/components/Chat/Messages/Content/citationUtils';

@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import type { AxiosResponse } from 'axios';
 import * as endpoints from './api-endpoints';
 import * as config from '~/types/chat/config';
@@ -262,7 +263,7 @@ export const updateUserPlugins = (payload: t.TUpdateUserPlugins) => {
 export const getStartupConfig = (): Promise<config.TStartupConfig> => {
   // return request.get(endpoints.config());
   return Promise.resolve({
-    "appTitle": "LibreChat",
+    "appTitle": "BISHENG",
     "socialLogins": [
       "github",
       "google",
@@ -287,31 +288,20 @@ export const getStartupConfig = (): Promise<config.TStartupConfig> => {
     "passwordResetEnabled": false,
     "checkBalance": false,
     "showBirthdayIcon": false,
-    "helpAndFaqURL": "https://librechat.ai",
+    "helpAndFaqURL": "",
     "interface": {
       "endpointsMenu": true,
       "modelSelect": true,
       "parameters": true,
       "presets": true,
       "sidePanel": true,
-      "privacyPolicy": {
-        "externalUrl": "https://librechat.ai/privacy-policy",
-        "openNewTab": true
-      },
-      "termsOfService": {
-        "externalUrl": "https://librechat.ai/tos",
-        "openNewTab": true,
-        "modalAcceptance": true,
-        "modalTitle": "Terms of Service for LibreChat",
-        "modalContent": "# Terms and Conditions for LibreChat\n\n*Effective Date: February 18, 2024*\n\nWelcome to LibreChat, the informational website for the open-source AI chat platform, available at https://librechat.ai. These Terms of Service (\"Terms\") govern your use of our website and the services we offer. By accessing or using the Website, you agree to be bound by these Terms and our Privacy Policy, accessible at https://librechat.ai//privacy.\n\n## 1. Ownership\n\nUpon purchasing a package from LibreChat, you are granted the right to download and use the code for accessing an admin panel for LibreChat. While you own the downloaded code, you are expressly prohibited from reselling, redistributing, or otherwise transferring the code to third parties without explicit permission from LibreChat.\n\n## 2. User Data\n\nWe collect personal data, such as your name, email address, and payment information, as described in our Privacy Policy. This information is collected to provide and improve our services, process transactions, and communicate with you.\n\n## 3. Non-Personal Data Collection\n\nThe Website uses cookies to enhance user experience, analyze site usage, and facilitate certain functionalities. By using the Website, you consent to the use of cookies in accordance with our Privacy Policy.\n\n## 4. Use of the Website\n\nYou agree to use the Website only for lawful purposes and in a manner that does not infringe the rights of, restrict, or inhibit anyone else's use and enjoyment of the Website. Prohibited behavior includes harassing or causing distress or inconvenience to any person, transmitting obscene or offensive content, or disrupting the normal flow of dialogue within the Website.\n\n## 5. Governing Law\n\nThese Terms shall be governed by and construed in accordance with the laws of the United States, without giving effect to any principles of conflicts of law.\n\n## 6. Changes to the Terms\n\nWe reserve the right to modify these Terms at any time. We will notify users of any changes by email. Your continued use of the Website after such changes have been notified will constitute your consent to such changes.\n\n## 7. Contact Information\n\nIf you have any questions about these Terms, please contact us at contact@librechat.ai.\n\nBy using the Website, you acknowledge that you have read these Terms of Service and agree to be bound by them.\n"
-      },
       "bookmarks": true,
       "prompts": true,
       "multiConvo": true,
       "agents": true,
       "temporaryChat": true,
       "runCode": true,
-      "customWelcome": "Welcome to LibreChat! Enjoy your experience."
+      "customWelcome": ""
     },
     "sharedLinksEnabled": true,
     "publicSharedLinksEnabled": true,
@@ -1050,6 +1040,29 @@ export function deleteKnowledge(id: string): Promise<t.TConversationTagResponse>
 export async function getFilePathApi(file_id: string) {
   return request.get(`/api/v1/knowledge/file_share`, { params: { file_id } });
 }
-export function getLinsightFileDownloadApi(fileUrl: string, vid: string): Promise<f.TFile> {
-  return request.post('/api/v1/linsight/workbench/file_download', { file_url: fileUrl, session_version_id: vid });
+/**
+ * Resolve a linsight workspace object key into a presigned MinIO link.
+ *
+ * `shareToken` is REQUIRED when the viewer is a share recipient: the endpoint
+ * grants a non-owner only through the `share-token` header (backend
+ * `linsight_file_download`). Callers normally let `resolveArtifactUrl` fill it
+ * in from the route.
+ *
+ * `skip403Redirect` keeps a single unreachable file from ejecting the whole
+ * document — the default 403 handling is `location.href = /c/new?error=11403`,
+ * which reads as "this share link is dead" when only one preview failed.
+ */
+export function getLinsightFileDownloadApi(fileUrl: string, vid: string, shareToken?: string): Promise<f.TFile> {
+  // _post spreads `config` AFTER its default headers, so a `headers` key here
+  // replaces them wholesale — carry Content-Type along explicitly.
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(shareToken ? { 'share-token': shareToken } : {}),
+  };
+  return request.post(
+    '/api/v1/linsight/workbench/file_download',
+    { file_url: fileUrl, session_version_id: vid },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- skip403Redirect is an ErrorOptions extra, not on AxiosRequestConfig
+    { headers, skip403Redirect: true } as any,
+  );
 }

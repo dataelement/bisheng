@@ -71,12 +71,12 @@ export function StandaloneSideNav({ sidebar, onCloseSidebar }: StandaloneSideNav
             <Tooltip>
               <TooltipTrigger asChild>
                 <div
-                  className="border-[#ebecf0] border-[0.5px] rounded-[6px] p-[8px] flex flex-col gap-[12px] cursor-default"
+                  className="border-[#ebecf0] border-[0.5px] rounded-md p-[8px] flex flex-col gap-[12px] cursor-default"
                   style={{ backgroundImage: 'linear-gradient(128.789deg, rgb(var(--brand-500)/0.04) 0%, rgb(255, 255, 255) 50%, rgb(var(--brand-500)/0.04) 100%)' }}
                 >
                   <div className="flex items-center gap-[8px]">
                     <AppAvator
-                      className="size-[32px] min-w-[32px] rounded-[4px]"
+                      className="size-[32px] min-w-[32px] rounded-sm"
                       url={flowData?.logo}
                       id={flowData?.id as any}
                       flowType={String(flowData?.flow_type || 5)}
@@ -99,7 +99,7 @@ export function StandaloneSideNav({ sidebar, onCloseSidebar }: StandaloneSideNav
                         createNewChat();
                       }}
                       type="button"
-                      className="flex-1 min-w-0 h-[28px] flex items-center justify-center gap-1 bg-white border border-[#ececec] rounded-[6px] text-[14px] leading-[22px] hover:bg-gray-50 transition-colors"
+                      className="flex-1 min-w-0 h-[28px] flex items-center justify-center gap-1 bg-white border border-[#ececec] rounded-md text-[14px] leading-[22px] hover:bg-gray-50 transition-colors"
                     >
                       {localize('com_knowledge_start_new_chat')}
                     </button>
@@ -144,7 +144,7 @@ export function StandaloneSideNav({ sidebar, onCloseSidebar }: StandaloneSideNav
                   <div className="flex flex-col gap-2">
                     <div className="flex items-center gap-2">
                       <AppAvator
-                        className="size-[32px] min-w-[32px] rounded-[4px]"
+                        className="size-[32px] min-w-[32px] rounded-sm"
                         url={flowData?.logo}
                         id={flowData?.id as any}
                         flowType={String(flowData?.flow_type || 5)}
@@ -166,12 +166,12 @@ export function StandaloneSideNav({ sidebar, onCloseSidebar }: StandaloneSideNav
           </TooltipProvider>
         ) : (
           <div
-            className="border-[#ebecf0] border-[0.5px] rounded-[6px] p-[8px] flex flex-col gap-[12px] cursor-default"
+            className="border-[#ebecf0] border-[0.5px] rounded-md p-[8px] flex flex-col gap-[12px] cursor-default"
             style={{ backgroundImage: 'linear-gradient(128.789deg, rgb(var(--brand-500)/0.04) 0%, rgb(255, 255, 255) 50%, rgb(var(--brand-500)/0.04) 100%)' }}
           >
             <div className="flex items-center gap-[8px]">
               <AppAvator
-                className="size-[32px] min-w-[32px] rounded-[4px]"
+                className="size-[32px] min-w-[32px] rounded-sm"
                 url={flowData?.logo}
                 id={flowData?.id as any}
                 flowType={String(flowData?.flow_type || 5)}
@@ -194,7 +194,7 @@ export function StandaloneSideNav({ sidebar, onCloseSidebar }: StandaloneSideNav
                   createNewChat();
                 }}
                 type="button"
-                className="flex-1 min-w-0 h-[28px] flex items-center justify-center gap-1 bg-white border border-[#ececec] rounded-[6px] text-[14px] leading-[22px] hover:bg-gray-50 transition-colors"
+                className="flex-1 min-w-0 h-[28px] flex items-center justify-center gap-1 bg-white border border-[#ececec] rounded-md text-[14px] leading-[22px] hover:bg-gray-50 transition-colors"
               >
                 {localize('com_knowledge_start_new_chat')}
               </button>

@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { Checkbox } from "@/components/bs-ui/checkBox";
 import { Download } from "lucide-react";
 import { useContext, useState } from "react";

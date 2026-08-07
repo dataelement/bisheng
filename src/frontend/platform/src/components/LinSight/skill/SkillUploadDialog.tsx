@@ -78,12 +78,23 @@ export function SkillUploadDialog({ open, onOpenChange, onUploaded }: SkillUploa
 
     const SelectedFileIcon = file ? fileIcon(file.name) : FileText;
 
+    // The backend auto-normalizes an illegal frontmatter name into a legal skill
+    // ID (e.g. "Presentations" -> "presentations") — tell the user when it did.
+    const toastImported = (detail: { name: string; normalized_from?: string | null }) => {
+        toast({
+            variant: 'success',
+            description: detail.normalized_from
+                ? t('skillManage.uploadDialog.normalized', { from: detail.normalized_from, to: detail.name })
+                : t('skillManage.saved'),
+        });
+    };
+
     const handleUpload = async () => {
         if (!file || uploading) return;
         setUploading(true);
         try {
-            await skillApi.createSkillUpload(file);
-            toast({ variant: 'success', description: t('skillManage.saved') });
+            const detail = await skillApi.createSkillUpload(file);
+            toastImported(detail);
             onOpenChange(false);
             onUploaded();
         } catch (err) {
@@ -100,8 +111,8 @@ export function SkillUploadDialog({ open, onOpenChange, onUploaded }: SkillUploa
         if (!githubUrlValid || importing) return;
         setImporting(true);
         try {
-            await skillApi.importSkillFromGithub(url);
-            toast({ variant: 'success', description: t('skillManage.saved') });
+            const detail = await skillApi.importSkillFromGithub(url);
+            toastImported(detail);
             onOpenChange(false);
             onUploaded();
         } catch (err) {

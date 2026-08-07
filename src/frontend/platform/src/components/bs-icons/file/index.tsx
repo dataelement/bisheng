@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import React, { forwardRef } from "react";
 import CsvIcon from "./csv.svg?react";
 import DocIcon from "./doc.svg?react";

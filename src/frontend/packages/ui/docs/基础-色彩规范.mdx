@@ -1,0 +1,185 @@
+import { BRAND, BRAND_STEPS, GRAY, TEXT, FILL, BORDER, BG, FUNCTIONAL, TAG } from '~/design-token.cjs';
+
+export const th = { padding: '8px 12px', color: 'rgb(var(--text-1))' };
+export const td = { padding: '8px 12px', color: 'rgb(var(--text-1))', borderBottom: '1px solid rgb(var(--border-base))' };
+export const headRow = { textAlign: 'left' };
+
+export const overlay = (hex) => {
+  const h = hex.slice(1);
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16));
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.6 ? 'rgba(0,0,0,0.85)' : 'rgba(255,255,255,0.95)';
+};
+
+export const mono = 'ui-monospace, "SF Mono", "Cascadia Mono", Consolas, "Liberation Mono", monospace';
+
+export const Strip = ({ title, swatches }) => (
+  <div style={{ marginBottom: 24 }}>
+    {title && <div style={{ marginBottom: 12, fontSize: 13, fontWeight: 500, color: 'rgb(var(--text-1))' }}>{title}</div>}
+    <div style={{ display: 'flex' }}>
+      {swatches.map((s) => {
+        const fg = s.fg || overlay(s.hex);
+        return (
+          <div key={s.label} className="bs-swatch" style={{ background: s.bg || s.hex, color: fg }}>
+            {s.usage ? <span className="bs-swatch-usage" style={{ color: fg }}>{s.usage}</span> : <span />}
+            <div>
+              <div style={{ fontSize: 13, lineHeight: 1.25, fontWeight: s.primary ? 500 : 400 }}>{s.label}</div>
+              <div style={{ marginTop: 4, fontSize: 11, lineHeight: 1, fontFamily: mono, opacity: 0.8 }}>{s.value || s.hex}</div>
+            </div>
+            {s.primary && <span style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 3, background: s.accent || fg }} />}
+          </div>
+        );
+      })}
+    </div>
+  </div>
+);
+
+export const BrandStrips = () => (
+  <div>
+    {['blue', 'green'].map((theme) => (
+      <Strip
+        key={theme}
+        title={theme === 'blue' ? '蓝' : '绿'}
+        swatches={[...BRAND_STEPS, 'muted'].map((step) => ({
+          label: step,
+          hex: BRAND[theme][step],
+          primary: step === BRAND.main,
+          accent: BRAND[theme][BRAND.accentStep],
+          usage: BRAND.role[step],
+        }))}
+      />
+    ))}
+  </div>
+);
+
+export const GrayStrip = () => (
+  <Strip
+    swatches={GRAY.map((g) => ({
+      label: `gray-${g.n}`,
+      hex: g.hex,
+      value: (
+        <>
+          <span className="bs-hex-light">{g.hex}</span>
+          <span className="bs-hex-dark">{g.darkHex}</span>
+        </>
+      ),
+      bg: `rgb(var(--arco-gray-${g.n}))`,
+      fg: g.n <= 5 ? 'rgb(var(--arco-gray-10))' : 'rgb(var(--arco-gray-1))',
+      usage: g.role,
+    }))}
+  />
+);
+
+export const SemanticTable = () => {
+  const Row = ({ cls, value, usage }) => (
+    <tr><td style={td}><code>{cls}</code></td><td style={td}>{value}</td><td style={{ ...td, color: 'rgb(var(--text-2))' }}>{usage}</td></tr>
+  );
+  return (
+    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+      <thead><tr style={headRow}><th style={th}>类名（语义）</th><th style={th}>取值</th><th style={th}>用途</th></tr></thead>
+      <tbody>
+        {TEXT.map((t) => <Row key={t.name} cls={`text-text-${t.name}`} value={t.ref} usage={t.usage} />)}
+        {FILL.map((f) => <Row key={f.name} cls={`bg-fill-${f.name}`} value={f.ref} usage={f.usage} />)}
+        {BORDER.map((b) => <Row key={b.name} cls={`border-border-${b.name}`} value={b.ref} usage={b.usage} />)}
+        {BG.map((b) => (
+          <Row
+            key={b.name}
+            cls={`bg-bg-${b.name}`}
+            value={<><span className="bs-hex-light">{b.hex}</span><span className="bs-hex-dark">{b.darkHex}</span></>}
+            usage={b.usage}
+          />
+        ))}
+      </tbody>
+    </table>
+  );
+};
+
+export const FunctionalStrips = () => (
+  <div>
+    {FUNCTIONAL.map((fn) => (
+      <Strip
+        key={fn.name}
+        title={fn.label}
+        swatches={[
+          { label: '主色', hex: fn.main, primary: true, accent: fn.active },
+          { label: 'hover', hex: fn.hover },
+          { label: 'active', hex: fn.active },
+          { label: 'tint 浅底', hex: fn.tint },
+        ]}
+      />
+    ))}
+  </div>
+);
+
+export const TagRow = () => (
+  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+    {TAG.map((t) => (
+      <span key={t.label} title={t.note} style={{ display: 'inline-flex', alignItems: 'center', borderRadius: 4, padding: '2px 8px', fontSize: 13, background: t.bg, color: t.fg }}>{t.label}</span>
+    ))}
+  </div>
+);
+
+# 色彩规范 Color
+
+具体设计过程中，基于产品色彩进一步定义符合产品调性以及功能诉求的颜色。
+
+- **品牌色**
+- **中性色**
+- **功能色**
+
+## 1. 品牌色 Brand
+
+品牌色体现产品调性，贯穿关键操作、链接与选中状态。BISHENG 提供**蓝、绿两套品牌主题**，同一色板在两个主题下各有取值，切换主题时品牌色整体跟随变化。
+
+{/* 主题实现机制（--brand-* CSS 变量 / .theme-green 换肤 / Tailwind 接线）见 src/frontend/client/BRAND-THEME-HANDOFF.md，规范页不展示实现细节。 */}
+
+### 1.1 色板
+
+<BrandStrips />
+
+### 1.2 使用规则
+
+- 品牌色始终跟随主题（蓝 / 绿），业务中不写死品牌色的具体色值。
+- **列表 / 菜单选中态**统一用品牌主色的浅色透明底（约 7%）。
+- **按钮品牌三态**：常态用主色，悬停变浅一档，按下加深一档（具体档位见「组件 → Button」）。
+- **固定例外**：审批中标签恒为蓝色、应用中心置顶图标用弱化的品牌色，二者均不随主题切换。
+
+## 2. 中性色 Neutral
+
+中性色用于文字、背景、边框、分割线等基础元素，构成界面信息层级的骨架。BISHENG 采用**一套统一的中性灰阶**作为唯一中性色板，不随主题切换。
+
+### 2.1 色板
+
+<GrayStrip />
+
+### 2.2 语义层
+
+在灰阶之上定义**语义化的角色 token**（如标题文字、次要文字、悬停填充、分割线等）。业务按「用途」取色而非直接取档位，保证同一角色全局一致。
+
+<SemanticTable />
+
+## 3. 功能色 Functional
+
+功能色表达明确的操作反馈与状态语义，**不随品牌主题切换**，在蓝 / 绿两个主题下保持恒定。
+
+<FunctionalStrips />
+
+- **成功 / 警告 / 危险**各含主色及其悬停、按下、浅底四态；浅底用于标签、提示条等大面积背景。
+- 链接色、信息色等同品牌色，跟随主题。
+
+## 4. 标签色 Extended
+
+标签色**成对使用：浅色底 + 深色字**（最浅档作底 + 主色档作字）。第三方品牌色（如各家 logo 色）原样保留，不纳入色板。
+
+<TagRow />
+
+## 5. 插画色 Illustration
+
+空状态等插画使用独立于 UI 品牌色的插画调色板，同样支持蓝 / 绿主题，另有一套主题无关的灰稿模式。实时预览见「组件 → Illustration」。
+
+{/* 插画着色实现（--illus-* / SVG 上色手段）见 src/frontend/client/BRAND-THEME-HANDOFF.md §3。 */}
+
+## 6. 使用约定
+
+- **同一语义只使用一个颜色**：如「次要文字」始终取同一 token，不再引入相近的其他灰。
+- 组件与业务只使用语义层颜色，不直接引用底层色板档位或写死色值。
+- 新增颜色需求先在现有色板内寻找替代；确需新增须经评审后进入色板。

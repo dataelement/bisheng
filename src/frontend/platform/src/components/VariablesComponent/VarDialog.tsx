@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import cloneDeep from 'lodash-es/cloneDeep';
 import { ArrowDownUp, Plus, X } from "lucide-react";
 import { useContext, useState } from 'react';
@@ -116,7 +117,7 @@ export default function VarDialog({ data, onSave, onClose }) {
                                                 <Input value={option.value} className={errors[index] && 'border-red-400'} onChange={(e) => handleChangeOptionValue(e.target.value, index)} />
                                                 <button onClick={() => {
                                                     setItem((old) => {
-                                                        let newItem = cloneDeep(old);
+                                                        const newItem = cloneDeep(old);
                                                         newItem.options.splice(index, 1);
                                                         return newItem;
                                                     });

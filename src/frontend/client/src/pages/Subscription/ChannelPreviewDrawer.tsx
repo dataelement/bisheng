@@ -308,7 +308,7 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onSubscrip
                                                 {channelDetail.source_infos.slice(0, 4).map((source: any, index: number) => (
                                                     <div
                                                         key={source.id}
-                                                        className="size-5 rounded-[4px] border border-white overflow-hidden bg-gray-100"
+                                                        className="size-5 rounded-sm border border-white overflow-hidden bg-gray-100"
                                                         style={{ zIndex: 4 - index }}
                                                     >
                                                         <img
@@ -331,7 +331,7 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onSubscrip
                                         variant={btnConfig.variant}
                                         disabled={btnConfig.disabled || subscribing}
                                         onClick={handleSubscribe}
-                                        className={`h-8 rounded-[6px] px-4 py-[5px] text-[14px] font-normal leading-[22px] flex-shrink-0 ${effectiveSubscribeStatus === "subscribed"
+                                        className={`h-8 rounded-md px-4 py-[5px] text-[14px] font-normal leading-[22px] flex-shrink-0 ${effectiveSubscribeStatus === "subscribed"
                                             ? "bg-[#f2f3f5] text-[#86909c] border-[#e5e6eb] cursor-default"
                                             : effectiveSubscribeStatus === "pending" || effectiveSubscribeStatus === "rejected"
                                                 ? "bg-[#f2f3f5] text-[#c9cdd4] border-[#e5e6eb] cursor-not-allowed"

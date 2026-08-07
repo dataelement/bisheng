@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import * as React from 'react';
 import { ChevronLeft, ChevronRight, MoreHorizontal } from 'lucide-react';
 import { ButtonProps, buttonVariants } from './Button';
@@ -45,7 +46,7 @@ const PaginationLink = ({
         size,
       }),
       'text-[14px]',
-      isActive && 'rounded-[8px]',
+      isActive && 'rounded-lg',
       className,
     )}
     {...props}

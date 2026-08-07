@@ -21,13 +21,10 @@ uv sync --frozen --python $(which python)
 ### 前端环境
 
 ```bash
-# Platform 前端（主应用）
-cd src/frontend/platform
-npm install
-
-# Client 前端（客户端嵌入应用）
-cd src/frontend/client
-npm install
+# 前端为 pnpm workspace(platform + client + packages/ui),在 workspace 根一次安装。
+# 已禁用 npm(only-allow pnpm);pnpm 通过 corepack 提供:corepack enable
+cd src/frontend
+pnpm install
 ```
 
 ### 存储服务
@@ -77,7 +74,7 @@ cd src/backend
 
 ```bash
 cd src/frontend/platform
-npm start -- --host 0.0.0.0
+pnpm start -- --host 0.0.0.0
 ```
 
 Vite 开发服务器运行在 3001 端口，自动将 `/api/` 和 `/health` 请求代理到后端 `localhost:7860`。文件服务路由（`/bisheng`、`/tmp-dir`）代理到 MinIO。

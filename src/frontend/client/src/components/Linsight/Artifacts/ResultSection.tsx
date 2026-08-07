@@ -41,7 +41,7 @@ export function ResultSection({ answer, files, versionId, onPreview }: ResultSec
         <div className="space-y-3">
             {/* report link row */}
             {primaryFile && (
-                <div className="group/row flex items-center gap-1.5 text-sm text-gray-800">
+                <div className="flex items-center gap-1.5 text-sm text-gray-800">
                     <span className="shrink-0">
                         {multiple
                             ? localize('com_linsight_files_ready_prefix', { 0: fileCount })
@@ -68,8 +68,14 @@ export function ResultSection({ answer, files, versionId, onPreview }: ResultSec
                         file card below only renders for multi-file runs), so the
                         download belongs here. With several files the card carries
                         one per row; repeating it after "等 N 个文件" would read as
-                        "download all", which is not what it does. */}
-                    {!multiple && <SaveAsButton file={primaryFile} versionId={versionId} />}
+                        "download all", which is not what it does.
+                        `inline` (always visible), not the list rows' hover-reveal:
+                        a lone glyph in a sentence isn't the repetition that made a
+                        column of them read as noise, and this is the only download
+                        entry a single-file run has — the exact gap this fixed. */}
+                    {!multiple && (
+                        <SaveAsButton file={primaryFile} versionId={versionId} variant="inline" />
+                    )}
                 </div>
             )}
 
@@ -84,7 +90,7 @@ export function ResultSection({ answer, files, versionId, onPreview }: ResultSec
                         isLatestMessage={true}
                         webContent={false}
                         resolveArtifactLink={resolveArtifactLink}
-                        onArtifactPreview={onPreview}
+                        onArtifactPreview={(file) => onPreview(file as ArtifactFile)}
                     />
                 </div>
             )}
@@ -123,13 +129,17 @@ export function ResultSection({ answer, files, versionId, onPreview }: ResultSec
                         {files.map((file) => (
                             <div
                                 key={file.file_id || file.file_url}
-                                className="group/row flex items-center gap-2 rounded-lg py-1.5 pl-7 pr-1.5 transition-colors hover:bg-[#f7f7f7]"
+                                className="group/row flex items-center gap-1 rounded-lg py-1.5 pl-7 pr-2 transition-colors hover:bg-[#f7f7f7]"
                             >
-                                {/* Name = preview. The rail on the right = keep the
-                                    file. Two jobs, two targets, no double duty. */}
+                                {/* Name = preview, and the action sits right after
+                                    it rather than in a far-right gutter — the name
+                                    is what the download is ABOUT, so it should not
+                                    have to be traced across the row. The name is
+                                    min-w-0 but NOT flex-1: it shrinks to its text
+                                    and only truncates when the row runs out. */}
                                 <button
                                     type="button"
-                                    className="flex min-w-0 flex-1 items-center gap-1.5 text-left text-[14px] text-[#1A1A1A] transition-colors hover:text-blue-500"
+                                    className="flex min-w-0 items-center gap-1.5 text-left text-[14px] text-[#1A1A1A] transition-colors hover:text-blue-500"
                                     onClick={() => onPreview(file)}
                                 >
                                     <span className="truncate">{file.file_name}</span>

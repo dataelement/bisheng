@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { AppType } from "@/types/app";
 import { useEffect, useState } from "react";
@@ -59,7 +60,6 @@ export default function Templates() {
     const handleDelTemp = (index: number, id: number) => {
         const nameMap = {
             [AppType.FLOW]: t('workflow'),
-            [AppType.SKILL]: t('skill'),
             [AppType.ASSISTANT]: t('assistant')
         };
         const labelName = nameMap[type]

@@ -238,13 +238,13 @@ export function EditTagsModal({
                 <div className="flex flex-1 flex-col gap-4 px-5 py-3 max-md:px-4 max-md:py-4">
                     {/* Tags Input Box */}
                     <div
-                        className="relative flex min-h-8 cursor-text flex-wrap items-center gap-1 rounded-[8px] border border-[#EBECF0] bg-white px-3 py-[5px] pr-[40px] transition-[border-color,box-shadow] focus-within:border-[#ddd] focus-within:shadow-[0_0_0_2px_#f1f5f9]"
+                        className="relative flex min-h-8 cursor-text flex-wrap items-center gap-1 rounded-lg border border-[#EBECF0] bg-white px-3 py-[5px] pr-[40px] transition-[border-color,box-shadow] focus-within:border-[#ddd] focus-within:shadow-[0_0_0_2px_#f1f5f9]"
                         onClick={() => document.getElementById("tag-input")?.focus()}
                     >
                         {selectedTags.map((tag) => (
                             <span
                                 key={tag.id}
-                                className="flex items-center justify-center bg-[#f2f3f5] text-[#4e5969] px-2 h-[22px] rounded-[4px] text-sm leading-[22px] whitespace-nowrap gap-1"
+                                className="flex items-center justify-center bg-[#f2f3f5] text-[#4e5969] px-2 h-[22px] rounded-sm text-sm leading-[22px] whitespace-nowrap gap-1"
                             >
                                 {tag.name}
                                 <button
@@ -293,7 +293,7 @@ export function EditTagsModal({
                                     <span
                                         key={tag.id}
                                         onClick={() => toggleTag(tag)}
-                                        className={`group h-5 flex items-center justify-center gap-1 px-2 text-[12px] leading-5 rounded-[4px] transition-colors ${isSelected
+                                        className={`group h-5 flex items-center justify-center gap-1 px-2 text-[12px] leading-5 rounded-sm transition-colors ${isSelected
                                             ? "text-blue-500 cursor-default bg-primary/10"
                                             : "bg-[#f2f3f5] text-[#4e5969] hover:bg-[#e5e6eb] cursor-pointer"
                                             }`}
@@ -322,13 +322,13 @@ export function EditTagsModal({
                 <DialogFooter className="flex h-14 shrink-0 items-center justify-end gap-3 border-none px-5 py-3 max-md:!mt-auto max-md:!h-auto max-md:!flex-row max-md:!justify-stretch max-md:border-t max-md:border-[#ECECEC] max-md:px-4 max-md:py-3 sm:space-x-0">
                     <Button
                         variant="outline"
-                        className="h-8 min-w-[60px] rounded-[6px] border-[#ebecf0] bg-white/50 px-4 font-normal text-[#070038] backdrop-blur-[8px] hover:bg-white/70 max-md:flex-1"
+                        className="h-8 min-w-[60px] rounded-md border-[#ebecf0] bg-white/50 px-4 font-normal text-[#070038] hover:bg-white/70 max-md:flex-1"
                         onClick={handleClose}
                     >
                         {localize("com_knowledge.cancel")}</Button>
                     <Button
                         variant="default"
-                        className="h-8 min-w-[60px] rounded-[6px] px-4 font-normal max-md:flex-1"
+                        className="h-8 min-w-[60px] rounded-md px-4 font-normal max-md:flex-1"
                         onClick={handleSave}
                         disabled={loading}
                     >

@@ -209,7 +209,7 @@ export default function ArticlePage() {
                     <DropdownMenuTrigger asChild>
                         <button
                             type="button"
-                            className="inline-flex size-9 items-center justify-center rounded-xl border border-black/5 bg-white/70 text-[#212121] shadow-[0_2px_8px_rgba(0,0,0,0.06)] backdrop-blur-md transition-colors hover:bg-white/85"
+                            className="inline-flex size-9 items-center justify-center rounded-xl border border-black/5 bg-white/70 text-[#212121] shadow-[0_2px_8px_rgba(0,0,0,0.06)] transition-colors hover:bg-white/85"
                             aria-label={localize("com_subscription.channel_settings")}
                         >
                             <Outlined.MoreCircle className="size-5" />
@@ -218,7 +218,7 @@ export default function ArticlePage() {
                     <DropdownMenuContent
                         align="end"
                         sideOffset={6}
-                        className="z-[120] w-[160px] space-y-1 border border-black/5 bg-white/85 p-1 backdrop-blur-md"
+                        className="z-[120] w-[160px] space-y-1 border border-black/5 bg-white/85 p-1"
                     >
                         <DropdownMenuItem
                             className="flex w-full cursor-pointer items-center gap-2 px-2 py-[5px] text-sm text-[#212121]"

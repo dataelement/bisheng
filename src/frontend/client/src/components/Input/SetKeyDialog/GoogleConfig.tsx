@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import React from 'react';
 import { object, string } from 'zod';
 import { AuthKeys } from '~/types/chat';

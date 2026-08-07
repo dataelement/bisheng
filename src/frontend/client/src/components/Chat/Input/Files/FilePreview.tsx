@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import type { ExtendedFile } from '~/common';
 import { FileIcon, getFileTypebyFileName } from '~/components/ui/icon/File/FileIcon';
 import LegacyFileIcon from '~/components/ui/icon/File';

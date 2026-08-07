@@ -25,6 +25,7 @@ from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.cache.utils import save_file_to_folder
 from bisheng.core.logger import trace_id_var
 from bisheng.core.prompts.manager import get_prompt_manager
+from bisheng.core.storage.chat_attachment import promote_chat_attachments
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.flow import FlowType
 from bisheng.database.models.session import MessageSession, MessageSessionDao
@@ -310,7 +311,12 @@ class LinsightWorkbenchImpl:
                 chat_id=chat_id,
                 user_id=login_user.user_id,
                 question=submit_obj.question,
-                files=cls._annotate_display_files(display_files, processed_files),
+                # Attachments that came in through the shared upload endpoint are
+                # still sitting in the temp bucket; the ones ingested by linsight
+                # already have an object_name and are skipped.
+                files=await promote_chat_attachments(
+                    cls._annotate_display_files(display_files, processed_files), login_user.user_id
+                ),
             )
 
             return message_session, linsight_session_version
@@ -347,6 +353,11 @@ class LinsightWorkbenchImpl:
                     item["error_message"] = p["error_message"]
                 if p.get("cover_filepath"):
                     item["cover_filepath"] = p["cover_filepath"]
+                # Ingestion already persisted the original image bytes for the
+                # workspace preview; naming it here lets the conversation resolve
+                # a fresh link for it too, the same way the other chat modes do.
+                if p.get("original_file_path"):
+                    item["object_name"] = p["original_file_path"]
             annotated.append(item)
         return annotated
 

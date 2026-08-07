@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 
 import { useRef, useState } from "react";
 import { useRecoilValue } from "recoil";

@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import UsersSelect from "@/components/bs-comp/selectComponent/Users";
 import type { DepartmentUserOption } from "@/components/bs-comp/selectComponent/DepartmentUsersSelect";
 import { Button } from "@/components/bs-ui/button";

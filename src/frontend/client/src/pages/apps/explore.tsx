@@ -19,7 +19,9 @@ const appFlowOriginKey = (flowId: string) => `app-flow-origin:${flowId}`;
 const appLastOriginKey = 'app-last-origin';
 
 export default function ExplorePlaza() {
-    const [activeTabId, setActiveTabId] = useState<number | string>(-1)
+    // Null until the navigation has its tags and can say which tab is the
+    // default; fetching before that would show one tab's apps and then swap.
+    const [activeTabId, setActiveTabId] = useState<number | string | null>(null)
     const [searchQuery, setSearchQuery] = useState("")
     const [agents, setAgents] = useState<any[]>([])
     const [loading, setLoading] = useState(false)
@@ -57,7 +59,7 @@ export default function ExplorePlaza() {
         try {
             const result = categoryId === 'uncategorized'
                 ? await getUncategorized(currentPage, pageSize, query)
-                : await getChatOnlineApi(currentPage, query, categoryId === -1 ? undefined : (categoryId as number), pageSize);
+                : await getChatOnlineApi(currentPage, query, categoryId as number, pageSize);
 
             const pageData = (result as any).data || [];
 
@@ -80,6 +82,7 @@ export default function ExplorePlaza() {
     }, [loading, loadingMore]);
 
     useEffect(() => {
+        if (activeTabId === null) return;
         setPage(1);
         setHasMore(true);
         loadMoreLockRef.current = false;
@@ -87,7 +90,7 @@ export default function ExplorePlaza() {
     }, [searchQuery, activeTabId, refreshTrigger]);
 
     useEffect(() => {
-        if (page > 1) {
+        if (page > 1 && activeTabId !== null) {
             fetchAgents(searchQuery, activeTabId, page, true);
         }
     }, [page]);
@@ -119,6 +122,12 @@ export default function ExplorePlaza() {
 
         return () => observer.disconnect();
     }, [loading, loadingMore, hasMore]);
+
+    // The spinner also covers the wait for the navigation's tags, which decide
+    // the default tab. `loading` itself must stay false until a request is
+    // actually in flight — fetchAgents treats it as a re-entry guard and would
+    // skip the very first fetch, leaving the spinner up for good.
+    const showLoading = loading || activeTabId === null;
 
     const handleCardClick = (agent: any) => {
         const flowId = agent.id
@@ -239,11 +248,11 @@ export default function ExplorePlaza() {
                         'flex w-full flex-col items-center',
                         // Empty/loading: fill the region and place content via flex spacers at a
                         // region-relative height (not viewport vh): ~40% on mobile, ~45% on PC.
-                        (loading || agents.length === 0) ? 'flex-1' : 'py-10',
+                        (showLoading || agents.length === 0) ? 'flex-1' : 'py-10',
                     )}
                 >
-                    {(loading || agents.length === 0) && <div className="flex-[8] md:flex-[9]" aria-hidden />}
-                    {loading ? (
+                    {(showLoading || agents.length === 0) && <div className="flex-[8] md:flex-[9]" aria-hidden />}
+                    {showLoading ? (
                         <div className="flex flex-col items-center gap-3 text-blue-500">
                             <LoadingIcon className="size-20 text-primary" />
                             <span className="text-sm font-['PingFang_SC'] text-[#999999]">{localize('com_app_explore_loading_more')}</span>
@@ -257,13 +266,13 @@ export default function ExplorePlaza() {
                     {!hasMore && agents.length > 0 && (
                         <p className="text-[#a9aeb8] text-[12px] font-['PingFang_SC'] mt-4">{localize('com_app_explore_end_of_list')}</p>
                     )}
-                    {!loading && agents.length === 0 && (
+                    {!showLoading && agents.length === 0 && (
                         <div className="flex flex-col items-center">
                             <EmptyStateIllustration className="size-[120px] mb-4" />
                             <p className="text-[#a9aeb8] text-[14px] font-['PingFang_SC']">{localize('com_app_explore_no_agents')}</p>
                         </div>
                     )}
-                    {(loading || agents.length === 0) && <div className="flex-[12] md:flex-[11]" aria-hidden />}
+                    {(showLoading || agents.length === 0) && <div className="flex-[12] md:flex-[11]" aria-hidden />}
                 </div>
                 </div>
             </main>

@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useEffect, useRef } from "react";
 import { KeyPairListComponentType } from "../../types/components";
 
@@ -86,7 +87,7 @@ export default function KeypairListComponent({
                             {index === ref.current.length - 1 ? (
                                 <button
                                     onClick={() => {
-                                        let newInputList = cloneDeep(ref.current);
+                                        const newInputList = cloneDeep(ref.current);
                                         newInputList.push({ "": "" });
                                         onChange(newInputList);
                                     }}
@@ -98,7 +99,7 @@ export default function KeypairListComponent({
                             ) : (
                                 <button
                                     onClick={() => {
-                                        let newInputList = cloneDeep(ref.current);
+                                        const newInputList = cloneDeep(ref.current);
                                         newInputList.splice(index, 1);
                                         onChange(newInputList);
                                     }}

@@ -1,0 +1,52 @@
+# 点赞 / 点踩反馈 Feedback
+
+`MessageFeedbackButtons` —— 全部 6 类 AI 回答界面共用的反馈控件（首页对话 / 知源 / 订阅 3 面板 / 灵思 / appChat）。点踩为**延迟提交**：弹窗（共享壳 `CommentDialog`）点「提交」才落库并高亮，原因选填；「取消」= 彻底放弃点踩。
+
+## 三种初始状态
+
+demo 只把回调打到旁边的文本上，不落库，可任意点。
+
+```tsx
+import { useState } from 'react';
+import { RecoilRoot } from 'recoil';
+import '~/locales/i18n';
+import store from '~/store';
+import { MessageFeedbackButtons } from '~/components/Chat/MessageFeedbackButtons';
+
+function Demo({ label, hint, liked }: { label: string; hint: string; liked?: number }) {
+  const [last, setLast] = useState('—');
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+      <div style={{ width: 300, flexShrink: 0, fontSize: 13, color: 'rgb(var(--text-2))' }}>
+        {label}
+        <div style={{ fontSize: 12, color: 'rgb(var(--text-3))' }}>{hint}</div>
+      </div>
+      <MessageFeedbackButtons
+        liked={liked}
+        onLike={(l) => setLast(`onLike(${l})`)}
+        onDislikeComment={(c) => setLast(`onDislikeComment("${c}")`)}
+      />
+      <span style={{ fontSize: 12, color: 'rgb(var(--text-3))' }}>最近调用：{last}</span>
+    </div>
+  );
+}
+
+export default () => (
+  <RecoilRoot initializeState={({ set }) => set(store.lang, 'zh-Hans')}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <Demo label="初始未评价" hint="点踩先弹窗，提交后才高亮；取消不留痕" />
+      <Demo label="已点赞态（liked=1）" hint="点踩弹窗取消后应保持点赞高亮" liked={1} />
+      <Demo label="已点踩态（liked=2）" hint="再点踩 = 直接取消，不弹窗" liked={2} />
+    </div>
+  </RecoilRoot>
+);
+```
+
+## 规则
+
+- 点赞与取消评价**立即落库**；点踩只有弹窗提交后才落库并高亮。
+- 已点踩态再点踩 = 直接取消，不再弹窗。
+- 按钮视觉与 AI 消息操作行一致：`size-6` 热区、14px bisheng-icons Outlined 字形、`#818181` 常态 / 品牌色激活。
+- 弹窗规格（CommentDialog）：圆角 12 / 边距 20 / 按钮 32 高 · 14px · 字重 400 · 圆角 6。
+
+> demo 里的 `RecoilRoot` + `import '~/locales/i18n'` 只是文档站的挂载脚手架；业务页在 App 全局已具备。

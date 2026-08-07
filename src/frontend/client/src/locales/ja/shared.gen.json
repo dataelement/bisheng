@@ -1,0 +1,21 @@
+{
+  "knowledge": {
+    "excelPreview": {
+      "filePathEmpty": "ファイルパスが空です",
+      "fileLoadFailed": "ファイル読み込み失敗",
+      "fileContentEmpty": "ファイル内容が空です",
+      "excelParseFailed": "Excel ファイルの解析に失敗しました。ファイルが破損していないか確認してください。",
+      "unsupportedType": "サポートされていないタイプ: {{type}}，CSV/XLSX/XLSのみ対応",
+      "unknownError": "不明なエラー",
+      "currentSheetNoData": "現在のシートにデータがありません",
+      "rowNumber": "行番号",
+      "defaultColumnName": "列{{index}}",
+      "loading": "ファイル読み込み中...",
+      "supportedFormats": "CSV、XLSX、XLS形式に対応",
+      "previewFailed": "プレビュー失敗",
+      "downloadOriginal": "元ファイルをダウンロード",
+      "imageLoadFailed": "画像の読み込みに失敗しました",
+      "imageRef": "画像参照"
+    }
+  }
+}

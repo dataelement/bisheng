@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 // src/features/chat-config/components/IconUploadSection.tsx
 import Avator from "@/components/bs-ui/input/avator";
 import { Label } from "@/components/bs-ui/label";

@@ -145,7 +145,7 @@ export function TaskModeInput({ conversationId = 'new', disabled = false, onFoll
             try {
                 const res = await checkFileParseStatus(pending.map((file: any) => file.file_id));
                 const statusList = Array.isArray(res.data) ? res.data.filter(Boolean) : [];
-                const statusMap = new Map(statusList.map((item: any) => [item.file_id, item]));
+                const statusMap = new Map<string, any>(statusList.map((item: any) => [item.file_id, item]));
                 if (!statusMap.size) return;
 
                 inputFilesRef.current?.updateParsingStatus?.(statusMap);

@@ -1,4 +1,4 @@
-import { useLocalize } from "~/hooks";
+import { useLocalize, useWorkbenchMenuNames } from "~/hooks";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -49,6 +49,8 @@ export function ChannelSidebar({
     onDrawerClose,
 }: ChannelSidebarProps) {
     const localize = useLocalize();
+    // 模块标题跟随后台配置的菜单显示名称
+    const menuNames = useWorkbenchMenuNames();
     const { data: bsConfig } = useGetBsConfig();
     const [collapsed, setCollapsed] = useState(false);
     const [createdCollapsed, setCreatedCollapsed] = useState(false);
@@ -185,7 +187,7 @@ export function ChannelSidebar({
                 <div className={collapsed ? "px-0 py-5" : "px-3 py-5"}>
                     <div className={collapsed ? "flex items-center justify-center h-7" : "border-b border-[#e5e6eb] space-y-4 pb-4"}>
                         {!collapsed && <div className="px-2 flex justify-between items-center text-[16px] font-medium">
-                            <span>{localize("com_subscription.subscribe")}</span>
+                            <span>{menuNames.channel}</span>
                         </div>}
                         {!collapsed && (
                             <div className="flex items-center gap-3">

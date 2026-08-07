@@ -680,6 +680,23 @@ class WorkFlowService(BaseService):
         ]
 
     @classmethod
+    async def aget_writeable_app_ids(cls, user: UserPayload, data: list[dict]) -> set[str]:
+        """Which of these apps the caller may edit.
+
+        Exists so an async endpoint can fill `add_extra_field`'s `writeable_ids`
+        without it reaching for a synchronous permission check of its own. Asked
+        through the F048 action map, like every other permission question here —
+        the 2.6 line resolved this against ApplicationPermissionService, which
+        the F048 rework replaced.
+        """
+        action_map = await cls._application_action_map(user, data, ("edit",))
+        return {
+            app_id
+            for app_id, action_codes in action_map.items()
+            if "edit" in action_codes
+        }
+
+    @classmethod
     async def run_once(
         cls,
         login_user: UserPayload,
@@ -940,7 +957,8 @@ class WorkFlowService(BaseService):
         end_index = start_index + page_size
         data = data[start_index:end_index]
 
-        data = cls.add_extra_field(user, data)
+        writeable_ids = await cls.aget_writeable_app_ids(user, data)
+        data = cls.add_extra_field(user, data, writeable_ids=writeable_ids)
         data = await cls.aenrich_apps_can_share(user, data)
 
         return data, total

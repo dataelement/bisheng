@@ -1,6 +1,5 @@
 import { AssistantDetail } from '@/types/assistant'
 import { create } from 'zustand'
-import { getAssistantDetailApi } from '../controllers/API/assistant'
 
 /**
  * 助手编辑管理
@@ -13,7 +12,8 @@ type State = {
 
 type Actions = {
   dispatchAssistant: (action: Action, assistantState: Partial<AssistantDetail>) => void,
-  loadAssistantState: (id: string, version: string) => Promise<any>
+  // C7: callers fetch via getAssistantDetailApi and hand the payload in here.
+  setAssistantDetail: (data: AssistantDetail) => void
   saveAfter: () => void
   destroy: () => void
 }
@@ -21,7 +21,6 @@ type Actions = {
 type Action = 'setBaseInfo' | 'setting' | 'setPrompt' | 'setGuideword' | 'setTools' | 'setFlows' | 'setQuestion' | 'setContentSecurity'
 
 const assistantReducer = (state: State, action: Action, data: Partial<AssistantDetail>) => {
-  console.log('action :>> ', action, data);
   return { changed: true, assistantState: { ...state.assistantState, ...data } }
   // switch (action) {
   //   case 'setBaseInfo':
@@ -56,18 +55,14 @@ export const useAssistantStore = create<State & Actions>((set) => ({
   changed: false,
   assistantState: { ...assistantTemp },
   dispatchAssistant: (action: Action, data: Partial<AssistantDetail>) => set((state) => assistantReducer(state, action, data)),
-  // 加载助手状态
-  loadAssistantState: (id, version) => {
-    return getAssistantDetailApi(id, version).then(data => {
-      set({
-        assistantState: {
-          ...data,
-          model_name: Number(data.model_name),
-          // 补一个空行
-          guide_question: data.guide_question ? [...data.guide_question, ''] : ['']
-        }
-      })
-      return data
+  setAssistantDetail: (data) => {
+    set({
+      assistantState: {
+        ...data,
+        model_name: Number(data.model_name),
+        // trailing empty slot for the guide-question editor
+        guide_question: data.guide_question ? [...data.guide_question, ''] : ['']
+      }
     })
   },
   saveAfter() {

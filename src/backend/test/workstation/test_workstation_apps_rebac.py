@@ -51,8 +51,13 @@ async def test_recommended_apps_filter_with_visible_action():
         ),
         patch.object(
             apps_mod.WorkFlowService,
+            "aget_writeable_app_ids",
+            new=AsyncMock(return_value=set()),
+        ),
+        patch.object(
+            apps_mod.WorkFlowService,
             "add_extra_field",
-            side_effect=lambda _user, data: data,
+            side_effect=lambda _user, data, **_kwargs: data,
         ),
         patch.object(
             apps_mod.WorkFlowService,

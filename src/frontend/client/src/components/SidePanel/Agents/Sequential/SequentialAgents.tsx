@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { Plus, X } from 'lucide-react';
 import React, { useRef, useState } from 'react';
 import { Transition } from 'react-transition-group';

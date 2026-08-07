@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useMemo } from "react";
 import { useRecoilValue } from "recoil";
 import type { CitationReferencesDesktopPayload } from "~/components/Chat/Messages/Content/CitationReferencesDrawer";
@@ -90,7 +91,9 @@ export default function ChatMessages({
         }
 
         {messages.map((msg) => {
-                if (msg.files?.length) {
+                // A user's own attachments belong on their message bubble;
+                // MessageFile is for files the run produced.
+                if (msg.files?.length && msg.category !== 'question') {
                     return <MessageFile key={msg.id} title={title} data={msg} logo={logo} />;
                 } else if (['tool', 'flow', 'knowledge'].includes(msg.category)) {
                     return <MessageRunlog key={msg.id || msg.extra} data={msg} />;

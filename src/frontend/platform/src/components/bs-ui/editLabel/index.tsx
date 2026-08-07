@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { PenLine } from "lucide-react";
 import { useContext, useRef, useState } from "react";
 import { alertContext } from "../../../contexts/alertContext";

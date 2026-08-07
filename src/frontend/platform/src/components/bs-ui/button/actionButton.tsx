@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { ChevronDown } from "lucide-react";
 import { Button } from ".";
 import { Popover, PopoverContent, PopoverTrigger } from "../popover";

@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 "use client"
 
 import { ChevronDown, Loader2 } from "lucide-react"

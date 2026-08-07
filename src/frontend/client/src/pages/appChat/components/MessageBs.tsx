@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { CheckIcon, ChevronDown, Loader2 } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
@@ -11,7 +12,7 @@ import {
 import { LoadingIcon } from "~/components/ui/icon/Loading";
 import { useMessageSelection } from "~/hooks/useMessageSelection";
 import { cn, copyText, formatStrTime } from "~/utils";
-import { AppChatFileChip } from "./AppChatFileChip";
+import { AppChatFileList } from "./AppChatFileList";
 import MessageButtons from "./MessageButtons";
 import useLocalize from "~/hooks/useLocalize";
 
@@ -145,11 +146,7 @@ export default function MessageBs({
                                         />
                                     </div>}
                                     {data.files.length > 0 && (
-                                        <div className="mt-2 flex max-w-sm flex-wrap gap-2">
-                                            {data.files.map((file, index) => (
-                                                <AppChatFileChip key={index} file={file} variant="message" />
-                                            ))}
-                                        </div>
+                                        <AppChatFileList files={data.files} className="mt-2" />
                                     )}
                                     {/* @user */}
                                     {data.receiver && <p className="text-blue-500 text-sm">@ {data.receiver.user_name}</p>}

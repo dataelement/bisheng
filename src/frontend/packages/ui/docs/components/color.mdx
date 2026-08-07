@@ -1,0 +1,257 @@
+# 色彩 Color
+
+两层 token 结构：primitive（`--arco-gray-1~10`）→ semantic（文字 / 填充 / 边框 / 语义色），**业务代码只接触 semantic 层，禁止裸 hex**。品牌色永远走 `blue-*` 类（自动蓝⇄绿换肤）。规范全文见「文档 → 设计规范 → 色彩 Color」。
+
+> 本页所有色块 / 表格均从设计 token 单一源 `~/design-token.cjs` 渲染，与组件消费的是同一份数据——改 token 即改此页。
+
+## 品牌色 Brand
+
+主色 = 500 档，跟随蓝⇄绿主题；hover 用 400、active 用 600，浅底走 50–200。悬停色块可看每档用途。
+
+```tsx
+import { BRAND, BRAND_STEPS } from '~/design-token.cjs';
+
+const overlay = (hex) => {
+  const h = hex.slice(1);
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16));
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.6
+    ? 'rgba(0,0,0,0.85)'
+    : 'rgba(255,255,255,0.95)';
+};
+
+const Ramp = ({ title, theme }) => {
+  const steps = [...BRAND_STEPS, 'muted'];
+  const accent = BRAND[theme][BRAND.accentStep];
+  return (
+    <div style={{ marginBottom: 24 }}>
+      <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 10, color: 'rgb(var(--text-1))' }}>{title}</div>
+      <div style={{ display: 'flex' }}>
+        {steps.map((step) => {
+          const hex = BRAND[theme][step];
+          const isMain = step === BRAND.main;
+          return (
+            <div
+              key={step}
+              title={BRAND.role[step]}
+              style={{
+                flex: 1,
+                minWidth: 0,
+                height: 132,
+                padding: 12,
+                background: hex,
+                color: overlay(hex),
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'flex-end',
+                position: 'relative',
+              }}
+            >
+              <div style={{ fontSize: 13, fontWeight: isMain ? 500 : 400 }}>{step}</div>
+              <div style={{ fontSize: 11, fontFamily: 'monospace', opacity: 0.8 }}>{hex}</div>
+              {isMain && (
+                <span style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 3, background: accent }} />
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+export default () => (
+  <div>
+    <Ramp title="蓝（默认）" theme="blue" />
+    <Ramp title="绿（theme-green）" theme="green" />
+    <p style={{ fontSize: 13, color: 'rgb(var(--text-3))', margin: 0 }}>
+      例外（固定不换肤）：审批 tag 永远蓝、第三方 logo 原色；muted 档为低饱和品牌点缀。
+    </p>
+  </div>
+);
+```
+
+## 中性色 · primitive（灰阶 1–10）
+
+中性色数值源；组件不直接用这层，走下方 semantic。色块背景实时取自 `rgb(var(--arco-gray-N))`，hex 为规范文档值。
+
+```tsx
+import { GRAY } from '~/design-token.cjs';
+
+export default () => (
+  <div style={{ display: 'flex' }}>
+    {GRAY.map((g) => (
+      <div
+        key={g.n}
+        title={g.role}
+        style={{
+          flex: 1,
+          minWidth: 0,
+          height: 116,
+          padding: 12,
+          background: `rgb(var(--arco-gray-${g.n}))`,
+          // On-swatch text uses the opposite end of the ramp, which co-flips
+          // with the bg in dark mode → contrast holds in both themes.
+          color: g.n <= 5 ? 'rgb(var(--arco-gray-10))' : 'rgb(var(--arco-gray-1))',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'flex-end',
+        }}
+      >
+        <div style={{ fontSize: 13 }}>gray-{g.n}</div>
+        <div style={{ fontSize: 11, fontFamily: 'monospace', opacity: 0.8 }}>{g.hex} / {g.darkHex}</div>
+      </div>
+    ))}
+  </div>
+);
+```
+
+## 中性色 · semantic（组件用这层）
+
+文字 / 填充 / 边框，**同一语义只有一个值**。token 名称已语义化（`text-title` / `fill-hover`…）；旧数字名（`text-1`…）作为 deprecated 别名保留，方便渐进迁移。右侧为实时渲染示例。
+
+```tsx
+import { TEXT, FILL, BORDER, BG } from '~/design-token.cjs';
+
+const Row = ({ token, cls, legacy, value, usage, demo }) => (
+  <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '10px 0', borderBottom: '1px solid rgb(var(--border-base))' }}>
+    <code style={{ width: 150, flexShrink: 0, fontSize: 13 }}>{cls}</code>
+    <code style={{ width: 90, flexShrink: 0, fontSize: 12, color: 'rgb(var(--text-4))' }}>{legacy || ''}</code>
+    <span style={{ width: 130, flexShrink: 0, fontSize: 12, color: 'rgb(var(--text-3))' }}>{value}</span>
+    <span style={{ flex: 1, fontSize: 13, color: 'rgb(var(--text-2))' }}>{usage}</span>
+    <span style={{ width: 150, flexShrink: 0 }}>{demo}</span>
+  </div>
+);
+
+export default () => (
+  <div style={{ display: 'flex', flexDirection: 'column' }}>
+    {TEXT.map((t) => (
+      <Row
+        key={t.name}
+        cls={`text-text-${t.name}`}
+        legacy={`text-text-${t.legacy}`}
+        value={`${t.ref} ${t.hex}`}
+        usage={t.usage}
+        demo={<span className={`text-body text-text-${t.name}`}>示例文字 Abc</span>}
+      />
+    ))}
+    {FILL.map((f) => (
+      <Row
+        key={f.name}
+        cls={`bg-fill-${f.name}`}
+        legacy={`bg-fill-${f.legacy}`}
+        value={`${f.ref} ${f.hex}`}
+        usage={f.usage}
+        demo={<span className={`bg-fill-${f.name}`} style={{ display: 'inline-block', width: 64, height: 24, borderRadius: 4, border: '1px solid rgb(var(--border-deep))' }} />}
+      />
+    ))}
+    {BORDER.map((b) => (
+      <Row
+        key={b.name}
+        cls={`border-border-${b.name}`}
+        legacy=""
+        value={`${b.ref} ${b.hex}`}
+        usage={b.usage}
+        demo={<span className={`border-border-${b.name}`} style={{ display: 'inline-block', width: 64, height: 24, borderRadius: 6, borderWidth: 1, borderStyle: 'solid', background: 'transparent' }} />}
+      />
+    ))}
+    {BG.map((b) => (
+      <Row
+        key={b.name}
+        cls={`bg-bg-${b.name}`}
+        legacy=""
+        value={`${b.hex} · 暗 ${b.darkHex}`}
+        usage={b.usage}
+        demo={<span style={{ display: 'inline-block', width: 64, height: 24, borderRadius: 6, background: `rgb(var(${b.cssVar}))`, border: '1px solid rgb(var(--border-base))' }} />}
+      />
+    ))}
+  </div>
+);
+```
+
+## 语义色 Functional（不换肤）
+
+成功 / 警告 / 危险固定 hex，全主题恒定；链接 / 信息 = 品牌色，跟随主题。危险浅底分两种：按钮用主色透明阶 `bg-danger/10~20`；tag 用实色 `bg-danger-tint`。
+
+```tsx
+import { FUNCTIONAL } from '~/design-token.cjs';
+
+const overlay = (hex) => {
+  const h = hex.slice(1);
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16));
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.6
+    ? 'rgba(0,0,0,0.85)'
+    : 'rgba(255,255,255,0.95)';
+};
+
+const STOPS = [['主色', 'main'], ['hover', 'hover'], ['active', 'active'], ['tint 浅底', 'tint']];
+
+export default () => (
+  <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+    {FUNCTIONAL.map((fn) => (
+      <div key={fn.name}>
+        <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 8, color: 'rgb(var(--text-1))' }}>{fn.label}</div>
+        <div style={{ display: 'flex' }}>
+          {STOPS.map(([label, key]) => (
+            <div
+              key={key}
+              style={{
+                flex: 1,
+                minWidth: 0,
+                height: 96,
+                padding: 12,
+                background: fn[key],
+                color: overlay(fn[key]),
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'flex-end',
+              }}
+            >
+              <div style={{ fontSize: 13 }}>{label}</div>
+              <div style={{ fontSize: 11, fontFamily: 'monospace', opacity: 0.8 }}>{fn[key]}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    ))}
+  </div>
+);
+```
+
+## 标签色 Tag
+
+成对使用：浅底 + 深字。橙 / 绿 / 红三对走 token；技能紫、审批蓝为固定例外色。
+
+```tsx
+import { TAG } from '~/design-token.cjs';
+
+export default () => (
+  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+    {TAG.map((t) => (
+      <span
+        key={t.label}
+        title={t.note}
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          borderRadius: 4,
+          padding: '2px 8px',
+          fontSize: 13,
+          background: t.bg,
+          color: t.fg,
+        }}
+      >
+        {t.label}
+      </span>
+    ))}
+  </div>
+);
+```
+
+## 使用规则
+
+- 只用 semantic 层（`text-text-strong` / `bg-fill-subtle` / `border-border-base` / `bg-success`…），**禁止裸 hex**。
+- 品牌色永远走 `blue-*` 类（自动蓝⇄绿换肤），禁止写品牌 hex。列表/菜单选中浅底统一 `bg-blue-500/[0.07]`。
+- 语义色（成功/警告/危险）**不参与换肤**。
+- 同一语义只允许一个值；新颜色先在色板找替代。
+
+> 色块的 hex 为规范文档值（展示用途）；业务代码一律走 token / 类名，不抄这些 hex。

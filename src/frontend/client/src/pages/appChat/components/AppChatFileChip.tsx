@@ -10,6 +10,14 @@ import ChatFile from './ChatFile';
 
 const IMAGE_FILE_TYPES = new Set(['jpg', 'jpeg', 'png', 'bmp', 'gif', 'webp']);
 
+/** Whether this attachment renders as a picture square rather than a card.
+ *  Exported so the list layout groups by exactly what the chip will draw. */
+export function isAppChatImageFile(file: AppChatFileLike): boolean {
+    const { name, path } = normalizeAppChatFile(file);
+    if (isMediaAttachmentFile({ name })) return false;
+    return IMAGE_FILE_TYPES.has(getFileTypebyFileName(name)) && !!path;
+}
+
 interface AppChatFileChipProps {
     file: AppChatFileLike;
     variant?: 'bar' | 'message';
@@ -43,26 +51,28 @@ export function AppChatFileChip({ file, variant = 'message', className }: AppCha
     const isImage = IMAGE_FILE_TYPES.has(fileType) && !!previewUrl;
 
     if (isImage) {
+        // Pictures show as a picture, not as a card with a filename — same
+        // 100px square daily mode uses (MessageImage), so an image attachment
+        // looks the same wherever it appears. The gray tint gives a
+        // transparent PNG something to show its own black artwork against;
+        // deliberately a fixed light gray, since the artwork inside the file
+        // does not invert with the theme.
         return (
             <>
                 <button
                     type="button"
                     onClick={() => setPreviewOpen(true)}
+                    title={name}
                     className={cn(
-                        'group flex min-w-52 max-w-sm items-center gap-2 rounded-xl border bg-white p-2 text-left cursor-pointer',
+                        'size-[100px] shrink-0 overflow-hidden rounded-lg bg-[#F8F8F8] cursor-pointer',
                         className,
                     )}
                 >
                     <img
                         src={previewUrl}
-                        alt=""
-                        className="size-10 shrink-0 rounded object-cover"
+                        alt={name}
+                        className="size-full object-cover"
                     />
-                    <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm font-medium text-gray-700" title={name}>
-                            {name}
-                        </div>
-                    </div>
                 </button>
                 <OGDialog open={previewOpen} onOpenChange={setPreviewOpen}>
                     <OGDialogContent

@@ -93,6 +93,20 @@ async def del_chat_id(*, request: Request, chat_id: str, login_user: UserPayload
     return resp_200()
 
 
+@router.get("/chat/{chat_id}/files/{file_id}/url", status_code=200)
+async def get_chat_attachment_url(
+    *, request: Request, chat_id: str, file_id: str, login_user: UserPayload = Depends(UserPayload.get_login_user)
+):
+    """Fresh link for an attachment of this conversation.
+
+    The link issued at upload time expires; the client asks for a new one when
+    it renders. Which object gets signed is decided from the conversation's own
+    messages, never from anything the caller sends.
+    """
+    url = await ChatSessionService.resolve_attachment_url(chat_id, file_id, login_user)
+    return resp_200(data={"url": url})
+
+
 @router.post("/chat/message", status_code=200)
 def add_chat_messages(
     *, request: Request, data: AddChatMessages, login_user: UserPayload = Depends(UserPayload.get_login_user)

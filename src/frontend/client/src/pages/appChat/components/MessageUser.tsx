@@ -8,6 +8,8 @@ import { bishengConfState } from "../store/atoms";
 import { emitAreaTextEvent, EVENT_TYPE } from "../useAreaText";
 import { Avatar, AvatarImage, AvatarName } from "~/components/ui/Avatar";
 import { MessageCheckbox } from "~/components/Chat/MessageSelection";
+import { MessageImage } from "~/components/Chat/Messages/Content/MessageImage";
+import { isImageFileName } from "~/components/ui/icon/File/FileIcon";
 import { useMessageSelection } from "~/hooks/useMessageSelection";
 
 export default function MessageUser({ useName, data, showButton, disabledSearch = false, readOnly }) {
@@ -19,12 +21,27 @@ export default function MessageUser({ useName, data, showButton, disabledSearch 
     const [config] = useRecoilState(bishengConfState)
     const localize = useLocalize()
 
+    const files = useMemo(() => (Array.isArray(data.files) ? data.files : []), [data.files])
+
     const msg = useMemo(() => {
         const res = typeof data.message === 'string' ? data.message : data.message[data.chatKey]
         // hack   handle user input json
         const hackStr = typeof res === 'string' ? res : JSON.stringify(data.message)
-        return hackStr.replace(/\\n/g, '\n')
-    }, [])
+        const text = hackStr.replace(/\\n/g, '\n')
+        // Attachment names are prepended to the text on the way to the workflow
+        // node, which still needs them. Once the attachments render on their
+        // own, showing those names again just duplicates them.
+        const names = files.map((f) => f.file_name || f.name).filter(Boolean)
+        if (!names.length) return text
+        const lines = text.split('\n')
+        while (lines.length && names.includes(lines[0])) lines.shift()
+        return lines.join('\n')
+    }, [data.message, files])
+
+    const images = useMemo(
+        () => files.filter((f) => isImageFileName(f.file_name || f.name)),
+        [files],
+    )
 
     const handleResend = (send) => {
         emitAreaTextEvent({
@@ -73,6 +90,21 @@ export default function MessageUser({ useName, data, showButton, disabledSearch 
                     <div className="">
                         <p className="select-none font-semibold text-base mb-1">{useName}</p>
                         <div className="text-[#0D1638] dark:text-[#CFD5E8] text-base break-all whitespace-break-spaces">{msg}</div>
+                        {/* Pictures the user attached show as pictures; other
+                            files keep reading as their filename in the text. */}
+                        {images.length > 0 && (
+                            <div className="mt-2 flex flex-wrap gap-2">
+                                {images.map((file, i) => (
+                                    <MessageImage
+                                        key={file.file_id ?? i}
+                                        conversationId={data.chat_id || chatId}
+                                        fileId={file.file_id}
+                                        altText={file.file_name || file.name}
+                                        initialUrl={file.file_url || file.filepath}
+                                    />
+                                ))}
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>

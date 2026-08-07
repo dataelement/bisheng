@@ -16,6 +16,8 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import WebSearchForm from "../tools/builtInTool/WebSearchFrom";
 import { resolveConfigString } from "./configValue";
+import { FormInput } from "./FormInput";
+import { clampMenuName } from "./menuDisplayName";
 import Preview from "./Preview";
 import ConfigInheritanceBanner, { resolveConfigEnvelope } from "./ConfigInheritanceBanner";
 import {
@@ -33,6 +35,7 @@ export interface FormErrors {
     systemPrompt: string;
     userPrompt: string;
     feedbackTips: string;
+    menuDisplayName: string;
     model: string;
     kownledgeBase: string;
     applicationCenterWelcomeMessage: string;
@@ -46,6 +49,8 @@ export interface ChatConfigForm {
     feedbackTips: string;
     /** 订阅侧 AI 助手自定义名称，对应接口 assistant_name；空表示用客户端默认文案 */
     assistantName: string;
+    /** 订阅在 client 侧边栏的菜单显示名称，对应接口 menu_display_name；空表示用客户端默认文案 */
+    menuDisplayName: string;
 }
 export default function Subscribe({ scopeVersion = 0 }: { scopeVersion?: number }) {
     const welcomeMessageRef = useRef<HTMLDivElement>(null);
@@ -105,6 +110,17 @@ export default function Subscribe({ scopeVersion = 0 }: { scopeVersion?: number 
                 <CardContent className="pt-4 pb-0 relative">
                     <div className="w-full  max-h-[calc(100vh-180px-var(--license-banner-h,0px))] overflow-y-scroll scrollbar-hide">
                         <ConfigInheritanceBanner meta={configMeta} />
+                        {/* 菜单显示名称：留空则客户端回退到本地化默认文案 */}
+                        <FormInput
+                            label={t('chatConfig.menuDisplayName')}
+                            value={formData.menuDisplayName}
+                            error={errors.menuDisplayName}
+                            placeholder={t('bench.subscribe')}
+                            onChange={(v) => {
+                                setFormData(prev => ({ ...prev, menuDisplayName: clampMenuName(v) }));
+                                setErrors(prev => ({ ...prev, menuDisplayName: '' }));
+                            }}
+                        />
                         <div className="mb-6">
                             <div className="flex items-center mb-2">
                                 <p className="text-lg font-bold flex items-center">
@@ -260,6 +276,8 @@ const useChatConfig = (refs: UseChatConfigProps, scopeVersion = 0) => {
         maxChunkSize: 15000,
         feedbackTips: '请将您的网站爬取需求发送至邮箱：XXXX@XX',
         assistantName: '',
+        // 接口为空时展示默认菜单名，用户可直接改
+        menuDisplayName: t('bench.subscribe'),
     });
     const [configMeta, setConfigMeta] = useState<any>(null);
 
@@ -275,6 +293,7 @@ const useChatConfig = (refs: UseChatConfigProps, scopeVersion = 0) => {
                 const maxChunkSizeFromRes = cfg?.max_chunk_size ?? cfg?.maxTokens;
                 const feedbackTipsFromRes = cfg?.feedback_tips ?? cfg?.feedbackTips;
                 const assistantNameFromRes = cfg?.assistant_name ?? cfg?.assistantName;
+                const menuDisplayNameFromRes = cfg?.menu_display_name ?? cfg?.menuDisplayName;
                 // When backend returns no saved value, seed the textarea with the
                 // localized default template so it is editable as a real value.
                 const resolvedSystemPrompt = resolveConfigString(systemPromptFromRes, '');
@@ -287,6 +306,8 @@ const useChatConfig = (refs: UseChatConfigProps, scopeVersion = 0) => {
                     feedbackTips: resolveConfigString(feedbackTipsFromRes, prev.feedbackTips),
                     // Keep blank when unset — empty means "use client i18n default".
                     assistantName: resolveConfigString(assistantNameFromRes, ''),
+                    // 空字符串同样视为「未配置」，回落到默认菜单名
+                    menuDisplayName: resolveConfigString(menuDisplayNameFromRes, '').trim() || t('bench.subscribe'),
                 };
             });
         });
@@ -303,6 +324,7 @@ const useChatConfig = (refs: UseChatConfigProps, scopeVersion = 0) => {
         systemPrompt: '',
         userPrompt: '',
         feedbackTips: '',
+        menuDisplayName: '',
         applicationCenterWelcomeMessage: '',
         applicationCenterDescription: '',
     });
@@ -336,6 +358,7 @@ const useChatConfig = (refs: UseChatConfigProps, scopeVersion = 0) => {
             systemPrompt: '',
             userPrompt: '',
             feedbackTips: '',
+            menuDisplayName: '',
             applicationCenterWelcomeMessage: '',
             applicationCenterDescription: '',
         };
@@ -357,6 +380,12 @@ const useChatConfig = (refs: UseChatConfigProps, scopeVersion = 0) => {
         const feedback = (formData.feedbackTips || '').trim();
         if (!feedback) {
             newErrors.feedbackTips = '请输入需求反馈提示文案';
+            isValid = false;
+        }
+
+        // 菜单显示名称必填（长度在输入时已截断）
+        if (!(formData.menuDisplayName || '').trim()) {
+            newErrors.menuDisplayName = t('chatConfig.errors.required');
             isValid = false;
         }
 
@@ -395,6 +424,7 @@ const useChatConfig = (refs: UseChatConfigProps, scopeVersion = 0) => {
             max_chunk_size: formData.maxChunkSize,
             feedback_tips: formData.feedbackTips,
             assistant_name: (formData.assistantName || '').trim(),
+            menu_display_name: (formData.menuDisplayName || '').trim(),
         };
 
         const res = await captureAndAlertRequestErrorHoc(setSubConfigApi(dataToSave));

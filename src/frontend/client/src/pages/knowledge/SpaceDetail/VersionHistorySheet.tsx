@@ -146,7 +146,7 @@ function ActionButton({ label, onClick, disabled, className, children }: ActionB
                     disabled={disabled}
                     onClick={onClick}
                     className={cn(
-                        "inline-flex size-7 items-center justify-center rounded-[4px] border border-[#ECECEC] bg-white text-[#4e5969]",
+                        "inline-flex size-7 items-center justify-center rounded-sm border border-[#ECECEC] bg-white text-[#4e5969]",
                         "transition-colors hover:bg-[#f7f7f7] disabled:cursor-not-allowed disabled:opacity-40",
                         className,
                     )}
@@ -414,7 +414,7 @@ export function VersionHistorySheet({
                 {/* Body */}
                 <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4">
                     {/* 3-column info panel */}
-                    <div className="mb-4 flex gap-6 rounded-[8px] border border-[#EBECF0] bg-[#F7F8FA] px-4 py-3">
+                    <div className="mb-4 flex gap-6 rounded-lg border border-[#EBECF0] bg-[#F7F8FA] px-4 py-3">
                         <InfoColumn
                             label={localize("com_knowledge.version.history_label_doc")}
                             value={headerTitle}
@@ -439,7 +439,7 @@ export function VersionHistorySheet({
                             —
                         </div>
                     ) : (
-                        <div className="overflow-x-auto rounded-[8px] border border-[#EBECF0]">
+                        <div className="overflow-x-auto rounded-lg border border-[#EBECF0]">
                             <table className="w-full min-w-[720px] border-collapse text-sm">
                                 <thead>
                                     <tr className="border-b border-[#EBECF0] bg-[#FAFAFA]">

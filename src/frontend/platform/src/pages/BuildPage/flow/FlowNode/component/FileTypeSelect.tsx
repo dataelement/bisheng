@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { Label } from "@/components/bs-ui/label";
 import { Select, SelectContent, SelectTrigger } from "@/components/bs-ui/select";
 import { Check } from "lucide-react";

@@ -173,6 +173,8 @@ const AiChatInput = memo(
         // Exiting task mode discards the skill selection so the panel's checkboxes
         // reset in sync with the (now-hidden) skill chips. Track the previous value
         // to fire only on a true→false transition, not on mount or re-entry.
+        // True while an IME composition is in flight — see handleKeyDown.
+        const isComposingRef = useRef(false);
         const prevTaskModeRef = useRef(taskMode);
         useEffect(() => {
             if (prevTaskModeRef.current && !taskMode) {
@@ -316,7 +318,18 @@ const AiChatInput = memo(
 
         const handleKeyDown = useCallback(
             (e: KeyboardEvent<HTMLTextAreaElement>) => {
-                if (e.key === "Enter" && !e.shiftKey) {
+                // While an IME is composing (拼音 / かな / 한글), Enter belongs to the
+                // IME: it commits the candidate into the box. Sending on it shipped
+                // the raw pinyin instead. The event must also pass through
+                // untouched — preventDefault here would swallow the commit.
+                // `isComposing` misbehaves in Safari and some IMEs only report the
+                // legacy 229 keyCode, so every signal is consulted.
+                const composing =
+                    isComposingRef.current ||
+                    e.nativeEvent.isComposing ||
+                    e.key === "Process" ||
+                    e.keyCode === 229;
+                if (e.key === "Enter" && !e.shiftKey && !composing) {
                     e.preventDefault();
                     if (isStreaming) return;
                     handleSend();
@@ -324,6 +337,16 @@ const AiChatInput = memo(
             },
             [handleSend, isStreaming]
         );
+
+        // Mirrors useTextarea's guard: true between compositionstart and
+        // compositionend, which is the only reliable signal on the browsers where
+        // `isComposing` is not.
+        const handleCompositionStart = useCallback(() => {
+            isComposingRef.current = true;
+        }, []);
+        const handleCompositionEnd = useCallback(() => {
+            isComposingRef.current = false;
+        }, []);
 
         const hasSelectionTags = ((selectedOrgKbs && selectedOrgKbs.length > 0) || (chatFiles && chatFiles.length > 0) || uploadingFiles.length > 0 || (taskMode && dailySkills.length > 0)) && !isLingsi;
 
@@ -462,6 +485,8 @@ const AiChatInput = memo(
                         value={text}
                         onChange={(e) => setText(e.target.value)}
                         onKeyDown={handleKeyDown}
+                        onCompositionStart={handleCompositionStart}
+                        onCompositionEnd={handleCompositionEnd}
                         onPaste={handlePaste}
                         onScroll={handleTextareaScroll}
                         onHeightChange={updateTextareaScrollable}

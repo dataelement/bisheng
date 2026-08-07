@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import AppAvator from "@/components/bs-comp/cardComponent/avatar";
 import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
 import { hasResourceAction, useResourceActions } from "@/components/bs-comp/permission/useResourceActions";

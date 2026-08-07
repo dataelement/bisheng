@@ -143,7 +143,7 @@ async def linsight_file_download(
         # Access by sharing a link. Both share shapes grant, same as
         # session-version-list / execute-task-detail: a workbench_chat share
         # carries resource_id = the session and no versionId, and its recipient
-        # must still be able to download the task's output files.
+        # must still be able to open the task's output files.
         shared_to_session = share_link is not None and share_link.resource_id == session_version_model.session_id
         shared_to_version = (
             share_link is not None

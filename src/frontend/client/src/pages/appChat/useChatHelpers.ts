@@ -207,6 +207,9 @@ export default function useChatHelpers() {
                                 file_name: el.file_name || el.name,
                                 file_url: el.file_url || el.url || el.path || el.filepath,
                                 filepath: el.filepath || el.file_path || el.file_url || el.url || el.path,
+                                // Keep the id: it's what an image attachment is
+                                // looked up by when its link is re-issued.
+                                file_id: el.file_id,
                             })),
                             is_bot,
                             message: msg,
@@ -384,7 +387,9 @@ export default function useChatHelpers() {
                 }),
             )
         },
-        createSendMsg: (msg: string) => {
+        // `files` keeps the attachments as data rather than only as filenames
+        // glued onto the text, so an image can render as an image.
+        createSendMsg: (msg: string, files: any[] = []) => {
             setChats((prev) =>
                 updateChatMessages(prev, chatId, (messages) => [
                     ...messages,
@@ -393,6 +398,7 @@ export default function useChatHelpers() {
                         category: "question",
                         id: 'u-' + generateUUID(8),
                         message: msg,
+                        files,
                         create_time: formatDate(new Date(), "yyyy-MM-ddTHH:mm:ss"),
                     },
                 ]),

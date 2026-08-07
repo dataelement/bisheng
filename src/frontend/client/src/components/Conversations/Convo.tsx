@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { Outlined } from "bisheng-icons";
 import { Check, X } from "lucide-react";
 import type { FocusEvent, KeyboardEvent, MouseEvent } from "react";

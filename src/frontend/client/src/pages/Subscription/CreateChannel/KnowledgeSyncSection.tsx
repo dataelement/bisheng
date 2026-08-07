@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 /**
  * KnowledgeSyncSection — v2.5 Module D configuration UI.
  *

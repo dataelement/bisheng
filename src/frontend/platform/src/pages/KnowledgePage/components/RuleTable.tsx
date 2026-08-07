@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { FileIcon } from "@/components/bs-icons/file";
 import {
   Accordion,

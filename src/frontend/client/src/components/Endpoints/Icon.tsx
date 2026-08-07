@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import React, { memo, useMemo } from 'react';
 import type { TUser } from '~/types/chat';
 import type { IconProps } from '~/common';

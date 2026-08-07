@@ -149,3 +149,13 @@ async def test_channel_release_filters_compile_as_dm8_compatible_equality():
     assert len(compiled_statements) == 3
     assert all("channel.is_released IS 1" not in statement for statement in compiled_statements)
     assert all("channel.is_released = 1" in statement for statement in compiled_statements)
+
+
+async def test_square_subscriber_sort_uses_subquery_column_without_parameterized_coalesce():
+    session = _RecordingSession()
+
+    await ChannelRepositoryImpl(session).find_square_channels(user_id=7)
+
+    subscriber_order = str(list(session.statements[0]._order_by_clauses)[1])
+    assert "coalesce" not in subscriber_order.lower()
+    assert subscriber_order.endswith("subscriber_count DESC")

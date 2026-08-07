@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { LoadIcon } from "@/components/bs-icons";
 import { LoadingIcon } from "@/components/bs-icons/loading";
 import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";

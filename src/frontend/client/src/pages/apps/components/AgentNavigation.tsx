@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 "use client"
 
 import { BoltIcon } from "lucide-react"
@@ -18,30 +19,51 @@ interface AgentNavigationProps {
     onRefresh: () => void
 }
 
+const UNCATEGORIZED = 'uncategorized'
+
 export function AgentNavigation({ onCategoryChange, onRefresh }: AgentNavigationProps) {
     const { user } = useAuthContext();
     const localize = useLocalize();
 
     const [isLabelModalOpen, setIsLabelModalOpen] = useState(false)
-    const [activeCategory, setActiveCategory] = useState<number | string>(-1)
+    // Nothing is selected until the tags come back — the first one is the
+    // default, and which one that is isn't known before then.
+    const [activeCategory, setActiveCategory] = useState<number | string | null>(null)
     const [showRightShadow, setShowRightShadow] = useState(false)
 
     const [categories, setCategories] = useState<Category[]>([])
     const tabsScrollRef = useRef<HTMLDivElement>(null)
+    const activeCategoryRef = useRef<number | string | null>(null)
 
-    const fetchCategoryTags = async () => {
+    const selectCategory = useCallback((id: number | string) => {
+        activeCategoryRef.current = id
+        setActiveCategory(id)
+        onCategoryChange(id)
+    }, [onCategoryChange])
+
+    const fetchCategoryTags = useCallback(async () => {
         const tags = await getHomeLabelApi()
-        setCategories(tags.data.map(tag => ({
+        const next: Category[] = tags.data.map(tag => ({
             label: tag.name,
             value: tag.id,
             selected: true
-        })))
-    }
+        }))
+        setCategories(next)
+
+        // Keep the current tab if it survived (the tag list is editable from
+        // here), otherwise fall back to the first tag — or to Uncategorized,
+        // which is the only tab left when no tags are configured at all.
+        const current = activeCategoryRef.current
+        const stillListed = current === UNCATEGORIZED || next.some((category) => category.value === current)
+        if (current === null || !stillListed) {
+            selectCategory(next[0]?.value ?? UNCATEGORIZED)
+        }
+    }, [selectCategory])
 
     // Initial data load
     useEffect(() => {
         fetchCategoryTags()
-    }, [])
+    }, [fetchCategoryTags])
 
     const updateShadow = useCallback(() => {
         const el = tabsScrollRef.current
@@ -76,10 +98,7 @@ export function AgentNavigation({ onCategoryChange, onRefresh }: AgentNavigation
             <button
                 key={id}
                 type="button"
-                onClick={() => {
-                    onCategoryChange(id);
-                    setActiveCategory(id);
-                }}
+                onClick={() => selectCategory(id)}
                 className={cn(
                     "flex shrink-0 items-center whitespace-nowrap border-b-2 px-2 py-[5px] font-['PingFang_SC'] text-[14px] leading-[22px] transition-colors",
                     isActive
@@ -100,9 +119,8 @@ export function AgentNavigation({ onCategoryChange, onRefresh }: AgentNavigation
                     onScroll={updateShadow}
                     className="flex w-full min-w-0 items-center gap-[8px] overflow-x-auto whitespace-nowrap scrollbar-hide"
                 >
-                    {renderTab(-1, "精选")}
                     {categories.map((category) => renderTab(category.value, category.label))}
-                    {renderTab('uncategorized', localize('com_app_uncategorized') || '未分类')}
+                    {renderTab(UNCATEGORIZED, localize('com_app_uncategorized'))}
                 </div>
 
                 {showRightShadow && (
@@ -114,7 +132,7 @@ export function AgentNavigation({ onCategoryChange, onRefresh }: AgentNavigation
             {user?.role === 'admin' && (
                 <button
                     onClick={() => setIsLabelModalOpen(true)}
-                    className="flex items-center justify-cente mr-2 p-[6px] relative rounded-[6px] shrink-0 hover:bg-gray-100 transition-colors"
+                    className="flex items-center justify-cente mr-2 p-[6px] relative rounded-md shrink-0 hover:bg-gray-100 transition-colors"
                 >
                     <BoltIcon size={16} className="text-[#666]" />
                 </button>
