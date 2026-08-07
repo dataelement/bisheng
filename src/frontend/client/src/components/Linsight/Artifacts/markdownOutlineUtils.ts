@@ -156,6 +156,36 @@ export function pickActiveIndex(headings: OutlineHeading[], scroller: HTMLElemen
  *  in markdown.css, which covers the `#anchor` path). */
 const HEADING_LANDING_OFFSET = 16;
 
+/** Forgiveness around the rail's own box before the outline opens. Aiming at a
+ *  thin column is easy left-to-right and fiddly at its two ends, hence the
+ *  taller vertical allowance. */
+const RAIL_HOVER_PADDING_X = 6;
+const RAIL_HOVER_PADDING_Y = 20;
+
+/**
+ * Is the pointer on (or just beside) the rail?
+ *
+ * Derived from the rail's real geometry rather than a fixed band along the
+ * panel edge: a band wide enough to be comfortable also fires well before the
+ * pointer reaches the ticks, and one spanning the panel's full height fires
+ * when merely reaching for the toolbar or the ends of the scrollbar. Reading
+ * the box back also keeps the target honest when tick lengths change.
+ *
+ * Unbounded to the right: past the rail there is only the panel edge and the
+ * scrollbar, so there is nothing there to exclude.
+ */
+export function isPointerNearRail(rail: HTMLElement | null, x: number, y: number): boolean {
+    if (!rail) {
+        return false;
+    }
+    const box = rail.getBoundingClientRect();
+    return (
+        x >= box.left - RAIL_HOVER_PADDING_X &&
+        y >= box.top - RAIL_HOVER_PADDING_Y &&
+        y <= box.bottom + RAIL_HOVER_PADDING_Y
+    );
+}
+
 /**
  * Scroll a heading to the top of its container.
  *

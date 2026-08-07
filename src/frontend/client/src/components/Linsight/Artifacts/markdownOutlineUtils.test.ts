@@ -3,6 +3,7 @@ import {
     collectHeadings,
     getScrollParent,
     headingsEqual,
+    isPointerNearRail,
     normalizeLevels,
     pickActiveIndex,
     scrollHeadingIntoView,
@@ -168,6 +169,43 @@ describe('headingsEqual', () => {
         expect(headingsEqual(base, render('<h1 id="a">A</h1><h2 id="b">B</h2><h2 id="c">C</h2>'))).toBe(false);
         expect(headingsEqual(base, render('<h1 id="a">A</h1><h2 id="b">B2</h2>'))).toBe(false);
         expect(headingsEqual(base, render('<h1 id="a">A</h1><h3 id="b">B</h3>'))).toBe(false);
+    });
+});
+
+describe('isPointerNearRail', () => {
+    // A rail hugging the right edge of a 700px-tall panel: 26px wide, ~200px of
+    // ticks centred vertically.
+    const rail = {
+        getBoundingClientRect: () => ({ left: 774, right: 800, top: 250, bottom: 450 }),
+    } as unknown as HTMLElement;
+
+    it('opens once the pointer is on the ticks', () => {
+        expect(isPointerNearRail(rail, 780, 350)).toBe(true);
+    });
+
+    it('allows a little approach room to the left', () => {
+        expect(isPointerNearRail(rail, 770, 350)).toBe(true); // within 6px
+        expect(isPointerNearRail(rail, 760, 350)).toBe(false);
+    });
+
+    it('stays open past the rail, where only the panel edge and scrollbar are', () => {
+        expect(isPointerNearRail(rail, 812, 350)).toBe(true);
+    });
+
+    it('ignores the right edge above and below the rail', () => {
+        // Reaching for the toolbar, or the ends of the scrollbar.
+        expect(isPointerNearRail(rail, 790, 60)).toBe(false);
+        expect(isPointerNearRail(rail, 790, 640)).toBe(false);
+    });
+
+    it('forgives vertical overshoot at either end of the rail', () => {
+        expect(isPointerNearRail(rail, 790, 235)).toBe(true); // within 20px above
+        expect(isPointerNearRail(rail, 790, 465)).toBe(true); // within 20px below
+        expect(isPointerNearRail(rail, 790, 225)).toBe(false);
+    });
+
+    it('is false before the rail exists', () => {
+        expect(isPointerNearRail(null, 790, 350)).toBe(false);
     });
 });
 
