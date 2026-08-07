@@ -115,7 +115,7 @@ class ExpertService:
     async def create_expert(self, request: ExpertCreateRequest) -> Expert:
         """创建专家（后台管理员操作）"""
         # 检查是否已是专家
-        existing = await self.repository.get_by_user_name(request.expert_name)
+        existing = await self.repository.get_by_user_name(request.expert_name, request.user_id)
         if existing:
             raise InvalidInvitationError(message=f"Expert {request.expert_name} is already exists")
 
