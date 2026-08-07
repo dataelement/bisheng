@@ -103,6 +103,17 @@ def parse_skill_md(text: str) -> tuple[dict, str]:
     return meta, text[match.end() :]
 
 
+def render_skill_md(meta: dict, body: str) -> str:
+    """Render SKILL.md from an arbitrary frontmatter mapping + body.
+
+    Keeps every frontmatter key as-is (document order preserved) — used when an
+    imported bundle's frontmatter must be rewritten without dropping foreign keys
+    like ``license`` or ``allowed-tools``.
+    """
+    front = yaml.safe_dump(meta, allow_unicode=True, sort_keys=False, default_flow_style=False).rstrip("\n")
+    return f"---\n{front}\n---\n\n{body.strip()}\n"
+
+
 def compose_skill_md(
     name: str,
     description: str,
@@ -122,8 +133,7 @@ def compose_skill_md(
         metadata.update({k: str(v) for k, v in extra_metadata.items()})
     if metadata:
         meta["metadata"] = metadata
-    front = yaml.safe_dump(meta, allow_unicode=True, sort_keys=False, default_flow_style=False).rstrip("\n")
-    return f"---\n{front}\n---\n\n{body.rstrip()}\n"
+    return render_skill_md(meta, body)
 
 
 def unpack_zip_bytes(data: bytes) -> dict[str, bytes]:
