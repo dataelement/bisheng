@@ -137,15 +137,44 @@ async def deduct(
 
 
 @router.get("/admin/users")
-@router.get("/admin/audit-logs")
-async def admin_list_placeholder(
+async def list_users(
+    keyword: str | None = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
     login_user: UserPayload = Depends(UserPayload.get_login_user),
     service: PointsQueryService = Depends(get_points_query_service),
 ):
-    """用户检索与审计列表占位；权限已校验，M4 再补完整查询。"""
+    """用户积分列表（姓名/部门/余额/本月净变动）。"""
     try:
-        # 先走 overview 同级权限校验，避免未授权拿到空数组误以为成功。
-        await service.overview(resolve_tenant_id(login_user), login_user)
-        return resp_200([])
+        data = await service.admin_list_users(
+            resolve_tenant_id(login_user),
+            login_user,
+            keyword=keyword,
+            page=page,
+            page_size=page_size,
+        )
+        return resp_200(data.model_dump())
+    except BaseErrorCode as exc:
+        return exc.return_resp_instance()
+
+
+@router.get("/admin/audit-logs")
+async def list_audit_logs(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    user_id: int | None = Query(None),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    service: PointsQueryService = Depends(get_points_query_service),
+):
+    """操作记录：手动调分与 R* 扣减流水。"""
+    try:
+        data = await service.admin_list_audit_logs(
+            resolve_tenant_id(login_user),
+            login_user,
+            page=page,
+            page_size=page_size,
+            user_id=user_id,
+        )
+        return resp_200(data.model_dump())
     except BaseErrorCode as exc:
         return exc.return_resp_instance()

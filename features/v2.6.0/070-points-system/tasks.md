@@ -14,7 +14,7 @@
 | spec.md | ✅ 已评审 | 2026-08-06 用户确认（含 design.md） |
 | design.md | ✅ 已评审 | 与 spec 同步确认 |
 | tasks.md | ✅ 已拆解 | 含阶段性无头浏览器验收门禁（2026-08-06 增补） |
-| 实现 | 🟡 M1 完成 / G-M1 通过 | 已完成 T000–T008、T018–T019、T021a、G-M1；待 M2 |
+| 实现 | ✅ M5 完成 / G-M5 通过 | T000–T028、G-M1~G-M5 完成；T025 Client 入口延后；可进入发布清单复检 |
 
 ---
 
@@ -261,72 +261,83 @@
   **覆盖 AC**: AC-13  
   **依赖**: T005, T007, T008
 
-- [ ] **T017**: 对账 + sync outbox drain  
-  **文件**: worker tasks  
+- [x] **T017**: 对账 + sync outbox drain ✅ 2026-08-07  
+  **文件**: `points_reconcile_service.py` / `points_sync_outbox_service.py`；Beat `points_reconcile_balances` / `points_drain_sync_outbox`  
+  **逻辑**: 日对账只告警不改流水；outbox 关闭时保持 pending，开启且无适配器则 skipped  
   **覆盖 AC**: AC-04, AC-23  
   **依赖**: T005
 
-- [ ] **T022**: Portal — 首页积分榜  
-  **文件**: `HomePage.tsx` 接 API；无「我」置底  
+- [x] **T022**: Portal — 首页积分榜 ✅ 2026-08-07  
+  **文件**: Portal `PointsLeaderboardPanel.tsx` + `fetchPointsLeaderboard`；BiSheng leaderboard 补 user_name/dept_name  
+  **逻辑**: 本月/本年/总榜 TOP10；无「我」置底；空态文案；数据来自小时快照  
   **覆盖 AC**: AC-15  
   **依赖**: T018, T015
 
-- [ ] **T024**: Platform — 组织四级打标 UI  
-  **文件**: Platform 部门树  
+- [x] **T024**: Platform — 组织四级打标 UI ✅ 2026-08-07  
+  **文件**: `DepartmentPage` 树徽章 + `DepartmentSettings`「设为公司根」；API `org-levels` / `set-company-root`  
+  **逻辑**: 仅平台超管可见打标按钮；树/详情展示 org_level；非超管后端仍 18201  
   **覆盖 AC**: AC-20, AC-21  
   **依赖**: T014
 
-- [ ] **G-M3**: 无头浏览器验收 — 榜单与组织标签  
-  **文件**: `e2e/.../gates/gm3.spec.ts`  
-  **逻辑**: Platform 打标 + Portal 三 Tab 榜 + 我的积分排名展示  
-  **通过标准**: G-M3 最低集全绿  
+- [x] **G-M3**: 无头浏览器验收 — 榜单与组织标签 ✅ 2026-08-07  
+  **文件**: `e2e_ui/points/gates/gm3.spec.ts` + `helpers/gm3_trigger.py`  
+  **逻辑**: Platform「设为公司根」入口可见；Portal 三 Tab 榜无「我」置底；我的积分部门/总榜；org_level 只读级联校验；破坏性打标需 `E2E_POINTS_ALLOW_ORG_MUTATE=1`  
+  **通过标准**: **4/4 green**（1 skipped mutate）；`E2E_POINTS_RUN_GATES=1 npm run test:gm3`  
   **覆盖 AC**: AC-15, AC-16, AC-20, AC-22  
   **依赖**: T015, T022, T024  
   **阻塞**: 未通过不得开始 T023 完整运营台验收
 
 ### 阶段 4：运营台与前台齐套 → 门禁 G-M4
 
-- [ ] **T021b**: Portal — 我的积分完善（规则弹窗/空态/999+）  
+- [x] **T021b**: Portal — 我的积分完善（规则弹窗/空态/999+） ✅ 2026-08-07  
+  **文件**: Portal `PointsPage.tsx`（`rank_refreshed_at`、999+、空态、规则弹窗过滤 M*）  
+  **逻辑**: 展示排名刷新时间；总榜 `999+` 不误拼 `#`；明细空态引导文案；规则弹窗仅 earn/deduct + 线下申诉 copies  
   **覆盖 AC**: AC-07, AC-14, AC-27  
   **依赖**: T021a, **G-M3**
 
-- [ ] **T023**: Portal — 积分管理后台完整  
-  **文件**: 概览/规则/用户/审计/说明文案  
-  **覆盖 AC**: AC-02, AC-05, AC-06, AC-17, AC-19  
+- [x] **T023**: Portal — 积分管理后台完整 ✅ 2026-08-07  
+  **文件**: Portal `PointsManagementPanel` + `PointsRuleEditModal`；BiSheng `admin/users` / `admin/audit-logs`  
+  **逻辑**: 概览三绝对数；规则四 Tab（获取/扣减/月奖/文案）可编辑分值·日 cap·受益人·启停；用户列表+操作记录；列表内「调整积分」直接调分（正加负减，不强制 R*）  
+  **覆盖 AC**: AC-02, AC-05, AC-06, AC-19（AC-17 前台违规扣减可延后 T025）  
   **依赖**: T019
 
-- [ ] **T025**: Client（可选）— 前台 R* 扣减  
-  **覆盖 AC**: AC-17  
+- [x] **T025**: Client（可选）— 前台 R* 扣减 — **延后** ✅ 2026-08-07  
+  **覆盖 AC**: AC-17（浏览器路径由 Portal 管理端「违规扣减」承担）  
   **依赖**: T019  
-  **备注**: 若延后，G-M4 用 Portal 管理端 deduct 代替 UI，但必须有一条浏览器扣减路径
+  **备注**: Client 文档/问答页入口未做；G-M4 用 Portal `PointsDeductModal` + `POST /admin/deduct` 作为扣减路径
 
-- [ ] **G-M4**: 无头浏览器验收 — 运营配置与扣减  
-  **文件**: `e2e/.../gates/gm4.spec.ts`  
-  **逻辑**: 受益人切换生效、R* 扣减、规则弹窗文案  
-  **通过标准**: G-M4 最低集全绿  
+- [x] **G-M4**: 无头浏览器验收 — 运营配置与扣减 ✅ 2026-08-07  
+  **文件**: `e2e_ui/points/gates/gm4.spec.ts` + `helpers/gm4_trigger.py`  
+  **逻辑**: G1 beneficiary→publisher 后发分落发布人；Portal「违规扣减」R1；规则弹窗无月奖文案且含「线下」；审计可见  
+  **通过标准**: **3/3 green**（`E2E_POINTS_RUN_GATES=1 npm run test:gm4`）  
   **覆盖 AC**: AC-06, AC-07, AC-17, AC-19, AC-27  
   **依赖**: T021b, T023  
   **阻塞**: 未通过不得宣称功能可交付
 
 ### 阶段 5：发布前 → 门禁 G-M5
 
-- [ ] **T026**: 本地联调（dev-stack）+ 补齐 Gate 数据工厂  
-  **逻辑**: 稳定造数 helpers（上传、分享审批、收藏）；供 Gate 复用  
+- [x] **T026**: 本地联调（dev-stack）+ 补齐 Gate 数据工厂 ✅ 2026-08-07  
+  **文件**: `e2e_ui/points/helpers/factory_trigger.py` + `factory.ts`  
+  **逻辑**: 统一造数 G2/G3/G4/G7、超管负例、外链负例、对账、`enabled=false`、schema 检查  
   **覆盖 AC**: AC-08~AC-16, AC-26, AC-30  
   **依赖**: T011–T025
 
-- [ ] **T027**: 双库迁移冒烟  
+- [x] **T027**: 双库迁移冒烟 ✅ 2026-08-07  
+  **文件**: `test/points/test_points_dual_db_smoke.py`  
+  **逻辑**: 静态校验 dialect_helpers；MySQL 表可读（或 skip）；DM8 macOS skip / CI Linux  
   **覆盖 AC**: AC-25  
   **依赖**: T002
 
-- [ ] **T028**: 上线检查清单记录  
-  **逻辑**: design §4.5；灰度开关；对账  
+- [x] **T028**: 上线检查清单记录 ✅ 2026-08-07  
+  **文件**: `features/v2.6.0/070-points-system/release-checklist.md`  
+  **逻辑**: design §4.5；灰度开关；对账；发布顺序；Gate 记录  
   **覆盖 AC**: AC-04, AC-23, AC-29  
   **依赖**: T026, T027
 
-- [ ] **G-M5**: 无头浏览器验收 — 发布前全量冒烟  
-  **文件**: `e2e/.../gates/gm5.spec.ts`（可串行调用 gm1–gm4 + 开关负例）  
-  **通过标准**: G-M5 最低集全绿；无 balance mismatch；关闭 enabled 后不再加分  
+- [x] **G-M5**: 无头浏览器验收 — 发布前全量冒烟 ✅ 2026-08-07  
+  **文件**: `e2e_ui/points/gates/gm5.spec.ts`；`npm run test:gm5` 串行 gm1–gm4 + gm5  
+  **逻辑**: 对账无 mismatch；`enabled=false` 不加分；outbox 安全；入口冒烟；回归 gm1–gm4  
+  **通过标准**: **22 passed / 1 skipped**（org mutate）  
   **覆盖 AC**: 回归 AC-01~AC-30 主路径  
   **依赖**: G-M1…G-M4, T027, T028  
   **阻塞**: 未通过不得合入主干/发版
@@ -370,3 +381,6 @@
 - 2026-08-06：**T011–T013 完成**：`points_award_hooks.py` 独立会话旁路；挂 `add_file` / 发布审批 / 收藏 / 采纳 / `share_approved`。种子补 G5/G6/G7（仅空租户首次 seed；已有库需管理端补规则或手工 INSERT）。`test/points/` 22 passed。
 - 2026-08-06：**G-M2 PASS 4/4**。修复 Facade 读开关路径（`config_service.settings`，原先误 import 导致始终 disabled）。本地 `config.yaml` `points.enabled=true`；171 库补 G7（id=11）。Gate 用 hooks 造数 + UI 断言（完整上传/审批 UI 流未在门禁内重放）。
 - 2026-08-07：**T014 完成**：`DepartmentOrgLevelService` + API；单测 5 条；联调冒烟 `gzx01` 调 `set-company-root` → **18201**，`GET org-levels` 200（46 节点）。未在共享库执行真实打标（避免误改 org_level）。`points_auth` 同时认 `is_global_super`。
+- 2026-08-07：**T023/T021b 完成**；用户列表直接调分弹窗对齐设计（+/- 按钮 + 纯数字）；调分校验错误改为弹窗内展示。
+- 2026-08-07：**T025 延后**（Client 文档页 R* 入口）；Portal 管理端补「违规扣减」弹窗作 AC-17 浏览器路径。**G-M4 PASS 3/3**。
+- 2026-08-07：**T026–T028 + G-M5 PASS**（`npm run test:gm5` → 22 passed / 1 skipped）。统一 `factory_trigger`；双库静态冒烟；`release-checklist.md`；修 gm3「排名」strict 选择器。

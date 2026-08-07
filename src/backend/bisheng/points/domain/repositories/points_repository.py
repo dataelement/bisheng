@@ -206,10 +206,16 @@ class PointsRepository:
         return list(rows)
 
     async def upsert_copies(self, tenant_id: int, items: list[dict]) -> list[PointCopy]:
-        """按 copy_key 批量更新文案内容；不存在则创建。"""
+        """按 copy_key 批量更新文案内容；不存在则创建。
+
+        Keys present for the tenant but missing from ``items`` are deleted
+        (replace-set semantics — product keeps a single ``guide`` row).
+        """
         result: list[PointCopy] = []
+        keep_keys: set[str] = set()
         for item in items:
             key = item["copy_key"]
+            keep_keys.add(key)
             row = (
                 await self.session.exec(
                     select(PointCopy).where(PointCopy.tenant_id == tenant_id, PointCopy.copy_key == key)
@@ -228,6 +234,14 @@ class PointsRepository:
                     row.sort_order = int(item["sort_order"])
             self.session.add(row)
             result.append(row)
+
+        existing = (
+            await self.session.exec(select(PointCopy).where(PointCopy.tenant_id == tenant_id))
+        ).all()
+        for row in existing:
+            if row.copy_key not in keep_keys:
+                await self.session.delete(row)
+
         await self.session.flush()
         return result
 
@@ -384,6 +398,63 @@ class PointsRepository:
         ).all()
         return list(rows)
 
+    async def list_accounts_page(
+        self,
+        tenant_id: int,
+        *,
+        page: int,
+        page_size: int,
+        user_ids: list[int] | None = None,
+    ) -> tuple[list[UserPointAccount], int]:
+        """分页列出积分账户；可按 user_ids 过滤（关键词预解析后传入）。"""
+        filters = [UserPointAccount.tenant_id == tenant_id]
+        if user_ids is not None:
+            if not user_ids:
+                return [], 0
+            filters.append(UserPointAccount.user_id.in_(user_ids))
+        total = (
+            await self.session.exec(select(func.count()).select_from(UserPointAccount).where(*filters))
+        ).one()
+        rows = (
+            await self.session.exec(
+                select(UserPointAccount)
+                .where(*filters)
+                .order_by(UserPointAccount.balance.desc(), UserPointAccount.user_id.asc())
+                .offset(max(page - 1, 0) * page_size)
+                .limit(page_size)
+            )
+        ).all()
+        return list(rows), int(total[0] if isinstance(total, tuple) else total)
+
+    async def list_audit_logs(
+        self,
+        tenant_id: int,
+        *,
+        page: int,
+        page_size: int,
+        sources: list[str] | None = None,
+        user_id: int | None = None,
+    ) -> tuple[list[UserPointLog], int]:
+        """管理端审计：默认看 manual/deduct；可扩 source。"""
+        filters = [UserPointLog.tenant_id == tenant_id]
+        if sources:
+            filters.append(UserPointLog.source.in_(sources))
+        if user_id is not None:
+            filters.append(UserPointLog.user_id == int(user_id))
+        total = (
+            await self.session.exec(select(func.count()).select_from(UserPointLog).where(*filters))
+        ).one()
+        rows = (
+            await self.session.exec(
+                select(UserPointLog)
+                .where(*filters)
+                .order_by(UserPointLog.occurred_at.desc(), UserPointLog.id.desc())
+                .offset(max(page - 1, 0) * page_size)
+                .limit(page_size)
+            )
+        ).all()
+        return list(rows), int(total[0] if isinstance(total, tuple) else total)
+
     async def list_tenant_ids_with_accounts(self) -> list[int]:
         """返回存在积分账户的租户 id（Beat 扫租户用）。"""
         rows = (await self.session.exec(select(UserPointAccount.tenant_id).distinct())).all()
@@ -411,6 +482,51 @@ class PointsRepository:
             user_id, total = row[0], row[1]
             result[int(user_id)] = int(total or 0)
         return result
+
+    async def sum_lifetime_deltas_by_user(self, tenant_id: int) -> dict[int, int]:
+        """按用户汇总全部流水 delta（对账期望余额）。"""
+        rows = (
+            await self.session.exec(
+                select(UserPointLog.user_id, func.coalesce(func.sum(UserPointLog.delta), 0))
+                .where(UserPointLog.tenant_id == tenant_id)
+                .group_by(UserPointLog.user_id)
+            )
+        ).all()
+        result: dict[int, int] = {}
+        for row in rows:
+            user_id, total = row[0], row[1]
+            result[int(user_id)] = int(total or 0)
+        return result
+
+    async def list_due_sync_outbox(
+        self,
+        *,
+        limit: int = 100,
+        now: datetime | None = None,
+    ) -> list[PointSyncOutbox]:
+        """列出到期可投递的 pending/failed outbox（跨租户时需 bypass）。"""
+        current = now or datetime.utcnow()
+        rows = (
+            await self.session.exec(
+                select(PointSyncOutbox)
+                .where(
+                    PointSyncOutbox.status.in_(["pending", "failed"]),
+                    or_(
+                        PointSyncOutbox.next_retry_at.is_(None),
+                        PointSyncOutbox.next_retry_at <= current,
+                    ),
+                )
+                .order_by(PointSyncOutbox.id)
+                .limit(limit)
+            )
+        ).all()
+        return list(rows)
+
+    async def save_outbox(self, row: PointSyncOutbox) -> PointSyncOutbox:
+        """持久化 outbox 状态变更。"""
+        self.session.add(row)
+        await self.session.flush()
+        return row
 
     async def clear_dept_rank_snapshots(self, tenant_id: int, period: str, period_key: str) -> None:
         """删除某 period_key 下全部部门桶快照（刷新前清僵尸桶）。"""

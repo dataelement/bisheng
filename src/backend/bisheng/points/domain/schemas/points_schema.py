@@ -85,6 +85,33 @@ class PointOverviewResponse(BaseModel):
     total_violation_deducted: int
 
 
+class PointAdminUserItem(BaseModel):
+    """管理端用户积分列表行。"""
+
+    user_id: int
+    user_name: str = ""
+    dept_name: str = "—"
+    balance: int
+    month_score: int = 0
+
+
+class PointAuditLogItem(BaseModel):
+    """管理端操作/审计流水行。"""
+
+    id: int
+    user_id: int
+    user_name: str = ""
+    title: str
+    delta: int
+    balance_after: int
+    direction: str
+    rule_code: str | None = None
+    source: str
+    operator_id: int | None = None
+    remark: str | None = None
+    occurred_at: datetime | None = None
+
+
 class PointRuleResponse(BaseModel):
     """规则列表项。"""
 
@@ -106,6 +133,8 @@ class PointLeaderboardItem(BaseModel):
 
     rank: int
     user_id: int
+    user_name: str = ""
+    dept_name: str = ""
     balance: int
     period_score: int
 

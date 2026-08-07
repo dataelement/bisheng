@@ -137,7 +137,7 @@ class PointsRuleService:
     async def update_copies(
         self, tenant_id: int, user: UserPayload, body: PointCopiesUpdateRequest
     ) -> list[PointCopyItem]:
-        """批量更新说明文案。"""
+        """Replace-set upsert for copy rows; keys omitted from the payload are deleted."""
         require_platform_admin(user)
         rows = await self.repository.upsert_copies(
             tenant_id,

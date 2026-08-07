@@ -19,6 +19,7 @@ import {
   moveDepartmentApi,
   purgeDepartmentApi,
   restoreDepartmentApi,
+  setDepartmentCompanyRootApi,
   unmountTenantApi,
   updateDepartmentApi,
 } from "@/controllers/API/department"
@@ -37,6 +38,12 @@ interface DepartmentSettingsProps {
   /** Open the "mark as Child Tenant" dialog for this department. When undefined
    * (multi-tenant disabled or root dept), the action button is hidden. */
   onMarkAsTenant?: (deptId: number, deptName: string) => void
+  /** F070 当前节点 org_level；null 表示未打标 */
+  orgLevel?: string | null
+  /** 仅平台超管可设公司根 */
+  canSetCompanyRoot?: boolean
+  /** 打标成功后刷新树侧徽章 */
+  onOrgLevelChanged?: () => void
 }
 
 function adminsToOptions(admins: DepartmentAdmin[]): DepartmentUserOption[] {
@@ -53,9 +60,18 @@ function sameIdSet(left: Array<number | string>, right: Array<number | string>):
 /** 企业级表单：统一控件最大宽度，右侧对齐 */
 const FORM_CONTROL_WIDTH = "w-full max-w-md"
 
-export function DepartmentSettings({ dept, tree, onChanged, onMarkAsTenant }: DepartmentSettingsProps) {
+export function DepartmentSettings({
+  dept,
+  tree,
+  onChanged,
+  onMarkAsTenant,
+  orgLevel = null,
+  canSetCompanyRoot = false,
+  onOrgLevelChanged,
+}: DepartmentSettingsProps) {
   const { t } = useTranslation()
   const [name, setName] = useState(dept.name)
+  const [labelingOrg, setLabelingOrg] = useState(false)
   const [adminSelectValue, setAdminSelectValue] = useState<DepartmentUserOption[]>([])
   const [defaultRoleIds, setDefaultRoleIds] = useState<string[]>([])
   const [applyDefaultRolesToExisting, setApplyDefaultRolesToExisting] = useState(false)
@@ -450,6 +466,72 @@ export function DepartmentSettings({ dept, tree, onChanged, onMarkAsTenant }: De
           </div>
         )}
       </section>
+
+      {/* 区块：积分组织四级标签（不改拓扑/挂载） */}
+      {!isArchived && (
+        <section className="mt-6 space-y-4">
+          <div>
+            <h3 className="mb-2 text-base font-semibold tracking-tight text-foreground">
+              {t("bs:department.sectionOrgLevel")}
+            </h3>
+            <Separator />
+          </div>
+          <p className="max-w-xl text-sm text-muted-foreground">
+            {t("bs:department.orgLevelHint")}
+          </p>
+          <div className="space-y-1.5">
+            <Label>{t("bs:department.orgLevelLabel")}</Label>
+            <Input
+              value={
+                orgLevel
+                  ? t(`bs:department.orgLevel.${orgLevel}`)
+                  : t("bs:department.orgLevelUnset")
+              }
+              disabled
+              className={FORM_CONTROL_WIDTH}
+            />
+          </div>
+          {canSetCompanyRoot ? (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={labelingOrg}
+              onClick={() => {
+                bsConfirm({
+                  title: t("bs:department.setCompanyRootTitle"),
+                  desc: t("bs:department.setCompanyRootConfirm", { name: dept.name }),
+                  okTxt: t("bs:department.setCompanyRootOk"),
+                  onOk(next) {
+                    setLabelingOrg(true)
+                    captureAndAlertRequestErrorHoc(
+                      setDepartmentCompanyRootApi(dept.dept_id)
+                    )
+                      .then((res) => {
+                        if (res) {
+                          toast({
+                            title: t("prompt"),
+                            description: t("bs:department.setCompanyRootSuccess", {
+                              count: res.labeled_count,
+                            }),
+                            variant: "success",
+                          })
+                          onOrgLevelChanged?.()
+                          onChanged()
+                        }
+                      })
+                      .finally(() => {
+                        setLabelingOrg(false)
+                        next()
+                      })
+                  },
+                })
+              }}
+            >
+              {t("bs:department.setCompanyRoot")}
+            </Button>
+          ) : null}
+        </section>
+      )}
 
       {/* 区块二：权限与角色 */}
       {!isArchived && (

@@ -79,6 +79,42 @@ export async function unmountTenantApi(
   return await axios.delete(`/api/v1/departments/${deptIdInt}/mount-tenant`)
 }
 
+// ── Points org_level (F070) ─────────────────────────────
+
+export type DepartmentOrgLevel = "company" | "dept" | "office" | "squad"
+
+export interface DepartmentOrgLevelItem {
+  id: number
+  dept_id: string | null
+  name: string | null
+  parent_id: number | null
+  path: string | null
+  org_level: DepartmentOrgLevel | null
+}
+
+export interface SetCompanyRootResult {
+  company_id: number
+  labeled_count: number
+  levels: Record<string, number>
+}
+
+/** 列出当前租户活跃部门的积分组织四级标签。 */
+export async function getDepartmentOrgLevelsApi(): Promise<DepartmentOrgLevelItem[]> {
+  return await axios.get(`/api/v1/departments/org-levels`)
+}
+
+/**
+ * 指定唯一公司根并级联打标。
+ * @param deptId 业务部门 ID（可含 BS@）
+ */
+export async function setDepartmentCompanyRootApi(
+  deptId: string
+): Promise<SetCompanyRootResult> {
+  return await axios.post(`/api/v1/departments/${depSeg(deptId)}/set-company-root`, {
+    confirm: true,
+  })
+}
+
 // ── Move ───────────────────────────────────────────────
 
 export async function moveDepartmentApi(

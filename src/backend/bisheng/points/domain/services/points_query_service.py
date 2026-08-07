@@ -8,8 +8,11 @@ from zoneinfo import ZoneInfo
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.points import PointsInvalidAdjustError, PointsRuleNotFoundError
+from bisheng.common.schemas.api import PageData
 from bisheng.points.domain.schemas.points_schema import (
     PointAdjustRequest,
+    PointAdminUserItem,
+    PointAuditLogItem,
     PointDeductRequest,
     PointLeaderboardItem,
     PointLeaderboardResponse,
@@ -133,7 +136,7 @@ class PointsQueryService:
         return [self._log_response(r) for r in rows], total
 
     async def leaderboard(self, tenant_id: int, period: str) -> PointLeaderboardResponse:
-        """读取小时快照 TOP10；未刷新时返回空列表。"""
+        """读取小时快照 TOP10；补齐展示名与主部门（AC-15）。"""
         now = datetime.now(SHANGHAI)
         if period == "year":
             period_key = now.strftime("%Y")
@@ -146,16 +149,40 @@ class PointsQueryService:
             tenant_id, period, "global", None, period_key, limit=10
         )
         refreshed = await self.repository.latest_rank_refreshed_at(tenant_id, period, period_key)
+        user_ids = [int(r.user_id) for r in rows]
+        name_by_user, dept_by_user = await self._leaderboard_display_maps(user_ids)
         items = [
             PointLeaderboardItem(
                 rank=int(r.rank_no),
                 user_id=int(r.user_id),
+                user_name=name_by_user.get(int(r.user_id), str(r.user_id)),
+                dept_name=dept_by_user.get(int(r.user_id), "—"),
                 balance=int(r.balance),
                 period_score=int(r.period_score),
             )
             for r in rows
         ]
         return PointLeaderboardResponse(period=period, refreshed_at=refreshed, items=items)
+
+    @staticmethod
+    async def _leaderboard_display_maps(
+        user_ids: list[int],
+    ) -> tuple[dict[int, str], dict[int, str]]:
+        """批量解析榜单用户名与主部门名称。"""
+        if not user_ids:
+            return {}, {}
+        from bisheng.database.models.department import UserDepartmentDao
+        from bisheng.user.domain.models.user import UserDao
+
+        users = await UserDao.aget_user_by_ids(user_ids) or []
+        name_by_user = {
+            int(u.user_id): str(getattr(u, "user_name", None) or u.user_id) for u in users
+        }
+        primary_map = UserDepartmentDao.get_primary_department_map_by_user_ids(user_ids)
+        dept_by_user = {
+            uid: str(dept.name) for uid, dept in primary_map.items() if getattr(dept, "name", None)
+        }
+        return name_by_user, dept_by_user
 
     async def overview(self, tenant_id: int, user: UserPayload) -> PointOverviewResponse:
         """运营概览：总发放 / 余额合计 / 违规扣减。"""
@@ -165,6 +192,92 @@ class PointsQueryService:
             total_balance=await self.repository.sum_total_balance(tenant_id),
             total_violation_deducted=await self.repository.sum_violation_deducted(tenant_id),
         )
+
+    async def admin_list_users(
+        self,
+        tenant_id: int,
+        user: UserPayload,
+        *,
+        keyword: str | None = None,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> PageData[PointAdminUserItem]:
+        """管理端用户积分列表（账户 + 姓名/主部门 + 本月净变动）。"""
+        require_platform_admin(user)
+        page = max(int(page), 1)
+        page_size = min(max(int(page_size), 1), 100)
+        user_ids_filter: list[int] | None = None
+        kw = (keyword or "").strip()
+        if kw:
+            from bisheng.user.domain.models.user import UserDao
+
+            matched = await UserDao.aget_users_by_username(kw)
+            # 精确同名可能只有少量；再做 like 搜索兜底
+            like_rows = UserDao.search_user_by_name(kw) or []
+            ids = {int(u.user_id) for u in (matched or [])} | {int(u.user_id) for u in like_rows}
+            # 纯数字关键词按 user_id 命中
+            if kw.isdigit():
+                ids.add(int(kw))
+            user_ids_filter = sorted(ids)
+        accounts, total = await self.repository.list_accounts_page(
+            tenant_id, page=page, page_size=page_size, user_ids=user_ids_filter
+        )
+        ids = [int(a.user_id) for a in accounts]
+        name_by_user, dept_by_user = await self._leaderboard_display_maps(ids)
+        start, end = self._month_bounds()
+        month_scores = await self.repository.sum_deltas_by_user(tenant_id, start=start, end=end)
+        data = [
+            PointAdminUserItem(
+                user_id=int(a.user_id),
+                user_name=name_by_user.get(int(a.user_id), str(a.user_id)),
+                dept_name=dept_by_user.get(int(a.user_id), "—"),
+                balance=int(a.balance),
+                month_score=int(month_scores.get(int(a.user_id), 0)),
+            )
+            for a in accounts
+        ]
+        return PageData(data=data, total=total)
+
+    async def admin_list_audit_logs(
+        self,
+        tenant_id: int,
+        user: UserPayload,
+        *,
+        page: int = 1,
+        page_size: int = 20,
+        user_id: int | None = None,
+    ) -> PageData[PointAuditLogItem]:
+        """管理端操作记录：手动调分 / R* 扣减。"""
+        require_platform_admin(user)
+        page = max(int(page), 1)
+        page_size = min(max(int(page_size), 1), 100)
+        rows, total = await self.repository.list_audit_logs(
+            tenant_id,
+            page=page,
+            page_size=page_size,
+            sources=["manual_adjust", "manual_deduct"],
+            user_id=user_id,
+        )
+        ids = sorted({int(r.user_id) for r in rows})
+        name_by_user, _ = await self._leaderboard_display_maps(ids)
+        data = [
+            PointAuditLogItem(
+                id=int(r.id),
+                user_id=int(r.user_id),
+                user_name=name_by_user.get(int(r.user_id), str(r.user_id)),
+                title=r.title,
+                delta=int(r.delta),
+                balance_after=int(r.balance_after),
+                direction=r.direction,
+                rule_code=r.rule_code,
+                source=r.source,
+                operator_id=r.operator_id,
+                remark=r.remark,
+                occurred_at=r.occurred_at,
+            )
+            for r in rows
+        ]
+        return PageData(data=data, total=total)
 
     async def admin_adjust(
         self, tenant_id: int, user: UserPayload, body: PointAdjustRequest

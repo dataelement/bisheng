@@ -1,6 +1,11 @@
 """月奖 M* 与 space.level / 成员角色的匹配表。
 
-预置 M1/M4/M6；其余编码可在后台启用，只要出现在本表即可参与取最高档。
+矩阵（与 seed_rules M1–M8 对齐）：
+  public     → M1 creator / M2 admin
+  department → M3 creator / M4 admin
+  team_ks    → M5 creator / M6 admin
+  team       → M7 creator / M8 admin
+多角色命中时取最高分（见 pick_highest_reward）。
 """
 
 from __future__ import annotations
@@ -16,13 +21,15 @@ class MonthlyRuleMatcher:
     roles: tuple[str, ...]
 
 
-# M1=公共所有者；M4=部门管理员（含所有者）；M6=科室管理员（team_ks）。
 MONTHLY_RULE_MATCHERS: dict[str, MonthlyRuleMatcher] = {
     "M1": MonthlyRuleMatcher(levels=("public",), roles=("creator",)),
     "M2": MonthlyRuleMatcher(levels=("public",), roles=("admin",)),
-    "M4": MonthlyRuleMatcher(levels=("department",), roles=("admin", "creator")),
-    "M6": MonthlyRuleMatcher(levels=("team_ks",), roles=("admin", "creator")),
-    "M7": MonthlyRuleMatcher(levels=("team",), roles=("admin", "creator")),
+    "M3": MonthlyRuleMatcher(levels=("department",), roles=("creator",)),
+    "M4": MonthlyRuleMatcher(levels=("department",), roles=("admin",)),
+    "M5": MonthlyRuleMatcher(levels=("team_ks",), roles=("creator",)),
+    "M6": MonthlyRuleMatcher(levels=("team_ks",), roles=("admin",)),
+    "M7": MonthlyRuleMatcher(levels=("team",), roles=("creator",)),
+    "M8": MonthlyRuleMatcher(levels=("team",), roles=("admin",)),
 }
 
 

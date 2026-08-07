@@ -402,6 +402,20 @@ class CeleryConf(BaseModel):
                 "schedule": crontab.from_string("5 0 1 * *"),
             }
 
+        # F070: 积分日对账（AC-04）；只告警，禁止静默改流水。
+        if "points_reconcile_balances" not in self.beat_schedule:
+            self.beat_schedule["points_reconcile_balances"] = {
+                "task": "bisheng.worker.points.tasks.reconcile_point_balances",
+                "schedule": crontab.from_string("30 2 * * *"),
+            }
+
+        # F070: 外部同步 outbox drain（AC-23）；受 points.sync_outbox_enabled 控制。
+        if "points_drain_sync_outbox" not in self.beat_schedule:
+            self.beat_schedule["points_drain_sync_outbox"] = {
+                "task": "bisheng.worker.points.tasks.drain_points_sync_outbox",
+                "schedule": crontab.from_string("0 3 * * *"),
+            }
+
         # convert str to crontab
         for key, task_info in self.beat_schedule.items():
             if isinstance(task_info["schedule"], str):

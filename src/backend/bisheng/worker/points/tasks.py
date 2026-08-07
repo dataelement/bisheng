@@ -1,4 +1,4 @@
-"""积分模块 Celery Beat 任务：排行快照与月奖。"""
+"""积分模块 Celery Beat 任务：排行、月奖、对账与 outbox。"""
 
 from __future__ import annotations
 
@@ -59,4 +59,44 @@ async def _monthly_reward_async() -> dict:
         return {"skipped": True}
     result = await PointsMonthlyRewardService().run_all_tenants()
     logger.info("points.monthly.cron_done %s", result)
+    return result
+
+
+@bisheng_celery.task(
+    acks_late=True,
+    time_limit=1800,
+    soft_time_limit=1500,
+    name="bisheng.worker.points.tasks.reconcile_point_balances",
+)
+def reconcile_point_balances():
+    """每日对账：sum(log.delta) 与 account.balance；只告警不改流水。"""
+    return run_async_task(_reconcile_async)
+
+
+async def _reconcile_async() -> dict:
+    """异步对账入口。"""
+    from bisheng.points.domain.services.points_reconcile_service import PointsReconcileService
+
+    result = await PointsReconcileService().reconcile_all_tenants()
+    logger.info("points.reconcile.cron_done %s", result)
+    return result
+
+
+@bisheng_celery.task(
+    acks_late=True,
+    time_limit=1800,
+    soft_time_limit=1500,
+    name="bisheng.worker.points.tasks.drain_points_sync_outbox",
+)
+def drain_points_sync_outbox():
+    """消费积分同步 outbox；sync_outbox_enabled=false 时保持 pending。"""
+    return run_async_task(_drain_outbox_async)
+
+
+async def _drain_outbox_async() -> dict:
+    """异步 outbox drain 入口。"""
+    from bisheng.points.domain.services.points_sync_outbox_service import PointsSyncOutboxService
+
+    result = await PointsSyncOutboxService().drain()
+    logger.info("points.outbox.cron_done %s", result)
     return result

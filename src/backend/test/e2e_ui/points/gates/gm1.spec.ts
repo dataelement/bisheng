@@ -13,7 +13,7 @@ test.describe('G-M1 points ledger & admin', () => {
     await page.goto('/admin');
     await page.getByText('积分管理').click();
     await expect(page.getByText('G1')).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByText('规则列表')).toBeVisible();
+    await expect(page.getByText('积分规则配置')).toBeVisible();
   });
 
   test('admin adjusts user points and balance updates', async ({ page, request }) => {
@@ -21,12 +21,19 @@ test.describe('G-M1 points ledger & admin', () => {
     await loginPortal(page, 'admin');
     await page.goto('/admin');
     await page.getByText('积分管理').click();
-    await expect(page.getByText('规则列表')).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText('用户积分管理')).toBeVisible({ timeout: 30_000 });
 
-    await page.locator('#points-user-id').fill(String(targetUserId));
-    await page.locator('#points-delta').fill('10');
-    await page.locator('#points-remark').fill('联调调分验证');
-    await page.getByRole('button', { name: '提交调分' }).click();
+    // 用户列表直接调分（不选 R* 扣减规则）
+    await page.getByRole('tab', { name: '用户积分列表' }).click();
+    await page.locator('#points-user-search').fill(String(targetUserId));
+    await expect(page.getByRole('button', { name: '调整积分' }).first()).toBeVisible({
+      timeout: 30_000,
+    });
+    await page.getByRole('button', { name: '调整积分' }).first().click();
+    await expect(page.getByRole('heading', { name: '调整用户积分' })).toBeVisible();
+    await page.locator('#points-adjust-delta').fill('10');
+    await page.locator('#points-adjust-remark').fill('联调调分验证');
+    await page.getByRole('button', { name: '确认调整' }).click();
     await expect(page.getByText(/调分成功/)).toBeVisible({ timeout: 30_000 });
 
     // API 复核：目标用户流水可见正 delta

@@ -38,7 +38,10 @@ def upgrade():
     if table_exists(bind, "point_rule"):
         count = bind.execute(sa.text("SELECT COUNT(*) FROM point_rule WHERE tenant_id = 1")).scalar() or 0
         if not count:
-            bind.execute(sa.insert(PointRule.__table__), [{"tenant_id": 1, "status": "enabled", "remark": None, **rule} for rule in SEED_RULES])
+            bind.execute(
+                sa.insert(PointRule.__table__),
+                [{"tenant_id": 1, "remark": None, **rule} for rule in SEED_RULES],
+            )
             bind.execute(sa.insert(PointCopy.__table__), [{"tenant_id": 1, **copy} for copy in SEED_COPIES])
 
 

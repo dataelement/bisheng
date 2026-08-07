@@ -10,7 +10,8 @@
     "test:gm2": "playwright test gates/gm2.spec.ts",
     "test:gm3": "playwright test gates/gm3.spec.ts",
     "test:gm4": "playwright test gates/gm4.spec.ts",
-    "test:gm5": "playwright test gates/gm5.spec.ts",
+    "test:gm5": "playwright test gates/gm1.spec.ts gates/gm2.spec.ts gates/gm3.spec.ts gates/gm4.spec.ts gates/gm5.spec.ts",
+    "test:gm5:only": "playwright test gates/gm5.spec.ts",
     "install:browsers": "playwright install chromium"
   },
   "devDependencies": {

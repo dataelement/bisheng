@@ -69,6 +69,8 @@ from bisheng.worker.permission.department_transfer_cleanup import (
 )
 from bisheng.worker.permission.retry_failed_tuples import retry_failed_tuples
 from bisheng.worker.points.tasks import (
+    drain_points_sync_outbox,
+    reconcile_point_balances,
     refresh_points_rank_snapshots,
     run_monthly_admin_rewards,
 )

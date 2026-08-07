@@ -38,3 +38,28 @@ export async function loginPortal(page: Page, kind: 'admin' | 'user'): Promise<v
   await page.getByRole('button', { name: '登录', exact: true }).click();
   await page.waitForURL((url) => !url.pathname.includes('/login'), { timeout: 30_000 });
 }
+
+/**
+ * 登录 Platform（组织打标 UI 在 /sys → 组织与成员）。
+ * Platform 登录页常在 `/`（pathname 不含 login），不能用 URL 判断成功。
+ * @param page Playwright 页面
+ * @param kind 账号类型（G-M3 打标入口仅超管可见）
+ */
+export async function loginPlatform(page: Page, kind: 'admin' | 'user' = 'admin'): Promise<void> {
+  const { username, password } = pointsCredentials(kind);
+  const platformBase = process.env.E2E_PLATFORM_BASE_URL || 'http://127.0.0.1:3001';
+  await page.goto(`${platformBase}/`);
+  const account = page.locator('#email');
+  const pwd = page.locator('#pwd').first();
+  await expect(account).toBeVisible({ timeout: 30_000 });
+  await account.fill(username);
+  await pwd.fill(password);
+  // zh-Hans loginButton is "登 录" (space between characters).
+  await page.getByRole('button', { name: /登\s*录|Login/i }).click();
+  // 登录成功后账号框消失，并进入业务页（常见 /build 或 /sys）。
+  await expect(account).toBeHidden({ timeout: 60_000 });
+  await page.waitForURL(
+    (url) => !url.pathname.includes('login') && url.pathname !== '/',
+    { timeout: 60_000 },
+  );
+}
