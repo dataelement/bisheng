@@ -7,7 +7,7 @@ import Markdown from "~/components/Chat/Messages/Content/Markdown";
 import { TextToSpeechButton } from "~/components/Voice/TextToSpeechButton";
 import useLocalize from "~/hooks/useLocalize";
 import { emitAreaTextEvent, EVENT_TYPE } from "../useAreaText";
-import { AppChatFileChip } from "./AppChatFileChip";
+import { AppChatFileList } from "./AppChatFileList";
 
 export default function MessageBsChoose({ type = 'choose', disabled, logo, data, flow }
     : { type?: string, disabled?: Boolean, logo: React.ReactNode, data: ChatMessageType }) {
@@ -63,11 +63,7 @@ export default function MessageBsChoose({ type = 'choose', disabled, logo, data,
                 {/* message */}
                 <div><Markdown content={data.message.msg} isLatestMessage={false} webContent={undefined} /></div>
                 {/* files */}
-                <div className="mt-2 flex max-w-sm flex-wrap gap-2">
-                    {files.map((file, index) => (
-                        <AppChatFileChip key={index} file={file} variant="message" />
-                    ))}
-                </div>
+                <AppChatFileList files={files} className="mt-2" />
                 {/* select or input */}
                 <div className="mt-2">
                     {type === 'input' ?
