@@ -295,7 +295,12 @@ class TestImportNameNormalization:
     the form-create path stays strict — the user typed that ID explicitly."""
 
     async def test_uppercase_name_normalized_on_upload(self, service):
-        md = b"---\nname: Presentations\ndescription: Create or edit PowerPoint decks.\n---\n\n# body\n"
+        md = (
+            b"---\n"
+            b"name: Presentations\n"
+            b"description: Create or edit PowerPoint decks.\n"
+            b"---\n\n# body\n"
+        )
         detail = await service.create_from_upload(TENANT, USER, "presentations.md", md)
         assert detail.name == "presentations"
         assert detail.display_name == "Presentations"
@@ -313,7 +318,14 @@ class TestImportNameNormalization:
         assert detail.normalized_from == "演示文稿"
 
     async def test_foreign_frontmatter_keys_survive_rewrite(self, service):
-        md = b"---\nname: My-Skill\ndescription: demo\nlicense: Apache-2.0\nallowed-tools: Bash, Read\n---\n\nbody"
+        md = (
+            b"---\n"
+            b"name: My-Skill\n"
+            b"description: demo\n"
+            b"license: Apache-2.0\n"
+            b"allowed-tools: Bash, Read\n"
+            b"---\n\nbody"
+        )
         await service.create_from_upload(TENANT, USER, "s.md", md)
         text = service.store.read_text(TENANT, "my-skill")
         assert "license: Apache-2.0" in text
