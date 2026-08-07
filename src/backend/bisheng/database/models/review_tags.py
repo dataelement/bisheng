@@ -52,6 +52,10 @@ class ReviewTag(ReviewTagBase, table=True):
     review_time: datetime | None = Field(
         default=None, sa_column=Column(DateTime, nullable=True), description="Review Time"
     )
+    # Who approved or rejected this tag. Null for rows reviewed before F079.
+    reviewer_id: int | None = Field(
+        default=None, sa_column=Column(Integer, nullable=True), description="Reviewer UserID"
+    )
     remark: str | None = Field(default=None, sa_column=Column(String(256)), description="Remark")
 
 

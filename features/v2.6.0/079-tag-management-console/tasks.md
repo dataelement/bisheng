@@ -14,7 +14,7 @@
 | spec-discovery.md | ✅ 已确认 | 2026-08-07，含 D11 推翻记录 |
 | spec.md | ✅ 已评审 | 两轮 `/sdd-review spec` 共 16 条问题全部处理，用户 2026-08-07 确认 |
 | tasks.md | ✅ 已拆解 | `/sdd-review tasks` 第 1 轮 7 条问题已修复，第 2 轮 LGTM |
-| 实现 | 🔲 未开始 | 0 / 23 完成 |
+| 实现 | 🚧 进行中 | 3 / 23 完成 |
 
 ---
 
@@ -45,7 +45,7 @@
 
 ### 基础设施（无测试配对）
 
-- [ ] **T001**: 审核留痕字段迁移 + ORM
+- [x] **T001**: 审核留痕字段迁移 + ORM
   **文件**:
   `src/backend/bisheng/core/database/alembic/versions/v2_6_0_f079_tag_review_audit_fields.py`（新建），
   `src/backend/bisheng/database/models/tag.py`（改），
@@ -63,7 +63,7 @@
   **覆盖 AC**: AC-19
   **依赖**: 无
 
-- [ ] **T002**: 错误码定义
+- [x] **T002**: 错误码定义
   **文件**: `src/backend/bisheng/common/errcode/workstation.py`
   **逻辑**: 追加 4 个继承 `BaseErrorCode` 的类，取 120 段（该文件现已用到 12045）：
   `TagConsoleBatchTooLargeError`(12046)、`TagConsolePageParamsError`(12047)、
@@ -72,7 +72,7 @@
   release-contract.md 的模块编码表已登记，无需再改。
   **依赖**: 无
 
-- [ ] **T003**: Console Schema 定义
+- [x] **T003**: Console Schema 定义
   **文件**: `src/backend/bisheng/workstation/domain/schemas/tag_console_schema.py`（新建）
   **逻辑**: 按 spec §5 定义 `TagConsoleFilter` / `TagConsoleSearchReq` / `TagConsoleItem` /
   `TagConsoleSearchResp` / `TagConsoleReviewRef` / `TagConsoleReviewItem` /
@@ -463,4 +463,7 @@
 
 > 完成后，在此记录实现与 spec.md 的偏差，供后续参考。
 
-- 暂无
+- **偏差 1（分支）**: 未按 SDD 第 4 步新建 `feat/v2.6.0/079-tag-management-console`，
+  而是继续在 `feat/2.5.0-sg` 上开发。原因：本仓近期所有特性（F077 文件夹拖拽排序、
+  F078 独立路由等）都落在这条分支上，CI 也是从它打镜像并部署到 171；
+  另起分支会把本特性从既有的构建/部署回路里割出去。合并策略不变。
