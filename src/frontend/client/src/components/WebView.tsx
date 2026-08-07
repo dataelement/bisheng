@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { applyHtmlViewerTabIdentity, resolveArtifactUrl } from "~/components/Linsight/Artifacts/artifactUtils";
 import { LoadingIcon } from "~/components/ui/icon/Loading";
+import { ARTIFACT_SANDBOX, buildSandboxedSrcDoc, focusArtifactFrame } from "~/utils/sandboxedHtml";
 
 // The SPA index.html is returned as a fallback when the artifact file does not
 // exist (dev server / gateway SPA-fallback). Rendering it inside the iframe
@@ -80,8 +81,11 @@ export default function WebView() {
             )}
             {content && (
                 <iframe
-                    srcDoc={content}
-                    sandbox="allow-scripts"
+                    srcDoc={buildSandboxedSrcDoc(content)}
+                    sandbox={ARTIFACT_SANDBOX}
+                    allow="fullscreen"
+                    allowFullScreen
+                    onLoad={(e) => focusArtifactFrame(e.currentTarget)}
                     className="size-full"
                     style={{ border: "none" }}
                 ></iframe>
