@@ -4,14 +4,26 @@
  * other type downloads the original file directly — so the label is honest per
  * type: "另存为" when there is a format choice, "下载" when there isn't.
  *
- * Two placements share the logic (`variant`):
- *   - 'rail'    the fixed trailing gutter of a file row (result card, workspace
- *               list). Reserved width, so the glyph never shifts the file name
- *               on hover, and a resting grey rather than hover-only visibility —
- *               a download you can't see until you hover is a download nobody
- *               finds, which is exactly how HTML reports ended up with no
- *               download entry at all (they open in a tab, never in the preview).
+ * Three placements share the logic (`variant`):
+ *   - 'row'     sits directly after the file name in a list, revealed on row
+ *               hover. Adjacency is the point: parked in a far-right gutter the
+ *               glyph ended up ~1000px from a short file name, and the eye had
+ *               to cross an empty row to work out which file it acted on.
+ *               Hover-reveal is what keeps a column of ten identical glyphs from
+ *               reading as noise — repetition is the noise, not the glyph.
+ *   - 'inline'  always visible, for a SINGLE action inside a sentence (the
+ *               one-deliverable result row). One instance isn't a column, so
+ *               there is nothing to quiet down, and hiding the only download
+ *               entry a run has is the failure this whole feature fixed.
  *   - 'toolbar' preview-panel toolbar icon button.
+ *
+ * 'row' hides with OPACITY, never `hidden`/`invisible`: the button keeps its
+ * box, so revealing it can't re-truncate the file name next to it. Three
+ * exceptions keep it from being a desktop-mouse-only affordance —
+ * `focus-visible` (never focus something invisible), `data-[state=open]` (the
+ * markdown menu must not fade out from under itself when the pointer leaves the
+ * row), and `(hover: none)`, where the whole gesture doesn't exist and the
+ * button simply stays put.
  */
 import { Outlined } from 'bisheng-icons';
 import { useState } from 'react';
@@ -34,12 +46,12 @@ import {
     saveConvertedBlob,
 } from './artifactUtils';
 
-type SaveAsVariant = 'rail' | 'toolbar';
+type SaveAsVariant = 'row' | 'inline' | 'toolbar';
 
 interface SaveAsButtonProps {
     file: ArtifactFile;
     versionId: string;
-    /** Trigger placement — see the file header. Defaults to the row rail. */
+    /** Trigger placement — see the file header. Defaults to the list-row action. */
     variant?: SaveAsVariant;
     className?: string;
 }
@@ -48,14 +60,21 @@ const TRIGGER_BASE =
     'flex shrink-0 items-center justify-center transition-colors focus-visible:outline-none ' +
     'focus-visible:ring-2 focus-visible:ring-blue-500/40 disabled:cursor-not-allowed disabled:opacity-50';
 
+// Shared by 'row' and 'inline': a quiet grey that turns brand on its own hover.
+// One resting grey, not the two-step the far-right gutter needed — by the time
+// a 'row' glyph is visible the row is already hovered, so there is no earlier
+// state left to distinguish.
+const ROW_GLYPH = 'size-6 rounded-md text-[#8C8C8C] hover:bg-blue-500/[0.07] hover:text-blue-500';
+
+// Reveal rules for the list-row variant. `transition-opacity` (not the base
+// `transition-colors`) so the fade is what animates.
+const ROW_REVEAL =
+    'opacity-0 transition-opacity group-hover/row:opacity-100 focus-visible:opacity-100 ' +
+    'data-[state=open]:opacity-100 [@media(hover:none)]:!opacity-100';
+
 const TRIGGER_VARIANT: Record<SaveAsVariant, string> = {
-    // Three resting states, so the action reads as available without competing
-    // with the file name (which turns brand-blue on row hover):
-    //   at rest → faint grey · row hover → grey · own hover → brand + tint.
-    // `hover:!text-blue-500` is deliberate: the row-hover and self-hover rules are
-    // both :hover-based utilities on this element, so equal specificity makes CSS
-    // source order the tiebreaker — `!` pins the winner instead of hoping.
-    rail: 'size-6 rounded-md text-[#C0C4CC] group-hover/row:text-[#8C8C8C] hover:bg-blue-500/[0.07] hover:!text-blue-500',
+    row: `${ROW_GLYPH} ${ROW_REVEAL}`,
+    inline: ROW_GLYPH,
     toolbar: 'size-7 rounded-lg text-[#8C8C8C] hover:bg-gray-100 hover:text-blue-500',
 };
 
@@ -73,7 +92,7 @@ async function readBlobError(blob: Blob): Promise<string | null> {
     return null;
 }
 
-export function SaveAsButton({ file, versionId, variant = 'rail', className }: SaveAsButtonProps) {
+export function SaveAsButton({ file, versionId, variant = 'row', className }: SaveAsButtonProps) {
     const localize = useLocalize();
     const { showToast } = useToastContext();
     const [busy, setBusy] = useState(false);
