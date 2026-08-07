@@ -484,6 +484,8 @@
   "com_linsight_exit_fullscreen": "Exit fullscreen",
   "com_linsight_download_to_view": "Download to view",
   "com_linsight_preview_unsupported": "This file type cannot be previewed online",
+  "com_linsight_deliverable_not_generated": "(not generated)",
+  "com_linsight_deliverable_not_generated_hint": "The model mentioned this file but never wrote it, so there is nothing to open.",
   "com_linsight_preview_load_failed": "Failed to load the file",
   "com_linsight_download_failed": "Download failed, please try again later",
   "com_linsight_exporting": "Exporting, please wait…",

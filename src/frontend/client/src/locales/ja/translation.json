@@ -469,6 +469,8 @@
   "com_linsight_exit_fullscreen": "全画面を終了",
   "com_linsight_download_to_view": "ダウンロードして表示",
   "com_linsight_preview_unsupported": "このファイル形式はオンラインプレビューに対応していません",
+  "com_linsight_deliverable_not_generated": "（未生成）",
+  "com_linsight_deliverable_not_generated_hint": "モデルはこのファイルに言及しましたが、実際には生成していないため、開けません。",
   "com_linsight_preview_load_failed": "ファイルの読み込みに失敗しました",
   "com_linsight_download_failed": "ダウンロードに失敗しました。後でもう一度お試しください",
   "com_linsight_exporting": "エクスポート中です。しばらくお待ちください…",
