@@ -130,7 +130,11 @@ class FilelibSyncService:
                 folder_id=folder_id,
                 used_personal_fallback=False,
             )
-        if self.file_sync_rule.business_domain.mode == "dynamic" and not target.used_personal_fallback:
+        if (
+            domain is not None
+            and self.file_sync_rule.business_domain.mode == "dynamic"
+            and not target.used_personal_fallback
+        ):
             self._ensure_domain_bound(target.space, domain)
         try:
             await self._require_upload_permission(target)
@@ -159,18 +163,21 @@ class FilelibSyncService:
                 int(target.space.id),
                 temporary_file_path,
             )
+            business_domain_code = domain.code if domain is not None else None
             upload_results = await self.knowledge_space_service.add_file(
                 knowledge_id=int(target.space.id),
                 file_path=[temporary_file_path],
                 parent_id=target.folder_id,
                 file_category_code=self.file_sync_rule.category.code,
                 file_subcategory_code=self.file_sync_rule.category.subcategory_code,
-                business_domain_code=domain.code,
+                business_domain_code=business_domain_code,
                 skip_approval=True,
                 enqueue_processing=False,
                 allow_duplicate_name=True,
                 allow_duplicate_content=True,
-                skip_space_business_domain_check=self.file_sync_rule.business_domain.mode == "fixed",
+                skip_space_business_domain_check=(
+                    self.file_sync_rule.business_domain.mode == "fixed" or domain is None
+                ),
             )
             if len(upload_results) != 1 or upload_results[0].status == KnowledgeFileStatus.FAILED.value:
                 raise FilelibSyncConflictError(msg="duplicate file content or name")
@@ -210,12 +217,13 @@ class FilelibSyncService:
                     )
                 )
             created_file.user_metadata = user_metadata
-            await FileEncodingTransformer.generate_fixed_encoding(
-                invoke_user_id=identity.responsible_user_id,
-                knowledge_file=created_file,
-                document_type_code=self.file_sync_rule.category.code,
-                business_domain_code=domain.code,
-            )
+            if domain is not None:
+                await FileEncodingTransformer.generate_fixed_encoding(
+                    invoke_user_id=identity.responsible_user_id,
+                    knowledge_file=created_file,
+                    document_type_code=self.file_sync_rule.category.code,
+                    business_domain_code=domain.code,
+                )
             # add_file persists via sync DAO; request-scoped async merge can INSERT a duplicate PK.
             created_file = await asyncio.to_thread(KnowledgeFileDao.update, created_file)
             file_persisted = True
@@ -468,7 +476,7 @@ class FilelibSyncService:
         self,
         config: ShougangPortalAdminConfig,
         selected_department: Department | None,
-    ) -> PortalDomainConfig:
+    ) -> PortalDomainConfig | None:
         if self.file_sync_rule.business_domain.mode == "fixed":
             candidates = [
                 item
@@ -487,8 +495,23 @@ class FilelibSyncService:
                 and int(selected_department.id) in (item.department_ids or [])
             ]
         if not candidates:
+            if self.file_sync_rule.business_domain.mode == "dynamic":
+                logger.warning(
+                    "filelib sync business domain unresolved department_id={} department_name={}; uploading without business domain",
+                    getattr(selected_department, "id", None),
+                    getattr(selected_department, "name", None),
+                )
+                return None
             raise FilelibSyncNotFoundError(msg="configured business domain does not exist")
         if len(candidates) > 1:
+            if self.file_sync_rule.business_domain.mode == "dynamic":
+                logger.warning(
+                    "filelib sync multiple business domains match department_id={} department_name={}; using first domain code={}",
+                    getattr(selected_department, "id", None),
+                    getattr(selected_department, "name", None),
+                    candidates[0].code,
+                )
+                return candidates[0]
             raise FilelibSyncConflictError(msg="multiple business domains match the department")
         return candidates[0]
 

@@ -620,5 +620,70 @@ async def test_sync_orchestration_allows_repeated_external_id_and_writes_source_
     assert repeated_result.external_file_id == "ext-1"
 
 
+@pytest.mark.asyncio
+async def test_sync_orchestration_skips_business_domain_when_dynamic_resolution_is_empty():
+    repository = SimpleNamespace(find_by_id=AsyncMock(), update=AsyncMock())
+    knowledge_space_service = SimpleNamespace(
+        get_preview_cache_key=Mock(return_value="cache-key"),
+        add_file=AsyncMock(return_value=[SimpleNamespace(id=9, status=5)]),
+        enqueue_file_title_extraction=Mock(),
+    )
+    service = _service(repository, knowledge_space_service)
+    service.file_sync_rule = DeveloperTokenFileSyncRule.model_validate(
+        {
+            "category": {"code": "POL", "subcategory_code": "POL01"},
+            "business_domain": {"mode": "dynamic", "code": None, "dynamic_source": "department_id"},
+            "target_space": {"mode": "fixed", "knowledge_id": 8},
+        }
+    )
+    identity = SimpleNamespace(
+        responsible_user_id=2,
+        responsible_user_name="owner",
+        responsible_user_external_id="owner-ext",
+        responsible_department=_department(20, "责任人部门", "/20/"),
+        main_department=_department(10, "主责单位", "/10/"),
+        business_domain_department=_department(10, "主责单位", "/10/"),
+        target_space_department=None,
+    )
+    target_space = Knowledge(id=8, name="信息库", type=3, business_domain_codes=["IT"])
+    knowledge_file = KnowledgeFile(
+        id=9,
+        knowledge_id=8,
+        file_name="a.pdf",
+        status=5,
+        create_time=datetime(2026, 7, 16),
+    )
+    repository.find_by_id = AsyncMock(return_value=knowledge_file)
+
+    service._resolve_identity = AsyncMock(return_value=identity)
+    service._get_portal_config = AsyncMock(return_value=SimpleNamespace())
+    service._resolve_document_type = Mock(return_value=(SimpleNamespace(code="POL"), SimpleNamespace(code="POL01")))
+    service._resolve_business_domain = Mock(return_value=None)
+    service._resolve_target_space = AsyncMock(return_value=ResolvedFileSyncTarget(space=target_space, folder_id=None))
+    service._ensure_domain_bound = Mock()
+    service._require_upload_permission = AsyncMock()
+    service._save_temporary_file = AsyncMock(return_value="temporary-url")
+    service._resolve_same_name_version_overwrite = AsyncMock(return_value=(None, None))
+
+    upload = UploadFile(filename="a.pdf", file=BytesIO(b"content"), size=7)
+    with (
+        patch.object(FileEncodingTransformer, "generate_fixed_encoding", AsyncMock()) as generate_encoding,
+        patch(
+            "bisheng.open_endpoints.domain.services.filelib_sync_service.KnowledgeFileDao.update",
+            side_effect=lambda value: value,
+        ),
+    ):
+        await service.sync(
+            raw_params='{"external_file_id":"ext-1","file_name":"a.pdf","department_id":"A0311"}',
+            upload_file=upload,
+        )
+
+    service._ensure_domain_bound.assert_not_called()
+    generate_encoding.assert_not_awaited()
+    add_kwargs = knowledge_space_service.add_file.await_args.kwargs
+    assert add_kwargs["business_domain_code"] is None
+    assert add_kwargs["skip_space_business_domain_check"] is True
+
+
 def test_external_file_id_is_not_reserved_by_sync_service():
     assert not hasattr(FilelibSyncService, "_reserve_external_file_id")
