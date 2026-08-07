@@ -9,8 +9,12 @@ existing columns. Rolling back only drops the columns, so pre-existing behaviour
 is unaffected.
 
 Revision ID: f079_tag_review_audit_fields
-Revises: f078_knowledge_parse_priority
+Revises: f049_automotive_sheet_intro_sync_run_log
 Create Date: 2026-08-07
+
+Originally authored against f078. Re-chained after f049 when that landed on the
+branch first — both pointing at f078 would leave alembic with two heads and
+``upgrade head`` would refuse to run.
 """
 
 from __future__ import annotations
@@ -21,7 +25,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "f079_tag_review_audit_fields"
-down_revision: str | Sequence[str] | None = "f078_knowledge_parse_priority"
+down_revision: str | Sequence[str] | None = "f049_automotive_sheet_intro_sync_run_log"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
