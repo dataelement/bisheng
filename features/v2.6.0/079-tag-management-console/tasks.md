@@ -14,7 +14,7 @@
 | spec-discovery.md | ✅ 已确认 | 2026-08-07，含 D11 推翻记录 |
 | spec.md | ✅ 已评审 | 两轮 `/sdd-review spec` 共 16 条问题全部处理，用户 2026-08-07 确认 |
 | tasks.md | ✅ 已拆解 | `/sdd-review tasks` 第 1 轮 7 条问题已修复，第 2 轮 LGTM |
-| 实现 | 🚧 进行中 | 15 / 23 完成（后端完成，前端进行中） |
+| 实现 | 🚧 待验收 | 22 / 23 完成（T023 端到端回归待用户在 171 验证） |
 
 ---
 
@@ -282,7 +282,7 @@
 > 本特性**不涉及 Client 前端**（`src/frontend/client/`）。
 > 唯一的交叉点是来源文件外链跳到 client 的 `/knowledge-portal`，那是既有页面，不需要改。
 
-- [ ] **T016**: 前端 API 封装 + 类型
+- [x] **T016**: 前端 API 封装 + 类型
   **文件**:
   `src/frontend/platform/src/controllers/API/knowledgeSpaceTagLibrary.ts`（改，追加 console 段），
   `src/frontend/platform/src/pages/BuildPage/bench/standalone/tagConsole/tagConsoleTypes.ts`（新建）
@@ -291,7 +291,7 @@
   待审核项的类型用 `{ name, resource_type }` 作 key，不要用 id。
   **依赖**: T015
 
-- [ ] **T017**: 纯逻辑工具函数 + 配套单测（Test-Alongside 配对任务）
+- [x] **T017**: 纯逻辑工具函数 + 配套单测（Test-Alongside 配对任务）
   > 本任务同时产出实现与测试，这是「前端 Test-Alongside」模式的既定配对方式（见开发模式），
   > 不适用后端 Test-First 的"测试任务不得混入实现"约束。
   **文件**:
@@ -313,7 +313,7 @@
 
 ### 前端 Platform — 页面实现（手动验证）
 
-- [ ] **T018**: 左栏 + 页面骨架
+- [x] **T018**: 左栏 + 页面骨架
   **文件**:
   `.../standalone/KnowledgeTagLibraryPage.tsx`（改成左右布局 + `mode` 状态），
   `.../tagConsole/TagLibraryPanel.tsx`、`TagLibraryFormDialog.tsx`（新建）
@@ -332,7 +332,7 @@
   - 搜索框输入 → 只过滤标签库，「待审核标签」不消失
   **依赖**: T016, T017
 
-- [ ] **T019**: 右栏模式 A（标签管理）
+- [x] **T019**: 右栏模式 A（标签管理）
   **文件**: `.../tagConsole/TagTablePanel.tsx`、`TagFilterBar.tsx`、`AddTagDialog.tsx`（新建）
   **逻辑**: 筛选栏（标签名/来源/提报者/审核者/创建日期区间/审核日期区间 + 搜索 + 重置）、
   工具栏（添加 / 批量删除 / 批量移动）、12 列表格、分页。
@@ -350,7 +350,7 @@
   - 「添加」重名 → 报「已存在于其他标签库」
   **依赖**: T018
 
-- [ ] **T020**: 右栏模式 B（待审核标签）+ 审核弹窗
+- [x] **T020**: 右栏模式 B（待审核标签）+ 审核弹窗
   **文件**: `.../tagConsole/ReviewTablePanel.tsx`、`TagReviewDialog.tsx`（新建）
   **逻辑**: 状态筛选（全部/待审核/已驳回，默认待审核）、
   工具栏标题「待审核标签（待审核 N / 已驳回 M）」、
@@ -370,7 +370,7 @@
   - 与工作台旧「待审核标签」区块对比条目集合一致
   **依赖**: T018
 
-- [ ] **T021**: 批量弹窗 + 结果清单
+- [x] **T021**: 批量弹窗 + 结果清单
   **文件**: `.../tagConsole/TagBatchDialogs.tsx`（新建）
   **逻辑**: 批量移动 / 批量入库 / 批量驳回三个弹窗 + 统一的结果清单弹窗（成功数 / 跳过数 / 失败明细列表）。
   批量移动与批量入库复用同一个「选择目标标签库」下拉；批量驳回复用「驳回原因」必填输入。
@@ -383,7 +383,7 @@
   - 批量驳回不填原因 → 前端拦住并提示
   **依赖**: T019, T020
 
-- [ ] **T022**: i18n 文案补齐
+- [x] **T022**: i18n 文案补齐
   **文件**: `src/frontend/platform/public/locales/{zh-Hans,en-US,ja}/bs.json`（改，三个文件同一批键）
   **逻辑**: 补齐本页全部文案，键前缀统一 `build.tagConsole.*`。
   三种语言的键集合必须完全一致，缺一个就会在该语言下露出 raw key。

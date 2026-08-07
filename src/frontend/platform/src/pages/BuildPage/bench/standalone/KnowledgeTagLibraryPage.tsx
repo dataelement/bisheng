@@ -1,95 +1,83 @@
-// Standalone page for the workbench "auto tag generation / tag library" section.
+// Standalone tag management console (F079).
 // Mounted at /standalone/knowledge-tag-library without the platform shell.
-import { Button } from "@/components/bs-ui/button"
-import { useToast } from "@/components/bs-ui/toast/use-toast"
-import { locationContext } from "@/contexts/locationContext"
-import { getKnowledgeConfigApi, setKnowledgeConfigApi } from "@/controllers/API"
+//
+// Left panel picks the data source; the right panel switches between two
+// independent listings rather than filtering one merged table:
+//   - library mode: approved tags
+//   - review mode:  pending / rejected tags, with a "handle" action per row
+import {
+    getTagConsolePendingCountApi,
+    type KnowledgeSpaceTagLibraryListItem,
+} from "@/controllers/API/knowledgeSpaceTagLibrary"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
-import { useContext, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
-import ConfigInheritanceBanner, { resolveConfigEnvelope } from "../ConfigInheritanceBanner"
-import KnowledgeSpaceTagSection from "../KnowledgeSpaceTagLibrarySection"
-import { resolveConfigString } from "../configValue"
-
-/**
- * Sibling fields of the knowledge workbench config that this page does not edit.
- * They are read on mount and written back verbatim on save, because the config
- * API replaces the whole object — omitting them would wipe the saved values.
- */
-interface PreservedKnowledgeConfig {
-    systemPrompt: string
-    userPrompt: string
-    maxChunkSize: number
-    reviewTagVisible: boolean
-}
-
-const DEFAULT_PRESERVED: PreservedKnowledgeConfig = {
-    systemPrompt: "",
-    userPrompt: "",
-    maxChunkSize: 15000,
-    reviewTagVisible: false,
-}
+import { ReviewTablePanel } from "./tagConsole/ReviewTablePanel"
+import { TagLibraryPanel } from "./tagConsole/TagLibraryPanel"
+import { TagTablePanel } from "./tagConsole/TagTablePanel"
+import {
+    INITIAL_SELECTION,
+    selectLibrary,
+    selectReviewEntry,
+    type TagConsoleSelection,
+} from "./tagConsole/tagConsoleTypes"
 
 export default function KnowledgeTagLibraryPage() {
     const { t } = useTranslation()
-    const { toast } = useToast()
-    const { reloadConfig } = useContext(locationContext)
-    const [autoTagVisible, setAutoTagVisible] = useState(false)
-    const [configMeta, setConfigMeta] = useState<any>(null)
-    const [loaded, setLoaded] = useState(false)
-    const preservedRef = useRef<PreservedKnowledgeConfig>(DEFAULT_PRESERVED)
+    const [selection, setSelection] = useState<TagConsoleSelection>(INITIAL_SELECTION)
+    const [libraries, setLibraries] = useState<KnowledgeSpaceTagLibraryListItem[]>([])
+    const [pendingCount, setPendingCount] = useState(0)
+
+    const refreshPendingCount = useCallback(async () => {
+        const res = await captureAndAlertRequestErrorHoc(getTagConsolePendingCountApi())
+        setPendingCount(res?.pending_count ?? 0)
+    }, [])
 
     useEffect(() => {
-        getKnowledgeConfigApi().then((res) => {
-            const { data: envData, meta } = resolveConfigEnvelope<Record<string, unknown>>(res)
-            const cfg = envData != null && typeof envData === "object" ? envData : null
-            const maxChunkSizeFromRes = cfg?.max_chunk_size ?? cfg?.maxTokens
-            preservedRef.current = {
-                systemPrompt:
-                    resolveConfigString(cfg?.system_prompt ?? cfg?.systemPrompt, "") ||
-                    t("chatConfig.aiPrompt"),
-                userPrompt:
-                    resolveConfigString(cfg?.user_prompt ?? cfg?.userPrompt, "") ||
-                    t("chatConfig.retrievedAndQuestion"),
-                maxChunkSize:
-                    typeof maxChunkSizeFromRes === "number"
-                        ? maxChunkSizeFromRes
-                        : DEFAULT_PRESERVED.maxChunkSize,
-                reviewTagVisible: Boolean(cfg?.review_tag_visible ?? cfg?.reviewTagVisible),
-            }
-            setConfigMeta(meta)
-            setAutoTagVisible(Boolean(cfg?.auto_tag_visible ?? cfg?.autoTagVisible))
-            setLoaded(true)
-        })
-    }, [t])
+        void refreshPendingCount()
+    }, [refreshPendingCount])
 
-    const handleSave = async () => {
-        if (!loaded) return
-        const preserved = preservedRef.current
-        const res = await captureAndAlertRequestErrorHoc(
-            setKnowledgeConfigApi({
-                system_prompt: preserved.systemPrompt,
-                user_prompt: preserved.userPrompt,
-                max_chunk_size: preserved.maxChunkSize,
-                review_tag_visible: preserved.reviewTagVisible,
-                auto_tag_visible: autoTagVisible,
-            }),
-        )
-        if (res) {
-            setConfigMeta({ inherited_from_root: false, has_override: true })
-            toast({ variant: "success", description: t("chatConfig.saveSuccess") })
-            reloadConfig()
-        }
-    }
+    const handleLibrariesChanged = useCallback((rows: KnowledgeSpaceTagLibraryListItem[]) => {
+        setLibraries(rows)
+        // Drop selections whose library another admin deleted meanwhile.
+        setSelection((prev) => {
+            const existing = new Set(rows.map((row) => row.id))
+            const kept = prev.selectedLibraryIds.filter((id) => existing.has(id))
+            return kept.length === prev.selectedLibraryIds.length ? prev : { ...prev, selectedLibraryIds: kept }
+        })
+    }, [])
 
     return (
-        <div className="relative flex h-full flex-col px-2 pt-4">
-            <div className="flex-1 overflow-y-auto scrollbar-hide pb-16">
-                <ConfigInheritanceBanner meta={configMeta} />
-                <KnowledgeSpaceTagSection visible={autoTagVisible} onToggle={setAutoTagVisible} />
+        <div className="flex h-full flex-col">
+            <div className="border-b border-[#ECECEC] px-4 py-3">
+                <p className="text-lg font-bold">{t("build.tagLibraryManagementTitle", "标签管理")}</p>
+                <p className="mt-1 text-sm text-[#86909C]">
+                    {t(
+                        "build.tagLibraryManagementDesc",
+                        "维护平台标签库；知识空间可绑定一个或多个标签库，AI 打标从库中选取候选标签。",
+                    )}
+                </p>
             </div>
-            <div className="absolute bottom-2 right-4">
-                <Button onClick={handleSave}>{t("save")}</Button>
+
+            <div className="flex min-h-0 flex-1">
+                <TagLibraryPanel
+                    mode={selection.mode}
+                    selectedLibraryIds={selection.selectedLibraryIds}
+                    pendingCount={pendingCount}
+                    onSelectLibrary={(libraryId) => setSelection((prev) => selectLibrary(prev, libraryId))}
+                    onSelectReviewEntry={() => setSelection(selectReviewEntry())}
+                    onLibrariesChanged={handleLibrariesChanged}
+                />
+
+                {selection.mode === "review" ? (
+                    <ReviewTablePanel libraries={libraries} onReviewed={refreshPendingCount} />
+                ) : (
+                    <TagTablePanel
+                        selectedLibraryIds={selection.selectedLibraryIds}
+                        libraries={libraries}
+                        onLibraryContentChanged={refreshPendingCount}
+                    />
+                )}
             </div>
         </div>
     )
