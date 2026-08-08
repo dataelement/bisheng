@@ -146,13 +146,11 @@ class PointsRankService:
 
         month_start, month_end = PointsQueryService._month_bounds(now)
         year_start, year_end = year_bounds(now)
+        # 月/年：仅期间有流水的用户入榜（GROUP BY 结果；净变动为 0 仍保留）。
+        # 总榜：仅当前余额非 0 的账户，避免全量 0 分行写放大。
         month_scores = await repo.sum_deltas_by_user(tenant_id, start=month_start, end=month_end)
         year_scores = await repo.sum_deltas_by_user(tenant_id, start=year_start, end=year_end)
-        # 无流水用户以 0 分入榜，总榜用余额。
-        for user_id in balances:
-            month_scores.setdefault(user_id, 0)
-            year_scores.setdefault(user_id, 0)
-        all_scores = dict(balances)
+        all_scores = {user_id: bal for user_id, bal in balances.items() if bal != 0}
 
         exclude = await self._load_super_admin_ids()
         bucket_by_user = await self._load_dept_buckets(list(balances.keys()))
@@ -190,23 +188,26 @@ class PointsRankService:
                 if bucket is None:
                     continue
                 buckets.setdefault(bucket, {})[user_id] = score
+            # 这一条已清掉本 period 下所有 dept 桶，故后续各桶排名后一次性批量插入，
+            # 不再逐桶 DELETE —— 逐桶删除属纯冗余，且桶越多全表扫描次数越多。
             await repo.clear_dept_rank_snapshots(tenant_id, period, period_key)
+            dept_rows: list[PointRankSnapshot] = []
             for scope_id, bucket_scores in buckets.items():
-                dept_rows = build_ranked_rows(
-                    tenant_id=tenant_id,
-                    period=period,
-                    scope="dept",
-                    scope_id=scope_id,
-                    period_key=period_key,
-                    scores=bucket_scores,
-                    balances=balances,
-                    dept_ids=bucket_by_user,
-                    exclude_user_ids=exclude,
-                    refreshed_at=refreshed_at,
+                dept_rows.extend(
+                    build_ranked_rows(
+                        tenant_id=tenant_id,
+                        period=period,
+                        scope="dept",
+                        scope_id=scope_id,
+                        period_key=period_key,
+                        scores=bucket_scores,
+                        balances=balances,
+                        dept_ids=bucket_by_user,
+                        exclude_user_ids=exclude,
+                        refreshed_at=refreshed_at,
+                    )
                 )
-                written += await repo.replace_rank_snapshots(
-                    tenant_id, period, "dept", scope_id, period_key, dept_rows
-                )
+            written += await repo.bulk_insert_rank_snapshots(dept_rows)
 
         logger.info(
             "points.rank.refreshed tenant_id=%s rows=%s periods=%s",

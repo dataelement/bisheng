@@ -17,6 +17,12 @@ BACKEND_ROOT = Path(__file__).resolve().parents[4]
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
+# 复用 factory 的 Gate 同步/轮询约定，避免 G-M2 在异步默认开启时读到旧余额。
+from test.e2e_ui.points.helpers.factory_trigger import (  # noqa: E402
+    _gate_award_mode,
+    _wait_ledger,
+)
+
 
 async def _ensure_g7(tenant_id: int = 1) -> dict:
     from bisheng.core.database import get_async_db_session
@@ -96,50 +102,66 @@ async def _award_g2(user_id: int, file_id: int, space_id: int) -> dict:
     from bisheng.points.domain.services.points_award_hooks import notify_space_files_ready
 
     before = await _snapshot(user_id, "G2")
-    await notify_space_files_ready(
-        tenant_id=1,
-        space_id=int(space_id),
-        files=[SimpleNamespace(id=int(file_id))],
-        uploader_id=int(user_id),
-        is_favorite_space=False,
-        space_level="department",
+    with _gate_award_mode() as mode:
+        await notify_space_files_ready(
+            tenant_id=1,
+            space_id=int(space_id),
+            files=[SimpleNamespace(id=int(file_id))],
+            uploader_id=int(user_id),
+            is_favorite_space=False,
+            space_level="department",
+        )
+    after = (
+        await _snapshot(user_id, "G2")
+        if mode == "sync"
+        else await _wait_ledger(user_id, "G2", before)
     )
-    after = await _snapshot(user_id, "G2")
-    return {"before": before, "after": after}
+    return {"before": before, "after": after, "mode": mode}
 
 
 async def _award_g7(user_id: int, share_entry_id: int) -> dict:
     from bisheng.points.domain.services.points_award_hooks import notify_document_shared
 
     before = await _snapshot(user_id, "G7")
-    await notify_document_shared(
-        tenant_id=1,
-        share_entry_id=int(share_entry_id),
-        source_space_id=10,
-        target_space_id=12,
-        uploader_id=int(user_id),
-        sharer_id=int(user_id),
+    with _gate_award_mode() as mode:
+        await notify_document_shared(
+            tenant_id=1,
+            share_entry_id=int(share_entry_id),
+            source_space_id=10,
+            target_space_id=12,
+            uploader_id=int(user_id),
+            sharer_id=int(user_id),
+        )
+    after = (
+        await _snapshot(user_id, "G7")
+        if mode == "sync"
+        else await _wait_ledger(user_id, "G7", before)
     )
-    after = await _snapshot(user_id, "G7")
-    return {"before": before, "after": after}
+    return {"before": before, "after": after, "mode": mode}
 
 
 async def _award_admin_g2(admin_uid: int, file_id: int) -> dict:
     from bisheng.points.domain.services.points_award_hooks import notify_space_files_ready
 
     before = await _snapshot(admin_uid, "G2")
-    await notify_space_files_ready(
-        tenant_id=1,
-        space_id=10,
-        files=[SimpleNamespace(id=int(file_id))],
-        uploader_id=int(admin_uid),
-        is_favorite_space=False,
-        space_level="department",
+    with _gate_award_mode() as mode:
+        await notify_space_files_ready(
+            tenant_id=1,
+            space_id=10,
+            files=[SimpleNamespace(id=int(file_id))],
+            uploader_id=int(admin_uid),
+            is_favorite_space=False,
+            space_level="department",
+        )
+    after = (
+        await _snapshot(admin_uid, "G2")
+        if mode == "sync"
+        else await _wait_ledger(admin_uid, "G2", before)
     )
-    after = await _snapshot(admin_uid, "G2")
     return {
         "before": before,
         "after": after,
+        "mode": mode,
         "skipped": after["count"] == before["count"] and after["balance"] == before["balance"],
     }
 

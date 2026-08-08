@@ -1,4 +1,4 @@
-"""业务成功后的积分旁路挂钩：独立会话提交，失败只记日志。"""
+"""业务成功后的积分旁路挂钩：可异步投递 Celery，失败不影响主业务。"""
 
 from __future__ import annotations
 
@@ -76,6 +76,16 @@ async def resolve_space_level(space_id: int) -> str:
         return KnowledgeSpaceLevelEnum.PERSONAL.value
 
 
+def _award_async_enabled() -> bool:
+    """读取 points.award_async_enabled；默认 True。"""
+    try:
+        from bisheng.common.services.config_service import settings
+
+        return bool(getattr(getattr(settings, "points", None), "award_async_enabled", True))
+    except Exception:
+        return True
+
+
 async def _run_with_facade(action) -> None:
     """打开独立积分会话执行门面并提交。"""
     async with get_async_db_session() as session:
@@ -90,6 +100,108 @@ async def _run_with_facade(action) -> None:
         await session.commit()
 
 
+def _enqueue_award_event(body: dict[str, Any]) -> None:
+    """投递 Celery 发分任务；抽出以便单测 patch，避开 conftest 对 worker 包的 mock。
+
+    可选环境变量 POINTS_AWARD_CELERY_QUEUE：指定队列名（联调共享 Broker 时避免旧 Worker 抢走未注册任务）。
+    未设置时走默认队列 celery（与 All-in-one 部署一致）。
+    """
+    import os
+
+    from bisheng.worker.points.tasks import process_points_award_event
+
+    queue = (os.environ.get("POINTS_AWARD_CELERY_QUEUE") or "").strip()
+    if queue:
+        process_points_award_event.apply_async(args=[body], queue=queue)
+    else:
+        process_points_award_event.delay(body)
+
+
+async def _dispatch(event_type: str, payload: dict[str, Any]) -> None:
+    """按开关异步投递或同步入账；enqueue 失败则 fallback 同步一次。"""
+    body = {"event_type": event_type, **payload}
+    if not _award_async_enabled():
+        await _run_payload_sync(body)
+        return
+    try:
+        _enqueue_award_event(body)
+        logger.info(
+            "points.award.enqueued event_type=%s tenant_id=%s",
+            event_type,
+            payload.get("tenant_id"),
+        )
+    except Exception:
+        # Broker 不可用时降级同步，避免丢事件。
+        logger.exception(
+            "points.award.enqueue_fallback_sync event_type=%s tenant_id=%s",
+            event_type,
+            payload.get("tenant_id"),
+        )
+        await _run_payload_sync(body)
+
+
+async def _run_payload_sync(payload: dict[str, Any]) -> None:
+    """与 Celery worker 相同的事件分发，供同步路径与 enqueue fallback 复用。"""
+
+    async def _award(facade: PointsAwardFacade) -> None:
+        event_type = str(payload.get("event_type") or "")
+        if event_type == "space_file_ready":
+            await facade.on_space_file_ready(
+                SpaceFileReadyEvent(
+                    tenant_id=int(payload["tenant_id"]),
+                    space_id=int(payload["space_id"]),
+                    space_level=str(payload["space_level"]),
+                    file_id=int(payload["file_id"]),
+                    uploader_id=int(payload["uploader_id"]),
+                    publisher_id=(
+                        int(payload["publisher_id"])
+                        if payload.get("publisher_id") is not None
+                        else None
+                    ),
+                    is_favorite_space=bool(payload.get("is_favorite_space")),
+                    space_manager_ids=frozenset(
+                        int(x) for x in (payload.get("space_manager_ids") or [])
+                    ),
+                )
+            )
+        elif event_type == "document_shared":
+            await facade.on_document_shared(
+                DocumentSharedEvent(
+                    tenant_id=int(payload["tenant_id"]),
+                    share_entry_id=int(payload["share_entry_id"]),
+                    uploader_id=int(payload["uploader_id"]),
+                    sharer_id=int(payload["sharer_id"]),
+                    related_manager_ids=frozenset(
+                        int(x) for x in (payload.get("related_manager_ids") or [])
+                    ),
+                )
+            )
+        elif event_type == "favorite_changed":
+            await facade.on_favorite_changed(
+                FavoriteChangedEvent(
+                    tenant_id=int(payload["tenant_id"]),
+                    file_id=int(payload["file_id"]),
+                    uploader_id=int(payload["uploader_id"]),
+                    unique_favoriter_count=int(payload["unique_favoriter_count"]),
+                    space_manager_ids=frozenset(
+                        int(x) for x in (payload.get("space_manager_ids") or [])
+                    ),
+                )
+            )
+        elif event_type == "answer_adopted":
+            await facade.on_answer_adopted(
+                AnswerAdoptedEvent(
+                    tenant_id=int(payload["tenant_id"]),
+                    answer_id=int(payload["answer_id"]),
+                    answerer_id=int(payload["answerer_id"]),
+                )
+            )
+        else:
+            raise ValueError(f"unknown points award event_type={event_type}")
+
+    await _run_with_facade(_award)
+
+
 async def notify_space_files_ready(
     *,
     tenant_id: int,
@@ -100,7 +212,7 @@ async def notify_space_files_ready(
     is_favorite_space: bool | None = None,
     space_level: str | None = None,
 ) -> None:
-    """上传/发布入库成功后发分；不影响主业务事务。"""
+    """上传/发布入库成功后发分；一文件一任务（或同步路径一批处理）。"""
     try:
         file_ids = [int(f.id) for f in files if getattr(f, "id", None)]
         if not file_ids:
@@ -111,23 +223,42 @@ async def notify_space_files_ready(
             favorite = bool(space and getattr(space, "is_favorite", False))
         level = space_level or await resolve_space_level(space_id)
         managers = await resolve_space_manager_ids(space_id)
+        manager_list = sorted(int(x) for x in managers)
 
-        async def _award(facade: PointsAwardFacade) -> None:
-            for file_id in file_ids:
-                await facade.on_space_file_ready(
-                    SpaceFileReadyEvent(
-                        tenant_id=int(tenant_id),
-                        space_id=int(space_id),
-                        space_level=level,
-                        file_id=file_id,
-                        uploader_id=int(uploader_id),
-                        publisher_id=int(publisher_id) if publisher_id is not None else None,
-                        is_favorite_space=bool(favorite),
-                        space_manager_ids=managers,
+        if not _award_async_enabled():
+            # 同步：同一会话批量处理，减少连接开销。
+            async def _award(facade: PointsAwardFacade) -> None:
+                for file_id in file_ids:
+                    await facade.on_space_file_ready(
+                        SpaceFileReadyEvent(
+                            tenant_id=int(tenant_id),
+                            space_id=int(space_id),
+                            space_level=level,
+                            file_id=file_id,
+                            uploader_id=int(uploader_id),
+                            publisher_id=int(publisher_id) if publisher_id is not None else None,
+                            is_favorite_space=bool(favorite),
+                            space_manager_ids=managers,
+                        )
                     )
-                )
 
-        await _run_with_facade(_award)
+            await _run_with_facade(_award)
+            return
+
+        for file_id in file_ids:
+            await _dispatch(
+                "space_file_ready",
+                {
+                    "tenant_id": int(tenant_id),
+                    "space_id": int(space_id),
+                    "space_level": level,
+                    "file_id": int(file_id),
+                    "uploader_id": int(uploader_id),
+                    "publisher_id": int(publisher_id) if publisher_id is not None else None,
+                    "is_favorite_space": bool(favorite),
+                    "space_manager_ids": manager_list,
+                },
+            )
     except Exception:
         logger.exception(
             "points.award.hooks space_file_ready_failed space_id=%s uploader_id=%s",
@@ -155,19 +286,16 @@ async def notify_favorite_changed(
         referrers = await KnowledgeFileDao.aget_favorite_referrers(file_id)
         unique_count = len({int(row.user_id) for row in referrers if getattr(row, "user_id", None)})
         managers = await resolve_space_manager_ids(int(source_space_id))
-
-        async def _award(facade: PointsAwardFacade) -> None:
-            await facade.on_favorite_changed(
-                FavoriteChangedEvent(
-                    tenant_id=int(tenant_id),
-                    file_id=file_id,
-                    uploader_id=int(payee),
-                    unique_favoriter_count=unique_count,
-                    space_manager_ids=managers,
-                )
-            )
-
-        await _run_with_facade(_award)
+        await _dispatch(
+            "favorite_changed",
+            {
+                "tenant_id": int(tenant_id),
+                "file_id": file_id,
+                "uploader_id": int(payee),
+                "unique_favoriter_count": int(unique_count),
+                "space_manager_ids": sorted(int(x) for x in managers),
+            },
+        )
     except Exception:
         logger.exception(
             "points.award.hooks favorite_changed_failed file_id=%s",
@@ -185,17 +313,14 @@ async def notify_answer_adopted(
     try:
         if not answer_id or not answerer_id:
             return
-
-        async def _award(facade: PointsAwardFacade) -> None:
-            await facade.on_answer_adopted(
-                AnswerAdoptedEvent(
-                    tenant_id=int(tenant_id),
-                    answer_id=int(answer_id),
-                    answerer_id=int(answerer_id),
-                )
-            )
-
-        await _run_with_facade(_award)
+        await _dispatch(
+            "answer_adopted",
+            {
+                "tenant_id": int(tenant_id),
+                "answer_id": int(answer_id),
+                "answerer_id": int(answerer_id),
+            },
+        )
     except Exception:
         logger.exception(
             "points.award.hooks answer_adopted_failed answer_id=%s",
@@ -215,19 +340,16 @@ async def notify_document_shared(
     """库间 SHARE 审批通过后触发 G7；外链分享不得调用。"""
     try:
         managers = await resolve_space_manager_ids(int(source_space_id), int(target_space_id))
-
-        async def _award(facade: PointsAwardFacade) -> None:
-            await facade.on_document_shared(
-                DocumentSharedEvent(
-                    tenant_id=int(tenant_id),
-                    share_entry_id=int(share_entry_id),
-                    uploader_id=int(uploader_id),
-                    sharer_id=int(sharer_id),
-                    related_manager_ids=managers,
-                )
-            )
-
-        await _run_with_facade(_award)
+        await _dispatch(
+            "document_shared",
+            {
+                "tenant_id": int(tenant_id),
+                "share_entry_id": int(share_entry_id),
+                "uploader_id": int(uploader_id),
+                "sharer_id": int(sharer_id),
+                "related_manager_ids": sorted(int(x) for x in managers),
+            },
+        )
     except Exception:
         logger.exception(
             "points.award.hooks document_shared_failed share_entry_id=%s",

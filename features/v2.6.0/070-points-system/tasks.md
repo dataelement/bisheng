@@ -14,7 +14,7 @@
 | spec.md | ✅ 已评审 | 2026-08-06 用户确认（含 design.md） |
 | design.md | ✅ 已评审 | 与 spec 同步确认 |
 | tasks.md | ✅ 已拆解 | 含阶段性无头浏览器验收门禁（2026-08-06 增补） |
-| 实现 | ✅ M5 完成 / G-M5 通过 | T000–T028、G-M1~G-M5 完成；T025 Client 入口延后；可进入发布清单复检 |
+| 实现 | ✅ M5 完成 / G-M5 通过 | T000–T028、G-M1~G-M5 完成；**T025 取消不做**（用户确认无 Client 内容页扣减场景）；AC-17 以 Portal「违规扣减」为准 |
 
 ---
 
@@ -298,13 +298,13 @@
 - [x] **T023**: Portal — 积分管理后台完整 ✅ 2026-08-07  
   **文件**: Portal `PointsManagementPanel` + `PointsRuleEditModal`；BiSheng `admin/users` / `admin/audit-logs`  
   **逻辑**: 概览三绝对数；规则四 Tab（获取/扣减/月奖/文案）可编辑分值·日 cap·受益人·启停；用户列表+操作记录；列表内「调整积分」直接调分（正加负减，不强制 R*）  
-  **覆盖 AC**: AC-02, AC-05, AC-06, AC-19（AC-17 前台违规扣减可延后 T025）  
+  **覆盖 AC**: AC-02, AC-05, AC-06, AC-19；AC-17 由本面板「违规扣减」覆盖（见 T025 取消说明）  
   **依赖**: T019
 
-- [x] **T025**: Client（可选）— 前台 R* 扣减 — **延后** ✅ 2026-08-07  
-  **覆盖 AC**: AC-17（浏览器路径由 Portal 管理端「违规扣减」承担）  
+- [x] **T025**: Client（可选）— 前台 R* 扣减 — **取消 / WONTFIX** ✅ 2026-08-07  
+  **覆盖 AC**: AC-17（正式路径 = Portal 管理端「违规扣减」+ `POST /admin/deduct`）  
   **依赖**: T019  
-  **备注**: Client 文档/问答页入口未做；G-M4 用 Portal `PointsDeductModal` + `POST /admin/deduct` 作为扣减路径
+  **备注**: 2026-08-07 用户确认：业务不用 Client 文档/问答页就地扣分入口，T025 不再排期；不在 Client 实现该按钮
 
 - [x] **G-M4**: 无头浏览器验收 — 运营配置与扣减 ✅ 2026-08-07  
   **文件**: `e2e_ui/points/gates/gm4.spec.ts` + `helpers/gm4_trigger.py`  
@@ -382,5 +382,6 @@
 - 2026-08-06：**G-M2 PASS 4/4**。修复 Facade 读开关路径（`config_service.settings`，原先误 import 导致始终 disabled）。本地 `config.yaml` `points.enabled=true`；171 库补 G7（id=11）。Gate 用 hooks 造数 + UI 断言（完整上传/审批 UI 流未在门禁内重放）。
 - 2026-08-07：**T014 完成**：`DepartmentOrgLevelService` + API；单测 5 条；联调冒烟 `gzx01` 调 `set-company-root` → **18201**，`GET org-levels` 200（46 节点）。未在共享库执行真实打标（避免误改 org_level）。`points_auth` 同时认 `is_global_super`。
 - 2026-08-07：**T023/T021b 完成**；用户列表直接调分弹窗对齐设计（+/- 按钮 + 纯数字）；调分校验错误改为弹窗内展示。
-- 2026-08-07：**T025 延后**（Client 文档页 R* 入口）；Portal 管理端补「违规扣减」弹窗作 AC-17 浏览器路径。**G-M4 PASS 3/3**。
+- 2026-08-07：**T025 曾延后**（Client 文档页 R* 入口）；Portal 管理端补「违规扣减」弹窗作 AC-17 浏览器路径。**G-M4 PASS 3/3**。
 - 2026-08-07：**T026–T028 + G-M5 PASS**（`npm run test:gm5` → 22 passed / 1 skipped）。统一 `factory_trigger`；双库静态冒烟；`release-checklist.md`；修 gm3「排名」strict 选择器。
+- 2026-08-07：**T025 取消不做**（用户确认：用不到 Client 内容页扣减；违规扣减只走 Portal 运营后台）。

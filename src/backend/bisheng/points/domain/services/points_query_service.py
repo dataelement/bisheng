@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -24,7 +25,11 @@ from bisheng.points.domain.services.points_auth import require_platform_admin
 from bisheng.points.domain.services.points_ledger_service import PointsLedgerService
 from bisheng.points.domain.services.points_notify_service import PointsNotifyService
 
+logger = logging.getLogger(__name__)
 SHANGHAI = ZoneInfo("Asia/Shanghai")
+# 运营概览缓存：三个指标均为全历史聚合，AC-19 允许 5min 陈旧。
+OVERVIEW_CACHE_PREFIX = "points:overview:"
+OVERVIEW_CACHE_TTL = 300
 
 
 class PointsQueryService:
@@ -185,13 +190,46 @@ class PointsQueryService:
         return name_by_user, dept_by_user
 
     async def overview(self, tenant_id: int, user: UserPayload) -> PointOverviewResponse:
-        """运营概览：总发放 / 余额合计 / 违规扣减。"""
+        """运营概览：总发放 / 余额合计 / 违规扣减。
+
+        三个指标都是全历史聚合，耗时随流水量线性增长；按 AC-19 允许 5min 陈旧，
+        因此走 Redis 缓存。缓存不可用时退化为直查库，不影响可用性。
+        """
         require_platform_admin(user)
-        return PointOverviewResponse(
-            total_issued=await self.repository.sum_total_issued(tenant_id),
-            total_balance=await self.repository.sum_total_balance(tenant_id),
-            total_violation_deducted=await self.repository.sum_violation_deducted(tenant_id),
-        )
+        cache_key = f"{OVERVIEW_CACHE_PREFIX}{tenant_id}"
+        cached = await self._overview_cache_get(cache_key)
+        if cached is not None:
+            return PointOverviewResponse(**cached)
+        payload = {
+            "total_issued": await self.repository.sum_total_issued(tenant_id),
+            "total_balance": await self.repository.sum_total_balance(tenant_id),
+            "total_violation_deducted": await self.repository.sum_violation_deducted(tenant_id),
+        }
+        await self._overview_cache_set(cache_key, payload)
+        return PointOverviewResponse(**payload)
+
+    @staticmethod
+    async def _overview_cache_get(key: str) -> dict | None:
+        """读概览缓存；Redis 不可用时按未命中处理。"""
+        try:
+            from bisheng.core.cache.redis_manager import get_redis_client
+
+            cached = await (await get_redis_client()).aget(key)
+        except Exception:
+            # 概览是只读统计，缓存故障时直接查库即可，无需中断请求。
+            logger.warning("points.overview cache read failed key=%s", key, exc_info=True)
+            return None
+        return cached if isinstance(cached, dict) else None
+
+    @staticmethod
+    async def _overview_cache_set(key: str, payload: dict) -> None:
+        """写概览缓存；失败仅告警，不影响本次返回。"""
+        try:
+            from bisheng.core.cache.redis_manager import get_redis_client
+
+            await (await get_redis_client()).aset(key, payload, expiration=OVERVIEW_CACHE_TTL)
+        except Exception:
+            logger.warning("points.overview cache write failed key=%s", key, exc_info=True)
 
     async def admin_list_users(
         self,
@@ -225,7 +263,10 @@ class PointsQueryService:
         ids = [int(a.user_id) for a in accounts]
         name_by_user, dept_by_user = await self._leaderboard_display_maps(ids)
         start, end = self._month_bounds()
-        month_scores = await self.repository.sum_deltas_by_user(tenant_id, start=start, end=end)
+        # 只聚合当页用户；此前是对全租户整月流水做 GROUP BY 后再取子集。
+        month_scores = await self.repository.sum_deltas_by_users(
+            tenant_id, ids, start=start, end=end
+        )
         data = [
             PointAdminUserItem(
                 user_id=int(a.user_id),

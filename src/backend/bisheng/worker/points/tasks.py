@@ -1,13 +1,47 @@
-"""积分模块 Celery Beat 任务：排行、月奖、对账与 outbox。"""
+"""积分模块 Celery 任务：排行、月奖、对账、outbox 与异步发分。"""
 
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from bisheng.worker._asyncio_utils import run_async_task
 from bisheng.worker.main import bisheng_celery
 
 logger = logging.getLogger(__name__)
+
+
+@bisheng_celery.task(
+    acks_late=True,
+    time_limit=120,
+    soft_time_limit=60,
+    name="bisheng.worker.points.tasks.process_points_award_event",
+)
+def process_points_award_event(payload: dict[str, Any]):
+    """消费自动发分事件；由 hooks 投递，幂等键防双发。"""
+    return run_async_task(lambda: _process_award_async(payload))
+
+
+async def _process_award_async(payload: dict[str, Any]) -> dict:
+    """在独立会话中执行 Facade 并提交（复用 hooks 同步分发，避免双份 event 映射）。"""
+    from bisheng.core.context.tenant import set_current_tenant_id
+    from bisheng.points.domain.services.points_award_hooks import _run_payload_sync
+
+    event_type = str(payload.get("event_type") or "")
+    if event_type not in {
+        "space_file_ready",
+        "document_shared",
+        "favorite_changed",
+        "answer_adopted",
+    }:
+        logger.error("points.award.unknown_event_type type=%s", event_type)
+        return {"ok": False, "reason": "unknown_event_type", "event_type": event_type}
+
+    tenant_id = int(payload["tenant_id"])
+    set_current_tenant_id(tenant_id)
+    await _run_payload_sync(payload)
+    logger.info("points.award.processed event_type=%s", event_type)
+    return {"ok": True, "event_type": event_type}
 
 
 @bisheng_celery.task(
@@ -99,4 +133,26 @@ async def _drain_outbox_async() -> dict:
 
     result = await PointsSyncOutboxService().drain()
     logger.info("points.outbox.cron_done %s", result)
+    return result
+
+
+@bisheng_celery.task(
+    acks_late=True,
+    time_limit=1800,
+    soft_time_limit=1500,
+    name="bisheng.worker.points.tasks.drain_points_pending_deduct",
+)
+def drain_points_pending_deduct():
+    """重试违规删除后失败的补扣队列。"""
+    return run_async_task(_drain_pending_deduct_async)
+
+
+async def _drain_pending_deduct_async() -> dict:
+    """异步补扣 drain 入口。"""
+    from bisheng.points.domain.services.points_pending_deduct_service import (
+        PointsPendingDeductService,
+    )
+
+    result = await PointsPendingDeductService().drain()
+    logger.info("points.pending_deduct.cron_done %s", result)
     return result

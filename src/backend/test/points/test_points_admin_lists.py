@@ -14,7 +14,7 @@ async def test_admin_list_users_enriches_name_and_dept():
         list_accounts_page=AsyncMock(
             return_value=([SimpleNamespace(user_id=4, balance=28)], 1)
         ),
-        sum_deltas_by_user=AsyncMock(return_value={4: 12}),
+        sum_deltas_by_users=AsyncMock(return_value={4: 12}),
     )
     service = PointsQueryService(session=None, repository=repo, ledger=None)
     with patch.object(
@@ -29,6 +29,8 @@ async def test_admin_list_users_enriches_name_and_dept():
     assert out.data[0].user_name == "gzx01"
     assert out.data[0].dept_name == "测试111"
     assert out.data[0].month_score == 12
+    # 月度聚合必须收敛到当页用户，不能退回全租户 GROUP BY。
+    assert repo.sum_deltas_by_users.await_args.args[1] == [4]
 
 
 @pytest.mark.asyncio

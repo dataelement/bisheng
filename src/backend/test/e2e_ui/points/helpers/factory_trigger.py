@@ -10,14 +10,43 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import sys
 import time
+from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 BACKEND_ROOT = Path(__file__).resolve().parents[4]
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
+
+
+@contextmanager
+def _gate_award_mode():
+    """Gate 默认强制同步入账，避免依赖 Celery worker；POINTS_GATE_FORCE_SYNC=0 时走异步+轮询。"""
+    force_sync = os.environ.get("POINTS_GATE_FORCE_SYNC", "1") != "0"
+    if force_sync:
+        with patch(
+            "bisheng.points.domain.services.points_award_hooks._award_async_enabled",
+            return_value=False,
+        ):
+            yield "sync"
+    else:
+        yield "async"
+
+
+async def _wait_ledger(user_id: int, rule_code: str, before: dict, *, timeout_s: float = 15.0) -> dict:
+    """轮询直到 earn 笔数或余额变化，或超时返回最后快照。"""
+    deadline = time.time() + timeout_s
+    after = before
+    while time.time() < deadline:
+        after = await _snapshot(user_id, rule_code)
+        if after["count"] != before["count"] or after["balance"] != before["balance"]:
+            return after
+        await asyncio.sleep(0.3)
+    return after
 
 
 async def _snapshot(user_id: int, rule_code: str) -> dict:
@@ -96,32 +125,42 @@ async def _award_g2(user_id: int, file_id: int, space_id: int) -> dict:
     from bisheng.points.domain.services.points_award_hooks import notify_space_files_ready
 
     before = await _snapshot(user_id, "G2")
-    await notify_space_files_ready(
-        tenant_id=1,
-        space_id=int(space_id),
-        files=[SimpleNamespace(id=int(file_id))],
-        uploader_id=int(user_id),
-        is_favorite_space=False,
-        space_level="department",
+    with _gate_award_mode() as mode:
+        await notify_space_files_ready(
+            tenant_id=1,
+            space_id=int(space_id),
+            files=[SimpleNamespace(id=int(file_id))],
+            uploader_id=int(user_id),
+            is_favorite_space=False,
+            space_level="department",
+        )
+    after = (
+        await _snapshot(user_id, "G2")
+        if mode == "sync"
+        else await _wait_ledger(user_id, "G2", before)
     )
-    after = await _snapshot(user_id, "G2")
-    return {"ok": True, "before": before, "after": after}
+    return {"ok": True, "before": before, "after": after, "mode": mode}
 
 
 async def _award_g7(user_id: int, share_entry_id: int) -> dict:
     from bisheng.points.domain.services.points_award_hooks import notify_document_shared
 
     before = await _snapshot(user_id, "G7")
-    await notify_document_shared(
-        tenant_id=1,
-        share_entry_id=int(share_entry_id),
-        source_space_id=10,
-        target_space_id=12,
-        uploader_id=int(user_id),
-        sharer_id=int(user_id),
+    with _gate_award_mode() as mode:
+        await notify_document_shared(
+            tenant_id=1,
+            share_entry_id=int(share_entry_id),
+            source_space_id=10,
+            target_space_id=12,
+            uploader_id=int(user_id),
+            sharer_id=int(user_id),
+        )
+    after = (
+        await _snapshot(user_id, "G7")
+        if mode == "sync"
+        else await _wait_ledger(user_id, "G7", before)
     )
-    after = await _snapshot(user_id, "G7")
-    return {"ok": True, "before": before, "after": after}
+    return {"ok": True, "before": before, "after": after, "mode": mode}
 
 
 async def _award_g3(user_id: int, file_id: int | None = None, favoriter_count: int = 75) -> dict:
@@ -187,19 +226,25 @@ async def _award_admin_g2(admin_uid: int, file_id: int) -> dict:
     from bisheng.points.domain.services.points_award_hooks import notify_space_files_ready
 
     before = await _snapshot(admin_uid, "G2")
-    await notify_space_files_ready(
-        tenant_id=1,
-        space_id=10,
-        files=[SimpleNamespace(id=int(file_id))],
-        uploader_id=int(admin_uid),
-        is_favorite_space=False,
-        space_level="department",
+    with _gate_award_mode() as mode:
+        await notify_space_files_ready(
+            tenant_id=1,
+            space_id=10,
+            files=[SimpleNamespace(id=int(file_id))],
+            uploader_id=int(admin_uid),
+            is_favorite_space=False,
+            space_level="department",
+        )
+    after = (
+        await _snapshot(admin_uid, "G2")
+        if mode == "sync"
+        else await _wait_ledger(admin_uid, "G2", before)
     )
-    after = await _snapshot(admin_uid, "G2")
     return {
         "ok": True,
         "before": before,
         "after": after,
+        "mode": mode,
         "skipped": after["count"] == before["count"] and after["balance"] == before["balance"],
     }
 

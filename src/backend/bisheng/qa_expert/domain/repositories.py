@@ -496,6 +496,21 @@ class CommentRepository:
             await session.flush(comment)
             return comment
 
+    async def get_by_id(self, comment_id: int) -> Comment | None:
+        """按主键读取评论/追问。"""
+        async with get_async_db_session() as session:
+            return (await session.exec(select(Comment).where(Comment.id == comment_id))).first()
+
+    async def delete(self, comment_id: int) -> bool:
+        """硬删除评论/追问。"""
+        async with get_async_db_session() as session:
+            comment = (await session.exec(select(Comment).where(Comment.id == comment_id))).first()
+            if not comment:
+                return False
+            await session.delete(comment)
+            await session.commit()
+            return True
+
     async def get_by_answer_id(
         self, answer_id: int, question_id: int | None = None, skip: int = 0, limit: int = 100
     ) -> tuple[list[Comment], int]:

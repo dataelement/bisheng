@@ -69,6 +69,32 @@ def _coerce_db_bool(value: Any) -> bool:
 # ==================== 专家 Schemas ====================
 
 
+class ModerateDeleteRequest(BaseModel):
+    """平台超管违规删除问题/评论；可选按 R* 扣分。"""
+
+    target_type: str = Field(..., description="question | comment")
+    target_id: int = Field(..., ge=1)
+    # 空/省略 = 只删除不扣分
+    rule_code: str | None = Field(default=None, max_length=32)
+    remark: str | None = Field(default=None, max_length=200)
+
+    @field_validator("target_type")
+    @classmethod
+    def _validate_target_type(cls, value: str) -> str:
+        normalized = (value or "").strip().lower()
+        if normalized not in {"question", "comment"}:
+            raise ValueError("target_type must be question or comment")
+        return normalized
+
+    @field_validator("rule_code")
+    @classmethod
+    def _normalize_rule_code(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip().upper()
+        return normalized or None
+
+
 class ExpertCreateRequest(BaseModel):
     """创建专家 - 请求"""
 

@@ -9,10 +9,12 @@ from loguru import logger
 
 from bisheng.api.v1.schemas import UploadFileResponse
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.errcode.http_error import ServerError
 from bisheng.common.schemas.api import resp_200, resp_500
 from bisheng.core.cache.utils import save_uploaded_file
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
+from bisheng.qa_expert.domain.moderate_delete_service import ModerateDeleteService
 from bisheng.qa_expert.domain.rich_text import question_description_to_plain_text
 from bisheng.qa_expert.domain.schemas import (
     AdoptAnswerRequest,
@@ -25,6 +27,7 @@ from bisheng.qa_expert.domain.schemas import (
     ExpertResponse,
     ExpertUpdateRequest,
     GetCommentsRequest,
+    ModerateDeleteRequest,
     QAExpertStatsResponse,
     QANotificationResponse,
     QuestionCheckRequest,
@@ -453,6 +456,38 @@ async def create_comment(
     comment = await service.create_comment(user.user_id, user.user_name, request)
 
     return resp_200(data=comment)
+
+
+@router.post("/admin/moderate-delete")
+async def moderate_delete(
+    request: ModerateDeleteRequest,
+    user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    """平台超管违规删除问题/评论/追问：先删内容，再按 R* 扣分（失败入补扣队列）。"""
+    try:
+        result = await ModerateDeleteService().moderate_delete(
+            operator=user,
+            target_type=request.target_type,  # type: ignore[arg-type]
+            target_id=request.target_id,
+            rule_code=request.rule_code,
+            remark=request.remark,
+        )
+        return resp_200(
+            data={
+                "deleted": result.deleted,
+                "target_type": result.target_type,
+                "target_id": result.target_id,
+                "target_user_id": result.target_user_id,
+                "deducted": result.deducted,
+                "pending_deduct": result.pending_deduct,
+                "reason": result.reason,
+            }
+        )
+    except BaseErrorCode as exc:
+        return exc.return_resp_instance()
+    except Exception as e:
+        logger.exception("qa.moderate_delete.failed")
+        return resp_500(code=500, msg=str(e))
 
 
 @router.post(

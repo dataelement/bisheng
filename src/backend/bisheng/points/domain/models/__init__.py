@@ -3,6 +3,7 @@
 from bisheng.points.domain.models.points import (
     PointCopy,
     PointFavoriteTierAward,
+    PointPendingDeduct,
     PointRankSnapshot,
     PointRule,
     PointSyncOutbox,
@@ -11,6 +12,6 @@ from bisheng.points.domain.models.points import (
 )
 
 __all__ = [
-    "PointCopy", "PointFavoriteTierAward", "PointRankSnapshot", "PointRule",
-    "PointSyncOutbox", "UserPointAccount", "UserPointLog",
+    "PointCopy", "PointFavoriteTierAward", "PointPendingDeduct", "PointRankSnapshot",
+    "PointRule", "PointSyncOutbox", "UserPointAccount", "UserPointLog",
 ]

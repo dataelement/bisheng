@@ -416,6 +416,13 @@ class CeleryConf(BaseModel):
                 "schedule": crontab.from_string("0 3 * * *"),
             }
 
+        # F070: 违规删除后扣分失败的补扣队列（每 5 分钟）。
+        if "points_drain_pending_deduct" not in self.beat_schedule:
+            self.beat_schedule["points_drain_pending_deduct"] = {
+                "task": "bisheng.worker.points.tasks.drain_points_pending_deduct",
+                "schedule": crontab.from_string("*/5 * * * *"),
+            }
+
         # convert str to crontab
         for key, task_info in self.beat_schedule.items():
             if isinstance(task_info["schedule"], str):
@@ -923,6 +930,10 @@ class PointsConf(BaseModel):
     """积分自动发放与旁路任务开关。"""
 
     enabled: bool = Field(default=False, description="是否允许业务事件自动发放积分")
+    award_async_enabled: bool = Field(
+        default=True,
+        description="自动发分是否走 Celery；false 时 hooks 内同步入账（回滚开关）",
+    )
     notify_enabled: bool = Field(default=True, description="是否发送积分变动站内信")
     sync_outbox_enabled: bool = Field(default=False, description="是否消费外部同步发件箱")
     rank_cron_enabled: bool = Field(default=True, description="是否刷新积分榜快照")

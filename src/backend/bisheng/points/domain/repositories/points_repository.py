@@ -2,18 +2,22 @@
 
 from datetime import datetime
 
-from sqlalchemy import and_, delete, func, or_
+from sqlalchemy import and_, delete, func, insert, or_
 from sqlmodel import select
 
 from bisheng.points.domain.models import (
     PointCopy,
     PointFavoriteTierAward,
+    PointPendingDeduct,
     PointRankSnapshot,
     PointRule,
     PointSyncOutbox,
     UserPointAccount,
     UserPointLog,
 )
+
+# 排行快照批量插入的分片大小，避免单条语句超过 max_allowed_packet。
+RANK_SNAPSHOT_INSERT_CHUNK = 2000
 
 
 class PointsRepository:
@@ -483,6 +487,35 @@ class PointsRepository:
             result[int(user_id)] = int(total or 0)
         return result
 
+    async def sum_deltas_by_users(
+        self,
+        tenant_id: int,
+        user_ids: list[int],
+        *,
+        start: datetime,
+        end: datetime,
+    ) -> dict[int, int]:
+        """按给定用户集合汇总时间窗内 delta。
+
+        供管理端列表按页取值：只聚合当页用户，避免为 20 行数据扫全租户整月流水。
+        user_ids 为空时直接返回空字典，不发查询。
+        """
+        if not user_ids:
+            return {}
+        rows = (
+            await self.session.exec(
+                select(UserPointLog.user_id, func.coalesce(func.sum(UserPointLog.delta), 0))
+                .where(
+                    UserPointLog.tenant_id == tenant_id,
+                    UserPointLog.user_id.in_(user_ids),
+                    UserPointLog.occurred_at >= start,
+                    UserPointLog.occurred_at < end,
+                )
+                .group_by(UserPointLog.user_id)
+            )
+        ).all()
+        return {int(row[0]): int(row[1] or 0) for row in rows}
+
     async def sum_lifetime_deltas_by_user(self, tenant_id: int) -> dict[int, int]:
         """按用户汇总全部流水 delta（对账期望余额）。"""
         rows = (
@@ -539,6 +572,47 @@ class PointsRepository:
             )
         )
 
+    @staticmethod
+    def _snapshot_values(rows: list[PointRankSnapshot]) -> list[dict]:
+        """快照 ORM 对象 → 批量插入用的字典列表。
+
+        故意不带 id 与 create_time：分别交给自增主键与库端默认值，
+        与逐行 ORM 插入时的落库结果保持一致。
+        """
+        return [
+            {
+                "tenant_id": row.tenant_id,
+                "period": row.period,
+                "scope": row.scope,
+                "scope_id": row.scope_id,
+                "period_key": row.period_key,
+                "user_id": row.user_id,
+                "rank_no": row.rank_no,
+                "period_score": row.period_score,
+                "balance": row.balance,
+                "dept_id": row.dept_id,
+                "refreshed_at": row.refreshed_at,
+            }
+            for row in rows
+        ]
+
+    async def bulk_insert_rank_snapshots(self, rows: list[PointRankSnapshot]) -> int:
+        """批量写入排行快照（不含删除）；返回写入行数。
+
+        用 Core 批量 insert 而非逐行 ``session.add()``：MySQL 无 RETURNING，ORM flush
+        为回填自增主键会退化成一行一条 INSERT（实测 4.2 万行约 12s，批量后约 0.5s）。
+        这些行在 ``build_ranked_rows`` 里已显式带上 tenant_id，因此绕过 before_flush
+        的租户回填不影响正确性。
+        """
+        if not rows:
+            return 0
+        values = self._snapshot_values(rows)
+        for start in range(0, len(values), RANK_SNAPSHOT_INSERT_CHUNK):
+            await self.session.execute(
+                insert(PointRankSnapshot), values[start : start + RANK_SNAPSHOT_INSERT_CHUNK]
+            )
+        return len(rows)
+
     async def replace_rank_snapshots(
         self,
         tenant_id: int,
@@ -560,7 +634,64 @@ class PointsRepository:
         else:
             stmt = stmt.where(PointRankSnapshot.scope_id == scope_id)
         await self.session.exec(stmt)
-        for row in rows:
-            self.session.add(row)
+        return await self.bulk_insert_rank_snapshots(rows)
+
+    async def get_pending_deduct_by_key(
+        self, tenant_id: int, idempotency_key: str
+    ) -> PointPendingDeduct | None:
+        """按幂等键读取补扣行。"""
+        return (
+            await self.session.exec(
+                select(PointPendingDeduct).where(
+                    PointPendingDeduct.tenant_id == tenant_id,
+                    PointPendingDeduct.idempotency_key == idempotency_key,
+                )
+            )
+        ).first()
+
+    async def upsert_pending_deduct(self, row: PointPendingDeduct) -> PointPendingDeduct:
+        """插入补扣行；同幂等键已存在则返回已有行（并发安全）。"""
+        existing = await self.get_pending_deduct_by_key(int(row.tenant_id), row.idempotency_key)
+        if existing is not None:
+            return existing
+        self.session.add(row)
+        try:
+            await self.session.flush()
+            return row
+        except Exception:
+            # 唯一键冲突：回滚本次 flush 后读已有行（独立 session 场景下安全）。
+            await self.session.rollback()
+            existing = await self.get_pending_deduct_by_key(int(row.tenant_id), row.idempotency_key)
+            if existing is not None:
+                return existing
+            raise
+
+    async def list_due_pending_deducts(
+        self,
+        *,
+        limit: int = 100,
+        now: datetime | None = None,
+    ) -> list[PointPendingDeduct]:
+        """列出到期可重试的补扣任务。"""
+        current = now or datetime.utcnow()
+        rows = (
+            await self.session.exec(
+                select(PointPendingDeduct)
+                .where(
+                    PointPendingDeduct.status == "pending",
+                    or_(
+                        PointPendingDeduct.next_retry_at.is_(None),
+                        PointPendingDeduct.next_retry_at <= current,
+                    ),
+                )
+                .order_by(PointPendingDeduct.id)
+                .limit(limit)
+            )
+        ).all()
+        return list(rows)
+
+    async def save_pending_deduct(self, row: PointPendingDeduct) -> PointPendingDeduct:
+        """持久化补扣行状态。"""
+        self.session.add(row)
         await self.session.flush()
-        return len(rows)
+        return row
