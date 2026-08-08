@@ -142,6 +142,42 @@ async def _award_g2(user_id: int, file_id: int, space_id: int) -> dict:
     return {"ok": True, "before": before, "after": after, "mode": mode}
 
 
+async def _award_by_level(
+    user_id: int,
+    file_id: int,
+    space_id: int,
+    *,
+    space_level: str,
+    rule_code: str,
+) -> dict:
+    """按空间等级触发入库发分（G5=team / G6=team_ks）。"""
+    from bisheng.points.domain.services.points_award_hooks import notify_space_files_ready
+
+    before = await _snapshot(user_id, rule_code)
+    with _gate_award_mode() as mode:
+        await notify_space_files_ready(
+            tenant_id=1,
+            space_id=int(space_id),
+            files=[SimpleNamespace(id=int(file_id))],
+            uploader_id=int(user_id),
+            is_favorite_space=False,
+            space_level=space_level,
+        )
+    after = (
+        await _snapshot(user_id, rule_code)
+        if mode == "sync"
+        else await _wait_ledger(user_id, rule_code, before)
+    )
+    return {
+        "ok": True,
+        "rule_code": rule_code,
+        "space_level": space_level,
+        "before": before,
+        "after": after,
+        "mode": mode,
+    }
+
+
 async def _award_g7(user_id: int, share_entry_id: int) -> dict:
     from bisheng.points.domain.services.points_award_hooks import notify_document_shared
 
@@ -364,6 +400,23 @@ async def main() -> int:
         out = await _ensure_g7()
     elif action == "award_g2":
         out = await _award_g2(int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4]))
+    elif action == "award_g5":
+        # argv: user_id file_id space_id
+        out = await _award_by_level(
+            int(sys.argv[2]),
+            int(sys.argv[3]),
+            int(sys.argv[4]),
+            space_level="team",
+            rule_code="G5",
+        )
+    elif action == "award_g6":
+        out = await _award_by_level(
+            int(sys.argv[2]),
+            int(sys.argv[3]),
+            int(sys.argv[4]),
+            space_level="team_ks",
+            rule_code="G6",
+        )
     elif action == "award_g7":
         out = await _award_g7(int(sys.argv[2]), int(sys.argv[3]))
     elif action == "award_g3":

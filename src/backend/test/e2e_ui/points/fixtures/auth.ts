@@ -22,12 +22,15 @@ export function pointsCredentials(kind: 'admin' | 'user') {
 }
 
 /**
- * 登录 Portal。
+ * 使用指定用户名登录 Portal（多用户验收用）。
  * @param page Playwright 页面
- * @param kind 账号类型
+ * @param username 门户账号（如 gzx0022）
  */
-export async function loginPortal(page: Page, kind: 'admin' | 'user'): Promise<void> {
-  const { username, password } = pointsCredentials(kind);
+export async function loginPortalAs(page: Page, username: string): Promise<void> {
+  const password = process.env.E2E_POINTS_PASSWORD;
+  if (!password) {
+    throw new Error('E2E_POINTS_PASSWORD is required for Gate runs');
+  }
   // Portal 登录页在 /login；首页仅有入口按钮，无账号输入框。
   await page.goto('/login');
   const userInput = page.getByRole('textbox', { name: '账号' });
@@ -37,6 +40,16 @@ export async function loginPortal(page: Page, kind: 'admin' | 'user'): Promise<v
   await passInput.fill(password);
   await page.getByRole('button', { name: '登录', exact: true }).click();
   await page.waitForURL((url) => !url.pathname.includes('/login'), { timeout: 30_000 });
+}
+
+/**
+ * 登录 Portal。
+ * @param page Playwright 页面
+ * @param kind 账号类型
+ */
+export async function loginPortal(page: Page, kind: 'admin' | 'user'): Promise<void> {
+  const { username } = pointsCredentials(kind);
+  await loginPortalAs(page, username);
 }
 
 /**

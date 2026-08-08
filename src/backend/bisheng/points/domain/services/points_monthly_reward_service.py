@@ -61,7 +61,9 @@ async def default_login_users(tenant_id: int, start_date: str, end_date: str) ->
     from bisheng.telemetry.domain.mid_table.daily_participation import DailyParticipationFact
 
     client = await get_statistics_es_connection()
-    index = DailyParticipationFact._index_name
+    # BaseMidTable 是 Pydantic BaseModel：类属性 _index_name 是 PrivateAttr，
+    # 类访问会得到 ModelPrivateAttr，ES 会去查字面量 default='…'。必须取实例值。
+    index = DailyParticipationFact(ensure_sync_index=False)._index_name
     body = {
         "size": 0,
         "query": {
