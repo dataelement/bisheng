@@ -21,11 +21,14 @@ finished ⇒ complete normally), and key the copy off the real exception type.
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import AsyncMock
 
+import yaml
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langgraph.errors import GraphRecursionError
 
+from bisheng.linsight.domain.services.resilience_middleware import _MAX_STATE_ONLY_REFUNDS
 from bisheng.linsight.domain.services.tool_loop_middleware import LinsightToolLoopError
 from bisheng.linsight.domain.task_exec import (
     _PARTIAL_NO_SALVAGE_STEP_LIMIT,
@@ -193,16 +196,29 @@ class _Conf:
         self.max_model_turns = max_model_turns
 
 
+def _floor_for(turns: int) -> int:
+    return (turns + _MAX_STATE_ONLY_REFUNDS) * _STEPS_PER_MODEL_TURN + _RECURSION_LIMIT_MARGIN
+
+
 def test_legacy_db_value_is_raised_above_the_turn_budget():
     """Existing installs keep ``max_steps: 200`` in the DB config, which would trip
     at ~50 turns and make the 115-turn budget unreachable."""
     resolved = _resolve_recursion_limit(_Conf(max_steps=200))
-    assert resolved == 115 * _STEPS_PER_MODEL_TURN + _RECURSION_LIMIT_MARGIN
+    assert resolved == _floor_for(115)
     assert resolved > 200
 
 
-def test_new_default_is_already_above_the_floor():
-    assert _resolve_recursion_limit(_Conf(max_steps=500)) == 500
+def test_shipped_default_is_already_above_the_floor():
+    """The value in ``initdb_config.yaml`` must not itself trip the auto-raise warning.
+
+    Guards the coupling that broke once already: raising the floor (for the refund cap)
+    without bumping the shipped default would make EVERY install log the
+    "max_steps is below ..." warning on every task.
+    """
+    shipped = yaml.safe_load(
+        (Path(__file__).resolve().parents[2] / "bisheng" / "initdb_config.yaml").read_text(encoding="utf-8")
+    )["linsight"]["max_steps"]
+    assert _resolve_recursion_limit(_Conf(max_steps=shipped)) == shipped
 
 
 def test_operator_raised_ceiling_is_respected():
@@ -211,4 +227,14 @@ def test_operator_raised_ceiling_is_respected():
 
 def test_floor_tracks_a_raised_turn_budget():
     resolved = _resolve_recursion_limit(_Conf(max_steps=500, max_model_turns=300))
-    assert resolved == 300 * _STEPS_PER_MODEL_TURN + _RECURSION_LIMIT_MARGIN
+    assert resolved == _floor_for(300)
+
+
+def test_recursion_floor_covers_the_refund_cap():
+    """Refunded state-only turns let a run exceed ``max_model_turns`` model calls, so
+    the fuse has to sit above budget + cap — otherwise the ladder is bypassed and the
+    run aborts into partial salvage instead of landing softly."""
+    floor = _resolve_recursion_limit(_Conf(max_steps=200))
+    assert floor >= (115 + _MAX_STATE_ONLY_REFUNDS) * _STEPS_PER_MODEL_TURN
+    # Strictly above the pre-refund floor: that is the whole point of this change.
+    assert floor > 115 * _STEPS_PER_MODEL_TURN + _RECURSION_LIMIT_MARGIN

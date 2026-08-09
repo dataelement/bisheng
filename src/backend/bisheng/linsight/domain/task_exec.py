@@ -33,6 +33,7 @@ from bisheng.linsight.domain.models.linsight_session_version import (
 )
 from bisheng.linsight.domain.services.agent_factory import _resolve_model, create_linsight_agent
 from bisheng.linsight.domain.services.binary_content_guard import CODE_INTERPRETER_TOOL
+from bisheng.linsight.domain.services.resilience_middleware import _MAX_STATE_ONLY_REFUNDS
 from bisheng.linsight.domain.services.state_message_manager import (
     LinsightStateMessageManager,
     MessageData,
@@ -122,7 +123,12 @@ def _resolve_recursion_limit(linsight_conf) -> int:
     """
     configured = int(getattr(linsight_conf, "max_steps", 500) or 0)
     turn_limit = int(getattr(linsight_conf, "max_model_turns", 115) or 0)
-    floor = turn_limit * _STEPS_PER_MODEL_TURN + _RECURSION_LIMIT_MARGIN
+    # Pure state-maintenance turns (a model call that only re-published the todo list)
+    # are refunded, up to ``_MAX_STATE_ONLY_REFUNDS`` per budget bucket, so a run may
+    # legitimately make more model calls than ``max_model_turns``. The fuse must still
+    # blow LATER than the budget, or the soft-landing ladder is bypassed and the run
+    # aborts into the partial-salvage path instead of finishing normally.
+    floor = (turn_limit + _MAX_STATE_ONLY_REFUNDS) * _STEPS_PER_MODEL_TURN + _RECURSION_LIMIT_MARGIN
     if configured >= floor:
         return configured
     logger.warning(
@@ -915,6 +921,22 @@ class LinsightWorkflowTask:
         except Exception as e:
             logger.warning(f"Failed to finalize session pseudo task: {e}")
 
+    async def _converge_task_rows_on_completion(self) -> None:
+        """Close out task rows a NORMALLY finished run left hanging.
+
+        ``linsight_execute_task`` used to be append-only: rows were inserted from the
+        first ``write_todos`` snapshot and only ever updated on a status flip, so a run
+        that finished after the model reshaped its plan left rows stuck at
+        NOT_STARTED/IN_PROGRESS forever. The panel then reported a fake ratio on a
+        COMPLETED session — measured on 180: "任务已完成 4/7" with 1 IN_PROGRESS and 2
+        NOT_STARTED still in the table.
+
+        ⚠️ ORDERING: must run AFTER ``_complete_session_pseudo_task``. The sweep walks
+        every row including the svid pseudo task; finalizing that one first is what
+        makes the sweep skip it instead of marking the session's own row TERMINATED.
+        """
+        await self._terminate_unfinished_tasks()
+
     async def _save_task_info(self, session_model: LinsightSessionVersion, task_info: list[dict]):
         """Save Task Information.
 
@@ -955,6 +977,24 @@ class LinsightWorkflowTask:
             new_tasks = [t for t in tasks if t.id not in existing_by_id]
             if new_tasks:
                 await LinsightExecuteTaskDao.batch_create_tasks(new_tasks)
+
+            # Positional alignment reuses an existing row id when the model REWRITES a
+            # todo's wording, so without this the row would keep the title from the
+            # very first plan for the rest of the run. Status/result are untouched.
+            for task in tasks:
+                prev = existing_by_id.get(task.id)
+                if prev is None:
+                    continue
+                if (prev.task_data or {}).get("name") == (task.task_data or {}).get("name"):
+                    continue
+                # DAO directly (like the batch insert above): the state-manager helper
+                # requires a ``status`` and returns a plain dict, both of which would
+                # be wrong here — the status must not move, and ``merged`` below has
+                # to stay a list of models. Redis is refreshed by the
+                # ``set_execution_tasks(merged)`` call a few lines down.
+                refreshed = await LinsightExecuteTaskDao.update_by_id(task.id, task_data=task.task_data)
+                if refreshed is not None:
+                    existing_by_id[task.id] = refreshed
 
             merged = [existing_by_id.get(t.id, t) for t in tasks]
             await self._state_manager.set_execution_tasks(merged)
@@ -1348,9 +1388,18 @@ class LinsightWorkflowTask:
 
     async def _handle_task_end(self, agent, event: TaskEnd, session_model: LinsightSessionVersion):
         """Handle task end events"""
-        status = (
-            ExecuteTaskStatusEnum.SUCCESS if event.status == TaskStatus.SUCCESS.value else ExecuteTaskStatusEnum.FAILED
-        )
+        # A "terminated" TaskEnd is a todo the model DROPPED from its plan (see
+        # StreamEventMapper._diff_todos), not a task that failed. Mapping it to FAILED
+        # would paint an error row in the panel — and, far worse, feed
+        # ``self._final_result`` below, which ``_handle_task_completion`` routes into
+        # ``_handle_task_failure`` for anything != success: a pruned todo arriving last
+        # would fail the WHOLE session.
+        if event.status == ExecuteTaskStatusEnum.TERMINATED.value:
+            status = ExecuteTaskStatusEnum.TERMINATED
+        elif event.status == TaskStatus.SUCCESS.value:
+            status = ExecuteTaskStatusEnum.SUCCESS
+        else:
+            status = ExecuteTaskStatusEnum.FAILED
 
         # F035 fix: TaskEnd.data is frequently empty for deepagents tasks; passing
         # it as task_data would OVERWRITE the task_data stored at write_todos time
@@ -1365,8 +1414,9 @@ class LinsightWorkflowTask:
 
         await self._state_manager.push_message(MessageData(event_type=MessageEventType.TASK_END, data=task_data))
 
-        # Save Final Result
-        self._final_result = event
+        # Save Final Result — a dropped todo is never the run's outcome.
+        if status is not ExecuteTaskStatusEnum.TERMINATED:
+            self._final_result = event
 
     async def _handle_need_user_input(self, agent, event: NeedUserInput, session_model: LinsightSessionVersion):
         """Handle events that require user input (park-and-release, F035 §4.6).
@@ -1482,8 +1532,8 @@ class LinsightWorkflowTask:
 
         await self._state_manager.set_session_version_info(session_model)
 
-        # Set all tasks to failed
-        await self._set_tasks_failed()
+        # Converge every task row the run never finished
+        await self._terminate_unfinished_tasks()
 
         # Push termination message
         await self._state_manager.push_message(
@@ -1615,6 +1665,7 @@ class LinsightWorkflowTask:
         # F035 problem 2: finalize the session pseudo task carrying any
         # planning/direct-answer steps so it isn't left stuck in_progress.
         await self._complete_session_pseudo_task(session_model)
+        await self._converge_task_rows_on_completion()
         # F035 Track J: land the answer in the unified conversation stream.
         await linsight_execute_utils.persist_task_turn_message(session_model)
         await self._state_manager.push_message(
@@ -1709,6 +1760,7 @@ class LinsightWorkflowTask:
         self._flag_phantom_deliverables(session_model, answer, final_files)
         await self._state_manager.set_session_version_info(session_model)
         await self._complete_session_pseudo_task(session_model)
+        await self._converge_task_rows_on_completion()
         await linsight_execute_utils.persist_task_turn_message(session_model)
         await self._state_manager.push_message(
             MessageData(event_type=MessageEventType.FINAL_RESULT, data=session_model.model_dump())
@@ -1758,6 +1810,7 @@ class LinsightWorkflowTask:
             # F035 problem 2: finalize the session pseudo task carrying any
             # planning/wrap-up steps so it isn't left stuck in_progress.
             await self._complete_session_pseudo_task(session_model)
+            await self._converge_task_rows_on_completion()
             # F035 Track J: land the answer in the unified conversation stream.
             await linsight_execute_utils.persist_task_turn_message(session_model)
             await self._state_manager.push_message(
@@ -1771,8 +1824,17 @@ class LinsightWorkflowTask:
             raise TaskExecutionError(f"An error occurred while processing the task successfully: {e}")
 
     # Modify All Task Failure Processing Logic
-    async def _set_tasks_failed(self):
-        """Set all tasks to failed"""
+    async def _terminate_unfinished_tasks(self):
+        """Converge every non-terminal task row to TERMINATED.
+
+        Named for what it DOES — the old name (``_set_tasks_failed``) described
+        neither the action nor the status it writes. Three callers, three meanings,
+        one action: user stop, task failure, and normal completion, where the model
+        simply stopped updating todos it never finished.
+
+        Rows already SUCCESS / FAILED / TERMINATED are left alone, so this is
+        idempotent and can never downgrade a delivered result.
+        """
         try:
             # Get All Execute Tasks
             execution_tasks = await self._state_manager.get_execution_tasks()
@@ -1788,7 +1850,7 @@ class LinsightWorkflowTask:
                         task_id=task.id, status=ExecuteTaskStatusEnum.TERMINATED
                     )
         except Exception as e:
-            logger.warning(f"Error setting task failed: {e}")
+            logger.warning("Error converging unfinished task rows: {}", e)
 
     async def _handle_task_failure(
         self, session_model: LinsightSessionVersion, error_msg: str, *, exc: Exception | None = None
@@ -1817,8 +1879,8 @@ class LinsightWorkflowTask:
         # whose detail panel shows the failure.
         await linsight_execute_utils.persist_task_turn_message(session_model)
 
-        # Set all tasks to failed
-        await self._set_tasks_failed()
+        # Converge every task row the run never finished
+        await self._terminate_unfinished_tasks()
 
         # error_message event: keep ``error`` for backward compatibility (old
         # clients display it raw); new fields drive the classified friendly card.
