@@ -19,6 +19,24 @@ class DepartmentFileViewGrantRepositoryImpl(DepartmentFileViewGrantRepository):
     def __init__(self, session: AsyncSession):
         self.session = session
 
+    async def list_active_by_user(
+        self,
+        *,
+        tenant_id: int,
+        user_id: int,
+    ) -> list[DepartmentFileViewGrant]:
+        statement = (
+            select(DepartmentFileViewGrant)
+            .where(
+                DepartmentFileViewGrant.tenant_id == tenant_id,
+                DepartmentFileViewGrant.user_id == user_id,
+                DepartmentFileViewGrant.status == DepartmentFileViewGrantStatus.ACTIVE,
+            )
+            .order_by(DepartmentFileViewGrant.id.asc())
+        )
+        result = await self.session.execute(statement)
+        return list(result.scalars().all())
+
     async def list_active_by_user_page(
         self,
         *,

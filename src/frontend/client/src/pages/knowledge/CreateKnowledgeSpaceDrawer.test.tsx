@@ -95,6 +95,18 @@ jest.mock("~/components/ui/Textarea", () => ({
     Textarea: (props: any) => <textarea {...props} />,
 }));
 
+jest.mock("~/components/ui/Switch", () => ({
+    Switch: ({ checked, onCheckedChange, ...props }: any) => (
+        <button
+            type="button"
+            role="switch"
+            aria-checked={checked ? "true" : "false"}
+            onClick={() => onCheckedChange?.(!checked)}
+            {...props}
+        />
+    ),
+}));
+
 jest.mock("~/components/ui/MultiSelect", () => ({
     __esModule: true,
     default: ({ value = [], options = [], onChange, multiple, renderOptionPreview }: any) => {
@@ -222,6 +234,7 @@ jest.mock("~/api/knowledge", () => ({
     }),
     getKnowledgeSpaceTagLibrariesByKnowledgeApi: jest.fn().mockResolvedValue([]),
     getKnowledgeSpaceTagLibraryDetailApi: jest.fn().mockResolvedValue({ tags: [] }),
+    extractTagLibraryPreviewNames: (detail: { tags?: string[] }) => detail.tags || [],
     getSpaceInfoApi: jest.fn().mockResolvedValue({ autoTagLibraryIds: [], autoTagLibraryId: null }),
 }));
 
@@ -517,6 +530,78 @@ describe("CreateKnowledgeSpaceDrawer", () => {
             joinPolicy: "public",
             publishToSquare: "yes",
             spaceLevel: SpaceLevel.TEAM,
+        }));
+    });
+
+    test("仅编辑公共、部门或科室知识库时显示门户发现统一开关", () => {
+        const base = {
+            name: "测试知识库",
+            description: "",
+            visibility: VisibilityType.PRIVATE,
+            isReleased: false,
+            autoTagEnabled: false,
+            autoTagLibraryIds: [],
+        };
+        const { unmount } = renderDrawer({
+            mode: "edit",
+            editingSpace: {
+                ...base,
+                id: "public-1",
+                spaceLevel: SpaceLevel.PUBLIC,
+                portalDiscoveryEnabled: true,
+            } as any,
+        });
+        expect(screen.getByText("公开用于首页知识库获取")).toBeInTheDocument();
+        expect(screen.getByRole("switch", { name: "公开用于首页知识库获取" })).toHaveAttribute(
+            "aria-checked",
+            "true",
+        );
+        unmount();
+
+        const team = renderDrawer({
+            mode: "edit",
+            editingSpace: {
+                ...base,
+                id: "team-1",
+                spaceLevel: SpaceLevel.TEAM,
+            } as any,
+        });
+        expect(screen.queryByText("公开用于首页知识库获取")).not.toBeInTheDocument();
+        team.unmount();
+
+        renderDrawer({
+            mode: "create",
+            initialSpaceLevel: SpaceLevel.PUBLIC,
+        });
+        expect(screen.queryByText("公开用于首页知识库获取")).not.toBeInTheDocument();
+    });
+
+    test("编辑开关仅在保存成功后由权威响应更新", async () => {
+        const onConfirm = jest.fn().mockResolvedValue(true);
+        renderDrawer({
+            mode: "edit",
+            editingSpace: {
+                id: "clinic-1",
+                name: "科室知识库",
+                description: "",
+                visibility: VisibilityType.PRIVATE,
+                isReleased: false,
+                spaceLevel: SpaceLevel.TEAM,
+                isClinic: true,
+                portalDiscoveryEnabled: false,
+                autoTagEnabled: false,
+                autoTagLibraryIds: [],
+            } as any,
+            onConfirm,
+        });
+
+        fireEvent.click(screen.getByRole("switch", { name: "公开用于首页知识库获取" }));
+        await selectDefaultTagLibrary();
+        fireEvent.click(screen.getByRole("button", { name: "保存" }));
+
+        await waitFor(() => expect(onConfirm).toHaveBeenCalledTimes(1));
+        expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({
+            portalDiscoveryEnabled: true,
         }));
     });
 

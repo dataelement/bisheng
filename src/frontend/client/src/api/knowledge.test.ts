@@ -105,6 +105,26 @@ describe("updateSpaceApi", () => {
     });
     expect(mockPut.mock.calls[0][1]).not.toHaveProperty("space_level");
   });
+
+  it("forwards portal_discovery_enabled and maps the authoritative response", async () => {
+    mockPut.mockResolvedValue({
+      status_code: 200,
+      data: {
+        id: 201,
+        name: "公共知识库",
+        auth_type: VisibilityType.PUBLIC,
+        space_level: SpaceLevel.PUBLIC,
+        portal_discovery_enabled: false,
+      },
+    });
+
+    const result = await updateSpaceApi("201", { portal_discovery_enabled: false });
+
+    expect(mockPut).toHaveBeenCalledWith("/api/v1/knowledge/space/201", {
+      portal_discovery_enabled: false,
+    });
+    expect(result.portalDiscoveryEnabled).toBe(false);
+  });
 });
 
 describe("mapSpace", () => {
@@ -120,6 +140,21 @@ describe("mapSpace", () => {
     expect(result.memberCount).toBe(2);
     expect(result.fileCount).toBe(3);
     expect(result.totalFileCount).toBe(3);
+  });
+
+  it("maps the portal discovery switch without inventing a value", () => {
+    expect(mapSpace({
+      id: 202,
+      name: "部门知识库",
+      auth_type: VisibilityType.PRIVATE,
+      portal_discovery_enabled: true,
+    } as any).portalDiscoveryEnabled).toBe(true);
+
+    expect(mapSpace({
+      id: 203,
+      name: "团队知识库",
+      auth_type: VisibilityType.PRIVATE,
+    } as any).portalDiscoveryEnabled).toBeUndefined();
   });
 });
 

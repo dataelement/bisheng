@@ -197,6 +197,8 @@ export interface KnowledgeSpace {
     isFavorite: boolean;
     /** Portal business-domain codes bound to this knowledge space */
     businessDomainCodes?: string[];
+    /** Whether this configurable space participates in portal knowledge discovery */
+    portalDiscoveryEnabled?: boolean;
 }
 
 export interface KnowledgeSpaceCreateOptions {
@@ -666,6 +668,7 @@ interface RawKnowledgeSpace {
     is_clinic?: boolean;
     department_id?: number;
     department_name?: string;
+    portal_discovery_enabled?: boolean | null;
 }
 
 export interface KnowledgeSpaceTagLibraryListItem {
@@ -840,6 +843,10 @@ export function mapSpace(raw: RawKnowledgeSpace): KnowledgeSpace {
                 .map((code: unknown) => String(code ?? "").trim().toUpperCase())
                 .filter(Boolean)
             : [],
+        portalDiscoveryEnabled:
+            raw.portal_discovery_enabled === null || raw.portal_discovery_enabled === undefined
+                ? undefined
+                : Boolean(raw.portal_discovery_enabled),
     };
 }
 
@@ -1768,6 +1775,7 @@ export async function updateSpaceApi(
         auto_tag_library_id?: number | null;
         auto_tag_library_ids?: number[];
         department_id?: number;
+        portal_discovery_enabled?: boolean;
     }
 ): Promise<KnowledgeSpace> {
     if (!space_id) throw new Error("space_id is required");

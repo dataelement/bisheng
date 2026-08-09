@@ -162,6 +162,49 @@ class FineGrainedPermissionService:
             for binding in bindings
         )
 
+    @classmethod
+    async def filter_object_ids_by_explicit_binding_async(
+        cls,
+        login_user: UserPayload,
+        object_type: str,
+        object_ids: list[str | int],
+    ) -> list[str]:
+        """批量返回当前用户可追溯到显式权限绑定的资源 ID。
+
+        该方法只读取持久化 binding, 不合并公共库默认权限、
+        成员订阅或其他隐式权限来源。
+        """
+        normalized_ids = list(
+            dict.fromkeys(str(object_id) for object_id in object_ids if str(object_id))
+        )
+        if not normalized_ids:
+            return []
+
+        bindings, user_subject_strings = await asyncio.gather(
+            _get_bindings(),
+            cls.get_current_user_subject_strings(login_user),
+        )
+        binding_department_paths = await cls.get_binding_department_paths(bindings)
+        user_department_paths = await cls.get_current_user_department_paths(
+            user_subject_strings
+        )
+        candidate_ids = set(normalized_ids)
+        matched_ids: set[str] = set()
+        for binding in bindings:
+            if binding.get('resource_type') != object_type:
+                continue
+            resource_id = str(binding.get('resource_id'))
+            if resource_id not in candidate_ids:
+                continue
+            if cls._binding_matches_current_user(
+                binding,
+                user_subject_strings,
+                binding_department_paths,
+                user_department_paths,
+            ):
+                matched_ids.add(resource_id)
+        return [object_id for object_id in normalized_ids if object_id in matched_ids]
+
     @staticmethod
     async def get_current_user_department_paths(user_subject_strings: set[str]) -> dict[int, str]:
         department_ids: set[int] = set()

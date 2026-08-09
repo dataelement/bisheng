@@ -33,6 +33,9 @@ from bisheng.knowledge.domain.repositories.implementations.knowledge_parse_queue
     KnowledgeParseQueueRedisRepository,
 )
 from bisheng.knowledge.domain.repositories.implementations.knowledge_repository_impl import KnowledgeRepositoryImpl
+from bisheng.knowledge.domain.repositories.implementations.knowledge_space_scope_repository_impl import (
+    KnowledgeSpaceScopeRepositoryImpl,
+)
 from bisheng.knowledge.domain.repositories.interfaces.department_file_view_grant_repository import (
     DepartmentFileViewGrantRepository,
 )
@@ -246,6 +249,7 @@ async def get_knowledge_space_service(
     message_service = await _get_message_service(session)
     service = _SvcClass(request=request, login_user=login_user)
     service.department_space_binding_repo = DepartmentSpaceBindingRepositoryImpl(session)
+    service.knowledge_space_scope_repo = KnowledgeSpaceScopeRepositoryImpl(session)
     service.message_service = message_service
     service.version_repo = version_repo
     service.doc_repo = doc_repo

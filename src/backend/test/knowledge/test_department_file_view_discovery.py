@@ -198,7 +198,7 @@ def test_unauthorized_department_file_uses_strict_safe_projection() -> None:
     )
 
     assert item.content_access == "approval_required"
-    assert item.can_download is True
+    assert item.can_download is False
     assert item.summary == ""
     assert item.file_size == ""
     assert item.file_encoding == ""

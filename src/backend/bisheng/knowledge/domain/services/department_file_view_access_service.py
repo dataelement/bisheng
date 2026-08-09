@@ -63,6 +63,7 @@ class DepartmentFileResource:
     department: Any | None
     valid: bool
     applicable: bool = True
+    is_clinic: bool = False
     invalid_reason: str | None = None
 
     @property
@@ -117,6 +118,33 @@ class DepartmentFileViewAccessService:
         self.permission_resolver = permission_resolver or self._resolve_permission_ids
         self.approver_resolver = approver_resolver or self._resolve_approvers
         self.persist_stale_grant_revalidation = persist_stale_grant_revalidation
+
+    @staticmethod
+    def classify_applicable_scope(
+        scope: Any | None,
+        binding: Any | None,
+    ) -> str | None:
+        if scope is None or binding is None:
+            return None
+        level = getattr(getattr(scope, "level", None), "value", getattr(scope, "level", None))
+        owner_type = getattr(
+            getattr(scope, "owner_type", None),
+            "value",
+            getattr(scope, "owner_type", None),
+        )
+        if (
+            level == KnowledgeSpaceLevelEnum.DEPARTMENT.value
+            and owner_type == KnowledgeSpaceOwnerTypeEnum.DEPARTMENT.value
+            and int(getattr(scope, "owner_id", 0) or 0)
+            == int(getattr(binding, "department_id", 0) or 0)
+        ):
+            return "department"
+        if (
+            KnowledgeSpaceLevelEnum.is_team_level(level)
+            and owner_type == KnowledgeSpaceOwnerTypeEnum.USER.value
+        ):
+            return "clinic"
+        return None
 
     async def evaluate_file(
         self,
@@ -293,7 +321,14 @@ class DepartmentFileViewAccessService:
         )
         spaces = {int(row.id): row for row in spaces_result.scalars().all()}
         scopes = {int(row.space_id): row for row in scopes_result.scalars().all()}
-        bindings = {int(row.space_id): row for row in bindings_result.scalars().all()}
+        binding_rows_by_space: dict[int, list[DepartmentKnowledgeSpace]] = {}
+        for row in bindings_result.scalars().all():
+            binding_rows_by_space.setdefault(int(row.space_id), []).append(row)
+        bindings = {
+            space_id: rows[0]
+            for space_id, rows in binding_rows_by_space.items()
+            if len(rows) == 1
+        }
         department_ids = {int(binding.department_id) for binding in bindings.values()}
         department_result = await self.session.execute(
             select(Department).where(Department.id.in_(sorted(department_ids)))
@@ -307,8 +342,8 @@ class DepartmentFileViewAccessService:
             space = spaces.get(space_id)
             scope = scopes.get(space_id)
             binding = bindings.get(space_id)
-            scope_level = getattr(getattr(scope, "level", None), "value", getattr(scope, "level", None))
-            if scope_level != KnowledgeSpaceLevelEnum.DEPARTMENT.value:
+            scope_kind = self.classify_applicable_scope(scope, binding)
+            if scope_kind is None:
                 resources[file_id] = DepartmentFileResource(
                     file=file,
                     space=space,
@@ -317,14 +352,14 @@ class DepartmentFileViewAccessService:
                     department=None,
                     valid=False,
                     applicable=False,
+                    invalid_reason=(
+                        "ambiguous_binding"
+                        if len(binding_rows_by_space.get(space_id, [])) > 1
+                        else None
+                    ),
                 )
                 continue
             department = departments.get(int(binding.department_id)) if binding is not None else None
-            owner_type = getattr(
-                getattr(scope, "owner_type", None),
-                "value",
-                getattr(scope, "owner_type", None),
-            )
             tenant_ids = {
                 int(value)
                 for value in (
@@ -342,8 +377,6 @@ class DepartmentFileViewAccessService:
                 and department is not None
                 and getattr(file, "file_type", None) == FileType.FILE.value
                 and getattr(file, "status", None) == KnowledgeFileStatus.SUCCESS.value
-                and owner_type == KnowledgeSpaceOwnerTypeEnum.DEPARTMENT.value
-                and int(scope.owner_id) == int(binding.department_id)
                 and getattr(department, "status", "active") == "active"
                 and int(getattr(department, "is_deleted", 0) or 0) == 0
                 and len(tenant_ids) <= 1
@@ -355,6 +388,7 @@ class DepartmentFileViewAccessService:
                 binding=binding,
                 department=department,
                 valid=valid,
+                is_clinic=scope_kind == "clinic",
                 invalid_reason=None if valid else "invalid_binding",
             )
         return resources

@@ -205,6 +205,16 @@ async def test_non_admin_cannot_rebind_department_space() -> None:
             return_value=space,
         ),
         patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceScopeDao.aget_by_space_id",
+            new_callable=AsyncMock,
+            return_value=SimpleNamespace(
+                level=KnowledgeSpaceLevelEnum.DEPARTMENT,
+                owner_type=KnowledgeSpaceOwnerTypeEnum.DEPARTMENT,
+                owner_id=1,
+                tenant_id=1,
+            ),
+        ),
+        patch(
             "bisheng.knowledge.domain.services.knowledge_space_service.UnAuthorizedError",
             _UnauthorizedTestError,
         ),
@@ -236,6 +246,116 @@ async def test_update_without_department_id_keeps_existing_flow() -> None:
 
     service._require_permission_id.assert_awaited_once_with("knowledge_space", 11, "edit_space")
     service.department_space_binding_repo.rebind_department.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_portal_switch_and_department_rebind_share_one_prepared_transaction() -> None:
+    service = _make_service(is_admin=True)
+    space = _make_space()
+    scope = KnowledgeSpaceScope(
+        id=1,
+        tenant_id=1,
+        space_id=11,
+        level=KnowledgeSpaceLevelEnum.DEPARTMENT,
+        owner_type=KnowledgeSpaceOwnerTypeEnum.DEPARTMENT,
+        owner_id=1,
+        portal_discovery_enabled=False,
+    )
+    binding = DepartmentKnowledgeSpace(
+        id=1,
+        tenant_id=1,
+        space_id=11,
+        department_id=1,
+    )
+    new_department = SimpleNamespace(
+        id=2,
+        dept_id="new",
+        status="active",
+        is_deleted=0,
+    )
+    old_department = SimpleNamespace(
+        id=1,
+        dept_id="old",
+        status="active",
+        is_deleted=0,
+    )
+    plan = DepartmentSpaceRebindPlan(
+        space_id=11,
+        old_department_id=1,
+        new_department_id=2,
+        is_noop=True,
+    )
+    updated_scope = scope.model_copy(
+        update={"portal_discovery_enabled": True, "owner_id": 2}
+    )
+    service.knowledge_space_scope_repo = AsyncMock()
+    service.knowledge_space_scope_repo.find_by_space_id.return_value = scope
+    service.knowledge_space_scope_repo.stage_space_and_portal_discovery.return_value = (
+        updated_scope
+    )
+    service.department_space_binding_repo.prepare_rebind_department.return_value = plan
+
+    with (
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id",
+            new_callable=AsyncMock,
+            return_value=space,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_space",
+            new_callable=AsyncMock,
+            return_value=space,
+        ) as update_space,
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceScopeDao.aget_by_space_id",
+            new_callable=AsyncMock,
+            return_value=scope,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.DepartmentKnowledgeSpaceDao.aget_by_space_id",
+            new_callable=AsyncMock,
+            return_value=binding,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.DepartmentDao.aget_by_id",
+            new_callable=AsyncMock,
+            side_effect=[new_department, old_department],
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.DepartmentService.aget_admins",
+            new_callable=AsyncMock,
+            side_effect=[[], []],
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service."
+            "FineGrainedPermissionService.has_explicit_relation_binding",
+            new_callable=AsyncMock,
+            return_value=False,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.AuditLogDao.ainsert_v2",
+            new_callable=AsyncMock,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service."
+            "KnowledgeSpaceContentStat.enqueue_space_rename_stat_async",
+            new_callable=AsyncMock,
+        ),
+    ):
+        await service.update_knowledge_space(
+            11,
+            description="一起提交",
+            department_id=2,
+            portal_discovery_enabled=True,
+        )
+
+    update_space.assert_not_awaited()
+    service.knowledge_space_scope_repo.update_space_and_portal_discovery.assert_not_awaited()
+    service.knowledge_space_scope_repo.stage_space_and_portal_discovery.assert_awaited_once_with(
+        space=space,
+        enabled=True,
+    )
+    service.department_space_binding_repo.commit_prepared_rebind.assert_awaited_once()
 
 
 @pytest.mark.asyncio

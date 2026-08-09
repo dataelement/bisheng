@@ -22,6 +22,12 @@ class DepartmentSpaceBindingRepository(BaseRepository[DepartmentKnowledgeSpace, 
     """部门知识库归属关系的事务仓储。"""
 
     @abstractmethod
+    async def find_by_space_ids(
+        self,
+        space_ids: list[int],
+    ) -> list[DepartmentKnowledgeSpace]: ...
+
+    @abstractmethod
     async def rebind_department(
         self,
         *,
