@@ -18,6 +18,7 @@ from loguru import logger
 from bisheng_langchain.gpts.tools.code_interpreter.base_executor import (
     OUTPUT_DIR_NAME,
     BaseExecutor,
+    path_namespace_rules,
 )
 
 CODE_BLOCK_PATTERN = r"```(\w*)\n(.*?)\n```"
@@ -39,7 +40,8 @@ MAX_FAILURE_LOG_CHARS = 8000
 LOG_TRUNCATED_NOTICE = "[... earlier output truncated ...]\n"
 PARTIAL_OUTPUT_HEADER = "\nOutput captured before the kill:\n"
 
-LOCAL_DESCRIPTION = """Evaluates python code in native environment. \
+LOCAL_DESCRIPTION = (
+    """Evaluates python code in native environment. \
 You must send the whole script every time and print your outputs. \
 Script should be pure python code that can be evaluated. \
 It should be in python format NOT markdown. \
@@ -49,15 +51,19 @@ FILE OUTPUT RULES (STRICT): write final deliverables to the RELATIVE directory \
 are subfolders of the current working directory. NEVER use an absolute path with a \
 leading slash such as `/output/...` or `/scratch/...` — anything written outside the \
 current working directory is DISCARDED and will NOT be delivered to the user. \
+"""
+    + path_namespace_rules(include_skills=True)
+    + """\
 Do not use things like plot.show() as it will not work; save figures to `output/` \
 instead. print() any output and results so you can capture the output. \
 AVAILABLE LIBRARIES: this runs in the backend Python environment; these are ALREADY \
 installed — pandas, numpy, matplotlib (charts), openpyxl / XlsxWriter (Excel), \
-python-docx (Word), Pillow (images), reportlab (generate PDF), and PyMuPDF a.k.a. \
+python-docx (Word), python-pptx (PowerPoint), Pillow (images), reportlab (generate PDF), and PyMuPDF a.k.a. \
 `fitz` (read/parse PDF). To READ text or tables from a PDF, use `import fitz` \
 (PyMuPDF); do NOT use pdfminer / pdfplumber / PyPDF2 — they are NOT installed. If an \
 import fails, switch to an already-installed library instead of assuming a package \
 exists; do NOT run `pip install` (this is a shared, offline environment)."""
+)
 
 
 class LocalExecutor(BaseExecutor):
@@ -391,7 +397,13 @@ class LocalExecutor(BaseExecutor):
                 # accumulated prefix handed the model {"exitcode": 1, "log": ""} on every
                 # failure and forced it to debug blind.
                 logger.warning("code interpreter block {}/{} exited {}", i + 1, len(code_blocks), exit_code)
-                return {"exitcode": exit_code, "log": self._tail(logs_all)}
+                # The advisory has to be attached HERE too, not only on the success
+                # path below: reading an absolute `/skills/...` raises
+                # FileNotFoundError, which is exactly a non-zero exit — so the one
+                # failure the read-side notice exists to explain would otherwise
+                # never see it. Appended AFTER ``_tail`` (which keeps the tail) so
+                # the truncation cannot eat it.
+                return {"exitcode": exit_code, "log": self._tail(logs_all) + self.absolute_path_advisory(original_code)}
             all_file_list += file_list
 
         # Deterministic safety net: if the script wrote a deliverable to an absolute
