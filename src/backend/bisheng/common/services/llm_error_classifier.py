@@ -116,6 +116,33 @@ _RATE_LIMIT_SIGNATURES: tuple[str, ...] = (
     "限流",
 )
 
+# Transient TRANSPORT failures a provider reports from ITS OWN upstream fetch,
+# wrapped in an otherwise non-transient status. When an endpoint fetches something
+# on our behalf — staging a data-URI image into object storage, a sandbox pulling a
+# file, a RAG fetcher — its I/O error surfaces as a 4xx even though the REQUEST was
+# fine; only their fetch of it failed. Retrying is exactly right, and a plain 400
+# otherwise DEGRADEs, which on the main graph means the whole run dies.
+#
+# Measured on 180 (2026-08-09, session 649ba617): a deck screenshot handed to the
+# model came back as
+#   400 {"code":"DOWNLOAD_FAILED", ... "read tcp 10.0.2.60:46976->10.86.10.104:6000:
+#        read: connection reset by peer"}
+# — both endpoints inside the vendor's own network — and killed a 21-minute run
+# with zero retries.
+#
+# These are Go/POSIX transport phrases, not vendor error codes, so this stays
+# vendor-agnostic like the other flat signature sets. DELIBERATELY transport-only:
+# a fetch that failed with 404 / bad URL / unsupported format is a genuine client
+# error and MUST keep degrading rather than burn three backoffs on a sure failure.
+_TRANSIENT_TRANSPORT_SIGNATURES: tuple[str, ...] = (
+    "connection reset",
+    "connection refused",
+    "broken pipe",
+    "i/o timeout",
+    "unexpected eof",
+    "no route to host",
+)
+
 # Content-moderation / safety-guardrail codes across mainstream vendors:
 # Aliyun DashScope (data_inspection_failed / inappropriate_content),
 # Baidu Qianfan (336003/336005), Zhipu (1301), MiniMax (2013),
@@ -231,6 +258,16 @@ def _is_rate_limit(exc: BaseException) -> bool:
     return any(sig in text for sig in _RATE_LIMIT_SIGNATURES)
 
 
+def _is_transient_transport(exc: BaseException) -> bool:
+    """A transport-level failure the PROVIDER hit on its own upstream fetch.
+
+    Checked only after the FAIL_FAST branches, so a quota/auth error carrying such
+    wording in a nested message can never be turned into a retry.
+    """
+    text = _exc_text(exc)
+    return any(sig in text for sig in _TRANSIENT_TRANSPORT_SIGNATURES)
+
+
 def _is_task_aborted(exc: BaseException) -> bool:
     """The task was aborted by a framework/loop guard, not a provider error.
 
@@ -300,6 +337,8 @@ def classify_behavior(exc: BaseException) -> Behavior:
         return Behavior.RETRYABLE
     if isinstance(exc, (TimeoutError, ConnectionError)):
         return Behavior.RETRYABLE
+    if _is_transient_transport(exc):  # provider's own upstream fetch blew up mid-flight
+        return Behavior.RETRYABLE
 
     # 3) DEGRADABLE — default bucket: content filter, plain 400, anything else.
     return Behavior.DEGRADABLE
@@ -350,6 +389,10 @@ def label_error(exc: BaseException) -> ErrorType:
         return ErrorType.NETWORK_TIMEOUT
     status = _status_code(exc)
     if isinstance(exc, openai.InternalServerError) or (status is not None and 500 <= status < 600):
+        return ErrorType.SERVICE_UNAVAILABLE
+    # Retries exhausted on the provider's own upstream fetch: "service busy" is the
+    # honest story for the user, not the generic unknown card.
+    if _is_transient_transport(exc):
         return ErrorType.SERVICE_UNAVAILABLE
     return ErrorType.UNKNOWN
 
