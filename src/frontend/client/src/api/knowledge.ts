@@ -595,19 +595,18 @@ export interface UploadedFileRecord extends KnowledgeFile {
     businessDomainCodes?: string[];
 }
 
-export type KnowledgeParseQueueStage = "title" | "parse" | "retry";
 export type KnowledgeParseQueuePositionState = "queued" | "processing" | "not_queued" | "unavailable";
 
 export interface KnowledgeParseQueuePositionItem {
     fileId: number;
     state: KnowledgeParseQueuePositionState;
-    stage: KnowledgeParseQueueStage | null;
     aheadWaitingCount: number | null;
 }
 
 export interface KnowledgeParseQueuePositionsResponse {
     items: KnowledgeParseQueuePositionItem[];
     activeCount: number;
+    waitingCount: number | null;
     approximate: true;
     asOf: string;
 }
@@ -2756,10 +2755,10 @@ export async function getKnowledgeParseQueuePositionsApi(
         items: Array<{
             file_id: number;
             state: KnowledgeParseQueuePositionState;
-            stage: KnowledgeParseQueueStage | null;
             ahead_waiting_count: number | null;
         }>;
         active_count: number;
+        waiting_count?: number | null;
         approximate: true;
         as_of: string;
     }>>(`/api/v1/knowledge/${knowledgeId}/parse-queue-positions`, {
@@ -2771,10 +2770,10 @@ export async function getKnowledgeParseQueuePositionsApi(
         items: payload.items.map((item) => ({
             fileId: item.file_id,
             state: item.state,
-            stage: item.stage,
             aheadWaitingCount: item.ahead_waiting_count,
         })),
         activeCount: payload.active_count,
+        waitingCount: payload.waiting_count ?? null,
         approximate: payload.approximate,
         asOf: payload.as_of,
     };

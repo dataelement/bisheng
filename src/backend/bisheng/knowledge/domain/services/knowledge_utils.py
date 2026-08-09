@@ -458,11 +458,11 @@ class KnowledgeUtils(BaseService):
     async def process_rebuild_file(cls, db_file, req_data, login_user_id: int, login_user_name: str):
         """Shared logic to rebuild a knowledge file with new rules."""
         from bisheng.api.v1.schemas import FileProcessBase
+        from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao, KnowledgeFileStatus
         from bisheng.knowledge.domain.services.knowledge_parse_dispatch_service import (
-            KnowledgeParseStage,
+            KnowledgeParseAttemptKind,
             dispatch_knowledge_parse_task,
         )
-        from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao, KnowledgeFileStatus
         from bisheng.knowledge.domain.services.knowledge_pdf_artifact_service import (
             request_pdf_artifact_generation,
         )
@@ -480,7 +480,7 @@ class KnowledgeUtils(BaseService):
 
         preview_cache_key = cls.get_preview_cache_key(req_data.knowledge_id, file_path=req_data.file_path)
         await dispatch_knowledge_parse_task(
-            stage=KnowledgeParseStage.RETRY,
+            attempt_kind=KnowledgeParseAttemptKind.RETRY,
             file_id=db_file.id,
             preview_cache_key=preview_cache_key,
             callback_url=req_data.callback_url,
@@ -494,12 +494,12 @@ class KnowledgeUtils(BaseService):
         """Shared logic for retrying multiple files with updated configuration"""
         from bisheng.core.storage.minio.minio_manager import get_minio_storage
         from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao, KnowledgeFileStatus
+        from bisheng.knowledge.domain.services.knowledge_parse_dispatch_service import (
+            KnowledgeParseAttemptKind,
+            dispatch_knowledge_parse_task,
+        )
         from bisheng.knowledge.domain.services.knowledge_pdf_artifact_service import (
             request_pdf_artifact_generation,
-        )
-        from bisheng.knowledge.domain.services.knowledge_parse_dispatch_service import (
-            KnowledgeParseStage,
-            dispatch_knowledge_parse_task,
         )
 
         minio_client = await get_minio_storage()
@@ -576,7 +576,7 @@ class KnowledgeUtils(BaseService):
         tmp = []
         for one_file in res:
             await dispatch_knowledge_parse_task(
-                stage=KnowledgeParseStage.RETRY,
+                attempt_kind=KnowledgeParseAttemptKind.RETRY,
                 file_id=one_file[0].id,
                 preview_cache_key=one_file[1],
                 operator_user_id=login_user.user_id,

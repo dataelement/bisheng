@@ -6,13 +6,9 @@ import ProgressItem from "@/components/bs-comp/knowledgeUploadComponent/Progress
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string, values?: Record<string, unknown>) => {
-      if (key === "parseQueueStage.title") return "标题提取"
-      if (key === "parseQueueStage.parse") return "正式解析"
-      if (key === "parseQueueStage.retry") return "重试解析"
-      if (key === "parseQueueAhead") return `${values?.stage}排队中，前方约 ${values?.count} 个等待任务`
-      if (key === "parseQueueProcessing") return `${values?.stage}处理中`
-      if (key === "parseQueueActiveCount") return `当前运行 ${values?.count} 个任务`
-      if (key === "parseQueueUnavailable") return "文档数据准备中"
+      if (key === "parseQueueAhead") return `排队中，前方约 ${values?.count} 个等待任务`
+      if (key === "parseQueueProcessing") return "解析中"
+      if (key === "parseQueueUnavailable") return "排队中"
       return key
     },
   }),
@@ -29,7 +25,7 @@ const baseItem = {
 }
 
 describe("parse queue position", () => {
-  it("shows approximate queued position and independent active count", () => {
+  it("shows only the generic approximate queued position", () => {
     render(
       <ProgressItem
         analysis
@@ -37,7 +33,6 @@ describe("parse queue position", () => {
           ...baseItem,
           queuePosition: {
             state: "queued",
-            stage: "title",
             aheadWaitingCount: 7,
             activeCount: 3,
           },
@@ -45,8 +40,8 @@ describe("parse queue position", () => {
       />,
     )
 
-    expect(screen.getByText(/标题提取排队中，前方约 7 个等待任务/)).toBeInTheDocument()
-    expect(screen.getByText(/当前运行 3 个任务/)).toBeInTheDocument()
+    expect(screen.getByText("排队中，前方约 7 个等待任务")).toBeInTheDocument()
+    expect(screen.queryByText(/标题提取|正式解析|重试解析|当前运行/)).not.toBeInTheDocument()
   })
 
   it("shows processing and safely degrades unavailable state", () => {
@@ -57,14 +52,13 @@ describe("parse queue position", () => {
           ...baseItem,
           queuePosition: {
             state: "processing",
-            stage: "parse",
             aheadWaitingCount: null,
             activeCount: 1,
           },
         } as any}
       />,
     )
-    expect(screen.getByText(/正式解析处理中/)).toBeInTheDocument()
+    expect(screen.getByText("解析中")).toBeInTheDocument()
 
     rerender(
       <ProgressItem
@@ -73,14 +67,13 @@ describe("parse queue position", () => {
           ...baseItem,
           queuePosition: {
             state: "unavailable",
-            stage: null,
             aheadWaitingCount: null,
             activeCount: 0,
           },
         } as any}
       />,
     )
-    expect(screen.getByText("文档数据准备中")).toBeInTheDocument()
+    expect(screen.getByText("排队中")).toBeInTheDocument()
   })
 
   it("stops showing queue information for terminal files", () => {
@@ -92,13 +85,12 @@ describe("parse queue position", () => {
           progress: "end",
           queuePosition: {
             state: "queued",
-            stage: "retry",
             aheadWaitingCount: 2,
             activeCount: 1,
           },
         } as any}
       />,
     )
-    expect(screen.queryByText(/等待任务|处理中|文档数据准备中/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/等待任务|解析中|排队中/)).not.toBeInTheDocument()
   })
 })

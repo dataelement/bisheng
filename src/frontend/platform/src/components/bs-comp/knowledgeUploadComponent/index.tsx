@@ -27,7 +27,6 @@ export interface Progress {
     error: boolean,
     queuePosition?: {
         state: 'queued' | 'processing' | 'not_queued' | 'unavailable',
-        stage: 'title' | 'parse' | 'retry' | null,
         aheadWaitingCount: number | null,
         activeCount: number,
     }

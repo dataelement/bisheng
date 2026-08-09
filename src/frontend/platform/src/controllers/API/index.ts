@@ -306,13 +306,11 @@ export async function readFileByLibDatabase({ id, page, pageSize = 20, name = ''
     // return { data, writeable, pages: Math.ceil(total / pageSize) }
 }
 
-export type KnowledgeParseQueueStage = 'title' | 'parse' | 'retry';
 export type KnowledgeParseQueuePositionState = 'queued' | 'processing' | 'not_queued' | 'unavailable';
 
 export interface KnowledgeParseQueuePositionItem {
     file_id: number;
     state: KnowledgeParseQueuePositionState;
-    stage: KnowledgeParseQueueStage | null;
     ahead_waiting_count: number | null;
 }
 

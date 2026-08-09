@@ -10,8 +10,8 @@ import pytest
 from bisheng.common.constants.enums.knowledge_parse_priority import KnowledgeParsePriority
 from bisheng.core.context.tenant import current_tenant_id, set_current_tenant_id
 from bisheng.knowledge.domain.services.knowledge_parse_dispatch_service import (
+    KnowledgeParseAttemptKind,
     KnowledgeParseDispatchService,
-    KnowledgeParseStage,
 )
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
@@ -52,7 +52,7 @@ async def test_dispatch_uses_snapshot_queue_priority_and_headers(
     tenant_token = set_current_tenant_id(7)
     try:
         ticket_id = await service.dispatch(
-            stage=KnowledgeParseStage.PARSE,
+            attempt_kind=KnowledgeParseAttemptKind.INITIAL,
             file_id=11,
             preview_cache_key="preview",
             callback_url="https://callback.invalid",
@@ -71,7 +71,7 @@ async def test_dispatch_uses_snapshot_queue_priority_and_headers(
             "priority": transport_priority,
             "headers": {
                 "knowledge_parse_priority": priority.value,
-                "knowledge_parse_stage": "parse",
+                "knowledge_parse_attempt_kind": "initial",
                 "knowledge_parse_queue_ticket_id": "ticket-1",
                 "knowledge_parse_file_id": 11,
                 "tenant_id": 7,
@@ -82,6 +82,51 @@ async def test_dispatch_uses_snapshot_queue_priority_and_headers(
 
 
 @pytest.mark.asyncio
+async def test_initial_dispatch_uses_one_parse_message_and_attempt_kind_header() -> None:
+    snapshot_service = AsyncMock()
+    snapshot_service.get_or_create = AsyncMock(return_value=KnowledgeParsePriority.MEDIUM)
+    task = FakeTask()
+    service = KnowledgeParseDispatchService(
+        snapshot_service,
+        ticket_id_factory=lambda: "initial-ticket",
+    )
+
+    await service.dispatch(
+        attempt_kind="initial",
+        file_id=21,
+        tenant_id=1,
+        knowledge_id=10,
+        task=task,
+    )
+
+    assert task.calls[0]["headers"]["knowledge_parse_attempt_kind"] == "initial"
+    assert "knowledge_parse_stage" not in task.calls[0]["headers"]
+
+
+@pytest.mark.asyncio
+async def test_upload_batch_dispatches_initial_lifecycle_without_title_message() -> None:
+    from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
+
+    process_files = [SimpleNamespace(id=31)]
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        dispatch = AsyncMock()
+        monkeypatch.setattr(
+            "bisheng.knowledge.domain.services.knowledge_parse_dispatch_service.dispatch_knowledge_parse_task",
+            dispatch,
+        )
+        await KnowledgeSpaceService.enqueue_file_title_extraction(
+            process_files,
+            ["preview"],
+            operator_user_id=5,
+            operator_is_global_super=False,
+        )
+
+    assert dispatch.await_count == 1
+    assert dispatch.await_args.kwargs["attempt_kind"] == "initial"
+    assert "stage" not in dispatch.await_args.kwargs
+
+
+@pytest.mark.asyncio
 async def test_dispatch_propagates_broker_failure(caplog) -> None:
     snapshot_service = AsyncMock()
     snapshot_service.get_or_create = AsyncMock(return_value=KnowledgeParsePriority.MEDIUM)
@@ -89,7 +134,7 @@ async def test_dispatch_propagates_broker_failure(caplog) -> None:
 
     with pytest.raises(RuntimeError, match="broker unavailable"):
         await service.dispatch(
-            stage=KnowledgeParseStage.RETRY,
+            attempt_kind=KnowledgeParseAttemptKind.RETRY,
             file_id=12,
             task=FakeTask(error=RuntimeError("broker unavailable")),
         )
@@ -111,7 +156,7 @@ async def test_queue_index_failure_does_not_block_celery_publish(caplog) -> None
     )
 
     result = await service.dispatch(
-        stage=KnowledgeParseStage.TITLE,
+        attempt_kind=KnowledgeParseAttemptKind.INITIAL,
         file_id=13,
         tenant_id=1,
         knowledge_id=10,
@@ -136,7 +181,7 @@ async def test_broker_failure_best_effort_cleans_created_ticket() -> None:
 
     with pytest.raises(RuntimeError, match="broker unavailable"):
         await service.dispatch(
-            stage=KnowledgeParseStage.RETRY,
+            attempt_kind=KnowledgeParseAttemptKind.RETRY,
             file_id=14,
             tenant_id=1,
             knowledge_id=10,

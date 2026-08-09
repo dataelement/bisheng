@@ -206,6 +206,14 @@ async def _get_field_options(
                 "当前主部门（历史登录回填）",
             ],
         ),
+        (
+            "mid_knowledge_space_content_stat",
+            "space_level",
+            None,
+            ["team", "team_ks"],
+            None,
+            ["团队库", "科室库"],
+        ),
     ],
     ids=[
         "application-type",
@@ -220,6 +228,7 @@ async def _get_field_options(
         "model-type",
         "model-system-app",
         "participation-department-source",
+        "knowledge-space-level",
     ],
 )
 @pytest.mark.asyncio

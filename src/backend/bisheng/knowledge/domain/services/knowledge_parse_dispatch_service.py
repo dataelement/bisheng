@@ -15,8 +15,8 @@ from bisheng.knowledge.domain.repositories.implementations.knowledge_parse_queue
     KnowledgeParseQueueRedisRepository,
 )
 from bisheng.knowledge.domain.schemas.knowledge_parse_queue_schema import (
+    KnowledgeParseAttemptKind,
     KnowledgeParseQueueTicket,
-    KnowledgeParseStage,
 )
 from bisheng.knowledge.domain.services.knowledge_parse_priority_snapshot_service import (
     KnowledgeParsePrioritySnapshotService,
@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 
 class KnowledgeParseDispatchService:
-    """Publish every file-parsing stage with one stable transport contract."""
+    """Publish one broker message for each file parsing attempt."""
 
     def __init__(
         self,
@@ -48,7 +48,7 @@ class KnowledgeParseDispatchService:
     async def dispatch(
         self,
         *,
-        stage: KnowledgeParseStage,
+        attempt_kind: KnowledgeParseAttemptKind | str,
         file_id: int,
         preview_cache_key: str | None = None,
         callback_url: str | None = None,
@@ -58,6 +58,7 @@ class KnowledgeParseDispatchService:
         knowledge_id: int | None = None,
         task: Any = None,
     ) -> str:
+        attempt_kind = KnowledgeParseAttemptKind(attempt_kind)
         priority, file_tenant_id, file_knowledge_id = await self._get_dispatch_context(
             file_id=file_id,
             operator_user_id=operator_user_id,
@@ -66,10 +67,10 @@ class KnowledgeParseDispatchService:
         tenant_id = tenant_id or file_tenant_id or get_current_tenant_id()
         knowledge_id = knowledge_id or file_knowledge_id
         ticket_id = self.ticket_id_factory()
-        task = task or self._load_task(stage)
+        task = task or self._load_task(attempt_kind)
         headers = {
             "knowledge_parse_priority": priority.value,
-            "knowledge_parse_stage": stage.value,
+            "knowledge_parse_attempt_kind": attempt_kind.value,
             "knowledge_parse_queue_ticket_id": ticket_id,
             "knowledge_parse_file_id": file_id,
         }
@@ -85,18 +86,18 @@ class KnowledgeParseDispatchService:
                 tenant_id=int(tenant_id),
                 knowledge_id=int(knowledge_id),
                 file_id=file_id,
-                stage=stage,
+                attempt_kind=attempt_kind,
                 priority=priority,
             )
             try:
                 await self.queue_repository.create_publishing(ticket)
             except Exception:
                 logger.exception(
-                    "knowledge parse queue index create failed ticket_id=%s file_id=%s tenant_id=%s stage=%s",
+                    "knowledge parse queue index create failed ticket_id=%s file_id=%s tenant_id=%s attempt_kind=%s",
                     ticket_id,
                     file_id,
                     tenant_id,
-                    stage.value,
+                    attempt_kind.value,
                 )
         try:
             result = task.apply_async(
@@ -108,9 +109,9 @@ class KnowledgeParseDispatchService:
             )
         except Exception:
             logger.exception(
-                "knowledge parse task publish failed file_id=%s stage=%s priority=%s",
+                "knowledge parse task publish failed file_id=%s attempt_kind=%s priority=%s",
                 file_id,
-                stage.value,
+                attempt_kind.value,
                 priority.value,
             )
             if ticket is not None:
@@ -174,19 +175,17 @@ class KnowledgeParseDispatchService:
             )
 
     @staticmethod
-    def _load_task(stage: KnowledgeParseStage) -> Any:
-        if stage is KnowledgeParseStage.TITLE:
-            from bisheng.worker.knowledge.file_title_worker import (
-                extract_knowledge_file_title_celery,
-            )
-
-            return extract_knowledge_file_title_celery
+    def _load_task(attempt_kind: KnowledgeParseAttemptKind) -> Any:
         from bisheng.worker.knowledge.file_worker import (
             parse_knowledge_file_celery,
             retry_knowledge_file_celery,
         )
 
-        return parse_knowledge_file_celery if stage is KnowledgeParseStage.PARSE else retry_knowledge_file_celery
+        return (
+            parse_knowledge_file_celery
+            if attempt_kind is KnowledgeParseAttemptKind.INITIAL
+            else retry_knowledge_file_celery
+        )
 
 
 async def dispatch_knowledge_parse_task(**kwargs: Any) -> str:

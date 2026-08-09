@@ -771,6 +771,7 @@ describe("PortalKnowledgeWorkbench", () => {
         jest.mocked(getKnowledgeParseQueuePositionsApi).mockResolvedValue({
             items: [],
             activeCount: 0,
+            waitingCount: 0,
             approximate: true,
             asOf: "2026-08-06T10:00:00Z",
         });
@@ -5108,19 +5109,21 @@ describe("PortalKnowledgeWorkbench", () => {
             if (knowledgeId === 10) {
                 return {
                     items: [
-                        { fileId: 501, state: "queued", stage: "parse", aheadWaitingCount: 7 },
-                        { fileId: 502, state: "processing", stage: "title", aheadWaitingCount: null },
+                        { fileId: 501, state: "queued", aheadWaitingCount: 7 },
+                        { fileId: 502, state: "processing", aheadWaitingCount: null },
                     ],
                     activeCount: 2,
+                    waitingCount: 8,
                     approximate: true,
                     asOf: "2026-08-06T10:00:00Z",
                 };
             }
             return {
                 items: [
-                    { fileId: 601, state: "queued", stage: "retry", aheadWaitingCount: 1 },
+                    { fileId: 601, state: "queued", aheadWaitingCount: 1 },
                 ],
                 activeCount: 2,
+                waitingCount: 2,
                 approximate: true,
                 asOf: "2026-08-06T10:00:00Z",
             };

@@ -14446,12 +14446,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
         KnowledgeService.audit_telemetry_service.telemetry_new_knowledge_file(self.login_user)
         preview_cache_key = self.get_preview_cache_key(knowledge_id, result.final_url, md5_value=result.content_hash)
         from bisheng.knowledge.domain.services.knowledge_parse_dispatch_service import (
-            KnowledgeParseStage,
+            KnowledgeParseAttemptKind,
             dispatch_knowledge_parse_task,
         )
 
         await dispatch_knowledge_parse_task(
-            stage=KnowledgeParseStage.PARSE,
+            attempt_kind=KnowledgeParseAttemptKind.INITIAL,
             file_id=db_file.id,
             preview_cache_key=preview_cache_key,
             operator_user_id=self.login_user.user_id,
@@ -14553,12 +14553,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
             md5_value=result.content_hash,
         )
         from bisheng.knowledge.domain.services.knowledge_parse_dispatch_service import (
-            KnowledgeParseStage,
+            KnowledgeParseAttemptKind,
             dispatch_knowledge_parse_task,
         )
 
         await dispatch_knowledge_parse_task(
-            stage=KnowledgeParseStage.RETRY,
+            attempt_kind=KnowledgeParseAttemptKind.RETRY,
             file_id=db_file.id,
             preview_cache_key=preview_cache_key,
             operator_user_id=self.login_user.user_id,
@@ -14885,9 +14885,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         operator_user_id: int | None = None,
         operator_is_global_super: bool | None = None,
     ) -> None:
-        """Enqueue title extraction and AI alias generation before formal parsing."""
+        """Enqueue one initial lifecycle containing title extraction and parsing."""
         from bisheng.knowledge.domain.services.knowledge_parse_dispatch_service import (
-            KnowledgeParseStage,
+            KnowledgeParseAttemptKind,
             dispatch_knowledge_parse_task,
         )
 
@@ -14895,7 +14895,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             raise ValueError("process_files and preview_cache_keys length mismatch")
         for index, knowledge_file in enumerate(process_files):
             await dispatch_knowledge_parse_task(
-                stage=KnowledgeParseStage.TITLE,
+                attempt_kind=KnowledgeParseAttemptKind.INITIAL,
                 file_id=knowledge_file.id,
                 preview_cache_key=preview_cache_keys[index],
                 operator_user_id=operator_user_id,
@@ -14908,7 +14908,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         preview_cache_keys: list[str],
     ) -> None:
         from bisheng.knowledge.domain.services.knowledge_parse_dispatch_service import (
-            KnowledgeParseStage,
+            KnowledgeParseAttemptKind,
             dispatch_knowledge_parse_task,
         )
 
@@ -14916,7 +14916,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             raise ValueError("process_files and preview_cache_keys length mismatch")
         for index, knowledge_file in enumerate(process_files):
             await dispatch_knowledge_parse_task(
-                stage=KnowledgeParseStage.PARSE,
+                attempt_kind=KnowledgeParseAttemptKind.INITIAL,
                 file_id=knowledge_file.id,
                 preview_cache_key=preview_cache_keys[index],
             )
@@ -16202,12 +16202,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
         return []
 
     async def batch_retry_failed_files(self, space_id: int, file_ids: list[int]):
+        from bisheng.knowledge.domain.services.knowledge_parse_dispatch_service import (
+            KnowledgeParseAttemptKind,
+            dispatch_knowledge_parse_task,
+        )
         from bisheng.knowledge.domain.services.knowledge_pdf_artifact_service import (
             request_pdf_artifact_generation,
-        )
-        from bisheng.knowledge.domain.services.knowledge_parse_dispatch_service import (
-            KnowledgeParseStage,
-            dispatch_knowledge_parse_task,
         )
 
         space = await KnowledgeDao.aquery_by_id(space_id)
@@ -16264,7 +16264,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 await request_pdf_artifact_generation(retry_file_map[file_id])
             for file_id in all_file_ids:
                 await dispatch_knowledge_parse_task(
-                    stage=KnowledgeParseStage.RETRY,
+                    attempt_kind=KnowledgeParseAttemptKind.RETRY,
                     file_id=file_id,
                     operator_user_id=self.login_user.user_id,
                     operator_is_global_super=bool(getattr(self.login_user, "is_global_super", False)),

@@ -123,7 +123,6 @@ export default function FileUploadStep4({ data, kId, hasRepeat }) {
                                 ...file,
                                 queuePosition: queuePosition ? {
                                     state: queuePosition.state,
-                                    stage: queuePosition.stage,
                                     aheadWaitingCount: queuePosition.ahead_waiting_count,
                                     activeCount,
                                 } : undefined,

@@ -4,8 +4,8 @@ from unittest.mock import Mock
 
 from bisheng.common.constants.enums.knowledge_parse_priority import KnowledgeParsePriority
 from bisheng.knowledge.domain.schemas.knowledge_parse_queue_schema import (
+    KnowledgeParseAttemptKind,
     KnowledgeParseQueueTicket,
-    KnowledgeParseStage,
 )
 from bisheng.knowledge.domain.services.knowledge_parse_processing_lease import (
     KnowledgeParseProcessingLease,
@@ -18,7 +18,7 @@ def _ticket() -> KnowledgeParseQueueTicket:
         tenant_id=1,
         knowledge_id=10,
         file_id=1,
-        stage=KnowledgeParseStage.PARSE,
+        attempt_kind=KnowledgeParseAttemptKind.INITIAL,
         priority=KnowledgeParsePriority.MEDIUM,
     )
 

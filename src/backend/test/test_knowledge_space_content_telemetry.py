@@ -369,6 +369,51 @@ def test_knowledge_space_content_build_file_record_contains_realtime_dimensions(
     assert record.projection_updated_at
 
 
+@pytest.mark.parametrize(
+    ("level", "expected_name"),
+    [
+        ("team", "团队库"),
+        ("team_ks", "科室库"),
+    ],
+)
+def test_content_sync_keeps_team_and_clinic_levels_separate(
+    monkeypatch,
+    level,
+    expected_name,
+):
+    worker_module = _import_worker_mid_table()
+    monkeypatch.setattr(
+        worker_module,
+        "get_user_from_ids_with_cache",
+        lambda _ids, user_map: user_map,
+    )
+    file_record = SimpleNamespace(
+        id=11,
+        tenant_id=1,
+        user_id=0,
+        user_name="",
+        create_time=None,
+        file_name="制度.pdf",
+        file_type=1,
+        split_rule=None,
+        file_subcategory_code=None,
+        file_encoding=None,
+    )
+    space = SimpleNamespace(id=3, tenant_id=1, name="知识空间")
+
+    records, _ = worker_module._build_knowledge_space_content_records(
+        [(file_record, space)],
+        {},
+        space_scope_map={3: SimpleNamespace(level=level)},
+        space_department_map={3: None},
+        primary_department_map={},
+        category_label_cache={1: ({}, {})},
+    )
+
+    assert records[0].space_level == level
+    assert records[0].space_level_name == expected_name
+
+
 def test_knowledge_space_content_mapping_excludes_tenant_and_common_user_context():
     from bisheng.telemetry.domain.mid_table.knowledge_space_content import (
         KnowledgeSpaceContentStat,

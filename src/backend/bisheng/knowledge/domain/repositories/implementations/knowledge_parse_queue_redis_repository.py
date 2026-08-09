@@ -9,7 +9,9 @@ from bisheng.knowledge.domain.repositories.interfaces.knowledge_parse_queue_repo
     KnowledgeParseQueueRepository,
 )
 from bisheng.knowledge.domain.schemas.knowledge_parse_queue_schema import (
+    KnowledgeParseAttemptKind,
     KnowledgeParseQueueTicket,
+    KnowledgeParseStage,
     KnowledgeParseTicketSnapshot,
     KnowledgeParseTicketState,
 )
@@ -27,7 +29,7 @@ class KnowledgeParseQueueRedisRepository(KnowledgeParseQueueRepository):
 local seq = redis.call('INCR', KEYS[1])
 redis.call('HSET', KEYS[2],
   'queue_ticket_id', ARGV[1], 'tenant_id', ARGV[2], 'knowledge_id', ARGV[3],
-  'file_id', ARGV[4], 'stage', ARGV[5], 'priority', ARGV[6],
+  'file_id', ARGV[4], 'attempt_kind', ARGV[5], 'priority', ARGV[6],
   'sequence', seq, 'state', 'publishing')
 redis.call('EXPIRE', KEYS[2], ARGV[8])
 redis.call('ZADD', KEYS[3], seq, ARGV[1])
@@ -46,7 +48,7 @@ if redis.call('EXISTS', KEYS[2]) == 0 then
   local seq = redis.call('INCR', KEYS[1])
   redis.call('HSET', KEYS[2],
     'queue_ticket_id', ARGV[1], 'tenant_id', ARGV[3], 'knowledge_id', ARGV[4],
-    'file_id', ARGV[5], 'stage', ARGV[6], 'priority', ARGV[7],
+    'file_id', ARGV[5], 'attempt_kind', ARGV[6], 'priority', ARGV[7],
     'sequence', seq, 'state', 'processing')
   redis.call('ZADD', KEYS[7], seq, ARGV[1])
   redis.call('ZADD', KEYS[8], ARGV[10], ARGV[1])
@@ -59,7 +61,7 @@ redis.call('ZREM', KEYS[5], ARGV[1])
 redis.call('HSET', KEYS[9],
   'processing_attempt_id', ARGV[2], 'queue_ticket_id', ARGV[1],
   'tenant_id', ARGV[3], 'knowledge_id', ARGV[4], 'file_id', ARGV[5],
-  'stage', ARGV[6], 'priority', ARGV[7], 'lease_deadline_ms', ARGV[9])
+  'attempt_kind', ARGV[6], 'priority', ARGV[7], 'lease_deadline_ms', ARGV[9])
 redis.call('EXPIRE', KEYS[2], ARGV[11])
 redis.call('EXPIRE', KEYS[7], ARGV[11])
 redis.call('EXPIRE', KEYS[9], ARGV[11])
@@ -177,7 +179,7 @@ return 1
             ticket.tenant_id,
             ticket.knowledge_id,
             ticket.file_id,
-            ticket.stage.value,
+            ticket.attempt_kind.value,
             ticket.priority.value,
             now_ms + self.HARD_TTL_SECONDS * 1000,
             self.HARD_TTL_SECONDS,
@@ -241,7 +243,7 @@ return 1
                 ticket.tenant_id,
                 ticket.knowledge_id,
                 ticket.file_id,
-                ticket.stage.value,
+                ticket.attempt_kind.value,
                 ticket.priority.value,
                 now_ms,
                 lease_deadline_ms,
@@ -419,6 +421,15 @@ return 1
         redis = await self._async_connection()
         return int(await redis.zcount(self.processing_key(), f"({now_ms}", "+inf") or 0)
 
+    async def waiting_ticket_count(self) -> int:
+        now_ms = self._now_ms()
+        await self._cleanup_expired_tickets(now_ms)
+        redis = await self._async_connection()
+        pipeline = redis.pipeline(transaction=False)
+        for priority in KnowledgeParsePriority:
+            pipeline.zcard(self.waiting_key(priority))
+        return sum(int(count or 0) for count in await pipeline.execute())
+
     def _attempt_cleanup_keys(self, ticket: KnowledgeParseQueueTicket, attempt_id: str) -> list[str]:
         return [
             self.processing_key(),
@@ -449,12 +460,17 @@ return 1
         if not metadata.get("queue_ticket_id"):
             return None
         try:
+            raw_attempt_kind = metadata.get("attempt_kind")
+            if not raw_attempt_kind:
+                raw_attempt_kind = KnowledgeParseAttemptKind.from_legacy_stage(
+                    metadata.get("stage", KnowledgeParseStage.PARSE.value)
+                ).value
             return KnowledgeParseQueueTicket(
                 queue_ticket_id=metadata["queue_ticket_id"],
                 tenant_id=int(metadata["tenant_id"]),
                 knowledge_id=int(metadata["knowledge_id"]),
                 file_id=int(metadata["file_id"]),
-                stage=metadata["stage"],
+                attempt_kind=raw_attempt_kind,
                 priority=metadata["priority"],
                 sequence=int(metadata.get("sequence", 0)),
                 state=metadata["state"],

@@ -50,18 +50,19 @@ def _load_file_title_worker():
 file_title_worker = _load_file_title_worker()
 
 
-def _parse_dispatch_kwargs(file_id: int, preview_cache_key: str) -> dict:
-    return {
-        "stage": file_title_worker.KnowledgeParseStage.PARSE,
-        "file_id": file_id,
-        "preview_cache_key": preview_cache_key,
-        "callback_url": None,
-    }
-
-
 class TestExtractKnowledgeFileTitleCelery:
     @patch("bisheng.knowledge.domain.services.knowledge_parse_dispatch_service.dispatch_knowledge_parse_task_sync")
-    def test_alias_generated_and_persisted(self, mock_dispatch, tmp_path):
+    def test_legacy_title_message_finishes_initial_lifecycle_without_requeue(self, mock_dispatch):
+        mock_lifecycle = MagicMock()
+        file_worker_stub = ModuleType("bisheng.worker.knowledge.file_worker")
+        file_worker_stub.run_initial_knowledge_parse_lifecycle = mock_lifecycle
+        with patch.dict(sys.modules, {"bisheng.worker.knowledge.file_worker": file_worker_stub}):
+            file_title_worker.extract_knowledge_file_title_celery(10, "preview-key", "callback")
+
+        mock_lifecycle.assert_called_once_with(10, "preview-key", "callback")
+        mock_dispatch.assert_not_called()
+
+    def test_alias_generated_and_persisted(self, tmp_path):
         db_file = SimpleNamespace(
             id=1,
             knowledge_id=1,
@@ -98,15 +99,13 @@ class TestExtractKnowledgeFileTitleCelery:
             ),
             patch.object(file_title_worker.KnowledgeFileDao, "update") as mock_update,
         ):
-            file_title_worker.extract_knowledge_file_title_celery(1, "preview-key")
+            file_title_worker.extract_and_generate_alias(1)
 
         assert db_file.file_name == "old_name.pdf"
         assert db_file.alias_name == "AI Generated Alias.pdf"
         mock_update.assert_called_once_with(db_file)
-        mock_dispatch.assert_called_once_with(**_parse_dispatch_kwargs(1, "preview-key"))
 
-    @patch("bisheng.knowledge.domain.services.knowledge_parse_dispatch_service.dispatch_knowledge_parse_task_sync")
-    def test_no_title_keeps_alias_empty(self, mock_dispatch, tmp_path):
+    def test_no_title_keeps_alias_empty(self, tmp_path):
         db_file = SimpleNamespace(
             id=2,
             knowledge_id=1,
@@ -142,27 +141,24 @@ class TestExtractKnowledgeFileTitleCelery:
             ) as mock_generate_alias,
             patch.object(file_title_worker.KnowledgeFileDao, "update") as mock_update,
         ):
-            file_title_worker.extract_knowledge_file_title_celery(2, "preview-key")
+            file_title_worker.extract_and_generate_alias(2)
 
         assert db_file.file_name == "old_name.txt"
         assert db_file.alias_name is None
         mock_generate_alias.assert_not_called()
         mock_update.assert_not_called()
-        mock_dispatch.assert_called_once_with(**_parse_dispatch_kwargs(2, "preview-key"))
 
-    @patch("bisheng.knowledge.domain.services.knowledge_parse_dispatch_service.dispatch_knowledge_parse_task_sync")
-    def test_file_not_found_still_triggers_parse(self, mock_dispatch):
+    def test_file_not_found_skips_title_extraction(self):
         with patch.object(
             file_title_worker.KnowledgeFileDao,
             "query_by_id_sync",
             return_value=None,
         ):
-            file_title_worker.extract_knowledge_file_title_celery(3, "preview-key")
+            result = file_title_worker.extract_and_generate_alias(3)
 
-        mock_dispatch.assert_called_once_with(**_parse_dispatch_kwargs(3, "preview-key"))
+        assert result is None
 
-    @patch("bisheng.knowledge.domain.services.knowledge_parse_dispatch_service.dispatch_knowledge_parse_task_sync")
-    def test_download_failure_still_triggers_parse(self, mock_dispatch):
+    def test_download_failure_is_best_effort(self):
         db_file = MagicMock()
         db_file.id = 4
         db_file.knowledge_id = 1
@@ -182,6 +178,6 @@ class TestExtractKnowledgeFileTitleCelery:
                 side_effect=RuntimeError("download error"),
             ),
         ):
-            file_title_worker.extract_knowledge_file_title_celery(4, "preview-key")
+            result = file_title_worker.extract_and_generate_alias(4)
 
-        mock_dispatch.assert_called_once_with(**_parse_dispatch_kwargs(4, "preview-key"))
+        assert result is None

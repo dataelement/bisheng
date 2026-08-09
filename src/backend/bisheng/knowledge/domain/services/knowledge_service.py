@@ -1390,7 +1390,7 @@ class KnowledgeService(KnowledgeUtils):
         upload_limit_bytes: int | None = None,
     ) -> list[KnowledgeFile]:
         from bisheng.knowledge.domain.services.knowledge_parse_dispatch_service import (
-            KnowledgeParseStage,
+            KnowledgeParseAttemptKind,
             dispatch_knowledge_parse_task_sync,
         )
 
@@ -1410,7 +1410,7 @@ class KnowledgeService(KnowledgeUtils):
         # Asynchronous processing of file parsing and warehousing, To voters if approvedcache_keyIf data can be obtained, use thecachefor inbound operations
         for index, one in enumerate(process_files):
             dispatch_knowledge_parse_task_sync(
-                stage=KnowledgeParseStage.PARSE,
+                attempt_kind=KnowledgeParseAttemptKind.INITIAL,
                 file_id=one.id,
                 preview_cache_key=preview_cache_keys[index],
                 callback_url=req_data.callback_url,
@@ -1432,7 +1432,7 @@ class KnowledgeService(KnowledgeUtils):
         upload_limit_bytes: int | None = None,
     ) -> list[KnowledgeFile]:
         from bisheng.knowledge.domain.services.knowledge_parse_dispatch_service import (
-            KnowledgeParseStage,
+            KnowledgeParseAttemptKind,
             dispatch_knowledge_parse_task,
         )
 
@@ -1450,7 +1450,7 @@ class KnowledgeService(KnowledgeUtils):
 
         for index, one in enumerate(process_files):
             await dispatch_knowledge_parse_task(
-                stage=KnowledgeParseStage.PARSE,
+                attempt_kind=KnowledgeParseAttemptKind.INITIAL,
                 file_id=one.id,
                 preview_cache_key=preview_cache_keys[index],
                 callback_url=req_data.callback_url,
