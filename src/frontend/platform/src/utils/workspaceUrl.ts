@@ -14,5 +14,8 @@ export function getWorkspaceClientUrl(path = '/') {
         return `${workspaceOrigin}${workspacePath}`;
     }
 
-    return joinUrlPath(__APP_ENV__.BASE_URL || '', workspacePath);
+    // Deliberately not prefixed with the admin app's BASE_URL: the client app is
+    // served at /workspace from the root, outside the admin prefix. Prefixing it
+    // would produce /platform/workspace/... and 404.
+    return workspacePath;
 }

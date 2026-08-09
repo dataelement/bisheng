@@ -11,7 +11,11 @@ import svgr from "vite-plugin-svgr";
  * 开启后一般外层网管匹配【custom】时直接透传转到内层网关
  * 内层网关访问 api或者前端静态资源需要去掉【custom】前缀
  */
-const app_env = { BASE_URL: '' } // /custom
+// Serving the admin app under a prefix keeps every request it makes — pages,
+// assets, locales and API — inside one path, so an embedding system needs a
+// single nginx location instead of proxying /assets, /api and friends at root.
+// The client chat app stays at /workspace and is not affected.
+const app_env = { BASE_URL: '/platform' }
 
 const fileServiceTarget = "http://192.168.106.171:9100";
 
