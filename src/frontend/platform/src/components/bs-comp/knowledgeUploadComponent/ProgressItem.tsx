@@ -94,17 +94,13 @@ export default function ProgressItem({ analysis = false, knowledgeId = '', item,
 
     const queueStatus = useMemo(() => {
         if (!analysis || item.progress !== ProgressStatus.Await || !item.queuePosition) return null
-        const stage = item.queuePosition.stage
-            ? t(`parseQueueStage.${item.queuePosition.stage}`)
-            : t('parsing')
         if (item.queuePosition.state === 'queued' && item.queuePosition.aheadWaitingCount !== null) {
             return t('parseQueueAhead', {
-                stage,
                 count: item.queuePosition.aheadWaitingCount,
             })
         }
         if (item.queuePosition.state === 'processing') {
-            return t('parseQueueProcessing', { stage })
+            return t('parseQueueProcessing')
         }
         return t('parseQueueUnavailable')
     }, [analysis, item.progress, item.queuePosition, t])
@@ -131,9 +127,6 @@ export default function ProgressItem({ analysis = false, knowledgeId = '', item,
                     {queueStatus && (
                         <span className="block truncate pr-4 text-xs text-muted-foreground">
                             {queueStatus}
-                            {item.queuePosition.activeCount > 0 && (
-                                <> · {t('parseQueueActiveCount', { count: item.queuePosition.activeCount })}</>
-                            )}
                         </span>
                     )}
                 </div>

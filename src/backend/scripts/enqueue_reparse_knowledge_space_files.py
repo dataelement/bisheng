@@ -62,6 +62,7 @@ from scripts.reparse_knowledge_space_files import (  # noqa: E402
     resolve_eligible_statuses,
 )
 
+
 class EnqueueOutcome(str, Enum):
     ENQUEUED = "enqueued"
     SKIPPED = "skipped"
@@ -189,7 +190,7 @@ def _update_file_sync(db_file: KnowledgeFile) -> KnowledgeFile:
 def publish_retry_task(file_id: int, tenant_id: int, *, task: Any = None) -> str:
     """Publish one retry task while preventing tenant-context overwrite."""
     from bisheng.knowledge.domain.services.knowledge_parse_dispatch_service import (
-        KnowledgeParseStage,
+        KnowledgeParseAttemptKind,
         dispatch_knowledge_parse_task_sync,
     )
 
@@ -201,7 +202,7 @@ def publish_retry_task(file_id: int, tenant_id: int, *, task: Any = None) -> str
     tenant_token = set_current_tenant_id(tenant_id)
     try:
         return dispatch_knowledge_parse_task_sync(
-            stage=KnowledgeParseStage.RETRY,
+            attempt_kind=KnowledgeParseAttemptKind.RETRY,
             file_id=file_id,
             task=task,
         )

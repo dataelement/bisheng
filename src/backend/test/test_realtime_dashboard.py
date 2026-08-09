@@ -356,7 +356,7 @@ async def test_runtime_dimension_filters_are_combined_with_and():
         "space_level",
         "business_domain_code",
     ]
-    assert dumped["filters"][0]["value"] == ["public", "team", "team_ks"]
+    assert dumped["filters"][0]["value"] == ["public", "team"]
 
 
 @pytest.mark.asyncio
@@ -419,7 +419,7 @@ async def test_realtime_component_query_does_not_pass_server_scope(monkeypatch):
     assert captured_kwargs["dimension_filters"] == []
 
 
-def test_file_space_level_options_group_section_libraries_under_team():
+def test_file_space_level_options_keep_team_and_clinic_separate():
     from bisheng.telemetry_search.domain.services.dashboard import (
         DashboardService,
     )
@@ -427,7 +427,8 @@ def test_file_space_level_options_group_section_libraries_under_team():
     assert DashboardService.FILE_SPACE_LEVEL_LABELS == {
         "public": "公共库",
         "department": "部门库",
-        "team": "团队库（含科室库）",
+        "team": "团队库",
+        "team_ks": "科室库",
         "personal": "个人库",
     }
 

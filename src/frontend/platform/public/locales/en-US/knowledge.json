@@ -140,9 +140,9 @@
   "englishPeriodRule": "Split after English period, English sentence segmentation",
   "splitt": "split",
   "documentDataParsingCompleted": "Document data parsing completed",
-  "parseQueueAhead": "{{stage}} queued, about {{count}} waiting tasks ahead",
-  "parseQueueProcessing": "{{stage}} in progress",
-  "parseQueueUnavailable": "Preparing document data",
+  "parseQueueAhead": "Queued, about {{count}} waiting tasks ahead",
+  "parseQueueProcessing": "Parsing",
+  "parseQueueUnavailable": "Queued",
   "parseQueueActiveCount": "{{count}} tasks currently running",
   "parseQueueStage": {
     "title": "Title extraction",

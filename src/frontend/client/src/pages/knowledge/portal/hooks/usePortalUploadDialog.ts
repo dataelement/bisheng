@@ -31,6 +31,7 @@ import {
     type UploadSizeLimits,
 } from "../../knowledgeUtils";
 import { DEFAULT_PORTAL_FILE_CATEGORY_GROUPS } from "../constants";
+import { resolvePortalUploadSuccessMessage } from "../portalUploadQueueToast";
 import type {
     PortalFileCategoryGroupOption,
     PortalFileSubcategoryOption,
@@ -542,6 +543,9 @@ export function usePortalUploadDialog({
         }
         setDuplicateFileCategoryCode(undefined);
         setDuplicateUploadMetadataPayload({});
+        const uploadSuccessMessage = activeSpace
+            ? resolvePortalUploadSuccessMessage(activeSpace.id, visibleRegisteredFiles)
+            : Promise.resolve("上传成功");
         await reloadFiles();
         setUploadDialogOpen(false);
         setUploadStep("select");
@@ -555,8 +559,11 @@ export function usePortalUploadDialog({
         setBusinessDomainCode("");
         setSelectedUploadTagValues([]);
         onUploaded?.();
-        showToast({ message: "上传成功", severity: NotificationSeverity.SUCCESS });
-    }, [getVisibleRegisteredFiles, onUploaded, reloadFiles, showToast]);
+        showToast({
+            message: await uploadSuccessMessage,
+            severity: NotificationSeverity.SUCCESS,
+        });
+    }, [activeSpace, getVisibleRegisteredFiles, onUploaded, reloadFiles, showToast]);
 
     const resolveManualParentId = useCallback(() => {
         if (uploadFolderSelection.mode !== "manual") return null;

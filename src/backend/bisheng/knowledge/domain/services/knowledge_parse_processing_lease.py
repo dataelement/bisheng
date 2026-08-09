@@ -15,8 +15,8 @@ from bisheng.knowledge.domain.repositories.implementations.knowledge_parse_queue
     KnowledgeParseQueueRedisRepository,
 )
 from bisheng.knowledge.domain.schemas.knowledge_parse_queue_schema import (
+    KnowledgeParseAttemptKind,
     KnowledgeParseQueueTicket,
-    KnowledgeParseStage,
     KnowledgeParseTicketState,
 )
 
@@ -108,7 +108,7 @@ class KnowledgeParseProcessingLease:
 
 def _ticket_from_current_delivery(
     *,
-    stage: KnowledgeParseStage,
+    attempt_kind: KnowledgeParseAttemptKind,
     file_id: int,
 ) -> KnowledgeParseQueueTicket | None:
     request = getattr(current_task, "request", None)
@@ -125,7 +125,7 @@ def _ticket_from_current_delivery(
             tenant_id=int(headers["tenant_id"]),
             knowledge_id=int(headers["knowledge_id"]),
             file_id=file_id,
-            stage=stage,
+            attempt_kind=attempt_kind,
             priority=KnowledgeParsePriority.parse(
                 headers.get("knowledge_parse_priority"),
                 default=KnowledgeParsePriority.MEDIUM,
@@ -134,17 +134,17 @@ def _ticket_from_current_delivery(
         )
     except (KeyError, TypeError, ValueError):
         logger.warning(
-            "knowledge parse delivery has incomplete queue metadata ticket_id=%s file_id=%s stage=%s",
+            "knowledge parse delivery has incomplete queue metadata ticket_id=%s file_id=%s attempt_kind=%s",
             ticket_id,
             file_id,
-            stage.value,
+            attempt_kind.value,
         )
         return None
 
 
 @contextmanager
-def processing_lease_for_current_delivery(*, stage: KnowledgeParseStage, file_id: int):
-    ticket = _ticket_from_current_delivery(stage=stage, file_id=file_id)
+def processing_lease_for_current_delivery(*, attempt_kind: KnowledgeParseAttemptKind, file_id: int):
+    ticket = _ticket_from_current_delivery(attempt_kind=attempt_kind, file_id=file_id)
     if ticket is None:
         yield
         return
@@ -156,11 +156,24 @@ def processing_lease_for_current_delivery(*, stage: KnowledgeParseStage, file_id
         lease.close()
 
 
-def track_knowledge_parse_delivery(stage: KnowledgeParseStage) -> Callable:
+def current_knowledge_parse_attempt_kind() -> KnowledgeParseAttemptKind | None:
+    request = getattr(current_task, "request", None)
+    headers = getattr(request, "headers", None) or {}
+    if not isinstance(headers, Mapping):
+        return None
+    raw_value = headers.get("knowledge_parse_attempt_kind")
+    try:
+        return KnowledgeParseAttemptKind(raw_value) if raw_value else None
+    except ValueError:
+        logger.warning("invalid knowledge parse attempt kind header value=%s", raw_value)
+        return None
+
+
+def track_knowledge_parse_delivery(attempt_kind: KnowledgeParseAttemptKind) -> Callable:
     def decorator(func: Callable) -> Callable:
         @functools.wraps(func)
         def wrapped(file_id: int, *args: Any, **kwargs: Any):
-            with processing_lease_for_current_delivery(stage=stage, file_id=file_id):
+            with processing_lease_for_current_delivery(attempt_kind=attempt_kind, file_id=file_id):
                 return func(file_id, *args, **kwargs)
 
         return wrapped

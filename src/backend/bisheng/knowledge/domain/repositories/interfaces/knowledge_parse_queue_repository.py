@@ -29,3 +29,6 @@ class KnowledgeParseQueueRepository(ABC):
 
     @abstractmethod
     async def active_attempt_count(self) -> int: ...
+
+    @abstractmethod
+    async def waiting_ticket_count(self) -> int: ...

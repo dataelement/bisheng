@@ -662,11 +662,11 @@ describe("getKnowledgeParseQueuePositionsApi", () => {
           {
             file_id: 501,
             state: "queued",
-            stage: "parse",
             ahead_waiting_count: 7,
           },
         ],
         active_count: 3,
+        waiting_count: 20,
         approximate: true,
         as_of: "2026-08-06T10:00:00Z",
       },
@@ -686,14 +686,30 @@ describe("getKnowledgeParseQueuePositionsApi", () => {
         {
           fileId: 501,
           state: "queued",
-          stage: "parse",
           aheadWaitingCount: 7,
         },
       ],
       activeCount: 3,
+      waitingCount: 20,
       approximate: true,
       asOf: "2026-08-06T10:00:00Z",
     });
+  });
+
+  it("falls back to an unavailable waiting count for an older backend response", async () => {
+    mockGet.mockResolvedValue({
+      status_code: 200,
+      data: {
+        items: [],
+        active_count: 0,
+        approximate: true,
+        as_of: "2026-08-06T10:00:00Z",
+      },
+    });
+
+    const result = await getKnowledgeParseQueuePositionsApi(10, [501]);
+
+    expect(result.waitingCount).toBeNull();
   });
 });
 

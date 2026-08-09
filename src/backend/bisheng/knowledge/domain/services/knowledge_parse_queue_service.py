@@ -79,6 +79,7 @@ class KnowledgeParseQueueService:
                 file_ids=file_ids,
             )
             active_count = await self.queue_repository.active_attempt_count()
+            waiting_count = await self.queue_repository.waiting_ticket_count()
         except Exception:
             logger.exception(
                 "knowledge parse queue position lookup failed tenant_id=%s knowledge_id=%s file_ids=%s",
@@ -89,6 +90,7 @@ class KnowledgeParseQueueService:
             return KnowledgeParseQueuePositionsResponse(
                 items=[self._fallback_item(file) for file in files],
                 active_count=0,
+                waiting_count=None,
                 as_of=as_of,
             )
 
@@ -108,7 +110,6 @@ class KnowledgeParseQueueService:
                     KnowledgeParseQueuePositionItem(
                         file_id=int(file.id),
                         state=KnowledgeParsePositionState.PROCESSING,
-                        stage=processing[0].stage,
                     )
                 )
                 continue
@@ -126,7 +127,6 @@ class KnowledgeParseQueueService:
                     KnowledgeParseQueuePositionItem(
                         file_id=int(file.id),
                         state=KnowledgeParsePositionState.QUEUED,
-                        stage=queued[0].stage,
                         ahead_waiting_count=queued[0].ahead_waiting_count,
                     )
                 )
@@ -136,6 +136,7 @@ class KnowledgeParseQueueService:
         return KnowledgeParseQueuePositionsResponse(
             items=items,
             active_count=active_count,
+            waiting_count=waiting_count,
             as_of=as_of,
         )
 

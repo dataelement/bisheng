@@ -179,7 +179,7 @@ def test_publish_retry_task_uses_unified_dispatch_and_isolates_tenant_headers(mo
     assert calls == [
         (
             {
-                "stage": "retry",
+                "attempt_kind": "retry",
                 "file_id": 100,
                 "task": task,
             },
@@ -187,7 +187,7 @@ def test_publish_retry_task_uses_unified_dispatch_and_isolates_tenant_headers(mo
         ),
         (
             {
-                "stage": "retry",
+                "attempt_kind": "retry",
                 "file_id": 200,
                 "task": task,
             },

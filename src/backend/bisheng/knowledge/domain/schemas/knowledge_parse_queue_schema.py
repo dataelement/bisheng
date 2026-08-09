@@ -9,9 +9,21 @@ from bisheng.common.constants.enums.knowledge_parse_priority import KnowledgePar
 
 
 class KnowledgeParseStage(str, Enum):
+    """Legacy queue-stage values kept only for rolling-message compatibility."""
+
     TITLE = "title"
     PARSE = "parse"
     RETRY = "retry"
+
+
+class KnowledgeParseAttemptKind(str, Enum):
+    INITIAL = "initial"
+    RETRY = "retry"
+
+    @classmethod
+    def from_legacy_stage(cls, stage: KnowledgeParseStage | str) -> KnowledgeParseAttemptKind:
+        parsed_stage = KnowledgeParseStage(stage)
+        return cls.RETRY if parsed_stage is KnowledgeParseStage.RETRY else cls.INITIAL
 
 
 class KnowledgeParseTicketState(str, Enum):
@@ -32,7 +44,7 @@ class KnowledgeParseQueueTicket(BaseModel):
     tenant_id: int
     knowledge_id: int
     file_id: int
-    stage: KnowledgeParseStage
+    attempt_kind: KnowledgeParseAttemptKind
     priority: KnowledgeParsePriority
     sequence: int = 0
     state: KnowledgeParseTicketState = KnowledgeParseTicketState.PUBLISHING
@@ -46,13 +58,14 @@ class KnowledgeParseTicketSnapshot(KnowledgeParseQueueTicket):
 class KnowledgeParseQueuePositionItem(BaseModel):
     file_id: int
     state: KnowledgeParsePositionState
-    stage: KnowledgeParseStage | None = None
+    stage: KnowledgeParseStage | None = Field(default=None, deprecated=True)
     ahead_waiting_count: int | None = Field(default=None, ge=0)
 
 
 class KnowledgeParseQueuePositionsResponse(BaseModel):
     items: list[KnowledgeParseQueuePositionItem]
     active_count: int = Field(ge=0)
+    waiting_count: int | None = Field(default=None, ge=0)
     approximate: bool = True
     as_of: datetime
 

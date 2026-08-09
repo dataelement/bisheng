@@ -55,22 +55,6 @@ class DataQueryService(BaseModel):
         description="runtime dimension filters from linked filter components",
     )
 
-    def _expand_dimension_filter_values(
-        self,
-        field: str,
-        values: List[Any],
-    ) -> List[Any]:
-        """Apply canonical dashboard groupings while retaining legacy facts."""
-        expanded = list(values)
-        if (
-            self.dataset_code == "mid_knowledge_space_content_stat"
-            and field == "space_level"
-            and any(str(value) == "team" for value in values)
-            and "team_ks" not in expanded
-        ):
-            expanded.append("team_ks")
-        return expanded
-
     async def query_telemetry_data(self) -> DataQueryResult:
         res = DataQueryResult()
         if not self.data_config.metrics:
@@ -535,10 +519,7 @@ class DataQueryService(BaseModel):
             runtime_filters.append(
                 TermsOp(
                     field=dimension_config.field,
-                    value=self._expand_dimension_filter_values(
-                        dimension_config.field,
-                        runtime_filter.values,
-                    ),
+                    value=runtime_filter.values,
                 )
             )
         if runtime_filters:

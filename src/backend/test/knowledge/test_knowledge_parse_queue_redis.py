@@ -28,9 +28,9 @@ from bisheng.knowledge.domain.repositories.implementations.knowledge_parse_queue
     KnowledgeParseQueueRedisRepository,
 )
 from bisheng.knowledge.domain.schemas.knowledge_parse_queue_schema import (
+    KnowledgeParseAttemptKind,
     KnowledgeParsePositionState,
     KnowledgeParseQueueTicket,
-    KnowledgeParseStage,
     KnowledgeParseTicketState,
 )
 from bisheng.knowledge.domain.services.knowledge_parse_queue_service import KnowledgeParseQueueService
@@ -52,7 +52,7 @@ def _ticket(ticket_id: str, file_id: int, priority: KnowledgeParsePriority) -> K
         tenant_id=1,
         knowledge_id=10,
         file_id=file_id,
-        stage=KnowledgeParseStage.PARSE,
+        attempt_kind=KnowledgeParseAttemptKind.INITIAL,
         priority=priority,
     )
 
@@ -76,6 +76,7 @@ async def test_three_level_ahead_formula_and_processing_exclusion(queue_reposito
     assert snapshots[2][0].ahead_waiting_count == 1
     assert snapshots[3][0].ahead_waiting_count == 2
     assert snapshots[4][0].ahead_waiting_count == 3
+    assert await queue_repository.waiting_ticket_count() == 4
 
     assert queue_repository.begin_attempt_sync(ticket=high, attempt_id="attempt-high")
     snapshots = await queue_repository.get_file_ticket_snapshots(
@@ -86,6 +87,7 @@ async def test_three_level_ahead_formula_and_processing_exclusion(queue_reposito
     assert snapshots[2][0].ahead_waiting_count == 0
     assert snapshots[3][0].ahead_waiting_count == 1
     assert await queue_repository.active_attempt_count() == 1
+    assert await queue_repository.waiting_ticket_count() == 3
 
 
 @pytest.mark.asyncio
@@ -176,15 +178,18 @@ async def test_position_service_prefers_processing_then_best_queued_and_degrades
     queued = await service.get_positions(tenant_id=1, knowledge_id=10, files=[file])
     assert queued.items[0].state is KnowledgeParsePositionState.QUEUED
     assert queued.items[0].ahead_waiting_count == 0
+    assert queued.waiting_count == 2
 
     queue_repository.begin_attempt_sync(ticket=low, attempt_id="position-attempt")
     processing = await service.get_positions(tenant_id=1, knowledge_id=10, files=[file])
     assert processing.items[0].state is KnowledgeParsePositionState.PROCESSING
     assert processing.active_count == 1
+    assert processing.waiting_count == 1
 
     broken_repository = SimpleNamespace(
         get_file_ticket_snapshots=AsyncFail(),
         active_attempt_count=AsyncFail(),
+        waiting_ticket_count=AsyncFail(),
     )
     unavailable = await KnowledgeParseQueueService(broken_repository).get_positions(
         tenant_id=1,
@@ -192,6 +197,7 @@ async def test_position_service_prefers_processing_then_best_queued_and_degrades
         files=[file],
     )
     assert unavailable.items[0].state is KnowledgeParsePositionState.UNAVAILABLE
+    assert unavailable.waiting_count is None
 
     file.status = KnowledgeFileStatus.SUCCESS.value
     not_queued = await KnowledgeParseQueueService(broken_repository).get_positions(
