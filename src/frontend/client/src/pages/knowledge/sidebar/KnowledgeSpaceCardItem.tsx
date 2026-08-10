@@ -29,7 +29,6 @@ interface KnowledgeSpaceCardItemProps {
     onLeave: (id: string) => void;
     onPin: (id: string, pinned: boolean) => void;
     onSettings?: (space: KnowledgeSpace) => void;
-    onManageMembers?: (space: KnowledgeSpace) => void;
     /** F040: lazily resolve this space's action permissions when its menu opens. */
     onMenuOpen?: () => void;
     canEditSpace?: boolean;
@@ -51,7 +50,6 @@ export default function KnowledgeSpaceCardItem({
     onLeave,
     onPin,
     onSettings,
-    onManageMembers,
     onMenuOpen,
     canEditSpace = false,
     canDeleteSpace = false,
@@ -97,7 +95,7 @@ export default function KnowledgeSpaceCardItem({
                 </DropdownMenuTrigger>
 
                 <SidebarListMoreMenuContent onClick={(e) => e.stopPropagation()}>
-                    {canEditSpace && (
+                    {(canEditSpace || canManageMembers) && (
                         <DropdownMenuItem
                             className={sidebarListMoreMenuItemClassName}
                             onClick={() => onSettings?.(space)}
@@ -105,17 +103,6 @@ export default function KnowledgeSpaceCardItem({
                             <Outlined.Edit className={sidebarListMoreMenuIconClassName} />
                             <span className={sidebarListMoreMenuLabelClassName}>
                                 {localize("com_knowledge.space_settings")}
-                            </span>
-                        </DropdownMenuItem>
-                    )}
-                    {canManageMembers && (
-                        <DropdownMenuItem
-                            className={sidebarListMoreMenuItemClassName}
-                            onClick={() => onManageMembers?.(space)}
-                        >
-                            <Outlined.PeopleSafe className={sidebarListMoreMenuIconClassName} />
-                            <span className={sidebarListMoreMenuLabelClassName}>
-                                {localize("com_knowledge.member_management")}
                             </span>
                         </DropdownMenuItem>
                     )}

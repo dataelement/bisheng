@@ -411,18 +411,22 @@ class TestRelationModelBindings:
         }]
 
         with patch(
-            'bisheng.permission.api.endpoints.resource_permission.ConfigDao.aget_config_by_key',
+            'bisheng.permission.domain.services.relation_model_store.ConfigDao.aget_config_version',
+            new_callable=AsyncMock,
+            return_value=None,
+        ), patch(
+            'bisheng.permission.domain.services.relation_model_store.ConfigDao.aget_config_by_key',
             new_callable=AsyncMock,
             return_value=SimpleNamespace(value='[]'),
         ), patch(
-            'bisheng.permission.api.endpoints.resource_permission.json.loads',
+            'bisheng.permission.domain.services.relation_model_store.json.loads',
             return_value=raw_bindings,
         ), patch(
             'bisheng.knowledge.domain.models.knowledge.KnowledgeDao.aget_list_by_ids',
             new_callable=AsyncMock,
             return_value=[SimpleNamespace(id=12, type=0)],
         ), patch(
-            'bisheng.permission.api.endpoints.resource_permission._save_bindings',
+            'bisheng.permission.domain.services.relation_model_store.save_bindings',
             new_callable=AsyncMock,
         ) as mock_save_bindings:
             result = await _get_bindings()
@@ -448,18 +452,22 @@ class TestRelationModelBindings:
         }]
 
         with patch(
-            'bisheng.permission.api.endpoints.resource_permission.ConfigDao.aget_config_by_key',
+            'bisheng.permission.domain.services.relation_model_store.ConfigDao.aget_config_version',
+            new_callable=AsyncMock,
+            return_value=None,
+        ), patch(
+            'bisheng.permission.domain.services.relation_model_store.ConfigDao.aget_config_by_key',
             new_callable=AsyncMock,
             return_value=SimpleNamespace(value='[]'),
         ), patch(
-            'bisheng.permission.api.endpoints.resource_permission.json.loads',
+            'bisheng.permission.domain.services.relation_model_store.json.loads',
             return_value=raw_bindings,
         ), patch(
             'bisheng.knowledge.domain.models.knowledge.KnowledgeDao.aget_list_by_ids',
             new_callable=AsyncMock,
             return_value=[SimpleNamespace(id=22, type=3)],
         ), patch(
-            'bisheng.permission.api.endpoints.resource_permission._save_bindings',
+            'bisheng.permission.domain.services.relation_model_store.save_bindings',
             new_callable=AsyncMock,
         ) as mock_save_bindings:
             result = await _get_bindings()

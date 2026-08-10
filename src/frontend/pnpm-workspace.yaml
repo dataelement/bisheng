@@ -19,6 +19,7 @@ catalog:
   class-variance-authority: ^0.6.0
   clsx: ^1.2.1
   tailwind-merge: ^1.14.0
+  qrcode.react: ^4.2.0
   tailwindcss: ^3.4.1
   postcss: ^8.4.31
   autoprefixer: ^10.4.20

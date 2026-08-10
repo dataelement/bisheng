@@ -8,11 +8,6 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.core.openfga.exceptions import FGAClientError
 from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
 from bisheng.database.models.user_group import UserGroupDao
-from bisheng.permission.api.endpoints.resource_permission import (
-    _get_bindings,
-    _get_relation_models,
-    _normalize_model_dict,
-)
 from bisheng.permission.domain.application_permission_template import (
     default_permission_ids_for_relation as default_application_permissions,
 )
@@ -26,6 +21,15 @@ from bisheng.permission.domain.knowledge_space_permission_template import (
     default_permission_ids_for_relation as default_knowledge_space_permissions,
 )
 from bisheng.permission.domain.services.permission_service import PermissionService
+from bisheng.permission.domain.services.relation_model_store import (
+    get_bindings as _get_bindings,
+)
+from bisheng.permission.domain.services.relation_model_store import (
+    get_relation_models as _get_relation_models,
+)
+from bisheng.permission.domain.services.relation_model_store import (
+    normalize_model_dict as _normalize_model_dict,
+)
 from bisheng.permission.domain.tool_permission_template import (
     default_permission_ids_for_relation as default_tool_permissions,
 )

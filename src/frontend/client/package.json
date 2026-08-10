@@ -97,7 +97,7 @@
     "openapi-types": "^12.1.3",
     "p-limit": "^5.0.0",
     "pdfjs-dist": "3.10.111",
-    "qrcode.react": "^4.2.0",
+    "qrcode.react": "catalog:",
     "rc-input-number": "^7.4.2",
     "react": "^18.2.0",
     "react-activation": "^0.13.4",

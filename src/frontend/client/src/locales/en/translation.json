@@ -1881,6 +1881,29 @@
     "channel_permission_management": "Member Management",
     "organization_grant_unsubscribe_blocked": "This channel was granted to you through a department/user group and cannot be unsubscribed from yet."
   },
+  "com_unified_permission": {
+    "access_and_share": "Access and sharing",
+    "add_authorization": "Add permission",
+    "advanced_settings": "Advanced settings",
+    "basic_settings": "Basic settings",
+    "cancel": "Cancel",
+    "create": "Create",
+    "enter_channel": "Enter channel",
+    "enter_space": "Enter space",
+    "join_public": "Anyone can join",
+    "join_review": "Approval required",
+    "page_channel_create": "Create channel",
+    "page_channel_settings": "Channel settings",
+    "page_knowledge_create": "Create knowledge space",
+    "page_knowledge_settings": "Space settings",
+    "permission_section": "Member permissions",
+    "private": "Private",
+    "publish_to_square": "Publish to square",
+    "resource_created_permission_failed": "The resource was created, but some permissions were not applied",
+    "retry_permission": "Retry permissions",
+    "save": "Save",
+    "shared": "Shared"
+  },
   "com_permission": {
     "action_revoke": "Revoke",
     "action_submit": "Submit",
@@ -2016,6 +2039,15 @@
   "com_approval_task_badge_rejected": "Rejected",
   "com_approval_section_business_content": "Business Content",
   "com_approval_search_placeholder": "Search applicant, scenario or file",
+  "com_share": {
+    "gate_eyebrow": "Shared link",
+    "gate_title": "Sign in to view this",
+    "gate_desc": "Taking you to sign in. You'll come back to this shared page.",
+    "gate_action": "Sign in and view",
+    "gate_blocked_title": "Still can't view this shared page",
+    "gate_blocked_desc": "Check whether the current account has access, or sign in again.",
+    "gate_blocked_action": "Sign in again"
+  },
   "workstation": {
     "messageExport": {
       "entry": "Export",
@@ -2035,5 +2067,22 @@
       "renderFailed": "Failed to generate file, please try again"
     }
   },
-  "com_linsight_legacy_sop": "Legacy SOP document (pre-migration session)"
+  "com_linsight_legacy_sop": "Legacy SOP document (pre-migration session)",
+  "com_error_page": {
+    "title": "Oops, something went wrong",
+    "description": "Don't worry — your data is safe. The quickest way to get help: screenshot this page and send it to support or your engineering contact.",
+    "copy_before": "You can also ",
+    "copy_link": "copy the error details",
+    "copy_after": ", or",
+    "copied": "Copied",
+    "refresh": "Refresh and retry",
+    "download": "Download error log",
+    "screenshot_hint": "Please include this area in your screenshot",
+    "trace_id": "Trace ID",
+    "error_code": "Error code",
+    "time": "Time",
+    "version": "Version",
+    "route": "Page",
+    "user": "User"
+  }
 }

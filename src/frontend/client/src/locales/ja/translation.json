@@ -1804,6 +1804,29 @@
     "channel_permission_management": "メンバー管理",
     "organization_grant_unsubscribe_blocked": "このチャンネルは部署/ユーザーグループ経由で付与されているため、現在購読解除できません。"
   },
+  "com_unified_permission": {
+    "access_and_share": "アクセスと共有",
+    "add_authorization": "権限を追加",
+    "advanced_settings": "詳細設定",
+    "basic_settings": "基本設定",
+    "cancel": "キャンセル",
+    "create": "作成",
+    "enter_channel": "チャンネルを開く",
+    "enter_space": "スペースを開く",
+    "join_public": "自由に参加",
+    "join_review": "参加には承認が必要",
+    "page_channel_create": "チャンネルを作成",
+    "page_channel_settings": "チャンネル設定",
+    "page_knowledge_create": "ナレッジスペースを作成",
+    "page_knowledge_settings": "スペース設定",
+    "permission_section": "メンバー権限",
+    "private": "プライベート",
+    "publish_to_square": "広場に公開",
+    "resource_created_permission_failed": "リソースは作成されましたが、一部の権限を設定できませんでした",
+    "retry_permission": "権限設定を再試行",
+    "save": "保存",
+    "shared": "共有"
+  },
   "com_permission": {
     "action_revoke": "解除",
     "action_submit": "送信",
@@ -1939,6 +1962,15 @@
   "com_approval_task_badge_rejected": "却下",
   "com_approval_section_business_content": "業務内容",
   "com_approval_search_placeholder": "申請者・シナリオ・ファイルを検索",
+  "com_share": {
+    "gate_eyebrow": "共有リンク",
+    "gate_title": "ログインすると表示されます",
+    "gate_desc": "ログイン画面へ移動します。ログイン後この共有ページに戻ります。",
+    "gate_action": "ログインして表示",
+    "gate_blocked_title": "ログインしてもこの共有を表示できません",
+    "gate_blocked_desc": "現在のアカウントに権限があるかを確認するか、再度ログインしてください。",
+    "gate_blocked_action": "再ログイン"
+  },
   "workstation": {
     "messageExport": {
       "entry": "エクスポート",
@@ -1958,5 +1990,22 @@
       "renderFailed": "ファイル生成に失敗しました。再度お試しください"
     }
   },
-  "com_linsight_legacy_sop": "旧バージョンの SOP ドキュメント"
+  "com_linsight_legacy_sop": "旧バージョンの SOP ドキュメント",
+  "com_error_page": {
+    "title": "おっと、問題が発生しました",
+    "description": "ご安心ください。データは安全です。最も早い解決方法：この画面をスクリーンショットして、サポートまたは開発担当者にお送りください。",
+    "copy_before": "または ",
+    "copy_link": "エラー情報をコピー",
+    "copy_after": " するか、",
+    "copied": "コピーしました",
+    "refresh": "再読み込み",
+    "download": "エラーログをダウンロード",
+    "screenshot_hint": "スクリーンショットにはこの領域を含めてください",
+    "trace_id": "トレースID",
+    "error_code": "エラーコード",
+    "time": "日時",
+    "version": "バージョン",
+    "route": "ページ",
+    "user": "ユーザー"
+  }
 }

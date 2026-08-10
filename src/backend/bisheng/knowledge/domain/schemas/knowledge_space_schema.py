@@ -6,6 +6,18 @@ from pydantic import BaseModel, ConfigDict, Field
 from bisheng.common.models.space_channel_member import UserRoleEnum
 from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum, KnowledgeBase
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileRead
+from bisheng.permission.domain.schemas.permission_schema import AuthorizeGrantItem
+
+
+class InitialPermissionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    grants: list[AuthorizeGrantItem] = Field(default_factory=list)
+
+
+class InitialPermissionResult(BaseModel):
+    status: Literal["success", "failed"]
+    error_code: int | None = None
 
 
 class SpaceSubscriptionStatusEnum(str, Enum):
@@ -30,6 +42,10 @@ class KnowledgeSpaceCreateReq(BaseModel):
             "auto_tag_library_id. When provided, a private tag library is "
             "upserted server-side."
         ),
+    )
+    initial_permissions: InitialPermissionRequest | None = Field(
+        default=None,
+        description="Optional grants applied after the knowledge space is created",
     )
 
 

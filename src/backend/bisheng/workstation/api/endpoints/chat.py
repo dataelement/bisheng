@@ -6,6 +6,7 @@ from fastapi import APIRouter, Body, Request
 from bisheng.api.v1.schema.chat_schema import APIChatCompletion
 from bisheng.api.v1.schemas import resp_200
 from bisheng.common.errcode.http_error import UnAuthorizedError
+from bisheng.core.context.tenant import bypass_tenant_filter_if
 from bisheng.database.models.message import ChatMessageDao
 from bisheng.database.models.session import MessageSessionDao
 from bisheng.workstation.domain.schemas import WorkstationMessage
@@ -48,7 +49,8 @@ async def get_chat_history(
     login_user=LoginUserDep,
     share_link: Union[ShareLink, None] = ShareLinkDep,
 ):
-    messages = await ChatMessageDao.aget_messages_by_chat_id(chat_id=conversationId, limit=1000)
+    with bypass_tenant_filter_if(share_link is not None):
+        messages = await ChatMessageDao.aget_messages_by_chat_id(chat_id=conversationId, limit=1000)
     if not messages:
         return resp_200([])
     if login_user.user_id != messages[0].user_id:
@@ -71,7 +73,8 @@ async def get_agent_chat_history(
       (thinking / web tool_calls extracted from `:::` markers).
     - New Agent-mode messages pass through.
     """
-    messages = await ChatMessageDao.aget_messages_by_chat_id(chat_id=conversationId, limit=1000)
+    with bypass_tenant_filter_if(share_link is not None):
+        messages = await ChatMessageDao.aget_messages_by_chat_id(chat_id=conversationId, limit=1000)
     if not messages:
         return resp_200([])
     if login_user.user_id != messages[0].user_id:

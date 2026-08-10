@@ -1810,6 +1810,29 @@
     "channel_permission_management": "成员管理",
     "organization_grant_unsubscribe_blocked": "本频道通过部门/用户组授权给你，暂无法取消订阅"
   },
+  "com_unified_permission": {
+    "access_and_share": "访问与分享",
+    "add_authorization": "添加授权",
+    "advanced_settings": "高级设置",
+    "basic_settings": "基础设置",
+    "cancel": "取消",
+    "create": "创建",
+    "enter_channel": "进入频道",
+    "enter_space": "进入空间",
+    "join_public": "公开加入",
+    "join_review": "加入需审核",
+    "page_channel_create": "新建频道",
+    "page_channel_settings": "频道设置",
+    "page_knowledge_create": "新建知识空间",
+    "page_knowledge_settings": "空间设置",
+    "permission_section": "成员权限",
+    "private": "私密",
+    "publish_to_square": "发布到广场",
+    "resource_created_permission_failed": "资源已创建，但权限未完全设置",
+    "retry_permission": "重试权限设置",
+    "save": "保存",
+    "shared": "分享"
+  },
   "com_permission": {
     "action_revoke": "撤销",
     "action_submit": "提交",
@@ -1945,6 +1968,15 @@
   "com_approval_task_badge_rejected": "已拒绝",
   "com_approval_section_business_content": "业务内容",
   "com_approval_search_placeholder": "搜索申请人、场景或文件",
+  "com_share": {
+    "gate_eyebrow": "分享链接",
+    "gate_title": "需要登录后查看",
+    "gate_desc": "正在前往登录页，登录后自动回到这条分享。",
+    "gate_action": "登录并查看",
+    "gate_blocked_title": "登录后仍无法查看这条分享",
+    "gate_blocked_desc": "请确认当前账号是否有权限，或重新登录。",
+    "gate_blocked_action": "重新登录"
+  },
   "workstation": {
     "messageExport": {
       "entry": "导出",
@@ -1964,5 +1996,22 @@
       "renderFailed": "文件生成失败，请稍后重试"
     }
   },
-  "com_linsight_legacy_sop": "历史 SOP 文档（旧版会话）"
+  "com_linsight_legacy_sop": "历史 SOP 文档（旧版会话）",
+  "com_error_page": {
+    "title": "哎呀，系统出了点小状况",
+    "description": "别担心，您的数据是安全的。最快的求助方式：直接截图本页面，发给技术支持或研发同学。",
+    "copy_before": "也可以 ",
+    "copy_link": "点击复制错误信息",
+    "copy_after": "，或",
+    "copied": "已复制",
+    "refresh": "刷新重试",
+    "download": "下载错误日志",
+    "screenshot_hint": "截图时请包含此区域",
+    "trace_id": "追踪ID",
+    "error_code": "错误码",
+    "time": "时间",
+    "version": "版本",
+    "route": "页面",
+    "user": "用户"
+  }
 }

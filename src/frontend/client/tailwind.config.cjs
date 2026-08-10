@@ -109,6 +109,13 @@ module.exports = {
           '0%': { backgroundPosition: '200% 0' },
           '100%': { backgroundPosition: '0% 0' },
         },
+        // Share login handoff: a dot runs the track and comes BACK, because the
+        // login trip is a round trip (we return the user to the shared page).
+        // Paired with animation-direction: alternate — hence 0%→100% only.
+        'return-trace': {
+          '0%': { left: '0%' },
+          '100%': { left: '100%' },
+        },
       },
       animation: {
         'fade-in': 'fadeIn 0.5s ease-out forwards',
@@ -122,6 +129,8 @@ module.exports = {
         // Slower, calmer handoff; staggered opacity keyframes do the no-overlap work.
         'narration-in': 'narration-in 0.5s ease-out',
         'narration-out': 'narration-out 0.5s ease-in forwards',
+        // `alternate` is what encodes "round trip" — do not switch to a plain loop.
+        'return-trace': 'return-trace 1.6s ease-in-out infinite alternate',
       },
       colors: {
         gray: {

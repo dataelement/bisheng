@@ -112,7 +112,7 @@ interface KnowledgeSpaceContentProps {
     onOpenSystemMenu?: () => void;
     onToggleSpaceList?: () => void;
     spaceListOpen?: boolean;
-    /** Edit current space (opens the space settings drawer owned by the page); permission-gated by the menu. */
+    /** Open the unified space settings page; permission-gated by the menu. */
     onEditSpace?: () => void;
     /** Delete current space (navigates back to the list); permission-gated by the menu. */
     onDeleteSpace?: () => void;
@@ -328,13 +328,13 @@ export function KnowledgeSpaceContent({
         "delete_space",
     );
     // Permission management — mirrors the desktop sidebar (KnowledgeSpaceItem) gating.
-    const canManageMembers = isAdmin || hasKnowledgeSpacePermission(
+    const canManageMembers = hasKnowledgeSpacePermission(
         spaceActionPermissions,
         space.id,
         "manage_space_relation",
     );
     // Edit space — mirrors the desktop sidebar (KnowledgeSpaceItem) gating.
-    const canEditSpace = isAdmin || hasKnowledgeSpacePermission(
+    const canEditSpace = hasKnowledgeSpacePermission(
         spaceActionPermissions,
         space.id,
         "edit_space",
@@ -388,7 +388,7 @@ export function KnowledgeSpaceContent({
     const [permTarget, setPermTarget] = useState<{
         id: string;
         name: string;
-        type: "folder" | "knowledge_file" | "knowledge_space";
+        type: "folder" | "knowledge_file";
     } | null>(null);
     const [permissionEntryIds, setPermissionEntryIds] = useState<Set<string>>(new Set());
     const [renameEntryIds, setRenameEntryIds] = useState<Set<string>>(new Set());
@@ -1244,7 +1244,7 @@ export function KnowledgeSpaceContent({
                             </DropdownMenu>
                             {/* Hide the whole "..." trigger when every item is permission-gated
                                 away — an empty menu is confusing on mobile. */}
-                            {(canUploadFile || canCreateFolder || showShareInMenu || canManageMembers || canDeleteSpace) && (
+                            {(canUploadFile || canCreateFolder || showShareInMenu || canEditSpace || canManageMembers || canDeleteSpace) && (
                             <DropdownMenu onOpenChange={(open) => { if (open) ensureSpacePermissions(space.id); }}>
                                 <DropdownMenuTrigger asChild disabled={spaceListOpen}>
                                     <button
@@ -1274,7 +1274,7 @@ export function KnowledgeSpaceContent({
                                             <span className={sidebarListMoreMenuLabelClassName}>{localize("com_knowledge.new_folder")}</span>
                                         </DropdownMenuItem>
                                     )}
-                                    {canEditSpace && onEditSpace && (
+                                    {(canEditSpace || canManageMembers) && onEditSpace && (
                                         <DropdownMenuItem className={sidebarListMoreMenuItemClassName} onClick={() => onEditSpace()}>
                                             <Outlined.Edit className={sidebarListMoreMenuIconClassName} />
                                             <span className={sidebarListMoreMenuLabelClassName}>{localize("com_knowledge.space_settings")}</span>
@@ -1284,15 +1284,6 @@ export function KnowledgeSpaceContent({
                                         <DropdownMenuItem className={sidebarListMoreMenuItemClassName} onClick={handleCopyShareLink}>
                                             <Outlined.Share className={sidebarListMoreMenuIconClassName} />
                                             <span className={sidebarListMoreMenuLabelClassName}>{localize("com_knowledge.share")}</span>
-                                        </DropdownMenuItem>
-                                    )}
-                                    {canManageMembers && (
-                                        <DropdownMenuItem
-                                            className={sidebarListMoreMenuItemClassName}
-                                            onClick={() => setPermTarget({ id: space.id, name: space.name, type: "knowledge_space" })}
-                                        >
-                                            <Outlined.PeopleSafe className={sidebarListMoreMenuIconClassName} />
-                                            <span className={sidebarListMoreMenuLabelClassName}>{localize("com_knowledge.member_management")}</span>
                                         </DropdownMenuItem>
                                     )}
                                     {canDeleteSpace && (
@@ -1680,7 +1671,6 @@ export function KnowledgeSpaceContent({
                     resourceType={permTarget.type}
                     resourceId={permTarget.id}
                     resourceName={permTarget.name}
-                    isDepartmentSpace={permTarget.type === "knowledge_space" && space?.spaceKind === "department"}
                 />
             )}
 

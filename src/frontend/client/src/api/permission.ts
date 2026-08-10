@@ -13,6 +13,21 @@ export type ResourceType =
 
 export type RelationLevel = "owner" | "manager" | "editor" | "viewer";
 export type SubjectType = "user" | "department" | "user_group";
+export type CreationResourceType = "knowledge_space" | "channel";
+
+export interface InitialPermissionsPayload {
+  grants: GrantItem[];
+}
+
+export interface InitialPermissionResult {
+  status: "success" | "failed";
+  errorCode: number | null;
+}
+
+export interface RawInitialPermissionResult {
+  status: "success" | "failed";
+  error_code?: number | null;
+}
 
 export interface PermissionEntry {
   subject_type: SubjectType;
@@ -55,7 +70,7 @@ export interface SelectedSubject {
   include_children?: boolean;
 }
 
-interface PermissionRequestConfig {
+export interface PermissionRequestConfig {
   signal?: AbortSignal;
 }
 
@@ -84,6 +99,16 @@ function withPermissionRequestOptions(config?: PermissionRequestConfig) {
   return {
     skip403Redirect: true,
     ...config,
+  };
+}
+
+export function mapInitialPermissionResult(
+  result?: RawInitialPermissionResult | null,
+): InitialPermissionResult | undefined {
+  if (!result) return undefined;
+  return {
+    status: result.status,
+    errorCode: result.error_code ?? null,
   };
 }
 
@@ -148,6 +173,17 @@ export async function getGrantableRelationModels(
   return unwrapArray<RelationModel>(res);
 }
 
+export async function getCreationGrantableRelationModels(
+  objectType: CreationResourceType,
+  config?: PermissionRequestConfig,
+): Promise<RelationModel[]> {
+  const res = await request.get(`/api/v1/permissions/relation-models/grantable`, {
+    params: { object_type: objectType, creation: true },
+    ...withPermissionRequestOptions(config),
+  });
+  return unwrapArray<RelationModel>(res);
+}
+
 export async function canOpenPermissionDialog(
   objectType: ResourceType,
   objectId: string,
@@ -174,6 +210,57 @@ export interface GrantUser {
   external_id?: string | null;
   primary_department_path?: string | null;
 }
+
+export interface GrantUserGroup {
+  id: number;
+  group_name: string;
+}
+
+interface CreationGrantSubjectQueryBase {
+  resourceType: CreationResourceType;
+}
+
+export interface CreationGrantUserQuery extends CreationGrantSubjectQueryBase {
+  subjectType: "user";
+  operation: "list";
+  keyword?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface CreationGrantUserGroupQuery extends CreationGrantSubjectQueryBase {
+  subjectType: "user_group";
+  operation: "list";
+  keyword?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface CreationGrantDepartmentChildrenQuery extends CreationGrantSubjectQueryBase {
+  subjectType: "department";
+  operation: "children";
+  parentId?: number | null;
+}
+
+export interface CreationGrantDepartmentSearchQuery extends CreationGrantSubjectQueryBase {
+  subjectType: "department";
+  operation: "search";
+  keyword: string;
+  limit?: number;
+}
+
+export interface CreationGrantDepartmentPathTreeQuery extends CreationGrantSubjectQueryBase {
+  subjectType: "department";
+  operation: "path_tree";
+  departmentId: number;
+}
+
+export type CreationGrantSubjectsQuery =
+  | CreationGrantUserQuery
+  | CreationGrantUserGroupQuery
+  | CreationGrantDepartmentChildrenQuery
+  | CreationGrantDepartmentSearchQuery
+  | CreationGrantDepartmentPathTreeQuery;
 
 export async function searchUsers(
   name: string,
@@ -260,6 +347,51 @@ const EMPTY_DEPARTMENT_SEARCH_RESULT: GrantDepartmentSearchResult = {
   truncated: false,
 };
 
+export function getCreationGrantSubjects(
+  query: CreationGrantUserQuery,
+  config?: PermissionRequestConfig,
+): Promise<GrantUser[]>;
+export function getCreationGrantSubjects(
+  query: CreationGrantUserGroupQuery,
+  config?: PermissionRequestConfig,
+): Promise<GrantUserGroup[]>;
+export function getCreationGrantSubjects(
+  query: CreationGrantDepartmentChildrenQuery,
+  config?: PermissionRequestConfig,
+): Promise<GrantDepartmentNode[]>;
+export function getCreationGrantSubjects(
+  query: CreationGrantDepartmentSearchQuery | CreationGrantDepartmentPathTreeQuery,
+  config?: PermissionRequestConfig,
+): Promise<GrantDepartmentSearchResult>;
+export async function getCreationGrantSubjects(
+  query: CreationGrantSubjectsQuery,
+  config?: PermissionRequestConfig,
+): Promise<GrantUser[] | GrantUserGroup[] | GrantDepartmentNode[] | GrantDepartmentSearchResult> {
+  const params: Record<string, string | number> = {
+    resource_type: query.resourceType,
+    subject_type: query.subjectType,
+    operation: query.operation,
+  };
+  if ("keyword" in query && query.keyword !== undefined) params.keyword = query.keyword;
+  if ("page" in query && query.page !== undefined) params.page = query.page;
+  if ("pageSize" in query && query.pageSize !== undefined) params.page_size = query.pageSize;
+  if ("parentId" in query && query.parentId != null) params.parent_id = query.parentId;
+  if ("departmentId" in query) params.department_id = query.departmentId;
+  if ("limit" in query && query.limit !== undefined) params.limit = query.limit;
+
+  const res = await request.get(`/api/v1/permissions/creation-grant-subjects`, {
+    params,
+    ...withPermissionRequestOptions(config),
+  });
+  if (query.subjectType === "department"
+    && (query.operation === "search" || query.operation === "path_tree")) {
+    return unwrap<GrantDepartmentSearchResult>(res) ?? EMPTY_DEPARTMENT_SEARCH_RESULT;
+  }
+  if (query.subjectType === "user") return unwrapArray<GrantUser>(res);
+  if (query.subjectType === "user_group") return unwrapArray<GrantUserGroup>(res);
+  return unwrapArray<GrantDepartmentNode>(res);
+}
+
 export async function getResourceGrantDepartmentChildren(
   resourceType: ResourceType,
   resourceId: string,
@@ -293,8 +425,18 @@ export async function searchResourceGrantDepartments(
   return unwrap<GrantDepartmentSearchResult>(res) ?? EMPTY_DEPARTMENT_SEARCH_RESULT;
 }
 
-// (no client consumer needs locate/path-tree: the picker browses+searches only,
-// and the permission list reads the backend-resolved full-path subject_name.)
+export async function getResourceGrantDepartmentPathTree(
+  resourceType: ResourceType,
+  resourceId: string,
+  departmentId: number,
+  config?: PermissionRequestConfig,
+): Promise<GrantDepartmentSearchResult> {
+  const res = await request.get(
+    `/api/v1/permissions/resources/${resourceType}/${resourceId}/grant-subjects/departments/${departmentId}/path-tree`,
+    withPermissionRequestOptions(config),
+  );
+  return unwrap<GrantDepartmentSearchResult>(res) ?? EMPTY_DEPARTMENT_SEARCH_RESULT;
+}
 
 export async function getUserGroups(
   config?: { signal?: AbortSignal }
@@ -313,7 +455,7 @@ export async function getResourceGrantUserGroups(
   resourceId: string,
   params?: { keyword?: string },
   config?: { signal?: AbortSignal }
-): Promise<any[]> {
+): Promise<GrantUserGroup[]> {
   const res = await request.get(
     `/api/v1/permissions/resources/${resourceType}/${resourceId}/grant-subjects/user-groups`,
     {
@@ -321,13 +463,13 @@ export async function getResourceGrantUserGroups(
       ...withPermissionRequestOptions(config),
     }
   );
-  return unwrapArray(res);
+  return unwrapArray<GrantUserGroup>(res);
 }
 
 export async function getKnowledgeSpaceGrantUserGroups(
   resourceId: string,
   params?: { keyword?: string },
   config?: { signal?: AbortSignal }
-): Promise<any[]> {
+): Promise<GrantUserGroup[]> {
   return getResourceGrantUserGroups("knowledge_space", resourceId, params, config);
 }

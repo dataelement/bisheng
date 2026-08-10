@@ -29,7 +29,6 @@ interface KnowledgeSpaceSidebarProps {
     onSpaceSelect: (space: KnowledgeSpace | null) => void;
     onCreateSpace: () => void;
     onSpaceSettings: (space: KnowledgeSpace) => void;
-    onManageMembers: (space: KnowledgeSpace) => void;
     onKnowledgeSquare?: () => void;
     collapsed?: boolean;
     onCollapsedChange?: (collapsed: boolean) => void;
@@ -53,7 +52,6 @@ export function KnowledgeSpaceSidebar({
     onSpaceSelect,
     onCreateSpace,
     onSpaceSettings,
-    onManageMembers,
     onKnowledgeSquare,
     collapsed: collapsedProp,
     onCollapsedChange,
@@ -199,7 +197,7 @@ export function KnowledgeSpaceSidebar({
 
     const getItemPermissions = (space: KnowledgeSpace, type: "created" | "joined" | "department") => {
         const isCreator = type === "created" || space.role === SpaceRole.CREATOR;
-        const canEditSpace = isCreator || hasKnowledgeSpacePermission(
+        const canEditSpace = hasKnowledgeSpacePermission(
             spaceActionPermissions,
             space.id,
             "edit_space",
@@ -209,7 +207,7 @@ export function KnowledgeSpaceSidebar({
             space.id,
             "delete_space",
         );
-        const canManageMembers = isCreator || hasKnowledgeSpacePermission(
+        const canManageMembers = hasKnowledgeSpacePermission(
             spaceActionPermissions,
             space.id,
             "manage_space_relation",
@@ -289,7 +287,6 @@ export function KnowledgeSpaceSidebar({
                 onLeave={handleLeaveSpace}
                 onPin={(id, pinned) => handlePinSpace(id, pinned, sectionType)}
                 onSettings={onSpaceSettings}
-                onManageMembers={onManageMembers}
                 onMenuOpen={() => ensureSpacePermissions(s.id)}
                 {...getItemPermissions(s, sectionType)}
             />
@@ -305,7 +302,6 @@ export function KnowledgeSpaceSidebar({
                 onLeave={handleLeaveSpace}
                 onPin={(id, pinned) => handlePinSpace(id, pinned, sectionType)}
                 onSettings={onSpaceSettings}
-                onManageMembers={onManageMembers}
                 onMenuOpen={() => ensureSpacePermissions(s.id)}
                 {...getItemPermissions(s, sectionType)}
             />
@@ -335,7 +331,6 @@ export function KnowledgeSpaceSidebar({
             onLeave={handleLeaveSpace}
             onPin={(id, pinned) => handlePinSpace(id, pinned, sectionType)}
             onSettings={onSpaceSettings}
-            onManageMembers={onManageMembers}
             hideMoreMenu
             compact
             onAfterNavigate={onNavigateAway}

@@ -17,6 +17,10 @@ const SEARCH_DEBOUNCE_MS = 300;
 export interface GrantDepartmentTreeSource {
   fetchChildren: (parentId: number | null, signal?: AbortSignal) => Promise<GrantDepartmentNode[]>;
   fetchSearch: (keyword: string, signal?: AbortSignal) => Promise<GrantDepartmentSearchResult>;
+  fetchPathTree?: (
+    departmentId: number,
+    signal?: AbortSignal,
+  ) => Promise<GrantDepartmentSearchResult>;
 }
 
 export interface GrantDepartmentTree {
@@ -28,6 +32,8 @@ export interface GrantDepartmentTree {
   initialLoading: boolean;
   /** Expand/collapse a node, loading its child layer on first expand. */
   toggle: (node: GrantDepartmentNode) => void;
+  /** Reveal a selected department without loading the complete organization tree. */
+  reveal: (departmentId: number) => Promise<void>;
   keyword: string;
   setKeyword: (kw: string) => void;
   searchMode: boolean;
@@ -63,22 +69,30 @@ export function useGrantDepartmentTree(source: GrantDepartmentTreeSource): Grant
     setChildIds((prev) => ({ ...prev, [key]: layer.map((n) => n.id) }));
   }, []);
 
-  const loadChildren = useCallback(
-    async (parentId: number) => {
-      if (childIdsRef.current[parentId]) return; // already loaded
-      setLoadingIds((prev) => new Set(prev).add(parentId));
+  const loadLayer = useCallback(
+    async (parentId: number | null) => {
+      const key = parentId ?? ROOT_KEY;
+      if (childIdsRef.current[key]) return;
+      if (parentId !== null) setLoadingIds((prev) => new Set(prev).add(parentId));
       try {
         const layer = await sourceRef.current.fetchChildren(parentId);
         if (layer) storeLayer(parentId, layer);
       } finally {
-        setLoadingIds((prev) => {
-          const next = new Set(prev);
-          next.delete(parentId);
-          return next;
-        });
+        if (parentId !== null) {
+          setLoadingIds((prev) => {
+            const next = new Set(prev);
+            next.delete(parentId);
+            return next;
+          });
+        }
       }
     },
     [storeLayer]
+  );
+
+  const loadChildren = useCallback(
+    async (parentId: number) => loadLayer(parentId),
+    [loadLayer],
   );
 
   const toggle = useCallback(
@@ -97,6 +111,36 @@ export function useGrantDepartmentTree(source: GrantDepartmentTreeSource): Grant
     },
     [loadChildren]
   );
+
+  const reveal = useCallback(async (departmentId: number) => {
+    const fetchPathTree = sourceRef.current.fetchPathTree;
+    if (!fetchPathTree) return;
+    const pathTree = await fetchPathTree(departmentId);
+
+    const findPath = (
+      nodes: GrantDepartmentNode[],
+      path: GrantDepartmentNode[] = [],
+    ): GrantDepartmentNode[] | null => {
+      for (const node of nodes) {
+        const nextPath = [...path, node];
+        if (node.id === departmentId) return nextPath;
+        const nested = findPath(node.children ?? [], nextPath);
+        if (nested) return nested;
+      }
+      return null;
+    };
+    const path = findPath(pathTree.roots ?? []);
+    if (!path) return;
+
+    await loadLayer(null);
+    for (const ancestor of path.slice(0, -1)) {
+      await loadLayer(ancestor.id);
+      setExpanded((prev) => new Set(prev).add(ancestor.id));
+    }
+  }, [loadLayer]);
+
+  const getNode = useCallback((id: number) => nodeMap[id], [nodeMap]);
+  const getChildIds = useCallback((id: number) => childIds[id], [childIds]);
 
   // Root layer on mount.
   useEffect(() => {
@@ -142,12 +186,13 @@ export function useGrantDepartmentTree(source: GrantDepartmentTreeSource): Grant
 
   return {
     rootIds: childIds[ROOT_KEY] ?? [],
-    getNode: (id) => nodeMap[id],
-    getChildIds: (id) => childIds[id],
+    getNode,
+    getChildIds,
     expanded,
     loadingIds,
     initialLoading,
     toggle,
+    reveal,
     keyword,
     setKeyword,
     searchMode: !!keyword.trim(),

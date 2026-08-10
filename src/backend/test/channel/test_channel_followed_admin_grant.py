@@ -22,7 +22,7 @@ from bisheng.channel.domain.schemas.channel_manager_schema import (
 )
 from bisheng.channel.domain.services.channel_service import ChannelService
 
-_RP = "bisheng.permission.api.endpoints.resource_permission._get_bindings"
+_RP = "bisheng.permission.domain.services.relation_model_store.get_bindings"
 
 
 class _Admin:
