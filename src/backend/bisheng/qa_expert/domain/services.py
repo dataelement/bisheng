@@ -78,6 +78,17 @@ class PermissionDeniedError(BaseErrorCode):
     Msg = "Permission denied"
 
 
+class AdoptLimitExceededError(BaseErrorCode):
+    """每个问题最多采纳 3 个最佳答案"""
+
+    Code = 10906
+    Msg = "每个问题最多采纳 3 个最佳答案"
+
+
+# 同题未删除回答中，adopted=true 的上限
+MAX_ADOPTED_ANSWERS_PER_QUESTION = 3
+
+
 class QAExpertStatsService:
     """Expert QA statistics service."""
 
@@ -456,32 +467,44 @@ class QuestionService:
         return question
 
     async def adopt_answer(self, question_id: int, answer_id: int, operator_id: int) -> Question:
-        """采纳最佳回答"""
+        """采纳最佳回答：同题最多 3 条；已采纳幂等；G4 仍按 answer_id。"""
         question = await self.repository.get_by_id(question_id)
         if not question:
             raise QuestionNotFoundError()
 
         # 只有提问者可以采纳
         if question.user_id != operator_id:
-            raise PermissionDeniedError(message="Only question author can adopt answer")
+            raise PermissionDeniedError(msg="Only question author can adopt answer")
 
         answer = await self.answer_repo.get_by_id(answer_id)
-        if not answer:
+        if not answer or int(getattr(answer, "status", 0) or 0) == 3:
             raise AnswerNotFoundError()
 
         if answer.question_id != question_id:
-            raise InvalidInvitationError(message="Answer does not belong to this question")
+            raise InvalidInvitationError(msg="Answer does not belong to this question")
 
-        # 更新问题状态
+        # 已采纳：幂等返回，不重复加采纳数 / 通知 / G4 旁路
+        if bool(getattr(answer, "adopted", False)):
+            logger.info(
+                "Answer %s already adopted for question %s; idempotent return",
+                answer_id,
+                question_id,
+            )
+            return question
+
+        adopted_count = await self.answer_repo.count_adopted_by_question_id(question_id)
+        if adopted_count >= MAX_ADOPTED_ANSWERS_PER_QUESTION:
+            raise AdoptLimitExceededError()
+
+        # 更新问题状态（adopted_answer_id = 最近一次采纳）
         question.adopted_answer_id = answer_id
         question.status = 1  # 已解决
         await self.repository.update(question_id, adopted_answer_id=answer_id, status=1)
 
-        # 更新回答状态
-        answer.status = 1  # 已采纳
+        # 采纳标记以 adopted 为准；status 保持与现网写路径一致（列表过滤看 status!=3）
         await self.answer_repo.update(answer_id, status=1, adopted=True)
-        # 增加采纳采纳数
-        await self.expert_repo.increment_adoption_count(answer.expert_id, count=1)
+        if getattr(answer, "expert_id", None):
+            await self.expert_repo.increment_adoption_count(answer.expert_id, count=1)
 
         # 发送采纳通知
         await self._send_adoption_notification(question, answer)

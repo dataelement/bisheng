@@ -423,6 +423,19 @@ class AnswerRepository:
 
             return result.first()
 
+    async def count_adopted_by_question_id(self, question_id: int) -> int:
+        """统计同题未软删且已采纳的回答数（用于最多 3 个最佳答案上限）。"""
+        async with get_async_db_session() as session:
+            stmt = select(func.count()).select_from(Answer).where(
+                and_(
+                    Answer.question_id == question_id,
+                    Answer.adopted.is_(True),
+                    Answer.status != 3,
+                )
+            )
+            result = await session.exec(stmt)
+            return int(result.one() or 0)
+
     async def get_by_question_id(
         self, question_id: int, skip: int = 0, limit: int = 100, sort_by: str | None = None
     ) -> tuple[list[Answer], int]:
