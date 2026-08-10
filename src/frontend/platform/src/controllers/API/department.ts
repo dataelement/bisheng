@@ -98,7 +98,11 @@ export interface SetCompanyRootResult {
   levels: Record<string, number>
 }
 
-/** 列出当前租户活跃部门的积分组织四级标签。 */
+export interface ClearCompanyRootResult {
+  cleared_count: number
+}
+
+/** 列出当前租户活跃部门的组织层级标签。 */
 export async function getDepartmentOrgLevelsApi(): Promise<DepartmentOrgLevelItem[]> {
   return await axios.get(`/api/v1/departments/org-levels`)
 }
@@ -113,6 +117,13 @@ export async function setDepartmentCompanyRootApi(
   return await axios.post(`/api/v1/departments/${depSeg(deptId)}/set-company-root`, {
     confirm: true,
   })
+}
+
+/** 取消公司根并清空本租户组织层级标签。 */
+export async function clearDepartmentCompanyRootApi(
+  deptId: string
+): Promise<ClearCompanyRootResult> {
+  return await axios.post(`/api/v1/departments/${depSeg(deptId)}/clear-company-root`)
 }
 
 // ── Move ───────────────────────────────────────────────

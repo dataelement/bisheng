@@ -24,8 +24,13 @@ class PointsRuleNotFoundError(BaseErrorCode):
 
 
 class PointsCompanyRootConflictError(BaseErrorCode):
-    """租户已有其他公司根节点。"""
-    Code, Msg = 18205, "公司根节点冲突"
+    """禁止在已有公司子树内嵌套设置公司根（或子树内已有其他公司）。"""
+    Code, Msg = 18205, "不能在已有公司组织下嵌套设置公司"
+
+
+class PointsNotCompanyRootError(BaseErrorCode):
+    """仅当前公司根节点可取消组织层级标签。"""
+    Code, Msg = 18207, "当前组织不是公司根节点"
 
 
 class PointsIdempotentReplayError(BaseErrorCode):

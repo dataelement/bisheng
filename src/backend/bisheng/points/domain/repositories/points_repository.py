@@ -333,8 +333,14 @@ class PointsRepository:
             stmt = stmt.where(PointRankSnapshot.scope_id.is_(None))
         else:
             stmt = stmt.where(PointRankSnapshot.scope_id == scope_id)
+        # TOP N 按人数截断：同分同名次时仍按分值降序、user_id 升序取前 N 人。
         rows = (
-            await self.session.exec(stmt.order_by(PointRankSnapshot.rank_no).limit(limit))
+            await self.session.exec(
+                stmt.order_by(
+                    PointRankSnapshot.period_score.desc(),
+                    PointRankSnapshot.user_id.asc(),
+                ).limit(limit)
+            )
         ).all()
         return list(rows)
 
@@ -568,6 +574,16 @@ class PointsRepository:
                 PointRankSnapshot.tenant_id == tenant_id,
                 PointRankSnapshot.period == period,
                 PointRankSnapshot.scope == "dept",
+                PointRankSnapshot.period_key == period_key,
+            )
+        )
+
+    async def clear_period_rank_snapshots(self, tenant_id: int, period: str, period_key: str) -> None:
+        """删除某 period_key 下全部快照（含旧全租户 global 与各公司/部门桶）。"""
+        await self.session.exec(
+            delete(PointRankSnapshot).where(
+                PointRankSnapshot.tenant_id == tenant_id,
+                PointRankSnapshot.period == period,
                 PointRankSnapshot.period_key == period_key,
             )
         )

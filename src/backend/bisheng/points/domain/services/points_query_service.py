@@ -73,8 +73,20 @@ class PointsQueryService:
             occurred_at=log.occurred_at,
         )
 
+    @staticmethod
+    async def _resolve_user_company_id(user_id: int) -> int | None:
+        """解析用户主部门所属公司根 id；无公司标签返回 None。"""
+        from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
+        from bisheng.points.domain.services.points_rank_service import resolve_company_id
+
+        primary_map = UserDepartmentDao.get_primary_department_map_by_user_ids([int(user_id)])
+        primary = primary_map.get(int(user_id))
+        all_depts = await DepartmentDao.aget_all_active()
+        dept_by_id = {int(d.id): d for d in all_depts}
+        return resolve_company_id(primary, dept_by_id)
+
     async def my_summary(self, tenant_id: int, user_id: int) -> PointSummaryResponse:
-        """余额、当月收支与可选全站排名。"""
+        """余额、当月收支与本公司排名（无公司则排名为 —）。"""
         account = await self.repository.find_account(tenant_id, user_id)
         balance = int(account.balance) if account else 0
         month_start, month_end = self._month_bounds()
@@ -87,9 +99,12 @@ class PointsQueryService:
             )
         )
         period_key = datetime.now(SHANGHAI).strftime("%Y-%m")
-        global_snap = await self.repository.find_user_rank(
-            tenant_id, "month", "global", None, period_key, user_id
-        )
+        company_id = await self._resolve_user_company_id(user_id)
+        global_snap = None
+        if company_id is not None:
+            global_snap = await self.repository.find_user_rank(
+                tenant_id, "month", "global", company_id, period_key, user_id
+            )
         global_rank = int(global_snap.rank_no) if global_snap else None
         if global_rank is None:
             display = "-"
@@ -140,8 +155,10 @@ class PointsQueryService:
         )
         return [self._log_response(r) for r in rows], total
 
-    async def leaderboard(self, tenant_id: int, period: str) -> PointLeaderboardResponse:
-        """读取小时快照 TOP10；补齐展示名与主部门（AC-15）。"""
+    async def leaderboard(
+        self, tenant_id: int, period: str, user_id: int
+    ) -> PointLeaderboardResponse:
+        """读取当前用户所属公司的小时快照 TOP10；无公司则空榜（AC-15）。"""
         now = datetime.now(SHANGHAI)
         if period == "year":
             period_key = now.strftime("%Y")
@@ -150,10 +167,13 @@ class PointsQueryService:
         else:
             period = "month"
             period_key = now.strftime("%Y-%m")
-        rows = await self.repository.list_top_ranks(
-            tenant_id, period, "global", None, period_key, limit=10
-        )
+        company_id = await self._resolve_user_company_id(user_id)
         refreshed = await self.repository.latest_rank_refreshed_at(tenant_id, period, period_key)
+        if company_id is None:
+            return PointLeaderboardResponse(period=period, refreshed_at=refreshed, items=[])
+        rows = await self.repository.list_top_ranks(
+            tenant_id, period, "global", company_id, period_key, limit=10
+        )
         user_ids = [int(r.user_id) for r in rows]
         name_by_user, dept_by_user = await self._leaderboard_display_maps(user_ids)
         items = [

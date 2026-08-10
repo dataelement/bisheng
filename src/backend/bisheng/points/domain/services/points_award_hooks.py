@@ -100,21 +100,26 @@ async def _run_with_facade(action) -> None:
         await session.commit()
 
 
-def _enqueue_award_event(body: dict[str, Any]) -> None:
-    """投递 Celery 发分任务；抽出以便单测 patch，避开 conftest 对 worker 包的 mock。
+def _resolve_award_queue() -> str:
+    """解析发分投递队列名。
 
-    可选环境变量 POINTS_AWARD_CELERY_QUEUE：指定队列名（联调共享 Broker 时避免旧 Worker 抢走未注册任务）。
-    未设置时走默认队列 celery（与 All-in-one 部署一致）。
+    默认 points_award_celery；POINTS_AWARD_CELERY_QUEUE 非空时覆盖（压测隔离）。
     """
     import os
 
+    from bisheng.core.config.celery_queues import POINTS_AWARD_QUEUE
+
+    return (os.environ.get("POINTS_AWARD_CELERY_QUEUE") or "").strip() or POINTS_AWARD_QUEUE
+
+
+def _enqueue_award_event(body: dict[str, Any]) -> None:
+    """投递 Celery 发分任务；抽出以便单测 patch，避开 conftest 对 worker 包的 mock。
+
+    默认投递到 points_award_celery（见 celery_queues.POINTS_AWARD_QUEUE）。
+    """
     from bisheng.worker.points.tasks import process_points_award_event
 
-    queue = (os.environ.get("POINTS_AWARD_CELERY_QUEUE") or "").strip()
-    if queue:
-        process_points_award_event.apply_async(args=[body], queue=queue)
-    else:
-        process_points_award_event.delay(body)
+    process_points_award_event.apply_async(args=[body], queue=_resolve_award_queue())
 
 
 async def _dispatch(event_type: str, payload: dict[str, Any]) -> None:

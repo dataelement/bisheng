@@ -5,6 +5,13 @@ import { Input } from "@/components/bs-ui/input"
 import { Label } from "@/components/bs-ui/label"
 import MultiSelect from "@/components/bs-ui/select/multi"
 import { Separator } from "@/components/bs-ui/separator"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/bs-ui/select"
 import { QuestionTooltip } from "@/components/bs-ui/tooltip"
 import { toast } from "@/components/bs-ui/toast/use-toast"
 import { TreeDepartmentSelect } from "@/components/bs-comp/department/TreeDepartmentSelect"
@@ -20,6 +27,7 @@ import {
   purgeDepartmentApi,
   restoreDepartmentApi,
   setDepartmentCompanyRootApi,
+  clearDepartmentCompanyRootApi,
   unmountTenantApi,
   updateDepartmentApi,
 } from "@/controllers/API/department"
@@ -28,7 +36,7 @@ import { isSyncedSource } from "@/pages/DepartmentPage/constants/syncReadonly"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import type { DepartmentAdmin, DepartmentTreeNode } from "@/types/api/department"
 import { Building2 } from "lucide-react"
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 interface DepartmentSettingsProps {
@@ -38,7 +46,7 @@ interface DepartmentSettingsProps {
   /** Open the "mark as Child Tenant" dialog for this department. When undefined
    * (multi-tenant disabled or root dept), the action button is hidden. */
   onMarkAsTenant?: (deptId: number, deptName: string) => void
-  /** F070 当前节点 org_level；null 表示未打标 */
+  /** F070 当前节点 org_level；null 表示未打标（未落入任何公司子树） */
   orgLevel?: string | null
   /** 仅平台超管可设公司根 */
   canSetCompanyRoot?: boolean
@@ -59,6 +67,14 @@ function sameIdSet(left: Array<number | string>, right: Array<number | string>):
 
 /** 企业级表单：统一控件最大宽度，右侧对齐 */
 const FORM_CONTROL_WIDTH = "w-full max-w-md"
+/** Radix Select 不接受空串；用哨兵表示「未设置/取消公司」。 */
+const ORG_LEVEL_UNSET = "__unset__"
+
+type OrgLevelDraft = "company" | typeof ORG_LEVEL_UNSET
+
+function toOrgLevelDraft(level: string | null | undefined): OrgLevelDraft {
+  return level === "company" ? "company" : ORG_LEVEL_UNSET
+}
 
 export function DepartmentSettings({
   dept,
@@ -71,7 +87,6 @@ export function DepartmentSettings({
 }: DepartmentSettingsProps) {
   const { t } = useTranslation()
   const [name, setName] = useState(dept.name)
-  const [labelingOrg, setLabelingOrg] = useState(false)
   const [adminSelectValue, setAdminSelectValue] = useState<DepartmentUserOption[]>([])
   const [defaultRoleIds, setDefaultRoleIds] = useState<string[]>([])
   const [applyDefaultRolesToExisting, setApplyDefaultRolesToExisting] = useState(false)
@@ -81,6 +96,7 @@ export function DepartmentSettings({
   const [parentIdValue, setParentIdValue] = useState<number | null>(dept.parent_id ?? null)
   const [parentTreeNodes, setParentTreeNodes] = useState<DepartmentTreeNode[]>([])
   const [isDefaultRootDept, setIsDefaultRootDept] = useState(Boolean(dept.is_default_root))
+  const [orgLevelDraft, setOrgLevelDraft] = useState<OrgLevelDraft>(() => toOrgLevelDraft(orgLevel))
 
   const adminSelectValueRef = useRef<DepartmentUserOption[]>([])
 
@@ -91,17 +107,43 @@ export function DepartmentSettings({
   const canEditPermissions = !isArchived
   const canEditParent = !isArchived && !isDefaultRootDept
 
+  /**
+   * 可编辑：未落入任何公司子树（未打标），或当前就是公司根（可清除）。
+   * 同级可另设公司；子树内自动标注节点只读。
+   */
+  const canEditOrgLevel = useMemo(() => {
+    if (!canSetCompanyRoot) return false
+    if (orgLevel === "company") return true
+    return orgLevel == null
+  }, [canSetCompanyRoot, orgLevel])
+
+  const orgLevelDisabledReason = useMemo(() => {
+    if (!canSetCompanyRoot || canEditOrgLevel) return null
+    if (orgLevel != null && orgLevel !== "company") return "underSubtree" as const
+    return null
+  }, [canEditOrgLevel, canSetCompanyRoot, orgLevel])
+
   /** 最近一次从服务端加载成功的快照（父部门变更判断、保存后更新） */
   const baselineRef = useRef<{
     name: string
     admins: DepartmentUserOption[]
     defaultRoleIds: string[]
     parentId: number | null
+    orgLevelDraft: OrgLevelDraft
   } | null>(null)
 
   useEffect(() => {
     adminSelectValueRef.current = adminSelectValue
   }, [adminSelectValue])
+
+  // 切换部门或服务端标签刷新时，重置草稿并写入 baseline。
+  useEffect(() => {
+    const draft = toOrgLevelDraft(orgLevel)
+    setOrgLevelDraft(draft)
+    if (baselineRef.current) {
+      baselineRef.current = { ...baselineRef.current, orgLevelDraft: draft }
+    }
+  }, [dept.dept_id, orgLevel])
 
   const gatherSubtreeIds = useCallback((node: DepartmentTreeNode | null): Set<number> => {
     const ids = new Set<number>()
@@ -179,6 +221,7 @@ export function DepartmentSettings({
           admins: adminOpts,
           defaultRoleIds: dr,
           parentId: pid,
+          orgLevelDraft: toOrgLevelDraft(orgLevel),
         }
       })
       .catch(() => {
@@ -196,6 +239,7 @@ export function DepartmentSettings({
     return () => {
       cancelled = true
     }
+    // orgLevel 草稿由下方独立 effect 同步，避免标签刷新时整表重载。
   }, [buildParentTreeNodes, dept.dept_id, dept.name, dept.parent_id, t, tree])
 
   const restoreBaseline = useCallback((b = baselineRef.current) => {
@@ -205,6 +249,7 @@ export function DepartmentSettings({
     adminSelectValueRef.current = b.admins
     setDefaultRoleIds(b.defaultRoleIds)
     setParentIdValue(b.parentId)
+    setOrgLevelDraft(b.orgLevelDraft)
   }, [])
 
   const hasUnsavedSettingsChanges = useCallback(() => {
@@ -212,6 +257,7 @@ export function DepartmentSettings({
     if (!b) return false
     if (canEditName && name !== b.name) return true
     if (canEditParent && parentIdValue !== b.parentId) return true
+    if (canEditOrgLevel && orgLevelDraft !== b.orgLevelDraft) return true
     if (
       !sameIdSet(
         adminSelectValue.map((o) => o.value),
@@ -220,7 +266,16 @@ export function DepartmentSettings({
     ) return true
     if (!sameIdSet(defaultRoleIds, b.defaultRoleIds)) return true
     return false
-  }, [adminSelectValue, canEditName, canEditParent, defaultRoleIds, name, parentIdValue])
+  }, [
+    adminSelectValue,
+    canEditName,
+    canEditOrgLevel,
+    canEditParent,
+    defaultRoleIds,
+    name,
+    orgLevelDraft,
+    parentIdValue,
+  ])
 
   const handleCancel = useCallback(() => {
     const b = baselineRef.current
@@ -285,8 +340,10 @@ export function DepartmentSettings({
         baseline &&
         nextParentId !== null &&
         nextParentId !== baseline.parentId
+      const orgLevelChanged =
+        canEditOrgLevel && !!baseline && orgLevelDraft !== baseline.orgLevelDraft
 
-      if (!parentChanged && Object.keys(body).length === 0) {
+      if (!parentChanged && Object.keys(body).length === 0 && !orgLevelChanged) {
         return
       }
 
@@ -296,10 +353,31 @@ export function DepartmentSettings({
         )
         if (moveRes === null || moveRes === false) return
       }
-      const res = await captureAndAlertRequestErrorHoc(
-        updateDepartmentApi(dept.dept_id, body)
-      )
-      if (res === null || res === false) return
+      if (Object.keys(body).length > 0) {
+        const res = await captureAndAlertRequestErrorHoc(
+          updateDepartmentApi(dept.dept_id, body)
+        )
+        if (res === null || res === false) return
+      } else if (parentChanged && !orgLevelChanged) {
+        // 仅移动父部门时无需再打 update。
+      }
+
+      // 组织层级走独立 API；与基础字段同一次「保存」提交，避免单独设公司按钮。
+      if (orgLevelChanged) {
+        if (orgLevelDraft === "company") {
+          const labelRes = await captureAndAlertRequestErrorHoc(
+            setDepartmentCompanyRootApi(dept.dept_id)
+          )
+          if (labelRes === null || labelRes === false) return
+        } else if (baseline?.orgLevelDraft === "company") {
+          const clearRes = await captureAndAlertRequestErrorHoc(
+            clearDepartmentCompanyRootApi(dept.dept_id)
+          )
+          if (clearRes === null || clearRes === false) return
+        }
+        onOrgLevelChanged?.()
+      }
+
       toast({
         title: t("prompt"),
         description: t("saved"),
@@ -317,6 +395,7 @@ export function DepartmentSettings({
         admins: adminOpts,
         defaultRoleIds: [...defaultRoleIds],
         parentId: nextParentId ?? baselineRef.current?.parentId ?? dept.parent_id ?? null,
+        orgLevelDraft,
       }
       onChanged()
     } finally {
@@ -325,6 +404,7 @@ export function DepartmentSettings({
   }, [
     adminSelectValue,
     canEditName,
+    canEditOrgLevel,
     canEditParent,
     canEditPermissions,
     applyDefaultRolesToExisting,
@@ -333,6 +413,8 @@ export function DepartmentSettings({
     dept.parent_id,
     name,
     onChanged,
+    onOrgLevelChanged,
+    orgLevelDraft,
     parentIdValue,
     t,
   ])
@@ -467,7 +549,7 @@ export function DepartmentSettings({
         )}
       </section>
 
-      {/* 区块：积分组织四级标签（不改拓扑/挂载） */}
+      {/* 区块：组织层级标签（不改拓扑/挂载；可编辑时经底部保存提交） */}
       {!isArchived && (
         <section className="mt-6 space-y-4">
           <div>
@@ -480,56 +562,59 @@ export function DepartmentSettings({
             {t("bs:department.orgLevelHint")}
           </p>
           <div className="space-y-1.5">
-            <Label>{t("bs:department.orgLevelLabel")}</Label>
-            <Input
-              value={
-                orgLevel
-                  ? t(`bs:department.orgLevel.${orgLevel}`)
-                  : t("bs:department.orgLevelUnset")
-              }
-              disabled
-              className={FORM_CONTROL_WIDTH}
-            />
+            <div className="flex items-center gap-1.5">
+              <Label>{t("bs:department.orgLevelLabel")}</Label>
+              {orgLevelDisabledReason ? (
+                <QuestionTooltip
+                  content={t("bs:department.setCompanyRootDisabledUnderSubtree")}
+                />
+              ) : null}
+            </div>
+            {canEditOrgLevel ? (
+              <div className={`flex items-center gap-2 ${FORM_CONTROL_WIDTH}`}>
+                <Select
+                  // 清除后 remount，避免 Radix 受控 value 从 company → 空时状态残留。
+                  key={orgLevelDraft === "company" ? "company" : "unset"}
+                  value={orgLevelDraft === "company" ? "company" : undefined}
+                  onValueChange={(v) => {
+                    if (v === "company") setOrgLevelDraft("company")
+                  }}
+                  disabled={saving}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder={t("bs:department.orgLevelUnset")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {/* 手动可选层级仅「公司」；部门/科室/班组由级联自动标注。 */}
+                    <SelectItem value="company">
+                      {t("bs:department.orgLevel.company")}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                {orgLevelDraft === "company" ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="shrink-0 px-2"
+                    disabled={saving}
+                    onClick={() => setOrgLevelDraft(ORG_LEVEL_UNSET)}
+                  >
+                    {t("bs:department.orgLevelClear")}
+                  </Button>
+                ) : null}
+              </div>
+            ) : (
+              <Input
+                value={
+                  orgLevel
+                    ? t(`bs:department.orgLevel.${orgLevel}`)
+                    : t("bs:department.orgLevelUnset")
+                }
+                disabled
+                className={FORM_CONTROL_WIDTH}
+              />
+            )}
           </div>
-          {canSetCompanyRoot ? (
-            <Button
-              type="button"
-              variant="outline"
-              disabled={labelingOrg}
-              onClick={() => {
-                bsConfirm({
-                  title: t("bs:department.setCompanyRootTitle"),
-                  desc: t("bs:department.setCompanyRootConfirm", { name: dept.name }),
-                  okTxt: t("bs:department.setCompanyRootOk"),
-                  onOk(next) {
-                    setLabelingOrg(true)
-                    captureAndAlertRequestErrorHoc(
-                      setDepartmentCompanyRootApi(dept.dept_id)
-                    )
-                      .then((res) => {
-                        if (res) {
-                          toast({
-                            title: t("prompt"),
-                            description: t("bs:department.setCompanyRootSuccess", {
-                              count: res.labeled_count,
-                            }),
-                            variant: "success",
-                          })
-                          onOrgLevelChanged?.()
-                          onChanged()
-                        }
-                      })
-                      .finally(() => {
-                        setLabelingOrg(false)
-                        next()
-                      })
-                  },
-                })
-              }}
-            >
-              {t("bs:department.setCompanyRoot")}
-            </Button>
-          ) : null}
         </section>
       )}
 

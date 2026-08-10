@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from bisheng.core.config.celery_queues import POINTS_AWARD_QUEUE
 from bisheng.points.domain.services import points_award_hooks as hooks
 
 
@@ -73,6 +74,18 @@ async def test_dispatch_falls_back_to_sync_when_enqueue_fails():
         )
     sync.assert_awaited_once()
     assert sync.await_args.args[0]["event_type"] == "answer_adopted"
+
+
+def test_resolve_award_queue_defaults_to_points_award_celery(monkeypatch):
+    """未设 POINTS_AWARD_CELERY_QUEUE 时解析为正式发分队列。"""
+    monkeypatch.delenv("POINTS_AWARD_CELERY_QUEUE", raising=False)
+    assert hooks._resolve_award_queue() == POINTS_AWARD_QUEUE
+
+
+def test_resolve_award_queue_respects_env_override(monkeypatch):
+    """POINTS_AWARD_CELERY_QUEUE 可覆盖正式队列名（压测隔离）。"""
+    monkeypatch.setenv("POINTS_AWARD_CELERY_QUEUE", "points_award_local")
+    assert hooks._resolve_award_queue() == "points_award_local"
 
 
 @pytest.mark.asyncio

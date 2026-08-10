@@ -1,4 +1,4 @@
-"""组织四级标签：唯一公司根 + 级联 dept/office/squad。"""
+"""组织四级标签：多公司作用域级联 dept/office/squad（公司之间互不干扰）。"""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from sqlalchemy import update
 from sqlmodel import select
 
 from bisheng.common.errcode.department import DepartmentNotFoundError
-from bisheng.common.errcode.points import PointsCompanyRootConflictError
+from bisheng.common.errcode.points import PointsCompanyRootConflictError, PointsNotCompanyRootError
 from bisheng.core.database import get_async_db_session
 from bisheng.database.models.department import Department, DepartmentDao
 from bisheng.points.domain.constants.org_levels import (
@@ -16,6 +16,7 @@ from bisheng.points.domain.constants.org_levels import (
     relative_depth,
 )
 from bisheng.points.domain.schemas.points_schema import (
+    ClearCompanyRootResponse,
     DepartmentOrgLevelItem,
     SetCompanyRootResponse,
 )
@@ -40,6 +41,25 @@ class DepartmentOrgLevelService:
             raise DepartmentNotFoundError()
         return row
 
+    @staticmethod
+    def _assert_no_company_nesting(company: Department, existing_companies: list) -> None:
+        """禁止嵌套：目标在其他公司子树内，或子树内已有其他公司根。"""
+        company_path = str(company.path or "")
+        company_id = int(company.id)
+        for row in existing_companies:
+            other_id = int(row.id)
+            if other_id == company_id:
+                continue
+            other_path = str(row.path or "")
+            if not other_path or not company_path:
+                continue
+            # 目标落在已有公司子树内
+            if company_path.startswith(other_path):
+                raise PointsCompanyRootConflictError()
+            # 已有公司落在目标子树内
+            if other_path.startswith(company_path):
+                raise PointsCompanyRootConflictError()
+
     async def list_org_levels(self, user) -> list[DepartmentOrgLevelItem]:
         """列出当前租户活跃部门的 org_level（只读）。"""
         _ = user  # 登录即可读；租户过滤由 ORM 事件注入。
@@ -57,10 +77,9 @@ class DepartmentOrgLevelService:
         ]
 
     async def set_company_root(self, user, dept_key: str) -> SetCompanyRootResponse:
-        """指定唯一公司根并级联打标；已有其他 company 则 18205。
+        """指定公司根并仅在该子树内级联打标；允许多公司并列，禁止嵌套。
 
-        同一公司根可重复调用以重算子树。清空本租户全部 org_level 后再写子树，
-        子树外节点保持 NULL。
+        同一公司根可重复调用以重算子树。只清空目标 path 子树标签后再写入。
         """
         require_platform_admin(user)
         company = await self._resolve_department(dept_key)
@@ -76,12 +95,17 @@ class DepartmentOrgLevelService:
                     )
                 )
             ).all()
-            for row in existing:
-                if int(row.id) != int(company.id):
-                    raise PointsCompanyRootConflictError()
+            self._assert_no_company_nesting(company, list(existing))
 
-            # 清空本租户标签；tenant_id 由自动注入约束在当前上下文。
-            await session.exec(update(Department).values(org_level=None))
+            # 仅清空本公司子树标签，不影响其他公司。
+            await session.exec(
+                update(Department)
+                .where(
+                    Department.path.like(f"{company.path}%"),
+                    Department.status == "active",
+                )
+                .values(org_level=None)
+            )
 
             subtree = (
                 await session.exec(
@@ -114,3 +138,35 @@ class DepartmentOrgLevelService:
                 "squad": levels.get("squad", 0),
             },
         )
+
+    async def clear_company_root(self, user, dept_key: str) -> ClearCompanyRootResponse:
+        """取消公司根：仅清空该公司 path 子树的 org_level。"""
+        require_platform_admin(user)
+        company = await self._resolve_department(dept_key)
+        if company.org_level != ORG_LEVEL_COMPANY:
+            raise PointsNotCompanyRootError()
+        if not company.path:
+            raise DepartmentNotFoundError(msg="部门缺少 path，无法取消公司标签")
+
+        async with get_async_db_session() as session:
+            labeled = (
+                await session.exec(
+                    select(Department).where(
+                        Department.path.like(f"{company.path}%"),
+                        Department.org_level.is_not(None),
+                        Department.status == "active",
+                    )
+                )
+            ).all()
+            cleared_count = len(labeled)
+            await session.exec(
+                update(Department)
+                .where(
+                    Department.path.like(f"{company.path}%"),
+                    Department.status == "active",
+                )
+                .values(org_level=None)
+            )
+            await session.commit()
+
+        return ClearCompanyRootResponse(cleared_count=cleared_count)

@@ -170,3 +170,9 @@ class SetCompanyRootResponse(BaseModel):
     company_id: int
     labeled_count: int
     levels: dict[str, int]
+
+
+class ClearCompanyRootResponse(BaseModel):
+    """取消公司根并清空组织层级标签的结果。"""
+
+    cleared_count: int

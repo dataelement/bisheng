@@ -18,20 +18,26 @@ test.describe('G-M3 ranks & org labels', () => {
     expect(refreshed.ok).toBeTruthy();
   });
 
-  test('org_level cascade is consistent when a company root exists', () => {
+  test('org_level cascade is consistent for each company root', () => {
     const snap = runGm3Trigger(['org_levels']);
     expect(snap.ok).toBeTruthy();
+    // 允许多公司；company_count 仅作观测，不再要求唯一根。
+    test.info().annotations.push({
+      type: 'note',
+      description: `company_count=${String(snap.company_count ?? 0)}`,
+    });
     const verified = runGm3Trigger(['verify_cascade']);
     expect(verified.ok).toBeTruthy();
     if (verified.skipped) {
       test.info().annotations.push({
         type: 'note',
-        description: String(verified.reason || 'no unique company root — cascade UI/API mutate skipped'),
+        description: String(verified.reason || 'no company root — cascade verification skipped'),
       });
       return;
     }
     expect(verified.mismatches).toEqual([]);
     expect(Number(verified.checked)).toBeGreaterThan(0);
+    expect(Number(verified.company_count)).toBeGreaterThan(0);
   });
 
   test('optional set-company-root only when mutate flag set', () => {
@@ -59,8 +65,11 @@ test.describe('G-M3 ranks & org labels', () => {
       // 树加载可能较慢；右侧默认选中根部门后切到「部门设置」。
       await expect(page.getByRole('tab', { name: '部门设置' })).toBeVisible({ timeout: 90_000 });
       await page.getByRole('tab', { name: '部门设置' }).click();
-      await expect(page.getByText('积分组织层级')).toBeVisible({ timeout: 30_000 });
-      await expect(page.getByRole('button', { name: '设为公司根并级联打标' })).toBeVisible();
+      await expect(page.getByText('组织层级标签')).toBeVisible({ timeout: 30_000 });
+      await expect(page.getByText('当前层级')).toBeVisible();
+      // 可编辑时为下拉（选项仅「公司」），经底部保存提交，不再有独立设公司按钮。
+      await expect(page.getByRole('button', { name: /设为公司/ })).toHaveCount(0);
+      await expect(page.getByRole('button', { name: '保存' }).first()).toBeVisible();
     } finally {
       await context.close();
     }

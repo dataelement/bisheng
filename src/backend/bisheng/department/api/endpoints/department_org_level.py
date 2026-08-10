@@ -1,4 +1,4 @@
-"""积分组织四级标签 API（Platform 部门树）。
+"""组织层级标签 API（Platform 部门树）。
 
 字面路径须挂在 ``GET /{dept_id}`` 之前，避免被路径参数吞掉。
 """
@@ -37,6 +37,19 @@ async def set_company_root(
     _ = body  # confirm 预留；当前一次调用即执行。
     try:
         data = await _service.set_company_root(login_user, dept_id)
+        return resp_200(data.model_dump())
+    except BaseErrorCode as exc:
+        return exc.return_resp_instance()
+
+
+@router.post("/{dept_id}/clear-company-root")
+async def clear_company_root(
+    dept_id: str,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    """取消公司根并清空本租户组织层级标签；非公司根 18207。"""
+    try:
+        data = await _service.clear_company_root(login_user, dept_id)
         return resp_200(data.model_dump())
     except BaseErrorCode as exc:
         return exc.return_resp_instance()

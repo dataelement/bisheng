@@ -95,7 +95,9 @@ async def get_leaderboard(
 ):
     """读取小时快照排行榜。"""
     try:
-        data = await service.leaderboard(resolve_tenant_id(login_user), period)
+        data = await service.leaderboard(
+            resolve_tenant_id(login_user), period, int(login_user.user_id)
+        )
         return resp_200(data.model_dump())
     except BaseErrorCode as exc:
         return exc.return_resp_instance()

@@ -34,6 +34,11 @@ start_pdf(){
     celery -A bisheng.worker.main worker -l info -c "${KNOWLEDGE_PDF_CONCURRENCY:-2}" -P threads -Q knowledge_pdf_celery -n knowledge_pdf@%h
 }
 
+start_points_award(){
+    # 积分异步发分专用队列，避免被共享 Broker 上远端 default Worker 抢走
+    celery -A bisheng.worker.main worker -l info -c "${POINTS_AWARD_CONCURRENCY:-20}" -P threads -Q points_award_celery -n points_award@%h
+}
+
 if [ "$start_mode" = "api" ]; then
     echo "Running database migrations..."
     alembic upgrade head || echo "WARNING: alembic migration failed, continuing startup..."
@@ -54,6 +59,9 @@ elif [ "$start_mode" = "default" ]; then
 elif [ "$start_mode" = "pdf" ]; then
     echo "Starting Knowledge PDF Celery worker..."
     start_pdf
+elif [ "$start_mode" = "points_award" ]; then
+    echo "Starting Points Award Celery worker..."
+    start_points_award
 elif [ "$start_mode" = "linsight" ]; then
     echo "Starting LinSight worker..."
     start_linsight
@@ -67,10 +75,12 @@ elif [ "$start_mode" = "worker" ]; then
     start_linsight &
     # 默认其他任务的执行worker，目前是定时统计埋点数据
     start_default &
+    # 积分异步发分专用 worker
+    start_points_award &
     start_beat
 
     echo "All workers started successfully."
 else
-    echo "Invalid start mode. Use api、worker、knowledge、workflow、beat、default、pdf、linsight."
+    echo "Invalid start mode. Use api、worker、knowledge、workflow、beat、default、pdf、points_award、linsight."
     exit 1
 fi

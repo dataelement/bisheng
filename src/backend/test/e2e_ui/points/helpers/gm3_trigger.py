@@ -65,54 +65,58 @@ async def _org_levels(tenant_id: int = 1) -> dict:
 
 
 async def _verify_cascade(tenant_id: int = 1) -> dict:
-    """只读：若存在唯一 company 根，校验子树相对深度映射。"""
+    """只读：对每个 company 根校验其子树相对深度映射（支持多公司）。"""
     from bisheng.points.domain.constants.org_levels import org_level_for_relative_depth, relative_depth
     from sqlalchemy import text
     from bisheng.core.database import get_async_db_session
 
     snap = await _org_levels(tenant_id)
     companies = snap["companies"]
-    if len(companies) != 1:
+    if not companies:
         return {
             "ok": True,
             "skipped": True,
-            "reason": f"expected exactly 1 company root, got {len(companies)}",
-            "company_count": len(companies),
+            "reason": "no company root — cascade verification skipped",
+            "company_count": 0,
         }
-    company = companies[0]
-    root_path = company["path"] or f"/{company['id']}/"
     mismatches: list[dict] = []
     checked = 0
+    company_ids: list[int] = []
     async with get_async_db_session() as session:
-        rows = (
-            await session.execute(
-                text(
-                    "select id, path, org_level from department "
-                    "where tenant_id=:t and status='active' and path like :pfx "
-                    "and org_level is not null"
-                ),
-                {"t": tenant_id, "pfx": f"{root_path}%"},
-            )
-        ).all()
-    for row in rows:
-        depth = relative_depth(root_path, row[1] or f"/{row[0]}/")
-        if depth is None:
-            continue
-        expected = org_level_for_relative_depth(depth)
-        checked += 1
-        if row[2] != expected:
-            mismatches.append(
-                {
-                    "id": int(row[0]),
-                    "org_level": row[2],
-                    "expected": expected,
-                    "depth": depth,
-                }
-            )
+        for company in companies:
+            company_ids.append(int(company["id"]))
+            root_path = company["path"] or f"/{company['id']}/"
+            rows = (
+                await session.execute(
+                    text(
+                        "select id, path, org_level from department "
+                        "where tenant_id=:t and status='active' and path like :pfx "
+                        "and org_level is not null"
+                    ),
+                    {"t": tenant_id, "pfx": f"{root_path}%"},
+                )
+            ).all()
+            for row in rows:
+                depth = relative_depth(root_path, row[1] or f"/{row[0]}/")
+                if depth is None:
+                    continue
+                expected = org_level_for_relative_depth(depth)
+                checked += 1
+                if row[2] != expected:
+                    mismatches.append(
+                        {
+                            "id": int(row[0]),
+                            "company_id": int(company["id"]),
+                            "org_level": row[2],
+                            "expected": expected,
+                            "depth": depth,
+                        }
+                    )
     return {
         "ok": len(mismatches) == 0,
         "skipped": False,
-        "company_id": company["id"],
+        "company_ids": company_ids,
+        "company_count": len(company_ids),
         "checked": checked,
         "mismatches": mismatches[:10],
     }
@@ -133,7 +137,7 @@ async def _set_company_root(dept_id: str) -> dict:
         return {
             "ok": False,
             "skipped": True,
-            "reason": "set E2E_POINTS_ALLOW_ORG_MUTATE=1 to clear/relabel tenant org_level",
+            "reason": "set E2E_POINTS_ALLOW_ORG_MUTATE=1 to label a company subtree (scoped; nested company rejected)",
         }
     from types import SimpleNamespace
     from bisheng.core.context.tenant import set_current_tenant_id

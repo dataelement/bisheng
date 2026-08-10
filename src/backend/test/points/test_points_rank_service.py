@@ -1,4 +1,4 @@
-"""积分排行快照：周期键、部门桶解析、排序与裁剪入榜。"""
+"""积分排行快照：周期键、公司/部门桶解析、稠密名次与按公司刷榜。"""
 
 from datetime import datetime
 from types import SimpleNamespace
@@ -11,6 +11,7 @@ from bisheng.points.domain.services.points_rank_service import (
     PointsRankService,
     build_ranked_rows,
     period_keys,
+    resolve_company_id,
     resolve_dept_bucket_id,
 )
 
@@ -20,6 +21,23 @@ SHANGHAI = ZoneInfo("Asia/Shanghai")
 def test_period_keys_shanghai():
     now = datetime(2026, 8, 7, 10, 0, tzinfo=SHANGHAI)
     assert period_keys(now) == {"month": "2026-08", "year": "2026", "all": "all"}
+
+
+def test_resolve_company_id_walks_path_to_nearest_company():
+    company = SimpleNamespace(id=1, path="/1/", org_level="company")
+    dept = SimpleNamespace(id=2, path="/1/2/", org_level="dept")
+    office = SimpleNamespace(id=3, path="/1/2/3/", org_level="office")
+    departments = {1: company, 2: dept, 3: office}
+    primary = SimpleNamespace(id=3, path="/1/2/3/")
+    assert resolve_company_id(primary, departments) == 1
+
+
+def test_resolve_company_id_none_when_unlabeled():
+    leaf = SimpleNamespace(id=9, path="/9/", org_level=None)
+    departments = {9: leaf}
+    primary = SimpleNamespace(id=9, path="/9/")
+    assert resolve_company_id(primary, departments) is None
+    assert resolve_company_id(None, departments) is None
 
 
 def test_resolve_dept_bucket_walks_path_to_nearest_dept():
@@ -41,13 +59,14 @@ def test_resolve_dept_bucket_none_when_unlabeled():
     assert resolve_dept_bucket_id(None, departments) is None
 
 
-def test_build_ranked_rows_orders_and_excludes_admins():
+def test_build_ranked_rows_dense_ties_and_excludes_admins():
+    """同分稠密同名次：100,100,50 → rank 1,1,2；列表序按 user_id。"""
     refreshed = datetime(2026, 8, 7, 5, 0)
     rows = build_ranked_rows(
         tenant_id=1,
         period="month",
         scope="global",
-        scope_id=None,
+        scope_id=100,
         period_key="2026-08",
         scores={10: 100, 11: 100, 12: 50, 99: 999},
         balances={10: 200, 11: 150, 12: 50, 99: 999},
@@ -56,35 +75,36 @@ def test_build_ranked_rows_orders_and_excludes_admins():
         refreshed_at=refreshed,
     )
     assert [r.user_id for r in rows] == [10, 11, 12]
-    assert [r.rank_no for r in rows] == [1, 2, 3]
+    assert [r.rank_no for r in rows] == [1, 1, 2]
     assert rows[0].period_score == 100
+    assert rows[0].scope_id == 100
     assert rows[2].dept_id is None
 
 
 @pytest.mark.asyncio
-async def test_refresh_trims_zero_balance_and_inactive_month_users():
-    """月/年不补 0 分账户；总榜排除 balance=0；有流水净额为 0 仍入月榜。"""
+async def test_refresh_scopes_by_company_and_trims_inactive():
+    """月/年不补 0 分账户；总榜按 lifetime_earned>0；按公司写 global/dept 桶。"""
     accounts = [
-        SimpleNamespace(user_id=1, balance=100),
-        SimpleNamespace(user_id=2, balance=0),
-        SimpleNamespace(user_id=3, balance=50),
+        SimpleNamespace(user_id=1, balance=100, lifetime_earned=120),
+        SimpleNamespace(user_id=2, balance=0, lifetime_earned=40),
+        SimpleNamespace(user_id=3, balance=50, lifetime_earned=0),
+        SimpleNamespace(user_id=4, balance=80, lifetime_earned=90),
     ]
-    # user1 有变动；user2 本月净 0 但仍有流水；user3 无本月流水
-    month_scores = {1: 30, 2: 0}
-    year_scores = {1: 80, 2: 5}
+    # user1/2 公司 A；user4 公司 B；user3 无公司且无本月流水
+    month_scores = {1: 30, 2: 0, 4: 20}
+    year_scores = {1: 80, 2: 5, 4: 40}
 
-    global_batches: list[list] = []
-    dept_batches: list[list] = []
+    inserted: list[list] = []
+    cleared: list[tuple] = []
 
     repo = SimpleNamespace(
         list_accounts=AsyncMock(return_value=accounts),
         sum_deltas_by_user=AsyncMock(side_effect=[month_scores, year_scores]),
-        replace_rank_snapshots=AsyncMock(
-            side_effect=lambda *_a, **_k: global_batches.append(_a[-1]) or len(_a[-1])
+        clear_period_rank_snapshots=AsyncMock(
+            side_effect=lambda *a, **_k: cleared.append(a) or None
         ),
-        clear_dept_rank_snapshots=AsyncMock(),
         bulk_insert_rank_snapshots=AsyncMock(
-            side_effect=lambda rows: dept_batches.append(list(rows)) or len(rows)
+            side_effect=lambda rows: inserted.append(list(rows)) or len(rows)
         ),
     )
 
@@ -92,20 +112,58 @@ async def test_refresh_trims_zero_balance_and_inactive_month_users():
         patch.object(PointsRankService, "_load_super_admin_ids", AsyncMock(return_value=set())),
         patch.object(
             PointsRankService,
-            "_load_dept_buckets",
-            AsyncMock(return_value={1: 10, 2: 10, 3: None}),
+            "_load_company_and_dept_buckets",
+            AsyncMock(
+                return_value=(
+                    {1: 100, 2: 100, 3: None, 4: 200},
+                    {1: 10, 2: 10, 3: None, 4: 20},
+                )
+            ),
         ),
     ):
         out = await PointsRankService(repository=repo)._refresh_with_repo(repo, 1)
 
     assert out["rows"] > 0
-    # 三次 global：month / year / all
-    assert len(global_batches) == 3
-    month_users = {r.user_id for r in global_batches[0]}
-    year_users = {r.user_id for r in global_batches[1]}
-    all_users = {r.user_id for r in global_batches[2]}
-    assert month_users == {1, 2}
-    assert year_users == {1, 2}
-    assert all_users == {1, 3}
-    assert 2 not in all_users  # balance=0 不进总榜
-    assert 3 not in month_users  # 无本月流水不进月榜
+    assert out["companies"] == 2
+    assert len(cleared) == 3  # month / year / all
+    assert len(inserted) == 3
+
+    month_rows = inserted[0]
+    month_global_a = [r for r in month_rows if r.scope == "global" and r.scope_id == 100]
+    month_global_b = [r for r in month_rows if r.scope == "global" and r.scope_id == 200]
+    assert {r.user_id for r in month_global_a} == {1, 2}
+    assert {r.user_id for r in month_global_b} == {4}
+    assert all(r.user_id != 3 for r in month_rows)
+
+    all_rows = inserted[2]
+    all_global_a = {r.user_id: r.period_score for r in all_rows if r.scope == "global" and r.scope_id == 100}
+    all_global_b = {r.user_id: r.period_score for r in all_rows if r.scope == "global" and r.scope_id == 200}
+    assert all_global_a == {1: 120, 2: 40}
+    assert all_global_b == {4: 90}
+
+
+@pytest.mark.asyncio
+async def test_refresh_no_company_writes_empty_period_batches():
+    """全员无公司时仍清桶，但各 period 插入空列表。"""
+    accounts = [SimpleNamespace(user_id=1, balance=100, lifetime_earned=120)]
+    inserted: list[list] = []
+    repo = SimpleNamespace(
+        list_accounts=AsyncMock(return_value=accounts),
+        sum_deltas_by_user=AsyncMock(side_effect=[{1: 10}, {1: 20}]),
+        clear_period_rank_snapshots=AsyncMock(),
+        bulk_insert_rank_snapshots=AsyncMock(
+            side_effect=lambda rows: inserted.append(list(rows)) or len(rows)
+        ),
+    )
+    with (
+        patch.object(PointsRankService, "_load_super_admin_ids", AsyncMock(return_value=set())),
+        patch.object(
+            PointsRankService,
+            "_load_company_and_dept_buckets",
+            AsyncMock(return_value=({1: None}, {1: None})),
+        ),
+    ):
+        out = await PointsRankService(repository=repo)._refresh_with_repo(repo, 1)
+
+    assert out["companies"] == 0
+    assert all(len(batch) == 0 for batch in inserted)

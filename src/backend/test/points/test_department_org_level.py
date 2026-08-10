@@ -1,11 +1,15 @@
-"""组织四级标签：深度映射、冲突与鉴权。"""
+"""组织四级标签：深度映射、多公司作用域、嵌套拒绝与鉴权。"""
 
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from bisheng.common.errcode.points import PointsCompanyRootConflictError, PointsPermissionDeniedError
+from bisheng.common.errcode.points import (
+    PointsCompanyRootConflictError,
+    PointsNotCompanyRootError,
+    PointsPermissionDeniedError,
+)
 from bisheng.points.domain.constants.org_levels import (
     org_level_for_relative_depth,
     relative_depth,
@@ -45,14 +49,68 @@ class _FakeResult:
 
 
 @pytest.mark.asyncio
-async def test_set_company_root_rejects_other_company():
+async def test_set_company_root_rejects_nested_under_existing_company():
+    """目标落在已有公司子树内时拒绝嵌套。"""
     service = DepartmentOrgLevelService()
-    company = SimpleNamespace(id=10, path="/10/", dept_id="BS@10", status="active")
-    other = SimpleNamespace(id=99, path="/99/", org_level="company", status="active")
+    nested = SimpleNamespace(id=10, path="/99/10/", dept_id="BS@10", status="active")
+    parent_company = SimpleNamespace(id=99, path="/99/", org_level="company", status="active")
 
     class FakeSession:
         async def exec(self, _stmt):
-            return _FakeResult([other])
+            return _FakeResult([parent_company])
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            return False
+
+    with (
+        patch.object(service, "_resolve_department", AsyncMock(return_value=nested)),
+        patch(
+            "bisheng.points.domain.services.department_org_level_service.get_async_db_session",
+            return_value=FakeSession(),
+        ),
+    ):
+        with pytest.raises(PointsCompanyRootConflictError):
+            await service.set_company_root(
+                SimpleNamespace(is_admin=lambda: True, is_global_super=False),
+                "10",
+            )
+
+
+@pytest.mark.asyncio
+async def test_set_company_root_allows_sibling_company():
+    """同级另一公司已存在时，仍可设本公司并只打本子树。"""
+    service = DepartmentOrgLevelService()
+    company = SimpleNamespace(id=10, path="/10/", dept_id="BS@10", status="active", org_level=None)
+    sibling = SimpleNamespace(id=99, path="/99/", org_level="company", status="active")
+    dept = SimpleNamespace(id=11, path="/10/11/", status="active", org_level=None)
+    nodes = [company, dept]
+    cleared_paths: list[str] = []
+
+    class ScriptedSession:
+        def __init__(self):
+            self.queue = [
+                _FakeResult([sibling]),  # existing companies
+                "update",
+                _FakeResult(nodes),  # subtree
+            ]
+            self._i = 0
+
+        async def exec(self, stmt):
+            item = self.queue[self._i]
+            self._i += 1
+            if item == "update":
+                cleared_paths.append("subtree")
+                return _FakeResult([])
+            return item
+
+        async def commit(self):
+            return None
+
+        def add(self, *_):
+            return None
 
         async def __aenter__(self):
             return self
@@ -64,14 +122,19 @@ async def test_set_company_root_rejects_other_company():
         patch.object(service, "_resolve_department", AsyncMock(return_value=company)),
         patch(
             "bisheng.points.domain.services.department_org_level_service.get_async_db_session",
-            return_value=FakeSession(),
+            return_value=ScriptedSession(),
         ),
     ):
-        with pytest.raises(PointsCompanyRootConflictError):
-            await service.set_company_root(
-                SimpleNamespace(is_admin=lambda: True, is_global_super=False),
-                "10",
-            )
+        result = await service.set_company_root(
+            SimpleNamespace(is_admin=lambda: True, is_global_super=False),
+            "10",
+        )
+
+    assert cleared_paths == ["subtree"]
+    assert company.org_level == "company"
+    assert dept.org_level == "dept"
+    assert result.company_id == 10
+    assert result.labeled_count == 2
 
 
 @pytest.mark.asyncio
@@ -133,3 +196,64 @@ async def test_set_company_root_labels_subtree_by_depth():
     assert result.company_id == 1
     assert result.labeled_count == 4
     assert result.levels == {"company": 1, "dept": 1, "office": 1, "squad": 1}
+
+
+@pytest.mark.asyncio
+async def test_clear_company_root_clears_subtree_only():
+    service = DepartmentOrgLevelService()
+    company = SimpleNamespace(
+        id=1, path="/1/", dept_id="BS@1", status="active", org_level="company"
+    )
+    labeled = [
+        SimpleNamespace(id=1, org_level="company"),
+        SimpleNamespace(id=2, org_level="dept"),
+    ]
+    cleared = {"ok": False}
+
+    class FakeSession:
+        def __init__(self):
+            self.queue = [_FakeResult(labeled), "update"]
+
+        async def exec(self, _stmt):
+            item = self.queue.pop(0)
+            if item == "update":
+                cleared["ok"] = True
+                return _FakeResult([])
+            return item
+
+        async def commit(self):
+            return None
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            return False
+
+    with (
+        patch.object(service, "_resolve_department", AsyncMock(return_value=company)),
+        patch(
+            "bisheng.points.domain.services.department_org_level_service.get_async_db_session",
+            return_value=FakeSession(),
+        ),
+    ):
+        result = await service.clear_company_root(
+            SimpleNamespace(is_admin=lambda: True, is_global_super=False),
+            "1",
+        )
+
+    assert cleared["ok"] is True
+    assert result.cleared_count == 2
+
+
+@pytest.mark.asyncio
+async def test_clear_company_root_rejects_non_company():
+    service = DepartmentOrgLevelService()
+    dept = SimpleNamespace(id=2, path="/1/2/", dept_id="BS@2", status="active", org_level="dept")
+
+    with patch.object(service, "_resolve_department", AsyncMock(return_value=dept)):
+        with pytest.raises(PointsNotCompanyRootError):
+            await service.clear_company_root(
+                SimpleNamespace(is_admin=lambda: True, is_global_super=False),
+                "2",
+            )

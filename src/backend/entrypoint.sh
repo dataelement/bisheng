@@ -29,6 +29,9 @@ DEFAULT_CONCURRENCY="${DEFAULT_CONCURRENCY:-100}"
 
 KNOWLEDGE_PDF_CONCURRENCY="${KNOWLEDGE_PDF_CONCURRENCY:-2}"
 
+POINTS_AWARD_POOL="${POINTS_AWARD_POOL:-threads}"
+POINTS_AWARD_CONCURRENCY="${POINTS_AWARD_CONCURRENCY:-20}"
+
 LINSIGHT_WORKER_NUM="${LINSIGHT_WORKER_NUM:-4}"
 LINSIGHT_MAX_CONCURRENCY="${LINSIGHT_MAX_CONCURRENCY:-5}"
 
@@ -86,6 +89,16 @@ start_pdf() {
         -n knowledge_pdf@%h
 }
 
+start_points_award() {
+    echo "Starting Points Award Celery worker..."
+    exec celery -A bisheng.worker.main worker \
+        -l info \
+        -c "$POINTS_AWARD_CONCURRENCY" \
+        -P "$POINTS_AWARD_POOL" \
+        -Q points_award_celery \
+        -n points_award@%h
+}
+
 start_beat() {
     echo "Starting Celery beat..."
     exec celery -A bisheng.worker.main beat -l info
@@ -126,6 +139,7 @@ start_all_workers() {
     run_background start_pdf
     run_background start_workflow
     run_background start_default
+    run_background start_points_award
     run_background start_beat
 
     set +e
@@ -154,6 +168,9 @@ case "$START_MODE" in
     pdf)
         start_pdf
         ;;
+    points_award)
+        start_points_award
+        ;;
     beat)
         start_beat
         ;;
@@ -165,7 +182,7 @@ case "$START_MODE" in
         ;;
     *)
         echo "Invalid start mode: $START_MODE"
-        echo "Use one of: api, worker, knowledge, workflow, default, pdf, beat, linsight"
+        echo "Use one of: api, worker, knowledge, workflow, default, pdf, points_award, beat, linsight"
         exit 1
         ;;
 esac
