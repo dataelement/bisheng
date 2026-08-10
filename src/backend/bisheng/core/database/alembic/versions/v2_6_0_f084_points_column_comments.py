@@ -45,16 +45,52 @@ def _escape_sql_literal(value: str) -> str:
     return value.replace("'", "''")
 
 
-def _apply_mysql_comment(table: str, column: str, comment: str, col_info: dict) -> None:
-    """MySQL/MariaDB：通过 alter_column 写入 comment，保留既有类型与可空性。"""
-    op.alter_column(
-        table,
-        column,
-        existing_type=col_info["type"],
-        existing_nullable=col_info["nullable"],
-        existing_server_default=col_info.get("default"),
-        comment=comment,
-    )
+def _apply_mysql_comment(bind, table: str, column: str, comment: str) -> None:
+    """MySQL/MariaDB：用 information_schema 拼 MODIFY，避免 alter_column 二次转义 DEFAULT。
+
+    inspector 返回的 default 形如 ``'1'``（已含引号）；若原样传给
+    ``existing_server_default`` 会变成 ``DEFAULT '''1'''`` 并触发 1067。
+    同时保留 EXTRA（如 ON UPDATE CURRENT_TIMESTAMP / auto_increment）。
+    """
+    row = bind.execute(
+        sa.text(
+            """
+            SELECT COLUMN_TYPE, IS_NULLABLE, COLUMN_DEFAULT, EXTRA, COLUMN_COMMENT
+            FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = :table
+              AND COLUMN_NAME = :column
+            """
+        ),
+        {"table": table, "column": column},
+    ).mappings().first()
+    if row is None:
+        return
+    # 已是目标文案则跳过，支持中断后重跑
+    if (row["COLUMN_COMMENT"] or "") == comment:
+        return
+
+    null_sql = "NULL" if row["IS_NULLABLE"] == "YES" else "NOT NULL"
+    default = row["COLUMN_DEFAULT"]
+    # MySQL 8 EXTRA 可能含 DEFAULT_GENERATED，不能原样拼进 MODIFY
+    extra_l = (row["EXTRA"] or "").lower()
+    parts = [f"ALTER TABLE `{table}` MODIFY COLUMN `{column}` {row['COLUMN_TYPE']} {null_sql}"]
+
+    if default is not None:
+        # CURRENT_TIMESTAMP 等函数默认值不能再加引号；普通标量按字符串字面量写入
+        upper = str(default).upper()
+        if upper in ("CURRENT_TIMESTAMP", "CURRENT_TIMESTAMP()", "NULL") or upper.startswith(
+            "CURRENT_TIMESTAMP"
+        ):
+            parts.append(f"DEFAULT {default}")
+        else:
+            parts.append(f"DEFAULT '{_escape_sql_literal(str(default))}'")
+    if "auto_increment" in extra_l:
+        parts.append("AUTO_INCREMENT")
+    if "on update current_timestamp" in extra_l:
+        parts.append("ON UPDATE CURRENT_TIMESTAMP")
+    parts.append(f"COMMENT '{_escape_sql_literal(comment)}'")
+    op.execute(sa.text(" ".join(parts)))
 
 
 def _apply_dm_comment(table: str, column: str, comment: str) -> None:
@@ -89,8 +125,8 @@ def upgrade() -> None:
             if dialect in ("dm", "oracle"):
                 _apply_dm_comment(table, name, comment)
             else:
-                # mysql / mariadb / 其他支持 alter_column comment 的方言
-                _apply_mysql_comment(table, name, comment, col_by_name[name])
+                # mysql / mariadb
+                _apply_mysql_comment(bind, table, name, comment)
 
 
 def downgrade() -> None:
