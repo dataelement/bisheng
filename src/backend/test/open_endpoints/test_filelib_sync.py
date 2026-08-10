@@ -132,11 +132,6 @@ def test_portal_domain_config_preserves_department_bindings():
     assert domain.department_ids == [3, 5]
 
 
-def test_department_chain_starts_at_self_and_walks_to_root():
-    department = _department(3, "三级部门", "/1/2/3/")
-    assert FilelibSyncService._department_chain(department) == [3, 2, 1]
-
-
 async def test_unknown_responsible_external_id_is_rejected():
     caller_department = _department(10, "调用人部门", "/10/")
     repository = SimpleNamespace(
@@ -238,6 +233,25 @@ async def test_main_department_name_without_id_must_match_caller_department():
         await _service(repository)._resolve_identity(params)
 
 
+def test_department_chain_starts_at_self_and_walks_to_root():
+    department = _department(3, "三级部门", "/1/2/3/")
+    assert FilelibSyncService._department_chain(department) == [3, 2, 1]
+
+
+async def test_department_binding_is_selected():
+    department = _department(3, "三级部门", "/1/2/3/")
+    repository = SimpleNamespace(
+        find_knowledge_by_id=AsyncMock(return_value=Knowledge(id=22, name="三级部门库", type=3)),
+    )
+    with patch(
+        "bisheng.open_endpoints.domain.services.filelib_sync_service.DepartmentSpaceTargetResolver.resolve",
+        new=AsyncMock(return_value=22),
+    ) as resolve:
+        space = await _service(repository)._find_department_space(department)
+    assert space.id == 22
+    resolve.assert_awaited_once_with([3])
+
+
 async def test_nearest_department_binding_is_selected():
     department = _department(3, "三级部门", "/1/2/3/")
     repository = SimpleNamespace(
@@ -253,6 +267,19 @@ async def test_nearest_department_binding_is_selected():
 
 
 async def test_ambiguous_department_binding_is_rejected_before_space_lookup():
+    department = _department(3, "三级部门", "/1/2/3/")
+    repository = SimpleNamespace(find_knowledge_by_id=AsyncMock())
+    with patch(
+        "bisheng.open_endpoints.domain.services.filelib_sync_service.DepartmentSpaceTargetResolver.resolve",
+        new=AsyncMock(side_effect=DepartmentKnowledgeSpaceAmbiguousError()),
+    ):
+        with pytest.raises(FilelibSyncConflictError, match="multiple target"):
+            await _service(repository)._find_department_space(department)
+
+    repository.find_knowledge_by_id.assert_not_awaited()
+
+
+async def test_nearest_ambiguous_department_binding_is_rejected_before_space_lookup():
     department = _department(3, "三级部门", "/1/2/3/")
     repository = SimpleNamespace(find_knowledge_by_id=AsyncMock())
     with patch(

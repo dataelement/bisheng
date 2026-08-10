@@ -164,7 +164,7 @@ async def test_dynamic_target_with_dynamic_folder_resolves_space_then_child_fold
         ),
         knowledge_space_service=knowledge_space_service,
     )
-    service._find_nearest_department_space = AsyncMock(return_value=space)
+    service._find_department_space = AsyncMock(return_value=space)
     identity = _identity(target_space_department=SimpleNamespace(id=20, name="同步部门"))
 
     target = await service._resolve_target_space(identity)

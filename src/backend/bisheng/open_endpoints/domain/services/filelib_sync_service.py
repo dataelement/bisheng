@@ -579,7 +579,7 @@ class FilelibSyncService:
             return space
         if identity.target_space_department is None:
             raise FilelibSyncNotFoundError(msg="dynamic target department does not exist")
-        return await self._find_nearest_department_space(identity.target_space_department)
+        return await self._find_department_space(identity.target_space_department)
 
     async def _resolve_personal_fallback_target(self, identity: ResolvedIdentity) -> ResolvedFileSyncTarget:
         space = await self.knowledge_space_service.ensure_personal_default_space()
@@ -698,6 +698,19 @@ class FilelibSyncService:
         if source == "caller_main_department_name":
             return str(identity.caller_department.name or "")
         raise FilelibSyncInvalidParamsError(msg="invalid folder dynamic source in token rule")
+
+    async def _find_department_space(self, department: Department) -> Knowledge:
+        try:
+            space_id = await DepartmentSpaceTargetResolver.resolve([int(department.id)])
+        except DepartmentKnowledgeSpaceAmbiguousError as exc:
+            raise FilelibSyncConflictError(
+                msg="multiple target knowledge spaces are bound to the department",
+            ) from exc
+        if space_id is not None:
+            space = await self.repository.find_knowledge_by_id(space_id)
+            if space is not None:
+                return space
+        raise FilelibSyncNotFoundError(msg=f"首钢股份知识管理平台不存在知识库{department.name}")
 
     async def _find_nearest_department_space(self, department: Department) -> Knowledge:
         chain = self._department_chain(department)

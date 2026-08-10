@@ -127,7 +127,7 @@ async def test_fixed_folder_target_resolves_string_path() -> None:
 async def test_dynamic_target_always_resolves_to_space_root() -> None:
     space = _space()
     service = _service(_rule(folder_id=None, dynamic=True))
-    service._find_nearest_department_space = AsyncMock(return_value=space)
+    service._find_department_space = AsyncMock(return_value=space)
 
     target = await service._resolve_target_space(
         SimpleNamespace(target_space_department=SimpleNamespace(id=20), business_domain_department=None)
