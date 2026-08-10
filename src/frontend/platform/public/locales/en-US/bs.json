@@ -1414,6 +1414,7 @@
       "noBoundSpace": "No linked knowledge space",
       "status": "Status",
       "tagType": "Tag type",
+      "sourceLibrary": "Source knowledge base",
       "statusAll": "All",
       "statusPending": "Pending",
       "statusApproved": "Approved",

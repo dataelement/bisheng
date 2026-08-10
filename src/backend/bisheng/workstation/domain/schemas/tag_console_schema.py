@@ -51,6 +51,11 @@ class TagConsoleFilter(BaseModel):
 
     tag_name: str | None = None
     resource_type: str | None = None
+    # 标签来源库: the knowledge space a tag was proposed from. Neither table
+    # stores it, so it is matched through the tag's file links — which means a
+    # tag an admin typed straight into a library has no source and can never
+    # match this filter.
+    source_knowledge_id: int | None = None
     submitter_id: int | None = None
     reviewer_id: int | None = None
     create_time_start: datetime | None = None

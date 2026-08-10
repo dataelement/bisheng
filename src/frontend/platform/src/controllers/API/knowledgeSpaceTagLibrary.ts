@@ -241,6 +241,8 @@ export interface TagConsoleSourceFile {
 export interface TagConsoleFilterParams {
   tag_name?: string
   resource_type?: string
+  /** 标签来源库 — matched through the tag's file links, not stored on the tag. */
+  source_knowledge_id?: number
   submitter_id?: number
   reviewer_id?: number
   create_time_start?: string

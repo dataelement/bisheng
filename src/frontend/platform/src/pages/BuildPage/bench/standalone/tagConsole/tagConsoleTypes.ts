@@ -14,24 +14,26 @@ export type TagConsoleMode = "library" | "review"
 export type TagConsoleReviewTab = "pending" | "reviewed"
 
 /**
- * A picked user.
+ * A value picked from a searchable dropdown (a user, a knowledge base).
  *
- * The name is kept alongside the id because the user picker renders from the
+ * The name is kept alongside the id because those controls render from the
  * option label; holding the id alone leaves the closed control blank.
  */
-export interface TagConsoleUserPick {
+export interface TagConsolePick {
     id: string
     name: string
 }
 
-export const EMPTY_USER_PICK: TagConsoleUserPick = { id: "", name: "" }
+export const EMPTY_PICK: TagConsolePick = { id: "", name: "" }
 
 /** Draft state of the filter bar, before it is turned into request params. */
 export interface TagConsoleFilterState {
     tagName: string
     resourceType: string
-    submitter: TagConsoleUserPick
-    reviewer: TagConsoleUserPick
+    /** 标签来源库 — the knowledge base the tag was proposed from. */
+    sourceKnowledge: TagConsolePick
+    submitter: TagConsolePick
+    reviewer: TagConsolePick
     createTimeStart: string
     createTimeEnd: string
     reviewTimeStart: string
@@ -43,8 +45,9 @@ export interface TagConsoleFilterState {
 export const EMPTY_FILTERS: TagConsoleFilterState = {
     tagName: "",
     resourceType: "",
-    submitter: EMPTY_USER_PICK,
-    reviewer: EMPTY_USER_PICK,
+    sourceKnowledge: EMPTY_PICK,
+    submitter: EMPTY_PICK,
+    reviewer: EMPTY_PICK,
     createTimeStart: "",
     createTimeEnd: "",
     reviewTimeStart: "",
@@ -88,6 +91,7 @@ export function buildSearchParams(
     const params: TagConsoleFilterParams = { page, page_size: pageSize }
     if (filters.tagName.trim()) params.tag_name = filters.tagName.trim()
     if (filters.resourceType) params.resource_type = filters.resourceType
+    if (filters.sourceKnowledge.id) params.source_knowledge_id = Number(filters.sourceKnowledge.id)
     if (filters.submitter.id) params.submitter_id = Number(filters.submitter.id)
     if (filters.reviewer.id) params.reviewer_id = Number(filters.reviewer.id)
     if (filters.createTimeStart) params.create_time_start = filters.createTimeStart
