@@ -148,11 +148,15 @@ class ReviewTagsRepositoryImpl:
         resource_type: TagResourceTypeEnum,
         tenant_id: int,
         space_ids: set[int] | None = None,
+        reviewer_id: int | None = None,
     ):
         """Soft-delete pending rows for ``tag_name``, optionally space-scoped.
 
         Scoped reject only soft-deletes in-scope links. The parent ``ReviewTag``
         is rejected only when no active links remain outside the scope.
+
+        Unlike approve — which hard-deletes the row — reject keeps it around, so
+        this is where the reviewer is recorded for rejected tags.
         """
         tags = await self.get_review_tag_list_by_tag_name(tag_name, resource_type, tenant_id, space_ids=space_ids)
         if not tags:
@@ -174,6 +178,7 @@ class ReviewTagsRepositoryImpl:
                         update_time=now,
                         review_status=ApproveOrRejectEnum.REJECT.value,
                         review_time=now,
+                        reviewer_id=reviewer_id,
                     )
                 )
                 await self.session.exec(
@@ -210,6 +215,7 @@ class ReviewTagsRepositoryImpl:
                         update_time=now,
                         review_status=ApproveOrRejectEnum.REJECT.value,
                         review_time=now,
+                        reviewer_id=reviewer_id,
                     )
                 )
 
@@ -260,6 +266,8 @@ class ReviewTagsRepositoryImpl:
         review_tag_link: list[ReviewTagLink],
         *,
         skip_library_add: bool = False,
+        reviewer_id: int | None = None,
+        review_time: datetime | None = None,
     ):
         if not skip_library_add:
             if (
@@ -267,7 +275,12 @@ class ReviewTagsRepositoryImpl:
                 or review_tag.resource_type == TagResourceTypeEnum.AI_AUTO_TAG
             ):
                 await self.create_tag_library_by_tag(review_tag.name, review_tag.tenant_id, review_tag.resource_type)
-        await self.tags_repository.approve_tag_to_move(review_tag, review_tag_link)
+        await self.tags_repository.approve_tag_to_move(
+            review_tag,
+            review_tag_link,
+            reviewer_id=reviewer_id,
+            review_time=review_time,
+        )
 
     async def create_tag_library_by_tag(self, tag_name: str, tenant_id: int, resource_type: TagResourceTypeEnum):
         tag_library = await self.tags_repository.get_tag_library(tenant_id)

@@ -55,6 +55,7 @@ start_knowledge() {
         -l info \
         -c "$KNOWLEDGE_CONCURRENCY" \
         -P "$KNOWLEDGE_POOL" \
+        --prefetch-multiplier=1 \
         -Q knowledge_celery \
         -n knowledge@%h
 }

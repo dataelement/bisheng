@@ -134,7 +134,7 @@ cd src/backend
 .venv/bin/uvicorn bisheng.main:app --host 0.0.0.0 --port 7860 --workers 1 --no-access-log
 
 # 4. 启动 Celery Workers（各开一个终端）
-.venv/bin/celery -A bisheng.worker.main worker -l info -c 20 -P threads -Q knowledge_celery -n knowledge@%h
+.venv/bin/celery -A bisheng.worker.main worker -l info -c 20 -P threads --prefetch-multiplier=1 -Q knowledge_celery -n knowledge@%h
 .venv/bin/celery -A bisheng.worker.main worker -l info -c 100 -P threads -Q workflow_celery -n workflow@%h
 .venv/bin/celery -A bisheng.worker.main beat -l info
 
@@ -173,12 +173,26 @@ npm start -- --host 0.0.0.0   # 端口 3001，API 代理到 localhost:7860
 | 模式 | 命令 | 队列 | 并发数 | 说明 |
 |------|------|------|--------|------|
 | `api` | `uvicorn bisheng.main:app` | -- | 8 workers | FastAPI 服务器（默认模式） |
-| `knowledge` | `celery ... worker -Q knowledge_celery` | `knowledge_celery` | 20 线程 | 知识库文档解析、Embedding 生成 |
+| `knowledge` | `celery ... worker --prefetch-multiplier=1 -Q knowledge_celery` | `knowledge_celery` | 20 线程 | 仅标题提取、正式解析和解析重试；三级优先级共享原有总并发 |
 | `workflow` | `celery ... worker -Q workflow_celery` | `workflow_celery` | 100 线程 | 工作流 DAG 执行 |
 | `beat` | `celery ... beat` | -- | -- | 定时任务调度器 |
 | `default` | `celery ... worker -Q celery` | `celery` | 100 线程 | 遥测统计等默认任务 |
 | `linsight` | `python bisheng/linsight/worker.py` | -- | 4 worker / 5 并发 | 灵思 Agent 独立进程 |
 | `worker` | 以上全部（除 api） | 全部 | -- | 一次性启动全部 Worker + Beat |
+
+### 解析队列优先级运行约束
+
+- Redis broker transport 必须保留 `priority_steps=[0,3,6,9]` 和 `queue_order_strategy=round_robin`；业务等级只映射到 `0/3/9`。
+- `knowledge_celery` 只允许标题提取、正式解析和解析重试三个任务。其他知识库任务进入 `celery` 默认队列，PDF 预生成进入 `knowledge_pdf_celery`。
+- 两套入口脚本都必须带 `--prefetch-multiplier=1`，并保持原有 `-c 20 -P threads`，避免部署方式不同导致优先级表现不一致。
+- 优先级只影响尚未开始的等待任务；执行中的任务不抢占，低优任务也不承诺公平等待上限。
+- 排队位置来自应用侧 Redis 可观测索引，Redis 索引异常只导致界面显示“暂不可用”，不得作为停止或重试 Celery 业务任务的依据。
+
+### 发布与回滚
+
+发布顺序建议先执行新增 `knowledge_file.parse_priority` 可空列的 Alembic migration，再发布后端 API/Worker，最后发布前端。滚动发布期间，旧消息没有 queue ticket 时位置接口会安全降级为 `unavailable`；新旧 Worker 不应同时长期运行，以免旧投递入口绕过优先级快照。
+
+回滚应用时可先回滚前端和后端代码，并保留可空列以兼容已写入数据。只有确认没有仍依赖该字段的新代码和待处理消息后，才执行 migration downgrade 删除列。排队索引全部使用 `{knowledge_parse_queue}` hash tag 和最长 26 小时硬 TTL，不需要数据迁移；紧急回滚时可以等待自动过期，不能通过清空整个 Redis 实例处理。
 
 ### 定时任务（Beat Schedule）
 

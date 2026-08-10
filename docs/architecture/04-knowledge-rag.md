@@ -334,22 +334,27 @@ Excel 类文件（xlsx/xls/csv）使用独立的转换链，跳过附件处理�
 
 ### 8.1 Worker 队列
 
-知识库任务使用 `knowledge_celery` 队列，启动命令：
+`knowledge_celery` 是文件解析专用队列，只接收标题提取、正式解析和解析重试三个任务。删除、复制、索引重建、问答对处理等其他知识库任务仍进入 `celery` 默认队列；PDF 预生成继续使用独立的 `knowledge_pdf_celery`。解析 Worker 的总并发保持 20，不因优先级功能扩容：
 
 ```bash
-celery -A bisheng.worker.main worker -l info -c 20 -P threads -Q knowledge_celery -n knowledge@%h
+celery -A bisheng.worker.main worker -l info -c 20 -P threads --prefetch-multiplier=1 -Q knowledge_celery -n knowledge@%h
 ```
+
+Redis broker 使用 Kombu 的四个兼容 priority steps `[0, 3, 6, 9]`。业务只使用其中 `0/3/9`，分别对应角色配置的高/中/低优先级；`queue_order_strategy` 保持 `round_robin`。`prefetch-multiplier=1` 限制每个 Worker 线程只预取一个任务，降低低优任务提前占用本地预取槽的程度，但已经开始执行的任务不会被抢占，也不提供用户间公平调度。
 
 ### 8.2 Celery 任务
 
 | 任务函数 | 文件 | 说明 |
 |---------|------|------|
+| `extract_knowledge_file_title_celery` | `file_title_worker.py` | 提取文件标题，完成后按同一文件快照投递正式解析 |
 | `parse_knowledge_file_celery` | `file_worker.py` | 解析上传的文件，构建向量索引 |
 | `retry_knowledge_file_celery` | `file_worker.py` | 重试失败的文件解析（先删除旧向量再重新解析） |
 | `delete_knowledge_file_celery` | `file_worker.py` | 删除文件及其向量数据 |
 | `file_copy_celery` | `file_worker.py` | 复制知识库（含文件、向量、ES 索引的完整复制） |
 | `rebuild_knowledge_celery` | `rebuild_knowledge_worker.py` | 重建知识库索引（切换 Embedding 模型时使用） |
 | QA 相关任务 | `qa.py` | 问答对的处理和向量化 |
+
+前三个任务属于 `knowledge_celery`；其余表内任务属于默认队列。路由由 `core/config/celery_queues.py` 的白名单强制约束，历史自定义路由不能把其他任务重新送入解析队列。
 
 ### 8.3 文件解析流程
 
@@ -361,7 +366,19 @@ celery -A bisheng.worker.main worker -l info -c 20 -P threads -Q knowledge_celer
 4. 调用 `process_file_task()` 执行完整的 Load -> Transform -> Ingest 管道
 5. 任务完成后检查文件记录是否仍存在（可能在解析期间被用户删除），若不存在则清理向量数据
 
-### 8.4 知识库重建
+### 8.4 解析优先级与文件快照
+
+角色的 `quota_config.knowledge_file_parse_priority` 可配置 `high`、`medium` 或 `low`，旧角色缺少该键时按中优处理。用户拥有多个角色时取最高等级；全局超级管理员固定为高优。文件第一次进入标题提取、正式解析或重试入口时，将解析等级原子固化到 `KnowledgeFile.parse_priority`。后续标题任务、正式解析和重试只继承该快照，因此角色配置变更不会回溯修改已经进入解析链路的文件。
+
+历史文件的快照列保持可空：首次重试时优先按原上传者在当前租户内的有效角色补齐；找不到上传者时降为低优。统一投递服务始终显式传入 `queue="knowledge_celery"` 和 transport priority，broker 发布失败保持原有错误语义，Redis 可观测索引失败则只降低排队位置展示，不阻断文件解析。
+
+### 8.5 排队位置可视化
+
+应用使用独立的 Redis ZSET/Hash 旁路索引记录每个真实 broker 消息的逻辑 ticket，以及每次 Worker delivery 的短租约 attempt。它不读取或反序列化 Celery broker list。排队位置按“所有更高等级等待任务数 + 同等级中更早的任务数”计算；执行中的 attempt 不计入前方等待数，并通过独立 `active_count` 展示。
+
+位置是近似值：应用 sequence 与 broker 发布不是同一事务，后到高优任务可以插队，Worker 预取也会造成短暂偏差。API 因此固定返回 `approximate=true`。Redis 不可用、旧版本消息、发布中断窗口或数据库仍处于等待/处理中但没有可靠 ticket/attempt 时返回 `unavailable`，不会猜测为 0，也不会影响解析任务本身。
+
+### 8.6 知识库重建
 
 `rebuild_knowledge_celery` 用于在切换 Embedding 模型后重建向量索引：
 
@@ -372,7 +389,7 @@ celery -A bisheng.worker.main worker -l info -c 20 -P threads -Q knowledge_celer
 5. 更新文件状态为 SUCCESS 或 FAILED
 6. 更新知识库状态
 
-### 8.5 知识库复制
+### 8.7 知识库复制
 
 `file_copy_celery` 实现知识库的完整复制：
 

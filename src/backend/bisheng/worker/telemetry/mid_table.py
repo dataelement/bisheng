@@ -12,6 +12,7 @@ from bisheng.common.constants.enums.telemetry import (
     ApplicationTypeEnum,
     BaseTelemetryTypeEnum,
 )
+from bisheng.common.constants.telemetry import KNOWLEDGE_SPACE_DASHBOARD_FILE_LEVELS
 from bisheng.common.schemas.telemetry.base_telemetry_schema import UserGroupInfo, UserRoleInfo, UserDepartmentInfo
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
@@ -461,6 +462,15 @@ def _is_department_bound_space_scope(scope) -> bool:
     }
 
 
+def _resolve_content_stat_space_level(scope) -> str | None:
+    if scope is None:
+        return None
+    level = str(getattr(scope.level, "value", scope.level)).strip().lower()
+    if level not in KNOWLEDGE_SPACE_DASHBOARD_FILE_LEVELS:
+        return None
+    return level
+
+
 def _get_knowledge_space_department_map(
     space_ids: list[int],
     space_scope_map: dict,
@@ -576,7 +586,7 @@ def _build_knowledge_space_content_records(
                 file_record=file_record,
                 space=space,
                 uploader=uploader,
-                space_level=getattr(scope, "level", None),
+                space_level=_resolve_content_stat_space_level(scope),
                 space_department=space_department_map.get(int(space.id)),
                 primary_department=primary_department_map.get(int(file_record.user_id or 0)),
                 file_category_labels=category_labels,

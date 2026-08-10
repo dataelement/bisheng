@@ -169,7 +169,7 @@ async def test_revoked_folder_permission_returns_19902() -> None:
 
 
 @pytest.mark.asyncio
-async def test_folder_permission_failure_happens_before_temporary_upload() -> None:
+async def test_folder_permission_failure_cleans_up_staged_upload() -> None:
     service = _service(_rule(folder_id=4096))
     service._resolve_identity = AsyncMock(
         return_value=SimpleNamespace(
@@ -184,7 +184,8 @@ async def test_folder_permission_failure_happens_before_temporary_upload() -> No
     service._resolve_target_folder = AsyncMock(return_value=4096)
     service._ensure_domain_bound = MagicMock()
     service._require_upload_permission = AsyncMock(side_effect=FilelibSyncPermissionDeniedError())
-    service._save_temporary_file = AsyncMock()
+    service._save_temporary_file = AsyncMock(return_value="temporary-url")
+    service._cleanup_failed_sync = AsyncMock()
 
     with pytest.raises(FilelibSyncPermissionDeniedError):
         await service.sync(
@@ -192,7 +193,8 @@ async def test_folder_permission_failure_happens_before_temporary_upload() -> No
             upload_file=UploadFile(filename="a.pdf", file=BytesIO(b"content"), size=7),
         )
 
-    service._save_temporary_file.assert_not_awaited()
+    service._save_temporary_file.assert_awaited_once()
+    service._cleanup_failed_sync.assert_awaited_once_with(None, "temporary-url")
 
 
 @pytest.mark.asyncio
@@ -212,7 +214,7 @@ async def test_fixed_folder_upload_passes_parent_id_and_keeps_response_contract(
     knowledge_service = SimpleNamespace(
         get_preview_cache_key=MagicMock(return_value="preview-key"),
         add_file=AsyncMock(return_value=[SimpleNamespace(id=9, status=KnowledgeFileStatus.WAITING.value)]),
-        enqueue_file_title_extraction=MagicMock(),
+        enqueue_file_title_extraction=AsyncMock(),
     )
     service = _service(
         _rule(folder_id=4096),

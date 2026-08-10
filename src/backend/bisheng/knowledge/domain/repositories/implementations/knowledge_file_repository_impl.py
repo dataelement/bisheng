@@ -64,6 +64,41 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
         result = await self.session.execute(stmt)
         return result.scalars().first()
 
+    async def set_parse_priority_if_unset(
+        self,
+        file_id: int,
+        priority: str,
+    ) -> KnowledgeFile | None:
+        try:
+            await self.session.execute(
+                update(KnowledgeFile)
+                .where(
+                    KnowledgeFile.id == file_id,
+                    KnowledgeFile.parse_priority.is_(None),
+                )
+                .values(parse_priority=priority)
+            )
+            await self.session.commit()
+        except Exception:
+            await self.session.rollback()
+            raise
+        return await self.find_by_id(file_id)
+
+    async def find_by_ids_in_knowledge(
+        self,
+        entity_ids: list[int],
+        knowledge_id: int,
+    ) -> list[KnowledgeFile]:
+        if not entity_ids:
+            return []
+        result = await self.session.execute(
+            select(KnowledgeFile).where(
+                col(KnowledgeFile.id).in_(entity_ids),
+                KnowledgeFile.knowledge_id == knowledge_id,
+            )
+        )
+        return list(result.scalars().all())
+
     async def find_by_ids_for_update(
         self,
         entity_ids: list[int],

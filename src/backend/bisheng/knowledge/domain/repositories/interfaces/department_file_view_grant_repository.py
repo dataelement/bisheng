@@ -10,6 +10,14 @@ from bisheng.knowledge.domain.models.department_file_view_grant import (
 
 class DepartmentFileViewGrantRepository(ABC):
     @abstractmethod
+    async def list_active_by_user(
+        self,
+        *,
+        tenant_id: int,
+        user_id: int,
+    ) -> list[DepartmentFileViewGrant]: ...
+
+    @abstractmethod
     async def list_active_by_user_page(
         self,
         *,

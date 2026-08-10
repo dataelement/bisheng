@@ -5,6 +5,7 @@ import {
     addFilesApi,
     checkSensitiveWordsApi,
     createFolderApi,
+    getKnowledgeParseQueuePositionsApi,
     getSimilarCandidatesApi,
     getSpaceTagsApi,
     listKnowledgeFolders,
@@ -27,6 +28,7 @@ jest.mock("~/api/knowledge", () => ({
     addFilesApi: jest.fn(),
     checkSensitiveWordsApi: jest.fn(),
     createFolderApi: jest.fn(),
+    getKnowledgeParseQueuePositionsApi: jest.fn(),
     getSimilarCandidatesApi: jest.fn(),
     getSpaceTagsApi: jest.fn(),
     linkAsNewVersionApi: jest.fn(),
@@ -86,7 +88,80 @@ describe("usePortalUploadDialog", () => {
         jest.mocked(getSpaceTagsApi).mockResolvedValue([] as any);
         jest.mocked(listKnowledgeFolders).mockResolvedValue({ items: [], total: 0 } as any);
         jest.mocked(createFolderApi).mockResolvedValue({ id: 1, name: "研发资料" } as any);
+        jest.mocked(getKnowledgeParseQueuePositionsApi).mockResolvedValue({
+            items: [],
+            activeCount: 0,
+            waitingCount: 0,
+            approximate: true,
+            asOf: "2026-08-09T00:00:00Z",
+        });
         jest.mocked(recommendUploadFoldersApi).mockResolvedValue({ items: [] } as any);
+    });
+
+    test("replaces upload success with one aggregate queue position toast", async () => {
+        jest.mocked(addFilesApi).mockResolvedValue([
+            makeFile({ id: "201", name: "一.pdf" }),
+            makeFile({ id: "202", name: "二.pdf" }),
+        ] as any);
+        jest.mocked(getKnowledgeParseQueuePositionsApi).mockResolvedValue({
+            items: [
+                { fileId: 201, state: "queued", aheadWaitingCount: 7 },
+                { fileId: 202, state: "queued", aheadWaitingCount: 9 },
+            ],
+            activeCount: 1,
+            waitingCount: 20,
+            approximate: true,
+            asOf: "2026-08-09T00:00:00Z",
+        });
+        const { hook, params } = renderUploadDialogHook();
+
+        act(() => {
+            hook.result.current.handleAddUploadFiles([
+                new File(["one"], "一.pdf", { type: "application/pdf" }),
+                new File(["two"], "二.pdf", { type: "application/pdf" }),
+            ]);
+        });
+        await act(async () => {
+            await hook.result.current.handleUploadNext();
+        });
+
+        expect(getKnowledgeParseQueuePositionsApi).toHaveBeenCalledWith("space-1", [201, 202]);
+        expect(params.showToast).toHaveBeenCalledTimes(1);
+        expect(params.showToast).toHaveBeenCalledWith({
+            message: "上传成功，2 个文件已进入队列，最前第 8/20 名",
+            severity: "success",
+        });
+    });
+
+    test.each([
+        ["no tasks ahead", () => Promise.resolve({
+            items: [{ fileId: 203, state: "queued", aheadWaitingCount: 0 }],
+            activeCount: 0,
+            waitingCount: 1,
+            approximate: true,
+            asOf: "2026-08-09T00:00:00Z",
+        })],
+        ["queue lookup fails", () => Promise.reject(new Error("redis unavailable"))],
+    ])("keeps the original success toast when %s", async (_caseName, queueResult) => {
+        jest.mocked(addFilesApi).mockResolvedValue([
+            makeFile({ id: "203", name: "三.pdf" }),
+        ] as any);
+        jest.mocked(getKnowledgeParseQueuePositionsApi).mockImplementation(() => queueResult() as any);
+        const { hook, params } = renderUploadDialogHook();
+
+        act(() => {
+            hook.result.current.handleAddUploadFiles([
+                new File(["three"], "三.pdf", { type: "application/pdf" }),
+            ]);
+        });
+        await act(async () => {
+            await hook.result.current.handleUploadNext();
+        });
+
+        expect(params.showToast).toHaveBeenCalledWith({
+            message: "上传成功",
+            severity: "success",
+        });
     });
 
     test("separates duplicate files from review rows when upload contains mixed results", async () => {
@@ -138,6 +213,7 @@ describe("usePortalUploadDialog", () => {
         expect(params.showToast).not.toHaveBeenCalledWith(expect.objectContaining({
             message: "上传成功",
         }));
+        expect(getKnowledgeParseQueuePositionsApi).not.toHaveBeenCalled();
         expect(getSimilarCandidatesApi).not.toHaveBeenCalled();
     });
 

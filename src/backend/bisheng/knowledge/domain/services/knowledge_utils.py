@@ -458,8 +458,11 @@ class KnowledgeUtils(BaseService):
     async def process_rebuild_file(cls, db_file, req_data, login_user_id: int, login_user_name: str):
         """Shared logic to rebuild a knowledge file with new rules."""
         from bisheng.api.v1.schemas import FileProcessBase
-        from bisheng.worker.knowledge import file_worker
         from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao, KnowledgeFileStatus
+        from bisheng.knowledge.domain.services.knowledge_parse_dispatch_service import (
+            KnowledgeParseAttemptKind,
+            dispatch_knowledge_parse_task,
+        )
         from bisheng.knowledge.domain.services.knowledge_pdf_artifact_service import (
             request_pdf_artifact_generation,
         )
@@ -476,7 +479,13 @@ class KnowledgeUtils(BaseService):
         db_file = await KnowledgeFileDao.async_update(db_file)
 
         preview_cache_key = cls.get_preview_cache_key(req_data.knowledge_id, file_path=req_data.file_path)
-        file_worker.retry_knowledge_file_celery.delay(db_file.id, preview_cache_key, req_data.callback_url)
+        await dispatch_knowledge_parse_task(
+            attempt_kind=KnowledgeParseAttemptKind.RETRY,
+            file_id=db_file.id,
+            preview_cache_key=preview_cache_key,
+            callback_url=req_data.callback_url,
+            operator_user_id=login_user_id,
+        )
 
         return db_file
 
@@ -485,10 +494,13 @@ class KnowledgeUtils(BaseService):
         """Shared logic for retrying multiple files with updated configuration"""
         from bisheng.core.storage.minio.minio_manager import get_minio_storage
         from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao, KnowledgeFileStatus
+        from bisheng.knowledge.domain.services.knowledge_parse_dispatch_service import (
+            KnowledgeParseAttemptKind,
+            dispatch_knowledge_parse_task,
+        )
         from bisheng.knowledge.domain.services.knowledge_pdf_artifact_service import (
             request_pdf_artifact_generation,
         )
-        from bisheng.worker.knowledge import file_worker
 
         minio_client = await get_minio_storage()
         file_level_path = set()
@@ -563,7 +575,13 @@ class KnowledgeUtils(BaseService):
 
         tmp = []
         for one_file in res:
-            file_worker.retry_knowledge_file_celery.delay(one_file[0].id, one_file[1], None)
+            await dispatch_knowledge_parse_task(
+                attempt_kind=KnowledgeParseAttemptKind.RETRY,
+                file_id=one_file[0].id,
+                preview_cache_key=one_file[1],
+                operator_user_id=login_user.user_id,
+                operator_is_global_super=bool(getattr(login_user, "is_global_super", False)),
+            )
             tmp.append(one_file[0])
 
         return tmp, file_level_path

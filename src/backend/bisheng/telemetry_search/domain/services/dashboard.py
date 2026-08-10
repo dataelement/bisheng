@@ -38,7 +38,8 @@ class DashboardService(BaseModel):
     FILE_SPACE_LEVEL_LABELS: ClassVar[dict[str, str]] = {
         "public": "公共库",
         "department": "部门库",
-        "team": "团队库（含科室库）",
+        "team": "团队库",
+        "team_ks": "科室库",
         "personal": "个人库",
     }
     APPLICATION_TYPE_LABELS: ClassVar[dict[str, str]] = {
@@ -63,6 +64,9 @@ class DashboardService(BaseModel):
     DASHBOARD_ENUM_LABELS: ClassVar[
         dict[str, dict[str, dict[str, str]]]
     ] = {
+        "mid_knowledge_space_content_stat": {
+            "space_level": FILE_SPACE_LEVEL_LABELS,
+        },
         "mid_app_increment": {
             "app_type": APPLICATION_TYPE_LABELS,
         },
@@ -750,28 +754,6 @@ class DashboardService(BaseModel):
             else:
                 label = enum_labels.get(str(value), label)
             options.append({"value": value, "label": label})
-        if (
-            dataset_code == "mid_knowledge_space_content_stat"
-            and field == "space_level"
-        ):
-            canonical_options = {}
-            for option in options:
-                canonical_value = (
-                    "team"
-                    if str(option["value"]) == "team_ks"
-                    else str(option["value"])
-                )
-                canonical_options[canonical_value] = {
-                    "value": canonical_value,
-                    "label": self.FILE_SPACE_LEVEL_LABELS.get(
-                        canonical_value,
-                        option["label"],
-                    ),
-                }
-            options = list(canonical_options.values())
-            enums = [option["value"] for option in options]
-            total = len(options)
-
         return {
             "total": total,
             "enums": enums,

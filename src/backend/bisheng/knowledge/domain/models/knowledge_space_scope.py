@@ -4,7 +4,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Dict, List, Optional
 
-from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String, UniqueConstraint, text
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Integer, String, UniqueConstraint, text
 from sqlmodel import Field, select
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -62,6 +62,15 @@ class KnowledgeSpaceScopeBase(SQLModelSerializable):
     owner_id: int = Field(
         sa_column=Column(Integer, nullable=False, comment='Scope owner id'),
     )
+    portal_discovery_enabled: bool = Field(
+        default=False,
+        sa_column=Column(
+            Boolean,
+            nullable=False,
+            server_default=text('0'),
+            comment='Whether the space participates in portal knowledge discovery',
+        ),
+    )
     created_by: int = Field(default=0, index=True, description='Creator user id')
     create_time: Optional[datetime] = Field(
         default=None,
@@ -103,6 +112,7 @@ class KnowledgeSpaceScopeDao(KnowledgeSpaceScopeBase):
         owner_type: KnowledgeSpaceOwnerTypeEnum,
         owner_id: int,
         created_by: int,
+        portal_discovery_enabled: bool = False,
     ) -> KnowledgeSpaceScope:
         row = KnowledgeSpaceScope(
             tenant_id=tenant_id,
@@ -111,6 +121,7 @@ class KnowledgeSpaceScopeDao(KnowledgeSpaceScopeBase):
             owner_type=owner_type,
             owner_id=owner_id,
             created_by=created_by,
+            portal_discovery_enabled=portal_discovery_enabled,
         )
         async with get_async_db_session() as session:
             session.add(row)

@@ -91,3 +91,23 @@ async def get_workstation_tags_service(
         request=request, session=session, login_user=login_user, review_tags_repository=review_tags_repository
     )
     return service
+
+
+async def get_tag_console_service(
+    session: AsyncSession = Depends(get_db_session),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    tags_service: "WorkStationTagsService" = Depends(get_workstation_tags_service),
+):
+    """Assemble the F079 tag console service.
+
+    It borrows ``WorkStationTagsService`` for the reviewer permission gate and
+    for delegating approve/reject, so the console never re-implements either.
+    """
+    from bisheng.workstation.domain.repositories.tag_console_repository import TagConsoleRepositoryImpl
+    from bisheng.workstation.domain.services.tag_console_service import TagConsoleService
+
+    return TagConsoleService(
+        login_user=login_user,
+        repository=TagConsoleRepositoryImpl(session=session),
+        tags_service=tags_service,
+    )

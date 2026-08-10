@@ -221,8 +221,9 @@ async def update_space(
         auto_tag_library_ids=req.auto_tag_library_ids,
         auto_tag_custom_tags=req.auto_tag_custom_tags,
         department_id=req.department_id,
+        portal_discovery_enabled=req.portal_discovery_enabled,
     )
-    if req.department_id is not None:
+    if req.department_id is not None or req.portal_discovery_enabled is not None:
         # Rebind responses must carry authoritative owner metadata so the portal
         # does not depend on a second best-effort detail request.
         space = await svc.get_space_info(space_id)

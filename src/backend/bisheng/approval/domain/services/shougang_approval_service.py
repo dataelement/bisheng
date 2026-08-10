@@ -76,6 +76,7 @@ from bisheng.knowledge.domain.services.knowledge_document_distribution_service i
     PUBLISH_DUPLICATE_CONTENT_MESSAGE,
 )
 from bisheng.tenant.domain.services.tenant_service import TenantService
+from bisheng.user.domain.models.user import UserDao
 
 logger = logging.getLogger(__name__)
 
@@ -130,6 +131,19 @@ class ShougangApprovalService:
     @staticmethod
     def _enum_value(value) -> Any:
         return value.value if hasattr(value, 'value') else value
+
+    @staticmethod
+    async def _build_original_origin_payload(canonical_source) -> dict[str, Any]:
+        uploader_id = getattr(canonical_source, "original_uploader_id", None)
+        knowledge_id = getattr(canonical_source, "original_knowledge_id", None)
+        uploader = await UserDao.aget_user(int(uploader_id)) if uploader_id is not None else None
+        knowledge = await KnowledgeDao.aquery_by_id(int(knowledge_id)) if knowledge_id is not None else None
+        return {
+            "original_uploader_id": int(uploader_id) if uploader_id is not None else None,
+            "original_uploader_name": getattr(uploader, "user_name", None),
+            "original_knowledge_id": int(knowledge_id) if knowledge_id is not None else None,
+            "original_knowledge_name": getattr(knowledge, "name", None),
+        }
 
     @classmethod
     def _is_private_personal_space_create(cls, params: dict) -> bool:
@@ -804,6 +818,7 @@ class ShougangApprovalService:
             source_file=source_file,
             target_space_id=int(target_space.id),
         )
+        origin_payload = await self._build_original_origin_payload(canonical_source)
         await self._ensure_file_share_not_in_pending_approval(
             tenant_id=int(login_user.tenant_id),
             document_id=int(canonical_source.document_id),
@@ -852,6 +867,7 @@ class ShougangApprovalService:
                 "source_entry_type_before_submit": (
                     getattr(source_file, "entry_type", None) or "normal"
                 ),
+                **origin_payload,
                 "target_space_id": int(target_space.id),
                 "target_space_name": target_space.name,
                 "target_space_level": (
@@ -1375,6 +1391,7 @@ class ShougangApprovalService:
 
         performance['failed_stage'] = 'approval_create'
         stage_started_at = perf_counter()
+        origin_payload = await self._build_original_origin_payload(canonical_source)
         applicant_department_id = await self._get_primary_department_id(login_user)
         file_name = getattr(source_file, 'file_name', None) or getattr(source_file, 'name', None) or str(source_file.id)
         approval_req = ApprovalGateRequest(
@@ -1409,6 +1426,7 @@ class ShougangApprovalService:
                 'source_entry_type_before_submit': (
                     getattr(source_file, 'entry_type', None) or 'normal'
                 ),
+                **origin_payload,
                 'target_space_id': int(target_space.id),
                 'target_space_name': target_space.name,
                 'target_space_level': target_level,

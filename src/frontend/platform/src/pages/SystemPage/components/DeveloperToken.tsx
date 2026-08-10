@@ -39,6 +39,7 @@ import {
   normalizeFileSyncRule,
 } from "./developerTokenFileSyncRuleValidation"
 import DeveloperTokenGlobalSettings from "./DeveloperTokenGlobalSettings"
+import { DeveloperTokenAutomotiveSheetSync } from "./DeveloperTokenAutomotiveSheetSync"
 import DeveloperTokenTable from "./DeveloperTokenTable"
 import useDeveloperTokenFileSyncOptions from "./useDeveloperTokenFileSyncOptions"
 import { resolveDepartmentUserTenantId } from "./developerTokenBinding"
@@ -357,6 +358,7 @@ export default function DeveloperToken() {
   return (
     <div className="flex h-full min-h-0 flex-col gap-4 overflow-auto p-4">
       {isSuperAdmin && <DeveloperTokenGlobalSettings />}
+      <DeveloperTokenAutomotiveSheetSync />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-72 items-center gap-2">

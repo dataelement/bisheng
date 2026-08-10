@@ -60,6 +60,8 @@ class CanonicalManagerSnapshot:
     document_id: int
     manager_file_id: int
     manager_space_id: int
+    original_uploader_id: int | None = None
+    original_knowledge_id: int | None = None
 
 
 @dataclass(frozen=True)
@@ -270,6 +272,12 @@ class KnowledgeDocumentDistributionService:
         }:
             raise KnowledgeDocumentDistributionError("source entry is not the current manager")
 
+        if source_file.original_uploader_id is None and source_file.user_id is not None:
+            source_file.original_uploader_id = int(source_file.user_id)
+        if source_file.original_knowledge_id is None:
+            source_file.original_knowledge_id = int(source_file.knowledge_id)
+        self.session.add(source_file)
+
         version = await self.version_repository.find_by_knowledge_file_id(source_file_id)
         if version is None:
             document = KnowledgeDocument(
@@ -318,6 +326,8 @@ class KnowledgeDocumentDistributionService:
             document_id=int(document.id),
             manager_file_id=int(source_file.id),
             manager_space_id=int(source_file.knowledge_id),
+            original_uploader_id=source_file.original_uploader_id,
+            original_knowledge_id=source_file.original_knowledge_id,
         )
 
     async def normalize_manager(
@@ -351,6 +361,8 @@ class KnowledgeDocumentDistributionService:
             document_id=int(document.id),
             manager_file_id=int(source_file.id),
             manager_space_id=int(source_file.knowledge_id),
+            original_uploader_id=source_file.original_uploader_id,
+            original_knowledge_id=source_file.original_knowledge_id,
         )
 
     async def restore_unapproved_manager(
@@ -696,6 +708,10 @@ class KnowledgeDocumentDistributionService:
         current_manager.projection_previous_file_id = None
 
         target_file.knowledge_id = int(document.knowledge_id)
+        if target_file.original_uploader_id is None:
+            target_file.original_uploader_id = current_manager.original_uploader_id
+        if target_file.original_knowledge_id is None:
+            target_file.original_knowledge_id = current_manager.original_knowledge_id
         target_file.file_level_path = previous_manager_path
         target_file.level = previous_manager_level
         target_file.reference_document_id = document_id
@@ -855,6 +871,8 @@ class KnowledgeDocumentDistributionService:
             user_name=manager.user_name,
             updater_id=manager.updater_id,
             updater_name=manager.updater_name,
+            original_uploader_id=manager.original_uploader_id,
+            original_knowledge_id=manager.original_knowledge_id,
             knowledge_id=int(manager.knowledge_id),
             file_name=manager.file_name,
             alias_name=manager.alias_name,
@@ -1218,6 +1236,19 @@ class KnowledgeDocumentDistributionService:
         source_version.version_no = next_version_no
         source_version.is_primary = True
 
+        target_origin_uploader_id = (
+            target_old_manager.original_uploader_id
+            if target_old_manager.original_uploader_id is not None
+            else target_old_manager.user_id
+        )
+        target_origin_knowledge_id = (
+            target_old_manager.original_knowledge_id
+            if target_old_manager.original_knowledge_id is not None
+            else target_old_manager.knowledge_id
+        )
+
+        target_old_manager.original_uploader_id = target_origin_uploader_id
+        target_old_manager.original_knowledge_id = target_origin_knowledge_id
         target_old_manager.reference_document_id = None
         target_old_manager.entry_type = None
         target_old_manager.entry_status = None
@@ -1226,6 +1257,8 @@ class KnowledgeDocumentDistributionService:
         target_old_manager.projection_lease_until = None
 
         manager.knowledge_id = command.target_space_id
+        manager.original_uploader_id = target_origin_uploader_id
+        manager.original_knowledge_id = target_origin_knowledge_id
         manager.file_level_path = command.target_file_level_path
         manager.level = command.target_level
         manager.reference_document_id = int(target_document.id)
@@ -1239,7 +1272,11 @@ class KnowledgeDocumentDistributionService:
 
         for entry in source_entries:
             entry.reference_document_id = int(target_document.id)
+            entry.original_uploader_id = target_origin_uploader_id
+            entry.original_knowledge_id = target_origin_knowledge_id
             self.session.add(entry)
+        publish.original_uploader_id = target_origin_uploader_id
+        publish.original_knowledge_id = target_origin_knowledge_id
         publish.entry_status = KnowledgeFileEntryStatus.ACTIVE.value
         publish.desired_entry_generation += 1
         publish.projection_status = KnowledgeFileProjectionStatus.PENDING.value
@@ -1488,6 +1525,8 @@ class KnowledgeDocumentDistributionService:
             user_name=source_entry.user_name,
             updater_id=source_entry.updater_id,
             updater_name=source_entry.updater_name,
+            original_uploader_id=source_entry.original_uploader_id,
+            original_knowledge_id=source_entry.original_knowledge_id,
             knowledge_id=command.target_space_id,
             file_name=source_entry.file_name,
             alias_name=source_entry.alias_name,
@@ -1756,6 +1795,8 @@ class KnowledgeDocumentDistributionService:
             user_name=manager.user_name,
             updater_id=manager.updater_id,
             updater_name=manager.updater_name,
+            original_uploader_id=manager.original_uploader_id,
+            original_knowledge_id=manager.original_knowledge_id,
             knowledge_id=int(manager.knowledge_id),
             file_name=manager.file_name,
             alias_name=manager.alias_name,

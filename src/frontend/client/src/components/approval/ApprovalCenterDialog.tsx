@@ -251,6 +251,8 @@ function buildFilePublishRows(snapshot: Record<string, any>, localize: ReturnTyp
   pushBusinessRow(rows, localize("com_approval_field_business_type" as any), snapshot.type, (value) => localizeBusinessType(value, localize));
   pushNameOrIdRow(rows, localize, "com_approval_field_source_space_name", "com_approval_field_source_space_id", snapshot.source_space_name, snapshot.source_space_id);
   pushNameOrIdRow(rows, localize, "com_approval_field_source_file_name", "com_approval_field_source_file_id", snapshot.source_file_name, snapshot.source_file_id);
+  pushNameOrIdRow(rows, localize, "com_approval_field_original_uploader_name", "com_approval_field_original_uploader_id", snapshot.original_uploader_name, snapshot.original_uploader_id);
+  pushNameOrIdRow(rows, localize, "com_approval_field_original_knowledge_name", "com_approval_field_original_knowledge_id", snapshot.original_knowledge_name, snapshot.original_knowledge_id);
   pushNameOrIdRow(rows, localize, "com_approval_field_target_space_name", "com_approval_field_target_space_id", snapshot.target_space_name, snapshot.target_space_id);
   pushNameOrIdRow(rows, localize, "com_approval_field_target_document_title", "com_approval_field_target_document_id", snapshot.target_document_title, snapshot.target_document_id);
   return rows;
@@ -261,6 +263,8 @@ function buildFileShareRows(snapshot: Record<string, any>, localize: ReturnType<
   pushBusinessRow(rows, localize("com_approval_field_business_type" as any), snapshot.type, (value) => localizeBusinessType(value, localize));
   pushNameOrIdRow(rows, localize, "com_approval_field_source_space_name", "com_approval_field_source_space_id", snapshot.source_space_name, snapshot.source_space_id);
   pushNameOrIdRow(rows, localize, "com_approval_field_source_file_name", "com_approval_field_source_file_id", snapshot.source_file_name, snapshot.source_file_id);
+  pushNameOrIdRow(rows, localize, "com_approval_field_original_uploader_name", "com_approval_field_original_uploader_id", snapshot.original_uploader_name, snapshot.original_uploader_id);
+  pushNameOrIdRow(rows, localize, "com_approval_field_original_knowledge_name", "com_approval_field_original_knowledge_id", snapshot.original_knowledge_name, snapshot.original_knowledge_id);
   pushNameOrIdRow(rows, localize, "com_approval_field_target_space_name", "com_approval_field_target_space_id", snapshot.target_space_name, snapshot.target_space_id);
   pushNameOrIdRow(rows, localize, "com_approval_field_target_folder_name", "com_approval_field_target_folder_id", snapshot.target_folder_name, snapshot.target_folder_id);
   // allow_download is boolean; always show so false is not dropped by hasDisplayValue

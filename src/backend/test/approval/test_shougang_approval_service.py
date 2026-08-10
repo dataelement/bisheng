@@ -119,8 +119,18 @@ def _patch_file_publish_submit_dependencies(
                 document_id=900,
                 manager_file_id=int(source_file.id),
                 manager_space_id=int(source_file.knowledge_id),
+                original_uploader_id=501,
+                original_knowledge_id=5,
             )
         ),
+    )
+    monkeypatch.setattr(
+        "bisheng.approval.domain.services.shougang_approval_service.UserDao.aget_user",
+        AsyncMock(return_value=SimpleNamespace(user_id=501, user_name="原始上传人")),
+    )
+    monkeypatch.setattr(
+        "bisheng.approval.domain.services.shougang_approval_service.KnowledgeDao.aquery_by_id",
+        AsyncMock(return_value=SimpleNamespace(id=5, name="原始个人库")),
     )
     monkeypatch.setattr(service, "_get_primary_department_id", AsyncMock(return_value=9))
     monkeypatch.setattr(service, "_task_approver_user_ids", AsyncMock(return_value=[]))
@@ -1127,6 +1137,27 @@ async def test_file_publish_submit_persists_target_folder_snapshot(monkeypatch):
         "_ensure_publish_target_folder",
         AsyncMock(return_value=SimpleNamespace(id=301, file_name="制度目录", level=2, file_level_path="/300")),
     )
+    monkeypatch.setattr(
+        service,
+        "_normalize_publish_source",
+        AsyncMock(
+            return_value=SimpleNamespace(
+                document_id=900,
+                manager_file_id=100,
+                manager_space_id=10,
+                original_uploader_id=501,
+                original_knowledge_id=5,
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        "bisheng.approval.domain.services.shougang_approval_service.UserDao.aget_user",
+        AsyncMock(return_value=SimpleNamespace(user_id=501, user_name="原始上传人")),
+    )
+    monkeypatch.setattr(
+        "bisheng.approval.domain.services.shougang_approval_service.KnowledgeDao.aquery_by_id",
+        AsyncMock(return_value=SimpleNamespace(id=5, name="原始个人库")),
+    )
     monkeypatch.setattr(service, "_get_primary_department_id", AsyncMock(return_value=9))
     monkeypatch.setattr(service, "_task_approver_user_ids", AsyncMock(return_value=[]))
 
@@ -1156,6 +1187,10 @@ async def test_file_publish_submit_persists_target_folder_snapshot(monkeypatch):
     assert gate_req.payload_snapshot["canonical_document_id"] == 900
     assert gate_req.payload_snapshot["source_entry_id"] == 100
     assert gate_req.payload_snapshot["source_entry_type_before_submit"] == "normal"
+    assert gate_req.payload_snapshot["original_uploader_id"] == 501
+    assert gate_req.payload_snapshot["original_uploader_name"] == "原始上传人"
+    assert gate_req.payload_snapshot["original_knowledge_id"] == 5
+    assert gate_req.payload_snapshot["original_knowledge_name"] == "原始个人库"
 
 
 @pytest.mark.asyncio

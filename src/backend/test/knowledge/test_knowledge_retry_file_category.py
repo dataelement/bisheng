@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 from types import ModuleType
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -61,18 +61,17 @@ async def test_process_retry_files_clears_encoding_when_file_category_selected(m
         AsyncMock(side_effect=lambda file: file),
     )
 
-    fake_file_worker = SimpleNamespace(
-        retry_knowledge_file_celery=SimpleNamespace(delay=Mock()),
+    dispatch = AsyncMock()
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.services.knowledge_parse_dispatch_service."
+        "dispatch_knowledge_parse_task",
+        dispatch,
     )
-    fake_worker_module = ModuleType("bisheng.worker")
-    fake_worker_knowledge_module = ModuleType("bisheng.worker.knowledge")
-    fake_worker_knowledge_module.file_worker = fake_file_worker
-    monkeypatch.setitem(sys.modules, "bisheng.worker", fake_worker_module)
-    monkeypatch.setitem(sys.modules, "bisheng.worker.knowledge", fake_worker_knowledge_module)
 
     await KnowledgeUtils.process_retry_files([db_file], {11: input_file}, login_user)
 
     assert db_file.file_encoding is None
+    dispatch.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -105,15 +104,14 @@ async def test_process_retry_files_clears_encoding_when_business_domain_selected
         AsyncMock(side_effect=lambda file: file),
     )
 
-    fake_file_worker = SimpleNamespace(
-        retry_knowledge_file_celery=SimpleNamespace(delay=Mock()),
+    dispatch = AsyncMock()
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.services.knowledge_parse_dispatch_service."
+        "dispatch_knowledge_parse_task",
+        dispatch,
     )
-    fake_worker_module = ModuleType("bisheng.worker")
-    fake_worker_knowledge_module = ModuleType("bisheng.worker.knowledge")
-    fake_worker_knowledge_module.file_worker = fake_file_worker
-    monkeypatch.setitem(sys.modules, "bisheng.worker", fake_worker_module)
-    monkeypatch.setitem(sys.modules, "bisheng.worker.knowledge", fake_worker_knowledge_module)
 
     await KnowledgeUtils.process_retry_files([db_file], {11: input_file}, login_user)
 
     assert db_file.file_encoding is None
+    dispatch.assert_awaited_once()

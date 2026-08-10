@@ -7,10 +7,14 @@ from loguru import logger
 
 from bisheng.core.logger import trace_id_var
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
+from bisheng.knowledge.domain.schemas.knowledge_parse_queue_schema import KnowledgeParseAttemptKind
 from bisheng.knowledge.domain.services.file_alias_name_generator import (
     FileAliasNameGeneratorService,
 )
 from bisheng.knowledge.domain.services.file_title_extractor import FileTitleExtractorService
+from bisheng.knowledge.domain.services.knowledge_parse_processing_lease import (
+    track_knowledge_parse_delivery,
+)
 from bisheng.utils.file import download_minio_file
 from bisheng.worker.main import bisheng_celery
 
@@ -101,49 +105,24 @@ def extract_and_generate_alias(file_id: int) -> str | None:
     return None
 
 
-@bisheng_celery.task(acks_late=True)
+@bisheng_celery.task(acks_late=True, priority=3)
+@track_knowledge_parse_delivery(KnowledgeParseAttemptKind.INITIAL)
 def extract_knowledge_file_title_celery(
     file_id: int,
     preview_cache_key: str | None = None,
     callback_url: str | None = None,
 ):
-    """Extract the title of an uploaded file, generate an AI alias, then parse.
-
-    This task runs after a knowledge file record has been created and before the
-    main parsing task. When a title is successfully extracted, an LLM is asked to
-    produce a normalized alias which is persisted in ``KnowledgeFile.alias_name``.
-    The task always dispatches ``parse_knowledge_file_celery`` so parsing proceeds
-    regardless of title extraction or alias generation success.
-    """
+    """Consume a legacy title message as one complete initial lifecycle."""
     trace_id_var.set(f"extract_title_{file_id}")
     logger.info(
         "extract_knowledge_file_title_celery start file_id={} preview_cache_key={}",
         file_id,
         preview_cache_key,
     )
-    try:
-        extract_and_generate_alias(file_id)
-    except Exception as e:
-        # Defensive catch: _extract_and_generate_alias already swallows its own
-        # errors, but we keep this guard so the downstream parse task is never
-        # skipped because of an unexpected failure.
-        logger.warning(
-            "unexpected error during title extraction file_id={} error={}",
-            file_id,
-            e,
-        )
-    finally:
-        try:
-            from bisheng.worker.knowledge.file_worker import parse_knowledge_file_celery
+    from bisheng.worker.knowledge.file_worker import run_initial_knowledge_parse_lifecycle
 
-            parse_knowledge_file_celery.delay(file_id, preview_cache_key, callback_url)
-            logger.info(
-                "enqueued parse task after title extraction file_id={}",
-                file_id,
-            )
-        except Exception as e:
-            logger.error(
-                "failed to enqueue parse after title extraction file_id={} error={}",
-                file_id,
-                e,
-            )
+    return run_initial_knowledge_parse_lifecycle(
+        file_id,
+        preview_cache_key,
+        callback_url,
+    )

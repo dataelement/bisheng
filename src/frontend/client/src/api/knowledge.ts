@@ -197,6 +197,8 @@ export interface KnowledgeSpace {
     isFavorite: boolean;
     /** Portal business-domain codes bound to this knowledge space */
     businessDomainCodes?: string[];
+    /** Whether this configurable space participates in portal knowledge discovery */
+    portalDiscoveryEnabled?: boolean;
 }
 
 export interface KnowledgeSpaceCreateOptions {
@@ -548,6 +550,10 @@ export interface KnowledgeFile {
     sourceSpaceId?: string;       // mapped from source_space_id for direct share origin
     sourceSpaceName?: string;     // mapped from source_space_name / knowledge_name / space_name
     sourceDepartmentName?: string; // mapped from source_department_name for direct share origin
+    originalUploaderId?: number;
+    originalUploaderName?: string;
+    originalKnowledgeId?: number;
+    originalKnowledgeName?: string;
     /** Department portal content decision. This never replaces backend authorization. */
     contentAccess?: "allowed" | "approval_required" | "unavailable" | string;
     /** Existing download_file decision, independent from department view approval. */
@@ -593,6 +599,22 @@ export interface UploadedFileRecord extends KnowledgeFile {
     spaceLevel?: SpaceLevel;
     folderPathName: string;
     businessDomainCodes?: string[];
+}
+
+export type KnowledgeParseQueuePositionState = "queued" | "processing" | "not_queued" | "unavailable";
+
+export interface KnowledgeParseQueuePositionItem {
+    fileId: number;
+    state: KnowledgeParseQueuePositionState;
+    aheadWaitingCount: number | null;
+}
+
+export interface KnowledgeParseQueuePositionsResponse {
+    items: KnowledgeParseQueuePositionItem[];
+    activeCount: number;
+    waitingCount: number | null;
+    approximate: true;
+    asOf: string;
 }
 
 export interface UploadFolderRecommendationFileReq {
@@ -650,6 +672,7 @@ interface RawKnowledgeSpace {
     is_clinic?: boolean;
     department_id?: number;
     department_name?: string;
+    portal_discovery_enabled?: boolean | null;
 }
 
 export interface KnowledgeSpaceTagLibraryListItem {
@@ -824,6 +847,10 @@ export function mapSpace(raw: RawKnowledgeSpace): KnowledgeSpace {
                 .map((code: unknown) => String(code ?? "").trim().toUpperCase())
                 .filter(Boolean)
             : [],
+        portalDiscoveryEnabled:
+            raw.portal_discovery_enabled === null || raw.portal_discovery_enabled === undefined
+                ? undefined
+                : Boolean(raw.portal_discovery_enabled),
     };
 }
 
@@ -1139,6 +1166,14 @@ export function mapChild(raw: any, spaceId: string): KnowledgeFile {
             : undefined,
         sourceSpaceName: raw?.source_space_name ?? raw?.knowledge_name ?? raw?.space_name ?? undefined,
         sourceDepartmentName: raw?.source_department_name ?? undefined,
+        originalUploaderId: raw?.original_uploader_id !== undefined && raw?.original_uploader_id !== null
+            ? Number(raw.original_uploader_id)
+            : undefined,
+        originalUploaderName: raw?.original_uploader_name ?? undefined,
+        originalKnowledgeId: raw?.original_knowledge_id !== undefined && raw?.original_knowledge_id !== null
+            ? Number(raw.original_knowledge_id)
+            : undefined,
+        originalKnowledgeName: raw?.original_knowledge_name ?? undefined,
         contentAccess: raw?.content_access ?? undefined,
         canDownload: raw?.can_download !== undefined ? Boolean(raw.can_download) : undefined,
         isDepartmentFile: raw?.is_department_file !== undefined
@@ -1752,6 +1787,7 @@ export async function updateSpaceApi(
         auto_tag_library_id?: number | null;
         auto_tag_library_ids?: number[];
         department_id?: number;
+        portal_discovery_enabled?: boolean;
     }
 ): Promise<KnowledgeSpace> {
     if (!space_id) throw new Error("space_id is required");
@@ -2728,6 +2764,38 @@ export async function listMyUploadedFilesApi(params: {
                 : [],
         })),
         total: Number(payload?.total ?? list.length),
+    };
+}
+
+export async function getKnowledgeParseQueuePositionsApi(
+    knowledgeId: string | number,
+    fileIds: number[],
+): Promise<KnowledgeParseQueuePositionsResponse> {
+    const res = await request.get<ApiResponse<{
+        items: Array<{
+            file_id: number;
+            state: KnowledgeParseQueuePositionState;
+            ahead_waiting_count: number | null;
+        }>;
+        active_count: number;
+        waiting_count?: number | null;
+        approximate: true;
+        as_of: string;
+    }>>(`/api/v1/knowledge/${knowledgeId}/parse-queue-positions`, {
+        params: { file_ids: fileIds },
+        paramsSerializer: request.paramsSerializer,
+    });
+    const payload = res.data;
+    return {
+        items: payload.items.map((item) => ({
+            fileId: item.file_id,
+            state: item.state,
+            aheadWaitingCount: item.ahead_waiting_count,
+        })),
+        activeCount: payload.active_count,
+        waitingCount: payload.waiting_count ?? null,
+        approximate: payload.approximate,
+        asOf: payload.as_of,
     };
 }
 

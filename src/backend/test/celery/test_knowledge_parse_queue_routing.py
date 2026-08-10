@@ -7,7 +7,9 @@ import yaml
 
 from bisheng.core.config.celery_queues import (
     DEFAULT_CELERY_QUEUE,
+    KNOWLEDGE_PARSE_COMPAT_TASKS,
     KNOWLEDGE_PARSE_QUEUE,
+    KNOWLEDGE_PARSE_ROUTED_TASKS,
     KNOWLEDGE_PARSE_TASKS,
     KNOWLEDGE_PDF_QUEUE,
     PDF_ARTIFACT_TASK,
@@ -43,6 +45,21 @@ def _resolve_queue(task_name: str, routes: dict) -> str | None:
 
 @pytest.mark.parametrize("task_name", sorted(KNOWLEDGE_PARSE_TASKS))
 def test_parse_task_whitelist_routes_to_knowledge_queue(task_name: str):
+    assert _resolve_queue(task_name, build_celery_task_routes({})) == KNOWLEDGE_PARSE_QUEUE
+
+
+def test_new_production_whitelist_contains_only_initial_and_retry_lifecycles():
+    assert KNOWLEDGE_PARSE_TASKS == {
+        "bisheng.worker.knowledge.file_worker.parse_knowledge_file_celery",
+        "bisheng.worker.knowledge.file_worker.retry_knowledge_file_celery",
+    }
+    assert KNOWLEDGE_PARSE_COMPAT_TASKS == {
+        "bisheng.worker.knowledge.file_title_worker.extract_knowledge_file_title_celery",
+    }
+
+
+@pytest.mark.parametrize("task_name", sorted(KNOWLEDGE_PARSE_COMPAT_TASKS))
+def test_legacy_title_task_remains_routed_for_rolling_compatibility(task_name: str):
     assert _resolve_queue(task_name, build_celery_task_routes({})) == KNOWLEDGE_PARSE_QUEUE
 
 
@@ -116,7 +133,7 @@ def test_celery_conf_uses_canonical_routes_for_default_and_legacy_config():
     )
 
     for config in (default_config, legacy_config):
-        for task_name in KNOWLEDGE_PARSE_TASKS:
+        for task_name in KNOWLEDGE_PARSE_ROUTED_TASKS:
             assert _resolve_queue(task_name, config.task_routers) == KNOWLEDGE_PARSE_QUEUE
         assert (
             _resolve_queue("bisheng.worker.knowledge.qa.insert_qa_celery", config.task_routers) == DEFAULT_CELERY_QUEUE
@@ -137,7 +154,7 @@ def test_runtime_yaml_declares_parse_only_knowledge_queue(config_path: Path):
     routes = config["celery_task"]["task_routers"]
 
     assert routes["bisheng.worker.knowledge.*"] == {"queue": DEFAULT_CELERY_QUEUE}
-    for task_name in KNOWLEDGE_PARSE_TASKS:
+    for task_name in KNOWLEDGE_PARSE_ROUTED_TASKS:
         assert routes[task_name] == {"queue": KNOWLEDGE_PARSE_QUEUE}
     assert routes[PDF_ARTIFACT_TASK] == {"queue": KNOWLEDGE_PDF_QUEUE}
     assert routes["bisheng.worker.workflow.*"] == {"queue": WORKFLOW_CELERY_QUEUE}
@@ -153,6 +170,7 @@ def test_worker_entrypoints_keep_default_queue_consumers_enabled():
         source = path.read_text(encoding="utf-8")
         assert "start_default" in source
         assert "-Q celery" in source
+        assert "--prefetch-multiplier=1" in source
 
 
 def test_worker_entrypoints_include_points_award_in_worker_bundle():
@@ -174,7 +192,7 @@ def test_worker_entrypoints_include_points_award_in_worker_bundle():
 
 def test_non_parse_production_dispatches_do_not_target_knowledge_queue():
     allowed_files = {
-        BACKEND_DIR / "scripts/enqueue_reparse_knowledge_space_files.py",
+        BACKEND_DIR / "bisheng/knowledge/domain/services/knowledge_parse_dispatch_service.py",
     }
     violations: list[str] = []
 

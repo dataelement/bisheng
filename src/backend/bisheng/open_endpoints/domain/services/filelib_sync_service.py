@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 from dataclasses import dataclass
 
 from fastapi import Request, UploadFile
@@ -22,6 +23,7 @@ from bisheng.common.errcode.knowledge_space import (
     SpacePermissionDeniedError,
 )
 from bisheng.core.cache.utils import save_uploaded_file
+from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.department import Department
 from bisheng.developer_token.domain.file_sync_folder_path import split_file_sync_folder_path
 from bisheng.developer_token.domain.schemas import DeveloperTokenFileSyncRule
@@ -84,13 +86,15 @@ class ResolvedFileSyncTarget:
 FILELIB_SYNC_PERSONAL_FALLBACK_METADATA_KEY = "filelib_sync_target_fallback"
 FILELIB_SYNC_PERSONAL_FALLBACK_METADATA_VALUE = "token_user_personal"
 FILELIB_SYNC_PERSONAL_FALLBACK_LEVEL2_FOLDER = "业务接口未分配"
+FILELIB_SYNC_DEVELOPER_TOKEN_ID_METADATA_KEY = "developer_token_id"
+FILELIB_SYNC_DEVELOPER_TOKEN_NAME_METADATA_KEY = "developer_token_name"
 
 
 class FilelibSyncService:
     def __init__(
         self,
         *,
-        request: Request,
+        request: Request | None,
         login_user: UserPayload,
         token_id: int,
         token_name: str = "",
@@ -115,71 +119,103 @@ class FilelibSyncService:
         params = self.parse_params(raw_params)
         self._validate_upload(params, upload_file)
         self._require_dynamic_source_id(params)
-        identity = await self._resolve_identity(params)
-        portal_config = await self._get_portal_config()
-        self._resolve_document_type(portal_config)
-        domain = self._resolve_business_domain(
-            portal_config,
-            identity.business_domain_department,
-        )
-        target = await self._resolve_target_space(identity)
-        if not target.used_personal_fallback:
-            folder_id = await self._resolve_target_folder(int(target.space.id), identity)
-            target = ResolvedFileSyncTarget(
-                space=target.space,
-                folder_id=folder_id,
-                used_personal_fallback=False,
-            )
-        if self.file_sync_rule.business_domain.mode == "dynamic" and not target.used_personal_fallback:
-            self._ensure_domain_bound(target.space, domain)
-        try:
-            await self._require_upload_permission(target)
-        except FilelibSyncNotFoundError:
-            if target.used_personal_fallback:
-                raise
-            logger.warning(
-                "filelib sync target unavailable, fallback to token user personal space token_id={} knowledge_id={}",
-                self.token_id,
-                target.space.id,
-            )
-            target = await self._resolve_personal_fallback_target(identity)
-            await self._require_upload_permission(target)
-
-        replaced_file_id, target_document_id = await self._resolve_same_name_version_overwrite(
-            knowledge_id=int(target.space.id),
-            file_name=params.file_name,
+        temporary_file_path = await self._save_temporary_file(params, upload_file)
+        return await self.sync_from_staged_file(
+            params=params,
+            local_file_path=temporary_file_path,
+            endpoint_tag="sync",
+            allow_personal_fallback=True,
         )
 
+    async def sync_from_staged_file(
+        self,
+        *,
+        params: FilelibSyncParams,
+        local_file_path: str,
+        endpoint_tag: str = "sync",
+        trigger_type: str | None = None,
+        allow_personal_fallback: bool = True,
+    ) -> FilelibSyncResponseData:
+        self._require_dynamic_source_id(params)
         created_file: KnowledgeFile | None = None
-        temporary_file_path: str | None = None
         file_persisted = False
+        staged_upload_path = local_file_path
+        extra_cleanup_paths: list[str] = []
         try:
-            temporary_file_path = await self._save_temporary_file(params, upload_file)
+            identity = await self._resolve_identity(params)
+            portal_config = await self._get_portal_config()
+            self._resolve_document_type(portal_config)
+            domain = self._resolve_business_domain(
+                portal_config,
+                identity.business_domain_department,
+            )
+            target = await self._resolve_target_space(
+                identity,
+                allow_personal_fallback=allow_personal_fallback,
+            )
+            if not target.used_personal_fallback:
+                folder_id = await self._resolve_target_folder(int(target.space.id), identity)
+                target = ResolvedFileSyncTarget(
+                    space=target.space,
+                    folder_id=folder_id,
+                    used_personal_fallback=False,
+                )
+            if (
+                domain is not None
+                and self.file_sync_rule.business_domain.mode == "dynamic"
+                and not target.used_personal_fallback
+            ):
+                self._ensure_domain_bound(target.space, domain)
+            try:
+                await self._require_upload_permission(target)
+            except FilelibSyncNotFoundError:
+                if target.used_personal_fallback or not allow_personal_fallback:
+                    raise
+                logger.warning(
+                    "filelib sync target unavailable, fallback to token user personal space token_id={} knowledge_id={}",
+                    self.token_id,
+                    target.space.id,
+                )
+                target = await self._resolve_personal_fallback_target(identity)
+                await self._require_upload_permission(target)
+
+            replaced_file_id, target_document_id = await self._resolve_same_name_version_overwrite(
+                knowledge_id=int(target.space.id),
+                file_name=params.file_name,
+            )
+
+            staged_upload_path = await self._ensure_upload_path_preserves_display_name(
+                local_file_path=local_file_path,
+                file_name=params.file_name,
+            )
+            if staged_upload_path != local_file_path:
+                extra_cleanup_paths.append(staged_upload_path)
+
             preview_cache_key = self.knowledge_space_service.get_preview_cache_key(
                 int(target.space.id),
-                temporary_file_path,
+                staged_upload_path,
             )
+            business_domain_code = domain.code if domain is not None else None
             upload_results = await self.knowledge_space_service.add_file(
                 knowledge_id=int(target.space.id),
-                file_path=[temporary_file_path],
+                file_path=[staged_upload_path],
                 parent_id=target.folder_id,
                 file_category_code=self.file_sync_rule.category.code,
                 file_subcategory_code=self.file_sync_rule.category.subcategory_code,
-                business_domain_code=domain.code,
+                business_domain_code=business_domain_code,
                 skip_approval=True,
                 enqueue_processing=False,
                 allow_duplicate_name=True,
                 allow_duplicate_content=True,
-                skip_space_business_domain_check=self.file_sync_rule.business_domain.mode == "fixed",
+                skip_space_business_domain_check=(
+                    self.file_sync_rule.business_domain.mode == "fixed" or domain is None
+                ),
             )
             if len(upload_results) != 1 or upload_results[0].status == KnowledgeFileStatus.FAILED.value:
                 raise FilelibSyncConflictError(msg="duplicate file content or name")
 
             upload_result = upload_results[0]
             file_id = int(upload_result.id)
-            # add_file persists via sync DAO; re-querying through the request-scoped async
-            # session can miss the row when tenant_id on the file/space is NULL or differs
-            # from the developer-token tenant filter context.
             created_file = upload_result if isinstance(upload_result, KnowledgeFile) else None
             if created_file is None:
                 created_file = await self.repository.find_by_id(file_id)
@@ -196,8 +232,12 @@ class FilelibSyncService:
                 "department_id": int(identity.main_department.id),
                 "responsible_person": identity.responsible_user_external_id,
                 "responsible_person_id": identity.responsible_user_id,
-                "filelib_sync_endpoint": "sync",
+                "filelib_sync_endpoint": endpoint_tag,
+                FILELIB_SYNC_DEVELOPER_TOKEN_ID_METADATA_KEY: self.token_id,
+                FILELIB_SYNC_DEVELOPER_TOKEN_NAME_METADATA_KEY: self._developer_token_display_name(),
             }
+            if trigger_type is not None:
+                user_metadata["filelib_sync_trigger"] = trigger_type
             if target.used_personal_fallback:
                 user_metadata[FILELIB_SYNC_PERSONAL_FALLBACK_METADATA_KEY] = (
                     FILELIB_SYNC_PERSONAL_FALLBACK_METADATA_VALUE
@@ -210,22 +250,24 @@ class FilelibSyncService:
                     )
                 )
             created_file.user_metadata = user_metadata
-            await FileEncodingTransformer.generate_fixed_encoding(
-                invoke_user_id=identity.responsible_user_id,
-                knowledge_file=created_file,
-                document_type_code=self.file_sync_rule.category.code,
-                business_domain_code=domain.code,
-            )
-            # add_file persists via sync DAO; request-scoped async merge can INSERT a duplicate PK.
+            if domain is not None:
+                await FileEncodingTransformer.generate_fixed_encoding(
+                    invoke_user_id=identity.responsible_user_id,
+                    knowledge_file=created_file,
+                    document_type_code=self.file_sync_rule.category.code,
+                    business_domain_code=domain.code,
+                )
             created_file = await asyncio.to_thread(KnowledgeFileDao.update, created_file)
             file_persisted = True
 
-            self.knowledge_space_service.enqueue_file_title_extraction(
+            await self.knowledge_space_service.enqueue_file_title_extraction(
                 [created_file],
                 [preview_cache_key],
+                operator_user_id=self.login_user.user_id,
+                operator_is_global_super=bool(getattr(self.login_user, "is_global_super", False)),
             )
             logger.info(
-                "filelib sync queued token_id={} external_file_id={} file_id={} knowledge_id={} folder_id={} token_user_id={} responsible_user_id={} personal_fallback={}",
+                "filelib sync queued token_id={} external_file_id={} file_id={} knowledge_id={} folder_id={} token_user_id={} responsible_user_id={} personal_fallback={} endpoint={} trigger={}",
                 self.token_id,
                 params.external_file_id,
                 created_file.id,
@@ -234,6 +276,8 @@ class FilelibSyncService:
                 self.login_user.user_id,
                 identity.responsible_user_id,
                 target.used_personal_fallback,
+                endpoint_tag,
+                trigger_type,
             )
             return FilelibSyncResponseData(
                 external_file_id=params.external_file_id,
@@ -247,7 +291,9 @@ class FilelibSyncService:
             )
         except Exception:
             if not file_persisted:
-                await self._cleanup_failed_sync(created_file, temporary_file_path)
+                await self._cleanup_failed_sync(created_file, local_file_path)
+                for extra_path in extra_cleanup_paths:
+                    await self._cleanup_failed_sync(None, extra_path)
             raise
 
     @staticmethod
@@ -468,7 +514,7 @@ class FilelibSyncService:
         self,
         config: ShougangPortalAdminConfig,
         selected_department: Department | None,
-    ) -> PortalDomainConfig:
+    ) -> PortalDomainConfig | None:
         if self.file_sync_rule.business_domain.mode == "fixed":
             candidates = [
                 item
@@ -487,16 +533,38 @@ class FilelibSyncService:
                 and int(selected_department.id) in (item.department_ids or [])
             ]
         if not candidates:
+            if self.file_sync_rule.business_domain.mode == "dynamic":
+                logger.warning(
+                    "filelib sync business domain unresolved department_id={} department_name={}; uploading without business domain",
+                    getattr(selected_department, "id", None),
+                    getattr(selected_department, "name", None),
+                )
+                return None
             raise FilelibSyncNotFoundError(msg="configured business domain does not exist")
         if len(candidates) > 1:
+            if self.file_sync_rule.business_domain.mode == "dynamic":
+                logger.warning(
+                    "filelib sync multiple business domains match department_id={} department_name={}; using first domain code={}",
+                    getattr(selected_department, "id", None),
+                    getattr(selected_department, "name", None),
+                    candidates[0].code,
+                )
+                return candidates[0]
             raise FilelibSyncConflictError(msg="multiple business domains match the department")
         return candidates[0]
 
-    async def _resolve_target_space(self, identity: ResolvedIdentity) -> ResolvedFileSyncTarget:
+    async def _resolve_target_space(
+        self,
+        identity: ResolvedIdentity,
+        *,
+        allow_personal_fallback: bool = True,
+    ) -> ResolvedFileSyncTarget:
         try:
             space = await self._resolve_configured_target_space(identity)
             return ResolvedFileSyncTarget(space=space, folder_id=None, used_personal_fallback=False)
         except (FilelibSyncNotFoundError, FilelibSyncConflictError) as exc:
+            if not allow_personal_fallback:
+                raise
             logger.warning(
                 "filelib sync configured target space unavailable, fallback to token user personal space: {}",
                 exc,
@@ -523,6 +591,9 @@ class FilelibSyncService:
         )
 
     def _personal_fallback_token_folder_name(self) -> str:
+        return self._developer_token_display_name()
+
+    def _developer_token_display_name(self) -> str:
         if self.token_name:
             return self.token_name
         return f"token-{self.token_id}"
@@ -715,6 +786,37 @@ class FilelibSyncService:
         object_name = await KnowledgeService.save_upload_file_original_name(params.file_name)
         file_path = await save_uploaded_file(upload_file, "bisheng", object_name)
         return str(file_path)
+
+    @staticmethod
+    async def _ensure_upload_path_preserves_display_name(
+        *,
+        local_file_path: str,
+        file_name: str,
+    ) -> str:
+        """Re-stage local disk files with the uuid+Redis naming used by HTTP uploads."""
+        local_candidate = local_file_path.split("?", 1)[0]
+        if not os.path.isfile(local_candidate):
+            return local_file_path
+
+        object_name = await KnowledgeService.save_upload_file_original_name(file_name)
+        minio_client = await get_minio_storage()
+        content_type = (
+            "application/pdf"
+            if object_name.lower().endswith(".pdf")
+            else "application/octet-stream"
+        )
+        await minio_client.put_object_tmp(
+            object_name=object_name,
+            file=local_candidate,
+            content_type=content_type,
+        )
+        return str(
+            await minio_client.get_share_link(
+                object_name,
+                minio_client.tmp_bucket,
+                clear_host=False,
+            )
+        )
 
     async def _cleanup_failed_sync(
         self,

@@ -23,9 +23,11 @@
 | PortalCourseVideoProgress | F062-portal-course-management | 按租户、登录用户和视频唯一覆盖的播放进度及完成终态 |
 | PortalCourseMediaCleanup | F062-portal-course-management | 课程上传对象的 provisional、替换、删除清理任务及最终一致重试 |
 | KnowledgeFilePdfArtifact | F063-unified-pdf-artifact | 知识文件统一 PDF 派生产物的当前 generation、独立处理状态、对象引用、重试信息和删除清理；不拥有 KnowledgeFile 解析状态、预览或下载行为 |
+| Tag.reviewer_id / Tag.review_time / ReviewTag.reviewer_id（扩展） | F079-tag-management-console | 标签审核留痕字段：谁审的、什么时候审的。审核通过搬运 `review_tag` → `tag` 时一并携带。不取得 `Tag` / `ReviewTag` 本身的创建、命名、打标或 Link A/Link B 解析行为所有权 |
 | DeveloperToken.file_sync_rule（扩展） | F066-token-configured-filelib-sync | 每个开发者 Token 最多一份完整的文件同步业务配置；只保存稳定分类/业务域编码、知识空间 ID、可空目录 ID、固定/动态模式及动态来源，不保存路径快照，不取得门户配置、部门、知识空间、目录或文件的所有权 |
 | UserPointAccount / UserPointLog / PointRule / PointCopy / PointRankSnapshot / PointSyncOutbox / PointFavoriteTierAward | F070-points-system | 积分账户、append-only 流水、规则/说明文案、排行快照、外部同步 outbox、收藏阶梯已授档位；站内信文案为代码常量（无模板表）；不拥有知识文件/审批/站内信本体写所有权 |
 | Department.org_level（扩展） | F070-points-system | 仅拥有部门节点组织层级标签（company/dept/office/squad）的写入与「指定唯一公司根 → 级联打标」行为；不拥有部门树结构、用户挂载、组织同步 |
+| Department.short_name（扩展） | F082-department-short-name | 部门简称字段的创建、修改、清空与本地维护语义；不取得 F002 对 Department 其他 CRUD、物化路径和名称唯一性的所有权，不改变 F009/F014/F015 的同步事实源 |
 
 **规则**：
 - 非 Owner Feature 的 AC 中不得出现其他对象的"创建/修改/删除"行为，只能"读取"或"调用" Owner 的 Service
@@ -44,7 +46,7 @@
 | INV-3 | 审批通过不等于绕过业务安全检查；handler 执行业务动作前仍需复用原业务校验逻辑 | ApprovalOutbox, 业务资源模块 | F025 |
 | INV-4 | 菜单权限申请通过后只写用户级菜单授权，不修改角色菜单权限；用户有效菜单 = 角色菜单 ∪ 个人授权 ∪ 管理员权限 | UserMenuAccess, RoleAccess | F025 |
 | INV-5 | 流程变更采用版本快照模型；已发起实例继续使用其创建时的流程版本，新配置仅影响后续新申请 | ApprovalFlowVersion, ApprovalInstance | F025 |
-| INV-6 | 走 ReBAC 过滤的高频列表接口采用 cursor-based 分页：请求用 `cursor` 透传上一页位置，响应含 `has_more: bool` 与 `next_cursor: string\|null`，**不再返 `total` / `page_num`**；后端不得为算 total 而扫描全部 batch；cursor 编码统一走 `common/cursor.py`（schema `{"v":1, "k":[...]}`，base64url）；cursor 解析失败必须明确报错（`*InvalidCursorError`），不得静默 fallback 首页 | 所有走 ReBAC 过滤的列表接口 | F027 |
+| INV-6 | 走 ReBAC 过滤的高频列表接口采用 cursor-based 分页：请求用 `cursor` 透传上一页位置，响应含 `has_more: bool` 与 `next_cursor: string\|null`，**不再返 `total` / `page_num`**；后端不得为算 total 而扫描全部 batch；cursor 编码统一走 `common/cursor.py`（schema `{"v":1, "k":[...]}`，base64url）；cursor 解析失败必须明确报错（`*InvalidCursorError`），不得静默 fallback 首页。**定向豁免**：`/api/v1/workstation/tags/console/search` 与 `/review/search`（F079，2026-08-07 批准），理由与失效条件见变更历史 | 所有走 ReBAC 过滤的列表接口 | F027 |
 | INV-7 | `DeveloperToken.file_sync_rule` 只决定文件分类、业务域和目标知识空间/目录的解析方式，不授予任何资源权限；管理选项、保存和统一同步运行时均按 Token 绑定用户校验最终空间根目录或目录的 `upload_file` 权限，且请求仍须先通过 Token 状态、IP、路由白名单和限流 | DeveloperToken, Knowledge, KnowledgeFile | F066 |
 | INV-8 | 动态业务域只读取当前租户首钢门户聚合配置中的 `domains[].department_ids`；Token 仅保存业务域编码引用，不复制部门与业务域映射，不建立第二配置事实源 | DeveloperToken.file_sync_rule, ShougangPortalAdminConfig | F066 |
 | INV-9 | 文件同步配置缺失、不完整、空间/目录引用失效、跨租户、目录不属于所选空间、绑定用户无目标节点上传权限、动态来源参数缺失、动态解析无唯一结果或业务域与目标空间未绑定时必须失败关闭；不得回退到根目录、请求中的其他 ID、调用人默认值、任意知识空间或旧接口固定规则 | DeveloperToken.file_sync_rule, Department, Knowledge, KnowledgeFile | F066 |
@@ -73,8 +75,10 @@
 | F063-unified-pdf-artifact | F017, F056 | 依赖租户共享存储路径与 Celery 单循环运行时基线；新增独立 PDF Artifact，不修改知识解析、预览或下载契约 |
 | F064-portal-watermarked-pdf-download | F063 | 只读 F063 提供的当前有效 `KnowledgeFilePdfArtifact` 引用；不创建、更新或删除统一 PDF 产物，不取得其写所有权 |
 | F066-token-configured-filelib-sync | F044, F047, F060 | 扩展开发者 Token 配置，收口 F047 的 11 个固定规则接口，复用 F060 动态空间解析器、Knowledge 目录只读契约与 PermissionService；不复制门户业务域配置或授权事实 |
+| F079-tag-management-console | F013 | 依赖多租户权限隔离基线；复用 workstation 现有审核标签可见空间解析与 knowledge 标签库服务；只为 `tag` / `review_tag` 追加审核留痕字段，不新增领域对象、不改 Link A/Link B 打标解析行为 |
 | F069-filelib-external-user-context | F004, F044 | 复用统一 PermissionService 与 Developer Token 认证；不新增身份或授权事实，只为四个 Filelib 查询接口组合调用资格与可选业务用户上下文；仅允许在未启用租户功能的部署发布 |
 | F070-points-system | F002, F004, F009, F012, F025（发布审批结果只读）, 现有 knowledge/qa_expert/message/telemetry | 新建积分域；扩展 Department.org_level；挂钩只读/调用知识上传发布、收藏、采纳、日活与站内信，不取得其写所有权；外部协同办公同步不阻塞 MVP |
+| F082-department-short-name | F002, F009, F014/F015 | 扩展 F002 的 Department 字段与既有创建/详情/更新链路；简称由本地维护，F009/F014/F015 组织同步不得覆盖 |
 
 ---
 
@@ -90,6 +94,7 @@
 | 199 | filelib_sync | F047 文件同步既有错误码；F066 只在该模块内追加 Token 文件同步配置缺失等运行时错误码 |
 | 250 | portal_course | F062 门户课程管理、媒体校验与播放进度错误码 |
 | 182 | points | F070 积分账户、流水、规则、排行、组织打标与同步 outbox 错误码 |
+| 120 | workstation（工作台） | 沿用现有 `common/errcode/workstation.py`（12000–12099）；F079 追加标签管理控制台错误码 12046–12049，不得与既有 12040–12045 冲突 |
 
 ---
 
@@ -107,5 +112,7 @@
 | 2026-07-21 | 登记 F064 门户带水印 PDF 下载依赖 F063；明确仅通过 accessor 读取统一 PDF 产物，不取得 `KnowledgeFilePdfArtifact` 写所有权 | F064, F063 |
 | 2026-07-22 | 登记 F066 的 `DeveloperToken.file_sync_rule` 扩展所有权、F044/F047/F060 依赖、199 错误码边界及权限不扩张、门户配置单一事实源和失败关闭不变量 | F066, F044, F047, F060 |
 | 2026-07-22 | 扩展 F066 固定目标到知识空间根目录或目录；明确选项、保存和运行时按 Token 绑定用户过滤/复核 `upload_file`，目录失效或无权不得回退根目录 | F066, Knowledge, Permission |
+| 2026-08-07 | 登记 F079 标签管理控制台：`Tag` / `ReviewTag` 审核留痕字段写所有权、120 模块错误码段 12046–12049、F013/F063 依赖；**批准 INV-6 定向豁免**——`/api/v1/workstation/tags/console/search` 与 `/review/search` 使用 page/total 分页，理由为可见空间集合一次性解析后下推 `IN`，不做逐行 ReBAC 判定，且属低频管理后台；豁免仅限这两个端点，接口若演化为逐行判权则自动失效 | F079, INV-6 |
 | 2026-08-02 | 登记 F069 Filelib 外部用户上下文：新增 INV-10 与 F004/F044 依赖，明确 Token 资格优先、可选目标用户完整权限、全局唯一匹配失败关闭及无租户部署边界 | F069, F004, F044, User, Knowledge |
 | 2026-08-06 | 登记 F070 积分系统：领域对象、Department.org_level 扩展、INV-11~14、模块编码 182；外部同步不阻塞 MVP | F070, F002, Department, Knowledge, Message |
+| 2026-08-10 | 登记 F082 部门简称：为 `Department.short_name` 建立字段扩展所有权，明确可空 64 字符、本地维护、同步不覆盖及不改变组织树/搜索/权限边界 | F082, F002, F009, F014, F015 |

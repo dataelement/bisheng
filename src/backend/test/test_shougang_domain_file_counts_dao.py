@@ -158,10 +158,10 @@ async def test_count_files_by_category_scopes_filters_by_document_type_in_bound_
     class FakeResult:
         def all(self):
             return [
-                (10, "GF-STD-PP-001"),
-                (10, "GF-POL-PP-002"),
-                (20, "GF-STD-QM-003"),
-                (10, "GF-PP-QM-004"),
+                (1, 10, "GF-STD-PP-001"),
+                (2, 10, "GF-POL-PP-002"),
+                (3, 20, "GF-STD-QM-003"),
+                (4, 10, "GF-PP-QM-004"),
             ]
 
     class FakeSession:
@@ -177,6 +177,48 @@ async def test_count_files_by_category_scopes_filters_by_document_type_in_bound_
 
     # Last row's document type is QM, but space 10 is not in QM scope.
     assert result == {"POL": 1, "STD": 2, "QM": 0}
+
+
+@pytest.mark.asyncio
+async def test_scoped_counts_include_only_explicit_grant_files_from_grant_only_parent(
+):
+    class DomainResult:
+        def all(self):
+            return [
+                (1, 1, 10, "GF-STD-PM-001"),
+                (2, 2, 30, "GF-STD-PM-002"),
+                (3, 3, 30, "GF-STD-PM-003"),
+            ]
+
+    class CategoryResult:
+        def all(self):
+            return [
+                (1, 10, "GF-STD-PM-001"),
+                (2, 30, "GF-STD-PM-002"),
+                (3, 30, "GF-STD-PM-003"),
+            ]
+
+    class FakeSession:
+        def __init__(self, result):
+            self.result = result
+
+        async def exec(self, statement):
+            self.statement = statement
+            return self.result
+
+    with _patch_session_factory(FakeSession(DomainResult())):
+        domain_counts = await KnowledgeFileDao.async_count_files_by_domain_scopes(
+            {"PM": {10}},
+            {"PM": {2}},
+        )
+    with _patch_session_factory(FakeSession(CategoryResult())):
+        category_counts = await KnowledgeFileDao.async_count_files_by_category_scopes(
+            {"STD": {10}},
+            {"STD": {2}},
+        )
+
+    assert domain_counts == {"PM": 2}
+    assert category_counts == {"STD": 2}
 
 
 @pytest.mark.asyncio

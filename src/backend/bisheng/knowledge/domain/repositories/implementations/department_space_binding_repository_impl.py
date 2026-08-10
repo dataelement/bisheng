@@ -33,6 +33,21 @@ class DepartmentSpaceBindingRepositoryImpl(
         super().__init__(session, DepartmentKnowledgeSpace)
         self._prepared_binding: DepartmentKnowledgeSpace | None = None
 
+    async def find_by_space_ids(
+        self,
+        space_ids: list[int],
+    ) -> list[DepartmentKnowledgeSpace]:
+        if not space_ids:
+            return []
+        result = await self.session.exec(
+            select(DepartmentKnowledgeSpace).where(
+                col(DepartmentKnowledgeSpace.space_id).in_(
+                    sorted({int(space_id) for space_id in space_ids if int(space_id) > 0})
+                )
+            )
+        )
+        return list(result.all())
+
     async def rebind_department(
         self,
         *,

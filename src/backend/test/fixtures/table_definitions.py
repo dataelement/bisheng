@@ -176,6 +176,82 @@ CREATE TABLE IF NOT EXISTS knowledge_tag_library_link (
     UNIQUE(knowledge_id, tag_library_id)
 )"""
 
+# F079: tag console operates directly on the approved/pending tag tables.
+# reviewer_id / review_time are the audit-trail columns added by F079.
+TABLE_TAG = """\
+CREATE TABLE IF NOT EXISTS tag (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name VARCHAR(255),
+    business_type VARCHAR(64) DEFAULT 'application',
+    business_id VARCHAR(36),
+    user_id INTEGER DEFAULT 0,
+    tenant_id INTEGER NOT NULL DEFAULT 1,
+    resource_type VARCHAR(64) DEFAULT 'manual_tag',
+    reviewer_id INTEGER,
+    review_time DATETIME,
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
+)"""
+
+TABLE_TAG_LINK = """\
+CREATE TABLE IF NOT EXISTS taglink (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tag_id INTEGER NOT NULL,
+    resource_id VARCHAR(255) NOT NULL,
+    resource_type INTEGER NOT NULL,
+    user_id INTEGER DEFAULT 0,
+    tenant_id INTEGER NOT NULL DEFAULT 1,
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    UNIQUE(resource_id, resource_type, tag_id)
+)"""
+
+TABLE_REVIEW_TAG = """\
+CREATE TABLE IF NOT EXISTS review_tag (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name VARCHAR(255),
+    business_type VARCHAR(64) DEFAULT 'application',
+    business_id VARCHAR(36),
+    user_id INTEGER DEFAULT 0,
+    tenant_id INTEGER NOT NULL DEFAULT 1,
+    resource_type VARCHAR(64) DEFAULT 'manual_tag',
+    is_deleted INTEGER NOT NULL DEFAULT 0,
+    review_status INTEGER NOT NULL DEFAULT 0,
+    reject_reason VARCHAR(256),
+    review_time DATETIME,
+    reviewer_id INTEGER,
+    remark VARCHAR(256),
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
+)"""
+
+TABLE_REVIEW_TAG_LINK = """\
+CREATE TABLE IF NOT EXISTS review_tag_link (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tag_id INTEGER NOT NULL,
+    resource_id VARCHAR(255) NOT NULL,
+    resource_type INTEGER NOT NULL,
+    user_id INTEGER DEFAULT 0,
+    tenant_id INTEGER NOT NULL DEFAULT 1,
+    is_deleted INTEGER NOT NULL DEFAULT 0,
+    remark VARCHAR(256),
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    UNIQUE(resource_id, resource_type, tag_id)
+)"""
+
+TABLE_KNOWLEDGE_SPACE_TAG_LIBRARY = """\
+CREATE TABLE IF NOT EXISTS knowledge_space_tag_library (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id INTEGER NOT NULL DEFAULT 1,
+    name VARCHAR(64) NOT NULL,
+    description VARCHAR(1024),
+    is_builtin INTEGER NOT NULL DEFAULT 0,
+    user_id INTEGER,
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
+)"""
+
 TABLE_KNOWLEDGE = """\
 CREATE TABLE IF NOT EXISTS knowledge (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -326,10 +402,12 @@ CREATE TABLE IF NOT EXISTS knowledgefile (
     file_source VARCHAR(32),
     level INTEGER DEFAULT 0,
     file_level_path VARCHAR(512),
+    sort_weight INTEGER,
     abstract TEXT,
     file_size INTEGER,
     md5 VARCHAR(255),
     parse_type VARCHAR(32),
+    parse_priority VARCHAR(16),
     split_rule TEXT,
     preview_file_object_name VARCHAR(512),
     bbox_object_name VARCHAR(512) DEFAULT '',
@@ -344,6 +422,8 @@ CREATE TABLE IF NOT EXISTS knowledgefile (
     similar_status INTEGER NOT NULL DEFAULT 0,
     updater_id INTEGER,
     updater_name VARCHAR(255),
+    original_uploader_id INTEGER,
+    original_knowledge_id INTEGER,
     reference_document_id INTEGER,
     entry_type VARCHAR(24),
     entry_status VARCHAR(16),
@@ -719,6 +799,28 @@ INDEX_PHSC_TENANT_BATCH = """\
 CREATE INDEX IF NOT EXISTS ix_phsc_tenant_batch
     ON portal_hot_search_candidate (tenant_id, batch_id)"""
 
+TABLE_FILELIB_SCHEDULED_SYNC_RUN_LOG = """\
+CREATE TABLE IF NOT EXISTS filelib_scheduled_sync_run_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id INTEGER NOT NULL DEFAULT 1,
+    job_code VARCHAR(64) NOT NULL,
+    trigger_type VARCHAR(16) NOT NULL,
+    status VARCHAR(16) NOT NULL DEFAULT 'running',
+    developer_token_id INTEGER,
+    file_id INTEGER,
+    knowledge_id INTEGER,
+    file_name VARCHAR(200),
+    error_message VARCHAR(500),
+    start_time DATETIME NOT NULL,
+    end_time DATETIME,
+    duration_ms INTEGER,
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
+)"""
+
+INDEX_FSSRL_TENANT_JOB_ID = """\
+CREATE INDEX IF NOT EXISTS ix_fssrl_tenant_job_id
+    ON filelib_scheduled_sync_run_log (tenant_id, job_code, id)"""
+
 TABLE_DEPARTMENT_TRANSFER_PERMISSION_CLEANUP_EVENT = """\
 CREATE TABLE IF NOT EXISTS department_transfer_permission_cleanup_event (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -804,6 +906,12 @@ TABLE_DEFINITIONS: dict[str, str] = {
     "knowledge": TABLE_KNOWLEDGE,
     "knowledge_space_scope": TABLE_KNOWLEDGE_SPACE_SCOPE,
     "knowledge_tag_library_link": TABLE_KNOWLEDGE_TAG_LIBRARY_LINK,
+    # F079: tag management console.
+    "tag": TABLE_TAG,
+    "taglink": TABLE_TAG_LINK,
+    "review_tag": TABLE_REVIEW_TAG,
+    "review_tag_link": TABLE_REVIEW_TAG_LINK,
+    "knowledge_space_tag_library": TABLE_KNOWLEDGE_SPACE_TAG_LIBRARY,
     "department": TABLE_DEPARTMENT,
     "user_department": TABLE_USER_DEPARTMENT,
     "auditlog": TABLE_AUDIT_LOG,
@@ -830,6 +938,7 @@ TABLE_DEFINITIONS: dict[str, str] = {
     "portal_hot_search_snapshot": TABLE_PORTAL_HOT_SEARCH_SNAPSHOT,
     "portal_hot_search_batch_run": TABLE_PORTAL_HOT_SEARCH_BATCH_RUN,
     "portal_hot_search_candidate": TABLE_PORTAL_HOT_SEARCH_CANDIDATE,
+    "filelib_scheduled_sync_run_log": TABLE_FILELIB_SCHEDULED_SYNC_RUN_LOG,
     "department_transfer_permission_cleanup_event": TABLE_DEPARTMENT_TRANSFER_PERMISSION_CLEANUP_EVENT,
     "department_transfer_permission_cleanup_item": TABLE_DEPARTMENT_TRANSFER_PERMISSION_CLEANUP_ITEM,
 }
@@ -854,6 +963,7 @@ INDEX_DEFINITIONS: list[str] = [
     INDEX_PHSBR_TENANT_TIME,
     INDEX_PHSBR_TENANT_BATCH,
     INDEX_PHSC_TENANT_BATCH,
+    INDEX_FSSRL_TENANT_JOB_ID,
     INDEX_DTPC_STATUS_RETRY,
     INDEX_DTPC_USER_CHANGED,
     INDEX_DTPC_ITEM_USER_STATUS,
@@ -904,3 +1014,5 @@ def create_tables(engine: Engine, *table_names: str) -> None:
             conn.execute(text(INDEX_PHSBR_TENANT_BATCH))
         if "portal_hot_search_candidate" in table_names:
             conn.execute(text(INDEX_PHSC_TENANT_BATCH))
+        if "filelib_scheduled_sync_run_log" in table_names:
+            conn.execute(text(INDEX_FSSRL_TENANT_JOB_ID))

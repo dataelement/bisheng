@@ -89,6 +89,8 @@ async def _seed_manager(session: AsyncSession) -> None:
             KnowledgeFile(
                 id=99,
                 tenant_id=7,
+                original_uploader_id=501,
+                original_knowledge_id=10,
                 knowledge_id=10,
                 file_name="v1.pdf",
                 object_name="tenant/7/v1.pdf",
@@ -97,6 +99,9 @@ async def _seed_manager(session: AsyncSession) -> None:
             KnowledgeFile(
                 id=100,
                 tenant_id=7,
+                user_id=501,
+                original_uploader_id=501,
+                original_knowledge_id=10,
                 knowledge_id=10,
                 file_name="canonical.pdf",
                 object_name="tenant/7/canonical.pdf",
@@ -132,7 +137,12 @@ async def _seed_manager(session: AsyncSession) -> None:
     await session.commit()
 
 
-async def _seed_ordinary_file(session: AsyncSession) -> None:
+async def _seed_ordinary_file(
+    session: AsyncSession,
+    *,
+    original_uploader_id: int | None = None,
+    original_knowledge_id: int | None = None,
+) -> None:
     session.add_all(
         [
             Knowledge(
@@ -150,6 +160,9 @@ async def _seed_ordinary_file(session: AsyncSession) -> None:
             KnowledgeFile(
                 id=100,
                 tenant_id=7,
+                user_id=501,
+                original_uploader_id=original_uploader_id,
+                original_knowledge_id=original_knowledge_id,
                 knowledge_id=10,
                 file_name="ordinary.pdf",
                 object_name="tenant/7/ordinary.pdf",
@@ -197,6 +210,28 @@ async def test_publish_submission_identity_keeps_source_as_ordinary_file(
     assert source.reference_document_id is None
     assert source.entry_type is None
     assert source.entry_status is None
+    assert source.original_uploader_id == 501
+    assert source.original_knowledge_id == 10
+
+
+@pytest.mark.asyncio
+async def test_document_identity_does_not_overwrite_existing_original_origin(
+    async_db_session: AsyncSession,
+):
+    await _seed_ordinary_file(
+        async_db_session,
+        original_uploader_id=401,
+        original_knowledge_id=5,
+    )
+
+    await _service(async_db_session).ensure_document_identity(
+        tenant_id=7,
+        source_file_id=100,
+    )
+
+    source = await KnowledgeFileRepositoryImpl(async_db_session).find_by_id(100)
+    assert source.original_uploader_id == 401
+    assert source.original_knowledge_id == 5
 
 
 @pytest.mark.asyncio
@@ -233,6 +268,10 @@ async def test_publish_approved_activates_expected_identity_before_transfer(
     assert manager.entry_type == KnowledgeFileEntryType.MANAGER.value
     assert publish.knowledge_id == 10
     assert publish.entry_type == KnowledgeFileEntryType.PUBLISH.value
+    assert manager.original_uploader_id == 501
+    assert manager.original_knowledge_id == 10
+    assert publish.original_uploader_id == 501
+    assert publish.original_knowledge_id == 10
 
 
 @pytest.mark.asyncio
@@ -358,6 +397,10 @@ async def test_publish_moves_manager_and_creates_payload_free_source_entry(
     assert manager.object_name == "tenant/7/canonical.pdf"
     assert manager.projection_previous_file_id == publish.id
     assert publish.knowledge_id == 10
+    assert manager.original_uploader_id == 501
+    assert manager.original_knowledge_id == 10
+    assert publish.original_uploader_id == 501
+    assert publish.original_knowledge_id == 10
     assert publish.file_level_path == "/8"
     assert publish.entry_type == KnowledgeFileEntryType.PUBLISH.value
     assert publish.entry_status == KnowledgeFileEntryStatus.ACTIVE.value

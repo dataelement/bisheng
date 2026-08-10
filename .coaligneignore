@@ -1,0 +1,42 @@
+# CoAligne ignore file
+# Patterns listed here are excluded from local-to-cloud sync.
+# Existing files are never overwritten by `coaligne bind` or `coaligne sync`.
+
+.git
+.coaligne
+node_modules
+__pycache__
+.venv
+venv
+dist
+build
+release
+.next
+.cache
+.pytest_cache
+.ruff_cache
+.DS_Store
+Thumbs.db
+.idea
+.vscode
+git_repos
+git_repos_test
+storage_data
+.env
+.env.*
+*.pem
+*.key
+*.p12
+credentials.json
+secrets.yaml
+*.log
+*.db
+*.sqlite
+*.sqlite3
+*.zip
+*.tar.gz
+*.tgz
+*.tar
+*.gz
+*.pyc
+*.pyo

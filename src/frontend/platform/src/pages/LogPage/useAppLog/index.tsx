@@ -19,6 +19,7 @@ import { exportCsv, formatDate } from "@/util/utils";
 import { useContext, useEffect, useMemo, useReducer, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
+import { useStandalonePrefix } from "@/routes/standalone";
 
 const getStrTime = (date) => {
     const start_date = date[0] && (formatDate(date[0], 'yyyy-MM-dd') + ' 00:00:00')
@@ -61,6 +62,8 @@ export default function AppUseLog() {
     const { t } = useTranslation()
     const { appConfig } = useContext(locationContext)
     const { message } = useToast()
+    // Keep the shell-less chrome when this page is opened as a standalone/embedded route
+    const routePrefix = useStandalonePrefix()
     // 20 items per page
     const { page, pageSize, data: datalist, total, loading, setPage, filterData } = useTable({}, (param) => {
         const [start_date, end_date] = getStrTime(param.dateRange || [])
@@ -378,7 +381,7 @@ export default function AppUseLog() {
                                 {/* <Button variant="link" className="" onClick={() => setOpenData(true)}>Add to dataset</Button> */}
                                 {
                                     el.chat_id && <Link
-                                        to={el.flow_type === 15 ? `/log/chatlog/${el.chat_id}` : `/log/chatlog/${el.flow_id}/${el.chat_id}/${el.flow_type}`}
+                                        to={el.flow_type === 15 ? `${routePrefix}/log/chatlog/${el.chat_id}` : `${routePrefix}/log/chatlog/${el.flow_id}/${el.chat_id}/${el.flow_type}`}
                                         className="no-underline hover:underline text-primary"
                                         onClick={handleCachePage}
                                     >{t('lib.details')}</Link>

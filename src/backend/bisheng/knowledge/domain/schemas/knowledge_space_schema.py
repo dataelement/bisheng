@@ -2,7 +2,14 @@ from datetime import date
 from enum import Enum
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
 
 from bisheng.common.models.space_channel_member import UserRoleEnum
 from bisheng.knowledge.domain.constants import normalize_business_domain_code, normalize_file_category_code
@@ -101,6 +108,10 @@ class KnowledgeSpaceInfoResp(KnowledgeBase):
     owner_type: KnowledgeSpaceOwnerTypeEnum | None = Field(default=None, description="Scope owner type")
     owner_id: int | None = Field(default=None, description="Scope owner id")
     owner_name: str | None = Field(default=None, description="Scope owner display name")
+    portal_discovery_enabled: bool | None = Field(
+        default=None,
+        description="Whether this configurable space participates in portal discovery",
+    )
     auto_tag_library_ids: list[int] | None = Field(
         default=None,
         description="Bound knowledge-space tag library IDs (supports multiple libraries)",
@@ -338,6 +349,13 @@ class ShougangPortalShareLinkAccessResp(BaseModel):
 
 
 class ShougangPortalTagSearchReq(BaseModel):
+    discovery_scope: Literal[
+        "legacy",
+        "public",
+        "public_and_department",
+        "portal_public",
+        "portal_configured",
+    ] = "legacy"
     space_ids: list[int] = Field(default_factory=list, max_length=200, description="Candidate knowledge space IDs")
     space_level: KnowledgeSpaceLevelEnum | None = Field(default=None, description="Knowledge space level filter")
     business_domain_code: str | None = Field(
@@ -376,6 +394,13 @@ class ShougangPortalDomainFileCountItem(BaseModel):
 
 class ShougangPortalDomainFileCountReq(BaseModel):
     domains: list[ShougangPortalDomainFileCountItem] = Field(default_factory=list, max_length=200)
+    discovery_scope: Literal[
+        "legacy",
+        "public",
+        "public_and_department",
+        "portal_public",
+        "portal_configured",
+    ] = "legacy"
 
 
 class ShougangPortalDomainFileCountResp(BaseModel):
@@ -399,6 +424,13 @@ class ShougangPortalCategoryFileCountItem(BaseModel):
 
 class ShougangPortalCategoryFileCountReq(BaseModel):
     categories: list[ShougangPortalCategoryFileCountItem] = Field(default_factory=list, max_length=200)
+    discovery_scope: Literal[
+        "legacy",
+        "public",
+        "public_and_department",
+        "portal_public",
+        "portal_configured",
+    ] = "legacy"
 
 
 class ShougangPortalCategoryFileCountResp(BaseModel):
@@ -445,6 +477,8 @@ class ShougangPortalFileBrowseReq(BaseModel):
         "legacy",
         "public",
         "public_and_department",
+        "portal_public",
+        "portal_configured",
     ] = Field(
         default="legacy",
         description="Server-derived portal discovery scope",
@@ -560,6 +594,8 @@ class ShougangPortalFileItemResp(BaseModel):
     ] = "allowed"
     access_source: str | None = None
     is_department_file: bool = False
+    space_level: KnowledgeSpaceLevelEnum | None = None
+    is_clinic: bool = False
     entry_type: Literal["normal", "manager", "publish", "share"] = "normal"
     entry_status: str = "active"
     distribution_invalid_reason: str | None = None
@@ -576,6 +612,30 @@ class ShougangPortalFileItemResp(BaseModel):
     capabilities: KnowledgeDocumentEntryCapabilities = Field(
         default_factory=KnowledgeDocumentEntryCapabilities
     )
+
+    @model_serializer(mode="wrap")
+    def serialize_with_content_access_allowlist(self, handler):
+        data = handler(self)
+        if self.content_access == "allowed":
+            return data
+        safe_fields = {
+            "id",
+            "space_id",
+            "title",
+            "source",
+            "updated_at",
+            "tag_infos",
+            "file_ext",
+            "file_subcategory_code",
+            "folder_path",
+            "can_download",
+            "content_access",
+            "access_source",
+            "is_department_file",
+            "space_level",
+            "is_clinic",
+        }
+        return {key: value for key, value in data.items() if key in safe_fields}
 
 
 class ShougangPortalFileSearchResp(BaseModel):
@@ -623,6 +683,8 @@ class ShougangPortalHomeReq(BaseModel):
         "legacy",
         "public",
         "public_and_department",
+        "portal_public",
+        "portal_configured",
     ] = "legacy"
     space_ids: list[int] = Field(default_factory=list, max_length=200, description="Candidate knowledge space IDs")
     space_level: KnowledgeSpaceLevelEnum | None = Field(default=None, description="Knowledge space level filter")
@@ -722,6 +784,10 @@ class KnowledgeSpaceUpdateReq(BaseModel):
         default=None,
         gt=0,
         description="New owning department for a department knowledge space",
+    )
+    portal_discovery_enabled: bool | None = Field(
+        default=None,
+        description="Whether this space participates in portal knowledge discovery",
     )
 
 

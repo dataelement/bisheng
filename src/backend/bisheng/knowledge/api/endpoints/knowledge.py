@@ -31,6 +31,7 @@ from bisheng.core.logger import trace_id_var
 from bisheng.database.models.role_access import AccessType, WebMenuResource
 from bisheng.knowledge.api.dependencies import (
     get_knowledge_file_service,
+    get_knowledge_parse_queue_query_service,
     get_knowledge_service,
     get_knowledge_space_service,
 )
@@ -42,6 +43,9 @@ from bisheng.knowledge.domain.models.knowledge_file import (KnowledgeFileDao, Kn
 from bisheng.knowledge.domain.schemas.knowledge_schema import (
     AddKnowledgeMetadataFieldsReq, UpdateKnowledgeMetadataFieldsReq,
     ModifyKnowledgeFileMetaDataReq, UpdateFileTagsReq, BatchAddFileTagsReq)
+from bisheng.knowledge.domain.schemas.knowledge_parse_queue_schema import (
+    normalize_parse_queue_file_ids,
+)
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.knowledge.domain.upload_file_size import validate_knowledge_upload_file_size
 from bisheng.llm.domain import LLMService
@@ -54,6 +58,23 @@ from bisheng.worker.knowledge.qa import insert_qa_celery
 
 # build router
 router = APIRouter(prefix='/knowledge', tags=['Knowledge'])
+
+
+@router.get('/{knowledge_id}/parse-queue-positions')
+async def get_parse_queue_positions(
+    knowledge_id: int,
+    file_ids: list[int] = Query(...),
+    query_service=Depends(get_knowledge_parse_queue_query_service),
+):
+    try:
+        normalized_ids = normalize_parse_queue_file_ids(knowledge_id, file_ids)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    result = await query_service.query(
+        knowledge_id=knowledge_id,
+        file_ids=normalized_ids,
+    )
+    return resp_200(result.model_dump(mode="json"))
 
 
 @router.post('/upload')

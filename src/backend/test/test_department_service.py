@@ -58,6 +58,10 @@ def svc_engine():
                           (
                               128
                           ) NOT NULL,
+                              short_name VARCHAR
+                          (
+                              64
+                          ),
                               parent_id INTEGER,
                               tenant_id INTEGER NOT NULL DEFAULT 1,
                               path VARCHAR

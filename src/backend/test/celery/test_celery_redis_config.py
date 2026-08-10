@@ -4,7 +4,13 @@ from bisheng.core.config.celery_redis import build_celery_redis_config
 def test_build_celery_redis_config_keeps_single_node_url() -> None:
     result = build_celery_redis_config('redis://127.0.0.1:6379/2')
 
-    assert result == {'broker_url': 'redis://127.0.0.1:6379/2'}
+    assert result == {
+        'broker_url': 'redis://127.0.0.1:6379/2',
+        'broker_transport_options': {
+            'priority_steps': [0, 3, 6, 9],
+            'queue_order_strategy': 'round_robin',
+        },
+    }
 
 
 def test_build_celery_redis_config_supports_single_mode_dict() -> None:
@@ -13,7 +19,13 @@ def test_build_celery_redis_config_supports_single_mode_dict() -> None:
         'url': 'redis://127.0.0.1:6379/3',
     })
 
-    assert result == {'broker_url': 'redis://127.0.0.1:6379/3'}
+    assert result == {
+        'broker_url': 'redis://127.0.0.1:6379/3',
+        'broker_transport_options': {
+            'priority_steps': [0, 3, 6, 9],
+            'queue_order_strategy': 'round_robin',
+        },
+    }
 
 
 def test_build_celery_redis_config_supports_sentinel_mode() -> None:
@@ -38,6 +50,8 @@ def test_build_celery_redis_config_supports_sentinel_mode() -> None:
         'sentinel://default:redis-secret@redis-sentinel-3:26379/5'
     )
     assert result['broker_transport_options'] == {
+        'priority_steps': [0, 3, 6, 9],
+        'queue_order_strategy': 'round_robin',
         'master_name': 'mymaster',
         'sentinel_kwargs': {'password': 'sentinel-secret'},
         'visibility_timeout': 7200,

@@ -536,6 +536,9 @@ export default function Knowledge() {
                     is_released,
                     auto_tag_enabled: form.autoTagEnabled,
                     ...buildAutoTagLibraryPayload(form.autoTagLibraryIds, { syncExplicitly: true }),
+                    ...(form.portalDiscoveryEnabled !== undefined
+                        ? { portal_discovery_enabled: form.portalDiscoveryEnabled }
+                        : {}),
                 };
                 if (
                     form.departmentId !== undefined

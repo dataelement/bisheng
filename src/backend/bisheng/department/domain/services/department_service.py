@@ -385,6 +385,7 @@ class DepartmentService:
             dept = Department(
                 dept_id=dept_id,
                 name=data.name,
+                short_name=data.short_name,
                 parent_id=data.parent_id,
                 sort_order=data.sort_order,
                 default_role_ids=data.default_role_ids,
@@ -551,6 +552,8 @@ class DepartmentService:
             # Apply updates (only non-None fields)
             if data.name is not None:
                 dept.name = data.name
+            if "short_name" in data.model_fields_set:
+                dept.short_name = data.short_name
             if data.sort_order is not None:
                 dept.sort_order = data.sort_order
             if data.default_role_ids is not None:

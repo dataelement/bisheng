@@ -13,7 +13,10 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     ShougangPortalFileItemResp,
     ShougangPortalFileSearchReq,
 )
-from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
+from bisheng.knowledge.domain.services.knowledge_space_service import (
+    KnowledgeSpaceService,
+    PortalDiscoveryResult,
+)
 
 
 @pytest.mark.asyncio
@@ -148,6 +151,114 @@ def test_unchecked_department_search_result_keeps_metadata_and_requires_click_ch
     assert result.summary == "完整检索摘要"
     assert result.file_size == "1024"
     assert result.source_path == "设备管理知识库/故障排查"
+
+
+@pytest.mark.asyncio
+async def test_portal_configured_semantic_search_never_recalls_unauthorized_content():
+    service = object.__new__(KnowledgeSpaceService)
+    public_space = SimpleNamespace(id=10, index_name="public")
+    explicit_space = SimpleNamespace(id=20, index_name="explicit")
+    metadata_only_space = SimpleNamespace(id=30, index_name="metadata-only")
+    grant_parent_space = SimpleNamespace(id=31, index_name="grant-parent")
+    spaces = [public_space, explicit_space, metadata_only_space, grant_parent_space]
+    service._portal_discovery_result = PortalDiscoveryResult(
+        discoverable_space_ids=[10, 20, 30],
+        explicitly_visible_space_ids=[20],
+        explicitly_visible_file_ids=[3101],
+        explicit_file_space_by_id={3101: 31},
+        grant_parent_space_ids=[31],
+        query_space_ids=[10, 20, 30, 31],
+        space_kind_by_id={10: "public", 20: "department", 30: "clinic", 31: "department"},
+        snapshot="snapshot",
+    )
+    service._portal_explicit_file_ids = {3101}
+    service._portal_grant_parent_space_ids = {31}
+    service._get_shougang_portal_public_space_ids = AsyncMock(return_value={10})
+    service._search_shougang_portal_es_chunks = AsyncMock(return_value=[])
+    service._search_shougang_portal_vector_chunks = AsyncMock(return_value=[])
+
+    metadata_file = SimpleNamespace(
+        id=3001,
+        knowledge_id=30,
+        file_name="轧机振动检修规程.pdf",
+        reference_document_id=None,
+    )
+    with patch.object(
+        KnowledgeFileDao,
+        "aget_file_by_space_filters_cursor",
+        new=AsyncMock(return_value=[metadata_file]),
+    ) as metadata_search:
+        chunks, metadata_files = await service._recall_portal_configured_search_sources(
+            req=ShougangPortalFileSearchReq(q="轧机振动", discovery_scope="portal_configured"),
+            spaces=spaces,
+            keyword="轧机振动",
+            tag_file_ids=None,
+        )
+
+    assert chunks == []
+    assert metadata_files == [metadata_file]
+    assert [
+        [space.id for space in call.kwargs["spaces"]]
+        for call in service._search_shougang_portal_es_chunks.await_args_list
+    ] == [[10, 20], [31]]
+    assert [
+        call.kwargs["filter_file_ids"]
+        for call in service._search_shougang_portal_es_chunks.await_args_list
+    ] == [None, [3101]]
+    assert [
+        [space.id for space in call.kwargs["spaces"]]
+        for call in service._search_shougang_portal_vector_chunks.await_args_list
+    ] == [[10, 20], [31]]
+    metadata_search.assert_awaited_once()
+    assert metadata_search.await_args.kwargs["knowledge_ids"] == [30]
+    assert metadata_search.await_args.kwargs["file_name"] == "轧机振动"
+
+
+def test_unauthorized_portal_item_serializes_only_safe_allowlist():
+    item = ShougangPortalFileItemResp(
+        id=101,
+        space_id=12,
+        title="设备点检标准",
+        summary="SECRET",
+        source="设备部知识库",
+        updated_at="2026-08-09T00:00:00",
+        tag_infos=[{"tag_name": "点检", "resource_type": "manual_tag"}],
+        file_ext="pdf",
+        file_size="1MB",
+        file_encoding="SECRET-001",
+        file_subcategory_code="ZD",
+        folder_path="制度/点检",
+        source_path="minio/internal/secret.pdf",
+        can_download=True,
+        content_access="approval_required",
+        access_source="none",
+        is_department_file=True,
+        space_level="department",
+        entry_type="share",
+        canonical_document_id=91,
+        manager_file_id=9001,
+        desired_content_generation=4,
+        projection_status="pending",
+        capabilities={"can_view": True},
+    )
+
+    assert set(item.model_dump(mode="json")) == {
+        "id",
+        "space_id",
+        "title",
+        "source",
+        "updated_at",
+        "tag_infos",
+        "file_ext",
+        "file_subcategory_code",
+        "folder_path",
+        "can_download",
+        "content_access",
+        "access_source",
+        "is_department_file",
+        "space_level",
+        "is_clinic",
+    }
 
 
 @pytest.mark.asyncio

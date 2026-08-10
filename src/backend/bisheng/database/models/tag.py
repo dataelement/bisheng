@@ -49,6 +49,14 @@ class TagBase(SQLModelSerializable):
 
 class Tag(TagBase, table=True):
     id: int | None = Field(default=None, index=True, primary_key=True, description="Tag UniqueID")
+    # Audit trail carried over from review_tag when an approved tag is moved here.
+    # Null for tags created before F079 and for tags added directly by an admin.
+    reviewer_id: int | None = Field(
+        default=None, sa_column=Column(Integer, nullable=True), description="Reviewer UserID"
+    )
+    review_time: datetime | None = Field(
+        default=None, sa_column=Column(DateTime, nullable=True), description="Review Time"
+    )
 
 
 class TagLinkBase(SQLModelSerializable):
@@ -480,6 +488,8 @@ class TagDao(Tag):
 
     @classmethod
     async def alist_tree(cls, keyword: str) -> list[Tag]:
-        statement = select(Tag).where(Tag.business_type == TagBusinessTypeEnum.TAG_LIBRARY.value, Tag.name.like(f"%{keyword}%"))
+        statement = select(Tag).where(
+            Tag.business_type == TagBusinessTypeEnum.TAG_LIBRARY.value, Tag.name.like(f"%{keyword}%")
+        )
         async with get_async_db_session() as session:
             return (await session.exec(statement)).all()

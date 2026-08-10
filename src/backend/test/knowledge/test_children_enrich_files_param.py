@@ -67,6 +67,8 @@ def _make_file(file_id: int):
     f.similar_status = 0
     f.reference_document_id = None
     f.entry_type = None
+    f.original_uploader_id = None
+    f.original_knowledge_id = None
     f.allow_download = False
     f.knowledge_id = 10
     f.model_dump.return_value = {"id": file_id, "file_name": "a.pdf", "file_type": FileType.FILE.value}
@@ -169,6 +171,44 @@ async def test_logical_entry_reuses_current_primary_file_size_and_version():
     assert result[9001]["file_size"] == 2048
     assert result[9001]["version_no"] == 3
     load_files.assert_awaited_once_with([7001])
+
+
+@pytest.mark.asyncio
+async def test_distribution_origin_names_are_loaded_in_batches():
+    svc = _make_svc()
+    logical = _make_file(9001)
+    logical.reference_document_id = 501
+    logical.entry_type = "share"
+    logical.entry_status = "active"
+    logical.original_uploader_id = 42
+    logical.original_knowledge_id = 10
+    logical.desired_content_generation = 1
+    logical.applied_content_generation = 1
+    logical.desired_entry_generation = 1
+    logical.applied_entry_generation = 1
+    logical.projection_status = "ready"
+    svc._entry_permission_ids_by_file = {9001: {"view_file"}}
+
+    with (
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.UserDao.aget_user_by_ids",
+            new_callable=AsyncMock,
+            return_value=[SimpleNamespace(user_id=42, user_name="原始上传人")],
+        ) as load_users,
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_spaces_by_ids",
+            new_callable=AsyncMock,
+            return_value=[SimpleNamespace(id=10, name="原始知识库")],
+        ) as load_spaces,
+    ):
+        result = await svc._load_document_distribution_info([logical])
+
+    assert result[9001]["original_uploader_id"] == 42
+    assert result[9001]["original_uploader_name"] == "原始上传人"
+    assert result[9001]["original_knowledge_id"] == 10
+    assert result[9001]["original_knowledge_name"] == "原始知识库"
+    load_users.assert_awaited_once_with([42])
+    load_spaces.assert_awaited_once_with([10])
 
 
 @pytest.mark.asyncio

@@ -18,13 +18,18 @@ from bisheng.core.ai import FakeEmbeddings
 from bisheng.core.logger import trace_id_var
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
-from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao, KnowledgeTypeEnum, KnowledgeState
+from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao, KnowledgeState, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFile,
     KnowledgeFileDao,
     KnowledgeFileEntryStatus,
     KnowledgeFileEntryType,
     KnowledgeFileStatus,
+)
+from bisheng.knowledge.domain.schemas.knowledge_parse_queue_schema import KnowledgeParseAttemptKind
+from bisheng.knowledge.domain.services.knowledge_parse_processing_lease import (
+    current_knowledge_parse_attempt_kind,
+    track_knowledge_parse_delivery,
 )
 from bisheng.telemetry.domain.mid_table.knowledge_space_content import KnowledgeSpaceContentStat
 from bisheng.utils import generate_uuid
@@ -530,15 +535,37 @@ def _complete_filelib_sync_version_link_if_needed(file_id: int) -> None:
         )
 
 
-@bisheng_celery.task(acks_late=True)
-def parse_knowledge_file_celery(file_id: int, preview_cache_key: str = None, callback_url: str = None):
-    """ Asynchronously parse one incoming successful file """
-    trace_id_var.set(f'parse_file_{file_id}')
-    logger.info(
-        f"parse_knowledge_file_celery start preview_cache_key={preview_cache_key}, callback_url={callback_url}")
+def _prepare_knowledge_file_for_processing(file_id: int) -> bool:
+    db_files = KnowledgeFileDao.get_file_by_ids([file_id])
+    if not db_files:
+        logger.error("file_id={} not found in db", file_id)
+        return False
+    db_file = db_files[0]
+    if db_file.status == KnowledgeFileStatus.WAITING.value:
+        KnowledgeFileDao.update_file_status(
+            [file_id],
+            KnowledgeFileStatus.PROCESSING,
+        )
+        return True
+    if db_file.status == KnowledgeFileStatus.PROCESSING.value:
+        return True
+    logger.warning(
+        "knowledge parse delivery skipped before lifecycle file_id={} status={}",
+        file_id,
+        db_file.status,
+    )
+    return False
+
+
+def _run_formal_parse_delivery(
+    file_id: int,
+    preview_cache_key: str | None = None,
+    callback_url: str | None = None,
+    *,
+    complete_filelib_sync: bool,
+):
     knowledge = None
     try:
-        # After the warehousing is successful, it is judged whether the file information still exists, and if not, it is deleted.
         knowledge = _parse_knowledge_file(file_id, preview_cache_key, callback_url)
     except Exception as e:
         logger.error("parse_knowledge_file_celery error: {}", str(e))
@@ -551,7 +578,8 @@ def parse_knowledge_file_celery(file_id: int, preview_cache_key: str = None, cal
                 == KnowledgeFileStatus.SUCCESS.value
             ):
                 _mark_manager_projection_after_parse(db_file[0])
-                _complete_filelib_sync_version_link_if_needed(file_id)
+                if complete_filelib_sync:
+                    _complete_filelib_sync_version_link_if_needed(file_id)
             _enqueue_recommendation_projection_refresh(file_id)
             _enqueue_current_pdf_artifact_sync(
                 tenant_id=int(db_file[0].tenant_id),
@@ -562,6 +590,61 @@ def parse_knowledge_file_celery(file_id: int, preview_cache_key: str = None, cal
             # If it does not exist, it may have been deleted during the parsing process,
             # and the data of the vector database needs to be deleted.
             delete_vector_files([file_id], knowledge)
+    return knowledge
+
+
+def run_initial_knowledge_parse_lifecycle(
+    file_id: int,
+    preview_cache_key: str | None = None,
+    callback_url: str | None = None,
+):
+    """Run title extraction and formal parsing in one Worker delivery."""
+    if not _prepare_knowledge_file_for_processing(file_id):
+        return None
+    try:
+        from bisheng.worker.knowledge.file_title_worker import extract_and_generate_alias
+
+        extract_and_generate_alias(file_id)
+    except Exception:
+        logger.exception(
+            "unexpected title extraction failure; formal parse will continue file_id={}",
+            file_id,
+        )
+    return _run_formal_parse_delivery(
+        file_id,
+        preview_cache_key,
+        callback_url,
+        complete_filelib_sync=True,
+    )
+
+
+@bisheng_celery.task(acks_late=True, priority=3)
+@track_knowledge_parse_delivery(KnowledgeParseAttemptKind.INITIAL)
+def parse_knowledge_file_celery(
+    file_id: int,
+    preview_cache_key: str | None = None,
+    callback_url: str | None = None,
+):
+    """Parse one file, including title extraction for new lifecycle messages."""
+    trace_id_var.set(f"parse_file_{file_id}")
+    logger.info(
+        "parse_knowledge_file_celery start preview_cache_key={} callback_url={}",
+        preview_cache_key,
+        callback_url,
+    )
+    if current_knowledge_parse_attempt_kind() is KnowledgeParseAttemptKind.INITIAL:
+        return run_initial_knowledge_parse_lifecycle(
+            file_id,
+            preview_cache_key,
+            callback_url,
+        )
+    # Pre-rollout formal-parse messages already completed title extraction.
+    return _run_formal_parse_delivery(
+        file_id,
+        preview_cache_key,
+        callback_url,
+        complete_filelib_sync=True,
+    )
 
 
 def _parse_knowledge_file(file_id: int, preview_cache_key: str = None, callback_url: str = None):
@@ -597,19 +680,23 @@ def _parse_knowledge_file(file_id: int, preview_cache_key: str = None, callback_
     return db_knowledge
 
 
-@bisheng_celery.task(acks_late=True)
-def retry_knowledge_file_celery(file_id: int, preview_cache_key: str = None, callback_url: str = None):
-    """ Retry parsing a file that failed to enter the repository or has a different name """
-    trace_id_var.set(f'retry_knowledge_file_{file_id}')
-    logger.info("retry_knowledge_file_celery start file_id={}", file_id)
+def run_retry_knowledge_parse_lifecycle(
+    file_id: int,
+    preview_cache_key: str | None = None,
+    callback_url: str | None = None,
+):
+    """Delete old vectors and parse again in one Worker delivery."""
+    if not _prepare_knowledge_file_for_processing(file_id):
+        return None
     try:
-        delete_knowledge_file_vectors(
-            file_ids=[file_id], clear_minio=False
-        )
+        delete_knowledge_file_vectors(file_ids=[file_id], clear_minio=False)
     except Exception as e:
         logger.exception("retry_knowledge_file_celery delete vectors error: {}", str(e))
-        KnowledgeFileDao.update_file_status([file_id], KnowledgeFileStatus.FAILED,
-                                            KnowledgeFileFailedError(exception=e).to_json_str())
+        KnowledgeFileDao.update_file_status(
+            [file_id],
+            KnowledgeFileStatus.FAILED,
+            KnowledgeFileFailedError(exception=e).to_json_str(),
+        )
         _enqueue_recommendation_projection_refresh(file_id)
         db_file = KnowledgeFileDao.get_file_by_ids([file_id])
         if db_file:
@@ -617,30 +704,30 @@ def retry_knowledge_file_celery(file_id: int, preview_cache_key: str = None, cal
                 tenant_id=int(db_file[0].tenant_id),
                 knowledge_file_id=file_id,
             )
-        return
-    knowledge = None
-    try:
-        knowledge = _parse_knowledge_file(file_id, preview_cache_key, callback_url)
-    except Exception as e:
-        logger.error("retry_knowledge_file_celery error: {}", str(e))
-    finally:
-        db_file = KnowledgeFileDao.get_file_by_ids([file_id])
-        if db_file:
-            if (
-                knowledge is not None
-                and db_file[0].status
-                == KnowledgeFileStatus.SUCCESS.value
-            ):
-                _mark_manager_projection_after_parse(db_file[0])
-            _enqueue_recommendation_projection_refresh(file_id)
-            _enqueue_current_pdf_artifact_sync(
-                tenant_id=int(db_file[0].tenant_id),
-                knowledge_file_id=file_id,
-            )
-        elif knowledge:
-            logger.debug(f"delete_knowledge_file_celery file_id={file_id}")
-            # If it does not exist, it may have been deleted during the parsing process, and the data of the vector database needs to be deleted.
-            delete_vector_files([file_id], knowledge)
+        return None
+    return _run_formal_parse_delivery(
+        file_id,
+        preview_cache_key,
+        callback_url,
+        complete_filelib_sync=False,
+    )
+
+
+@bisheng_celery.task(acks_late=True, priority=3)
+@track_knowledge_parse_delivery(KnowledgeParseAttemptKind.RETRY)
+def retry_knowledge_file_celery(
+    file_id: int,
+    preview_cache_key: str | None = None,
+    callback_url: str | None = None,
+):
+    """Retry parsing without rerunning title extraction."""
+    trace_id_var.set(f"retry_knowledge_file_{file_id}")
+    logger.info("retry_knowledge_file_celery start file_id={}", file_id)
+    return run_retry_knowledge_parse_lifecycle(
+        file_id,
+        preview_cache_key,
+        callback_url,
+    )
 
 
 @bisheng_celery.task(acks_late=True)

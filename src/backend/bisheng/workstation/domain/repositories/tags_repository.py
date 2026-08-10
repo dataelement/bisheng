@@ -14,16 +14,34 @@ class TagRepositoryImpl:
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def approve_tag_to_move(self, review_tag: ReviewTag, review_tag_link: list[ReviewTagLink]):
+    async def approve_tag_to_move(
+        self,
+        review_tag: ReviewTag,
+        review_tag_link: list[ReviewTagLink],
+        *,
+        reviewer_id: int | None = None,
+        review_time: datetime | None = None,
+    ):
+        """Move an approved tag from ``review_tag`` into ``tag``.
+
+        The approval path hard-deletes the source ``review_tag`` row afterwards,
+        so the audit trail has to be stamped here — there is nothing left to read
+        it back from. ``review_time`` is likewise passed in rather than copied:
+        the source row is still unreviewed at this point, the service marks it
+        only after the move.
+        """
         tag = Tag()
         tag.name = review_tag.name
         tag.business_id = self._resolve_approved_tag_business_id(review_tag)
         tag.business_type = TagBusinessTypeEnum.TAG_LIBRARY.value
+        # Stays the original proposer; the reviewer is a separate column.
         tag.user_id = review_tag.user_id
         tag.tenant_id = review_tag.tenant_id
         tag.resource_type = review_tag.resource_type
         tag.create_time = review_tag.create_time
         tag.update_time = review_tag.update_time
+        tag.reviewer_id = reviewer_id
+        tag.review_time = review_time
         self.session.add(tag)
         await self.session.flush()
         for link in review_tag_link:

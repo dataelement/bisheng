@@ -37,10 +37,10 @@ class ExpertRepository:
             result = await session.exec(stmt)
             return result.first()
 
-    async def get_by_user_name(self, name: str) -> Expert | None:
+    async def get_by_user_name(self, name: str, user_id: int) -> Expert | None:
         """根据用户名称获取专家"""
         async with get_async_db_session() as session:
-            stmt = select(Expert).where(Expert.expert_name == name)
+            stmt = select(Expert).where(and_(Expert.expert_name == name, Expert.user_id == user_id))
             result = await session.exec(stmt)
             return result.first()
 

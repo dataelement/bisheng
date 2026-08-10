@@ -42,6 +42,12 @@ import { DepartmentTreeNode } from "@/types/api/department"
 import { ROLE } from "@/types/api/user"
 import { useContext, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
+import RoleParsePriorityField, {
+  DEFAULT_KNOWLEDGE_PARSE_PRIORITY,
+  KnowledgeParsePriorityValue,
+  mergeKnowledgeParsePriority,
+  normalizeKnowledgeParsePriority,
+} from "./RoleParsePriorityField"
 
 const WORKBENCH_PARENT_ID = "workstation"
 const ADMIN_PARENT_ID = "admin"
@@ -128,6 +134,9 @@ export default function Roles() {
   const [quotaChannelCount, setQuotaChannelCount] = useState("10")
   const [quotaDownloadUnlimited, setQuotaDownloadUnlimited] = useState(false)
   const [quotaDownloadDaily, setQuotaDownloadDaily] = useState("20")
+  const [parsePriority, setParsePriority] = useState<KnowledgeParsePriorityValue>(
+    DEFAULT_KNOWLEDGE_PARSE_PRIORITY,
+  )
   const [menuIds, setMenuIds] = useState<string[]>([])
   const [menuApprovalMode, setMenuApprovalMode] = useState(false)
   const [isMenuLoading, setIsMenuLoading] = useState(false)
@@ -191,6 +200,7 @@ export default function Roles() {
     quotaChannelCountVal: string,
     quotaDownloadUnlimitedVal: boolean,
     quotaDownloadDailyVal: string,
+    parsePriorityVal: KnowledgeParsePriorityValue,
     menuIdsVal: string[],
     menuApprovalModeVal: boolean,
   ) => JSON.stringify({
@@ -202,6 +212,7 @@ export default function Roles() {
     quotaChannelCountVal,
     quotaDownloadUnlimitedVal,
     quotaDownloadDailyVal,
+    parsePriorityVal,
     menuIds: [...menuIdsVal].sort(),
     menuApprovalModeVal,
   })
@@ -244,12 +255,25 @@ export default function Roles() {
     setQuotaChannelCount("10")
     setQuotaDownloadUnlimited(false)
     setQuotaDownloadDaily("20")
+    setParsePriority(DEFAULT_KNOWLEDGE_PARSE_PRIORITY)
     setMenuApprovalMode(false)
     setMenuIds(nextMenuIds)
     setIsMenuLoading(false)
     setMenuLoadFailed(false)
     setInitialEditSnapshot(
-      buildEditSnapshot("", nextDepartmentId, false, "500", false, "10", false, "20", nextMenuIds, false)
+      buildEditSnapshot(
+        "",
+        nextDepartmentId,
+        false,
+        "500",
+        false,
+        "10",
+        false,
+        "20",
+        DEFAULT_KNOWLEDGE_PARSE_PRIORITY,
+        nextMenuIds,
+        false,
+      )
     )
     setEditOpen(true)
   }
@@ -276,6 +300,9 @@ export default function Roles() {
     })
     setMenuIds(ids)
     const qc = role.quota_config || {}
+    const priorityFromRole = normalizeKnowledgeParsePriority(
+      (qc as Record<string, unknown>).knowledge_file_parse_priority,
+    )
     const approvalFromRole = Boolean((qc as Record<string, unknown>).menu_approval_mode)
     setMenuApprovalMode(approvalFromRole)
     setInitialEditSnapshot(
@@ -288,6 +315,7 @@ export default function Roles() {
         channelLimit >= 0 ? String(channelLimit) : "10",
         downloadLimit === -1,
         downloadLimit >= 0 ? String(downloadLimit) : "20",
+        priorityFromRole,
         ids,
         approvalFromRole,
       )
@@ -304,6 +332,7 @@ export default function Roles() {
     const fileLimit = typeof rawFile === "number" ? rawFile : Number(rawFile ?? -1)
     const channelLimit = Number(qc.channel ?? 10)
     const downloadLimit = Number(qc.knowledge_space_download_daily ?? 20)
+    setParsePriority(normalizeKnowledgeParsePriority(qc.knowledge_file_parse_priority))
     setQuotaFileUnlimited(fileLimit === -1)
     setQuotaFileGb(fileLimit > 0 ? formatKnowledgeSpaceGbInput(fileLimit) : "500")
     setQuotaChannelUnlimited(channelLimit === -1)
@@ -328,7 +357,7 @@ export default function Roles() {
       ? -1
       : Math.max(0, Number(quotaDownloadDaily || 0))
     base.menu_approval_mode = menuApprovalMode
-    return base
+    return mergeKnowledgeParsePriority(base, parsePriority)
   }
 
   const submitRole = async () => {
@@ -481,6 +510,7 @@ export default function Roles() {
       quotaChannelCount,
       quotaDownloadUnlimited,
       quotaDownloadDaily,
+      parsePriority,
       menuIds,
       menuApprovalMode,
     )
@@ -496,6 +526,7 @@ export default function Roles() {
     quotaChannelCount,
     quotaDownloadUnlimited,
     quotaDownloadDaily,
+    parsePriority,
     menuIds,
     menuApprovalMode,
   ])
@@ -812,6 +843,8 @@ export default function Roles() {
                 )}
               </div>
             </div>
+
+            <RoleParsePriorityField value={parsePriority} onChange={setParsePriority} />
 
             <div className="rounded-md border p-3">
               <Label>{t("system.menuPermissionSection")}</Label>

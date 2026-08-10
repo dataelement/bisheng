@@ -5,6 +5,7 @@ import { uploadFileApi } from "@/controllers/API";
 import { cn } from "@/util/utils";
 import { CheckCircle2Icon, RefreshCw, RotateCw, XCircle } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Progress, ProgressStatus } from ".";
 
 export default function ProgressItem({ analysis = false, knowledgeId = '', item, onResulte, onDelete }: {
@@ -14,6 +15,7 @@ export default function ProgressItem({ analysis = false, knowledgeId = '', item,
     onResulte?: (id: string, res: any) => void
     onDelete?: (id: string) => void
 }) {
+    const { t } = useTranslation('knowledge')
     const [progress, setProgress] = useState(analysis ? 100 : 0)
     const [retrying, setRetrying] = useState(false)
     const abortControllerRef = useRef(null)
@@ -90,6 +92,19 @@ export default function ProgressItem({ analysis = false, knowledgeId = '', item,
         }
     }
 
+    const queueStatus = useMemo(() => {
+        if (!analysis || item.progress !== ProgressStatus.Await || !item.queuePosition) return null
+        if (item.queuePosition.state === 'queued' && item.queuePosition.aheadWaitingCount !== null) {
+            return t('parseQueueAhead', {
+                count: item.queuePosition.aheadWaitingCount,
+            })
+        }
+        if (item.queuePosition.state === 'processing') {
+            return t('parseQueueProcessing')
+        }
+        return t('parseQueueUnavailable')
+    }, [analysis, item.progress, item.queuePosition, t])
+
     return (
         <div className={cn(
             "border border-primary/20 rounded-xl cursor-pointer hover:border-primary/80 hover:shadow-lg relative overflow-hidden",
@@ -109,6 +124,11 @@ export default function ProgressItem({ analysis = false, knowledgeId = '', item,
                 <FileIcon type={extension} className="size-[30px] min-w-[30px]" />
                 <div className="progress-item__title flex-grow min-w-0">
                     <span className="progress-item__title__name truncate block w-full pr-4">{item.fileName}</span>
+                    {queueStatus && (
+                        <span className="block truncate pr-4 text-xs text-muted-foreground">
+                            {queueStatus}
+                        </span>
+                    )}
                 </div>
                 <div className="ml-auto flex opacity-0 group-hover:opacity-100">
                     {item.error && !analysis &&

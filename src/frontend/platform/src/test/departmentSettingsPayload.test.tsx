@@ -70,7 +70,8 @@ const dept: DepartmentTreeNode = {
   sort_order: 0,
   source: "local",
   status: "active",
-  member_count: 0,
+  is_tenant_root: false,
+  mounted_tenant_id: null,
   children: [],
 };
 
@@ -82,6 +83,7 @@ describe("DepartmentSettings payload", () => {
       id: 2,
       dept_id: "BS@dept",
       name: "Engineering",
+      short_name: "R&D",
       parent_id: 1,
       path: "/1/2/",
       sort_order: 0,
@@ -113,5 +115,74 @@ describe("DepartmentSettings payload", () => {
       expect(mockedUpdateDepartmentApi).toHaveBeenCalledTimes(1);
     });
     expect(mockedUpdateDepartmentApi).toHaveBeenCalledWith("BS@dept", { name: "Engineering 2" });
+  });
+
+  it("submits a normalized short name without unrelated fields", async () => {
+    render(
+      <DepartmentSettings dept={dept} tree={[dept]} onChanged={vi.fn()} />,
+    );
+
+    const input = await screen.findByDisplayValue("R&D");
+    fireEvent.change(input, { target: { value: "  Eng  " } });
+    fireEvent.click(screen.getByRole("button", { name: "save" }));
+
+    await waitFor(() => expect(mockedUpdateDepartmentApi).toHaveBeenCalledTimes(1));
+    expect(mockedUpdateDepartmentApi).toHaveBeenCalledWith("BS@dept", {
+      short_name: "Eng",
+    });
+  });
+
+  it("submits null when the saved short name is cleared", async () => {
+    render(
+      <DepartmentSettings dept={dept} tree={[dept]} onChanged={vi.fn()} />,
+    );
+
+    const input = await screen.findByDisplayValue("R&D");
+    fireEvent.change(input, { target: { value: "   " } });
+    fireEvent.click(screen.getByRole("button", { name: "save" }));
+
+    await waitFor(() => expect(mockedUpdateDepartmentApi).toHaveBeenCalledTimes(1));
+    expect(mockedUpdateDepartmentApi).toHaveBeenCalledWith("BS@dept", {
+      short_name: null,
+    });
+  });
+
+  it("does not submit when settings are unchanged", async () => {
+    render(
+      <DepartmentSettings dept={dept} tree={[dept]} onChanged={vi.fn()} />,
+    );
+
+    await screen.findByDisplayValue("R&D");
+    fireEvent.click(screen.getByRole("button", { name: "save" }));
+
+    await waitFor(() => expect(mockedGetDepartmentApi).toHaveBeenCalledTimes(1));
+    expect(mockedUpdateDepartmentApi).not.toHaveBeenCalled();
+  });
+
+  it("keeps synced department name disabled while allowing short name edits", async () => {
+    render(
+      <DepartmentSettings
+        dept={{ ...dept, source: "wecom" }}
+        tree={[{ ...dept, source: "wecom" }]}
+        onChanged={vi.fn()}
+      />,
+    );
+
+    expect(await screen.findByDisplayValue("Engineering")).toBeDisabled();
+    expect(screen.getByDisplayValue("R&D")).not.toBeDisabled();
+  });
+
+  it("keeps archived department name and short name disabled", async () => {
+    render(
+      <DepartmentSettings
+        dept={{ ...dept, status: "archived" }}
+        tree={[{ ...dept, status: "archived" }]}
+        onChanged={vi.fn()}
+      />,
+    );
+
+    expect(await screen.findByDisplayValue("Engineering")).toBeDisabled();
+    expect(screen.getByDisplayValue("R&D")).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "save" })).not.toBeInTheDocument();
   });
 });

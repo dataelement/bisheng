@@ -1,6 +1,10 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRecoilValue } from "recoil";
 
+import {
+    DEFAULT_PORTAL_WATERMARK_HORIZONTAL_TEXT,
+    useGetPortalWatermarkConfig,
+} from "~/hooks/queries/endpoints/queries";
 import store from "~/store";
 import type { TUser } from "~/types/chat";
 import styles from "./KnowledgePreviewWatermark.module.css";
@@ -154,21 +158,25 @@ export function formatKnowledgePreviewWatermarkTime(value: Date): string {
 export function buildKnowledgePreviewWatermarkLines(
     user: KnowledgePreviewWatermarkUser,
     viewedAt: Date,
+    horizontalText: string = DEFAULT_PORTAL_WATERMARK_HORIZONTAL_TEXT,
 ): string[] {
     const name = user.name.trim() || user.username.trim() || "未知用户";
     const account = user.externalId?.trim() || user.username.trim() || name;
     const departmentName = user.departmentName?.trim() || "";
     const identity = departmentName ? `${departmentName}-${name}` : name;
+    const resolvedHorizontalText = horizontalText.trim() || DEFAULT_PORTAL_WATERMARK_HORIZONTAL_TEXT;
     return [
         `${identity}-${account}-${formatKnowledgePreviewWatermarkTime(viewedAt)}`,
-        "首钢股份内部资料，严禁外传，违者必究",
+        resolvedHorizontalText,
     ];
 }
 
 export function KnowledgePreviewWatermarkProvider({ children }: { children: ReactNode }) {
     const user = useRecoilValue(store.user);
     const [viewedAt] = useState(() => new Date());
-    const lines = user ? buildKnowledgePreviewWatermarkLines(user, viewedAt) : null;
+    const { data: watermarkConfig } = useGetPortalWatermarkConfig();
+    const horizontalText = watermarkConfig?.horizontal_text ?? DEFAULT_PORTAL_WATERMARK_HORIZONTAL_TEXT;
+    const lines = user ? buildKnowledgePreviewWatermarkLines(user, viewedAt, horizontalText) : null;
 
     return (
         <KnowledgePreviewWatermarkContext.Provider value={lines}>
