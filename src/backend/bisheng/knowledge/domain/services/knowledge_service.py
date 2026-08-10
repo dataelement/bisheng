@@ -1660,6 +1660,8 @@ class KnowledgeService(KnowledgeUtils):
             split_rule=str_split_rule,
             user_id=login_user.user_id,
             user_name=login_user.user_name,
+            original_uploader_id=login_user.user_id,
+            original_knowledge_id=knowledge.id,
             updater_id=login_user.user_id,
             updater_name=login_user.user_name,
             **file_kwargs if file_kwargs else {},

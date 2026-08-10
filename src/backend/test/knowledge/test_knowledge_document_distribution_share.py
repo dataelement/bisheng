@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
 from bisheng.knowledge.domain.models.knowledge_document_version import (
     KnowledgeDocumentVersion,
@@ -63,6 +64,15 @@ async def _seed_document(
 ) -> None:
     session.add_all(
         [
+            *[
+                Knowledge(
+                    id=knowledge_id,
+                    tenant_id=7,
+                    name=f"空间{knowledge_id}",
+                    type=KnowledgeTypeEnum.SPACE.value,
+                )
+                for knowledge_id in (10, 20, 30, 40)
+            ],
             KnowledgeDocument(
                 id=91,
                 tenant_id=7,
@@ -73,6 +83,8 @@ async def _seed_document(
             KnowledgeFile(
                 id=100,
                 tenant_id=7,
+                original_uploader_id=501,
+                original_knowledge_id=10,
                 knowledge_id=20,
                 file_name="canonical.pdf",
                 object_name="tenant/7/canonical.pdf",
@@ -98,6 +110,8 @@ async def _seed_document(
             KnowledgeFile(
                 id=101,
                 tenant_id=7,
+                original_uploader_id=501,
+                original_knowledge_id=10,
                 knowledge_id=10,
                 file_name="canonical.pdf",
                 status=KnowledgeFileStatus.SUCCESS.value,
@@ -165,6 +179,8 @@ async def test_share_creates_payload_free_active_entry_without_moving_manager(
     assert share.preview_file_object_name is None
     assert share.file_size == 0
     assert share.desired_content_generation == 4
+    assert share.original_uploader_id == 501
+    assert share.original_knowledge_id == 10
 
 
 def test_share_entry_uses_selected_target_folder():

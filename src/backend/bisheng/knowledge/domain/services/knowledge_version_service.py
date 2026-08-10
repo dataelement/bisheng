@@ -484,6 +484,13 @@ class KnowledgeVersionService:
         if current_kf.md5 and any(kf.md5 == current_kf.md5 for kf in existing_kfs if kf.md5):
             raise HTTPException(status_code=409, detail="duplicate content already in target chain")
 
+        if target_primary_kf.original_uploader_id is None and target_primary_kf.user_id is not None:
+            target_primary_kf.original_uploader_id = int(target_primary_kf.user_id)
+        if target_primary_kf.original_knowledge_id is None:
+            target_primary_kf.original_knowledge_id = int(target_primary_kf.knowledge_id)
+        current_kf.original_uploader_id = target_primary_kf.original_uploader_id
+        current_kf.original_knowledge_id = target_primary_kf.original_knowledge_id
+
         # Capture the original document before moving the unique physical-file
         # relationship. The version row itself must be migrated, not copied:
         # ``knowledge_file_id`` is globally unique.

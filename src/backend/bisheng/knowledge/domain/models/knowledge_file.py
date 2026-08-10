@@ -172,6 +172,14 @@ class KnowledgeFileBase(SQLModelSerializable):
         default=None,
         sa_column=Column(Integer, nullable=False, server_default=text("1"), index=True, comment="Tenant ID"),
     )
+    original_uploader_id: int | None = Field(
+        default=None,
+        description="User ID that first uploaded the canonical business document",
+    )
+    original_knowledge_id: int | None = Field(
+        default=None,
+        description="Knowledge space ID where the canonical business document was first uploaded",
+    )
     reference_document_id: int | None = Field(
         default=None,
         description="Canonical KnowledgeDocument referenced by this F059 entry",

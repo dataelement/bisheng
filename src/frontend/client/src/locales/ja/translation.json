@@ -2144,5 +2144,9 @@
   "com_approval_task_badge_approved": "承認済み",
   "com_approval_task_badge_rejected": "却下",
   "com_approval_section_business_content": "業務内容",
-  "com_approval_search_placeholder": "申請者・シナリオ・ファイルを検索"
+  "com_approval_search_placeholder": "申請者・シナリオ・ファイルを検索",
+  "com_approval_field_original_uploader_name": "最初のアップロード者",
+  "com_approval_field_original_uploader_id": "最初のアップロード者ID",
+  "com_approval_field_original_knowledge_name": "最初のナレッジスペース",
+  "com_approval_field_original_knowledge_id": "最初のナレッジスペースID"
 }

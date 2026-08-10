@@ -4412,6 +4412,8 @@ describe("PortalKnowledgeWorkbench", () => {
             sourceSpaceName: "来源知识库",
             sourceDepartmentName: "来源部门",
             sourcePath: "来源知识库>源目录/共享制度.pdf",
+            originalUploaderName: "最初上传人张三",
+            originalKnowledgeName: "最初个人知识库",
         });
         jest.mocked(getGroupedSpacesApi).mockResolvedValue({
             publicSpaces: [],
@@ -4440,6 +4442,10 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(drawer).toHaveTextContent("分享文件");
         expect(drawer).toHaveTextContent("来源知识库");
         expect(drawer).toHaveTextContent("来源知识库>源目录/共享制度.pdf");
+        expect(drawer).toHaveTextContent("原始上传人");
+        expect(drawer).toHaveTextContent("最初上传人张三");
+        expect(drawer).toHaveTextContent("原始上传知识库");
+        expect(drawer).toHaveTextContent("最初个人知识库");
         expect(getSpaceInfoApi).not.toHaveBeenCalledWith("source-space");
         expect(drawer).not.toHaveTextContent("接收部门");
         expect(drawer).not.toHaveTextContent("被分享知识库");
@@ -4527,6 +4533,8 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(screen.getByTestId("portal-info-drawer")).toHaveTextContent("产品研发中心-数智组");
         expect(screen.getByTestId("portal-info-drawer")).toHaveTextContent("知识库");
         expect(screen.getByTestId("portal-info-drawer")).toHaveTextContent("路径");
+        expect(screen.getByTestId("portal-info-drawer")).not.toHaveTextContent("原始上传人");
+        expect(screen.getByTestId("portal-info-drawer")).not.toHaveTextContent("原始上传知识库");
 
         fireEvent.click(within(rail).getByRole("button", { name: "使用" }));
         expect(screen.getByRole("tab", { name: "使用" })).toHaveAttribute("aria-selected", "true");

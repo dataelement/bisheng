@@ -23,6 +23,8 @@ jest.mock("~/hooks/useLocalize", () => ({
       com_approval_field_user_group_id: "用户组ID",
       com_approval_field_source_space_name: "源知识库",
       com_approval_field_source_file_name: "源文件",
+      com_approval_field_original_uploader_name: "原始上传人",
+      com_approval_field_original_knowledge_name: "原始上传知识库",
       com_approval_field_target_space_name: "目标知识库",
       com_approval_field_target_document_title: "目标文档",
       com_approval_field_target_folder_name: "目标文件夹",
@@ -190,6 +192,10 @@ describe("ApprovalCenterDialog", () => {
         target_folder_id: 0,
         source_file_name: "操作手册.md",
         source_space_name: "测试部门01-子部门2",
+        original_uploader_id: 501,
+        original_uploader_name: "张三",
+        original_knowledge_id: 5,
+        original_knowledge_name: "原始个人库",
         target_space_name: "0111",
         target_folder_name: "根目录",
       },
@@ -209,6 +215,10 @@ describe("ApprovalCenterDialog", () => {
     expect(screen.getByText("测试部门01-子部门2")).toBeInTheDocument();
     expect(screen.getByText("源文件")).toBeInTheDocument();
     expect(screen.getByText("操作手册.md")).toBeInTheDocument();
+    expect(screen.getByText("原始上传人")).toBeInTheDocument();
+    expect(screen.getByText("张三")).toBeInTheDocument();
+    expect(screen.getByText("原始上传知识库")).toBeInTheDocument();
+    expect(screen.getByText("原始个人库")).toBeInTheDocument();
     expect(screen.getByText("目标知识库")).toBeInTheDocument();
     expect(screen.getByText("0111")).toBeInTheDocument();
     expect(screen.getByText("目标文件夹")).toBeInTheDocument();
@@ -246,6 +256,10 @@ describe("ApprovalCenterDialog", () => {
         source_space_name: "团队知识库",
         source_file_id: 20,
         source_file_name: "操作手册.pdf",
+        original_uploader_id: 502,
+        original_uploader_name: "李四",
+        original_knowledge_id: 6,
+        original_knowledge_name: "最初团队库",
         target_space_id: 30,
         target_space_name: "业务域知识库",
         target_document_id: 40,
@@ -267,6 +281,10 @@ describe("ApprovalCenterDialog", () => {
     expect(screen.getByText("团队知识库")).toBeInTheDocument();
     expect(screen.getByText("源文件")).toBeInTheDocument();
     expect(screen.getByText("操作手册.pdf")).toBeInTheDocument();
+    expect(screen.getByText("原始上传人")).toBeInTheDocument();
+    expect(screen.getByText("李四")).toBeInTheDocument();
+    expect(screen.getByText("原始上传知识库")).toBeInTheDocument();
+    expect(screen.getByText("最初团队库")).toBeInTheDocument();
     expect(screen.getByText("目标知识库")).toBeInTheDocument();
     expect(screen.getByText("业务域知识库")).toBeInTheDocument();
     expect(screen.getByText("目标文档")).toBeInTheDocument();

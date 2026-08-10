@@ -888,6 +888,10 @@ describe("mapChild", () => {
         source_space_name: "来源知识库",
         source_department_name: "来源部门",
         source_path: "来源知识库>源目录/shared.pdf",
+        original_uploader_id: 42,
+        original_uploader_name: "原始上传人",
+        original_knowledge_id: 1,
+        original_knowledge_name: "原始知识库",
       },
       "2",
     );
@@ -899,6 +903,10 @@ describe("mapChild", () => {
       sourceSpaceName: "来源知识库",
       sourceDepartmentName: "来源部门",
       sourcePath: "来源知识库>源目录/shared.pdf",
+      originalUploaderId: 42,
+      originalUploaderName: "原始上传人",
+      originalKnowledgeId: 1,
+      originalKnowledgeName: "原始知识库",
     });
   });
 

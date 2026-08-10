@@ -1,7 +1,9 @@
 """Link operation: associate a file into a target doc; auto-promote to primary."""
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
 from fastapi import HTTPException
-from unittest.mock import MagicMock, AsyncMock
 
 from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
@@ -35,14 +37,25 @@ def enable_switch(monkeypatch):
 
 def _build_svc(session):
     return KnowledgeVersionService(
-        request=MagicMock(), login_user=MagicMock(),
+        request=MagicMock(),
+        login_user=SimpleNamespace(tenant_id=1, user_id=1, user_name="tester"),
         doc_repo=KnowledgeDocumentRepositoryImpl(session),
         version_repo=KnowledgeDocumentVersionRepositoryImpl(session),
         knowledge_file_repo=KnowledgeFileRepositoryImpl(session),
     )
 
 
-async def _seed_doc(session, knowledge_id, file_id, file_name="a.pdf", md5=None, status=2):
+async def _seed_doc(
+    session,
+    knowledge_id,
+    file_id,
+    file_name="a.pdf",
+    md5=None,
+    status=2,
+    *,
+    original_uploader_id=None,
+    original_knowledge_id=None,
+):
     # idempotent space seed (the first call creates, later seeds reuse)
     from sqlmodel import select
     existing = await session.execute(select(Knowledge).where(Knowledge.id == knowledge_id))
@@ -50,8 +63,16 @@ async def _seed_doc(session, knowledge_id, file_id, file_name="a.pdf", md5=None,
         session.add(Knowledge(id=knowledge_id, name=f"space{knowledge_id}", type=3, user_id=1))
         await session.commit()
 
-    session.add(KnowledgeFile(id=file_id, knowledge_id=knowledge_id, file_name=file_name,
-                              file_type=1, status=status, md5=md5))
+    session.add(KnowledgeFile(
+        id=file_id,
+        knowledge_id=knowledge_id,
+        file_name=file_name,
+        file_type=1,
+        status=status,
+        md5=md5,
+        original_uploader_id=original_uploader_id,
+        original_knowledge_id=original_knowledge_id,
+    ))
     await session.commit()
     doc = KnowledgeDocument(knowledge_id=knowledge_id)
     session.add(doc)
@@ -101,6 +122,47 @@ async def test_link_promotes_new_version_to_primary(enable_switch, async_db_sess
     assert migrated is not None
     assert migrated.document_id == target_doc.id
     assert migrated.version_no == 2
+
+
+@pytest.mark.asyncio
+async def test_linked_version_inherits_target_document_original_origin(
+    enable_switch,
+    async_db_session,
+    monkeypatch,
+):
+    target_doc, _ = await _seed_doc(
+        async_db_session,
+        1,
+        100,
+        "target.pdf",
+        md5="aaa",
+        original_uploader_id=501,
+        original_knowledge_id=8,
+    )
+    await _seed_doc(
+        async_db_session,
+        1,
+        101,
+        "incoming.pdf",
+        md5="bbb",
+        original_uploader_id=502,
+        original_knowledge_id=9,
+    )
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.services.knowledge_audit_telemetry_service."
+        "KnowledgeAuditTelemetryService.audit_link_file_version",
+        MagicMock(return_value=None),
+    )
+
+    svc = _build_svc(async_db_session)
+    await svc.link_file_to_document(
+        knowledge_file_id=101,
+        target_document_id=target_doc.id,
+    )
+
+    linked_file = await svc.knowledge_file_repo.find_by_id(101)
+    assert linked_file.original_uploader_id == 501
+    assert linked_file.original_knowledge_id == 8
 
 
 @pytest.mark.asyncio

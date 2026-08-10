@@ -13520,6 +13520,42 @@ class KnowledgeSpaceService(KnowledgeUtils):
         primary_files = await KnowledgeFileDao.aget_file_by_ids(primary_file_ids) if primary_file_ids else []
         primary_file_map = {int(file.id): file for file in primary_files}
 
+        distributed_entry_types = {
+            KnowledgeFileEntryType.MANAGER.value,
+            KnowledgeFileEntryType.PUBLISH.value,
+            KnowledgeFileEntryType.SHARE.value,
+        }
+        original_uploader_ids = sorted(
+            {
+                int(item.original_uploader_id)
+                for item in file_items
+                if item.entry_type in distributed_entry_types
+                and item.original_uploader_id is not None
+            }
+        )
+        original_knowledge_ids = sorted(
+            {
+                int(item.original_knowledge_id)
+                for item in file_items
+                if item.entry_type in distributed_entry_types
+                and item.original_knowledge_id is not None
+            }
+        )
+        original_users, original_spaces = await asyncio.gather(
+            UserDao.aget_user_by_ids(original_uploader_ids)
+            if original_uploader_ids
+            else asyncio.sleep(0, result=[]),
+            KnowledgeDao.async_get_spaces_by_ids(original_knowledge_ids)
+            if original_knowledge_ids
+            else asyncio.sleep(0, result=[]),
+        )
+        original_user_name_map = {
+            int(user.user_id): str(user.user_name or user.user_id) for user in original_users
+        }
+        original_space_name_map = {
+            int(space.id): str(space.name or space.id) for space in original_spaces
+        }
+
         info: dict[int, dict] = {}
         for item in file_items:
             permission_ids = self._entry_permission_ids_by_file.get(int(item.id))
@@ -13605,6 +13641,25 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 item_info["version_no"] = int(primary_version.version_no)
             if primary_file is not None:
                 item_info["file_size"] = int(primary_file.file_size or 0)
+            if entry_type in distributed_entry_types:
+                original_uploader_id = item.original_uploader_id
+                original_knowledge_id = item.original_knowledge_id
+                item_info.update(
+                    {
+                        "original_uploader_id": original_uploader_id,
+                        "original_uploader_name": (
+                            original_user_name_map.get(int(original_uploader_id))
+                            if original_uploader_id is not None
+                            else None
+                        ),
+                        "original_knowledge_id": original_knowledge_id,
+                        "original_knowledge_name": (
+                            original_space_name_map.get(int(original_knowledge_id))
+                            if original_knowledge_id is not None
+                            else None
+                        ),
+                    }
+                )
             info[int(item.id)] = item_info
         return info
 
@@ -15208,6 +15263,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         db_file = KnowledgeFile(
             knowledge_id=knowledge_id,
             tenant_id=db_knowledge.tenant_id,
+            original_uploader_id=self.login_user.user_id,
+            original_knowledge_id=knowledge_id,
             file_name=file_name,
             file_size=result.content_length,
             md5=result.content_hash,
