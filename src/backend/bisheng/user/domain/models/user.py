@@ -129,6 +129,8 @@ class UserRead(UserBase):
     user_id: int | None = None
     role: str | None = None  # admin；非超管时由服务端序列化（见 /user/info）
     department_name: str | None = None
+    department_short_name: str | None = None
+    department_display_name: str | None = None
     access_token: str | None = None
     web_menu: list[str] | None = None
     # True if any assigned role sets quota_config.menu_approval_mode (需审批模式)

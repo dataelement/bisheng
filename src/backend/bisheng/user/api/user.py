@@ -30,6 +30,7 @@ from bisheng.database.models.role import Role, RoleCreate, RoleDao, RoleUpdate
 from bisheng.database.models.role_access import AccessType, RoleAccessDao, RoleRefresh
 from bisheng.database.models.tenant import UserTenantDao
 from bisheng.database.models.user_group import UserGroupDao
+from bisheng.department.domain.services.department_display_service import build_department_name_projection
 from bisheng.permission.domain.services.legacy_rbac_sync_service import LegacyRBACSyncService
 from bisheng.utils import generate_uuid, get_request_ip
 from bisheng.utils.constants import CAPTCHA_PREFIX, RSA_KEY, USER_CURRENT_SESSION, USER_PASSWORD_ERROR
@@ -202,7 +203,7 @@ async def get_info(login_user: LoginUser = Depends(LoginUser.get_login_user)):
         is_department_admin=is_department_admin,
     )
     menu_approval_mode = await login_user.compute_menu_approval_mode(db_user)
-    department_name = await UserService.get_primary_department_name(user_id)
+    department_projection = await UserService.get_primary_department_name_projection(user_id)
 
     # Tenant-tree admin flags for the frontend. Any failure here degrades
     # to defaults so a transient FGA outage never blocks login.
@@ -250,7 +251,13 @@ async def get_info(login_user: LoginUser = Depends(LoginUser.get_login_user)):
             admin_groups=admin_group,
             can_manage_user_groups=can_manage_user_groups,
             is_department_admin=is_department_admin,
-            department_name=department_name,
+            department_name=department_projection.name if department_projection else None,
+            department_short_name=(
+                department_projection.short_name if department_projection else None
+            ),
+            department_display_name=(
+                department_projection.display_name if department_projection else None
+            ),
             is_global_super=is_global_super,
             is_child_admin=is_child_admin,
             leaf_tenant_id=leaf_tenant_id,
@@ -494,9 +501,18 @@ async def list_user(
         if one_data["department_id"]:
             department = DepartmentDao.get_by_id(one_data["department_id"])
             if department:
-                one_data["department_name"] = department.name
+                projection = build_department_name_projection(department)
+                one_data["department_name"] = projection.name
+                one_data["department_short_name"] = projection.short_name
+                one_data["department_display_name"] = projection.display_name
             else:
                 one_data["department_name"] = None
+                one_data["department_short_name"] = None
+                one_data["department_display_name"] = None
+        else:
+            one_data["department_name"] = None
+            one_data["department_short_name"] = None
+            one_data["department_display_name"] = None
         one_data["avatar"] = avatar_url
         user_roles = get_user_roles(one, role_dict)
         user_groups = get_user_groups(one, group_dict)
@@ -574,9 +590,19 @@ async def _build_user_list_entry(
     one_data["department_id"] = primary_dept_id
     if primary_dept_id:
         department = DepartmentDao.get_by_id(primary_dept_id)
-        one_data["department_name"] = department.name if department else None
+        if department:
+            projection = build_department_name_projection(department)
+            one_data["department_name"] = projection.name
+            one_data["department_short_name"] = projection.short_name
+            one_data["department_display_name"] = projection.display_name
+        else:
+            one_data["department_name"] = None
+            one_data["department_short_name"] = None
+            one_data["department_display_name"] = None
     else:
         one_data["department_name"] = None
+        one_data["department_short_name"] = None
+        one_data["department_display_name"] = None
     one_data["avatar"] = await UserService.get_avatar_share_link(one_data.get("avatar"))
     user_roles = get_user_roles(user, role_dict)
     user_groups = get_user_groups(user, group_dict)

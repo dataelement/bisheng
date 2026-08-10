@@ -902,12 +902,16 @@ class KnowledgeDao(KnowledgeBase):
     async def async_get_space_source_metadata_by_ids(
         cls,
         space_ids: List[int],
-    ) -> Dict[int, Tuple[str, str]]:
-        """批量读取来源知识库名称及其绑定部门名称。"""
+    ) -> Dict[int, Tuple[str, str, str | None, str]]:
+        """批量读取来源知识库名称及其绑定部门名称投影。"""
         if not space_ids:
             return {}
 
         from bisheng.database.models.department import Department
+        from bisheng.department.domain.services.department_display_service import (
+            get_department_display_name,
+            normalize_department_short_name,
+        )
         from bisheng.knowledge.domain.models.department_knowledge_space import DepartmentKnowledgeSpace
 
         statement = (
@@ -915,6 +919,7 @@ class KnowledgeDao(KnowledgeBase):
                 Knowledge.id,
                 Knowledge.name,
                 Department.name,
+                Department.short_name,
             )
             .outerjoin(
                 DepartmentKnowledgeSpace,
@@ -935,8 +940,13 @@ class KnowledgeDao(KnowledgeBase):
                 int(space_id): (
                     str(space_name or space_id),
                     str(department_name or ''),
+                    normalize_department_short_name(department_short_name),
+                    get_department_display_name(
+                        str(department_name or ''),
+                        department_short_name,
+                    ),
                 )
-                for space_id, space_name, department_name in result.all()
+                for space_id, space_name, department_name, department_short_name in result.all()
             }
 
     @classmethod

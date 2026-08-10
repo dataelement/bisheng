@@ -20,6 +20,7 @@ def repository():
                     department_id=10,
                     dept_id="BS@10",
                     name="默认组织",
+                    short_name="集团",
                     parent_id=None,
                     path="/10/",
                 ),
@@ -27,6 +28,7 @@ def repository():
                     department_id=11,
                     dept_id="BS@11",
                     name="研发部",
+                    short_name="研发",
                     parent_id=10,
                     path="/10/11/",
                 ),
@@ -34,6 +36,7 @@ def repository():
                     department_id=12,
                     dept_id="BS@12",
                     name="项目组",
+                    short_name=None,
                     parent_id=10,
                     path="/10/12/",
                 ),
@@ -73,19 +76,26 @@ async def test_service_returns_all_visible_department_memberships(repository):
             "external_id": "EMP007",
             "primary_department_path": "默认组织/研发部",
             "department_paths": ["默认组织/研发部", "默认组织/项目组"],
+            "department_display_paths": ["集团/研发", "集团/项目组"],
             "department_memberships": [
                 {
                     "department_id": 11,
                     "dept_id": "BS@11",
                     "name": "研发部",
+                    "short_name": "研发",
+                    "display_name": "研发",
                     "path": "默认组织/研发部",
+                    "display_path": "集团/研发",
                     "is_primary": True,
                 },
                 {
                     "department_id": 12,
                     "dept_id": "BS@12",
                     "name": "项目组",
+                    "short_name": None,
+                    "display_name": "项目组",
                     "path": "默认组织/项目组",
+                    "display_path": "集团/项目组",
                     "is_primary": False,
                 },
             ],
@@ -159,4 +169,3 @@ async def test_service_does_not_expose_an_out_of_scope_department(repository):
 
     assert result == []
     repository.list_candidates.assert_not_awaited()
-

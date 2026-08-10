@@ -18,6 +18,9 @@ from bisheng.database.models.qa_expert import Answer, Comment, Expert, QANotific
 from bisheng.dictionary.domain.repositories.implementations.system_dictionary_repository_impl import (
     SystemDictionaryRepositoryImpl,
 )
+from bisheng.department.domain.services.department_display_service import (
+    build_department_name_projection,
+)
 from bisheng.qa_expert.domain.repositories import (
     AnswerRepository,
     CommentRepository,
@@ -108,6 +111,21 @@ class ExpertService:
         self.repository = ExpertRepository()
 
     @staticmethod
+    def _with_department_projection(expert: Expert, department) -> dict:
+        expert_dict = expert.model_dump()
+        expert_dict["department_id"] = expert.depart_ment
+        if department is None:
+            expert_dict["depart_ment"] = None
+            expert_dict["department_short_name"] = None
+            expert_dict["department_display_name"] = None
+            return expert_dict
+        projection = build_department_name_projection(department)
+        expert_dict["depart_ment"] = projection.name
+        expert_dict["department_short_name"] = projection.short_name
+        expert_dict["department_display_name"] = projection.display_name
+        return expert_dict
+
+    @staticmethod
     async def _sync_wechat_user_id(user_id: int | None, wechat_user_id: str | None) -> None:
         """将企业微信用户ID同步到关联的user表。"""
         if user_id is None:
@@ -123,7 +141,7 @@ class ExpertService:
         user.update_time = datetime.now()
         await UserDao.aupdate_user(user)
 
-    async def create_expert(self, request: ExpertCreateRequest) -> Expert:
+    async def create_expert(self, request: ExpertCreateRequest) -> dict:
         """创建专家（后台管理员操作）"""
         # 检查是否已是专家
         existing = await self.repository.get_by_user_name(request.expert_name, request.user_id)
@@ -143,11 +161,7 @@ class ExpertService:
         temp_expert = await self.repository.create(expert)
         await self._sync_wechat_user_id(temp_expert.user_id, request.wechat_user_id)
         depart = await DepartmentDao.aget_by_id(temp_expert.depart_ment)
-        if depart:
-            temp_expert.depart_ment = depart.name
-        else:
-            temp_expert.depart_ment = None
-        return temp_expert
+        return self._with_department_projection(temp_expert, depart)
 
     async def update_expert(self, expert_id: int, request: ExpertUpdateRequest) -> dict:
         """更新专家信息"""
@@ -159,14 +173,8 @@ class ExpertService:
         wechat_user_id = update_data.pop("wechat_user_id", None)
         temp_expert = await self.repository.update(expert_id, **update_data)
         await self._sync_wechat_user_id(temp_expert.user_id, wechat_user_id)
-        expert_dict = temp_expert.model_dump()
-        expert_dict["department_id"] = temp_expert.depart_ment
         depart = await DepartmentDao.aget_by_id(temp_expert.depart_ment)
-        if depart:
-            expert_dict["depart_ment"] = depart.name
-        else:
-            expert_dict["depart_ment"] = None
-        return expert_dict
+        return self._with_department_projection(temp_expert, depart)
 
     async def list_experts(
         self,
@@ -203,10 +211,19 @@ class ExpertService:
         )
         experts_all = await self._build_expert_rows(experts)
         if sort_by_department:
-            populated = [item for item in experts_all if str(item.get("depart_ment") or "").strip()]
-            empty = [item for item in experts_all if not str(item.get("depart_ment") or "").strip()]
+            populated = [
+                item
+                for item in experts_all
+                if str(item.get("department_display_name") or "").strip()
+            ]
+            empty = [
+                item
+                for item in experts_all
+                if not str(item.get("department_display_name") or "").strip()
+            ]
             populated.sort(
                 key=lambda item: (
+                    str(item.get("department_display_name") or "").casefold(),
                     str(item.get("depart_ment") or "").casefold(),
                     str(item.get("expert_name") or "").casefold(),
                     int(item.get("id") or 0),
@@ -227,13 +244,26 @@ class ExpertService:
                 continue
 
         departments = await DepartmentDao.aget_by_ids(department_ids)
+        department_options = []
+        for department in departments:
+            if department.id is None or not str(department.name or "").strip():
+                continue
+            projection = build_department_name_projection(department)
+            department_options.append(
+                {
+                    "id": str(department.id),
+                    "name": projection.name,
+                    "short_name": projection.short_name,
+                    "display_name": projection.display_name,
+                }
+            )
         department_options = sorted(
-            (
-                {"id": str(department.id), "name": department.name}
-                for department in departments
-                if department.id is not None and str(department.name or "").strip()
+            department_options,
+            key=lambda item: (
+                str(item["display_name"]).casefold(),
+                str(item["name"]).casefold(),
+                str(item["id"]),
             ),
-            key=lambda item: (str(item["name"]).casefold(), str(item["id"])),
         )
         # 职业维度字段对应系统字典表中的 type code
         field_to_type = {
@@ -308,8 +338,8 @@ class ExpertService:
                 major_keys.add(expert.major)
 
         departments = await DepartmentDao.aget_by_ids(sorted(department_ids))
-        department_names = {
-            int(department.id): department.name for department in departments if department.id is not None
+        department_map = {
+            int(department.id): department for department in departments if department.id is not None
         }
 
         users = await UserDao.aget_user_by_ids(list(set(user_ids))) or []
@@ -326,13 +356,14 @@ class ExpertService:
 
         experts_all = []
         for expert in experts:
-            expert_dict = expert.model_dump()
-            expert_dict["department_id"] = expert.depart_ment
             try:
                 department_id = int(expert.depart_ment) if expert.depart_ment else None
             except (TypeError, ValueError):
                 department_id = None
-            expert_dict["depart_ment"] = department_names.get(department_id)
+            expert_dict = self._with_department_projection(
+                expert,
+                department_map.get(department_id),
+            )
             expert_dict["job_family"] = dict_key_maps["job_family"].get(expert.job_family, expert.job_family)
             expert_dict["job_category"] = dict_key_maps["job_category"].get(expert.job_category, expert.job_category)
             expert_dict["position"] = dict_key_maps["position"].get(expert.position, expert.position)
@@ -348,16 +379,13 @@ class ExpertService:
         """删除专家"""
         return await self.repository.delete(expert_id)
 
-    async def get_expertinfo(self, expert_name: str) -> Expert | None:
+    async def get_expertinfo(self, expert_name: str) -> dict | None:
         """获取专家信息"""
         expert = await self.repository.get_expertinfo(expert_name)
         if expert:
             department = DepartmentDao.get_by_id(expert.depart_ment)
-            if department:
-                expert.depart_ment = department.name
-            else:
-                expert.depart_ment = None
-        return expert
+            return self._with_department_projection(expert, department)
+        return None
 
     async def get_expertinfobyid(self, user_id: int) -> bool:
         """获取专家信息"""

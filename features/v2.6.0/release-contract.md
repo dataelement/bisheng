@@ -55,6 +55,7 @@
 | INV-12 | 自动记分必须带租户内唯一 `idempotency_key`；重试/重复事件不得双计；平台超级管理员账号不参与自动发放与激励榜 | UserPointLog, User | F070 |
 | INV-13 | `department.org_level` 全租户（或约定作用域）至多一个 `company` 节点；级联打标不得改写 `parent_id`/`path`/用户挂载；组织标签与知识空间 level 不得强绑 | Department.org_level, KnowledgeSpace | F070 |
 | INV-14 | 积分规则配置、全站调分与说明文案仅平台超级管理员可写；公共库管理员不得改规则；站内不做申诉流程；积分站内信文案为代码常量不可运营配置 | PointRule, PointCopy, UserPointLog | F070 |
+| INV-15 | 首钢门户范围内的动态部门展示统一为 `trim(short_name) or name`，部门路径逐级应用同一规则，搜索同时匹配正式名称和简称，展示排序按展示名称稳定排序；既有 `name` / `department_name` 继续表达正式名称，部门 ID、权限、同步匹配及历史审批快照不得被简称替代或批量改写。该不变量不适用于 Platform 组织架构、首页无部门 ID 的硬编码积分榜、Filelib/同步/遥测事实字段。 | Department, User, Knowledge, Permission, Approval, QAExpert | F083 |
 
 **规则**：
 - 新增不变量：先在此表追加，再写 AC
@@ -79,6 +80,7 @@
 | F069-filelib-external-user-context | F004, F044 | 复用统一 PermissionService 与 Developer Token 认证；不新增身份或授权事实，只为四个 Filelib 查询接口组合调用资格与可选业务用户上下文；仅允许在未启用租户功能的部署发布 |
 | F070-points-system | F002, F004, F009, F012, F025（发布审批结果只读）, 现有 knowledge/qa_expert/message/telemetry | 新建积分域；扩展 Department.org_level；挂钩只读/调用知识上传发布、收藏、采纳、日活与站内信，不取得其写所有权；外部协同办公同步不阻塞 MVP |
 | F082-department-short-name | F002, F009, F014/F015 | 扩展 F002 的 Department 字段与既有创建/详情/更新链路；简称由本地维护，F009/F014/F015 组织同步不得覆盖 |
+| F083-portal-department-display-name | F082, F025, F060, F064, F065 | 只读 F082 的 `Department.short_name`，统一首钢门户、嵌入式知识门户、成员管理、审批、专家和水印展示；保留正式名称、历史快照、权限与同步契约，不新增领域对象或数据迁移 |
 
 ---
 
@@ -116,3 +118,4 @@
 | 2026-08-02 | 登记 F069 Filelib 外部用户上下文：新增 INV-10 与 F004/F044 依赖，明确 Token 资格优先、可选目标用户完整权限、全局唯一匹配失败关闭及无租户部署边界 | F069, F004, F044, User, Knowledge |
 | 2026-08-06 | 登记 F070 积分系统：领域对象、Department.org_level 扩展、INV-11~14、模块编码 182；外部同步不阻塞 MVP | F070, F002, Department, Knowledge, Message |
 | 2026-08-10 | 登记 F082 部门简称：为 `Department.short_name` 建立字段扩展所有权，明确可空 64 字符、本地维护、同步不覆盖及不改变组织树/搜索/权限边界 | F082, F002, F009, F014, F015 |
+| 2026-08-10 | 登记 F083 门户部门简称统一展示：新增 INV-11 与 F082/F025/F060/F064/F065 依赖；门户动态展示、搜索、排序和路径使用简称回退，正式名称字段、历史快照、部门 ID、权限及同步事实保持不变 | F083, F082, User, Knowledge, Permission, Approval, QAExpert |

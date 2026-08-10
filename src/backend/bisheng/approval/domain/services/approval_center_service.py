@@ -30,6 +30,10 @@ from bisheng.common.errcode.approval import (
 )
 from bisheng.database.models.audit_log import AuditLogDao
 from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
+from bisheng.department.domain.services.department_display_service import (
+    DepartmentNameProjection,
+    build_department_name_projection,
+)
 from bisheng.user.domain.models.user import UserDao
 from bisheng.user.domain.services.auth import LoginUser
 
@@ -53,6 +57,37 @@ class ApprovalCenterService:
         self.instance_repository = instance_repository
 
     @classmethod
+    async def _load_department_projection_map(
+        cls,
+        department_ids: list[int | None],
+    ) -> dict[int, DepartmentNameProjection]:
+        unique_ids = sorted({int(value) for value in department_ids if value})
+        if not unique_ids:
+            return {}
+        departments = await DepartmentDao.aget_by_ids(unique_ids)
+        return {
+            int(department.id): build_department_name_projection(department)
+            for department in departments
+            if getattr(department, 'id', None) is not None
+        }
+
+    @staticmethod
+    def _with_department_display_name(
+        snapshot: dict | None,
+        department_map: dict[int, DepartmentNameProjection],
+    ) -> dict:
+        result = dict(snapshot or {})
+        department_id = int(result.get('department_id') or 0)
+        projection = department_map.get(department_id)
+        formal_name = str(result.get('department_name') or '')
+        result['department_display_name'] = (
+            projection.display_name if projection is not None else formal_name
+        )
+        if projection is not None:
+            result['department_short_name'] = projection.short_name
+        return result
+
+    @classmethod
     async def list_my_tasks(cls, *, tenant_id: int, approver_user_id: int):
         tasks = await ApprovalQueryRepository.list_tasks_by_approver(tenant_id, approver_user_id)
         if not tasks:
@@ -63,11 +98,7 @@ class ApprovalCenterService:
         instance_map = {inst.id: inst for inst in instances}
 
         dept_ids = [inst.applicant_department_id for inst in instances if inst.applicant_department_id]
-        dept_name_map: dict[int, str] = {}
-        if dept_ids:
-            from bisheng.database.models.department import DepartmentDao
-            depts = await DepartmentDao.aget_by_ids(list(set(dept_ids)))
-            dept_name_map = {d.id: d.name for d in depts}
+        department_map = await cls._load_department_projection_map(dept_ids)
 
         # Batch-check which menu_access instances have had their grant revoked
         from bisheng.approval.domain.repositories.user_menu_access_repository import UserMenuAccessRepository
@@ -91,7 +122,11 @@ class ApprovalCenterService:
         data = []
         for task in tasks:
             inst = instance_map.get(task.instance_id)
-            dept_name = dept_name_map.get(inst.applicant_department_id) if inst and inst.applicant_department_id else None
+            projection = (
+                department_map.get(int(inst.applicant_department_id))
+                if inst and inst.applicant_department_id
+                else None
+            )
             data.append({
                 'task_id': task.id,
                 'instance_id': task.instance_id,
@@ -104,7 +139,9 @@ class ApprovalCenterService:
                 'current_node_name': task.node_name,
                 'applicant_user_name': inst.applicant_user_name if inst else None,
                 'applicant_department_id': inst.applicant_department_id if inst else None,
-                'applicant_department_name': dept_name,
+                'applicant_department_name': projection.name if projection else None,
+                'applicant_department_short_name': projection.short_name if projection else None,
+                'applicant_department_display_name': projection.display_name if projection else None,
                 'create_time': task.create_time,
                 'update_time': task.update_time,
             })
@@ -236,12 +273,15 @@ class ApprovalCenterService:
         if not login_user.is_admin() and task.approver_user_id != login_user.user_id and instance.applicant_user_id != login_user.user_id:
             raise ApprovalRequestPermissionDeniedError()
 
-        dept_name: str | None = None
-        if instance.applicant_department_id:
-            from bisheng.database.models.department import DepartmentDao
-            depts = await DepartmentDao.aget_by_ids([instance.applicant_department_id])
-            if depts:
-                dept_name = depts[0].name
+        snapshot_department_ids = [
+            int(snapshot.get('department_id') or 0)
+            for snapshot in (instance.payload_snapshot or {}, instance.detail_snapshot or {})
+            if snapshot.get('department_id')
+        ]
+        department_map = await cls._load_department_projection_map(
+            [instance.applicant_department_id, *snapshot_department_ids]
+        )
+        projection = department_map.get(int(instance.applicant_department_id or 0))
 
         action_logs = await ApprovalInstanceRepository.list_action_logs(instance.id)
         all_tasks = await ApprovalInstanceRepository.list_tasks(instance.id)
@@ -281,11 +321,19 @@ class ApprovalCenterService:
             'grant_revoked': grant_revoked,
             'current_node_name': task.node_name,
             'comment': task.comment,
-            'detail_snapshot': instance.detail_snapshot,
-            'payload_snapshot': instance.payload_snapshot,
+            'detail_snapshot': cls._with_department_display_name(
+                instance.detail_snapshot,
+                department_map,
+            ),
+            'payload_snapshot': cls._with_department_display_name(
+                instance.payload_snapshot,
+                department_map,
+            ),
             'applicant_user_name': instance.applicant_user_name,
             'applicant_department_id': instance.applicant_department_id,
-            'applicant_department_name': dept_name,
+            'applicant_department_name': projection.name if projection else None,
+            'applicant_department_short_name': projection.short_name if projection else None,
+            'applicant_department_display_name': projection.display_name if projection else None,
             'reason': instance.reason,
             'create_time': instance.create_time,
             'update_time': task.update_time,
@@ -356,13 +404,12 @@ class ApprovalCenterService:
         cls,
         instance_ids: list[int],
         dept_ids: list[int],
-    ) -> tuple[dict[int, str], dict[int, str]]:
-        """Returns (approver_names_map, dept_name_map).
+    ) -> tuple[dict[int, str], dict[int, DepartmentNameProjection]]:
+        """Returns (approver_names_map, department_map).
 
         approver_names_map: {instance_id -> comma-separated approver names}
-        dept_name_map: {dept_id -> dept name}
+        department_map: {dept_id -> department display projection}
         """
-        from bisheng.database.models.department import DepartmentDao
         from bisheng.user.domain.models.user import UserDao
 
         pending_tasks = await ApprovalQueryRepository.list_pending_tasks_for_instances(instance_ids)
@@ -382,13 +429,8 @@ class ApprovalCenterService:
             if names:
                 approver_names_map[inst_id] = '、'.join(names)
 
-        dept_name_map: dict[int, str] = {}
-        unique_dept_ids = [d for d in set(dept_ids) if d]
-        if unique_dept_ids:
-            depts = await DepartmentDao.aget_by_ids(unique_dept_ids)
-            dept_name_map = {d.id: d.name for d in depts}
-
-        return approver_names_map, dept_name_map
+        department_map = await cls._load_department_projection_map(dept_ids)
+        return approver_names_map, department_map
 
     @classmethod
     async def list_my_requests(cls, *, tenant_id: int, applicant_user_id: int):
@@ -398,7 +440,7 @@ class ApprovalCenterService:
 
         instance_ids = [r.id for r in rows]
         dept_ids = [r.applicant_department_id for r in rows if r.applicant_department_id]
-        approver_names_map, dept_name_map = await cls._enrich_with_approver_and_dept(instance_ids, dept_ids)
+        approver_names_map, department_map = await cls._enrich_with_approver_and_dept(instance_ids, dept_ids)
 
         # Batch-check which menu_access instances have had their grant revoked
         from bisheng.approval.domain.repositories.user_menu_access_repository import UserMenuAccessRepository
@@ -419,8 +461,10 @@ class ApprovalCenterService:
             )
         )
 
-        data = [
-            {
+        data = []
+        for row in rows:
+            projection = department_map.get(int(row.applicant_department_id or 0))
+            data.append({
                 'instance_id': row.id,
                 'scenario_code': row.scenario_code,
                 'scenario_name': row.scenario_name,
@@ -429,14 +473,14 @@ class ApprovalCenterService:
                 'grant_revoked': row.id in revoked_instance_ids,
                 'applicant_user_name': row.applicant_user_name,
                 'applicant_department_id': row.applicant_department_id,
-                'applicant_department_name': dept_name_map.get(row.applicant_department_id) if row.applicant_department_id else None,
+                'applicant_department_name': projection.name if projection else None,
+                'applicant_department_short_name': projection.short_name if projection else None,
+                'applicant_department_display_name': projection.display_name if projection else None,
                 'current_node_name': row.current_node_name,
                 'current_approver_names': approver_names_map.get(row.id),
                 'create_time': row.create_time,
                 'update_time': row.update_time,
-            }
-            for row in rows
-        ]
+            })
         return {'data': data, 'total': len(data)}
 
     @classmethod
@@ -453,12 +497,15 @@ class ApprovalCenterService:
                 raise ApprovalRequestPermissionDeniedError()
         action_logs = await ApprovalInstanceRepository.list_action_logs(instance.id)
         # Enrich with department name and current approver names
-        dept_name: str | None = None
-        if instance.applicant_department_id:
-            from bisheng.database.models.department import DepartmentDao
-            depts = await DepartmentDao.aget_by_ids([instance.applicant_department_id])
-            if depts:
-                dept_name = depts[0].name
+        snapshot_department_ids = [
+            int(snapshot.get('department_id') or 0)
+            for snapshot in (instance.payload_snapshot or {}, instance.detail_snapshot or {})
+            if snapshot.get('department_id')
+        ]
+        department_map = await cls._load_department_projection_map(
+            [instance.applicant_department_id, *snapshot_department_ids]
+        )
+        projection = department_map.get(int(instance.applicant_department_id or 0))
 
         all_task_uids = list({t.approver_user_id for t in tasks})
         task_user_name_map: dict[int, str] = {}
@@ -501,11 +548,19 @@ class ApprovalCenterService:
             'status': instance.status,
             'grant_revoked': grant_revoked,
             'reason': instance.reason,
-            'payload_snapshot': instance.payload_snapshot,
-            'detail_snapshot': instance.detail_snapshot,
+            'payload_snapshot': cls._with_department_display_name(
+                instance.payload_snapshot,
+                department_map,
+            ),
+            'detail_snapshot': cls._with_department_display_name(
+                instance.detail_snapshot,
+                department_map,
+            ),
             'applicant_user_name': instance.applicant_user_name,
             'applicant_department_id': instance.applicant_department_id,
-            'applicant_department_name': dept_name,
+            'applicant_department_name': projection.name if projection else None,
+            'applicant_department_short_name': projection.short_name if projection else None,
+            'applicant_department_display_name': projection.display_name if projection else None,
             'current_node_name': instance.current_node_name,
             'current_approver_names': current_approver_names,
             'create_time': instance.create_time,

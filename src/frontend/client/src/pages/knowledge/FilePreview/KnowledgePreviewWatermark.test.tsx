@@ -171,11 +171,20 @@ describe("KnowledgePreviewWatermark", () => {
         expect(enabled.container.textContent).toContain("设备管理部-张三-SG001-2026/07/21");
     });
 
-    test("falls back to username/account and clips overlays to document surfaces", () => {
+    test("falls back to username/account and clips overlays to document surfaces", async () => {
         expect(buildKnowledgePreviewWatermarkLines(
             { ...currentUser, name: "", username: "lisi", departmentName: "", externalId: "" },
             new Date(),
         )[0]).toBe("lisi-lisi-2026/07/21");
+        expect(buildKnowledgePreviewWatermarkLines(
+            {
+                ...currentUser,
+                departmentName: "设备管理部",
+                departmentShortName: "设备",
+                departmentDisplayName: "设备",
+            },
+            new Date(),
+        )[0]).toBe("设备-张三-SG001-2026/07/21");
 
         const compactLayout = calculateKnowledgePreviewWatermarkLayout([100, 90]);
         const normalLayout = calculateKnowledgePreviewWatermarkLayout([240, 220]);

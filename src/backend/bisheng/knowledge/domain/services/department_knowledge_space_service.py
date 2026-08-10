@@ -21,6 +21,10 @@ from bisheng.common.models.space_channel_member import (
 )
 from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
 from bisheng.department.domain.services.department_service import DepartmentService
+from bisheng.department.domain.services.department_display_service import (
+    build_department_name_projection,
+    get_department_display_name,
+)
 from bisheng.knowledge.domain.models.department_knowledge_space import (
     DepartmentKnowledgeSpaceDao,
 )
@@ -297,9 +301,13 @@ class DepartmentKnowledgeSpaceService:
         created_spaces: list[KnowledgeSpaceInfoResp] = []
         for item in req.items:
             dept = dept_map[int(item.department_id)]
+            department_display_name = get_department_display_name(
+                dept.name,
+                getattr(dept, "short_name", None),
+            )
             space = await space_service.create_knowledge_space(
-                name=item.name or cls._build_default_name(dept.name),
-                description=item.description or cls._build_default_description(dept.name),
+                name=item.name or cls._build_default_name(department_display_name),
+                description=item.description or cls._build_default_description(department_display_name),
                 icon=item.icon,
                 auth_type=item.auth_type or cls.DEFAULT_AUTH_TYPE,
                 is_released=cls.DEFAULT_IS_RELEASED if item.is_released is None else item.is_released,
@@ -486,13 +494,25 @@ class DepartmentKnowledgeSpaceService:
             return []
         spaces = await KnowledgeDao.async_get_spaces_by_ids([r.space_id for r in rows])
         name_map = {s.id: s.name for s in spaces}
-        dept_map = {d.id: d.name for d in await DepartmentDao.aget_by_ids([r.department_id for r in rows])}
+        dept_map = {
+            int(d.id): build_department_name_projection(d)
+            for d in await DepartmentDao.aget_by_ids([r.department_id for r in rows])
+            if getattr(d, "id", None) is not None
+        }
         return [
             {
                 "space_id": r.space_id,
                 "space_name": name_map.get(r.space_id, ""),
                 "department_id": r.department_id,
-                "department_name": dept_map.get(r.department_id, ""),
+                "department_name": (
+                    dept_map[int(r.department_id)].name if int(r.department_id) in dept_map else ""
+                ),
+                "department_short_name": (
+                    dept_map[int(r.department_id)].short_name if int(r.department_id) in dept_map else None
+                ),
+                "department_display_name": (
+                    dept_map[int(r.department_id)].display_name if int(r.department_id) in dept_map else ""
+                ),
                 "created_by": r.created_by,
                 "create_time": str(getattr(r, "create_time", "")),
             }
@@ -524,9 +544,12 @@ class DepartmentKnowledgeSpaceService:
             if department.id is None:
                 continue
             department_id = int(department.id)
+            projection = build_department_name_projection(department)
             nodes[department_id] = {
                 "id": department_id,
                 "name": department.name,
+                "short_name": projection.short_name,
+                "display_name": projection.display_name,
                 "children": [],
                 "_sort_order": getattr(department, "sort_order", 0),
             }
@@ -541,7 +564,7 @@ class DepartmentKnowledgeSpaceService:
                 roots.append(node)
 
         def sort_tree(items: list[dict]) -> None:
-            items.sort(key=lambda item: (item["_sort_order"], item["name"], item["id"]))
+            items.sort(key=lambda item: (item["display_name"], item["name"], item["id"]))
             for item in items:
                 sort_tree(item["children"])
                 item.pop("_sort_order", None)

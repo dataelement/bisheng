@@ -22,6 +22,9 @@ from bisheng.common.errcode.knowledge_space import (
     SpacePermissionDeniedError,
 )
 from bisheng.core.config.settings import KnowledgePdfWatermarkConf
+from bisheng.department.domain.services.department_display_service import (
+    build_department_name_projection,
+)
 from bisheng.knowledge.domain.models.knowledge_file import (
     FileType,
     KnowledgeFile,
@@ -77,10 +80,19 @@ class FakeUserRepository:
     async def find_by_id(self, user_id: int):
         return self.user if self.user and self.user.user_id == user_id else None
 
-    async def get_primary_department_name(self, user_id: int) -> str | None:
+    async def get_primary_department_name_projection(self, user_id: int):
         if not self.user or self.user.user_id != user_id:
             return None
-        return getattr(self.user, "primary_department_name", None)
+        department_name = getattr(self.user, "primary_department_name", None)
+        if not department_name:
+            return None
+        return build_department_name_projection(
+            SimpleNamespace(
+                id=getattr(self.user, "primary_department_id", None),
+                name=department_name,
+                short_name=getattr(self.user, "primary_department_short_name", None),
+            )
+        )
 
 
 class FakeAuthorizationService:
@@ -266,6 +278,7 @@ def _user(**overrides):
         "external_id": "SG001",
         "external_code": "CODE001",
         "primary_department_name": "设备管理部",
+        "primary_department_short_name": None,
     }
     payload.update(overrides)
     return SimpleNamespace(**payload)
@@ -594,6 +607,10 @@ async def test_on_demand_failure_maps_to_safe_download_error(tmp_path: Path, err
     ("user", "expected_identity"),
     [
         (_user(), "设备管理部-张三-SG001-2026/07/21"),
+        (
+            _user(primary_department_short_name="设备"),
+            "设备-张三-SG001-2026/07/21",
+        ),
         (_user(primary_department_name=""), "张三-SG001-2026/07/21"),
         (
             _user(user_name="", primary_department_name=None),

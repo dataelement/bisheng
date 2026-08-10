@@ -7,6 +7,7 @@ import {
 } from "~/hooks/queries/endpoints/queries";
 import store from "~/store";
 import type { TUser } from "~/types/chat";
+import { resolveDepartmentDisplayName } from "~/utils/departmentDisplayName";
 import styles from "./KnowledgePreviewWatermark.module.css";
 
 const BEIJING_TIME_ZONE = "Asia/Shanghai";
@@ -28,7 +29,7 @@ const WATERMARK_FONT_FAMILY = [
 
 type KnowledgePreviewWatermarkUser = Pick<
     TUser,
-    "name" | "username" | "departmentName" | "externalId"
+    "name" | "username" | "departmentName" | "departmentShortName" | "departmentDisplayName" | "externalId"
 >;
 
 interface WatermarkLayout {
@@ -162,7 +163,11 @@ export function buildKnowledgePreviewWatermarkLines(
 ): string[] {
     const name = user.name.trim() || user.username.trim() || "未知用户";
     const account = user.externalId?.trim() || user.username.trim() || name;
-    const departmentName = user.departmentName?.trim() || "";
+    const departmentName = resolveDepartmentDisplayName({
+        displayName: user.departmentDisplayName,
+        shortName: user.departmentShortName,
+        name: user.departmentName,
+    });
     const identity = departmentName ? `${departmentName}-${name}` : name;
     const resolvedHorizontalText = horizontalText.trim() || DEFAULT_PORTAL_WATERMARK_HORIZONTAL_TEXT;
     return [

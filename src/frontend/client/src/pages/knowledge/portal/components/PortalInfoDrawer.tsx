@@ -160,8 +160,8 @@ export function PortalInfoDrawer({
         || selectedFile?.entryType === "publish"
         || selectedFile?.entryType === "share";
     const sourceDepartmentName = isSharedFile
-        ? (selectedFile?.sourceDepartmentName || "-")
-        : (selectedFile ? (activeSpace?.ownerName || "-") : "-");
+        ? (selectedFile?.sourceDepartmentDisplayName || selectedFile?.sourceDepartmentName || "-")
+        : (selectedFile ? (activeSpace?.ownerDisplayName || activeSpace?.departmentDisplayName || activeSpace?.ownerName || "-") : "-");
     const sourceSpaceName = selectedFile
         ? (isSharedFile
             ? (selectedFile.sourceSpaceName || "-")

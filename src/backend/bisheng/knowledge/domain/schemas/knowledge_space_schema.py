@@ -96,6 +96,8 @@ class KnowledgeSpaceInfoResp(KnowledgeBase):
     )
     department_id: int | None = Field(default=None, description="Bound department id for department spaces")
     department_name: str | None = Field(default=None, description="Bound department name for department spaces")
+    department_short_name: str | None = Field(default=None, description="Bound department short name")
+    department_display_name: str | None = Field(default=None, description="Bound department portal display name")
     approval_enabled: bool | None = Field(default=None, description="Whether department-space uploads require approval")
     sensitive_check_enabled: bool | None = Field(
         default=None,
@@ -108,6 +110,7 @@ class KnowledgeSpaceInfoResp(KnowledgeBase):
     owner_type: KnowledgeSpaceOwnerTypeEnum | None = Field(default=None, description="Scope owner type")
     owner_id: int | None = Field(default=None, description="Scope owner id")
     owner_name: str | None = Field(default=None, description="Scope owner display name")
+    owner_display_name: str | None = Field(default=None, description="Scope owner portal display name")
     portal_discovery_enabled: bool | None = Field(
         default=None,
         description="Whether this configurable space participates in portal discovery",
@@ -160,7 +163,10 @@ class ShougangPortalSpaceInfoResp(BaseModel):
 class KnowledgeSpaceCreateOptionDepartment(BaseModel):
     id: int
     name: str
+    short_name: str | None = None
+    display_name: str
     path_name: str | None = None
+    display_path_name: str | None = None
 
 
 class KnowledgeSpaceCreateOptionUserGroup(BaseModel):

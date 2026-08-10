@@ -25,6 +25,7 @@ from contextlib import AsyncExitStack
 from typing import List, Optional, Set
 
 from bisheng.core.openfga.exceptions import FGAConnectionError, FGAWriteError
+from bisheng.department.domain.services.department_display_service import get_department_display_name
 from bisheng.permission.domain.schemas.permission_schema import (
     UNCACHEABLE_RELATIONS,
     AuthorizeGrantItem,
@@ -616,7 +617,7 @@ class PermissionService:
 
         # Step 3: Batch resolve names and user/group captions for the permission list UI
         (
-            name_map,
+            subject_name_maps,
             user_group_names_map,
             user_group_member_names_map,
             user_subject_metadata_map,
@@ -626,6 +627,12 @@ class PermissionService:
             cls._resolve_user_group_member_names(group_ids),
             cls._resolve_user_subject_metadata(user_ids),
         )
+        if isinstance(subject_name_maps, tuple):
+            name_map, display_name_map = subject_name_maps
+        else:
+            # 兼容既有扩展点和测试替身；旧实现只返回正式名称映射。
+            name_map = subject_name_maps
+            display_name_map = {}
 
         # Step 4: Build items and merge department entries
         dept_tracker: dict[tuple, ResourcePermissionItem] = {}
@@ -645,6 +652,7 @@ class PermissionService:
                         subject_type=p['subject_type'],
                         subject_id=p['subject_id'],
                         subject_name=name,
+                        subject_display_name=display_name_map.get(key) or name,
                         relation=p['relation'],
                         include_children=False,
                     )
@@ -659,6 +667,8 @@ class PermissionService:
                     subject_external_id=user_metadata.get('external_id')
                     if p['subject_type'] == 'user' else None,
                     subject_department_paths=user_metadata.get('department_paths')
+                    if p['subject_type'] == 'user' else None,
+                    subject_department_display_paths=user_metadata.get('department_display_paths')
                     if p['subject_type'] == 'user' else None,
                     subject_member_names=user_group_member_names_map.get(p['subject_id'])
                     if p['subject_type'] == 'user_group' else None,
@@ -716,6 +726,7 @@ class PermissionService:
                 int(user.user_id): {
                     'external_id': getattr(user, 'external_id', None),
                     'department_paths': [],
+                    'department_display_paths': [],
                 }
                 for user in users or []
                 if getattr(user, 'user_id', None) is not None
@@ -758,16 +769,29 @@ class PermissionService:
                 user_dept_pairs,
                 key=lambda item: (item[0], item[2], item[3], item[1]),
             ):
-                path_label = cls._department_display_path(dept_map.get(dept_id), dept_map)
-                if not path_label:
+                path_label = cls._department_name_path(
+                    dept_map.get(dept_id),
+                    dept_map,
+                    use_display_name=False,
+                )
+                display_path_label = cls._department_name_path(
+                    dept_map.get(dept_id),
+                    dept_map,
+                    use_display_name=True,
+                )
+                if not path_label or not display_path_label:
                     continue
                 item = metadata.setdefault(user_id, {
                     'external_id': None,
                     'department_paths': [],
+                    'department_display_paths': [],
                 })
                 paths = item.setdefault('department_paths', [])
                 if isinstance(paths, list) and path_label not in paths:
                     paths.append(path_label)
+                display_paths = item.setdefault('department_display_paths', [])
+                if isinstance(display_paths, list) and display_path_label not in display_paths:
+                    display_paths.append(display_path_label)
 
             return metadata
         except Exception as e:
@@ -784,14 +808,37 @@ class PermissionService:
         return path_ids
 
     @staticmethod
-    def _department_display_path(dept, dept_map: dict[int, object]) -> Optional[str]:
+    def _department_name_path(
+        dept,
+        dept_map: dict[int, object],
+        *,
+        use_display_name: bool,
+    ) -> Optional[str]:
         if dept is None:
             return None
+        from bisheng.department.domain.services.department_display_service import (
+            get_department_display_name,
+        )
+
         labels = [
-            getattr(dept_map.get(dept_id), 'name', f'#{dept_id}')
+            (
+                get_department_display_name(
+                    str(getattr(dept_map.get(dept_id), 'name', f'#{dept_id}')),
+                    getattr(dept_map.get(dept_id), 'short_name', None),
+                )
+                if use_display_name
+                else getattr(dept_map.get(dept_id), 'name', f'#{dept_id}')
+            )
             for dept_id in PermissionService._department_path_ids(getattr(dept, 'path', None))
         ]
-        current_name = getattr(dept, 'name', None)
+        current_name = (
+            get_department_display_name(
+                str(getattr(dept, 'name', '') or ''),
+                getattr(dept, 'short_name', None),
+            )
+            if use_display_name
+            else getattr(dept, 'name', None)
+        )
         if current_name and current_name not in labels:
             labels.append(current_name)
         return '/'.join(labels) if labels else current_name
@@ -852,8 +899,8 @@ class PermissionService:
         user_ids: List[int],
         dept_ids: List[int],
         group_ids: List[int],
-    ) -> dict[tuple, Optional[str]]:
-        """Batch-resolve subject names from DB. Returns {(type, id): name}.
+    ) -> tuple[dict[tuple, Optional[str]], dict[tuple, Optional[str]]]:
+        """批量解析主体正式名称及门户展示名称。
 
         Runs all DAO queries concurrently via asyncio.gather.
         """
@@ -881,6 +928,7 @@ class PermissionService:
         )
 
         name_map: dict[tuple, Optional[str]] = {}
+        display_name_map: dict[tuple, Optional[str]] = {}
         extractors = [
             (results[0], 'user', lambda u: (u.user_id, u.user_name)),
             (results[1], 'department', lambda d: (d.id, d.name)),
@@ -893,8 +941,15 @@ class PermissionService:
             for item in result:
                 id_val, name_val = extractor(item)
                 name_map[(subject_type, id_val)] = name_val
+                if subject_type == 'department':
+                    display_name_map[(subject_type, id_val)] = get_department_display_name(
+                        str(name_val or ''),
+                        getattr(item, 'short_name', None),
+                    )
+                else:
+                    display_name_map[(subject_type, id_val)] = name_val
 
-        return name_map
+        return name_map, display_name_map
 
     @classmethod
     async def get_permission_level(

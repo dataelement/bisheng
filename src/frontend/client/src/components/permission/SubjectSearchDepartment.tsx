@@ -4,14 +4,41 @@ import type { ResourceType, SelectedSubject } from "~/api/permission";
 import { ChevronDown, ChevronRight, Building2, Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocalize } from "~/hooks";
+import {
+  departmentMatchesKeyword,
+  resolveDepartmentDisplayName,
+} from "~/utils/departmentDisplayName";
 
 export interface DepartmentNode {
   id: number;
   dept_id: string;
   name: string;
+  short_name?: string | null;
+  display_name?: string;
   parent_id: number | null;
   member_count?: number;
   children?: DepartmentNode[];
+}
+
+function departmentDisplayName(node: DepartmentNode): string {
+  return resolveDepartmentDisplayName({
+    displayName: node.display_name,
+    shortName: node.short_name,
+    name: node.name,
+  });
+}
+
+function sortDepartmentTree(nodes: DepartmentNode[]): DepartmentNode[] {
+  return nodes
+    .map((node) => ({
+      ...node,
+      children: node.children ? sortDepartmentTree(node.children) : undefined,
+    }))
+    .sort((left, right) => (
+      departmentDisplayName(left).localeCompare(departmentDisplayName(right), "zh-CN")
+      || left.name.localeCompare(right.name, "zh-CN")
+      || left.id - right.id
+    ));
 }
 
 interface SubjectSearchDepartmentProps {
@@ -41,7 +68,7 @@ function collectExplicitDepartmentSelections(
     for (const node of items) {
       const explicitSelection = selectedDepartmentsById.get(node.id);
       const isSelected = ancestorSelected || Boolean(explicitSelection);
-      const pathSegments = [...prefix, node.name];
+      const pathSegments = [...prefix, departmentDisplayName(node)];
       if (isSelected && !visited.has(node.id)) {
         visited.add(node.id);
         out.push({
@@ -117,7 +144,7 @@ export function SubjectSearchDepartment({
 
     request
       .then((res) => {
-        if (!controller.signal.aborted && res) setTree(res);
+        if (!controller.signal.aborted && res) setTree(sortDepartmentTree(res));
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
@@ -155,7 +182,7 @@ export function SubjectSearchDepartment({
       onChange(
         selectedIds.has(node.id)
           ? []
-          : [{ type: "department", id: node.id, name: node.name, include_children: includeChildren }]
+          : [{ type: "department", id: node.id, name: departmentDisplayName(node), include_children: includeChildren }]
       );
       return;
     }
@@ -164,7 +191,7 @@ export function SubjectSearchDepartment({
     } else {
       onChange([
         ...value,
-        { type: "department", id: node.id, name: node.name, include_children: includeChildren },
+        { type: "department", id: node.id, name: departmentDisplayName(node), include_children: includeChildren },
       ]);
     }
   };
@@ -192,7 +219,11 @@ export function SubjectSearchDepartment({
     (node: DepartmentNode): boolean => {
       if (!keyword) return true;
       const lower = keyword.toLowerCase();
-      if (node.name.toLowerCase().includes(lower)) return true;
+      if (departmentMatchesKeyword({
+        displayName: node.display_name,
+        shortName: node.short_name,
+        name: node.name,
+      }, lower)) return true;
       return (node.children || []).some(matchesKeyword);
     },
     [keyword]
@@ -300,6 +331,7 @@ function TreeNode({
   const isChecked = isExplicitlySelected || isImplicitlySelected;
   const isIndeterminate = !isChecked && indeterminateIds.has(node.id);
   const nextAncestorIncluded = ancestorIncluded || Boolean(explicitSelection?.include_children);
+  const displayName = departmentDisplayName(node);
 
   return (
     <>
@@ -341,8 +373,8 @@ function TreeNode({
           }}
         />
         <Building2 className="h-4 w-4 text-gray-400" />
-        <span className="min-w-0 truncate text-sm" title={node.name}>
-          {node.name}
+        <span className="min-w-0 truncate text-sm" title={displayName}>
+          {displayName}
         </span>
         {node.member_count != null && (
           <span className="ml-1 text-xs text-gray-400">({node.member_count})</span>

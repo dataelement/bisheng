@@ -115,6 +115,10 @@ from bisheng.database.models.tag import Tag, TagBusinessTypeEnum, TagDao, TagRes
 from bisheng.database.models.tenant import TenantDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.department.domain.services.department_service import DepartmentService
+from bisheng.department.domain.services.department_display_service import (
+    build_department_name_projection,
+    get_department_display_name,
+)
 from bisheng.knowledge.domain.constants import (
     BUSINESS_DOMAIN_CODE_KEY,
     BUSINESS_DOMAIN_OPTIONS,
@@ -1678,16 +1682,24 @@ class KnowledgeSpaceService(KnowledgeUtils):
         departments = await self._visible_departments_for_create(approval_request=approval_request)
 
         dept_name_map = {int(dept.id): dept.name for dept in departments if getattr(dept, "id", None) is not None}
+        dept_display_name_map = {
+            int(dept.id): get_department_display_name(dept.name, getattr(dept, "short_name", None))
+            for dept in departments
+            if getattr(dept, "id", None) is not None
+        }
         options = [
             KnowledgeSpaceCreateOptionDepartment(
                 id=int(dept.id),
                 name=dept.name,
+                short_name=build_department_name_projection(dept).short_name,
+                display_name=dept_display_name_map[int(dept.id)],
                 path_name=self._department_path_name(dept, dept_name_map),
+                display_path_name=self._department_path_name(dept, dept_display_name_map),
             )
             for dept in departments
             if getattr(dept, "id", None) is not None
         ]
-        return sorted(options, key=lambda item: (item.path_name or item.name or "", item.id))
+        return sorted(options, key=lambda item: (item.display_name, item.name, item.id))
 
     async def _department_tree_for_create(self, *, approval_request: bool = False) -> list[dict]:
         departments = await self._visible_departments_for_create(approval_request=approval_request)
@@ -1712,19 +1724,22 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 )
                 count_map = {int(dept_id): int(count) for dept_id, count in count_result.all()}
 
-        nodes = {
-            int(dept.id): {
+        nodes = {}
+        for dept in departments:
+            if getattr(dept, "id", None) is None:
+                continue
+            projection = build_department_name_projection(dept)
+            nodes[int(dept.id)] = {
                 "id": int(dept.id),
                 "dept_id": getattr(dept, "dept_id", "") or "",
                 "name": dept.name,
+                "short_name": projection.short_name,
+                "display_name": projection.display_name,
                 "parent_id": int(dept.parent_id) if getattr(dept, "parent_id", None) is not None else None,
                 "member_count": count_map.get(int(dept.id), 0),
                 "sort_order": int(getattr(dept, "sort_order", 0) or 0),
                 "children": [],
             }
-            for dept in departments
-            if getattr(dept, "id", None) is not None
-        }
         roots: list[dict] = []
         for node in nodes.values():
             parent_id = node["parent_id"]
@@ -1734,7 +1749,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 roots.append(node)
 
         def _sort_tree(items: list[dict]) -> list[dict]:
-            items.sort(key=lambda item: (item.get("sort_order", 0), item.get("name", "")))
+            items.sort(
+                key=lambda item: (
+                    item.get("display_name", ""),
+                    item.get("name", ""),
+                    item.get("id", 0),
+                )
+            )
             for item in items:
                 item["children"] = _sort_tree(item.get("children", []))
                 item.pop("sort_order", None)
@@ -2094,6 +2115,21 @@ class KnowledgeSpaceService(KnowledgeUtils):
         approval_request: bool = False,
     ) -> KnowledgeSpaceCreateOptionDepartmentsResp:
         tree = await self._department_tree_for_create(approval_request=approval_request)
+        normalized_keyword = str(keyword or "").strip().casefold()
+        if normalized_keyword:
+            def _filter_tree(nodes: list[dict]) -> list[dict]:
+                filtered: list[dict] = []
+                for node in nodes:
+                    children = _filter_tree(node.get("children", []))
+                    search_text = " ".join(
+                        str(node.get(field) or "")
+                        for field in ("name", "short_name", "display_name")
+                    ).casefold()
+                    if normalized_keyword in search_text or children:
+                        filtered.append({**node, "children": children})
+                return filtered
+
+            tree = _filter_tree(tree)
         return KnowledgeSpaceCreateOptionDepartmentsResp(data=tree, total=len(tree))
 
     async def get_create_user_groups(
@@ -2134,7 +2170,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             }:
                 department_ids.add(int(scope.owner_id))
         departments = await DepartmentDao.aget_by_ids(list(department_ids))
-        department_name_map = {int(dept.id): dept.name for dept in departments}
+        department_map = {int(dept.id): build_department_name_projection(dept) for dept in departments}
 
         group_ids = [
             int(scope.owner_id)
@@ -2187,7 +2223,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 KnowledgeSpaceOwnerTypeEnum.DEPARTMENT,
                 KnowledgeSpaceOwnerTypeEnum.TENANT_ROOT_DEPARTMENT,
             }:
-                space.owner_name = department_name_map.get(int(space.owner_id or 0))
+                projection = department_map.get(int(space.owner_id or 0))
+                space.owner_name = projection.name if projection else None
+                space.owner_display_name = projection.display_name if projection else None
             elif space.owner_type == KnowledgeSpaceOwnerTypeEnum.USER_GROUP:
                 space.owner_name = group_name_map.get(int(space.owner_id or 0))
             elif space.owner_type == KnowledgeSpaceOwnerTypeEnum.USER:
@@ -2197,7 +2235,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 dept_id = int(binding.department_id) if binding is not None else int(space.owner_id or 0)
                 space.space_kind = "department"
                 space.department_id = dept_id
-                space.department_name = department_name_map.get(dept_id)
+                projection = department_map.get(dept_id)
+                space.department_name = projection.name if projection else None
+                space.department_short_name = projection.short_name if projection else None
+                space.department_display_name = projection.display_name if projection else None
                 if binding is not None:
                     space.approval_enabled = binding.approval_enabled
                     space.sensitive_check_enabled = binding.sensitive_check_enabled
@@ -6572,6 +6613,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     "entry_type",
                     "entry_status",
                     "source_department_name",
+                    "source_department_short_name",
+                    "source_department_display_name",
                     "source_space_id",
                     "source_space_name",
                     "source_folder_path",
@@ -10198,24 +10241,33 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if department is None:
                 continue
             space_name = str(getattr(space, "name", "") or "")
-            department_name = str(getattr(department, "name", "") or "")
+            projection = build_department_name_projection(department)
+            department_name = projection.name
             search_text = " ".join(
                 (
                     space_name,
                     department_name,
+                    projection.short_name or "",
+                    projection.display_name,
                     str(space_id),
                     str(getattr(department, "dept_id", "") or ""),
                 )
             ).casefold()
             if normalized_keyword and normalized_keyword not in search_text:
                 continue
-            label = f"{space_name} ({department_name})" if department_name else space_name
+            label = (
+                f"{space_name} ({projection.display_name})"
+                if projection.display_name
+                else space_name
+            )
             options.append(
                 {
                     "value": str(space_id),
                     "label": label,
                     "department_id": int(binding.department_id),
                     "department_name": department_name,
+                    "department_short_name": projection.short_name,
+                    "department_display_name": projection.display_name,
                 }
             )
 
@@ -12921,10 +12973,15 @@ class KnowledgeSpaceService(KnowledgeUtils):
             is_share = str(item.get("entry_type") or "") == KnowledgeFileEntryType.SHARE.value
             has_share_department = not is_share or "source_department_name" in item
             if item_id and source_space_id and source_space_name and source_path and has_share_department:
+                source_department_name = str(item.get("source_department_name") or "")
                 resolved_metadata[item_id] = {
                     "source_space_id": source_space_id,
                     "source_space_name": source_space_name,
-                    "source_department_name": str(item.get("source_department_name") or ""),
+                    "source_department_name": source_department_name,
+                    "source_department_short_name": item.get("source_department_short_name"),
+                    "source_department_display_name": str(
+                        item.get("source_department_display_name") or source_department_name
+                    ),
                     "source_folder_path": str(item.get("source_folder_path") or ""),
                     "source_path": source_path,
                 }
@@ -13067,6 +13124,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         space_name_map: dict[int, str] = {}
         source_department_name_map: dict[int, str] = {}
+        source_department_short_name_map: dict[int, str | None] = {}
+        source_department_display_name_map: dict[int, str] = {}
         if source_space_ids:
             if shared_source_by_item:
                 space_metadata = await KnowledgeDao.async_get_space_source_metadata_by_ids(list(source_space_ids))
@@ -13075,6 +13134,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 }
                 source_department_name_map = {
                     int(space_id): str(metadata[1] or "") for space_id, metadata in space_metadata.items()
+                }
+                source_department_short_name_map = {
+                    int(space_id): metadata[2] for space_id, metadata in space_metadata.items()
+                }
+                source_department_display_name_map = {
+                    int(space_id): str(metadata[3] or metadata[1] or "")
+                    for space_id, metadata in space_metadata.items()
                 }
             else:
                 source_spaces = await KnowledgeDao.async_get_spaces_by_ids(list(source_space_ids))
@@ -13103,6 +13169,15 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 resolved_metadata[item_id]["source_department_name"] = source_department_name_map.get(
                     knowledge_id,
                     "",
+                )
+                resolved_metadata[item_id]["source_department_short_name"] = (
+                    source_department_short_name_map.get(knowledge_id)
+                )
+                resolved_metadata[item_id]["source_department_display_name"] = (
+                    source_department_display_name_map.get(
+                        knowledge_id,
+                        source_department_name_map.get(knowledge_id, ""),
+                    )
                 )
         return resolved_metadata
 

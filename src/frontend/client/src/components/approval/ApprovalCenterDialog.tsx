@@ -18,6 +18,7 @@ import { useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common/types";
 import useLocalize from "~/hooks/useLocalize";
 import { cn } from "~/utils";
+import { resolveDepartmentDisplayName } from "~/utils/departmentDisplayName";
 import { FutureApproverList } from "./FutureApproverList";
 import { Dialog, DialogContent } from "../ui/Dialog";
 
@@ -279,7 +280,15 @@ function buildDepartmentFileViewRows(snapshot: Record<string, any>, localize: Re
   const rows: BusinessContentRow[] = [];
   pushBusinessRow(rows, localize("com_approval_field_file_name" as any), snapshot.file_name);
   pushBusinessRow(rows, localize("com_approval_field_space_name" as any), snapshot.space_name);
-  pushBusinessRow(rows, localize("com_approval_field_department_name" as any), snapshot.department_name);
+  pushBusinessRow(
+    rows,
+    localize("com_approval_field_department_name" as any),
+    resolveDepartmentDisplayName({
+      displayName: snapshot.department_display_name,
+      shortName: snapshot.department_short_name,
+      name: snapshot.department_name,
+    }),
+  );
   pushBusinessRow(rows, localize("com_approval_field_file_extension" as any), snapshot.file_extension);
   return rows;
 }
@@ -318,6 +327,14 @@ function InfoGrid({ rows }: { rows: [string, string][] }) {
   );
 }
 
+function approvalDepartmentName(item: ApprovalTaskItem | ApprovalInstanceItem): string {
+  return resolveDepartmentDisplayName({
+    displayName: item.applicant_department_display_name,
+    shortName: item.applicant_department_short_name,
+    name: item.applicant_department_name,
+  });
+}
+
 export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCenterDialogProps) {
   const localize = useLocalize();
   const { showToast } = useToastContext();
@@ -352,7 +369,7 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
     return byStatus.filter((t) =>
       (t.business_name ?? "").toLowerCase().includes(q) ||
       (t.applicant_user_name ?? "").toLowerCase().includes(q) ||
-      (t.applicant_department_name ?? "").toLowerCase().includes(q) ||
+      `${approvalDepartmentName(t)} ${t.applicant_department_name ?? ""}`.toLowerCase().includes(q) ||
       (t.current_node_name ?? "").toLowerCase().includes(q),
     );
   }, [taskItems, taskFilter, searchQuery]);
@@ -366,7 +383,7 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
     return byStatus.filter((i) =>
       (i.business_name ?? "").toLowerCase().includes(q) ||
       (i.applicant_user_name ?? "").toLowerCase().includes(q) ||
-      (i.applicant_department_name ?? "").toLowerCase().includes(q) ||
+      `${approvalDepartmentName(i)} ${i.applicant_department_name ?? ""}`.toLowerCase().includes(q) ||
       (i.current_node_name ?? "").toLowerCase().includes(q) ||
       (i.current_approver_names ?? "").toLowerCase().includes(q),
     );
@@ -638,7 +655,7 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
                               </div>
                             )}
                             <div className="mt-1.5 flex items-center justify-between text-[12px] text-[#c9cdd4]">
-                              <span>{item.applicant_user_name}{item.applicant_department_name ? ` · ${item.applicant_department_name}` : ""}</span>
+                              <span>{item.applicant_user_name}{approvalDepartmentName(item) ? ` · ${approvalDepartmentName(item)}` : ""}</span>
                               <span>{formatTime(item.create_time)}</span>
                             </div>
                           </button>
@@ -669,7 +686,7 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
                               </div>
                             )}
                             <div className="mt-1.5 flex items-center justify-between text-[12px] text-[#c9cdd4]">
-                              <span>{item.applicant_user_name}{item.applicant_department_name ? ` · ${item.applicant_department_name}` : ""}</span>
+                              <span>{item.applicant_user_name}{approvalDepartmentName(item) ? ` · ${approvalDepartmentName(item)}` : ""}</span>
                               <span>{formatTime(item.create_time)}</span>
                             </div>
                           </button>
@@ -842,7 +859,7 @@ function TaskDetailPanel({ detail, localize }: { detail: ApprovalTaskDetail; loc
     [localize("com_approval_field_scenario_type"),  detail.scenario_name || detail.scenario_code || "--"],
     [localize("com_approval_field_business_target"),detail.business_name || "--"],
     [localize("com_approval_field_applicant"),       detail.applicant_user_name || "--"],
-    [localize("com_approval_field_department"),      detail.applicant_department_name || "--"],
+    [localize("com_approval_field_department"),      approvalDepartmentName(detail) || "--"],
     [localize("com_approval_field_apply_time"),      formatTime(detail.create_time)],
     [localize("com_approval_status_label").replace("：", ""), localize(`com_approval_status_${detail.instance_status ?? detail.status}` as any, { defaultValue: detail.instance_status || detail.status || "--" }) as string],
   ];
@@ -1018,7 +1035,7 @@ function RequestDetailPanel({ detail, localize }: { detail: ApprovalInstanceDeta
     [localize("com_approval_field_scenario_type"),  detail.scenario_name || detail.scenario_code || "--"],
     [localize("com_approval_field_business_target"),detail.business_name || "--"],
     [localize("com_approval_field_applicant"),       detail.applicant_user_name || "--"],
-    [localize("com_approval_field_department"),      detail.applicant_department_name || "--"],
+    [localize("com_approval_field_department"),      approvalDepartmentName(detail) || "--"],
     [localize("com_approval_field_apply_time"),      formatTime(detail.create_time)],
     ...(!isTerminal ? [[localize("com_approval_field_current_approver"), detail.current_approver_names || "--"] as [string, string]] : []),
     [localize("com_approval_status_label").replace("：", ""), localize(`com_approval_status_${detail.status}` as any, { defaultValue: detail.status ?? "--" }) as string],

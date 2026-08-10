@@ -37,6 +37,7 @@ class TestEnrichPermissionTuples:
                 7: {
                     'external_id': 'EMP001',
                     'department_paths': ['总部/研发部'],
+                    'department_display_paths': ['集团/研发'],
                 },
             }
             result = await PermissionService._enrich_permission_tuples(tuples)
@@ -47,6 +48,7 @@ class TestEnrichPermissionTuples:
         assert result[0].subject_name == 'Alice'
         assert result[0].subject_external_id == 'EMP001'
         assert result[0].subject_department_paths == ['总部/研发部']
+        assert result[0].subject_department_display_paths == ['集团/研发']
         assert result[0].relation == 'owner'
 
     @pytest.mark.asyncio
@@ -229,6 +231,7 @@ class TestResolveSubjectNames:
         mock_dept = AsyncMock()
         mock_dept.id = 5
         mock_dept.name = 'Engineering'
+        mock_dept.short_name = 'Eng'
 
         mock_group = AsyncMock()
         mock_group.id = 3
@@ -238,12 +241,13 @@ class TestResolveSubjectNames:
              patch.object(DepartmentDao, 'aget_by_ids', new_callable=AsyncMock, return_value=[mock_dept]), \
              patch.object(GroupDao, 'aget_group_by_ids', new_callable=AsyncMock, return_value=[mock_group]):
 
-            result = await PermissionService._resolve_subject_names(
+            result, display_result = await PermissionService._resolve_subject_names(
                 user_ids=[7], dept_ids=[5], group_ids=[3],
             )
 
         assert result[('user', 7)] == 'Alice'
         assert result[('department', 5)] == 'Engineering'
+        assert display_result[('department', 5)] == 'Eng'
         assert result[('user_group', 3)] == 'Alpha Team'
 
     @pytest.mark.asyncio
@@ -251,10 +255,11 @@ class TestResolveSubjectNames:
         """Empty ID lists should not call DAOs."""
         from bisheng.permission.domain.services.permission_service import PermissionService
 
-        result = await PermissionService._resolve_subject_names(
+        result, display_result = await PermissionService._resolve_subject_names(
             user_ids=[], dept_ids=[], group_ids=[],
         )
         assert result == {}
+        assert display_result == {}
 
     @pytest.mark.asyncio
     async def test_dao_failure_graceful(self):
@@ -268,12 +273,13 @@ class TestResolveSubjectNames:
         with patch.object(UserDao, 'aget_user_by_ids', new_callable=AsyncMock, return_value=[mock_user]), \
              patch.object(DepartmentDao, 'aget_by_ids', new_callable=AsyncMock, side_effect=Exception('DB error')):
 
-            result = await PermissionService._resolve_subject_names(
+            result, display_result = await PermissionService._resolve_subject_names(
                 user_ids=[7], dept_ids=[5], group_ids=[],
             )
 
         assert result[('user', 7)] == 'Alice'
         assert ('department', 5) not in result
+        assert ('department', 5) not in display_result
 
     @pytest.mark.asyncio
     async def test_resolve_user_group_member_names(self):
@@ -312,9 +318,9 @@ class TestResolveSubjectNames:
             type('UserDept', (), {'user_id': 7, 'department_id': 11, 'is_primary': 0})(),
         ]
         departments = [
-            type('Dept', (), {'id': 1, 'name': '总部', 'path': '/1/'})(),
-            type('Dept', (), {'id': 10, 'name': '研发部', 'path': '/1/10/'})(),
-            type('Dept', (), {'id': 11, 'name': '平台组', 'path': '/1/10/11/'})(),
+            type('Dept', (), {'id': 1, 'name': '总部', 'short_name': '集团', 'path': '/1/'})(),
+            type('Dept', (), {'id': 10, 'name': '研发部', 'short_name': '研发', 'path': '/1/10/'})(),
+            type('Dept', (), {'id': 11, 'name': '平台组', 'short_name': None, 'path': '/1/10/11/'})(),
         ]
 
         async def _aget_by_ids(ids):
@@ -333,6 +339,7 @@ class TestResolveSubjectNames:
             7: {
                 'external_id': 'EMP001',
                 'department_paths': ['总部/研发部', '总部/研发部/平台组'],
+                'department_display_paths': ['集团/研发', '集团/研发/平台组'],
             },
         }
 
