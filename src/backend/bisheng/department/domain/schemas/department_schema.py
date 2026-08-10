@@ -5,7 +5,7 @@ Part of F002-department-tree.
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class DepartmentMemberAffiliateRolesPayload(BaseModel):
@@ -36,7 +36,21 @@ class DepartmentMemberEditApply(BaseModel):
     )
 
 
-class DepartmentCreate(BaseModel):
+class _DepartmentShortNamePayload(BaseModel):
+    short_name: str | None = Field(default=None, max_length=64)
+
+    @field_validator("short_name", mode="before")
+    @classmethod
+    def normalize_short_name(cls, value: object) -> object:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            normalized = value.strip()
+            return normalized or None
+        return value
+
+
+class DepartmentCreate(_DepartmentShortNamePayload):
     name: str = Field(..., min_length=2, max_length=50)
     parent_id: int
     sort_order: int = 0
@@ -44,7 +58,7 @@ class DepartmentCreate(BaseModel):
     admin_user_ids: list[int] | None = None
 
 
-class DepartmentUpdate(BaseModel):
+class DepartmentUpdate(_DepartmentShortNamePayload):
     name: str | None = Field(None, min_length=2, max_length=50)
     sort_order: int | None = None
     default_role_ids: list[int] | None = None

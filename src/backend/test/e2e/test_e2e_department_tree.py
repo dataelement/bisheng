@@ -366,6 +366,52 @@ class TestUpdateDepartment:
         assert detail['name'] == f'{PREFIX}update-new'
 
 
+class TestDepartmentShortName:
+
+    def test_short_name_create_update_and_clear(self, client, admin_token):
+        """F082: short_name is wired through create, detail, update, and clear."""
+        tree = _assert_200(client.get(
+            f'{API_BASE}/departments/tree', headers=_auth(admin_token),
+        ))
+        root_id = tree[0]['id']
+
+        created = _assert_200(client.post(
+            f'{API_BASE}/departments/',
+            json={
+                'name': f'{PREFIX}short-name',
+                'short_name': '  F082  ',
+                'parent_id': root_id,
+            },
+            headers=_auth(admin_token),
+        ))
+        assert created['short_name'] == 'F082'
+
+        detail = _assert_200(client.get(
+            f"{API_BASE}/departments/{created['dept_id']}",
+            headers=_auth(admin_token),
+        ))
+        assert detail['short_name'] == 'F082'
+
+        updated = _assert_200(client.put(
+            f"{API_BASE}/departments/{created['dept_id']}",
+            json={'short_name': '  Short  '},
+            headers=_auth(admin_token),
+        ))
+        assert updated['short_name'] == 'Short'
+
+        cleared = _assert_200(client.put(
+            f"{API_BASE}/departments/{created['dept_id']}",
+            json={'short_name': None},
+            headers=_auth(admin_token),
+        ))
+        assert cleared['short_name'] is None
+
+        final_detail = _assert_200(client.get(
+            f"{API_BASE}/departments/{created['dept_id']}",
+            headers=_auth(admin_token),
+        ))
+        assert final_detail['short_name'] is None
+
 # =========================================================================
 # AC-07 ~ AC-09: Delete department
 # =========================================================================

@@ -27,6 +27,7 @@ export interface DepartmentDetail {
   id: number
   dept_id: string
   name: string
+  short_name: string | null
   parent_id: number | null
   path: string
   sort_order: number
@@ -59,6 +60,7 @@ export interface DepartmentMember {
 
 export interface DepartmentCreateForm {
   name: string
+  short_name?: string | null
   parent_id: number
   sort_order?: number
   default_role_ids?: number[]
@@ -67,6 +69,7 @@ export interface DepartmentCreateForm {
 
 export interface DepartmentUpdateForm {
   name?: string
+  short_name?: string | null
   sort_order?: number
   default_role_ids?: number[]
   /** 与名称、默认角色一并提交时全量替换部门管理员；不传则不改 */

@@ -63,6 +63,14 @@ class Department(SQLModelSerializable, table=True):
     name: str = Field(
         sa_column=Column(String(128), nullable=False, comment="Department name"),
     )
+    short_name: str | None = Field(
+        default=None,
+        sa_column=Column(
+            String(64),
+            nullable=True,
+            comment="Optional department short name maintained locally",
+        ),
+    )
     parent_id: int | None = Field(
         default=None,
         sa_column=Column(

@@ -34,6 +34,7 @@ export function CreateDepartmentDialog({
 }: CreateDepartmentDialogProps) {
   const { t } = useTranslation()
   const [name, setName] = useState("")
+  const [shortName, setShortName] = useState("")
   const [parentId, setParentId] = useState<number | null>(defaultParentId)
   const [adminSelectValue, setAdminSelectValue] = useState<DepartmentUserOption[]>([])
   const [loading, setLoading] = useState(false)
@@ -56,9 +57,11 @@ export function CreateDepartmentDialog({
       return
     }
     setLoading(true)
+    const normalizedShortName = shortName.trim()
     captureAndAlertRequestErrorHoc(
       createDepartmentApi({
         name,
+        short_name: normalizedShortName || undefined,
         parent_id: parentId,
         admin_user_ids: adminSelectValue.length
           ? adminSelectValue.map((o) => o.value)
@@ -75,7 +78,7 @@ export function CreateDepartmentDialog({
       })
       onCreated()
     })
-  }, [name, parentId, adminSelectValue, onCreated, t])
+  }, [name, shortName, parentId, adminSelectValue, onCreated, t])
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -108,6 +111,20 @@ export function CreateDepartmentDialog({
               placeholder={t("bs:department.nameRequired")}
               maxLength={50}
             />
+          </div>
+
+          {/* Department short name (optional) */}
+          <div className="space-y-2">
+            <Label>{t("bs:department.shortName")}</Label>
+            <Input
+              value={shortName}
+              onChange={(e) => setShortName(e.target.value)}
+              placeholder={t("bs:department.shortNamePlaceholder")}
+              maxLength={64}
+            />
+            <p className="text-xs text-muted-foreground">
+              {t("bs:department.shortNameLength")}
+            </p>
           </div>
 
           {/* Department admins (optional) — 与部门设置页相同的多选搜索 */}
