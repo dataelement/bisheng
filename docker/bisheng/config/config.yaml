@@ -62,14 +62,6 @@ celery_redis_url: "redis://redis:6379/2"
 #   password: encrypt(gAAAAABlp5vQN7g85IfoeK8nLCb9cfVqpy9ZK9kN7b0qbAXZ4NOZT_Ef7stKJBY6PjL0dngQnCvQMdsavuGu-EE2o6Zlvv6l-Frye08DBXRR4WmL7y7EfK4=)
 #   db: 10
 
-# 积分系统开关（挂载为 /app/bisheng/config.yaml；enabled 默认 false，测试/生产需显式打开）
-points:
-  enabled: true
-  award_async_enabled: true
-  notify_enabled: true
-  sync_outbox_enabled: false
-  rank_cron_enabled: true
-  monthly_reward_enabled: true
 
 celery_task:
   # 对celery熟悉的用户可以自定义配置任务的路由，启动不同类型的worker处理不同类型的异步任务。注意工作流的执行只能在一个进程内！！！
@@ -82,8 +74,6 @@ celery_task:
       queue: knowledge_celery
     bisheng.worker.knowledge.pdf_artifact_worker.generate_knowledge_file_pdf_celery:
       queue: knowledge_pdf_celery
-    bisheng.worker.points.tasks.process_points_award_event:
-      queue: points_award_celery
     bisheng.worker.knowledge.*: # 其他知识库后台任务
       queue: celery
     bisheng.worker.workflow.*: # 工作流相关任务

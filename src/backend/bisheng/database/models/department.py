@@ -210,16 +210,6 @@ class Department(SQLModelSerializable, table=True):
             comment="Dept-wide max concurrent daily-mode chat users; 0=unlimited (F030)",
         ),
     )
-    # 积分部门榜使用的业务标签；不参与部门树拓扑和用户挂载。
-    org_level: str | None = Field(
-        default=None,
-        sa_column=Column(
-            String(16),
-            nullable=True,
-            index=True,
-            comment="Points org level: company/dept/office/squad",
-        ),
-    )
     create_user: int | None = Field(
         default=None,
         sa_column=Column(Integer, nullable=True, comment="Creator user ID"),

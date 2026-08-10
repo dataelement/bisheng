@@ -56,7 +56,6 @@ from bisheng.open_endpoints.api.router import (
 from bisheng.org_sync.api.endpoints.relink import router as relink_router
 from bisheng.org_sync.api.router import router as org_sync_router
 from bisheng.permission.api.router import router as permission_router
-from bisheng.points.api.router import router as points_router
 from bisheng.qa_expert.api.router import router as qa_expert_router
 from bisheng.role.api.router import router as role_router
 from bisheng.sensitive_word.api.router import router as sensitive_word_policy_router
@@ -110,7 +109,6 @@ router.include_router(message_router)
 router.include_router(department_router)
 router.include_router(user_group_router)
 router.include_router(permission_router)
-router.include_router(points_router)
 router.include_router(role_router)
 router.include_router(org_sync_router)
 router.include_router(sso_sync_router)
