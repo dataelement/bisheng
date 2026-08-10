@@ -359,6 +359,13 @@ class KnowledgeQAFilterConf(BaseModel):
         return self
 
 
+class KnowledgeSpaceReadBypassConf(BaseModel):
+    """Emergency read-permission bypass for selected knowledge spaces."""
+
+    enabled: bool = Field(default=False)
+    space_ids: set[int] = Field(default_factory=set)
+
+
 class LinsightConf(BaseModel):
     """Inspiration Configuration"""
 
@@ -738,6 +745,7 @@ class Settings(BaseModel):
     celery_task: CeleryConf = CeleryConf()
     knowledge_file_worker: KnowledgeFileWorkerConf = KnowledgeFileWorkerConf()
     knowledge_qa_filter: KnowledgeQAFilterConf = KnowledgeQAFilterConf()
+    knowledge_space_read_bypass: KnowledgeSpaceReadBypassConf = KnowledgeSpaceReadBypassConf()
     cookie_conf: CookieConf = CookieConf()
     telemetry_elasticsearch: ElasticsearchConf = ElasticsearchConf()
 
