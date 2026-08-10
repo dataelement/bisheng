@@ -1,7 +1,10 @@
 import { useCallback, useContext, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Loader2 } from "lucide-react"
-import { getDepartmentTreeApi } from "@/controllers/API/department"
+import {
+  getDepartmentOrgLevelsApi,
+  getDepartmentTreeApi,
+} from "@/controllers/API/department"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { locationContext } from "@/contexts/locationContext"
 import { userContext } from "@/contexts/userContext"
@@ -19,11 +22,14 @@ export default function DepartmentPage() {
   const { user } = useContext(userContext)
   const multiTenantEnabled = !!appConfig?.multiTenantEnabled
   const canMountTenant = multiTenantEnabled && !!user?.is_global_super
+  // 积分四级打标仅平台超管（与后端 points_auth / role=admin 对齐）。
+  const canSetCompanyRoot = user?.role === "admin" || !!user?.is_global_super
   const [tree, setTree] = useState<DepartmentTreeNode[]>([])
   // Start in loading state so the first paint shows the spinner instead of
   // an empty tree while /api/v1/departments/tree is still in flight — that
   // call can take many seconds at scale (tens of thousands of departments).
   const [loadingTree, setLoadingTree] = useState(true)
+  const [orgLevelById, setOrgLevelById] = useState<Record<number, string | null>>({})
   const [selectedDeptId, setSelectedDeptId] = useState<string | null>(null)
   const [selectedDept, setSelectedDept] = useState<DepartmentTreeNode | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
@@ -40,6 +46,17 @@ export default function DepartmentPage() {
     const fallback = nodes[0] ?? null
     setSelectedDeptId(fallback?.dept_id ?? null)
     setSelectedDept(fallback)
+  }, [])
+
+  const loadOrgLevels = useCallback(() => {
+    captureAndAlertRequestErrorHoc(getDepartmentOrgLevelsApi()).then((rows) => {
+      if (!rows) return
+      const map: Record<number, string | null> = {}
+      for (const row of rows) {
+        map[Number(row.id)] = row.org_level ?? null
+      }
+      setOrgLevelById(map)
+    })
   }, [])
 
   const loadTree = useCallback((removedDeptId?: string) => {
@@ -62,7 +79,8 @@ export default function DepartmentPage() {
       .finally(() => {
         setLoadingTree(false)
       })
-  }, [selectFallbackDepartment, selectedDeptId])
+    loadOrgLevels()
+  }, [loadOrgLevels, selectFallbackDepartment, selectedDeptId])
 
   useEffect(() => {
     loadTree()
@@ -178,6 +196,7 @@ export default function DepartmentPage() {
             onCreateChild={handleCreateClick}
             scrollRequest={treeScrollRequest}
             onScrollRequestHandled={handleTreeScrollHandled}
+            orgLevelById={orgLevelById}
           />
         )}
         <button
@@ -198,8 +217,17 @@ export default function DepartmentPage() {
                   {selectedDept.name}
                   {selectedDept.status === "archived" ? ` ${t("bs:department.archivedTag")}` : ""}
                 </h2>
-                {/* F027 AC-14: per-department member-count badge removed; the
-                    tree-node response no longer carries this field. */}
+                {orgLevelById[selectedDept.id] ? (
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {t("bs:department.orgLevelCurrent", {
+                      level: t(`bs:department.orgLevel.${orgLevelById[selectedDept.id]}`),
+                    })}
+                  </p>
+                ) : (
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {t("bs:department.orgLevelUnset")}
+                  </p>
+                )}
               </div>
               <TabsList>
                 <TabsTrigger value="members">{t("bs:department.members")}</TabsTrigger>
@@ -226,6 +254,9 @@ export default function DepartmentPage() {
                 tree={tree}
                 onChanged={handleDepartmentSettingsChanged}
                 onMarkAsTenant={canMountTenant ? handleMarkAsTenant : undefined}
+                orgLevel={orgLevelById[selectedDept.id] ?? null}
+                canSetCompanyRoot={canSetCompanyRoot}
+                onOrgLevelChanged={loadOrgLevels}
               />
             </TabsContent>
           </Tabs>
