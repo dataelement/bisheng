@@ -80,6 +80,16 @@ def _stable_task_id(svid: str, content: str) -> str:
     return hashlib.md5(f"{svid}:{content}".encode()).hexdigest()[:8]
 
 
+# Todo statuses that count as delivered. A todo dropped from the plan AFTER it was
+# completed stays completed — pruning the plan does not un-deliver work.
+_TODO_DONE_STATUSES = frozenset({"completed", "done"})
+
+# Status carried by the TaskEnd emitted for a todo the model pruned. Matches
+# ``ExecuteTaskStatusEnum.TERMINATED`` (imported as a literal to keep this pure
+# mapper free of the persistence layer); ``task_exec._handle_task_end`` maps it back.
+_TODO_DROPPED_STATUS = "terminated"
+
+
 def _truncate(text: str | None) -> tuple[str | None, bool]:
     if text is None:
         return None, False
@@ -311,6 +321,7 @@ class StreamEventMapper:
         used_old_idx: set[int] = set()
         new_projection: list[_TodoProjection] = []
         newly_generated: list[_TodoProjection] = []
+        renamed: list[_TodoProjection] = []
         status_events: list[BaseEvent] = []
 
         for pos, item in enumerate(new_todos):
@@ -334,6 +345,12 @@ class StreamEventMapper:
             if matched is not None:
                 proj = _TodoProjection(task_id=matched.task_id, content=content, status=status)
                 new_projection.append(proj)
+                if matched.content != content:
+                    # Level-2 alignment reused an existing row id while the model
+                    # REWROTE the wording. Re-announce it so the DB row's task_data
+                    # (and therefore the panel after a refresh) follows the current
+                    # plan instead of keeping the very first draft's title.
+                    renamed.append(proj)
                 status_events.extend(self._status_transition(matched.status, status, proj))
             else:
                 # Level 3: brand new
@@ -346,15 +363,33 @@ class StreamEventMapper:
                 newly_generated.append(proj)
                 status_events.extend(self._status_transition(None, status, proj))
 
-        # Tasks that vanished from the new list are marked TERMINATED (not
-        # deleted) — projection drop is enough at the mapper layer. The todo
-        # projection still drives TaskPanel signals (GenerateSubTask / TaskStart /
-        # TaskEnd); it no longer needs an in_progress cursor because steps are no
-        # longer attributed to a todo (B2 段流重构 2026-06).
+        # Todos that vanished from the new snapshot: the model pruned them from its
+        # plan. Emit a terminal event so the DB row converges instead of sitting at
+        # NOT_STARTED/IN_PROGRESS forever — measured on 180, a COMPLETED session left
+        # 1 IN_PROGRESS + 2 NOT_STARTED behind and the panel was stuck at "4/7".
+        # Rows that already reached a done state are left alone: they were delivered,
+        # dropping them from the plan afterwards does not un-deliver them.
+        terminated_events: list[BaseEvent] = [
+            TaskEnd(
+                task_id=o.task_id,
+                name=o.content,
+                status=_TODO_DROPPED_STATUS,
+                answer="",
+                # Non-empty data on purpose: _handle_task_end only refreshes
+                # ``task_data`` when the event carries some, so this also repairs the
+                # row's title on the way out.
+                data={"id": o.task_id, "task_id": o.task_id, "name": o.content, "status": _TODO_DROPPED_STATUS},
+            )
+            for i, o in enumerate(old)
+            if i not in used_old_idx and o.status not in _TODO_DONE_STATUSES
+        ]
+        # The todo projection drives TaskPanel signals (GenerateSubTask / TaskStart /
+        # TaskEnd); it needs no in_progress cursor because steps are no longer
+        # attributed to a todo (B2 段流重构 2026-06).
         self.ctx.todos = new_projection
 
         events: list[BaseEvent] = []
-        if newly_generated:
+        if newly_generated or renamed:
             events.append(
                 GenerateSubTask(
                     task_id=self.ctx.svid,
@@ -365,11 +400,12 @@ class StreamEventMapper:
                             "name": p.content,
                             "status": p.status,
                         }
-                        for p in newly_generated
+                        for p in (*newly_generated, *renamed)
                     ],
                 )
             )
         events.extend(status_events)
+        events.extend(terminated_events)
         return events
 
     def _status_transition(self, old_status: str | None, new_status: str, proj: _TodoProjection) -> list[BaseEvent]:

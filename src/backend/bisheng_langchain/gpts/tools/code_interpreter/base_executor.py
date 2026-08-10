@@ -17,12 +17,31 @@ from minio import Minio
 # executor can append a corrective notice and the model self-corrects next step.
 _ABSOLUTE_DELIVERABLE_RE = re.compile(r"""['"]/(?:output|scratch)(?:/|['"])""")
 
+# The read-side twin. ``/skills`` and ``/uploads`` are zones the model READS: the
+# workspace tools hand it ``/skills/<name>/SKILL.md`` and ``/uploads/<file>``, and
+# copying those into code prefixes the container root — ``open()`` then raises
+# FileNotFoundError. Nothing is lost, so the write-side wording ("DISCARDED") would
+# be actively misleading here; hence a separate pattern and a separate notice.
+_ABSOLUTE_PROVISIONED_RE = re.compile(r"""['"]/(?:skills|uploads)(?:/|['"])""")
+
 ABSOLUTE_PATH_NOTICE = (
     "\n\n[SYSTEM NOTICE] Your code wrote file(s) to an ABSOLUTE path "
     "(/output/... or /scratch/...). Files written outside the current working "
     "directory are DISCARDED and were NOT delivered to the user. Re-run and write "
     "to the RELATIVE path with no leading slash, e.g. `output/report.pdf` for "
-    "deliverables or `scratch/temp.png` for intermediate files."
+    "deliverables or `scratch/temp.png` for intermediate files. The working "
+    "directory IS the workspace root, so the file tools' `/output/x` is simply "
+    "`output/x` here."
+)
+
+ABSOLUTE_PROVISIONED_PATH_NOTICE = (
+    "\n\n[SYSTEM NOTICE] Your code opened an ABSOLUTE workspace path "
+    "(/skills/... or /uploads/...). Those leading-slash paths exist only in the FILE "
+    "TOOLS' view; on this filesystem they live under the CURRENT WORKING DIRECTORY, "
+    "so a leading slash sends open() to the container root and raises "
+    "FileNotFoundError. Nothing was lost or discarded — the file simply was not "
+    "read. Re-run with the same path minus the leading slash, e.g. "
+    "`skills/<name>/SKILL.md` or `uploads/<file>`."
 )
 
 # Delivery zones of the executor working dir. ``output/`` is the ONLY zone the
@@ -30,6 +49,39 @@ ABSOLUTE_PATH_NOTICE = (
 # ``scratch/`` is explicitly intermediate.
 OUTPUT_DIR_NAME = "output"
 SCRATCH_DIR_NAME = "scratch"
+
+
+def path_namespace_rules(include_skills: bool = True) -> str:
+    """The mapping between the two path namespaces the model is shown.
+
+    The file tools (ls / read_file / write_file / edit_file) render every workspace
+    path with a LEADING SLASH, while the interpreter's cwd IS that same workspace
+    root — so `/output/a.md` and `output/a.md` are one file, and the model has to
+    translate in both directions. Nothing said so until now, and a real run burned
+    three model round-trips discovering it, then failed four `read_file` calls at the
+    end by handing back a host path it had seen in the interpreter.
+
+    ``include_skills`` is False for E2B: the sandbox copy-in snapshots the working dir
+    BEFORE skills are materialised, so `skills/` genuinely is not there and promising
+    it would just point the model at nothing.
+    """
+    zones = "`/output/x` is `output/x`, `/scratch/x` is `scratch/x`, `/uploads/x` is `uploads/x`"
+    # Every example has to stay inside the zone set this executor actually has, or
+    # the guidance points at something that is not there.
+    read_example = "`open('/skills/...')`" if include_skills else "`open('/uploads/...')`"
+    if include_skills:
+        zones += ", `/skills/<name>/SKILL.md` is `skills/<name>/SKILL.md`"
+    return (
+        "WORKING DIRECTORY: your cwd IS the task workspace root. The file tools show "
+        f"those same files with a LEADING SLASH: {zones}. "
+        f"In code ALWAYS drop the leading slash — {read_example} or "
+        "`open('/output/...')` resolves at the CONTAINER ROOT, so reads raise "
+        "FileNotFoundError and writes are discarded and never delivered. Conversely, "
+        "never hand a host path you saw here (e.g. `/root/.cache/.../output/a.png`) "
+        "back to read_file — pass the workspace path `output/a.png`. Create the zone "
+        "dirs before writing into them: `os.makedirs('output', exist_ok=True)`. "
+    )
+
 
 # A file created at the working-directory ROOT sits in no zone at all, so it was
 # never delivered — the model just wrote ``report.xlsx`` instead of
@@ -59,17 +111,28 @@ class BaseExecutor(ABC):
 
     @staticmethod
     def absolute_path_advisory(code: str) -> str:
-        """Corrective notice to append when ``code`` writes to an absolute
-        ``/output``/``/scratch`` path (which escapes the harvested working dir and
-        makes the deliverable silently vanish); empty string otherwise.
+        """Corrective notice for absolute workspace paths in ``code``; "" if clean.
 
-        String-literal match only (leading-slash ``/output`` / ``/scratch``), which
-        is specific enough that false positives are negligible, and the notice is
-        non-blocking (appended to the tool result, never rejects the run).
+        Two independent failure modes, two notices, because the consequences differ:
+
+        - WRITE side (``/output`` / ``/scratch``): the file lands outside the
+          harvested working dir and silently vanishes from the result panel.
+        - READ side (``/skills`` / ``/uploads``): ``open()`` raises FileNotFoundError
+          and nothing is lost — telling the model its file was "DISCARDED" there
+          would send it chasing a data-loss problem that never happened.
+
+        Both hit at once → both notices, write side first. String-literal match only,
+        which is specific enough that false positives are negligible, and the notice
+        is non-blocking (appended to the tool result, never rejects the run).
         """
-        if code and _ABSOLUTE_DELIVERABLE_RE.search(code):
-            return ABSOLUTE_PATH_NOTICE
-        return ""
+        if not code:
+            return ""
+        notices = ""
+        if _ABSOLUTE_DELIVERABLE_RE.search(code):
+            notices += ABSOLUTE_PATH_NOTICE
+        if _ABSOLUTE_PROVISIONED_RE.search(code):
+            notices += ABSOLUTE_PROVISIONED_PATH_NOTICE
+        return notices
 
     @staticmethod
     def relocation_advisory(moved: list[tuple[str, str]]) -> str:

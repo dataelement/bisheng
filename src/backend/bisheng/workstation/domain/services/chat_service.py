@@ -60,6 +60,11 @@ from .chat_helpers import (
 from .constants import VISUAL_MODEL_FILE_TYPES
 from .workstation_service import WorkStationService
 
+# Handed to the model in place of a transcript when an audio/video attachment
+# carries no recognizable speech. English on purpose, like the [file name] /
+# [file content] markers around it — the model answers in the user's language.
+NO_SPEECH_PLACEHOLDER = "(No recognizable speech was detected in this audio/video file.)"
+
 
 async def get_file_content(filepath_local: str, file_name: str, invoke_user_id: int):
     """Extract uploaded file content for prompt building."""
@@ -84,10 +89,19 @@ async def get_file_content(filepath_local: str, file_name: str, invoke_user_id: 
         raw_texts = [doc.page_content for doc in result.documents]
     except KnowledgeFileNotSupportedError:
         raw_texts = []
+    except KnowledgeMediaNoRecognizableAudioError:
+        # A clip with no speech in it is not a failure — the user attached a
+        # file, not a transcription request. Failing the turn would throw away
+        # the question they wrote alongside it; dropping it silently would have
+        # the model answer as if nothing were attached. Say so instead, and let
+        # the turn continue. The genuine faults below (no ASR model configured,
+        # transcription service down) still raise: those need fixing, not
+        # narrating.
+        logger.info("[get_file_content] no recognizable speech in {}; telling the model it is empty", file_name)
+        raw_texts = [NO_SPEECH_PLACEHOLDER]
     except (
         NoAsrModelConfigError,
         KnowledgeMediaTranscriptionError,
-        KnowledgeMediaNoRecognizableAudioError,
     ):
         raise
     return knowledge_imp.KnowledgeUtils.chunk2promt("".join(raw_texts), {"source": file_name})

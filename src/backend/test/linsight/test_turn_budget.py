@@ -17,10 +17,14 @@ forward is a text answer and the graph reaches END by itself.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from bisheng.linsight.domain.services.resilience_middleware import (
+    _BUDGET_BUCKETS_MAX,
     _DELIVERABLE_TOOLS,
+    _MAX_STATE_ONLY_REFUNDS,
     LinsightModelResilienceMiddleware,
     build_resilience_middleware,
 )
@@ -36,7 +40,7 @@ class FakeTool:
 class FakeRequest:
     """ModelRequest stand-in supporting the immutable ``override`` contract."""
 
-    def __init__(self, messages=None, tools=None) -> None:
+    def __init__(self, messages=None, tools=None, runtime=None) -> None:
         self.messages = messages if messages is not None else [HumanMessage(content="做一份 PPT")]
         self.tools = (
             tools
@@ -49,12 +53,31 @@ class FakeRequest:
                 FakeTool("read_file"),
             ]
         )
+        # Defaults to None so every pre-existing case keeps exercising the
+        # no-runtime path, which must behave exactly as it did before bucketing.
+        self.runtime = runtime
 
     def override(self, **kwargs):
-        new = FakeRequest(messages=list(self.messages), tools=list(self.tools))
+        new = FakeRequest(messages=list(self.messages), tools=list(self.tools), runtime=self.runtime)
         for key, value in kwargs.items():
             setattr(new, key, value)
         return new
+
+
+# Real namespaces captured from ``test_subagent_ns_contract.py``: two parallel ``task``
+# calls, each re-entering the SAME compiled researcher subgraph.
+NS_A = "tools:a6dc6726-df24-8a53-049a-fbf4c35a1e9c|model_request:0d1c6618-5d9a-1111-2222-333344445555"
+NS_A_TOOLS = "tools:a6dc6726-df24-8a53-049a-fbf4c35a1e9c|sub_tools:4c3b921e-1111-2222-3333-444455556666"
+NS_B = "tools:5923fee9-ce67-f1a7-a07f-265bbf188878|model_request:f71b1032-5e6b-1111-2222-333344445555"
+
+
+def _runtime(ns: str):
+    return SimpleNamespace(execution_info=SimpleNamespace(checkpoint_ns=ns))
+
+
+def ns_request(ns: str, **kwargs):
+    """A request that looks like it came from inside a namespaced subgraph node."""
+    return FakeRequest(runtime=_runtime(ns), **kwargs)
 
 
 def make_mw(*, turn_limit=115, soft_landing_turns=8, is_subagent=False, sink=None):
@@ -245,8 +268,9 @@ def test_main_and_subagent_budgets_come_from_different_config_keys():
 
 
 class FakeToolRequest:
-    def __init__(self, name: str, call_id: str = "call_1") -> None:
+    def __init__(self, name: str, call_id: str = "call_1", ns: str | None = None) -> None:
         self.tool_call = {"name": name, "args": {}, "id": call_id}
+        self.runtime = _runtime(ns) if ns is not None else None
 
 
 def tool_handler():
@@ -334,3 +358,246 @@ def test_build_falls_back_to_defaults_on_a_legacy_conf():
     mw = build_resilience_middleware(LegacyConf(), is_subagent=False)
     assert mw.turn_limit == 115
     assert mw.soft_landing_turns == 8
+
+
+# --------------------------------------------------------------------------
+# Per-``task``-call budget buckets
+#
+# deepagents compiles the researcher subagent ONCE and re-enters that same
+# runnable on every ``task`` call, so one middleware instance serves every
+# delegation. Before bucketing, two parallel researchers split ONE 30-turn
+# allowance: measured on v2.6.0-fix2, `graph=sub turn 29/30` was the two of them
+# added together and the second one started already inside the soft-landing zone.
+# --------------------------------------------------------------------------
+
+
+def test_key_is_the_namespace_prefix_for_a_subagent():
+    mw = make_mw(is_subagent=True)
+    key = mw._budget_key(ns_request(NS_A))
+    assert key == "tools:a6dc6726-df24-8a53-049a-fbf4c35a1e9c"
+    # Different node inside the SAME task call → same bucket.
+    assert mw._budget_key(ns_request(NS_A_TOOLS)) == key
+    # A different task call → different bucket.
+    assert mw._budget_key(ns_request(NS_B)) != key
+
+
+async def test_two_task_calls_get_independent_budgets():
+    mw = make_mw(turn_limit=3, soft_landing_turns=8, is_subagent=True)
+    handler = capturing_handler()
+    for _ in range(3):
+        await mw.awrap_model_call(ns_request(NS_A), handler)
+    assert handler.state["requests"][-1].tools == []  # A is exhausted
+
+    # B starts fresh: 3 left, still above the soft-landing window used here.
+    request_b = ns_request(NS_B)
+    await mw.awrap_model_call(request_b, handler)
+    assert mw._turns_used(mw._budget_key(request_b)) == 1
+    assert handler.state["requests"][-1].tools != []
+
+
+async def test_parallel_task_calls_do_not_share_the_ladder():
+    """The regression: interleaved delegations must each get their own stage."""
+    mw = make_mw(turn_limit=3, soft_landing_turns=8, is_subagent=True)
+    handler = capturing_handler()
+    for _ in range(3):
+        await mw.awrap_model_call(ns_request(NS_A), handler)
+        await mw.awrap_model_call(ns_request(NS_B), handler)
+
+    a_turns = mw._turns_used("tools:a6dc6726-df24-8a53-049a-fbf4c35a1e9c")
+    b_turns = mw._turns_used("tools:5923fee9-ce67-f1a7-a07f-265bbf188878")
+    assert a_turns == b_turns == 3  # not 6 shared between them
+
+
+async def test_main_graph_ignores_the_namespace():
+    """Gate-keeper: the main graph's namespace changes every turn and carries no
+    separator, so bucketing it would hand it a brand-new budget on every call."""
+    mw = make_mw(turn_limit=10, is_subagent=False)
+    handler = capturing_handler()
+    await mw.awrap_model_call(ns_request(NS_A), handler)
+    await mw.awrap_model_call(ns_request(NS_B), handler)
+    assert mw._turn_count == 2
+    assert list(mw._turns) == [""]
+
+
+async def test_missing_runtime_falls_back_to_the_shared_bucket():
+    mw = make_mw(turn_limit=10, is_subagent=True)
+    handler = capturing_handler()
+    for _ in range(2):
+        await mw.awrap_model_call(FakeRequest(), handler)
+    assert mw._turn_count == 2
+
+
+async def test_flat_namespace_falls_back_to_the_shared_bucket():
+    """A subagent graph that ran un-nested has no separator — degrade, never crash."""
+    mw = make_mw(turn_limit=10, is_subagent=True)
+    handler = capturing_handler()
+    await mw.awrap_model_call(ns_request("model:abc"), handler)
+    assert mw._turn_count == 1
+
+
+async def test_tool_refusal_uses_the_calling_task_bucket():
+    mw = make_mw(turn_limit=1, is_subagent=True)
+    await mw.awrap_model_call(ns_request(NS_A), capturing_handler())  # spend A only
+
+    refused_handler = tool_handler()
+    refused = await mw.awrap_tool_call(FakeToolRequest("read_file", ns=NS_A_TOOLS), refused_handler)
+    assert refused_handler.state["calls"] == 0
+    assert "预算已用尽" in refused.content
+
+    allowed_handler = tool_handler()
+    allowed = await mw.awrap_tool_call(FakeToolRequest("read_file", ns=NS_B), allowed_handler)
+    assert allowed_handler.state["calls"] == 1
+    assert allowed.content == "executed"
+
+
+async def test_bucket_table_is_bounded():
+    mw = make_mw(turn_limit=100, is_subagent=True)
+    handler = capturing_handler()
+    for i in range(_BUDGET_BUCKETS_MAX + 40):
+        await mw.awrap_model_call(ns_request(f"tools:{i}|model_request:x"), handler)
+    assert len(mw._turns) <= _BUDGET_BUCKETS_MAX
+    assert len(mw._refunds) <= _BUDGET_BUCKETS_MAX
+
+
+# --------------------------------------------------------------------------
+# State-only turns are refunded
+#
+# ``TodoListMiddleware`` is injected into every subagent by deepagents, and a
+# model call that only re-publishes the todo list buys nothing. Measured: 10 of a
+# researcher's 29 calls were exactly that.
+# --------------------------------------------------------------------------
+
+
+def todo_handler(tool_names_seq=("write_todos",), *, invalid=False, fail_times=0, truncate_first=False):
+    """Handler returning an AIMessage whose tool calls are under our control."""
+    state = {"calls": 0, "requests": []}
+
+    async def handler(request):
+        state["calls"] += 1
+        state["requests"].append(request)
+        if state["calls"] <= fail_times:
+            import openai
+
+            exc = openai.APITimeoutError.__new__(openai.APITimeoutError)
+            exc.message = "timeout"
+            exc.code = None
+            exc.body = None
+            raise exc
+        truncated = truncate_first and state["calls"] == fail_times + 1
+        return AIMessage(
+            content="",
+            tool_calls=[{"name": name, "args": {}, "id": f"c{i}"} for i, name in enumerate(tool_names_seq)],
+            invalid_tool_calls=([{"name": "write_file", "args": "{bad", "id": "bad", "error": "x"}] if invalid else []),
+            response_metadata={"finish_reason": "length"} if truncated else {},
+        )
+
+    handler.state = state
+    return handler
+
+
+async def test_write_todos_only_turn_is_refunded():
+    mw = make_mw(turn_limit=10)
+    for _ in range(3):
+        await mw.awrap_model_call(FakeRequest(), todo_handler())
+    assert mw._turn_count == 0
+
+
+async def test_write_todos_plus_another_tool_burns_a_turn():
+    mw = make_mw(turn_limit=10)
+    await mw.awrap_model_call(FakeRequest(), todo_handler(("write_todos", "write_file")))
+    assert mw._turn_count == 1
+
+
+async def test_text_only_close_out_burns_a_turn():
+    """Refunding the closing turn would keep the ladder from ever reaching stage 3."""
+    mw = make_mw(turn_limit=10)
+    await mw.awrap_model_call(FakeRequest(), todo_handler(()))
+    assert mw._turn_count == 1
+
+
+async def test_invalid_tool_calls_burn_a_turn():
+    mw = make_mw(turn_limit=10)
+    await mw.awrap_model_call(FakeRequest(), todo_handler(("write_todos",), invalid=True))
+    assert mw._turn_count == 1
+
+
+async def test_response_without_an_ai_message_burns_a_turn():
+    mw = make_mw(turn_limit=10)
+
+    async def handler(_request):
+        return SimpleNamespace(result=[])
+
+    await mw.awrap_model_call(FakeRequest(), handler)
+    assert mw._turn_count == 1
+
+
+async def test_refund_happens_once_across_transient_retries():
+    """The refund sits at the loop's single success exit, so two retries cannot
+    turn one state-only turn into a -2 credit."""
+    mw = make_mw(turn_limit=10)
+    handler = todo_handler(fail_times=2)
+    await mw.awrap_model_call(FakeRequest(), handler)
+    assert handler.state["calls"] == 3
+    assert mw._turn_count == 0
+
+
+async def test_refund_happens_once_across_truncation_retries():
+    mw = make_mw(turn_limit=10)
+    handler = todo_handler(truncate_first=True)
+    await mw.awrap_model_call(FakeRequest(), handler)
+    assert handler.state["calls"] == 2  # truncation nudge retried once
+    assert mw._turn_count == 0
+
+
+async def test_degraded_turn_is_not_refunded():
+    """A degraded call really did burn model calls — it never reaches the refund."""
+    mw = make_mw(turn_limit=10, is_subagent=True)
+
+    async def handler(_request):
+        import openai
+
+        exc = openai.BadRequestError.__new__(openai.BadRequestError)
+        exc.message = "content filter"
+        exc.code = "content_filter"
+        exc.body = None
+        raise exc
+
+    await mw.awrap_model_call(FakeRequest(), handler)
+    assert mw._turn_count == 1
+
+
+async def test_refunds_are_capped():
+    mw = make_mw(turn_limit=100)
+    for _ in range(_MAX_STATE_ONLY_REFUNDS + 5):
+        await mw.awrap_model_call(FakeRequest(), todo_handler())
+    assert mw._turn_count == 5
+
+
+async def test_soft_landing_stage_is_chosen_before_the_refund():
+    """Two-phase accounting: the stage is picked from the pre-call count (it has to
+    shape the request), and only afterwards is the turn given back."""
+    mw = make_mw(turn_limit=3, soft_landing_turns=8)
+    handler = todo_handler()
+    await mw.awrap_model_call(FakeRequest(), handler)
+    assert tool_names(handler.state["requests"][0]) <= _DELIVERABLE_TOOLS
+    assert mw._turn_count == 0
+
+
+async def test_refunds_never_make_the_hard_stop_unreachable():
+    """The cap is what keeps a write_todos loop from bypassing the ladder entirely
+    and dying on GraphRecursionError instead."""
+    mw = make_mw(turn_limit=3, soft_landing_turns=8)
+    handler = todo_handler()
+    for _ in range(3 + _MAX_STATE_ONLY_REFUNDS + 1):
+        await mw.awrap_model_call(FakeRequest(), handler)
+    assert handler.state["requests"][-1].tools == []
+
+
+async def test_refunds_are_per_bucket():
+    mw = make_mw(turn_limit=10, is_subagent=True)
+    handler = todo_handler()
+    for _ in range(2):
+        await mw.awrap_model_call(ns_request(NS_A), handler)
+        await mw.awrap_model_call(ns_request(NS_B), handler)
+    assert mw._turns_used("tools:a6dc6726-df24-8a53-049a-fbf4c35a1e9c") == 0
+    assert mw._turns_used("tools:5923fee9-ce67-f1a7-a07f-265bbf188878") == 0

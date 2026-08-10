@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { getWorkstationFileShareUrlApi } from '~/api/apps';
 import useLocalize from '~/hooks/useLocalize';
+import { MediaPlayer } from '~/pages/knowledge/FilePreview/MediaPlayer';
 import { resolveKnowledgePreviewUrl } from '~/pages/knowledge/FilePreview/previewUrlUtils';
 
 export interface MediaPlaybackSource {
@@ -20,7 +21,9 @@ export interface MediaPlaybackSource {
  * a fresh one is minted from the stored path where possible, and the captured
  * link is only the fallback.
  */
-export function MediaPlaybackView({ url: initialUrl, filepath, name, kind }: MediaPlaybackSource) {
+// name is part of the source but not drawn here — the chrome around the player
+// (dialog header / page title bar) already shows it.
+export function MediaPlaybackView({ url: initialUrl, filepath, kind }: MediaPlaybackSource) {
     const localize = useLocalize();
     const [playbackUrl, setPlaybackUrl] = useState<string | undefined>(initialUrl);
     const [loading, setLoading] = useState(() => !!filepath && !initialUrl?.startsWith('blob:'));
@@ -96,31 +99,9 @@ export function MediaPlaybackView({ url: initialUrl, filepath, name, kind }: Med
     return (
         <>
             {errorMessage ? <p className="text-sm text-muted-foreground">{errorMessage}</p> : null}
-            {kind === 'video' ? (
-                <video
-                    key={playbackUrl}
-                    src={playbackUrl}
-                    controls
-                    autoPlay
-                    playsInline
-                    onError={() => setError('fetch_failed')}
-                    className="max-h-full max-w-full rounded-lg bg-black shadow-lg"
-                />
-            ) : (
-                <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-sm">
-                    <p className="mb-4 truncate text-sm text-[#4e5969]" title={name}>
-                        {name}
-                    </p>
-                    <audio
-                        key={playbackUrl}
-                        src={playbackUrl}
-                        controls
-                        autoPlay
-                        onError={() => setError('fetch_failed')}
-                        className="w-full"
-                    />
-                </div>
-            )}
+            {/* The same player knowledge-space preview uses, so a clip looks and
+                behaves identically wherever it is opened from. */}
+            <MediaPlayer key={playbackUrl} kind={kind} src={playbackUrl} autoPlay />
         </>
     );
 }

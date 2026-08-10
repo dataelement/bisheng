@@ -157,12 +157,12 @@ __SKILL_DELIVERABLE_LINE__   - 3a（始终）：write_file 写 output/<name>.md�
 
 - ask_user(reason, questions)：第 0 步澄清；整个会话最多调用一次。
 - write_todos(todos)：维护有编号的待办清单；只翻转 status，不改写已有文案。
-__KB_TOOL_LINE__- write_file / read_file / edit_file / ls：工作区文件工具；交付物写 output/，中间产物写 scratch/。
+__KB_TOOL_LINE__- write_file / read_file / edit_file / ls：工作区文件工具；交付物写 output/，中间产物写 scratch/（工具回显的 /output/x 与 output/x 是同一个文件）。
 - export_docx(source_path, dest_path)：把 output/ 下的 markdown 转 Word(.docx)，必须在对应 .md 写好之后。
 - export_pdf(source_path, dest_path)：把 output/ 下的 markdown 转 PDF，必须在对应 .md 写好之后。
 - task(description, subagent_type="general-purpose")：把独立、可隔离、较重的调研子任务委派给子代理。description 必须自包含——子代理看不到你的对话历史与上下文，只能读到 description，因此完成该子任务所需的全部背景、目标、约束与必要标识都要写进去；不得委派最终交付物撰写，也不得委派“问用户/澄清”。
 
-# 风格
+__PATH_NAMESPACE_LINE__# 风格
 
 - 简洁，工具调用之间不加多余解释性文字。
 - 不要凭空编造事实；交付内容应基于检索到的资料/依据。
@@ -320,10 +320,7 @@ def _build_linsight_system_prompt(
                 "此时**禁止**调用 export_docx / export_pdf 从 markdown 派生同一份交付物——"
                 "那条路径丢掉技能规定的全部排版细节，等于没用技能；"
                 "只有代码执行连续失败、确实产不出成品时，才允许退回 export_docx / export_pdf 兜底，"
-                "并在收尾里说明退化。3a 的 markdown 规范源仍然要写（界面预览依赖它）。"
-                "注意：代码执行器直接写在工作区本地目录，它生成的文件**不会**出现在 ls / glob 的结果里"
-                "（那两个工具读的是对象存储视图）。只要执行返回 exitcode 0 且日志显示写成功，"
-                "就视为交付物已产出，继续下一步；不要反复 ls / glob 找它，也不要因为“找不到”而重新生成。\n"
+                "并在收尾里说明退化。3a 的 markdown 规范源仍然要写（界面预览依赖它）。\n"
             )
         else:
             # No executor bound: the skill's route cannot run, so banning the
@@ -337,12 +334,38 @@ def _build_linsight_system_prompt(
     else:
         skill_exec_line = ""
         skill_deliverable_line = ""
+
+    # The two path namespaces only need explaining when a code interpreter is bound —
+    # that is the ONLY tool with a cwd. Gated on ``has_code_interpreter`` ALONE:
+    # this used to ride along inside ``skill_deliverable_line``, so a run that bound
+    # the executor but selected no skill (exactly the 180 session) never saw it and
+    # burned three model round-trips rediscovering the mapping. Keeping the
+    # ``has_code_interpreter`` gate preserves the prompt↔tool lockstep this module
+    # enforces everywhere else (a bound-tool name must never appear otherwise).
+    path_namespace_line = ""
+    if has_code_interpreter:
+        path_namespace_line = (
+            "# 工作区路径（同一份文件的两种写法）\n\n"
+            "- 文件工具（ls / read_file / write_file / edit_file / export_*）用**带前导斜杠**的工作区路径："
+            "/output/x.md、/scratch/x.png、/uploads/x.xlsx、/skills/<name>/SKILL.md；不带斜杠的相对写法等价。\n"
+            "- bisheng_code_interpreter 的**当前工作目录就是工作区根**，代码里一律用**去掉前导斜杠**的相对路径："
+            'open("skills/<name>/assets/t.html")、plt.savefig("output/chart.png")。'
+            '写成 open("/skills/…") / open("/output/…") 会落到容器根目录——读必然 FileNotFoundError，'
+            "写会被丢弃、进不了交付。\n"
+            "- 反向同理：**不要**把代码里看到的宿主机绝对路径（形如 /root/.cache/…/<8位任务号>/output/a.png）"
+            "传给 read_file / edit_file，去掉前缀只传 output/a.png。\n"
+            "- 执行器直接写本地工作目录，它生成的文件**不会**出现在 ls / glob 的结果里"
+            "（那两个工具读的是对象存储视图）。只要执行返回 exitcode 0 且日志显示写成功，"
+            "就视为交付物已产出，继续下一步；不要反复 ls / glob 找它，也不要因为“找不到”而重新生成。\n\n"
+        )
+
     return (
         _LINSIGHT_SYSTEM_PROMPT_TEMPLATE_ZH.replace("__KB_EXEC_LINE__", exec_line)
         .replace("__KB_TOOL_LINE__", tool_line)
         .replace("__KB_DELEGATE_LINE__", delegate_line)
         .replace("__SKILL_EXEC_LINE__", skill_exec_line)
         .replace("__SKILL_DELIVERABLE_LINE__", skill_deliverable_line)
+        .replace("__PATH_NAMESPACE_LINE__", path_namespace_line)
     )
 
 
