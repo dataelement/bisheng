@@ -465,14 +465,15 @@ class AnswerRepository:
             return answer
 
     async def delete(self, answer_id: int) -> bool:
-        """删除回答"""
+        """软删除回答（status=3）。"""
         async with get_async_db_session() as session:
-            answer = await self.get_by_id(answer_id)
+            answer = (await session.exec(select(Answer).where(Answer.id == answer_id))).first()
             if not answer:
                 return False
-            answer.status = "deleted"
+            # ORM: 1=normal, 2=adopted, 3=deleted — 勿写字符串
+            answer.status = 3
             session.add(answer)
-            await session.flush()
+            await session.commit()
             return True
 
     async def get_answer_vote_count(self, question_id: int) -> int:
@@ -510,6 +511,18 @@ class CommentRepository:
             await session.delete(comment)
             await session.commit()
             return True
+
+    async def delete_by_answer_id(self, answer_id: int) -> int:
+        """硬删除某回答下全部评论/追问。返回删除条数。"""
+        async with get_async_db_session() as session:
+            rows = (
+                await session.exec(select(Comment).where(Comment.answer_id == answer_id))
+            ).all()
+            for comment in rows:
+                await session.delete(comment)
+            if rows:
+                await session.commit()
+            return len(rows)
 
     async def get_by_answer_id(
         self, answer_id: int, question_id: int | None = None, skip: int = 0, limit: int = 100

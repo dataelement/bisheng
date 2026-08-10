@@ -463,7 +463,7 @@ async def moderate_delete(
     request: ModerateDeleteRequest,
     user: UserPayload = Depends(UserPayload.get_login_user),
 ):
-    """平台超管违规删除问题/评论/追问：先删内容，再按 R* 扣分（失败入补扣队列）。"""
+    """平台超管违规删除问题/回答/评论/追问：先删内容，再按 R* 扣分（失败入补扣队列）。"""
     try:
         result = await ModerateDeleteService().moderate_delete(
             operator=user,
