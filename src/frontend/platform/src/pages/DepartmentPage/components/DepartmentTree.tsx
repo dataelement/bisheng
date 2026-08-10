@@ -25,6 +25,24 @@ interface DepartmentTreeProps {
   /** 父组件请求将某部门行滚入可视区域（如全组织搜索定位）；requestId 递增可重复定位同一部门 */
   scrollRequest?: { deptId: string; requestId: number } | null
   onScrollRequestHandled?: () => void
+  /** F070：部门 id → org_level，用于树行徽章 */
+  orgLevelById?: Record<number, string | null>
+}
+
+/** org_level 徽章样式（积分部门榜用标签，不改拓扑）。 */
+function orgLevelBadgeClass(level: string | null | undefined): string {
+  switch (level) {
+    case "company":
+      return "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200"
+    case "dept":
+      return "bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-200"
+    case "office":
+      return "bg-violet-100 text-violet-800 dark:bg-violet-950 dark:text-violet-200"
+    case "squad":
+      return "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200"
+    default:
+      return "bg-muted text-muted-foreground"
+  }
 }
 
 function findPathToDept(
@@ -48,6 +66,7 @@ export function DepartmentTree({
   onCreateChild,
   scrollRequest,
   onScrollRequestHandled,
+  orgLevelById,
 }: DepartmentTreeProps) {
   const { t } = useTranslation()
   const [keyword, setKeyword] = useState("")
@@ -227,6 +246,17 @@ export function DepartmentTree({
                 {t("bs:tenant.mountedTag", { defaultValue: "子租户" })}
               </span>
             )}
+            {orgLevelById?.[node.id] ? (
+              <span
+                className={cn(
+                  "mr-1 shrink-0 rounded px-1 py-0.5 text-[10px] font-medium",
+                  orgLevelBadgeClass(orgLevelById[node.id]),
+                )}
+                title={t("bs:department.orgLevelBadgeTitle")}
+              >
+                {t(`bs:department.orgLevel.${orgLevelById[node.id]}`)}
+              </span>
+            ) : null}
             {/* Quick create child button — hidden for archived departments */}
             {!isArchived && (
               <button
@@ -252,7 +282,16 @@ export function DepartmentTree({
       )
     }
     return Render
-  }, [expanded, selectedDeptId, matchesKeyword, onSelect, onCreateChild, toggleExpand, t])
+  }, [
+    expanded,
+    selectedDeptId,
+    matchesKeyword,
+    onSelect,
+    onCreateChild,
+    toggleExpand,
+    orgLevelById,
+    t,
+  ])
 
   const TreeNode = renderNode
 
