@@ -388,41 +388,6 @@ class CeleryConf(BaseModel):
                 "schedule": crontab.from_string("0 2 * * *"),
             }
 
-        # F070: 积分排行快照，每小时第 5 分钟刷新（受 points.rank_cron_enabled 控制）。
-        if "points_refresh_rank_snapshots" not in self.beat_schedule:
-            self.beat_schedule["points_refresh_rank_snapshots"] = {
-                "task": "bisheng.worker.points.tasks.refresh_points_rank_snapshots",
-                "schedule": crontab.from_string("5 * * * *"),
-            }
-
-        # F070: 管理员月奖，每月 1 日 00:05 Asia/Shanghai（结算上月；受 monthly_reward_enabled 控制）。
-        if "points_monthly_admin_rewards" not in self.beat_schedule:
-            self.beat_schedule["points_monthly_admin_rewards"] = {
-                "task": "bisheng.worker.points.tasks.run_monthly_admin_rewards",
-                "schedule": crontab.from_string("5 0 1 * *"),
-            }
-
-        # F070: 积分日对账（AC-04）；只告警，禁止静默改流水。
-        if "points_reconcile_balances" not in self.beat_schedule:
-            self.beat_schedule["points_reconcile_balances"] = {
-                "task": "bisheng.worker.points.tasks.reconcile_point_balances",
-                "schedule": crontab.from_string("30 2 * * *"),
-            }
-
-        # F070: 外部同步 outbox drain（AC-23）；受 points.sync_outbox_enabled 控制。
-        if "points_drain_sync_outbox" not in self.beat_schedule:
-            self.beat_schedule["points_drain_sync_outbox"] = {
-                "task": "bisheng.worker.points.tasks.drain_points_sync_outbox",
-                "schedule": crontab.from_string("0 3 * * *"),
-            }
-
-        # F070: 违规删除后扣分失败的补扣队列（每 5 分钟）。
-        if "points_drain_pending_deduct" not in self.beat_schedule:
-            self.beat_schedule["points_drain_pending_deduct"] = {
-                "task": "bisheng.worker.points.tasks.drain_points_pending_deduct",
-                "schedule": crontab.from_string("*/5 * * * *"),
-            }
-
         # F049: automotive sheet intro sync daily fan-out (00:00 Asia/Shanghai).
         if "automotive_sheet_intro_sync_daily" not in self.beat_schedule:
             self.beat_schedule["automotive_sheet_intro_sync_daily"] = {
@@ -933,20 +898,6 @@ class PortalHotSearchConf(BaseModel):
     llm_sample_max_chars: int = Field(default=2000, description="Max chars of LLM I/O persisted for diagnostics")
 
 
-class PointsConf(BaseModel):
-    """积分自动发放与旁路任务开关。"""
-
-    enabled: bool = Field(default=False, description="是否允许业务事件自动发放积分")
-    award_async_enabled: bool = Field(
-        default=True,
-        description="自动发分是否走 Celery；false 时 hooks 内同步入账（回滚开关）",
-    )
-    notify_enabled: bool = Field(default=True, description="是否发送积分变动站内信")
-    sync_outbox_enabled: bool = Field(default=False, description="是否消费外部同步发件箱")
-    rank_cron_enabled: bool = Field(default=True, description="是否刷新积分榜快照")
-    monthly_reward_enabled: bool = Field(default=True, description="是否执行月度管理员奖励")
-
-
 class Settings(BaseModel):
     """Application Settings"""
 
@@ -1011,7 +962,6 @@ class Settings(BaseModel):
     in_app_message_forwarding: InAppMessageForwardingConf = InAppMessageForwardingConf()
     database_pool: DatabasePoolConf = Field(default_factory=DatabasePoolConf)
     portal_hot_search: PortalHotSearchConf = Field(default_factory=PortalHotSearchConf)
-    points: PointsConf = Field(default_factory=PointsConf)
 
     @field_validator("database_url")
     @classmethod

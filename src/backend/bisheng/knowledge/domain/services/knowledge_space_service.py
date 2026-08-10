@@ -4633,26 +4633,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
             canonical_document_id=canonical_document_id,
         )
         await KnowledgeDao.async_update_knowledge_update_time_by_id(int(fav_space.id))
-        # 积分旁路：首次收藏计入 G3 去重人数；已存在收藏的 early-return 不触发。
-        try:
-            from bisheng.points.domain.services.points_award_hooks import notify_favorite_changed
-
-            await notify_favorite_changed(
-                tenant_id=int(
-                    getattr(source_file, "tenant_id", None)
-                    or getattr(source_space, "tenant_id", None)
-                    or self.login_user.tenant_id
-                    or 1
-                ),
-                source_file_id=source_file_id,
-                source_space_id=int(req.source_space_id),
-                uploader_id=int(source_file.user_id) if getattr(source_file, "user_id", None) else None,
-            )
-        except Exception:
-            _logger.exception(
-                "points.award.hooks favorite notify failed source_file_id=%s",
-                source_file_id,
-            )
         title = Path(ref_file.file_name or source_file.file_name or "").stem
         return ShougangPortalFavoriteCreateResp(
             favorite_file_id=int(ref_file.id),
@@ -15860,22 +15840,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 )
         await self.update_folder_update_time(file_level_path)
         await KnowledgeDao.async_update_knowledge_update_time_by_id(knowledge_id)
-        # 积分旁路：上传成功记分，失败不影响返回。
-        try:
-            from bisheng.points.domain.services.points_award_hooks import notify_space_files_ready
-
-            await notify_space_files_ready(
-                tenant_id=int(getattr(db_knowledge, "tenant_id", None) or self.login_user.tenant_id or 1),
-                space_id=int(knowledge_id),
-                files=process_files,
-                uploader_id=int(self.login_user.user_id),
-                is_favorite_space=bool(getattr(db_knowledge, "is_favorite", False)),
-            )
-        except Exception:
-            _logger.exception(
-                "points.award.hooks add_file notify failed knowledge_id=%s",
-                knowledge_id,
-            )
         return failed_files + process_files
 
     @staticmethod
