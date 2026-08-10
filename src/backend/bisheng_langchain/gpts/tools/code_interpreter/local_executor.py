@@ -363,6 +363,9 @@ class LocalExecutor(BaseExecutor):
                 continue
             file_ext = os.path.splitext(rel)[-1]
             file_list.append(self.upload_minio(f"{uuid.uuid4().hex}.{file_ext}", file_name))
+        # Mirror the same set into the session workspace so the file tools and the
+        # next turn can see what this run produced (see sync_to_workspace).
+        self.sync_to_workspace(dir_path, touched)
         # 同步执行结果文件到本地同步目录
         if self.local_sync_path and os.path.exists(self.local_sync_path):
             files_info = list(os.scandir(dir_path))
