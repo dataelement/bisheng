@@ -242,12 +242,14 @@ async def test_reject_passes_space_ids_to_repository():
     ):
         await service.approve_or_reject_review_tag(data, tenant_id=1)
 
+    # reviewer_id added by F079 so rejected tags record who rejected them.
     service.review_tags_repository.reject_review_tag.assert_awaited_once_with(
         "scoped",
         "bad",
         TagResourceTypeEnum.MANUAL_TAG,
         1,
         space_ids={100},
+        reviewer_id=9,
     )
 
 

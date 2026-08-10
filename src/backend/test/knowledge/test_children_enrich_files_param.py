@@ -67,6 +67,8 @@ def _make_file(file_id: int):
     f.similar_status = 0
     f.reference_document_id = None
     f.entry_type = None
+    f.original_uploader_id = None
+    f.original_knowledge_id = None
     f.allow_download = False
     f.knowledge_id = 10
     f.model_dump.return_value = {"id": file_id, "file_name": "a.pdf", "file_type": FileType.FILE.value}
@@ -172,6 +174,44 @@ async def test_logical_entry_reuses_current_primary_file_size_and_version():
 
 
 @pytest.mark.asyncio
+async def test_distribution_origin_names_are_loaded_in_batches():
+    svc = _make_svc()
+    logical = _make_file(9001)
+    logical.reference_document_id = 501
+    logical.entry_type = "share"
+    logical.entry_status = "active"
+    logical.original_uploader_id = 42
+    logical.original_knowledge_id = 10
+    logical.desired_content_generation = 1
+    logical.applied_content_generation = 1
+    logical.desired_entry_generation = 1
+    logical.applied_entry_generation = 1
+    logical.projection_status = "ready"
+    svc._entry_permission_ids_by_file = {9001: {"view_file"}}
+
+    with (
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.UserDao.aget_user_by_ids",
+            new_callable=AsyncMock,
+            return_value=[SimpleNamespace(user_id=42, user_name="原始上传人")],
+        ) as load_users,
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_spaces_by_ids",
+            new_callable=AsyncMock,
+            return_value=[SimpleNamespace(id=10, name="原始知识库")],
+        ) as load_spaces,
+    ):
+        result = await svc._load_document_distribution_info([logical])
+
+    assert result[9001]["original_uploader_id"] == 42
+    assert result[9001]["original_uploader_name"] == "原始上传人"
+    assert result[9001]["original_knowledge_id"] == 10
+    assert result[9001]["original_knowledge_name"] == "原始知识库"
+    load_users.assert_awaited_once_with([42])
+    load_spaces.assert_awaited_once_with([10])
+
+
+@pytest.mark.asyncio
 async def test_share_entry_enrichment_keeps_target_folder_and_adds_direct_source_metadata():
     svc = _make_svc()
     logical = _make_file(9001)
@@ -248,7 +288,7 @@ async def test_share_source_metadata_resolves_share_source_entry_instead_of_rece
         patch(
             "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_space_source_metadata_by_ids",
             new_callable=AsyncMock,
-            return_value={10: ("来源知识库", "来源部门")},
+            return_value={10: ("来源知识库", "来源部门", "来源", "来源")},
         ),
     ):
         result = await svc._resolve_shougang_portal_source_metadata(
@@ -269,6 +309,8 @@ async def test_share_source_metadata_resolves_share_source_entry_instead_of_rece
             "source_space_id": 10,
             "source_space_name": "来源知识库",
             "source_department_name": "来源部门",
+            "source_department_short_name": "来源",
+            "source_department_display_name": "来源",
             "source_folder_path": "来源知识库/源目录",
             "source_path": "来源知识库>源目录/制度.pdf",
         }
@@ -281,8 +323,8 @@ async def test_source_space_metadata_query_returns_department_name_without_extra
         exec=AsyncMock(
             return_value=SimpleNamespace(
                 all=lambda: [
-                    (10, "来源知识库", "来源部门"),
-                    (11, "无绑定知识库", None),
+                    (10, "来源知识库", "来源部门", "来源"),
+                    (11, "无绑定知识库", None, None),
                 ]
             )
         )
@@ -299,7 +341,7 @@ async def test_source_space_metadata_query_returns_department_name_without_extra
         result = await KnowledgeDao.async_get_space_source_metadata_by_ids([10, 11])
 
     assert result == {
-        10: ("来源知识库", "来源部门"),
-        11: ("无绑定知识库", ""),
+        10: ("来源知识库", "来源部门", "来源", "来源"),
+        11: ("无绑定知识库", "", None, ""),
     }
     session.exec.assert_awaited_once()

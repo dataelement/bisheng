@@ -94,6 +94,19 @@ def test_realtime_dashboard_seed_contains_three_target_datasets():
             "personal",
         ]
     assert knowledge_metrics["preview_count"]["aggregations"][0]["type"] == "sum"
+    assert knowledge_metrics["download_count"]["name"] == "下载次数"
+    assert knowledge_metrics["download_count"]["filter"]["filters"] == [
+        {"operator": "term", "field": "record_type", "value": "download_daily"},
+        {
+            "operator": "terms",
+            "field": "space_level",
+            "value": ["public", "department", "team", "team_ks", "personal"],
+        },
+    ]
+    download_aggregation = knowledge_metrics["download_count"]["aggregations"][0]
+    assert download_aggregation["name"] == "download_count"
+    assert download_aggregation["type"] == "sum"
+    assert download_aggregation["field"] == "download_count"
     knowledge_dimensions = {
         dimension["field"]: dimension["name"]
         for dimension in knowledge_dataset.schema_config["dimensions"]
@@ -343,7 +356,7 @@ async def test_runtime_dimension_filters_are_combined_with_and():
         "space_level",
         "business_domain_code",
     ]
-    assert dumped["filters"][0]["value"] == ["public", "team", "team_ks"]
+    assert dumped["filters"][0]["value"] == ["public", "team"]
 
 
 @pytest.mark.asyncio
@@ -406,7 +419,7 @@ async def test_realtime_component_query_does_not_pass_server_scope(monkeypatch):
     assert captured_kwargs["dimension_filters"] == []
 
 
-def test_file_space_level_options_group_section_libraries_under_team():
+def test_file_space_level_options_keep_team_and_clinic_separate():
     from bisheng.telemetry_search.domain.services.dashboard import (
         DashboardService,
     )
@@ -414,7 +427,8 @@ def test_file_space_level_options_group_section_libraries_under_team():
     assert DashboardService.FILE_SPACE_LEVEL_LABELS == {
         "public": "公共库",
         "department": "部门库",
-        "team": "团队库（含科室库）",
+        "team": "团队库",
+        "team_ks": "科室库",
         "personal": "个人库",
     }
 

@@ -32,6 +32,9 @@ from bisheng.common.errcode.approval import (
     ApprovalRequestPermissionDeniedError,
 )
 from bisheng.user.domain.models.user import UserDao
+from bisheng.department.domain.services.department_display_service import (
+    build_department_name_projection,
+)
 
 
 @dataclass
@@ -113,6 +116,23 @@ def _build_task(
         node_mode='or',
         status=status,
     )
+
+
+def test_department_snapshot_display_uses_live_short_name_without_mutating_history() -> None:
+    snapshot = {"department_id": 18, "department_name": "技术研发中心"}
+    projection = build_department_name_projection(
+        SimpleNamespace(id=18, name="技术研发中心", short_name="研发")
+    )
+
+    enriched = ApprovalCenterService._with_department_display_name(
+        snapshot,
+        {18: projection},
+    )
+    fallback = ApprovalCenterService._with_department_display_name(snapshot, {})
+
+    assert enriched["department_display_name"] == "研发"
+    assert fallback["department_display_name"] == "技术研发中心"
+    assert snapshot == {"department_id": 18, "department_name": "技术研发中心"}
 
 
 @pytest.mark.asyncio

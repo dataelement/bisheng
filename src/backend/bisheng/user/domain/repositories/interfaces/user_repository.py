@@ -1,6 +1,9 @@
 from abc import ABC
 
 from bisheng.common.repositories.interfaces.base_repository import BaseRepository
+from bisheng.department.domain.services.department_display_service import (
+    DepartmentNameProjection,
+)
 from bisheng.user.domain.models.user import User, UserQuery
 
 
@@ -15,6 +18,12 @@ class UserRepository(BaseRepository[User, int], ABC):
         pass
 
     async def get_primary_department_name(self, user_id: int) -> str | None:
+        pass
+
+    async def get_primary_department_name_projection(
+        self,
+        user_id: int,
+    ) -> DepartmentNameProjection | None:
         pass
 
     async def list_active_by_external_id(self, external_id: str) -> list[User]:

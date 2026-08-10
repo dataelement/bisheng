@@ -12,6 +12,7 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.filelib_sync import (
     FilelibSyncConflictError,
     FilelibSyncInvalidParamsError,
+    FilelibSyncNotFoundError,
 )
 from bisheng.common.errcode.knowledge_space import DepartmentKnowledgeSpaceAmbiguousError
 from bisheng.database.models.department import Department, UserDepartment
@@ -247,19 +248,57 @@ def test_document_type_resolves_codes_within_selected_parent() -> None:
     assert child is expected_child
 
 
-def test_duplicate_dynamic_business_domains_are_rejected() -> None:
+def test_duplicate_dynamic_business_domains_use_first_match() -> None:
+    first_domain = SimpleNamespace(enabled=True, code="IT", name="信息", department_ids=[20])
+    second_domain = SimpleNamespace(enabled=True, code="SA", name="安全", department_ids=[20])
+    config = SimpleNamespace(
+        portal=SimpleNamespace(
+            domains=[first_domain, second_domain],
+        )
+    )
+    service = _service(_rule("dynamic", "fixed", "department_id"))
+
+    domain = service._resolve_business_domain(config, _department(20, "动态部门"))
+
+    assert domain is first_domain
+
+
+def test_fixed_business_domain_duplicate_codes_still_conflict() -> None:
     config = SimpleNamespace(
         portal=SimpleNamespace(
             domains=[
-                SimpleNamespace(enabled=True, code="IT", name="信息", department_ids=[20]),
-                SimpleNamespace(enabled=True, code="SA", name="安全", department_ids=[20]),
+                SimpleNamespace(enabled=True, code="IT", name="信息", department_ids=[]),
+                SimpleNamespace(enabled=True, code="IT", name="信息二", department_ids=[]),
+            ]
+        )
+    )
+    service = _service(_rule("fixed", "fixed"))
+
+    with pytest.raises(FilelibSyncConflictError, match="multiple business domains"):
+        service._resolve_business_domain(config, None)
+
+
+def test_dynamic_business_domain_without_department_binding_returns_none() -> None:
+    config = SimpleNamespace(
+        portal=SimpleNamespace(
+            domains=[
+                SimpleNamespace(enabled=True, code="FI", name="财务", department_ids=[2211]),
             ]
         )
     )
     service = _service(_rule("dynamic", "fixed", "department_id"))
 
-    with pytest.raises(FilelibSyncConflictError, match="multiple business domains"):
-        service._resolve_business_domain(config, _department(20, "动态部门"))
+    domain = service._resolve_business_domain(config, _department(9999, "未绑定部门"))
+
+    assert domain is None
+
+
+def test_fixed_business_domain_still_requires_portal_match() -> None:
+    config = SimpleNamespace(portal=SimpleNamespace(domains=[]))
+    service = _service(_rule("fixed", "fixed"))
+
+    with pytest.raises(FilelibSyncNotFoundError, match="configured business domain does not exist"):
+        service._resolve_business_domain(config, None)
 
 
 @pytest.mark.asyncio

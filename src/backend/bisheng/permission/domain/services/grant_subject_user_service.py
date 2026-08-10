@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from bisheng.core.context.tenant import bypass_tenant_filter
 from bisheng.core.database import get_async_db_session
+from bisheng.department.domain.services.department_display_service import (
+    get_department_display_name,
+)
 from bisheng.permission.domain.models.grant_subject_user import (
     GrantSubjectDepartment,
     GrantSubjectDepartmentMembership,
@@ -54,8 +57,20 @@ class GrantSubjectUserService:
             visible_department_ids=visible_department_ids,
         )
         department_map = {department.department_id: department for department in departments}
+        path_map = {
+            department.department_id: self._department_path(
+                department,
+                department_map,
+                use_display_name=False,
+            )
+            for department in departments
+        }
         display_path_map = {
-            department.department_id: self._display_path(department, department_map)
+            department.department_id: self._department_path(
+                department,
+                department_map,
+                use_display_name=True,
+            )
             for department in departments
         }
         links_by_user: dict[int, list[GrantSubjectDepartmentMembership]] = {}
@@ -71,7 +86,13 @@ class GrantSubjectUserService:
                     department_id=department.department_id,
                     dept_id=department.dept_id,
                     name=department.name,
-                    path=display_path_map[department.department_id],
+                    short_name=department.short_name,
+                    display_name=get_department_display_name(
+                        department.name,
+                        department.short_name,
+                    ),
+                    path=path_map[department.department_id],
+                    display_path=display_path_map[department.department_id],
                     is_primary=link.is_primary,
                 )
             )
@@ -91,22 +112,37 @@ class GrantSubjectUserService:
         return result
 
     @staticmethod
-    def _display_path(
+    def _department_path(
         department: GrantSubjectDepartment,
         department_map: dict[int, GrantSubjectDepartment],
+        *,
+        use_display_name: bool,
     ) -> str:
         path_ids = [
             int(part)
             for part in department.path.split("/")
             if part.strip().isdigit()
         ]
-        labels = [
-            department_map[path_id].name
-            for path_id in path_ids
-            if path_id in department_map
-        ]
-        if not labels or labels[-1] != department.name:
-            labels.append(department.name)
+        labels = []
+        for path_id in path_ids:
+            path_department = department_map.get(path_id)
+            if path_department is None:
+                continue
+            labels.append(
+                get_department_display_name(
+                    path_department.name,
+                    path_department.short_name,
+                )
+                if use_display_name
+                else path_department.name
+            )
+        current_name = (
+            get_department_display_name(department.name, department.short_name)
+            if use_display_name
+            else department.name
+        )
+        if not labels or labels[-1] != current_name:
+            labels.append(current_name)
         return "/".join(labels)
 
 

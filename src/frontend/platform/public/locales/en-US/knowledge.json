@@ -140,6 +140,15 @@
   "englishPeriodRule": "Split after English period, English sentence segmentation",
   "splitt": "split",
   "documentDataParsingCompleted": "Document data parsing completed",
+  "parseQueueAhead": "Queued, about {{count}} waiting tasks ahead",
+  "parseQueueProcessing": "Parsing",
+  "parseQueueUnavailable": "Queued",
+  "parseQueueActiveCount": "{{count}} tasks currently running",
+  "parseQueueStage": {
+    "title": "Title extraction",
+    "parse": "File parsing",
+    "retry": "Retry parsing"
+  },
   "documentDataBeingPrepared": "Document data is being prepared",
   "youCanReturn": "You can return to the knowledge base file list to view the parsing status",
   "returnToKnowledgeBase": "Return to Knowledge Base",

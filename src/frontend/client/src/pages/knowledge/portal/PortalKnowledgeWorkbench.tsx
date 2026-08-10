@@ -2666,6 +2666,9 @@ export default function PortalKnowledgeWorkbench() {
                     is_released: form.publishToSquare === "yes",
                     auto_tag_enabled: form.autoTagEnabled,
                     ...buildAutoTagLibraryPayload(form.autoTagLibraryIds, { syncExplicitly: true }),
+                    ...(form.portalDiscoveryEnabled !== undefined
+                        ? { portal_discovery_enabled: form.portalDiscoveryEnabled }
+                        : {}),
                     ...(form.departmentId ? { department_id: form.departmentId } : {}),
                 });
                 await queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });

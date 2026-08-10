@@ -12,11 +12,16 @@ WORKFLOW_CELERY_QUEUE = "workflow_celery"
 
 KNOWLEDGE_PARSE_TASKS = frozenset(
     {
-        "bisheng.worker.knowledge.file_title_worker.extract_knowledge_file_title_celery",
         "bisheng.worker.knowledge.file_worker.parse_knowledge_file_celery",
         "bisheng.worker.knowledge.file_worker.retry_knowledge_file_celery",
     }
 )
+KNOWLEDGE_PARSE_COMPAT_TASKS = frozenset(
+    {
+        "bisheng.worker.knowledge.file_title_worker.extract_knowledge_file_title_celery",
+    }
+)
+KNOWLEDGE_PARSE_ROUTED_TASKS = KNOWLEDGE_PARSE_TASKS | KNOWLEDGE_PARSE_COMPAT_TASKS
 PDF_ARTIFACT_TASK = "bisheng.worker.knowledge.pdf_artifact_worker.generate_knowledge_file_pdf_celery"
 
 _DEFAULT_QUEUE_PATTERNS = (
@@ -52,10 +57,10 @@ def build_celery_task_routes(configured_routes: Mapping[str, Any] | None) -> dic
     routes.update({pattern: {"queue": DEFAULT_CELERY_QUEUE} for pattern in _DEFAULT_QUEUE_PATTERNS})
 
     for task_pattern, route in (configured_routes or {}).items():
-        if task_pattern in routes or task_pattern in KNOWLEDGE_PARSE_TASKS:
+        if task_pattern in routes or task_pattern in KNOWLEDGE_PARSE_ROUTED_TASKS:
             continue
         routes[task_pattern] = _normalize_configured_route(route)
 
     routes[PDF_ARTIFACT_TASK] = {"queue": KNOWLEDGE_PDF_QUEUE}
-    routes.update({task_name: {"queue": KNOWLEDGE_PARSE_QUEUE} for task_name in sorted(KNOWLEDGE_PARSE_TASKS)})
+    routes.update({task_name: {"queue": KNOWLEDGE_PARSE_QUEUE} for task_name in sorted(KNOWLEDGE_PARSE_ROUTED_TASKS)})
     return routes

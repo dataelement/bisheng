@@ -16,6 +16,10 @@ import functools
 import logging
 from typing import Union
 
+from bisheng.common.constants.enums.knowledge_parse_priority import (
+    KNOWLEDGE_PARSE_PRIORITY_CONFIG_KEY,
+    KnowledgeParsePriority,
+)
 from bisheng.common.errcode.role import QuotaConfigInvalidError
 from bisheng.common.errcode.tenant_quota import (
     TenantQuotaExceededError,
@@ -843,6 +847,37 @@ class QuotaService:
                 raise QuotaConfigInvalidError(
                     msg=f"quota_config[{key}] must be -1, 0, or positive integer, got {value}",
                 )
+
+    @classmethod
+    def validate_role_quota_config(cls, quota_config: dict | None) -> None:
+        """Validate role quota values plus role-only parse priority metadata."""
+        if not quota_config:
+            return
+        role_priority = quota_config.get(KNOWLEDGE_PARSE_PRIORITY_CONFIG_KEY)
+        shared_quota = {
+            key: value
+            for key, value in quota_config.items()
+            if key != KNOWLEDGE_PARSE_PRIORITY_CONFIG_KEY
+        }
+        cls.validate_quota_config(shared_quota)
+        if KNOWLEDGE_PARSE_PRIORITY_CONFIG_KEY not in quota_config:
+            return
+        if isinstance(role_priority, bool) or not isinstance(role_priority, str):
+            raise QuotaConfigInvalidError(
+                msg=(
+                    f"quota_config[{KNOWLEDGE_PARSE_PRIORITY_CONFIG_KEY}] "
+                    "must be high, medium, or low"
+                ),
+            )
+        try:
+            KnowledgeParsePriority(role_priority)
+        except ValueError as exc:
+            raise QuotaConfigInvalidError(
+                msg=(
+                    f"quota_config[{KNOWLEDGE_PARSE_PRIORITY_CONFIG_KEY}] "
+                    "must be high, medium, or low"
+                ),
+            ) from exc
 
 
 def require_quota(resource_type: str):

@@ -7,7 +7,7 @@ start_mode=${1:-api}
 
 start_knowledge(){
   # 知识库解析的celery worker
-    celery -A bisheng.worker.main worker -l info -c 20 -P threads -Q knowledge_celery -n knowledge@%h
+    celery -A bisheng.worker.main worker -l info -c 20 -P threads --prefetch-multiplier=1 -Q knowledge_celery -n knowledge@%h
 }
 
 start_workflow(){

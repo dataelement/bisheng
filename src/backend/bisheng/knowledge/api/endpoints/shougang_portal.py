@@ -117,11 +117,18 @@ async def list_shougang_portal_discoverable_spaces(
     discovery_scope: Literal[
         "public",
         "public_and_department",
+        "portal_public",
+        "portal_configured",
     ] = "public_and_department",
     svc: Any = Depends(get_knowledge_space_service),
 ) -> Any:
     spaces = await svc.list_shougang_portal_discoverable_spaces(discovery_scope=discovery_scope)
-    return resp_200({"spaces": spaces})
+    payload: dict[str, Any] = {"spaces": spaces}
+    discovery = getattr(svc, "_portal_discovery_result", None)
+    if discovery_scope in {"portal_public", "portal_configured"} and discovery is not None:
+        payload["discovery_snapshot"] = discovery.snapshot
+        payload["explicit_file_ids"] = discovery.explicitly_visible_file_ids
+    return resp_200(payload)
 
 
 @router.get("/personal-spaces")
@@ -269,7 +276,19 @@ async def search_shougang_portal_tags(
     req: ShougangPortalTagSearchReq,
     svc: Any = Depends(get_knowledge_space_service),
 ) -> Any:
-    tags = await svc.search_shougang_portal_tags(req.space_ids, req.space_level, req.business_domain_code)
+    if req.discovery_scope == "legacy":
+        tags = await svc.search_shougang_portal_tags(
+            req.space_ids,
+            req.space_level,
+            req.business_domain_code,
+        )
+    else:
+        tags = await svc.search_shougang_portal_tags(
+            req.space_ids,
+            req.space_level,
+            req.business_domain_code,
+            discovery_scope=req.discovery_scope,
+        )
     return resp_200(ShougangPortalTagSearchResp(tags=tags).model_dump(mode="json"))
 
 
@@ -278,7 +297,13 @@ async def count_shougang_portal_domain_files(
     req: ShougangPortalDomainFileCountReq,
     svc: Any = Depends(get_knowledge_space_service),
 ) -> Any:
-    counts = await svc.count_shougang_portal_domain_files(req.domains)
+    if req.discovery_scope == "legacy":
+        counts = await svc.count_shougang_portal_domain_files(req.domains)
+    else:
+        counts = await svc.count_shougang_portal_domain_files(
+            req.domains,
+            discovery_scope=req.discovery_scope,
+        )
     return resp_200(ShougangPortalDomainFileCountResp(counts=counts).model_dump(mode="json"))
 
 
@@ -287,7 +312,13 @@ async def count_shougang_portal_category_files(
     req: ShougangPortalCategoryFileCountReq,
     svc: Any = Depends(get_knowledge_space_service),
 ) -> Any:
-    counts = await svc.count_shougang_portal_category_files(req.categories)
+    if req.discovery_scope == "legacy":
+        counts = await svc.count_shougang_portal_category_files(req.categories)
+    else:
+        counts = await svc.count_shougang_portal_category_files(
+            req.categories,
+            discovery_scope=req.discovery_scope,
+        )
     return resp_200(ShougangPortalCategoryFileCountResp(counts=counts).model_dump(mode="json"))
 
 

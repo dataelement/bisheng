@@ -193,9 +193,9 @@ steps:
 
         echo "======= update deployment config ======="
 
-        git fetch origin feat/2.5.0-sg
-        git checkout feat/2.5.0-sg
-        git pull --ff-only origin feat/2.5.0-sg
+        # git fetch origin feat/2.5.0-sg
+        # git checkout feat/2.5.0-sg
+        # git pull --ff-only origin feat/2.5.0-sg
 
         echo "======= login docker registry ======="
 

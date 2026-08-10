@@ -388,6 +388,13 @@ class CeleryConf(BaseModel):
                 "schedule": crontab.from_string("0 2 * * *"),
             }
 
+        # F049: automotive sheet intro sync daily fan-out (00:00 Asia/Shanghai).
+        if "automotive_sheet_intro_sync_daily" not in self.beat_schedule:
+            self.beat_schedule["automotive_sheet_intro_sync_daily"] = {
+                "task": "bisheng.open_endpoints.worker.filelib_sync_worker.fanout_automotive_sheet_intro_sync",
+                "schedule": crontab.from_string("0 0 * * *"),
+            }
+
         # convert str to crontab
         for key, task_info in self.beat_schedule.items():
             if isinstance(task_info["schedule"], str):

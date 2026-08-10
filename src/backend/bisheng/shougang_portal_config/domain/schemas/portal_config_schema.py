@@ -454,6 +454,27 @@ class PortalSiteConfig(BaseModel):
     home_cache_ttl_seconds: int = Field(default=1800, ge=60)
 
 
+DEFAULT_PORTAL_WATERMARK_HORIZONTAL_TEXT = "首钢股份内部资料，严禁外传，违者必究"
+
+
+class PortalWatermarkConfig(BaseModel):
+    """Portal watermark second-line text (horizontal tile on PDF / preview overlay)."""
+
+    horizontal_text: str = ""
+
+    @field_validator("horizontal_text", mode="before")
+    @classmethod
+    def normalize_horizontal_text(cls, value: Any) -> str:
+        return _strip(value)
+
+
+def resolve_portal_watermark_horizontal_text(
+    watermark: PortalWatermarkConfig | None = None,
+) -> str:
+    configured = _strip(getattr(watermark, "horizontal_text", "") if watermark is not None else "")
+    return configured or DEFAULT_PORTAL_WATERMARK_HORIZONTAL_TEXT
+
+
 class PortalConfig(BaseModel):
     domains: list[PortalDomainConfig] = Field(default_factory=list)
     category_cards: list[PortalCategoryCardConfig] = Field(default_factory=list)
@@ -467,6 +488,7 @@ class PortalConfig(BaseModel):
     banners: list[PortalBannerSlide] = Field(default_factory=list)
     integrations: PortalIntegrationsConfig = Field(default_factory=PortalIntegrationsConfig)
     site: PortalSiteConfig = Field(default_factory=PortalSiteConfig)
+    watermark: PortalWatermarkConfig = Field(default_factory=PortalWatermarkConfig)
 
     @model_validator(mode="before")
     @classmethod

@@ -305,6 +305,31 @@ export async function readFileByLibDatabase({ id, page, pageSize = 20, name = ''
     return response
     // return { data, writeable, pages: Math.ceil(total / pageSize) }
 }
+
+export type KnowledgeParseQueuePositionState = 'queued' | 'processing' | 'not_queued' | 'unavailable';
+
+export interface KnowledgeParseQueuePositionItem {
+    file_id: number;
+    state: KnowledgeParseQueuePositionState;
+    ahead_waiting_count: number | null;
+}
+
+export interface KnowledgeParseQueuePositionsResponse {
+    items: KnowledgeParseQueuePositionItem[];
+    active_count: number;
+    approximate: true;
+    as_of: string;
+}
+
+export async function getKnowledgeParseQueuePositions(
+    knowledgeId: string | number,
+    fileIds: number[],
+): Promise<KnowledgeParseQueuePositionsResponse> {
+    return await axios.get(`/api/v1/knowledge/${knowledgeId}/parse-queue-positions`, {
+        params: { file_ids: fileIds },
+        paramsSerializer,
+    });
+}
 /**
  * 添加元数据
  */

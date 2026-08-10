@@ -210,11 +210,12 @@ def _make_login_user(*, is_admin: bool = True):
     )
 
 
-def _make_department(*, dept_id: int = 10, name: str = '财务部'):
+def _make_department(*, dept_id: int = 10, name: str = '财务部', short_name: str | None = None):
     return SimpleNamespace(
         id=dept_id,
         dept_id=f'BS@{dept_id}',
         name=name,
+        short_name=short_name,
         status='active',
     )
 
@@ -226,7 +227,7 @@ async def test_batch_create_spaces_reuses_core_binding_and_returns_infos():
         items=[DepartmentKnowledgeSpaceBatchItem(department_id=10)]
     )
     login_user = _make_login_user()
-    department = _make_department()
+    department = _make_department(short_name='财务')
     created_space = SimpleNamespace(id=101)
     created_info = SimpleNamespace(
         id=101,
@@ -260,7 +261,7 @@ async def test_batch_create_spaces_reuses_core_binding_and_returns_infos():
         'bisheng.knowledge.domain.services.department_knowledge_space_service.KnowledgeSpaceService.create_knowledge_space',
         new_callable=AsyncMock,
         return_value=created_space,
-    ), patch(
+    ) as mock_create_space, patch(
         'bisheng.knowledge.domain.services.department_knowledge_space_service.KnowledgeSpaceService.get_space_info',
         new_callable=AsyncMock,
         return_value=created_info,
@@ -272,6 +273,8 @@ async def test_batch_create_spaces_reuses_core_binding_and_returns_infos():
         )
 
     assert result == [created_info]
+    assert mock_create_space.await_args.kwargs['name'] == '财务的知识空间'
+    assert mock_create_space.await_args.kwargs['description'] == '财务的知识空间'
     mock_binding_create.assert_not_awaited()
     mock_grant_department_viewer.assert_awaited_once_with(space_id=101, department_id=10)
     mock_grant_admins.assert_awaited_once()

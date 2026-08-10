@@ -1,6 +1,10 @@
 # ruff: noqa: F401
 # register tasks
 from bisheng.worker.admin_scope.tasks import admin_scope_cleanup
+from bisheng.open_endpoints.worker.filelib_sync_worker import (
+    fanout_automotive_sheet_intro_sync,
+    run_automotive_sheet_intro_sync,
+)
 from bisheng.worker.approval.notification_tasks import (
     consume_approval_notification,
     dispatch_approval_notifications,

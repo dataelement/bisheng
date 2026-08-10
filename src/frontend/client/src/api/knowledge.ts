@@ -1,4 +1,5 @@
 import request, { formatApiErrorMessage } from "./request";
+import { resolveDepartmentDisplayName } from "~/utils/departmentDisplayName";
 
 function logKnowledgeMutationStart(action: string, details: Record<string, unknown>): number {
     const startedAt = Date.now();
@@ -187,16 +188,21 @@ export interface KnowledgeSpace {
     isClinic?: boolean;
     departmentId?: number;
     departmentName?: string;
+    departmentShortName?: string;
+    departmentDisplayName?: string;
     approvalEnabled?: boolean;
     sensitiveCheckEnabled?: boolean;
     spaceLevel: SpaceLevel;
     ownerType?: SpaceOwnerType;
     ownerId?: number;
     ownerName?: string;
+    ownerDisplayName?: string;
     /** 当前用户是否已收藏该空间（mapped from is_favorite） */
     isFavorite: boolean;
     /** Portal business-domain codes bound to this knowledge space */
     businessDomainCodes?: string[];
+    /** Whether this configurable space participates in portal knowledge discovery */
+    portalDiscoveryEnabled?: boolean;
 }
 
 export interface KnowledgeSpaceCreateOptions {
@@ -204,7 +210,7 @@ export interface KnowledgeSpaceCreateOptions {
     canCreateDepartment: boolean;
     canCreateTeam: boolean;
     canCreatePersonal: boolean;
-    departments: Array<{ id: number; name: string; pathName?: string }>;
+    departments: KnowledgeSpaceCreateOptionDepartment[];
     userGroups: Array<{ id: number; groupName: string }>;
     defaultSpaceLevel: SpaceLevel;
 }
@@ -212,13 +218,18 @@ export interface KnowledgeSpaceCreateOptions {
 export interface KnowledgeSpaceCreateOptionDepartment {
     id: number;
     name: string;
+    shortName?: string;
+    displayName: string;
     pathName?: string;
+    displayPathName?: string;
 }
 
 export interface KnowledgeSpaceCreateDepartmentNode {
     id: number;
     dept_id: string;
     name: string;
+    short_name?: string | null;
+    display_name?: string;
     parent_id: number | null;
     member_count?: number;
     children?: KnowledgeSpaceCreateDepartmentNode[];
@@ -548,6 +559,12 @@ export interface KnowledgeFile {
     sourceSpaceId?: string;       // mapped from source_space_id for direct share origin
     sourceSpaceName?: string;     // mapped from source_space_name / knowledge_name / space_name
     sourceDepartmentName?: string; // mapped from source_department_name for direct share origin
+    sourceDepartmentShortName?: string;
+    sourceDepartmentDisplayName?: string;
+    originalUploaderId?: number;
+    originalUploaderName?: string;
+    originalKnowledgeId?: number;
+    originalKnowledgeName?: string;
     /** Department portal content decision. This never replaces backend authorization. */
     contentAccess?: "allowed" | "approval_required" | "unavailable" | string;
     /** Existing download_file decision, independent from department view approval. */
@@ -593,6 +610,22 @@ export interface UploadedFileRecord extends KnowledgeFile {
     spaceLevel?: SpaceLevel;
     folderPathName: string;
     businessDomainCodes?: string[];
+}
+
+export type KnowledgeParseQueuePositionState = "queued" | "processing" | "not_queued" | "unavailable";
+
+export interface KnowledgeParseQueuePositionItem {
+    fileId: number;
+    state: KnowledgeParseQueuePositionState;
+    aheadWaitingCount: number | null;
+}
+
+export interface KnowledgeParseQueuePositionsResponse {
+    items: KnowledgeParseQueuePositionItem[];
+    activeCount: number;
+    waitingCount: number | null;
+    approximate: true;
+    asOf: string;
 }
 
 export interface UploadFolderRecommendationFileReq {
@@ -646,10 +679,14 @@ interface RawKnowledgeSpace {
     owner_type?: string;
     owner_id?: number;
     owner_name?: string;
+    owner_display_name?: string;
     business_domain_codes?: string[];
     is_clinic?: boolean;
     department_id?: number;
     department_name?: string;
+    department_short_name?: string;
+    department_display_name?: string;
+    portal_discovery_enabled?: boolean | null;
 }
 
 export interface KnowledgeSpaceTagLibraryListItem {
@@ -806,6 +843,12 @@ export function mapSpace(raw: RawKnowledgeSpace): KnowledgeSpace {
         isClinic: Boolean((raw as any).is_clinic),
         departmentId: (raw as any).department_id ?? undefined,
         departmentName: (raw as any).department_name ?? undefined,
+        departmentShortName: (raw as any).department_short_name ?? undefined,
+        departmentDisplayName: resolveDepartmentDisplayName({
+            displayName: (raw as any).department_display_name,
+            shortName: (raw as any).department_short_name,
+            name: (raw as any).department_name,
+        }) || undefined,
         approvalEnabled:
             (raw as any).approval_enabled !== undefined
                 ? Boolean((raw as any).approval_enabled)
@@ -818,12 +861,20 @@ export function mapSpace(raw: RawKnowledgeSpace): KnowledgeSpace {
         ownerType: (raw as any).owner_type as SpaceOwnerType | undefined,
         ownerId: (raw as any).owner_id ?? undefined,
         ownerName: (raw as any).owner_name ?? undefined,
+        ownerDisplayName: resolveDepartmentDisplayName({
+            displayName: (raw as any).owner_display_name,
+            name: (raw as any).owner_name,
+        }) || undefined,
         isFavorite: (raw as any).is_favorite ?? false,
         businessDomainCodes: Array.isArray((raw as any).business_domain_codes)
             ? (raw as any).business_domain_codes
                 .map((code: unknown) => String(code ?? "").trim().toUpperCase())
                 .filter(Boolean)
             : [],
+        portalDiscoveryEnabled:
+            raw.portal_discovery_enabled === null || raw.portal_discovery_enabled === undefined
+                ? undefined
+                : Boolean(raw.portal_discovery_enabled),
     };
 }
 
@@ -1139,6 +1190,20 @@ export function mapChild(raw: any, spaceId: string): KnowledgeFile {
             : undefined,
         sourceSpaceName: raw?.source_space_name ?? raw?.knowledge_name ?? raw?.space_name ?? undefined,
         sourceDepartmentName: raw?.source_department_name ?? undefined,
+        sourceDepartmentShortName: raw?.source_department_short_name ?? undefined,
+        sourceDepartmentDisplayName: resolveDepartmentDisplayName({
+            displayName: raw?.source_department_display_name,
+            shortName: raw?.source_department_short_name,
+            name: raw?.source_department_name,
+        }) || undefined,
+        originalUploaderId: raw?.original_uploader_id !== undefined && raw?.original_uploader_id !== null
+            ? Number(raw.original_uploader_id)
+            : undefined,
+        originalUploaderName: raw?.original_uploader_name ?? undefined,
+        originalKnowledgeId: raw?.original_knowledge_id !== undefined && raw?.original_knowledge_id !== null
+            ? Number(raw.original_knowledge_id)
+            : undefined,
+        originalKnowledgeName: raw?.original_knowledge_name ?? undefined,
         contentAccess: raw?.content_access ?? undefined,
         canDownload: raw?.can_download !== undefined ? Boolean(raw.can_download) : undefined,
         isDepartmentFile: raw?.is_department_file !== undefined
@@ -1451,7 +1516,14 @@ export async function getCreateSpaceOptionsApi(): Promise<KnowledgeSpaceCreateOp
         departments: asArray<any>(raw.departments).map((dept) => ({
             id: Number(dept.id),
             name: String(dept.name ?? ""),
+            shortName: dept.short_name ?? undefined,
+            displayName: resolveDepartmentDisplayName({
+                displayName: dept.display_name,
+                shortName: dept.short_name,
+                name: dept.name,
+            }),
             pathName: dept.path_name ?? undefined,
+            displayPathName: dept.display_path_name ?? dept.path_name ?? undefined,
         })),
         userGroups: asArray<any>(raw.user_groups).map((group) => ({
             id: Number(group.id),
@@ -1512,6 +1584,12 @@ function mapCreateDepartmentNode(raw: any): KnowledgeSpaceCreateDepartmentNode {
         id: Number(raw.id),
         dept_id: String(raw.dept_id ?? ""),
         name: String(raw.name ?? ""),
+        short_name: raw.short_name ?? null,
+        display_name: resolveDepartmentDisplayName({
+            displayName: raw.display_name,
+            shortName: raw.short_name,
+            name: raw.name,
+        }),
         parent_id: raw.parent_id == null ? null : Number(raw.parent_id),
         member_count: raw.member_count == null ? undefined : Number(raw.member_count),
         children: asArray<any>(raw.children).map((child) => mapCreateDepartmentNode(child)),
@@ -1752,6 +1830,7 @@ export async function updateSpaceApi(
         auto_tag_library_id?: number | null;
         auto_tag_library_ids?: number[];
         department_id?: number;
+        portal_discovery_enabled?: boolean;
     }
 ): Promise<KnowledgeSpace> {
     if (!space_id) throw new Error("space_id is required");
@@ -2728,6 +2807,38 @@ export async function listMyUploadedFilesApi(params: {
                 : [],
         })),
         total: Number(payload?.total ?? list.length),
+    };
+}
+
+export async function getKnowledgeParseQueuePositionsApi(
+    knowledgeId: string | number,
+    fileIds: number[],
+): Promise<KnowledgeParseQueuePositionsResponse> {
+    const res = await request.get<ApiResponse<{
+        items: Array<{
+            file_id: number;
+            state: KnowledgeParseQueuePositionState;
+            ahead_waiting_count: number | null;
+        }>;
+        active_count: number;
+        waiting_count?: number | null;
+        approximate: true;
+        as_of: string;
+    }>>(`/api/v1/knowledge/${knowledgeId}/parse-queue-positions`, {
+        params: { file_ids: fileIds },
+        paramsSerializer: request.paramsSerializer,
+    });
+    const payload = res.data;
+    return {
+        items: payload.items.map((item) => ({
+            fileId: item.file_id,
+            state: item.state,
+            aheadWaitingCount: item.ahead_waiting_count,
+        })),
+        activeCount: payload.active_count,
+        waitingCount: payload.waiting_count ?? null,
+        approximate: payload.approximate,
+        asOf: payload.as_of,
     };
 }
 

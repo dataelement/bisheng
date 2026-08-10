@@ -17,6 +17,7 @@ from bisheng.approval.domain.schemas.shougang_approval_schema import (
 from bisheng.approval.domain.services.approval_registry import ApprovalRegistry
 from bisheng.approval.domain.services.shougang_approval_handler import (
     FILE_SHARE_SCENARIO,
+    KnowledgeSpaceFilePublishApprovalHandler,
     KnowledgeSpaceFileShareApprovalHandler,
 )
 from bisheng.approval.domain.services.shougang_approval_service import (
@@ -40,6 +41,35 @@ def _login_user():
         user_name="申请人",
         tenant_id=7,
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "handler",
+    [
+        KnowledgeSpaceFilePublishApprovalHandler(),
+        KnowledgeSpaceFileShareApprovalHandler(),
+    ],
+)
+async def test_file_distribution_detail_keeps_original_origin_snapshot(handler):
+    req = SimpleNamespace(
+        payload_snapshot={
+            "original_uploader_id": 501,
+            "original_uploader_name": "原始上传人",
+            "original_knowledge_id": 5,
+            "original_knowledge_name": "原始个人库",
+        },
+        reason="申请原因",
+        applicant_user_id=11,
+        applicant_user_name="申请人",
+    )
+
+    detail = await handler.build_detail(req)
+
+    assert detail["original_uploader_id"] == 501
+    assert detail["original_uploader_name"] == "原始上传人"
+    assert detail["original_knowledge_id"] == 5
+    assert detail["original_knowledge_name"] == "原始个人库"
 
 
 def _approval_gate():
@@ -149,8 +179,18 @@ async def test_share_submit_uses_canonical_business_key_and_download_snapshot(
                 document_id=900,
                 manager_file_id=100,
                 manager_space_id=10,
+                original_uploader_id=501,
+                original_knowledge_id=5,
             )
         ),
+    )
+    monkeypatch.setattr(
+        "bisheng.approval.domain.services.shougang_approval_service.UserDao.aget_user",
+        AsyncMock(return_value=SimpleNamespace(user_id=501, user_name="原始上传人")),
+    )
+    monkeypatch.setattr(
+        "bisheng.approval.domain.services.shougang_approval_service.KnowledgeDao.aquery_by_id",
+        AsyncMock(return_value=SimpleNamespace(id=5, name="原始个人库")),
     )
     monkeypatch.setattr(
         service,
@@ -183,6 +223,10 @@ async def test_share_submit_uses_canonical_business_key_and_download_snapshot(
     assert request.payload_snapshot["canonical_document_id"] == 900
     assert request.payload_snapshot["source_entry_id"] == 100
     assert request.payload_snapshot["allow_download"] is True
+    assert request.payload_snapshot["original_uploader_id"] == 501
+    assert request.payload_snapshot["original_uploader_name"] == "原始上传人"
+    assert request.payload_snapshot["original_knowledge_id"] == 5
+    assert request.payload_snapshot["original_knowledge_name"] == "原始个人库"
     assert result["decision"] == "pending"
     space_service._require_permission_id.assert_awaited_once_with(
         "knowledge_file",

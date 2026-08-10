@@ -75,17 +75,17 @@ def test_sync_and_celery_parse_completion_hooks_enqueue_existing_generation() ->
         "bisheng/knowledge/domain/services/knowledge_service.py",
         "sync_process_knowledge_file",
     )
-    parse_source = _function_source(
+    parse_core_source = _function_source(
         "bisheng/worker/knowledge/file_worker.py",
-        "parse_knowledge_file_celery",
+        "_run_formal_parse_delivery",
     )
-    retry_source = _function_source(
+    retry_lifecycle_source = _function_source(
         "bisheng/worker/knowledge/file_worker.py",
-        "retry_knowledge_file_celery",
+        "run_retry_knowledge_parse_lifecycle",
     )
     assert "enqueue_current_pdf_artifact_sync" in sync_source
-    assert "enqueue_current_pdf_artifact_sync" in parse_source
-    assert "enqueue_current_pdf_artifact_sync" in retry_source
+    assert "enqueue_current_pdf_artifact_sync" in parse_core_source
+    assert "_run_formal_parse_delivery" in retry_lifecycle_source
 
 
 def test_fixed_path_retry_invalidates_before_copy_and_persists_new_md5() -> None:
@@ -131,7 +131,7 @@ def test_batch_retry_invalidates_before_dispatch() -> None:
         "batch_retry_failed_files",
     )
     request_index = source.index("await request_pdf_artifact_generation(")
-    dispatch_index = source.index("retry_knowledge_file_celery.delay")
+    dispatch_index = source.index("await dispatch_knowledge_parse_task(")
     status_index = source.index("aupdate_file_status")
     assert status_index < request_index < dispatch_index
 

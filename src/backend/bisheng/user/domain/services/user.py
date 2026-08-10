@@ -127,7 +127,15 @@ class UserService:
 
     @classmethod
     async def get_primary_department_name(cls, user_id: int) -> str | None:
+        projection = await cls.get_primary_department_name_projection(user_id)
+        return projection.name if projection is not None else None
+
+    @classmethod
+    async def get_primary_department_name_projection(cls, user_id: int):
         from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
+        from bisheng.department.domain.services.department_display_service import (
+            build_department_name_projection,
+        )
 
         primary_department = await UserDepartmentDao.aget_user_primary_department(user_id)
         if primary_department is None:
@@ -135,7 +143,7 @@ class UserService:
         department = await DepartmentDao.aget_by_id(primary_department.department_id)
         if department is None:
             return None
-        return str(department.name or "").strip() or None
+        return build_department_name_projection(department)
 
     @classmethod
     def build_user_read_sync(cls, user: User, **kwargs) -> UserRead:

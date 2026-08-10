@@ -6,6 +6,7 @@ from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.shougang_portal_config.domain.schemas.portal_config_schema import (
     ShougangPortalAdminConfig,
     redact_portal_admin_config,
+    resolve_portal_watermark_horizontal_text,
 )
 from bisheng.shougang_portal_config.domain.services.portal_config_service import (
     ShougangPortalConfigService,
@@ -31,6 +32,13 @@ async def get_shougang_portal_config(
 @router.get("/internal")
 async def get_shougang_portal_config_internal():
     return resp_200(await ShougangPortalConfigService.get_config())
+
+
+@router.get("/watermark")
+async def get_shougang_portal_watermark_config():
+    config = await ShougangPortalConfigService.get_config()
+    watermark = config.portal.watermark if config is not None else None
+    return resp_200({"horizontal_text": resolve_portal_watermark_horizontal_text(watermark)})
 
 
 @router.put("")

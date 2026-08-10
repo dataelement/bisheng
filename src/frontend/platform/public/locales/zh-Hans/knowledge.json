@@ -132,6 +132,15 @@
   "uploadHint": "请先完成文件上传",
   "nameRequired": "知识库名称不可为空",
   "documentDataParsingCompleted": "文档数据解析已完成",
+  "parseQueueAhead": "排队中，前方约 {{count}} 个等待任务",
+  "parseQueueProcessing": "解析中",
+  "parseQueueUnavailable": "排队中",
+  "parseQueueActiveCount": "当前运行 {{count}} 个任务",
+  "parseQueueStage": {
+    "title": "标题提取",
+    "parse": "正式解析",
+    "retry": "重试解析"
+  },
   "documentDataBeingPrepared": "文档数据正在准备中",
   "youCanReturn": "您可以返回知识库文件列表查看解析状态",
   "returnToKnowledgeBase": "返回知识库",

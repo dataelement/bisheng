@@ -98,6 +98,20 @@ def test_file_distribution_fields_and_indexes_match_projection_recovery_contract
     }
 
 
+def test_file_original_origin_fields_are_nullable_integer_ids_without_indexes():
+    fields = set(KnowledgeFile.model_fields)
+    assert fields >= {"original_uploader_id", "original_knowledge_id"}
+
+    uploader_column = KnowledgeFile.__table__.c.original_uploader_id
+    knowledge_column = KnowledgeFile.__table__.c.original_knowledge_id
+    assert isinstance(uploader_column.type, Integer)
+    assert isinstance(knowledge_column.type, Integer)
+    assert uploader_column.nullable is True
+    assert knowledge_column.nullable is True
+    assert uploader_column.index is not True
+    assert knowledge_column.index is not True
+
+
 def test_distribution_enum_values_are_closed_and_stable():
     assert {item.value for item in KnowledgeDocumentLifecycleStatus} == {
         "active",

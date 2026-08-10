@@ -16,6 +16,7 @@ import {
     SheetTitle,
 } from "~/components/ui/Sheet";
 import { Textarea } from "~/components/ui/Textarea";
+import { Switch } from "~/components/ui/Switch";
 import { useLocalize } from "~/hooks";
 import {
     getCreateSpaceOptionsApi,
@@ -137,6 +138,7 @@ export interface CreateKnowledgeSpaceFormData {
     isClinic?: boolean;
     autoTagEnabled: boolean;
     autoTagLibraryIds: number[];
+    portalDiscoveryEnabled?: boolean;
 }
 
 interface CreateKnowledgeSpaceSubmitResult {
@@ -220,6 +222,7 @@ export function CreateKnowledgeSpaceDrawer({
     const [boundDepartmentIds, setBoundDepartmentIds] = useState<number[]>([]);
     const [autoTagEnabled, setAutoTagEnabled] = useState(false);
     const [autoTagLibraryIds, setAutoTagLibraryIds] = useState<number[]>([]);
+    const [portalDiscoveryEnabled, setPortalDiscoveryEnabled] = useState(false);
     const [autoTagLibraryTags, setAutoTagLibraryTags] = useState<string[]>([]);
     const [autoTagLibraryTagsLoading, setAutoTagLibraryTagsLoading] = useState(false);
     const [tagLibraries, setTagLibraries] = useState<KnowledgeSpaceTagLibraryListItem[]>([]);
@@ -363,6 +366,11 @@ export function CreateKnowledgeSpaceDrawer({
     const shouldShowApprovalReason = mode === "create"
         && showApprovalReason
         && initialSpaceLevel === SpaceLevel.TEAM;
+    const shouldShowPortalDiscoverySwitch = mode === "edit" && Boolean(
+        editingSpace?.spaceLevel === SpaceLevel.PUBLIC
+        || editingSpace?.spaceLevel === SpaceLevel.DEPARTMENT
+        || editingSpace?.isClinic,
+    );
     const confirmDisabled = submitting || (mode === "create" && !selectedLevelCreateEnabled);
     const selectedDepartmentId = departmentSelection[0]?.id;
     const selectedDepartmentName = departmentSelection[0]?.name;
@@ -375,10 +383,10 @@ export function CreateKnowledgeSpaceDrawer({
     const levelOwnerName = mode === "create"
         ? undefined
         : isEditingClinic
-            ? selectedDepartmentName || editingSpace?.departmentName
+            ? selectedDepartmentName || editingSpace?.departmentDisplayName || editingSpace?.departmentName
             : spaceLevel === SpaceLevel.DEPARTMENT
-                ? selectedDepartmentName || editingSpace?.ownerName || editingSpace?.departmentName
-                : editingSpace?.ownerName || editingSpace?.departmentName;
+                ? selectedDepartmentName || editingSpace?.ownerDisplayName || editingSpace?.departmentDisplayName || editingSpace?.ownerName || editingSpace?.departmentName
+                : editingSpace?.ownerDisplayName || editingSpace?.departmentDisplayName || editingSpace?.ownerName || editingSpace?.departmentName;
     const levelDisplayLabel = levelOwnerName
         ? `${currentLevelLabel} - ${levelOwnerName}`
         : currentLevelLabel;
@@ -417,6 +425,7 @@ export function CreateKnowledgeSpaceDrawer({
         setDepartmentSelection([]);
         setAutoTagEnabled(false);
         setAutoTagLibraryIds([]);
+        setPortalDiscoveryEnabled(false);
         setAutoTagLibraryTags([]);
         setShowSuccess(false);
         setSubmitting(false);
@@ -482,12 +491,13 @@ export function CreateKnowledgeSpaceDrawer({
                 setDepartmentSelection([{
                     type: "department",
                     id: Number(departmentId),
-                    name: editingSpace.departmentName || editingSpace.ownerName || `#${departmentId}`,
+                    name: editingSpace.departmentDisplayName || editingSpace.ownerDisplayName || editingSpace.departmentName || editingSpace.ownerName || `#${departmentId}`,
                 }]);
             } else {
                 setDepartmentSelection([]);
             }
             setAutoTagEnabled(Boolean(editingSpace.autoTagEnabled));
+            setPortalDiscoveryEnabled(Boolean(editingSpace.portalDiscoveryEnabled));
             setAutoTagLibraryTags([]);
             setShowSuccess(false);
         }
@@ -686,11 +696,15 @@ export function CreateKnowledgeSpaceDrawer({
             isClinic: isClinicSpace,
             autoTagEnabled: effectiveAutoTagEnabled,
             autoTagLibraryIds,
+            ...(shouldShowPortalDiscoverySwitch
+                ? { portalDiscoveryEnabled }
+                : {}),
         };
         try {
             setSubmitting(true);
             const result = await onConfirm?.(payload);
             if (result === false) {
+                setPortalDiscoveryEnabled(Boolean(editingSpace?.portalDiscoveryEnabled));
                 return;
             }
             const shouldShowSuccess =
@@ -702,6 +716,9 @@ export function CreateKnowledgeSpaceDrawer({
             } else {
                 onOpenChange(false);
             }
+        } catch (error) {
+            setPortalDiscoveryEnabled(Boolean(editingSpace?.portalDiscoveryEnabled));
+            throw error;
         } finally {
             setSubmitting(false);
         }
@@ -808,6 +825,29 @@ export function CreateKnowledgeSpaceDrawer({
                                     </RadioGroup.Root>
                                 )}
                             </div>
+
+                            {shouldShowPortalDiscoverySwitch ? (
+                                <div className="flex items-center justify-between gap-4 rounded-[6px] border border-[#E5E6EB] px-3 py-3">
+                                    <div className="min-w-0">
+                                        <Label
+                                            htmlFor="portal-discovery-enabled"
+                                            className="text-sm font-medium text-[#1D2129]"
+                                        >
+                                            公开用于首页知识库获取
+                                        </Label>
+                                        <p className="mt-1 text-[12px] text-[#86909C]">
+                                            开启后，无知识库权限的用户也可在门户检索与导航中发现文件。
+                                        </p>
+                                    </div>
+                                    <Switch
+                                        id="portal-discovery-enabled"
+                                        aria-label="公开用于首页知识库获取"
+                                        checked={portalDiscoveryEnabled}
+                                        disabled={submitting}
+                                        onCheckedChange={setPortalDiscoveryEnabled}
+                                    />
+                                </div>
+                            ) : null}
 
                             {/* 知识空间名称 */}
                             <div className="space-y-2">

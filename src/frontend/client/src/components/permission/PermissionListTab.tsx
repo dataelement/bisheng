@@ -329,7 +329,7 @@ export function PermissionListTab({
   const getEntryDisplayName = useCallback(
     (entry: PermissionEntry) => {
       // For departments, show only the leaf name in the left column; full path goes to caption.
-      return entry.subject_name ?? `${entry.subject_type}:${entry.subject_id}`;
+      return entry.subject_display_name ?? entry.subject_name ?? `${entry.subject_type}:${entry.subject_id}`;
     },
     [],
   );
@@ -344,7 +344,10 @@ export function PermissionListTab({
       const groupNames = entry.subject_group_names?.join(" ") ?? "";
       const memberNames = entry.subject_member_names?.join(" ") ?? "";
       const account = entry.subject_external_id ?? "";
-      const departmentPaths = entry.subject_department_paths?.join(" ") ?? "";
+      const departmentPaths = [
+        ...(entry.subject_department_display_paths ?? []),
+        ...(entry.subject_department_paths ?? []),
+      ].join(" ");
       const includeChildrenText =
         entry.subject_type === "department" && entry.include_children
           ? localize("com_permission.include_children")
@@ -531,7 +534,11 @@ export function PermissionListTab({
 
   const getEntryCaption = (entry: PermissionEntry) => {
     if (entry.subject_type === "user") {
-      const departmentPaths = entry.subject_department_paths?.filter(Boolean) ?? [];
+      const departmentPaths = (
+        entry.subject_department_display_paths?.filter(Boolean)
+        ?? entry.subject_department_paths?.filter(Boolean)
+        ?? []
+      );
       return [
         entry.subject_external_id
           ? `${localize("com_permission.user_account")}: ${entry.subject_external_id}`

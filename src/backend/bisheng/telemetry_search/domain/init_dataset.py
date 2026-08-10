@@ -815,6 +815,25 @@ DASHBOARD_DATASET = [
                         )
                     ]
                 ),
+                MetricConfig(
+                    field="download_count",
+                    name="下载次数",
+                    is_virtual=True,
+                    filter=FilterExpression(bool_operator="must", filters=[
+                        TermOp(field="record_type", value="download_daily"),
+                        TermsOp(
+                            field="space_level",
+                            value=list(KNOWLEDGE_SPACE_DASHBOARD_FILE_LEVELS),
+                        ),
+                    ]),
+                    aggregations=[
+                        AggregationExpression(
+                            name="download_count",
+                            type=AggsTypeEnum.SUM,
+                            field="download_count"
+                        )
+                    ]
+                ),
             ],
             dimensions=[
                 DimensionConfig(

@@ -1389,7 +1389,10 @@ class KnowledgeService(KnowledgeUtils):
         *,
         upload_limit_bytes: int | None = None,
     ) -> list[KnowledgeFile]:
-        from bisheng.worker.knowledge import file_worker
+        from bisheng.knowledge.domain.services.knowledge_parse_dispatch_service import (
+            KnowledgeParseAttemptKind,
+            dispatch_knowledge_parse_task_sync,
+        )
 
         """Process uploaded files"""
         knowledge, failed_files, process_files, preview_cache_keys = cls.save_knowledge_file(
@@ -1406,7 +1409,14 @@ class KnowledgeService(KnowledgeUtils):
 
         # Asynchronous processing of file parsing and warehousing, To voters if approvedcache_keyIf data can be obtained, use thecachefor inbound operations
         for index, one in enumerate(process_files):
-            file_worker.parse_knowledge_file_celery.delay(one.id, preview_cache_keys[index], req_data.callback_url)
+            dispatch_knowledge_parse_task_sync(
+                attempt_kind=KnowledgeParseAttemptKind.INITIAL,
+                file_id=one.id,
+                preview_cache_key=preview_cache_keys[index],
+                callback_url=req_data.callback_url,
+                operator_user_id=login_user.user_id,
+                operator_is_global_super=bool(getattr(login_user, "is_global_super", False)),
+            )
 
         cls.upload_knowledge_file_hook(request, login_user, knowledge, process_files)
         return failed_files + process_files
@@ -1421,7 +1431,10 @@ class KnowledgeService(KnowledgeUtils):
         *,
         upload_limit_bytes: int | None = None,
     ) -> list[KnowledgeFile]:
-        from bisheng.worker.knowledge import file_worker
+        from bisheng.knowledge.domain.services.knowledge_parse_dispatch_service import (
+            KnowledgeParseAttemptKind,
+            dispatch_knowledge_parse_task,
+        )
 
         knowledge, failed_files, process_files, preview_cache_keys = await cls.asave_knowledge_file(
             login_user, req_data, upload_limit_bytes=upload_limit_bytes
@@ -1436,7 +1449,14 @@ class KnowledgeService(KnowledgeUtils):
         )
 
         for index, one in enumerate(process_files):
-            file_worker.parse_knowledge_file_celery.delay(one.id, preview_cache_keys[index], req_data.callback_url)
+            await dispatch_knowledge_parse_task(
+                attempt_kind=KnowledgeParseAttemptKind.INITIAL,
+                file_id=one.id,
+                preview_cache_key=preview_cache_keys[index],
+                callback_url=req_data.callback_url,
+                operator_user_id=login_user.user_id,
+                operator_is_global_super=bool(getattr(login_user, "is_global_super", False)),
+            )
 
         await run_in_threadpool(cls.upload_knowledge_file_hook, request, login_user, knowledge, process_files)
         return failed_files + process_files
@@ -1640,6 +1660,8 @@ class KnowledgeService(KnowledgeUtils):
             split_rule=str_split_rule,
             user_id=login_user.user_id,
             user_name=login_user.user_name,
+            original_uploader_id=login_user.user_id,
+            original_knowledge_id=knowledge.id,
             updater_id=login_user.user_id,
             updater_name=login_user.user_name,
             **file_kwargs if file_kwargs else {},

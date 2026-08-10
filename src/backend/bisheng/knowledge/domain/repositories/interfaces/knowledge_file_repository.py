@@ -13,6 +13,22 @@ class KnowledgeFileRepository(BaseRepository[KnowledgeFile, int], ABC):
         """锁定文件行，用于串行化申请创建与绑定校验。"""
         ...
 
+    async def set_parse_priority_if_unset(
+        self,
+        file_id: int,
+        priority: str,
+    ) -> KnowledgeFile | None:
+        """Atomically persist the first priority and return the database winner."""
+        ...
+
+    async def find_by_ids_in_knowledge(
+        self,
+        entity_ids: list[int],
+        knowledge_id: int,
+    ) -> list[KnowledgeFile]:
+        """Load current-tenant candidate files that belong to one knowledge space."""
+        ...
+
     async def find_by_ids_for_update(
         self,
         entity_ids: list[int],

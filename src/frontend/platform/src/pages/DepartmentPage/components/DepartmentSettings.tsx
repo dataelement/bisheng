@@ -1,13 +1,11 @@
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
 import { Button } from "@/components/bs-ui/button"
 import { Checkbox } from "@/components/bs-ui/checkBox"
-import { Input } from "@/components/bs-ui/input"
 import { Label } from "@/components/bs-ui/label"
 import MultiSelect from "@/components/bs-ui/select/multi"
 import { Separator } from "@/components/bs-ui/separator"
 import { QuestionTooltip } from "@/components/bs-ui/tooltip"
 import { toast } from "@/components/bs-ui/toast/use-toast"
-import { TreeDepartmentSelect } from "@/components/bs-comp/department/TreeDepartmentSelect"
 import DepartmentUsersSelect, {
   DepartmentUserOption,
 } from "@/components/bs-comp/selectComponent/DepartmentUsersSelect"
@@ -25,7 +23,12 @@ import {
 import { isGuestDepartmentDeptId } from "@/pages/DepartmentPage/constants/systemDepartments"
 import { isSyncedSource } from "@/pages/DepartmentPage/constants/syncReadonly"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
-import type { DepartmentAdmin, DepartmentTreeNode } from "@/types/api/department"
+import { DepartmentBasicInfoSection } from "@/pages/DepartmentPage/components/DepartmentBasicInfoSection"
+import type {
+  DepartmentAdmin,
+  DepartmentTreeNode,
+  DepartmentUpdateForm,
+} from "@/types/api/department"
 import { Building2 } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
@@ -34,8 +37,7 @@ interface DepartmentSettingsProps {
   dept: DepartmentTreeNode
   tree: DepartmentTreeNode[]
   onChanged: (removedDeptId?: string) => void
-  /** Open the "mark as Child Tenant" dialog for this department. When undefined
-   * (multi-tenant disabled or root dept), the action button is hidden. */
+  /** Open the "mark as Child Tenant" dialog when this action is available. */
   onMarkAsTenant?: (deptId: number, deptName: string) => void
 }
 
@@ -52,10 +54,10 @@ function sameIdSet(left: Array<number | string>, right: Array<number | string>):
 
 /** 企业级表单：统一控件最大宽度，右侧对齐 */
 const FORM_CONTROL_WIDTH = "w-full max-w-md"
-
 export function DepartmentSettings({ dept, tree, onChanged, onMarkAsTenant }: DepartmentSettingsProps) {
   const { t } = useTranslation()
   const [name, setName] = useState(dept.name)
+  const [shortName, setShortName] = useState("")
   const [adminSelectValue, setAdminSelectValue] = useState<DepartmentUserOption[]>([])
   const [defaultRoleIds, setDefaultRoleIds] = useState<string[]>([])
   const [applyDefaultRolesToExisting, setApplyDefaultRolesToExisting] = useState(false)
@@ -65,19 +67,20 @@ export function DepartmentSettings({ dept, tree, onChanged, onMarkAsTenant }: De
   const [parentIdValue, setParentIdValue] = useState<number | null>(dept.parent_id ?? null)
   const [parentTreeNodes, setParentTreeNodes] = useState<DepartmentTreeNode[]>([])
   const [isDefaultRootDept, setIsDefaultRootDept] = useState(Boolean(dept.is_default_root))
-
   const adminSelectValueRef = useRef<DepartmentUserOption[]>([])
 
   const isSynced = isSyncedSource(dept.source)
   const isArchived = dept.status === "archived"
   /** 仅部门名称对第三方同步部门只读；管理员、默认角色与上级部门仍可保存 */
   const canEditName = !isArchived && !isSynced
+  const canEditShortName = !isArchived
   const canEditPermissions = !isArchived
   const canEditParent = !isArchived && !isDefaultRootDept
 
   /** 最近一次从服务端加载成功的快照（父部门变更判断、保存后更新） */
   const baselineRef = useRef<{
     name: string
+    shortName: string
     admins: DepartmentUserOption[]
     defaultRoleIds: string[]
     parentId: number | null
@@ -148,6 +151,8 @@ export function DepartmentSettings({ dept, tree, onChanged, onMarkAsTenant }: De
         setAdminSelectValue(adminOpts)
         adminSelectValueRef.current = adminOpts
         setName(detailRes?.name ?? dept.name)
+        const loadedShortName = detailRes?.short_name ?? ""
+        setShortName(loadedShortName)
         const dr = (detailRes?.default_role_ids ?? []).map(String)
         setDefaultRoleIds(dr)
         const pTreeNodes = buildParentTreeNodes(tree, dept.dept_id)
@@ -160,6 +165,7 @@ export function DepartmentSettings({ dept, tree, onChanged, onMarkAsTenant }: De
         )
         baselineRef.current = {
           name: detailRes?.name ?? dept.name,
+          shortName: loadedShortName,
           admins: adminOpts,
           defaultRoleIds: dr,
           parentId: pid,
@@ -185,6 +191,7 @@ export function DepartmentSettings({ dept, tree, onChanged, onMarkAsTenant }: De
   const restoreBaseline = useCallback((b = baselineRef.current) => {
     if (!b) return
     setName(b.name)
+    setShortName(b.shortName)
     setAdminSelectValue(b.admins)
     adminSelectValueRef.current = b.admins
     setDefaultRoleIds(b.defaultRoleIds)
@@ -195,6 +202,7 @@ export function DepartmentSettings({ dept, tree, onChanged, onMarkAsTenant }: De
     const b = baselineRef.current
     if (!b) return false
     if (canEditName && name !== b.name) return true
+    if (canEditShortName && shortName !== b.shortName) return true
     if (canEditParent && parentIdValue !== b.parentId) return true
     if (
       !sameIdSet(
@@ -204,7 +212,16 @@ export function DepartmentSettings({ dept, tree, onChanged, onMarkAsTenant }: De
     ) return true
     if (!sameIdSet(defaultRoleIds, b.defaultRoleIds)) return true
     return false
-  }, [adminSelectValue, canEditName, canEditParent, defaultRoleIds, name, parentIdValue])
+  }, [
+    adminSelectValue,
+    canEditName,
+    canEditParent,
+    canEditShortName,
+    defaultRoleIds,
+    name,
+    parentIdValue,
+    shortName,
+  ])
 
   const handleCancel = useCallback(() => {
     const b = baselineRef.current
@@ -235,18 +252,17 @@ export function DepartmentSettings({ dept, tree, onChanged, onMarkAsTenant }: De
     }
     setSaving(true)
     try {
-      const body: {
-        name?: string
-        default_role_ids?: number[]
-        admin_user_ids?: number[]
-        apply_default_roles_to_existing_members?: boolean
-      } = {}
+      const body: DepartmentUpdateForm = {}
       const baseline = baselineRef.current
       const nextName = name.trim()
+      const nextShortName = shortName.trim()
       const nextAdminIds = adminSelectValue.map((o) => o.value)
       const nextDefaultRoleIds = defaultRoleIds.map(Number)
       if (canEditName && baseline && nextName !== baseline.name) {
         body.name = nextName
+      }
+      if (canEditShortName && baseline && nextShortName !== baseline.shortName) {
+        body.short_name = nextShortName || null
       }
       if (
         baseline &&
@@ -290,6 +306,7 @@ export function DepartmentSettings({ dept, tree, onChanged, onMarkAsTenant }: De
         variant: "success",
       })
       setApplyDefaultRolesToExisting(false)
+      setShortName(nextShortName)
       const nextAdmins = await getDepartmentAdminsApi(dept.dept_id).catch(() => null)
       const adminOpts = Array.isArray(nextAdmins)
         ? adminsToOptions(nextAdmins)
@@ -298,6 +315,7 @@ export function DepartmentSettings({ dept, tree, onChanged, onMarkAsTenant }: De
       adminSelectValueRef.current = adminOpts
       baselineRef.current = {
         name: nextName,
+        shortName: nextShortName,
         admins: adminOpts,
         defaultRoleIds: [...defaultRoleIds],
         parentId: nextParentId ?? baselineRef.current?.parentId ?? dept.parent_id ?? null,
@@ -311,6 +329,7 @@ export function DepartmentSettings({ dept, tree, onChanged, onMarkAsTenant }: De
     canEditName,
     canEditParent,
     canEditPermissions,
+    canEditShortName,
     applyDefaultRolesToExisting,
     defaultRoleIds,
     dept.dept_id,
@@ -318,6 +337,7 @@ export function DepartmentSettings({ dept, tree, onChanged, onMarkAsTenant }: De
     name,
     onChanged,
     parentIdValue,
+    shortName,
     t,
   ])
 
@@ -381,19 +401,6 @@ export function DepartmentSettings({ dept, tree, onChanged, onMarkAsTenant }: De
     })
   }, [dept.dept_id, onChanged, t])
 
-  const findParentDisplay = (
-    nodes: DepartmentTreeNode[],
-    parentId: number | null
-  ): string => {
-    if (parentId === null) return "-"
-    for (const n of nodes) {
-      if (n.id === parentId) return n.name
-      const found = findParentDisplay(n.children || [], parentId)
-      if (found !== "-") return found
-    }
-    return "-"
-  }
-
   return (
     <div className="max-w-3xl pb-8">
       {isArchived && (
@@ -406,50 +413,21 @@ export function DepartmentSettings({ dept, tree, onChanged, onMarkAsTenant }: De
         <p className="mb-4 text-sm text-muted-foreground">{t("loading", { ns: "bs" })}</p>
       )}
 
-      {/* 区块一：基础信息 */}
-      <section className="space-y-4">
-        <div>
-          <h3 className="mb-2 text-base font-semibold tracking-tight text-foreground">
-            {t("bs:department.sectionBasic")}
-          </h3>
-          <Separator />
-        </div>
-        <div className="space-y-1.5">
-          <Label>{t("bs:department.name")}</Label>
-          {isSynced || isArchived ? (
-            <Input value={name} disabled className={FORM_CONTROL_WIDTH} />
-          ) : (
-            <Input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              maxLength={50}
-              className={FORM_CONTROL_WIDTH}
-            />
-          )}
-        </div>
-        {!isDefaultRootDept && (
-          <div className="space-y-1.5">
-            <Label>{t("bs:department.parentDept")}</Label>
-            {canEditParent ? (
-              <TreeDepartmentSelect
-                nodes={parentTreeNodes}
-                value={parentIdValue}
-                onChange={(id) => setParentIdValue(id)}
-                className={FORM_CONTROL_WIDTH}
-                placeholder={t("bs:department.selectDept")}
-                searchPlaceholder={t("bs:department.parentDept")}
-                modal={false}
-              />
-            ) : (
-              <Input
-                value={findParentDisplay(tree, dept.parent_id)}
-                disabled
-                className={FORM_CONTROL_WIDTH}
-              />
-            )}
-          </div>
-        )}
-      </section>
+      <DepartmentBasicInfoSection
+        name={name}
+        shortName={shortName}
+        tree={tree}
+        parentTreeNodes={parentTreeNodes}
+        parentId={parentIdValue}
+        originalParentId={dept.parent_id}
+        isSynced={isSynced}
+        isArchived={isArchived}
+        isDefaultRoot={isDefaultRootDept}
+        canEditParent={canEditParent}
+        onNameChange={setName}
+        onShortNameChange={setShortName}
+        onParentChange={setParentIdValue}
+      />
 
       {/* 区块二：权限与角色 */}
       {!isArchived && (

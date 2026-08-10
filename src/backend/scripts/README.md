@@ -95,6 +95,66 @@ PYTHONPATH=./ .venv/bin/python \
   scripts/knowledge_document_distribution_preflight.py
 ```
 
+### `backfill_knowledge_file_original_origin.py`
+
+回填历史 `knowledgefile.original_uploader_id/original_knowledge_id`。脚本覆盖所有租户的
+`SPACE + FILE` 业务行，包含软删除文件和 manager/publish/share 入口，排除
+`file_source=favorite_reference` 的收藏快捷引用和 `projection_tombstone` 清理占位。默认是纯
+dry-run；不会随 Alembic、应用启动或部署自动执行，只有显式传入 `--apply` 才写数据库。
+
+来源规则：
+
+- 普通文件使用自身 `user_id/knowledge_id`。
+- 旧复制发布沿 `user_metadata.shougang_portal_publish.source_file_id` 追到根文件。
+- F059 数据以同一 `KnowledgeDocument` 的所有 version 和 reference entry 为原子组；已有一致的
+  非空原始事实优先，否则通过 publish 前驱根或首版本确定。
+- 断链、循环、跨租户、缺少上传人、已有值冲突均失败关闭。历史目标版本合并与多版本后发布在旧字段上
+  无法唯一辨别且没有可信已有值时，也整组跳过，不使用当前属性猜测。
+- 任意已有非 `NULL` 字段都不会覆盖；apply 写入前会锁定并重新解析，只更新仍为 `NULL` 的字段。
+
+```bash
+# 1. 全量只读扫描，保存 JSON 输出供评审
+PYTHONPATH=./ .venv/bin/python \
+  scripts/backfill_knowledge_file_original_origin.py \
+  > /tmp/original-origin-dry-run.json
+
+# 2. 按租户、知识库或单文件收窄范围；单文件属于 canonical 时会扩展到整个组
+PYTHONPATH=./ .venv/bin/python \
+  scripts/backfill_knowledge_file_original_origin.py \
+  --tenant-id 7 --knowledge-id 100 --limit 500 --batch-size 100
+
+PYTHONPATH=./ .venv/bin/python \
+  scripts/backfill_knowledge_file_original_origin.py --file-id 123
+
+# 3. 审核 dry-run、完成数据库备份并取得独立执行授权后再写入
+PYTHONPATH=./ .venv/bin/python \
+  scripts/backfill_knowledge_file_original_origin.py \
+  --tenant-id 7 --batch-size 100 --apply
+
+# 4. 中断后使用上一份报告的 next_start_after_id 续跑
+PYTHONPATH=./ .venv/bin/python \
+  scripts/backfill_knowledge_file_original_origin.py \
+  --tenant-id 7 --start-after-id 5000 --batch-size 100 --apply
+
+# 5. 同一范围再次 dry-run；would_update 应为 0
+PYTHONPATH=./ .venv/bin/python \
+  scripts/backfill_knowledge_file_original_origin.py --tenant-id 7
+```
+
+过滤和报告约定：
+
+- `--tenant-id/--knowledge-id/--file-id` 选择候选种子；命中 canonical 后，为保证一致性会锁定并处理
+  整个同租户 canonical 组，因此组内行可能位于所选知识库之外。
+- `--limit` 限制按 ID 稳定排序的候选种子行数，不限制 canonical 展开后的行数；`--batch-size`
+  控制每批种子数量。
+- `--start-after-id` 是排他游标。报告的 `next_start_after_id` 是本次最后扫描的种子 ID；若修复了先前
+  跳过的数据，应使用 `--file-id` 或从更早游标重新 dry-run，不能直接越过它。
+- `scanned` 是候选种子行数，`eligible` 是解析和写前复核后仍缺字段的目标行数，`would_update/updated`
+  分别是 dry-run/apply 的目标行数；`skipped/conflict/broken_chain/reason_counts/samples` 用于审计失败关闭结果。
+- apply 按批次提交，单个 canonical 组使用保存点避免部分写入；中断后安全重跑。正式执行前必须备份
+  `knowledgefile`，保存全量 dry-run 报告并先做单文件、小批量灰度。脚本本身不提供错误来源值的回滚；
+  回退依赖执行前数据库备份。
+
 ### `reconcile_knowledge_document_projection.py`
 
 按 tenant 和 entry 检查或重新调度单个 F059 ES/Milvus 投影。默认仅输出代次、状态和

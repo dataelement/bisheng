@@ -59,7 +59,7 @@ async def test_sync_same_name_upload_replaces_existing_without_version_link():
     knowledge_space_service = SimpleNamespace(
         get_preview_cache_key=Mock(return_value="cache-key"),
         add_file=AsyncMock(return_value=[SimpleNamespace(id=99, status=KnowledgeFileStatus.WAITING.value)]),
-        enqueue_file_title_extraction=Mock(),
+        enqueue_file_title_extraction=AsyncMock(),
     )
     service = _service(knowledge_space_service=knowledge_space_service, repository=repository)
     service._resolve_identity = AsyncMock(

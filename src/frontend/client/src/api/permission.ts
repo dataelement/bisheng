@@ -18,8 +18,10 @@ export interface PermissionEntry {
   subject_type: SubjectType;
   subject_id: number;
   subject_name: string | null;
+  subject_display_name?: string | null;
   subject_external_id?: string | null;
   subject_department_paths?: string[] | null;
+  subject_department_display_paths?: string[] | null;
   subject_group_names?: string[];
   subject_member_names?: string[];
   relation: RelationLevel;
@@ -61,6 +63,7 @@ export interface PermissionUserRow {
   external_id?: string | null;
   primary_department_path?: string | null;
   department_paths?: string[] | null;
+  department_display_paths?: string[] | null;
   department_memberships?: PermissionUserDepartmentMembership[];
 }
 
@@ -68,8 +71,22 @@ export interface PermissionUserDepartmentMembership {
   department_id: number;
   dept_id: string;
   name: string;
+  short_name?: string | null;
+  display_name?: string;
   path: string;
+  display_path?: string;
   is_primary: boolean;
+}
+
+export interface PermissionDepartmentNode {
+  id: number;
+  dept_id: string;
+  name: string;
+  short_name?: string | null;
+  display_name?: string;
+  parent_id: number | null;
+  member_count?: number;
+  children?: PermissionDepartmentNode[];
 }
 
 export interface ResourceGrantUserParams {
@@ -370,7 +387,7 @@ export async function getResourceGrantDepartments(
   resourceType: ResourceType,
   resourceId: string,
   config?: { signal?: AbortSignal }
-): Promise<any[]> {
+): Promise<PermissionDepartmentNode[]> {
   const res = await request.get(
     `/api/v1/permissions/resources/${resourceType}/${resourceId}/grant-subjects/departments`,
     withPermissionRequestOptions(config)
@@ -381,7 +398,7 @@ export async function getResourceGrantDepartments(
 export async function getKnowledgeSpaceGrantDepartments(
   resourceId: string,
   config?: { signal?: AbortSignal }
-): Promise<any[]> {
+): Promise<PermissionDepartmentNode[]> {
   const res = await request.get(
     `/api/v1/permissions/knowledge-spaces/${resourceId}/grant-subjects/departments`,
     withPermissionRequestOptions(config)

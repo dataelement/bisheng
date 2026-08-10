@@ -22,6 +22,9 @@ from bisheng.common.errcode.knowledge_space import (
     SpacePermissionDeniedError,
 )
 from bisheng.core.config.settings import KnowledgePdfWatermarkConf
+from bisheng.department.domain.services.department_display_service import (
+    build_department_name_projection,
+)
 from bisheng.knowledge.domain.models.knowledge_file import (
     FileType,
     KnowledgeFile,
@@ -43,7 +46,12 @@ from bisheng.knowledge.domain.services.portal_share_download_grant_service impor
     PortalShareDownloadGrantService,
 )
 from bisheng.knowledge.pdf.validator import validate_pdf
-from bisheng.knowledge.pdf.watermark_worker import PdfWatermarkWorkerTimeout
+from bisheng.shougang_portal_config.domain.schemas.portal_config_schema import (
+    DEFAULT_PORTAL_WATERMARK_HORIZONTAL_TEXT,
+)
+from bisheng.shougang_portal_config.domain.services.portal_config_service import (
+    ShougangPortalConfigService,
+)
 
 
 def _pdf_bytes() -> bytes:
@@ -72,10 +80,19 @@ class FakeUserRepository:
     async def find_by_id(self, user_id: int):
         return self.user if self.user and self.user.user_id == user_id else None
 
-    async def get_primary_department_name(self, user_id: int) -> str | None:
+    async def get_primary_department_name_projection(self, user_id: int):
         if not self.user or self.user.user_id != user_id:
             return None
-        return getattr(self.user, "primary_department_name", None)
+        department_name = getattr(self.user, "primary_department_name", None)
+        if not department_name:
+            return None
+        return build_department_name_projection(
+            SimpleNamespace(
+                id=getattr(self.user, "primary_department_id", None),
+                name=department_name,
+                short_name=getattr(self.user, "primary_department_short_name", None),
+            )
+        )
 
 
 class FakeAuthorizationService:
@@ -261,6 +278,7 @@ def _user(**overrides):
         "external_id": "SG001",
         "external_code": "CODE001",
         "primary_department_name": "设备管理部",
+        "primary_department_short_name": None,
     }
     payload.update(overrides)
     return SimpleNamespace(**payload)
@@ -589,6 +607,10 @@ async def test_on_demand_failure_maps_to_safe_download_error(tmp_path: Path, err
     ("user", "expected_identity"),
     [
         (_user(), "设备管理部-张三-SG001-2026/07/21"),
+        (
+            _user(primary_department_short_name="设备"),
+            "设备-张三-SG001-2026/07/21",
+        ),
         (_user(primary_department_name=""), "张三-SG001-2026/07/21"),
         (
             _user(user_name="", primary_department_name=None),
@@ -604,7 +626,17 @@ async def test_watermark_identity_comes_from_server_user_record(
     tmp_path: Path,
     user,
     expected_identity: str,
+    monkeypatch,
 ) -> None:
+    async def fake_get_watermark_horizontal_text(*, tenant_id: int | None = None):
+        del tenant_id
+        return DEFAULT_PORTAL_WATERMARK_HORIZONTAL_TEXT
+
+    monkeypatch.setattr(
+        ShougangPortalConfigService,
+        "get_watermark_horizontal_text",
+        staticmethod(fake_get_watermark_horizontal_text),
+    )
     runner = CapturingRunner()
     service, _ = _build_service(tmp_path, user=user, runner=runner)
 
@@ -613,8 +645,30 @@ async def test_watermark_identity_comes_from_server_user_record(
     lines = runner.calls[0]["spec"].lines
     assert lines == (
         expected_identity,
-        "首钢股份内部资料，严禁外传，违者必究",  # noqa: RUF001
+        DEFAULT_PORTAL_WATERMARK_HORIZONTAL_TEXT,  # noqa: RUF001
     )
+    await prepared.close()
+
+
+@pytest.mark.asyncio
+async def test_watermark_second_line_uses_portal_config(tmp_path: Path, monkeypatch) -> None:
+    custom_text = "自定义水印第二行"
+
+    async def fake_get_watermark_horizontal_text(*, tenant_id: int | None = None):
+        del tenant_id
+        return custom_text
+
+    monkeypatch.setattr(
+        ShougangPortalConfigService,
+        "get_watermark_horizontal_text",
+        staticmethod(fake_get_watermark_horizontal_text),
+    )
+    runner = CapturingRunner()
+    service, _ = _build_service(tmp_path, runner=runner)
+
+    prepared = await service.prepare_download(_request(), _login_user())
+
+    assert runner.calls[0]["spec"].lines[1] == custom_text
     await prepared.close()
 
 

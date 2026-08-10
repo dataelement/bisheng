@@ -122,6 +122,11 @@ class KnowledgeFileBase(SQLModelSerializable):
     file_size: int | None = Field(default=None, index=False, description="File size inbytes")
     md5: str | None = Field(default=None, index=False)
     parse_type: str | None = Field(default=ParseType.LOCAL.value, index=False, description="Files parsed in what mode")
+    parse_priority: str | None = Field(
+        default=None,
+        sa_column=Column(String(16), nullable=True),
+        description="Immutable file parsing priority snapshot",
+    )
     split_rule: str | None = Field(default=None, sa_column=Column(Text), description="Files parsed in what mode")
     preview_file_object_name: str | None = Field(default=None, index=True, description="Preview File Object name")
     bbox_object_name: str | None = Field(default="", description="bboxFiles inminioStored object name")
@@ -166,6 +171,14 @@ class KnowledgeFileBase(SQLModelSerializable):
     tenant_id: int | None = Field(
         default=None,
         sa_column=Column(Integer, nullable=False, server_default=text("1"), index=True, comment="Tenant ID"),
+    )
+    original_uploader_id: int | None = Field(
+        default=None,
+        description="User ID that first uploaded the canonical business document",
+    )
+    original_knowledge_id: int | None = Field(
+        default=None,
+        description="Knowledge space ID where the canonical business document was first uploaded",
     )
     reference_document_id: int | None = Field(
         default=None,
@@ -552,22 +565,38 @@ class KnowledgeFileDao(KnowledgeFileBase):
         return {code: len(canonical_ids) for code, canonical_ids in canonical_ids_by_code.items()}
 
     @classmethod
-    async def async_count_files_by_domain_scopes(cls, domain_space_ids: dict[str, set[int]]) -> dict[str, int]:
+    async def async_count_files_by_domain_scopes(
+        cls,
+        domain_space_ids: dict[str, set[int]],
+        domain_file_ids: dict[str, set[int]] | None = None,
+    ) -> dict[str, int]:
         """Count successful files for each business-domain and knowledge-space scope."""
         normalized_scopes = {
             code.strip().upper(): {int(space_id) for space_id in space_ids if int(space_id) > 0}
             for code, space_ids in domain_space_ids.items()
             if code and code.strip()
         }
-        counts = dict.fromkeys(normalized_scopes, 0)
-        conditions = [
-            and_(
-                KnowledgeFile.knowledge_id.in_(space_ids),
-                col(KnowledgeFile.file_encoding).like(f"%-{code}-%"),
-            )
-            for code, space_ids in normalized_scopes.items()
-            if space_ids
-        ]
+        normalized_file_scopes = {
+            code.strip().upper(): {int(file_id) for file_id in file_ids if int(file_id) > 0}
+            for code, file_ids in (domain_file_ids or {}).items()
+            if code and code.strip()
+        }
+        codes = set(normalized_scopes) | set(normalized_file_scopes)
+        counts = dict.fromkeys(codes, 0)
+        conditions = []
+        for code in codes:
+            resource_conditions = []
+            if space_ids := normalized_scopes.get(code):
+                resource_conditions.append(KnowledgeFile.knowledge_id.in_(space_ids))
+            if file_ids := normalized_file_scopes.get(code):
+                resource_conditions.append(KnowledgeFile.id.in_(file_ids))
+            if resource_conditions:
+                conditions.append(
+                    and_(
+                        or_(*resource_conditions),
+                        col(KnowledgeFile.file_encoding).like(f"%-{code}-%"),
+                    )
+                )
         if not conditions:
             return counts
         statement = select(
@@ -584,18 +613,25 @@ class KnowledgeFileDao(KnowledgeFileBase):
         )
         async with get_async_db_session() as session:
             rows = (await session.exec(statement)).all()
-        canonical_ids_by_code = {code: set() for code in normalized_scopes}
+        canonical_ids_by_code = {code: set() for code in codes}
         for file_id, document_id, knowledge_id, encoding in rows:
             parts = (encoding or "").split("-")
             if len(parts) < 3:
                 continue
             code = parts[-2].strip().upper()
-            if knowledge_id in normalized_scopes.get(code, set()):
+            if (
+                knowledge_id in normalized_scopes.get(code, set())
+                or file_id in normalized_file_scopes.get(code, set())
+            ):
                 canonical_ids_by_code[code].add(int(document_id or file_id))
         return {code: len(canonical_ids_by_code[code]) for code in counts}
 
     @classmethod
-    async def async_count_files_by_category_scopes(cls, category_space_ids: dict[str, set[int]]) -> dict[str, int]:
+    async def async_count_files_by_category_scopes(
+        cls,
+        category_space_ids: dict[str, set[int]],
+        category_file_ids: dict[str, set[int]] | None = None,
+    ) -> dict[str, int]:
         """Count SUCCESS files per document-type category within each card's bound spaces.
 
         Aligns with portal category landing list (``aget_file_by_space_filters*`` +
@@ -608,18 +644,31 @@ class KnowledgeFileDao(KnowledgeFileBase):
             for code, space_ids in category_space_ids.items()
             if code and code.strip()
         }
-        counts = dict.fromkeys(normalized_scopes, 0)
-        conditions = [
-            and_(
-                KnowledgeFile.knowledge_id.in_(space_ids),
-                col(KnowledgeFile.file_encoding).like(f"%-{code}-%"),
-            )
-            for code, space_ids in normalized_scopes.items()
-            if space_ids
-        ]
+        normalized_file_scopes = {
+            code.strip().upper(): {int(file_id) for file_id in file_ids if int(file_id) > 0}
+            for code, file_ids in (category_file_ids or {}).items()
+            if code and code.strip()
+        }
+        codes = set(normalized_scopes) | set(normalized_file_scopes)
+        counts = dict.fromkeys(codes, 0)
+        conditions = []
+        for code in codes:
+            resource_conditions = []
+            if space_ids := normalized_scopes.get(code):
+                resource_conditions.append(KnowledgeFile.knowledge_id.in_(space_ids))
+            if file_ids := normalized_file_scopes.get(code):
+                resource_conditions.append(KnowledgeFile.id.in_(file_ids))
+            if resource_conditions:
+                conditions.append(
+                    and_(
+                        or_(*resource_conditions),
+                        col(KnowledgeFile.file_encoding).like(f"%-{code}-%"),
+                    )
+                )
         if not conditions:
             return counts
         statement = select(
+            KnowledgeFile.id,
             KnowledgeFile.knowledge_id,
             KnowledgeFile.file_encoding,
         ).where(
@@ -631,12 +680,15 @@ class KnowledgeFileDao(KnowledgeFileBase):
         )
         async with get_async_db_session() as session:
             rows = (await session.exec(statement)).all()
-        for knowledge_id, encoding in rows:
+        for file_id, knowledge_id, encoding in rows:
             document_code, _ = parse_shougang_file_encoding_codes({"file_encoding": encoding})
             document_code = (document_code or "").strip().upper()
             if not document_code:
                 continue
-            if int(knowledge_id) in normalized_scopes.get(document_code, set()):
+            if (
+                int(knowledge_id) in normalized_scopes.get(document_code, set())
+                or int(file_id) in normalized_file_scopes.get(document_code, set())
+            ):
                 counts[document_code] += 1
         return counts
 

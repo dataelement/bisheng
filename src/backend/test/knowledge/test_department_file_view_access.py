@@ -24,6 +24,10 @@ from bisheng.knowledge.domain.models.department_file_view_grant import (
 from bisheng.knowledge.domain.repositories.implementations.department_file_view_grant_repository_impl import (
     DepartmentFileViewGrantRepositoryImpl,
 )
+from bisheng.knowledge.domain.models.knowledge_space_scope import (
+    KnowledgeSpaceLevelEnum,
+    KnowledgeSpaceOwnerTypeEnum,
+)
 from bisheng.knowledge.domain.services.department_file_view_access_service import (
     DepartmentFileAccessSource,
     DepartmentFileAccessStatus,
@@ -37,6 +41,34 @@ from bisheng.user.domain.services.auth import LoginUser
 
 SCHEMA_MIGRATION = "bisheng.core.database.alembic.versions.v2_6_0_f067_department_file_view_grant"
 DATA_MIGRATION = "bisheng.core.database.alembic.versions.v2_6_0_f068_department_file_view_scenario_seed"
+
+
+@pytest.mark.parametrize(
+    ("level", "owner_type", "owner_id", "binding_department_id", "expected"),
+    [
+        (KnowledgeSpaceLevelEnum.DEPARTMENT, KnowledgeSpaceOwnerTypeEnum.DEPARTMENT, 2, 2, "department"),
+        (KnowledgeSpaceLevelEnum.TEAM_KS, KnowledgeSpaceOwnerTypeEnum.USER, 7, 3, "clinic"),
+        (KnowledgeSpaceLevelEnum.TEAM, KnowledgeSpaceOwnerTypeEnum.USER, 7, 3, "clinic"),
+        (KnowledgeSpaceLevelEnum.TEAM, KnowledgeSpaceOwnerTypeEnum.USER, 7, None, None),
+        (KnowledgeSpaceLevelEnum.PERSONAL, KnowledgeSpaceOwnerTypeEnum.USER, 7, None, None),
+        (KnowledgeSpaceLevelEnum.DEPARTMENT, KnowledgeSpaceOwnerTypeEnum.DEPARTMENT, 2, 3, None),
+    ],
+)
+def test_department_file_access_scope_classifier_supports_clinic_but_not_normal_team(
+    level,
+    owner_type,
+    owner_id,
+    binding_department_id,
+    expected,
+) -> None:
+    scope = SimpleNamespace(level=level, owner_type=owner_type, owner_id=owner_id)
+    binding = (
+        SimpleNamespace(department_id=binding_department_id)
+        if binding_department_id is not None
+        else None
+    )
+
+    assert DepartmentFileViewAccessService.classify_applicable_scope(scope, binding) == expected
 
 
 @pytest.fixture
