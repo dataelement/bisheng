@@ -10,25 +10,41 @@ import { getWorkspaceClientUrl } from "@/utils/workspaceUrl"
 /** Which table the right panel is showing. */
 export type TagConsoleMode = "library" | "review"
 
+/** Which listing the review panel's tab bar is on. */
+export type TagConsoleReviewTab = "pending" | "reviewed"
+
+/**
+ * A picked user.
+ *
+ * The name is kept alongside the id because the user picker renders from the
+ * option label; holding the id alone leaves the closed control blank.
+ */
+export interface TagConsoleUserPick {
+    id: string
+    name: string
+}
+
+export const EMPTY_USER_PICK: TagConsoleUserPick = { id: "", name: "" }
+
 /** Draft state of the filter bar, before it is turned into request params. */
 export interface TagConsoleFilterState {
     tagName: string
     resourceType: string
-    submitterId: string
-    reviewerId: string
+    submitter: TagConsoleUserPick
+    reviewer: TagConsoleUserPick
     createTimeStart: string
     createTimeEnd: string
     reviewTimeStart: string
     reviewTimeEnd: string
-    /** Review mode only; empty string means "both". */
+    /** Reviewed tab only; empty string means "approved and rejected together". */
     status: TagConsoleReviewStatus | ""
 }
 
 export const EMPTY_FILTERS: TagConsoleFilterState = {
     tagName: "",
     resourceType: "",
-    submitterId: "",
-    reviewerId: "",
+    submitter: EMPTY_USER_PICK,
+    reviewer: EMPTY_USER_PICK,
     createTimeStart: "",
     createTimeEnd: "",
     reviewTimeStart: "",
@@ -72,8 +88,8 @@ export function buildSearchParams(
     const params: TagConsoleFilterParams = { page, page_size: pageSize }
     if (filters.tagName.trim()) params.tag_name = filters.tagName.trim()
     if (filters.resourceType) params.resource_type = filters.resourceType
-    if (filters.submitterId) params.submitter_id = Number(filters.submitterId)
-    if (filters.reviewerId) params.reviewer_id = Number(filters.reviewerId)
+    if (filters.submitter.id) params.submitter_id = Number(filters.submitter.id)
+    if (filters.reviewer.id) params.reviewer_id = Number(filters.reviewer.id)
     if (filters.createTimeStart) params.create_time_start = filters.createTimeStart
     if (filters.createTimeEnd) params.create_time_end = filters.createTimeEnd
     if (filters.reviewTimeStart) params.review_time_start = filters.reviewTimeStart
@@ -112,8 +128,8 @@ export type BatchAction = "delete" | "move" | "approve" | "reject"
 /**
  * Whether a batch action applies to the current selection.
  *
- * Rejected entries are read-only this release, so they take part in neither
- * approve nor reject.
+ * Already-reviewed entries are read-only, so they take part in neither approve
+ * nor reject.
  */
 export function canBatch(action: BatchAction, selected: (TagConsoleItem | TagConsoleReviewItem)[]): boolean {
     if (!selected.length) return false
@@ -121,9 +137,25 @@ export function canBatch(action: BatchAction, selected: (TagConsoleItem | TagCon
     return selected.every((row) => (row as TagConsoleReviewItem).status === "pending")
 }
 
-/** Tag rows carry a review status only in review mode. */
-export function isRejected(row: TagConsoleItem | TagConsoleReviewItem): boolean {
-    return (row as TagConsoleReviewItem).status === "rejected"
+/**
+ * Request status for a tab.
+ *
+ * The pending tab has nothing to narrow; the reviewed tab defaults to both
+ * outcomes and lets the filter bar pick one.
+ */
+export function reviewRequestStatus(
+    tab: TagConsoleReviewTab,
+    status: TagConsoleReviewStatus | "",
+): TagConsoleReviewStatus | "reviewed" {
+    if (tab === "pending") return "pending"
+    return status || "reviewed"
+}
+
+/** Row name colour: pending is still open, rejected failed, approved is in. */
+export function reviewStatusColorClass(status: TagConsoleReviewStatus): string {
+    if (status === "rejected") return "text-[#F53F3F]"
+    if (status === "approved") return "text-[#00B42A]"
+    return "text-[#FF7D00]"
 }
 
 export function formatDateTime(value?: string | null): string {

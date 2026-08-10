@@ -17,8 +17,20 @@ MAX_BATCH_SIZE = 500
 
 
 class TagConsoleReviewStatus(str, Enum):
+    """Row status, plus one filter-only value.
+
+    ``APPROVED`` rows do not live in ``review_tag`` at all — approving deletes
+    the review row and writes the tag into ``tag`` — so they are read back from
+    the tag library instead, recognised by a non-null ``reviewer_id``.
+
+    ``REVIEWED`` is a *request* value only and never appears on a row: it is what
+    the console's "已审核" tab asks for, meaning approved and rejected together.
+    """
+
     PENDING = "pending"
     REJECTED = "rejected"
+    APPROVED = "approved"
+    REVIEWED = "reviewed"
 
 
 class TagConsoleSourceFile(BaseModel):
@@ -147,14 +159,14 @@ class TagConsoleReviewSearchReq(TagConsoleFilter):
 
 
 class TagConsoleReviewSearchResp(BaseModel):
-    """``pending_count`` / ``rejected_count`` deliberately ignore the ``status``
-    filter so the toolbar heading keeps showing both real totals even while the
-    user is looking at one of them."""
+    """The three counts deliberately ignore the ``status`` filter so the tab bar
+    keeps showing real totals even while the user is looking at one of them."""
 
     data: list[TagConsoleReviewItem]
     total: int
     pending_count: int
     rejected_count: int
+    approved_count: int = 0
 
 
 class TagConsoleBatchApproveReq(BaseModel):

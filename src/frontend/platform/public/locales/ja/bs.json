@@ -1398,6 +1398,7 @@
       "status": "ステータス",
       "statusAll": "すべて",
       "statusPending": "審査待ち",
+      "statusApproved": "承認済み",
       "statusRejected": "却下済み",
       "createDate": "作成日",
       "reviewDate": "審査日",
@@ -1430,10 +1431,12 @@
       "batchSummary": "成功 {{ok}} 件、スキップ {{skipped}} 件、失敗 {{failed}} 件",
       "deleteConfirm": "選択したタグを削除しますか？ファイルとの関連も削除されます。",
       "moreFiles": "全 {{count}} ファイル",
-      "reviewCounts": "（審査待ち {{pending}} / 却下済み {{rejected}}）",
       "multiSpaceHint": "{{count}} 個のナレッジスペースで生成",
       "tagNamePlaceholder": "タグ名を入力",
-      "selectUser": "ユーザーを選択"
+      "selectUser": "ユーザーを選択",
+      "tabPending": "審査待ち",
+      "tabReviewed": "審査済み",
+      "emptyReviewed": "審査済みタグはありません"
     }
   },
   "bench": {

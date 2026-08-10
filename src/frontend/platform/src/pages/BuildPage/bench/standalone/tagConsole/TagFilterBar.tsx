@@ -4,14 +4,21 @@ import { Input } from "@/components/bs-ui/input"
 import { Label } from "@/components/bs-ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select"
 import { useTranslation } from "react-i18next"
-import { EMPTY_FILTERS, RESOURCE_TYPES, type TagConsoleFilterState } from "./tagConsoleTypes"
+import {
+    EMPTY_USER_PICK,
+    RESOURCE_TYPES,
+    type TagConsoleFilterState,
+    type TagConsoleUserPick,
+} from "./tagConsoleTypes"
 
 interface TagFilterBarProps {
     filters: TagConsoleFilterState
-    /** Review mode adds the status selector; library mode has a single source. */
+    /** Only the reviewed tab has two outcomes to choose between. */
     showStatus: boolean
     onChange: (filters: TagConsoleFilterState) => void
     onSearch: () => void
+    /** Clearing the form is expected to show the cleared result straight away. */
+    onReset: () => void
 }
 
 /** One labelled control. Fields wrap instead of being squeezed side by side. */
@@ -24,7 +31,7 @@ function Field({ label, wide, children }: { label: string; wide?: boolean; child
     )
 }
 
-export function TagFilterBar({ filters, showStatus, onChange, onSearch }: TagFilterBarProps) {
+export function TagFilterBar({ filters, showStatus, onChange, onSearch, onReset }: TagFilterBarProps) {
     const { t } = useTranslation()
 
     const patch = (part: Partial<TagConsoleFilterState>) => onChange({ ...filters, ...part })
@@ -37,9 +44,15 @@ export function TagFilterBar({ filters, showStatus, onChange, onSearch }: TagFil
 
     // FilterByUser is a multi-select, but the API takes a single id — keep the
     // last picked value so the control stays usable without a new component.
-    const userValue = (id: string) => (id ? [{ label: "", value: id }] : [])
-    const pickUser = (options: { value: string }[]) =>
-        options?.length ? options[options.length - 1].value : ""
+    // The name has to be carried along: the control renders the option label,
+    // so feeding it back an id with an empty label shows an empty box.
+    const userValue = (pick: TagConsoleUserPick) =>
+        pick.id ? [{ label: pick.name, value: pick.id }] : []
+    const pickUser = (options: { label: string; value: string }[]): TagConsoleUserPick => {
+        if (!options?.length) return EMPTY_USER_PICK
+        const picked = options[options.length - 1]
+        return { id: picked.value, name: picked.label }
+    }
 
     const dateRange = (
         startKey: "createTimeStart" | "reviewTimeStart",
@@ -85,7 +98,7 @@ export function TagFilterBar({ filters, showStatus, onChange, onSearch }: TagFil
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="all">{t("build.tagConsole.statusAll", "全部")}</SelectItem>
-                                <SelectItem value="pending">{t("build.tagConsole.statusPending", "待审核")}</SelectItem>
+                                <SelectItem value="approved">{t("build.tagConsole.statusApproved", "已通过")}</SelectItem>
                                 <SelectItem value="rejected">{t("build.tagConsole.statusRejected", "已驳回")}</SelectItem>
                             </SelectContent>
                         </Select>
@@ -113,17 +126,17 @@ export function TagFilterBar({ filters, showStatus, onChange, onSearch }: TagFil
 
                 <Field label={t("build.tagConsole.submitter", "提报者")}>
                     <FilterByUser
-                        value={userValue(filters.submitterId)}
+                        value={userValue(filters.submitter)}
                         placeholder={t("build.tagConsole.selectUser", "请选择用户")}
-                        onChange={(options: any) => patch({ submitterId: pickUser(options) })}
+                        onChange={(options: any) => patch({ submitter: pickUser(options) })}
                     />
                 </Field>
 
                 <Field label={t("build.tagConsole.reviewer", "审核者")}>
                     <FilterByUser
-                        value={userValue(filters.reviewerId)}
+                        value={userValue(filters.reviewer)}
                         placeholder={t("build.tagConsole.selectUser", "请选择用户")}
-                        onChange={(options: any) => patch({ reviewerId: pickUser(options) })}
+                        onChange={(options: any) => patch({ reviewer: pickUser(options) })}
                     />
                 </Field>
 
@@ -137,13 +150,7 @@ export function TagFilterBar({ filters, showStatus, onChange, onSearch }: TagFil
 
                 <div className="flex items-center gap-2 pb-0.5">
                     <Button onClick={onSearch}>{t("build.tagConsole.search", "搜索")}</Button>
-                    <Button
-                        variant="outline"
-                        onClick={() => {
-                            // Clears the filters only; the left panel selection stays.
-                            onChange({ ...EMPTY_FILTERS, status: filters.status })
-                        }}
-                    >
+                    <Button variant="outline" onClick={onReset}>
                         {t("build.tagConsole.reset", "重置")}
                     </Button>
                 </div>

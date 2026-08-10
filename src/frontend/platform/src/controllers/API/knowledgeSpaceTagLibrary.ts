@@ -221,7 +221,15 @@ export async function deleteReviewTagApi(data: {
 // pair as a single unit.
 // ---------------------------------------------------------------------------
 
-export type TagConsoleReviewStatus = "pending" | "rejected"
+/**
+ * Row status, plus one filter-only value.
+ *
+ * "approved" rows are read back from the tag library rather than review_tag —
+ * approving deletes the review row. "reviewed" is only ever sent as a filter
+ * (the 已审核 tab: approved and rejected together) and never comes back on a row.
+ */
+export type TagConsoleReviewStatus = "pending" | "rejected" | "approved"
+export type TagConsoleReviewFilterStatus = TagConsoleReviewStatus | "reviewed"
 
 export interface TagConsoleSourceFile {
   file_id: number
@@ -313,12 +321,13 @@ export async function batchMoveTagConsoleApi(
 }
 
 export async function searchTagConsoleReviewApi(
-  params: TagConsoleFilterParams & { status?: TagConsoleReviewStatus | null },
+  params: TagConsoleFilterParams & { status?: TagConsoleReviewFilterStatus | null },
 ): Promise<{
   data: TagConsoleReviewItem[]
   total: number
   pending_count: number
   rejected_count: number
+  approved_count: number
 }> {
   return await axios.post("/api/v1/workstation/tags/console/review/search", params)
 }

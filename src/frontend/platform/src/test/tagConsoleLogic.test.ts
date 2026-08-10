@@ -15,6 +15,7 @@ import {
     canBatch,
     EMPTY_FILTERS,
     INITIAL_SELECTION,
+    reviewRequestStatus,
     selectLibrary,
     selectReviewEntry,
     type TagConsoleFilterState,
@@ -70,8 +71,8 @@ describe("buildSearchParams", () => {
         const filters: TagConsoleFilterState = {
             ...EMPTY_FILTERS,
             tagName: "  结垢  ",
-            submitterId: "101",
-            reviewerId: "103",
+            submitter: { id: "101", name: "张三" },
+            reviewer: { id: "103", name: "李四" },
         }
 
         const params = buildSearchParams(filters, 1, 20)
@@ -127,5 +128,27 @@ describe("canBatch", () => {
         expect(canBatch("reject", [pending])).toBe(true)
         expect(canBatch("approve", [pending, rejected])).toBe(false)
         expect(canBatch("reject", [rejected])).toBe(false)
+    })
+
+    it("approved entries are read-only too", () => {
+        const approved = { name: "剥落", resource_type: "manual_tag", status: "approved" } as any
+        expect(canBatch("approve", [approved])).toBe(false)
+        expect(canBatch("reject", [approved])).toBe(false)
+    })
+})
+
+describe("reviewRequestStatus", () => {
+    it("pins the pending tab to pending, whatever the status field holds", () => {
+        expect(reviewRequestStatus("pending", "")).toBe("pending")
+        expect(reviewRequestStatus("pending", "rejected")).toBe("pending")
+    })
+
+    it("asks for both outcomes when the reviewed tab has no status picked", () => {
+        expect(reviewRequestStatus("reviewed", "")).toBe("reviewed")
+    })
+
+    it("narrows the reviewed tab to one outcome", () => {
+        expect(reviewRequestStatus("reviewed", "approved")).toBe("approved")
+        expect(reviewRequestStatus("reviewed", "rejected")).toBe("rejected")
     })
 })

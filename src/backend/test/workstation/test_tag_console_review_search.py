@@ -19,7 +19,11 @@ import pytest
 
 from bisheng.database.models.review_tags import ReviewTag, ReviewTagLink
 from bisheng.database.models.tag import Tag, TagBusinessTypeEnum, TagResourceTypeEnum
-from bisheng.workstation.domain.repositories.tag_console_repository import TagConsoleRepositoryImpl
+from bisheng.workstation.domain.repositories.tag_console_repository import (
+    SOURCE_REVIEW,
+    SOURCE_TAG,
+    TagConsoleRepositoryImpl,
+)
 from bisheng.workstation.domain.schemas.tag_console_schema import (
     TagConsoleReviewSearchReq,
     TagConsoleReviewStatus,
@@ -90,6 +94,9 @@ async def _seed(session):
 
     for row in [*scale, *pending_others, rejected, already_in_library, orphan]:
         session.add(row)
+    # 漏水 went through review and was approved: the review row above is the
+    # leftover the library-name guard exists to hide, and the tag below is what
+    # the reviewed listing must show instead.
     session.add(
         Tag(
             name="漏水",
@@ -98,6 +105,22 @@ async def _seed(session):
             user_id=ALICE,
             tenant_id=TENANT_ID,
             resource_type=AI,
+            reviewer_id=CAROL,
+            review_time=datetime(2026, 8, 9),
+            create_time=datetime(2026, 8, 1),
+            update_time=datetime(2026, 8, 1),
+        )
+    )
+    # Typed straight into a library by an admin — never reviewed, so it must not
+    # appear in the reviewed listing.
+    session.add(
+        Tag(
+            name="手工录入",
+            business_type=TagBusinessTypeEnum.TAG_LIBRARY.value,
+            business_id="10",
+            user_id=ALICE,
+            tenant_id=TENANT_ID,
+            resource_type=TagResourceTypeEnum.SYSTEM_TAG.value,
             create_time=datetime(2026, 8, 1),
             update_time=datetime(2026, 8, 1),
         )
@@ -195,10 +218,11 @@ async def test_counts_ignore_status_filter(async_db_session):
     repository = TagConsoleRepositoryImpl(session=async_db_session)
 
     narrowed = TagConsoleReviewSearchReq(status=TagConsoleReviewStatus.PENDING)
-    pending, rejected = await repository.count_review_by_status(narrowed, tenant_id=TENANT_ID, space_ids=None)
+    pending, rejected, approved = await repository.count_review_by_status(narrowed, tenant_id=TENANT_ID, space_ids=None)
 
     assert pending == 3
     assert rejected == 1, "rejected total must stay real while viewing pending"
+    assert approved == 1, "漏水 is the only tag carrying a reviewer"
 
 
 @pytest.mark.asyncio
@@ -247,6 +271,72 @@ async def test_department_scope_narrows_rows(async_db_session):
 
     _, empty_scope = await _search(async_db_session, space_ids=set())
     assert empty_scope == 0
+
+
+async def _search_reviewed(session, *, space_ids=None, **overrides):
+    repository = TagConsoleRepositoryImpl(session=session)
+    req = TagConsoleReviewSearchReq(**overrides)
+    return await repository.search_reviewed_tags(req, tenant_id=TENANT_ID, space_ids=space_ids)
+
+
+@pytest.mark.asyncio
+async def test_reviewed_spans_both_tables(async_db_session):
+    """Approved history lives in ``tag``, rejected history in ``review_tag``."""
+    await _seed(async_db_session)
+
+    refs, total = await _search_reviewed(async_db_session, status=TagConsoleReviewStatus.REVIEWED)
+
+    assert total == 2
+    assert {(source, name) for source, name, _ in refs} == {(SOURCE_TAG, "漏水"), (SOURCE_REVIEW, "翘曲")}
+
+
+@pytest.mark.asyncio
+async def test_reviewed_orders_by_review_time_across_tables(async_db_session):
+    """Rows interleave by review time rather than clumping per source table."""
+    await _seed(async_db_session)
+
+    refs, _ = await _search_reviewed(async_db_session, status=TagConsoleReviewStatus.REVIEWED)
+
+    assert [name for _, name, _ in refs] == ["漏水", "翘曲"], "08-09 approval outranks the 08-08 rejection"
+
+
+@pytest.mark.asyncio
+async def test_reviewed_paging_is_stable(async_db_session):
+    await _seed(async_db_session)
+
+    page1, total = await _search_reviewed(async_db_session, status=TagConsoleReviewStatus.REVIEWED, page=1, page_size=1)
+    page2, _ = await _search_reviewed(async_db_session, status=TagConsoleReviewStatus.REVIEWED, page=2, page_size=1)
+
+    assert total == 2
+    assert len({(name, resource_type) for _, name, resource_type in page1 + page2}) == 2
+
+
+@pytest.mark.asyncio
+async def test_approved_only_needs_a_reviewer(async_db_session):
+    await _seed(async_db_session)
+
+    refs, total = await _search_reviewed(async_db_session, status=TagConsoleReviewStatus.APPROVED)
+
+    assert total == 1
+    assert [name for _, name, _ in refs] == ["漏水"]
+
+
+@pytest.mark.asyncio
+async def test_reviewed_honours_the_shared_filters(async_db_session):
+    await _seed(async_db_session)
+
+    _, by_reviewer = await _search_reviewed(async_db_session, status=TagConsoleReviewStatus.REVIEWED, reviewer_id=CAROL)
+    assert by_reviewer == 2  # both were handled by Carol
+
+    _, by_name = await _search_reviewed(async_db_session, status=TagConsoleReviewStatus.REVIEWED, tag_name="漏")
+    assert by_name == 1
+
+    _, by_review_time = await _search_reviewed(
+        async_db_session,
+        status=TagConsoleReviewStatus.REVIEWED,
+        review_time_start=datetime(2026, 8, 9),
+    )
+    assert by_review_time == 1  # only the approval
 
 
 @pytest.mark.asyncio

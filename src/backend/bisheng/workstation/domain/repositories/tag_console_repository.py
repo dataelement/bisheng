@@ -1,12 +1,14 @@
 """Queries backing the F079 tag management console.
 
-Library mode reads ``tag``; review mode (added later) reads ``review_tag``. The
-two never get merged into one result set — the console switches between them
-from the left panel, so each side pages independently and neither needs a
-cross-table UNION.
+Library mode reads ``tag``; review mode reads ``review_tag``. The console
+switches between them from the left panel, so each side pages independently.
+
+The one exception is the reviewed ("已审核") listing: approving a tag deletes its
+``review_tag`` row and writes the tag into ``tag``, so approved and rejected
+history live in different tables and only that listing needs a UNION.
 """
 
-from sqlalchemy import Integer, cast, exists, or_
+from sqlalchemy import Integer, cast, exists, literal, or_, union_all
 from sqlmodel import delete, func, select, update
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -15,6 +17,7 @@ from bisheng.database.models.tag import Tag, TagBusinessTypeEnum, TagLink
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 from bisheng.knowledge.domain.models.knowledge_space_tag_library import KnowledgeSpaceTagLibrary
 from bisheng.workstation.domain.schemas.tag_console_schema import (
+    TagConsoleFilter,
     TagConsoleReviewSearchReq,
     TagConsoleReviewStatus,
     TagConsoleSearchReq,
@@ -22,6 +25,12 @@ from bisheng.workstation.domain.schemas.tag_console_schema import (
 
 PENDING_STATUS = 0
 REJECTED_STATUS = ApproveOrRejectEnum.REJECT.value
+
+# Which table a "已审核" row came from. Approved tags no longer exist in
+# review_tag, so the reviewed listing reads two tables and has to say which one
+# each row belongs to before it can be decorated.
+SOURCE_TAG = 0
+SOURCE_REVIEW = 1
 
 
 class TagConsoleRepositoryImpl:
@@ -33,8 +42,9 @@ class TagConsoleRepositoryImpl:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _library_tag_filters(req: TagConsoleSearchReq, tenant_id: int) -> list:
-        """Where-clauses shared by the page query and its COUNT.
+    def _tag_field_filters(req: TagConsoleFilter, tenant_id: int) -> list:
+        """Where-clauses over ``tag`` shared by library mode and the approved half
+        of the reviewed listing.
 
         Visibility is tenant-only by design (AD-12): tag libraries are tenant-level
         vocabulary, so narrowing these rows per department would make the left
@@ -47,10 +57,6 @@ class TagConsoleRepositoryImpl:
             # to other features and must never surface here.
             Tag.business_type == TagBusinessTypeEnum.TAG_LIBRARY.value,
         ]
-        if req.library_ids:
-            # Unknown ids simply match nothing — a library another admin deleted
-            # must not turn the request into an error.
-            clauses.append(Tag.business_id.in_([str(library_id) for library_id in req.library_ids]))
         if req.tag_name:
             clauses.append(Tag.name.like(f"%{req.tag_name.strip()}%"))
         if req.resource_type:
@@ -67,6 +73,15 @@ class TagConsoleRepositoryImpl:
             clauses.append(Tag.review_time >= req.review_time_start)
         if req.review_time_end is not None:
             clauses.append(Tag.review_time <= req.review_time_end)
+        return clauses
+
+    @classmethod
+    def _library_tag_filters(cls, req: TagConsoleSearchReq, tenant_id: int) -> list:
+        clauses = cls._tag_field_filters(req, tenant_id)
+        if req.library_ids:
+            # Unknown ids simply match nothing — a library another admin deleted
+            # must not turn the request into an error.
+            clauses.append(Tag.business_id.in_([str(library_id) for library_id in req.library_ids]))
         return clauses
 
     async def search_library_tags(self, req: TagConsoleSearchReq, tenant_id: int) -> tuple[list[Tag], int]:
@@ -174,6 +189,22 @@ class TagConsoleRepositoryImpl:
             return []
         statement = select(Tag).where(
             Tag.id.in_(normalized),
+            Tag.tenant_id == tenant_id,
+            Tag.business_type == TagBusinessTypeEnum.TAG_LIBRARY.value,
+        )
+        return list((await self.session.exec(statement)).all())
+
+    async def get_library_tags_by_names(self, names: list[str], tenant_id: int) -> list[Tag]:
+        """Approved tags by name, for the reviewed listing.
+
+        Safe as a lookup key here because tag names are unique per tenant across
+        every library — the create path enforces that before inserting.
+        """
+        wanted = [name for name in names if name]
+        if not wanted:
+            return []
+        statement = select(Tag).where(
+            Tag.name.in_(wanted),
             Tag.tenant_id == tenant_id,
             Tag.business_type == TagBusinessTypeEnum.TAG_LIBRARY.value,
         )
@@ -306,6 +337,13 @@ class TagConsoleRepositoryImpl:
             return pending
         if status == TagConsoleReviewStatus.REJECTED:
             return rejected
+        if status == TagConsoleReviewStatus.APPROVED:
+            # Approved tags were deleted from this table; they are read from
+            # ``tag`` instead. Matching nothing here keeps a stray caller honest
+            # rather than silently handing back pending rows.
+            return ReviewTag.id == -1
+        if status == TagConsoleReviewStatus.REVIEWED:
+            return rejected  # only the rejected half of "已审核" lives here
         return or_(pending, rejected)
 
     @classmethod
@@ -369,16 +407,102 @@ class TagConsoleRepositoryImpl:
         rows = (await self.session.exec(page_stmt)).all()
         return [(name, resource_type) for name, resource_type in rows], int(total or 0)
 
+    # ------------------------------------------------------------------
+    # Reviewed mode — approved (from ``tag``) and rejected (from ``review_tag``)
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def _approved_leg(cls, req: TagConsoleReviewSearchReq, tenant_id: int):
+        """Tags that went through review and were approved.
+
+        ``reviewer_id IS NOT NULL`` is the only marker that separates them from
+        tags an admin typed straight into a library — both end up as plain rows
+        in ``tag`` once approved. Tags approved before F079 added the column have
+        no reviewer and therefore cannot appear here; there is nothing to backfill
+        them from.
+
+        Scope is tenant-wide rather than department-narrowed, matching library
+        mode (AD-12): an approved tag is shared tenant vocabulary and no longer
+        belongs to the space that proposed it.
+        """
+        return select(
+            literal(SOURCE_TAG).label("source"),
+            Tag.name.label("name"),
+            Tag.resource_type.label("resource_type"),
+            Tag.review_time.label("sort_time"),
+        ).where(*cls._tag_field_filters(req, tenant_id), Tag.reviewer_id.is_not(None))
+
+    @classmethod
+    def _rejected_leg(cls, req: TagConsoleReviewSearchReq, tenant_id: int, space_ids: set[int] | None):
+        scoped = req.model_copy(update={"status": TagConsoleReviewStatus.REJECTED})
+        return (
+            select(
+                literal(SOURCE_REVIEW).label("source"),
+                ReviewTag.name.label("name"),
+                ReviewTag.resource_type.label("resource_type"),
+                func.max(ReviewTag.review_time).label("sort_time"),
+            )
+            .where(*cls._review_filters(scoped, tenant_id, space_ids))
+            .group_by(ReviewTag.name, ReviewTag.resource_type)
+        )
+
+    @classmethod
+    def _reviewed_subquery(
+        cls,
+        req: TagConsoleReviewSearchReq,
+        tenant_id: int,
+        space_ids: set[int] | None,
+    ):
+        legs = []
+        if req.status in (TagConsoleReviewStatus.APPROVED, TagConsoleReviewStatus.REVIEWED):
+            legs.append(cls._approved_leg(req, tenant_id))
+        if req.status in (TagConsoleReviewStatus.REJECTED, TagConsoleReviewStatus.REVIEWED):
+            legs.append(cls._rejected_leg(req, tenant_id, space_ids))
+        combined = legs[0] if len(legs) == 1 else union_all(*legs)
+        return combined.subquery()
+
+    async def search_reviewed_tags(
+        self,
+        req: TagConsoleReviewSearchReq,
+        tenant_id: int,
+        space_ids: set[int] | None,
+    ) -> tuple[list[tuple[int, str, str]], int]:
+        """One page of ``(source, name, resource_type)`` plus the unpaged total.
+
+        Sorted newest-reviewed first. ``sort_time`` alone repeats and drops rows
+        across pages whenever two tags share a review timestamp — a batch approval
+        stamps them all with the same value — so the pair itself and finally the
+        source table break the tie, which makes the ordering total.
+        """
+        subquery = self._reviewed_subquery(req, tenant_id, space_ids)
+
+        total = await self.session.scalar(select(func.count()).select_from(subquery))
+
+        page_stmt = (
+            select(subquery.c.source, subquery.c.name, subquery.c.resource_type)
+            .order_by(
+                subquery.c.sort_time.desc(),
+                subquery.c.name.asc(),
+                subquery.c.resource_type.asc(),
+                subquery.c.source.asc(),
+            )
+            .offset((req.page - 1) * req.page_size)
+            .limit(req.page_size)
+        )
+        rows = (await self.session.exec(page_stmt)).all()
+        return [(int(source), name, resource_type) for source, name, resource_type in rows], int(total or 0)
+
     async def count_review_by_status(
         self,
         req: TagConsoleReviewSearchReq,
         tenant_id: int,
         space_ids: set[int] | None,
-    ) -> tuple[int, int]:
-        """Pending / rejected totals that deliberately ignore the status filter.
+    ) -> tuple[int, int, int]:
+        """Pending / rejected / approved totals, deliberately ignoring the status
+        filter.
 
-        The toolbar shows both numbers at once, so narrowing them by the status
-        the user is currently looking at would make the heading useless.
+        The tab bar shows every number at once, so narrowing them by the status
+        the user is currently looking at would make the tabs useless.
         """
         counts = []
         for status in (TagConsoleReviewStatus.PENDING, TagConsoleReviewStatus.REJECTED):
@@ -391,7 +515,13 @@ class TagConsoleRepositoryImpl:
                 .subquery()
             )
             counts.append(int(await self.session.scalar(statement) or 0))
-        return counts[0], counts[1]
+
+        approved_req = req.model_copy(update={"status": TagConsoleReviewStatus.APPROVED})
+        approved_total = await self.session.scalar(
+            select(func.count()).select_from(self._reviewed_subquery(approved_req, tenant_id, space_ids))
+        )
+        counts.append(int(approved_total or 0))
+        return counts[0], counts[1], counts[2]
 
     async def load_review_group(
         self,

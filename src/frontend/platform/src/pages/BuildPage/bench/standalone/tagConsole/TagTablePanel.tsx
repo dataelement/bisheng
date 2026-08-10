@@ -120,6 +120,13 @@ export function TagTablePanel({ selectedLibraryIds, libraries, onLibraryContentC
                 showStatus={false}
                 onChange={setFilters}
                 onSearch={() => setAppliedFilters(filters)}
+                onReset={() => {
+                    // A fresh object on purpose: reloading is keyed on the
+                    // applied filters by reference, so reusing the constant
+                    // would make a reset on an untouched form do nothing.
+                    setFilters({ ...EMPTY_FILTERS })
+                    setAppliedFilters({ ...EMPTY_FILTERS })
+                }}
             />
 
             <div className="flex flex-wrap items-center gap-2 border-b border-[#E5E6EB] bg-background px-4 py-2.5">

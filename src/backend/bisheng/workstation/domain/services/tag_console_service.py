@@ -25,6 +25,8 @@ from bisheng.knowledge.domain.services.tag_library_tag_service import TagLibrary
 from bisheng.user.domain.models.user import UserDao
 from bisheng.workstation.domain.repositories.tag_console_repository import (
     REJECTED_STATUS,
+    SOURCE_REVIEW,
+    SOURCE_TAG,
     TagConsoleRepositoryImpl,
 )
 from bisheng.workstation.domain.schemas.review_tags_schema import ApproveOrRejectRequest
@@ -150,17 +152,91 @@ class TagConsoleService:
         self._validate_page(req)
         space_ids = await self.tags_service.resolve_reviewable_space_ids()
 
-        pairs, total = await self.repository.search_review_tags(req, tenant_id=tenant_id, space_ids=space_ids)
-        pending_count, rejected_count = await self.repository.count_review_by_status(
+        if req.status in (TagConsoleReviewStatus.APPROVED, TagConsoleReviewStatus.REVIEWED):
+            # The "已审核" tab spans two tables, so rows arrive tagged with the
+            # one they came from.
+            refs, total = await self.repository.search_reviewed_tags(req, tenant_id=tenant_id, space_ids=space_ids)
+        else:
+            pairs, total = await self.repository.search_review_tags(req, tenant_id=tenant_id, space_ids=space_ids)
+            refs = [(SOURCE_REVIEW, name, resource_type) for name, resource_type in pairs]
+
+        pending_count, rejected_count, approved_count = await self.repository.count_review_by_status(
             req, tenant_id=tenant_id, space_ids=space_ids
         )
-        data = await self._decorate_review(pairs, tenant_id=tenant_id, space_ids=space_ids)
+        data = await self._assemble_review_page(refs, tenant_id=tenant_id, space_ids=space_ids)
         return TagConsoleReviewSearchResp(
             data=data,
             total=total,
             pending_count=pending_count,
             rejected_count=rejected_count,
+            approved_count=approved_count,
         )
+
+    async def _assemble_review_page(
+        self,
+        refs: list[tuple[int, str, str]],
+        tenant_id: int,
+        space_ids: set[int] | None,
+    ) -> list[TagConsoleReviewItem]:
+        """Decorate each half with its own query, then restore the page order.
+
+        Rebuilding from ``refs`` rather than concatenating the two halves is what
+        keeps approved and rejected rows interleaved by review time instead of
+        clumping into two blocks.
+        """
+        if not refs:
+            return []
+        review_pairs = [(name, resource_type) for source, name, resource_type in refs if source == SOURCE_REVIEW]
+        approved_pairs = [(name, resource_type) for source, name, resource_type in refs if source == SOURCE_TAG]
+
+        review_items = {
+            (item.name, item.resource_type): item
+            for item in await self._decorate_review(review_pairs, tenant_id=tenant_id, space_ids=space_ids)
+        }
+        approved_items = await self._decorate_approved(approved_pairs, tenant_id=tenant_id)
+
+        ordered: list[TagConsoleReviewItem] = []
+        for source, name, resource_type in refs:
+            bucket = approved_items if source == SOURCE_TAG else review_items
+            item = bucket.get((name, resource_type))
+            if item is not None:
+                ordered.append(item)
+        return ordered
+
+    async def _decorate_approved(
+        self,
+        pairs: list[tuple[str, str]],
+        tenant_id: int,
+    ) -> dict[tuple[str, str], TagConsoleReviewItem]:
+        """Approved rows reuse library mode's decoration, then get reshaped.
+
+        Same underlying tag, just presented with a review status so the reviewed
+        listing can hold both kinds of row in one table.
+        """
+        if not pairs:
+            return {}
+        tags = await self.repository.get_library_tags_by_names([name for name, _ in pairs], tenant_id=tenant_id)
+        wanted = set(pairs)
+        tags = [tag for tag in tags if (tag.name, tag.resource_type) in wanted]
+        items = await self._decorate(tags, tenant_id=tenant_id)
+        return {
+            (item.name, item.resource_type): TagConsoleReviewItem(
+                name=item.name,
+                resource_type=item.resource_type,
+                status=TagConsoleReviewStatus.APPROVED,
+                review_tag_count=1,
+                library_id=item.library_id,
+                library_name=item.library_name,
+                submitter_id=item.submitter_id,
+                submitter_name=item.submitter_name,
+                reviewer_id=item.reviewer_id,
+                reviewer_name=item.reviewer_name,
+                source_files=item.source_files,
+                create_time=item.create_time,
+                review_time=item.review_time,
+            )
+            for item in items
+        }
 
     async def pending_count(self, tenant_id: int) -> int:
         """Badge on the left panel's fixed 'pending review' entry.
@@ -168,7 +244,7 @@ class TagConsoleService:
         Shares the query used by review mode so the two numbers cannot drift.
         """
         space_ids = await self.tags_service.resolve_reviewable_space_ids()
-        pending, _ = await self.repository.count_review_by_status(
+        pending, _, _ = await self.repository.count_review_by_status(
             TagConsoleReviewSearchReq(), tenant_id=tenant_id, space_ids=space_ids
         )
         return pending
