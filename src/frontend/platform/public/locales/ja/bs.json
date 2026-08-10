@@ -1396,6 +1396,7 @@
       "noLibrary": "タグライブラリなし",
       "noBoundSpace": "関連ナレッジスペースなし",
       "status": "ステータス",
+      "tagType": "タグ種別",
       "statusAll": "すべて",
       "statusPending": "審査待ち",
       "statusApproved": "承認済み",

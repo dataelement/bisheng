@@ -97,7 +97,7 @@ export function TagReviewDialog({ target, libraries, saving, onClose, onApprove,
                             <div className="rounded-lg border border-[#ECECEC] bg-[#FAFBFC] p-4">
                                 {field(t("build.tagName", "标签名称"), detail?.name || "-")}
                                 {field(
-                                    t("build.tagSource", "标签来源"),
+                                    t("build.tagConsole.tagType", "标签类型"),
                                     detail ? tagSourceLabel(detail.resource_type, t) : "-",
                                 )}
                                 {field(t("build.creator", "创建者"), detail?.submitter_name || "-")}

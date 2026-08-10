@@ -105,7 +105,7 @@ export function TagFilterBar({ filters, showStatus, onChange, onSearch, onReset 
                     </Field>
                 )}
 
-                <Field label={t("build.tagSource", "标签来源")}>
+                <Field label={t("build.tagConsole.tagType", "标签类型")}>
                     <Select
                         value={filters.resourceType || "all"}
                         onValueChange={(value) => patch({ resourceType: value === "all" ? "" : value })}

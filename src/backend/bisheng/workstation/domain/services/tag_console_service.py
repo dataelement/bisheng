@@ -439,6 +439,8 @@ class TagConsoleService:
 
         pairs = [(item.name, item.resource_type) for item in items]
         grouped = await self.repository.load_review_group(pairs, tenant_id=tenant_id, space_ids=space_ids)
+        # One batched lookup for the whole request rather than per item.
+        spaces_by_review_tag = await self._map_review_tags_to_spaces(grouped, tenant_id=tenant_id) if approve else {}
 
         result = TagConsoleBatchResult()
         for item in items:
@@ -450,20 +452,33 @@ class TagConsoleService:
                 # The underlying flow only looks at pending rows and would report
                 # a bare "tag not found"; say what is actually wrong instead.
                 raise TagConsoleActionNotApplicableError()
-            knowledge_id = self._resolve_knowledge_id(rows, space_ids)
+            knowledge_id = self._resolve_knowledge_id(rows, space_ids, spaces_by_review_tag)
             if approve and knowledge_id is None:
+                # Logged, not silent: this rejects the whole item while still
+                # returning HTTP 200, which is invisible in the access log.
+                logger.warning(
+                    "tag console approve skipped, no in-scope source space for %s (review_tag ids=%s, scope=%s)",
+                    item.name,
+                    [row.id for row in rows],
+                    "all" if space_ids is None else sorted(space_ids),
+                )
                 result.failed.append(TagConsoleBatchFailure(name=item.name, reason="缺少来源知识"))
                 continue
+            # reject_reason is declared `str = None`: pydantic skips the default
+            # but validates anything passed in, so handing it an explicit None on
+            # the approve path fails the request outright. Omit it instead.
+            payload = {
+                "tag_name": item.name,
+                "status": ApproveOrRejectEnum.APPROVE if approve else ApproveOrRejectEnum.REJECT,
+                "resource_type": item.resource_type,
+                "tag_library_id": target_library_id,
+                "knowledge_id": knowledge_id,
+            }
+            if reject_reason is not None:
+                payload["reject_reason"] = reject_reason
             try:
                 await self.tags_service.approve_or_reject_review_tag(
-                    ApproveOrRejectRequest(
-                        tag_name=item.name,
-                        status=ApproveOrRejectEnum.APPROVE if approve else ApproveOrRejectEnum.REJECT,
-                        resource_type=item.resource_type,
-                        reject_reason=reject_reason,
-                        tag_library_id=target_library_id,
-                        knowledge_id=knowledge_id,
-                    ),
+                    ApproveOrRejectRequest(**payload),
                     tenant_id,
                 )
             except Exception as exc:  # one bad item must not undo the whole batch
@@ -476,13 +491,56 @@ class TagConsoleService:
             await TagLibraryTagService.invalidate_link_b_tenant_catalog_cache_async(tenant_id)
         return result
 
+    async def _map_review_tags_to_spaces(
+        self,
+        grouped: dict[tuple[str, str], list],
+        tenant_id: int,
+    ) -> dict[int, list[int]]:
+        """Knowledge space ids per ``review_tag`` row, via its source files.
+
+        ``review_tag.business_id`` cannot be used for this: in practice these
+        rows carry ``business_type='tag_library'`` and the id is the *tag
+        library*, not a space. Reading it as a space id would approve the tag
+        into the wrong knowledge space. The provenance that does hold is the
+        file link — the same route the workbench page takes.
+        """
+        review_tag_ids = [int(row.id) for rows in grouped.values() for row in rows if row.id is not None]
+        if not review_tag_ids:
+            return {}
+        files_by_tag = await self.repository.list_review_source_files(review_tag_ids, tenant_id=tenant_id)
+        file_ids = sorted({file_id for ids in files_by_tag.values() for file_id in ids})
+        file_briefs = await self.repository.list_file_briefs(file_ids, tenant_id=tenant_id)
+
+        spaces: dict[int, list[int]] = {}
+        for review_tag_id, ids in files_by_tag.items():
+            seen: list[int] = []
+            for file_id in ids:
+                space_id = (file_briefs.get(file_id) or {}).get("knowledge_id")
+                if space_id and space_id not in seen:
+                    seen.append(int(space_id))
+            if seen:
+                spaces[review_tag_id] = seen
+        return spaces
+
     @staticmethod
-    def _resolve_knowledge_id(rows, space_ids: set[int] | None) -> int | None:
+    def _resolve_knowledge_id(
+        rows,
+        space_ids: set[int] | None,
+        spaces_by_review_tag: dict[int, list[int]],
+    ) -> int | None:
         """First in-scope knowledge space carrying the tag.
 
         A tag produced in several spaces still approves into one library; the
         review panel lists every source file so the reviewer sees the blast radius.
+
+        Source files come first because that is where the provenance actually
+        lives; ``business_id`` is only trusted when the row explicitly says it
+        holds a knowledge space.
         """
+        for row in rows:
+            for space_id in spaces_by_review_tag.get(int(row.id), []):
+                if space_ids is None or space_id in space_ids:
+                    return space_id
         for row in rows:
             if row.business_type != TagBusinessTypeEnum.KNOWLEDGE_SPACE.value:
                 continue

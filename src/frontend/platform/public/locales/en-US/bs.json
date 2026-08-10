@@ -1413,6 +1413,7 @@
       "noLibrary": "No tag library",
       "noBoundSpace": "No linked knowledge space",
       "status": "Status",
+      "tagType": "Tag type",
       "statusAll": "All",
       "statusPending": "Pending",
       "statusApproved": "Approved",

@@ -218,7 +218,7 @@ export function ReviewTablePanel({ libraries, onReviewed }: ReviewTablePanelProp
                             )}
                             <th className="w-14 px-3 py-3 font-medium">{t("build.tagConsole.index", "序号")}</th>
                             <th className="px-3 py-3 font-medium">{t("build.tagName", "标签名称")}</th>
-                            <th className="px-3 py-3 font-medium">{t("build.tagSource", "标签来源")}</th>
+                            <th className="px-3 py-3 font-medium">{t("build.tagConsole.tagType", "标签类型")}</th>
                             {!isPendingTab && (
                                 <th className="px-3 py-3 font-medium">{t("build.tagConsole.status", "标签状态")}</th>
                             )}
