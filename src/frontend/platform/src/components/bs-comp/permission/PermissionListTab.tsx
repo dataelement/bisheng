@@ -213,7 +213,7 @@ export function PermissionListTab({
   const [hasMore, setHasMore] = useState(false)
   const [loading, setLoading] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
-  const [pendingAssigneeId, setPendingAssigneeId] = useState<number | null>(null)
+  const [pendingAssigneeId, setPendingAssigneeId] = useState<string | null>(null)
   const [failed, setFailed] = useState(false)
 
   useEffect(() => {

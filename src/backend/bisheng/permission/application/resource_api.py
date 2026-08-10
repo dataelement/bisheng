@@ -183,7 +183,7 @@ class F048ResourcePermissionApi:
         model_names = {item.snapshot.model_key: item.name for item in catalog.models}
         data = [
             {
-                "assignee_id": row.source_id,
+                "assignee_id": str(row.source_id),
                 "assignee_version": row.source_version,
                 "subject": {
                     "type": row.subject_type,
@@ -294,7 +294,7 @@ class F048ResourcePermissionApi:
                     operation=change.op.value,
                     model_key=change.model_key,
                     source=source,
-                    assignee_id=change.assignee_id,
+                    assignee_id=change.assignee_row_id,
                     expected_assignee_version=(change.expected_assignee_version),
                     target_model_key=change.target_model_key,
                 )
@@ -309,7 +309,7 @@ class F048ResourcePermissionApi:
         )
         items = [
             {
-                "assignee_id": source.source_id,
+                "assignee_id": str(source.source_id),
                 "assignee_version": source.version,
                 "subject": {
                     "type": source.subject_type,

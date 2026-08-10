@@ -86,13 +86,13 @@ describe("F048 Client permission API", () => {
         },
         {
           op: "MOVE" as const,
-          assignee_id: 8,
+          assignee_id: "8",
           expected_assignee_version: 3,
           target_model_key: "standard-editor",
         },
         {
           op: "REMOVE" as const,
-          assignee_id: 9,
+          assignee_id: "9",
           expected_assignee_version: 4,
         },
       ],

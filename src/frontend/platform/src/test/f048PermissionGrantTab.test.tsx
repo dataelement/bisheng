@@ -50,7 +50,7 @@ const context: ResourcePermissionContext = {
 }
 
 const editableAssignee: PermissionGrantAssignee = {
-  assignee_id: 41,
+  assignee_id: "41",
   assignee_version: 2,
   subject: { type: "user", id: "10", name: "Bob" },
   model: { key: "viewer", name: "Viewer", level: 1, active: true },
@@ -63,7 +63,7 @@ const editableAssignee: PermissionGrantAssignee = {
 
 const protectedAssignee: PermissionGrantAssignee = {
   ...editableAssignee,
-  assignee_id: 42,
+  assignee_id: "42",
   assignee_version: 5,
   subject: { type: "user", id: "11", name: "Creator" },
   model: { key: "owner", name: "Owner", level: 4, active: true },
@@ -196,7 +196,7 @@ describe("F048 PermissionGrantTab", () => {
           changes: [
             {
               op: "MOVE",
-              assignee_id: 41,
+              assignee_id: "41",
               expected_assignee_version: 2,
               target_model_key: "editor",
             },
@@ -233,7 +233,7 @@ describe("F048 PermissionGrantTab", () => {
           changes: [
             {
               op: "REMOVE",
-              assignee_id: 41,
+              assignee_id: "41",
               expected_assignee_version: 2,
             },
           ],

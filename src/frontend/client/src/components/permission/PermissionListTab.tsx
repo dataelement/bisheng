@@ -24,17 +24,9 @@ import type {
   ResourceType,
   SubjectType,
 } from "~/api/permission";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  Button,
-} from "~/components/ui";
+import { Button } from "~/components/ui";
 import { useLocalize } from "~/hooks";
+import { useConfirm } from "~/Providers";
 import { SourceBadge } from "./SourceBadge";
 
 interface PermissionListTabProps {
@@ -223,6 +215,7 @@ export function PermissionListTab({
   onMutationSuccess,
 }: PermissionListTabProps) {
   const localize = useLocalize();
+  const confirm = useConfirm();
   const [assignees, setAssignees] = useState<PermissionGrantAssignee[]>([]);
   const [models, setModels] = useState<GrantablePermissionModel[]>([]);
   const [summary, setSummary] = useState<MyResourcePermissions | null>(null);
@@ -231,11 +224,9 @@ export function PermissionListTab({
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [pendingAssigneeId, setPendingAssigneeId] = useState<number | null>(
+  const [pendingAssigneeId, setPendingAssigneeId] = useState<string | null>(
     null,
   );
-  const [removeTarget, setRemoveTarget] =
-    useState<PermissionGrantAssignee | null>(null);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
@@ -382,8 +373,18 @@ export function PermissionListTab({
       setFailed(true);
     } finally {
       setPendingAssigneeId(null);
-      setRemoveTarget(null);
     }
+  };
+
+  const handleRemove = async (assignee: PermissionGrantAssignee) => {
+    const confirmed = await confirm({
+      variant: "destructive",
+      title: localize("com_permission.confirm_revoke"),
+      description: assignee.subject.name || assignee.subject.id,
+      confirmText: localize("com_permission.action_revoke"),
+    });
+    if (!confirmed) return;
+    await mutateAssignee(assignee, { op: "REMOVE" });
   };
 
   const handleLoadMore = async () => {
@@ -457,7 +458,7 @@ export function PermissionListTab({
                   target_model_key: modelKey,
                 })
               }
-              onRemove={setRemoveTarget}
+              onRemove={(item) => void handleRemove(item)}
             />
           ))}
           {visibleAssignees.length === 0 && (
@@ -484,33 +485,6 @@ export function PermissionListTab({
           )}
         </div>
       </div>
-
-      <AlertDialog
-        open={removeTarget !== null}
-        onOpenChange={(nextOpen) => {
-          if (!nextOpen) setRemoveTarget(null);
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {localize("com_permission.confirm_revoke")}
-            </AlertDialogTitle>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>{localize("cancel")}</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                if (removeTarget) {
-                  void mutateAssignee(removeTarget, { op: "REMOVE" });
-                }
-              }}
-            >
-              {localize("confirm")}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </>
   );
 }

@@ -79,8 +79,8 @@ export function PermissionGrantTab({
   );
   const [selectedModelKey, setSelectedModelKey] = useState("");
   const [internalIncludeChildren, setInternalIncludeChildren] = useState(false);
-  const [targetModels, setTargetModels] = useState<Record<number, string>>({});
-  const [removedIds, setRemovedIds] = useState<Set<number>>(new Set());
+  const [targetModels, setTargetModels] = useState<Record<string, string>>({});
+  const [removedIds, setRemovedIds] = useState<Set<string>>(new Set());
   const [queuedAdds, setQueuedAdds] = useState<
     PermissionGrantMutationChange[]
   >([]);

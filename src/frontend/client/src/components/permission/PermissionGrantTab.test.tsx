@@ -79,7 +79,7 @@ const context: ResourcePermissionContext = {
 };
 
 function existing(
-  id: number,
+  id: string,
   overrides: Partial<PermissionGrantAssignee> = {},
 ): PermissionGrantAssignee {
   return {
@@ -155,7 +155,7 @@ describe("F048 Client PermissionGrantTab", () => {
         resourceType="channel"
         resourceId="channel-1"
         context={context}
-        assignees={[existing(1), existing(2)]}
+        assignees={[existing("1"), existing("2")]}
         onSuccess={jest.fn()}
       />,
     );
@@ -225,8 +225,8 @@ describe("F048 Client PermissionGrantTab", () => {
         resourceId="channel-1"
         context={context}
         assignees={[
-          existing(3, { protected: true, editable: false }),
-          existing(4, { scope: "INHERITED", editable: false }),
+          existing("3", { protected: true, editable: false }),
+          existing("4", { scope: "INHERITED", editable: false }),
         ]}
         onSuccess={jest.fn()}
       />,
@@ -251,7 +251,7 @@ describe("F048 Client PermissionGrantTab", () => {
         resourceType="channel"
         resourceId="channel-1"
         context={context}
-        assignees={[existing(99)]}
+        assignees={[existing("99")]}
         onSuccess={jest.fn()}
       />,
     );
@@ -319,7 +319,7 @@ describe("F048 Client PermissionGrantTab", () => {
         resourceType="channel"
         resourceId="channel-1"
         context={context}
-        assignees={[existing(1)]}
+        assignees={[existing("1")]}
         onSuccess={jest.fn()}
       />,
     );

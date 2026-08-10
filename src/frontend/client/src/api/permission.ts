@@ -45,7 +45,7 @@ export interface PermissionGrantSource {
 }
 
 export interface PermissionGrantAssignee {
-  assignee_id: number;
+  assignee_id: string;
   assignee_version: number;
   subject: PermissionGrantSubject;
   model: GrantablePermissionModel;
@@ -85,13 +85,13 @@ export type PermissionGrantMutationChange =
     }
   | {
       op: "MOVE";
-      assignee_id: number;
+      assignee_id: string;
       expected_assignee_version: number;
       target_model_key: string;
     }
   | {
       op: "REMOVE";
-      assignee_id: number;
+      assignee_id: string;
       expected_assignee_version: number;
     };
 

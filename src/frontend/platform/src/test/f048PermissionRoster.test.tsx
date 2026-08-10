@@ -26,7 +26,7 @@ const customContext: ResourcePermissionContext = {
 }
 
 const directAssignee = {
-  assignee_id: 101,
+  assignee_id: "101",
   assignee_version: 3,
   subject: { type: "user" as const, id: "7", name: "Alice" },
   model: {
@@ -43,7 +43,7 @@ const directAssignee = {
 }
 
 const departmentAssignee = {
-  assignee_id: 102,
+  assignee_id: "102",
   assignee_version: 4,
   subject: { type: "user" as const, id: "7", name: "Alice" },
   model: {

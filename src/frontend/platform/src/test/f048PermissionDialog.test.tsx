@@ -31,7 +31,7 @@ const customContext = {
 }
 
 const protectedAssignee = {
-  assignee_id: 81,
+  assignee_id: "81",
   assignee_version: 4,
   subject: { type: "user" as const, id: "3", name: "Creator" },
   model: {

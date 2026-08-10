@@ -48,7 +48,7 @@ const context: ResourcePermissionContext = {
 };
 
 function assignee(
-  id: number,
+  id: string,
   source: "DIRECT" | "DEPARTMENT",
   overrides: Partial<PermissionGrantAssignee> = {},
 ): PermissionGrantAssignee {
@@ -72,7 +72,7 @@ describe("F048 Client PermissionListTab", () => {
       { key: "standard-viewer", name: "Viewer", level: 1, active: true },
     ]);
     mockedGetGrants.mockResolvedValue({
-      data: [assignee(1, "DIRECT"), assignee(2, "DEPARTMENT")],
+      data: [assignee("1", "DIRECT"), assignee("2", "DEPARTMENT")],
       page_size: 2,
       has_more: true,
       next_cursor: "cursor-2",
@@ -112,7 +112,7 @@ describe("F048 Client PermissionListTab", () => {
     mockedGetGrants
       .mockResolvedValueOnce({
         data: [
-          assignee(3, "DIRECT", {
+          assignee("3", "DIRECT", {
             protected: true,
             editable: false,
             scope: "INHERITED",
@@ -124,7 +124,7 @@ describe("F048 Client PermissionListTab", () => {
         next_cursor: "cursor-2",
       })
       .mockResolvedValueOnce({
-        data: [assignee(4, "DIRECT", { subject: { type: "user", id: "8", name: "Bob" } })],
+        data: [assignee("4", "DIRECT", { subject: { type: "user", id: "8", name: "Bob" } })],
         page_size: 1,
         has_more: false,
         next_cursor: null,

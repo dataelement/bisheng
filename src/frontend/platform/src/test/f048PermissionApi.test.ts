@@ -103,13 +103,13 @@ describe("F048 Platform permission API", () => {
         },
         {
           op: "MOVE",
-          assignee_id: 91,
+          assignee_id: "91",
           expected_assignee_version: 2,
           target_model_key: "editor",
         },
         {
           op: "REMOVE",
-          assignee_id: 92,
+          assignee_id: "92",
           expected_assignee_version: 3,
         },
       ],

@@ -50,7 +50,7 @@ class _ResourcePermissionApi:
         return {
             "data": [
                 {
-                    "assignee_id": 91,
+                    "assignee_id": "91",
                     "assignee_version": 2,
                     "subject": {
                         "type": "department",
@@ -190,7 +190,7 @@ def test_protected_mutation_and_stale_cursor_preserve_business_codes() -> None:
                 "changes": [
                     {
                         "op": "REMOVE",
-                        "assignee_id": 91,
+                        "assignee_id": "91",
                         "expected_assignee_version": 2,
                     }
                 ],
