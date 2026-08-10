@@ -70,6 +70,11 @@ ApprovalCenterService.decide_task()
 - AND 节点（`node_mode=and`）：同节点全部通过才 advance。
 - finalize 时若 `handler_key` 未注册，记录 error 后仍照常 APPROVED + 建 outbox（避免卡死）。
 
+**资源个人用户邀请是强制本人确认特例**：`resource_user_invite_confirmation` 由 Handler 声明
+`requires_self_confirmation` 和 business-key 去重。Gate 禁止 pass，且只接受单个 `or` 节点、唯一
+`invited_user` 处理人；instance/task/log 同事务创建。Center 即使操作人是管理员也不允许代办，
+approve/reject/withdraw 通过 Repository 单事务只接受一个终态。
+
 **异常实例也留痕**：`_create_exception_result()` 在创建异常后会补写 `action='approval.request.submit'` 审计日志（与正常 PENDING/PASS 分支一致）。
 
 ---
@@ -91,6 +96,8 @@ ApprovalCenterService.decide_task()
 | `approval/domain/services/approval_registry.py` | 场景预置目录 + handler 注册表 | `with_default_presets()`、`register_handler()`、`get_handler()` |
 | `approval/domain/services/approval_runtime_handler_factory.py` | 为 outbox 执行 / 多节点 advance 重新构造运行时 handler | `build_runtime_handler(scenario_code)` |
 | `approval/domain/services/approval_notification_service.py` | 站内信统一封装 | `notify_user()` / `notify_users()` / `notify_admins()` |
+| `approval/domain/services/resource_user_invite_service.py` | 18106 场景门禁、操作期场景行锁、快照/指纹、跨邀请人去重和建单 | `ensure_scenario_available()`、`scenario_guard()`、`request_invite()`、`list_pending_invites()` |
+| `approval/domain/services/approval_business_lock.py` | token-safe Redis 短锁，串行化同资源同用户的查重建单 | `approval_invite_business_lock()` |
 | `approval/domain/services/user_menu_access_service.py` | 菜单授权增删查，含父级菜单依赖自动补全 | `grant_menu_access()`、`revoke_menu_access()`、`ensure_application_allowed()` |
 | `approval/domain/services/approval_service.py` + `message_handler.py` | **旧系统（已废弃）**：部门知识空间文件上传审批（`approval_request` 表），与审批中心独立，仅兼容存量、勿新增功能 | `ApprovalService.decide_request()` |
 | `worker/approval/tasks.py` | Celery 任务（走默认 `celery` 队列） | `execute_approval_outbox`、`retry_approval_outbox` |
@@ -99,13 +106,14 @@ ApprovalCenterService.decide_task()
 | `approval/api/endpoints/approval_admin.py` | Platform 管理 API（`/api/v1/approval/admin/...`） | — |
 | `approval/api/endpoints/approval.py` | 旧系统 legacy API（`/api/v1/approval/requests/...`），**已废弃** | — |
 
-### 三个场景 Handler
+### 四个场景 Handler
 
 | 文件 | 类 |
 |------|----|
 | `approval/domain/services/menu_access_handler.py` | `MenuAccessApprovalHandler` |
 | `approval/domain/services/channel_subscribe_scenario_handler.py` | `ChannelSubscribeScenarioHandler` |
 | `approval/domain/services/knowledge_space_subscribe_scenario_handler.py` | `KnowledgeSpaceSubscribeScenarioHandler` |
+| `approval/domain/services/resource_user_invite_scenario_handler.py` | `ResourceUserInviteScenarioHandler`（强制本人确认；执行时调资源 owner Service 的 `apply_confirmed_personal_user_grant()`） |
 
 ### 前端
 
@@ -122,9 +130,9 @@ ApprovalCenterService.decide_task()
 
 ## 4. 预置场景
 
-三个场景由 `ApprovalRegistry.with_default_presets()` 注册（仅是"目录/下拉来源"，**不等于已启用**）。每个场景的业务入口在创建 `ApprovalGateRequest` 时**都需要传 `applicant_department_id`**（供 `department_admin` 审批人来源使用，查 `UserDepartmentDao.aget_user_primary_department()`）。
+四个场景由 `ApprovalRegistry.with_default_presets()` 注册（仅是"目录/下拉来源"，**不等于已启用**）。需要部门管理员解析的业务入口在创建 `ApprovalGateRequest` 时传 `applicant_department_id`。
 
-**首次部署自动落库**：4.2 频道订阅审批、4.3 知识空间加入审批由 `common/init_data.py::_init_default_approval_scenarios()`（在 `init_default_data` 内）为默认租户幂等 seed——各建「默认分支(catch-all, route_type=flow) → 默认流程 → 单节点(node_mode=or 或签)」，审批人来源即资源 owner+manager（频道 `channel_owner`/`channel_manager`，知识空间 `knowledge_space_owner`/`knowledge_space_manager`），场景 `enabled=True`。按 `tenant_id+scenario_code` 判存在即跳过，绝不覆盖人工改动。菜单权限申请(4.1)**不**自动 seed。新租户不自动 seed，需管理后台手工配置。
+**首次部署自动落库**：4.2 频道订阅、4.3 知识空间加入和 4.4 资源个人用户邀请由 `common/init_data.py::_init_default_approval_scenarios()` 为默认租户幂等 seed。按 `tenant_id+scenario_code` 存在即整体跳过，绝不覆盖人工改动。邀请场景的默认流程是单个 `or` 节点，唯一来源 `invited_user`。菜单权限申请(4.1)不自动 seed；新租户不自动 seed。
 
 ### 4.1 菜单权限申请 (`menu_access_request`)
 - **入口**：Client `/workspace/menu-unavailable?plugin=xxx` → `POST /api/v1/approval/menu-access/apply`
@@ -146,6 +154,14 @@ ApprovalCenterService.decide_task()
 - PENDING 时调 `_send_space_approval_notification()` 通知审批人
 - **不变量：先过网关、再落 membership。** `subscribe_space` 对 APPROVAL 空间必须先 `await gate.request_or_pass()`，按 gate 结果（pass→ACTIVE / pending·exception→PENDING）才通过 `_persist_space_member()` 写 `space_channel_member`。**严禁在调网关前预写 PENDING membership**——否则场景未配置/未启用时网关 `raise ApprovalScenarioDisabledError`，但 PENDING 行已落库，下次点"关注"会被 `subscribe_space` 顶部"已 PENDING 直接返回 pending"的早退分支短路，掩盖错误（首次报错、二次假成功）。无场景时每次点击都应一致报错。
 
+### 4.4 资源个人用户邀请确认 (`resource_user_invite_confirmation`)
+- **入口**：知识空间/频道授权 Service 识别"新增个人用户" 后调 `ResourceUserInviteService.request_invite()`
+- **18106 失败关闭**：含新个人用户的请求必须在资源创建/direct 授权前调 `ensure_scenario_available()`；场景缺失/关闭不得降级直接授权
+- **并发关闭保护**：授权 Service 通过 `scenario_guard()` 对场景行加 `FOR UPDATE`，保护区覆盖创建资源、direct 写入和全部邀请建单；管理端关闭/删除场景必须等待本次已通过门禁的操作结束，避免二次检查返回 18106 时遗留部分副作用
+- **去重**：`tenant/resource_type/resource_id/target_user_id`，不含邀请人；`pending/approved/executing` 阻止新单并保留首次角色快照
+- **生效**：本人 approve 只使 instance 进入 `approved`；outbox claim 后是 `executing/processing`，Handler 实时复核并调用资源 owner Service，完整成功后才 `executed/success`
+- **日志/审计**：发起 `created/existing` 与 Handler `start/success` 只记结构化 ID、business key、validation stage，不记姓名/完整 payload；outbox 终态审计 action 为 `resource.user_invite.execute.success/failed`，其他场景仍用 `approval.handler.success/failed`
+
 ---
 
 ## 5. 数据库表
@@ -157,22 +173,24 @@ ApprovalCenterService.decide_task()
 | `approval_flow_definition` | 审批流程定义头 | — |
 | `approval_flow_version` | 流程版本快照 | `is_active` |
 | `approval_node_definition` | 流程版本内顺序节点 | `node_order`、`node_mode: or/and`、`approver_config` |
-| `approval_instance` | 一次审批申请 | `pending/approved/rejected/withdrawn/executed/execute_failed/exception/cancelled` |
+| `approval_instance` | 一次审批申请 | `pending/approved/executing/rejected/withdrawn/executed/execute_failed/exception/cancelled` |
 | `approval_task` | 分配给审批人的节点待办 | `pending/approved/rejected/skipped/cancelled` |
 | `approval_exception` | 异常记录 | `open/resolved`，`exception_type: route_missing/approver_empty/execute_failed` |
-| `approval_outbox` | 业务执行队列 | `pending/success/failed` |
+| `approval_outbox` | 业务执行队列 | `pending/processing/success/failed`；`processing` 超过 claim TTL 可重领 |
 | `approval_action_log` | 时间线日志 | — |
 | `user_menu_access` | 用户级菜单授权（菜单审批专用） | `active/revoked` |
 | `approval_request` | **旧系统（已废弃）**：部门知识空间文件上传审批，仅兼容存量 | — |
 
 > 模型定义见 `approval/domain/models/approval_instance.py`、`approval_scenario.py`、`user_menu_access.py`。
-> `approval_instance.latest_approver_user_id` 字段已定义但**当前从未赋值**（已知限制，需要时在 `decide_task` 里补）。
+> `approval_instance.latest_approver_user_id` 在强制本人邀请的单任务事务终态中会赋值；通用多节点路径仍未统一赋值。
 
 ---
 
 ## 6. outbox 与 Celery
 
-业务执行走 outbox：通过后写 `approval_outbox(PENDING)` → Celery `execute_approval_outbox` 执行 `handler.on_approved()` → 成功 outbox=SUCCESS、instance=EXECUTED；失败 outbox=FAILED、instance=EXECUTE_FAILED 并建 `execute_failed` 异常。
+业务执行走 outbox：通过后写 `approval_outbox(PENDING)` → Celery `execute_approval_outbox` 执行 `handler.on_approved()` → 成功 outbox=SUCCESS、instance=EXECUTED；失败 outbox=FAILED、instance=EXECUTE_FAILED 并建 `execute_failed` 异常。成功的 outbox/instance 终态必须由 repository 同一事务落库；确定失败的 outbox/instance/exception 也必须同一事务落库。重复投递遇到历史 `success/executing` 中间态时，只修复 instance 为 `executed`，不重跑 handler。
+
+执行前 `ApprovalInstanceRepository.claim_outbox()` 在同事务中把 outbox 置 `processing`、instance 置 `executing`。未超过 `approval_invite.outbox_claim_ttl_seconds` 的 claim 不得并行重领；TTL 必须大于 worker 900s hard time limit。邀请授权补偿结果不确定时抛 `ApprovalInviteRetryableExecutionError`：repository 在原子事务中保持 `processing/executing`，但把当前 claim 时间标记为已过期，使 Celery 下一次重试可立即重领；不得先记 `failed/execute_failed`或发送失败通知。
 
 > **原则：业务回调（`on_approved` 等）不得静默失败。** 该执行成功/失败由「是否抛异常」判定：抛异常 → outbox=FAILED + `execute_failed` 异常暴露问题；正常返回 → 一律视为成功并置 instance=EXECUTED。因此前置条件缺失（如找不到要激活的 membership/资源）**必须 raise**，绝不能 `return {'status':'xxx'}` 之类把失败伪装成成功——否则会出现 instance=executed 但业务实际没生效的「假成功」，且无任何告警。
 
@@ -250,6 +268,9 @@ POST   /approval/admin/exceptions/{exception_id}/cancel      # 取消审批（�
 | 申请撤回 | 有 task 的审批人 | `ApprovalCenterService.withdraw_instance()` |
 | 异常产生（route_missing/approver_empty） | 管理员（AdminRole） | `ApprovalGate._notify_admins_of_exception()` / `ApprovalNotificationService.notify_admins()` |
 | 异常取消 | 申请人 | `ApprovalExceptionService.cancel_exception_api()` |
+| 资源个人邀请建单 | 被邀请用户 | `ResourceUserInviteService` → `resource_user_invite_pending` |
+| 资源个人邀请完整生效 | 邀请人 | `ApprovalOutboxService` 成功终态 → `resource_user_invite_effective` |
+| 资源个人邀请拒绝/撤回/执行失败 | 邀请人（撤回时亦提醒目标用户） | `resource_user_invite_failed` |
 
 > 注：申请人侧"通过"通知是在**最后节点 finalize** 时发的（即审批通过即通知），不等 outbox 业务真正执行完。若要"业务执行成功"的精确通知，需在 `execute_outbox` 成功回调里补。
 

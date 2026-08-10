@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from bisheng.common.models.space_channel_member import UserRoleEnum
 from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum, KnowledgeBase
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileRead
-from bisheng.permission.domain.schemas.permission_schema import AuthorizeGrantItem
+from bisheng.permission.domain.schemas.permission_schema import AuthorizationItemResult, AuthorizeGrantItem
 
 
 class InitialPermissionRequest(BaseModel):
@@ -18,6 +18,11 @@ class InitialPermissionRequest(BaseModel):
 class InitialPermissionResult(BaseModel):
     status: Literal["success", "failed"]
     error_code: int | None = None
+    direct_applied_count: int = 0
+    invite_created_count: int = 0
+    invite_existing_count: int = 0
+    failed_count: int = 0
+    results: list[AuthorizationItemResult] = Field(default_factory=list)
 
 
 class SpaceSubscriptionStatusEnum(str, Enum):

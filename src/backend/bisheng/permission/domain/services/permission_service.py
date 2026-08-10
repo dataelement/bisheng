@@ -319,6 +319,7 @@ class PermissionService:
         grants: list[AuthorizeGrantItem] = None,
         revokes: list[AuthorizeRevokeItem] = None,
         enforce_fga_success: bool = False,
+        recovery_owner: str = "service",
     ) -> None:
         """Grant or revoke permissions on a resource.
 
@@ -398,6 +399,7 @@ class PermissionService:
             operations,
             raise_on_failure=enforce_fga_success,
             stop_on_failure=enforce_fga_success,
+            recovery_owner=recovery_owner,
         )
 
         # Invalidate cache for directly affected users
@@ -417,6 +419,7 @@ class PermissionService:
         crash_safe: bool = False,
         raise_on_failure: bool = False,
         stop_on_failure: bool = False,
+        recovery_owner: str = "service",
     ) -> None:
         """Batch write/delete tuples to OpenFGA.
 
@@ -431,6 +434,10 @@ class PermissionService:
                 deleted. Used by ChangeHandler callsites where the DB transaction
                 has already committed.
         """
+        if recovery_owner not in {"service", "caller"}:
+            raise ValueError("recovery_owner must be 'service' or 'caller'")
+        if recovery_owner == "caller" and crash_safe:
+            raise ValueError("caller-owned recovery cannot use crash_safe FailedTuple records")
         if not operations:
             return
         operations = cls._dedupe_operations(operations)
@@ -444,7 +451,7 @@ class PermissionService:
         try:
             fga = await cls._aget_fga()
             if fga is None:
-                if not crash_safe:
+                if not crash_safe and recovery_owner == "service":
                     await cls._save_failed_tuples(operations, "FGAClient not available")
                 if raise_on_failure:
                     raise FGAConnectionError("FGAClient not available")
@@ -494,7 +501,7 @@ class PermissionService:
                     raise_on_failure,
                     crash_safe,
                 )
-                if not crash_safe:
+                if not crash_safe and recovery_owner == "service":
                     await cls._save_failed_tuples(
                         failed_ops,
                         "OpenFGA single-tuple fallback failed",
@@ -512,7 +519,7 @@ class PermissionService:
 
         except Exception as e:
             logger.error("Failed to batch write tuples: %s", e)
-            if not crash_safe and not saved_failure_ops:
+            if not crash_safe and not saved_failure_ops and recovery_owner == "service":
                 await cls._save_failed_tuples(operations, str(e))
             # If crash_safe, pre-recorded entries remain as 'pending' for retry
             if raise_on_failure:

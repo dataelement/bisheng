@@ -336,6 +336,15 @@ _DEFAULT_APPROVAL_SCENARIO_SEEDS = [
         "node_name": "知识空间负责人审批",
         "sources": [{"type": "knowledge_space_owner"}, {"type": "knowledge_space_manager"}],
     },
+    {
+        "scenario_code": "resource_user_invite_confirmation",
+        "scenario_name": "知识空间用户邀请确认",
+        "flow_code": "resource_user_invite_confirmation_default_flow",
+        "flow_name": "默认本人确认流程",
+        "node_code": "invited_user_confirmation",
+        "node_name": "被邀请用户确认",
+        "sources": [{"type": "invited_user"}],
+    },
 ]
 
 

@@ -338,11 +338,39 @@ export function ChannelSettingsPage() {
     }
     try {
       const result = await settings.submit();
+      const feedback = result?.authorizationResult;
+      if (feedback?.inviteCreatedCount) {
+        showToast({
+          message: settings.localize("com_invite.invite_sent", {
+            count: feedback.inviteCreatedCount,
+          }),
+          severity: NotificationSeverity.SUCCESS,
+        });
+      }
+      if (feedback?.inviteExistingCount) {
+        showToast({
+          message: settings.localize("com_invite.invite_existing", {
+            count: feedback.inviteExistingCount,
+          }),
+          severity: NotificationSeverity.INFO,
+        });
+      }
+      if (feedback?.failedCount) {
+        showToast({
+          message: settings.localize("com_invite.partial_failed", {
+            count: feedback.failedCount,
+          }),
+          severity: NotificationSeverity.WARNING,
+        });
+      }
       if (result?.status === "success" && settings.isEditMode) {
         showToast({
           message: settings.localize("com_subscription.save_success"),
           severity: NotificationSeverity.SUCCESS,
         });
+      }
+      if (result?.status === "success") {
+        await settings.completeSubmission(result.channelId);
       }
     } catch (error) {
       if (!extractApiStatusCode(error)) {

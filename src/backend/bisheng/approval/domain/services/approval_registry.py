@@ -11,35 +11,49 @@ class ApprovalRegistry:
         self._handlers: dict[str, Any] = {}
 
     @classmethod
-    def with_default_presets(cls) -> 'ApprovalRegistry':
+    def with_default_presets(cls) -> ApprovalRegistry:
         registry = cls()
         registry.register_preset(
             ApprovalScenarioPreset(
-                scenario_code='menu_access_request',
-                scenario_name='菜单权限申请',
-                handler_key='menu_access_request',
+                scenario_code="menu_access_request",
+                scenario_name="菜单权限申请",
+                handler_key="menu_access_request",
                 # applicant_role: admin / dept_admin / regular_user
                 # menu_key: specific menu key from payload_snapshot
-                condition_fields=['applicant_role', 'menu_key'],
-                approver_source_types=['direct_user', 'department_admin'],
+                condition_fields=["applicant_role", "menu_key"],
+                approver_source_types=["direct_user", "department_admin"],
             )
         )
         registry.register_preset(
             ApprovalScenarioPreset(
-                scenario_code='channel_subscribe_request',
-                scenario_name='频道订阅审批',
-                handler_key='channel_subscribe_request',
-                condition_fields=['applicant_role'],
-                approver_source_types=['direct_user', 'department_admin', 'channel_owner', 'channel_manager'],
+                scenario_code="channel_subscribe_request",
+                scenario_name="频道订阅审批",
+                handler_key="channel_subscribe_request",
+                condition_fields=["applicant_role"],
+                approver_source_types=["direct_user", "department_admin", "channel_owner", "channel_manager"],
             )
         )
         registry.register_preset(
             ApprovalScenarioPreset(
-                scenario_code='knowledge_space_subscribe_request',
-                scenario_name='知识空间加入审批',
-                handler_key='knowledge_space_subscribe_request',
-                condition_fields=['applicant_role'],
-                approver_source_types=['direct_user', 'department_admin', 'knowledge_space_owner', 'knowledge_space_manager'],
+                scenario_code="knowledge_space_subscribe_request",
+                scenario_name="知识空间加入审批",
+                handler_key="knowledge_space_subscribe_request",
+                condition_fields=["applicant_role"],
+                approver_source_types=[
+                    "direct_user",
+                    "department_admin",
+                    "knowledge_space_owner",
+                    "knowledge_space_manager",
+                ],
+            )
+        )
+        registry.register_preset(
+            ApprovalScenarioPreset(
+                scenario_code="resource_user_invite_confirmation",
+                scenario_name="知识空间用户邀请确认",
+                handler_key="resource_user_invite_confirmation",
+                condition_fields=[],
+                approver_source_types=["invited_user"],
             )
         )
         return registry
@@ -59,5 +73,5 @@ class ApprovalRegistry:
     async def get_handler(self, scenario_code: str) -> Any:
         handler = self._handlers.get(scenario_code)
         if handler is None:
-            raise KeyError(f'handler not registered for scenario_code={scenario_code}')
+            raise KeyError(f"handler not registered for scenario_code={scenario_code}")
         return handler

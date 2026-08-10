@@ -19,9 +19,11 @@ import {
 } from "~/api/permission";
 import { KnowledgeSpaceSettingsPage } from "./KnowledgeSpaceSettingsPage";
 
+const mockShowToast = jest.fn();
+
 jest.mock("~/Providers", () => ({
   useConfirm: () => jest.fn().mockResolvedValue(true),
-  useToastContext: () => ({ showToast: jest.fn() }),
+  useToastContext: () => ({ showToast: mockShowToast }),
 }));
 
 jest.mock("~/hooks", () => ({
@@ -230,7 +232,15 @@ describe("KnowledgeSpaceSettingsPage", () => {
     mockedGetPermissions.mockResolvedValue([]);
     mockedGetSpaceInfo.mockResolvedValue(baseSpace);
     mockedUpdateSpace.mockResolvedValue(baseSpace);
-    mockedAuthorize.mockResolvedValue(null);
+    mockedAuthorize.mockResolvedValue({
+      syncedUserCount: 0,
+      affectedMemberCount: 0,
+      directAppliedCount: 1,
+      inviteCreatedCount: 0,
+      inviteExistingCount: 0,
+      failedCount: 0,
+      results: [],
+    });
   });
 
   it("uses server capabilities for manager, editor-only, and read-only visibility", async () => {
@@ -292,7 +302,15 @@ describe("KnowledgeSpaceSettingsPage", () => {
     mockedCreateSpace.mockResolvedValue({
       ...baseSpace,
       id: "88",
-      initialPermissionResult: { status: "failed", errorCode: 21009 },
+      initialPermissionResult: {
+        status: "failed",
+        errorCode: 21009,
+        directAppliedCount: 0,
+        inviteCreatedCount: 0,
+        inviteExistingCount: 0,
+        failedCount: 1,
+        results: [],
+      },
     });
     renderPage("/knowledge/create");
     await screen.findByTestId("permission-section");
@@ -462,7 +480,15 @@ describe("KnowledgeSpaceSettingsPage", () => {
       ...baseSpace,
       visibility: VisibilityType.PRIVATE,
     });
-    mockedAuthorize.mockResolvedValue(null);
+    mockedAuthorize.mockResolvedValue({
+      syncedUserCount: 0,
+      affectedMemberCount: 0,
+      directAppliedCount: 1,
+      inviteCreatedCount: 0,
+      inviteExistingCount: 0,
+      failedCount: 0,
+      results: [],
+    });
     mockEditCapabilities(true, true);
     renderPage("/knowledge/space/7/settings");
     await screen.findByTestId("permission-section");
@@ -482,5 +508,56 @@ describe("KnowledgeSpaceSettingsPage", () => {
       ),
     );
     expect(mockedAuthorize).not.toHaveBeenCalled();
+  });
+
+  it("stays on edit settings and does not report success for partial authorization failure", async () => {
+    mockEditCapabilities(true, true);
+    mockedGetPermissions.mockResolvedValue([
+      {
+        subject_type: "user",
+        subject_id: 9,
+        subject_name: "Ada",
+        relation: "owner",
+        model_id: "owner",
+        is_creator: false,
+      },
+    ]);
+    mockedAuthorize.mockResolvedValue({
+      syncedUserCount: 0,
+      affectedMemberCount: 0,
+      directAppliedCount: 0,
+      inviteCreatedCount: 0,
+      inviteExistingCount: 0,
+      failedCount: 1,
+      results: [
+        {
+          operation: "grant",
+          subjectType: "user",
+          subjectId: 9,
+          relation: "editor",
+          modelId: "editor",
+          outcome: "failed",
+          approvalInstanceId: null,
+          errorCode: 18118,
+          errorMessage: "failed",
+        },
+      ],
+    });
+    renderPage("/knowledge/space/7/settings");
+    await screen.findByText("change-relation");
+    fireEvent.click(screen.getByText("change-relation"));
+    fireEvent.click(
+      screen.getByRole("button", { name: "com_unified_permission.save" }),
+    );
+
+    await waitFor(() =>
+      expect(mockShowToast).toHaveBeenCalledWith(
+        expect.objectContaining({ message: "com_invite.partial_failed" }),
+      ),
+    );
+    expect(screen.queryByText("space-detail")).toBeNull();
+    expect(mockShowToast).not.toHaveBeenCalledWith(
+      expect.objectContaining({ message: "com_knowledge.space_updated" }),
+    );
   });
 });

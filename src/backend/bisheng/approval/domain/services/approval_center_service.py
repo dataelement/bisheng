@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from loguru import logger
+
 from bisheng.approval.domain.models.approval_instance import (
     ApprovalActionLog,
     ApprovalInstance,
@@ -429,6 +431,43 @@ class ApprovalCenterService:
             raise ValueError(f"instance not found: {instance_id}")
         if instance.applicant_user_id != operator_user_id:
             raise PermissionError("only applicant can withdraw")
+        if instance.scenario_code == "resource_user_invite_confirmation":
+            tasks = await ApprovalInstanceRepository.list_tasks(instance.id)
+            saved = await ApprovalInstanceRepository.withdraw_pending_instance(
+                instance_id=instance.id,
+                applicant_user_id=operator_user_id,
+                operator_user_name=operator_user_name,
+                reason=reason,
+            )
+            if saved is None:
+                raise ApprovalRequestAlreadyProcessedError()
+            await cls._write_audit_log(
+                tenant_id=saved.tenant_id,
+                operator_user_id=operator_user_id,
+                operator_tenant_id=saved.tenant_id,
+                action="approval.request.withdraw",
+                target_id=str(saved.id),
+                reason=reason,
+                metadata={"instance_id": saved.id, "scenario_code": saved.scenario_code},
+                operator_name=operator_user_name,
+                object_name=saved.business_name,
+                ip_address=ip_address,
+            )
+            receiver_ids = list({task.approver_user_id for task in tasks if task.approver_user_id != operator_user_id})
+            if receiver_ids:
+                await cls._send_invite_notify_best_effort(
+                    sender=operator_user_id,
+                    receiver_user_ids=receiver_ids,
+                    action_code="resource_user_invite_failed",
+                    business_name=saved.business_name,
+                    instance_id=saved.id,
+                    scenario_code=saved.scenario_code,
+                    reason=reason or "邀请已撤回",
+                )
+            return await cls.get_instance_detail(
+                instance_id=saved.id,
+                login_user=_SystemLoginUser(operator_user_id, tenant_id=saved.tenant_id),
+            )
         tasks = await ApprovalInstanceRepository.list_tasks(instance.id)
         for task in tasks:
             if task.status == ApprovalTaskStatus.PENDING:
@@ -675,6 +714,49 @@ class ApprovalCenterService:
             raise ApprovalRequestNotFoundError()
         if instance.tenant_id != operator_tenant_id:
             raise ApprovalRequestPermissionDeniedError()
+        if instance.scenario_code == "resource_user_invite_confirmation":
+            target_user_id = int((instance.payload_snapshot or {}).get("target_user_id", 0))
+            if task.approver_user_id != operator_user_id or target_user_id != operator_user_id:
+                raise ApprovalRequestPermissionDeniedError()
+            decision = await self.instance_repository.decide_single_task(
+                task_id=task_id,
+                operator_user_id=operator_user_id,
+                action=action,
+                operator_user_name=operator_user_name,
+                comment=comment,
+            )
+            if decision is None:
+                raise ApprovalRequestAlreadyProcessedError()
+            await self.__class__._write_audit_log(
+                tenant_id=instance.tenant_id,
+                operator_user_id=operator_user_id,
+                operator_tenant_id=instance.tenant_id,
+                action="approval.task.approve" if action == "approve" else "approval.task.reject",
+                target_type="approval_task",
+                target_id=str(task.id),
+                reason=comment,
+                metadata={
+                    "instance_id": instance.id,
+                    "task_id": task.id,
+                    "scenario_code": instance.scenario_code,
+                },
+                operator_name=operator_user_name,
+                object_name=instance.business_name,
+                ip_address=ip_address,
+            )
+            if decision.outbox is not None:
+                self.__class__._dispatch_outbox(decision.outbox.id)
+            else:
+                await self.__class__._send_invite_notify_best_effort(
+                    sender=operator_user_id,
+                    receiver_user_ids=[instance.applicant_user_id],
+                    action_code="resource_user_invite_failed",
+                    business_name=instance.business_name,
+                    instance_id=instance.id,
+                    scenario_code=instance.scenario_code,
+                    reason=comment or "被邀请用户已拒绝",
+                )
+            return
         if not operator_is_admin and task.approver_user_id != operator_user_id:
             raise ApprovalRequestPermissionDeniedError()
         if task.status != ApprovalTaskStatus.PENDING:
@@ -989,6 +1071,18 @@ class ApprovalCenterService:
             reason=reason,
             task_id=task_id,
         )
+
+    @classmethod
+    async def _send_invite_notify_best_effort(cls, **kwargs) -> None:
+        try:
+            await cls._send_approval_notify(**kwargs)
+        except Exception:
+            # Instance/task terminal state is authoritative; reminders are best effort.
+            logger.exception(
+                "failed to send resource invite decision reminder: instance_id={} action_code={}",
+                kwargs.get("instance_id"),
+                kwargs.get("action_code"),
+            )
 
     @staticmethod
     def _dispatch_outbox(outbox_id: int) -> None:

@@ -147,6 +147,45 @@ def test_create_channel_authorization_failure_keeps_resource_without_retry(
     assert service.create.await_count == 1
 
 
+def test_channel_create_response_item_results(app_with_creation_service):
+    app, service = app_with_creation_service
+    service.create.return_value = {
+        "id": CHANNEL_ID,
+        "name": "资讯频道",
+        "initial_permission_result": {
+            "status": "success",
+            "error_code": None,
+            "direct_applied_count": 0,
+            "invite_created_count": 1,
+            "invite_existing_count": 0,
+            "failed_count": 0,
+            "results": [
+                {
+                    "operation": "grant",
+                    "subject_type": "user",
+                    "subject_id": 11,
+                    "relation": "viewer",
+                    "model_id": "viewer",
+                    "outcome": "invite_created",
+                    "approval_instance_id": 1201,
+                    "error_code": None,
+                    "error_message": None,
+                }
+            ],
+        },
+    }
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/channel/manager/create",
+            json=_payload(grant=_grant()),
+        )
+
+    result = response.json()["data"]["initial_permission_result"]
+    assert result["invite_created_count"] == 1
+    assert result["results"][0]["approval_instance_id"] == 1201
+
+
 @pytest.mark.parametrize(
     "grant",
     [

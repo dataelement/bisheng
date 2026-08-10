@@ -689,6 +689,21 @@ class MetricLogConf(BaseModel):
     )
 
 
+class ApprovalInviteConf(BaseModel):
+    """Concurrency controls for personal-user approval invitations."""
+
+    business_lock_ttl_seconds: int = Field(default=15, ge=1)
+    binding_lock_ttl_seconds: int = Field(default=60, ge=3)
+    binding_lock_renewal_interval_seconds: int = Field(default=20, ge=1)
+    outbox_claim_ttl_seconds: int = Field(default=1200, gt=900)
+
+    @model_validator(mode="after")
+    def validate_lock_intervals(self):
+        if self.binding_lock_renewal_interval_seconds >= self.binding_lock_ttl_seconds:
+            raise ValueError("binding lock renewal interval must be shorter than its TTL")
+        return self
+
+
 class Settings(BaseModel):
     """Application Settings"""
 
@@ -754,6 +769,7 @@ class Settings(BaseModel):
     in_app_message_forwarding: InAppMessageForwardingConf = InAppMessageForwardingConf()
     database_pool: DatabasePoolConf = DatabasePoolConf()
     metric_log: MetricLogConf = MetricLogConf()
+    approval_invite: ApprovalInviteConf = ApprovalInviteConf()
 
     @field_validator("database_url")
     @classmethod

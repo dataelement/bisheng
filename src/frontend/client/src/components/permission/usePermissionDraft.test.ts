@@ -25,6 +25,14 @@ const viewer: PermissionDraftRow = {
   modelId: "viewer",
 };
 
+const pendingViewer: PermissionDraftRow = {
+  ...viewer,
+  subjectId: 7,
+  subjectName: "Pending viewer",
+  authorizationStatus: "pending",
+  approvalInstanceId: 1201,
+};
+
 describe("permissionDraftReducer", () => {
   it("adds, changes and removes rows while tracking both sides of a change", () => {
     const editor: PermissionDraftRow = {
@@ -74,6 +82,42 @@ describe("permissionDraftReducer", () => {
 
     expect(changed).toBe(state);
     expect(removed).toBe(state);
+  });
+
+  it("keeps pending rows immutable across change, remove and replace", () => {
+    const state = createPermissionDraft([pendingViewer, viewer]);
+    const pendingKey = getPermissionDraftRowKey(pendingViewer);
+
+    expect(permissionDraftReducer(state, {
+      type: "change",
+      key: pendingKey,
+      changes: { relation: "editor", modelId: "editor" },
+    })).toBe(state);
+    expect(permissionDraftReducer(state, { type: "remove", key: pendingKey })).toBe(state);
+
+    const replaced = permissionDraftReducer(state, {
+      type: "replace_rows",
+      rows: [{ ...pendingViewer, relation: "editor", modelId: "editor" }],
+    });
+    expect(replaced.rows).toContainEqual(pendingViewer);
+    expect(replaced.rows).not.toContainEqual(expect.objectContaining({
+      subjectId: pendingViewer.subjectId,
+      relation: "editor",
+    }));
+  });
+
+  it("never emits pending grants or revokes", () => {
+    let state = createPermissionDraft([pendingViewer, viewer]);
+    state = {
+      ...state,
+      rows: [viewer, { ...pendingViewer, relation: "editor" }],
+      touchedKeys: [
+        getPermissionDraftRowKey(pendingViewer),
+        getPermissionDraftRowKey({ ...pendingViewer, relation: "editor" }),
+      ],
+    };
+
+    expect(getPermissionDraftDiff(state)).toEqual({ grants: [], revokes: [] });
   });
 
   it("uses relation, model and department scope in the stable key", () => {

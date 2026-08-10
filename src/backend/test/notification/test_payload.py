@@ -12,8 +12,12 @@ from bisheng.notification.external._payload import (
 
 def test_forwardable_set_has_supported_station_message_codes():
     assert FORWARDABLE_ACTION_CODES == {
-        "request_channel", "approved_channel", "rejected_channel",
-        "request_knowledge_space", "approved_knowledge_space", "rejected_knowledge_space",
+        "request_channel",
+        "approved_channel",
+        "rejected_channel",
+        "request_knowledge_space",
+        "approved_knowledge_space",
+        "rejected_knowledge_space",
         "request_department_knowledge_space_upload",
         "approved_department_knowledge_space_upload",
         "rejected_department_knowledge_space_upload",
@@ -28,6 +32,9 @@ def test_forwardable_set_has_supported_station_message_codes():
         "approval_exception_approver_empty",
         "approval_execute_failed",
         "menu_grant_revoked",
+        "resource_user_invite_pending",
+        "resource_user_invite_effective",
+        "resource_user_invite_failed",
         "assigned_channel_admin",
         "assigned_knowledge_space_admin",
         "revoked_channel_admin",
@@ -77,8 +84,11 @@ def test_build_textcard_request_channel(mock_settings):
 def test_build_textcard_approved_knowledge_space(mock_settings):
     mock_settings.get_cofco_forwarding_conf.return_value.bisheng_inbox_url = "https://bisheng.cofco.com"
     card = build_textcard(
-        message_id=2, action_code="approved_knowledge_space",
-        applicant_name="李四", resource_name="研发知识空间", triggered_at="2026-05-13 11:00",
+        message_id=2,
+        action_code="approved_knowledge_space",
+        applicant_name="李四",
+        resource_name="研发知识空间",
+        triggered_at="2026-05-13 11:00",
     )
     assert card["title"] == "[知源] 知识空间加入申请已通过"
     assert "李四通过了你对「研发知识空间」的审批申请" in card["description"]
@@ -117,8 +127,11 @@ def test_build_textcard_pending_uses_scenario_specific_prd_copy(mock_settings):
 def test_build_textcard_unknown_action_code_raises():
     with pytest.raises(KeyError):
         build_textcard(
-            message_id=3, action_code="unknown_code",
-            applicant_name="A", resource_name="B", triggered_at="2026-05-13 12:00",
+            message_id=3,
+            action_code="unknown_code",
+            applicant_name="A",
+            resource_name="B",
+            triggered_at="2026-05-13 12:00",
         )
 
 
@@ -128,8 +141,11 @@ def test_build_textcard_truncates_long_title(mock_settings):
     mock_settings.get_cofco_forwarding_conf.return_value.bisheng_inbox_url = "https://bisheng.cofco.com"
     long_name = "X" * 1000
     card = build_textcard(
-        message_id=4, action_code="request_channel",
-        applicant_name=long_name, resource_name=long_name, triggered_at="2026-05-13 12:00",
+        message_id=4,
+        action_code="request_channel",
+        applicant_name=long_name,
+        resource_name=long_name,
+        triggered_at="2026-05-13 12:00",
     )
     assert len(card["title"].encode("utf-8")) <= 128
     assert len(card["description"].encode("utf-8")) <= 512

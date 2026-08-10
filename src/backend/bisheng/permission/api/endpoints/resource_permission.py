@@ -875,12 +875,12 @@ async def authorize_resource(
         dispatch_notifications=_dispatch_authorize_notifications_in_background,
     )
     try:
-        await service.authorize(resource_type, resource_id, request, login_user)
+        result = await service.authorize(resource_type, resource_id, request, login_user)
     except PermissionTupleWriteError as error:
         return error.return_resp_instance()
     except BaseErrorCode as error:
         return error.__class__.return_resp(msg=error.message)
-    return resp_200(None)
+    return resp_200(result)
 
 @router.get("/creation-grant-subjects")
 async def get_creation_grant_subjects(
@@ -1135,6 +1135,21 @@ async def get_resource_permissions(
         permissions=permissions,
         model_map=model_map,
         login_user=login_user,
+    )
+    from bisheng.permission.domain.services.resource_authorization_service import (
+        ResourceAuthorizationService,
+    )
+
+    resource_tenant_id = await PermissionService._resolve_resource_tenant(resource_type, resource_id)
+    if resource_tenant_id is None:
+        from bisheng.core.context.tenant import get_current_tenant_id
+
+        resource_tenant_id = get_current_tenant_id() or login_user.tenant_id
+    permissions = await ResourceAuthorizationService().list_pending_permissions(
+        tenant_id=int(resource_tenant_id),
+        resource_type=resource_type,
+        resource_id=resource_id,
+        active_permissions=permissions,
     )
     return resp_200(permissions)
 

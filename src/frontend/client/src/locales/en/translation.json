@@ -506,6 +506,9 @@
   "com_notifications_action_approval_exception_route_missing": "The approval request for「{{target}}」did not match an approval branch. Please handle it",
   "com_notifications_action_approval_exception_approver_empty": "No approver was resolved for the approval request for「{{target}}」. Please handle it",
   "com_notifications_action_approval_execute_failed": "Approval for「{{target}}」passed, but the business action failed. Please handle it",
+  "com_notifications_action_resource_user_invite_effective": "The user accepted the invitation to “{{target}}”; access is now active",
+  "com_notifications_action_resource_user_invite_failed": "The user did not join “{{target}}”; the invitation did not take effect",
+  "com_notifications_action_resource_user_invite_pending": "You were invited to access “{{target}}”. Confirm the invitation to activate access",
   "com_notifications_action_menu_grant_revoked": "Your access to menu「{{target}}」has been revoked",
   "com_notifications_action_revoked_channel_admin": "You are no longer an administrator of channel「{{target}}」",
   "com_notifications_action_revoked_knowledge_space_admin": "You are no longer an administrator of knowledge space「{{target}}」",
@@ -1903,6 +1906,13 @@
     "retry_permission": "Retry permissions",
     "save": "Save",
     "shared": "Shared"
+  },
+  "com_invite": {
+    "invite_existing": "{{count}} user(s) already have a pending invitation; no duplicate was created",
+    "invite_sent": "Invitation sent to {{count}} user(s); access activates after they confirm",
+    "partial_failed": "{{count}} invitation(s) failed. Review and retry them",
+    "pending": "Pending activation",
+    "scene_unavailable": "Personal-user invitation confirmation is not enabled, so personal access cannot be added"
   },
   "com_permission": {
     "action_revoke": "Revoke",

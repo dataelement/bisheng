@@ -14,6 +14,8 @@ export interface PermissionDraftRow {
   modelId?: string;
   includeChildren?: boolean;
   immutableCreator?: boolean;
+  authorizationStatus?: "active" | "pending";
+  approvalInstanceId?: number | null;
 }
 
 export interface PermissionDraft {
@@ -35,6 +37,14 @@ export type PermissionDraftAction =
   | { type: "reset"; rows?: PermissionDraftRow[] };
 
 const EMPTY_DIFF: PermissionDraftDiff = { grants: [], revokes: [] };
+
+function isImmutableRow(row: PermissionDraftRow): boolean {
+  return row.immutableCreator === true || row.authorizationStatus === "pending";
+}
+
+function isSameSubject(left: PermissionDraftRow, right: PermissionDraftRow): boolean {
+  return left.subjectType === right.subjectType && left.subjectId === right.subjectId;
+}
 
 function cloneRows(rows: PermissionDraftRow[]): PermissionDraftRow[] {
   return rows.map((row) => ({ ...row }));
@@ -118,13 +128,15 @@ export function permissionDraftReducer(
 
   if (action.type === "change") {
     const index = state.rows.findIndex((row) => getPermissionDraftRowKey(row) === action.key);
-    if (index < 0 || state.rows[index].immutableCreator) return state;
+    if (index < 0 || isImmutableRow(state.rows[index])) return state;
 
     const previous = state.rows[index];
     const next = {
       ...previous,
       ...action.changes,
       immutableCreator: previous.immutableCreator,
+      authorizationStatus: previous.authorizationStatus,
+      approvalInstanceId: previous.approvalInstanceId,
     };
     if (JSON.stringify(previous) === JSON.stringify(next)) return state;
 
@@ -142,7 +154,7 @@ export function permissionDraftReducer(
 
   if (action.type === "remove") {
     const row = state.rows.find((candidate) => getPermissionDraftRowKey(candidate) === action.key);
-    if (!row || row.immutableCreator) return state;
+    if (!row || isImmutableRow(row)) return state;
     return {
       ...state,
       rows: state.rows.filter((candidate) => getPermissionDraftRowKey(candidate) !== action.key),
@@ -150,11 +162,12 @@ export function permissionDraftReducer(
     };
   }
 
-  const immutableRows = state.rows.filter((row) => row.immutableCreator);
-  const immutableKeys = new Set(immutableRows.map(getPermissionDraftRowKey));
+  const immutableRows = state.rows.filter(isImmutableRow);
   const rows = uniqueRows([
     ...immutableRows,
-    ...cloneRows(action.rows).filter((row) => !immutableKeys.has(getPermissionDraftRowKey(row))),
+    ...cloneRows(action.rows).filter(
+      (row) => !immutableRows.some((immutableRow) => isSameSubject(immutableRow, row)),
+    ),
   ]);
   const currentKeys = state.rows.map(getPermissionDraftRowKey);
   const nextKeys = rows.map(getPermissionDraftRowKey);
@@ -183,14 +196,16 @@ export function getPermissionDraftDiff(draft: PermissionDraft): PermissionDraftD
   return {
     grants: draft.rows
       .filter((row) => {
+        if (isImmutableRow(row)) return false;
         const key = getPermissionDraftRowKey(row);
         return touchedKeys.has(key) && !baselineKeys.has(key);
       })
       .map(rowToGrant),
     revokes: draft.baseline
       .filter((row) => {
+        if (isImmutableRow(row)) return false;
         const key = getPermissionDraftRowKey(row);
-        return touchedKeys.has(key) && !rowKeys.has(key) && !row.immutableCreator;
+        return touchedKeys.has(key) && !rowKeys.has(key);
       })
       .map(rowToRevoke),
   };

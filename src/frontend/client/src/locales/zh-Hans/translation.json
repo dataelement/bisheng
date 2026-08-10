@@ -494,6 +494,9 @@
   "com_notifications_action_approval_exception_route_missing": "「{{target}}」的审批申请未匹配到审批分支，请处理",
   "com_notifications_action_approval_exception_approver_empty": "「{{target}}」的审批申请未解析到审批人，请处理",
   "com_notifications_action_approval_execute_failed": "「{{target}}」审批已通过，但业务执行失败，请处理",
+  "com_notifications_action_resource_user_invite_effective": "用户已确认加入「{{target}}」，权限现已生效",
+  "com_notifications_action_resource_user_invite_failed": "用户未能加入「{{target}}」，邀请未生效",
+  "com_notifications_action_resource_user_invite_pending": "你收到「{{target}}」的个人用户权限邀请，请确认",
   "com_notifications_action_menu_grant_revoked": "你对菜单「{{target}}」的访问权限已被撤回",
   "com_notifications_action_revoked_channel_admin": "你已不再是频道「{{target}}」的管理员",
   "com_notifications_action_revoked_knowledge_space_admin": "你已不再是知识空间「{{target}}」的管理员",
@@ -1832,6 +1835,13 @@
     "retry_permission": "重试权限设置",
     "save": "保存",
     "shared": "分享"
+  },
+  "com_invite": {
+    "invite_existing": "{{count}} 个用户已有待确认邀请，本次未重复创建",
+    "invite_sent": "已向 {{count}} 个用户发送邀请，需本人确认后生效",
+    "partial_failed": "{{count}} 个邀请处理失败，请检查后重试",
+    "pending": "待生效",
+    "scene_unavailable": "个人用户邀请确认场景未启用，无法新增个人用户权限"
   },
   "com_permission": {
     "action_revoke": "撤销",

@@ -491,6 +491,9 @@
   "com_notifications_action_approval_exception_route_missing": "「{{target}}」の審査申請は審査分岐に一致しませんでした。対応してください",
   "com_notifications_action_approval_exception_approver_empty": "「{{target}}」の審査申請で承認者を解決できませんでした。対応してください",
   "com_notifications_action_approval_execute_failed": "「{{target}}」の審査は承認されましたが、業務処理に失敗しました。対応してください",
+  "com_notifications_action_resource_user_invite_effective": "ユーザーが「{{target}}」への招待を承認し、権限が有効になりました",
+  "com_notifications_action_resource_user_invite_failed": "ユーザーは「{{target}}」に参加せず、招待は有効になりませんでした",
+  "com_notifications_action_resource_user_invite_pending": "「{{target}}」への権限招待が届きました。確認すると権限が有効になります",
   "com_notifications_action_menu_grant_revoked": "メニュー「{{target}}」へのアクセス権限は取り消されました",
   "com_notifications_action_revoked_channel_admin": "チャンネル「{{target}}」の管理者ではなくなりました",
   "com_notifications_action_revoked_knowledge_space_admin": "ナレッジスペース「{{target}}」の管理者ではなくなりました",
@@ -1826,6 +1829,13 @@
     "retry_permission": "権限設定を再試行",
     "save": "保存",
     "shared": "共有"
+  },
+  "com_invite": {
+    "invite_existing": "{{count}} 人には確認待ちの招待があるため、重複して作成しませんでした",
+    "invite_sent": "{{count}} 人に招待を送信しました。本人の確認後に権限が有効になります",
+    "partial_failed": "{{count}} 件の招待処理に失敗しました。確認して再試行してください",
+    "pending": "有効化待ち",
+    "scene_unavailable": "個人ユーザー招待確認が有効でないため、個人権限を追加できません"
   },
   "com_permission": {
     "action_revoke": "解除",

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ButtonHTMLAttributes } from "react";
 import { ChannelSettingsPage } from "./ChannelSettingsPage";
 import {
@@ -11,6 +11,7 @@ const mockConfirm = jest.fn().mockResolvedValue(true);
 const mockSetVisibility = jest.fn();
 const mockReplaceRows = jest.fn();
 const mockSubmit = jest.fn().mockResolvedValue({ status: "success", channelId: "channel-1" });
+const mockCompleteSubmission = jest.fn();
 const mockRetryAuthorization = jest.fn();
 const mockEnterCreatedChannel = jest.fn();
 const mockCancel = jest.fn();
@@ -83,6 +84,7 @@ const mockSettings = {
   submitting: false,
   authorizationRecovery: null as null | { channelId: string; grants: []; errorCode: number | null },
   submit: mockSubmit,
+  completeSubmission: mockCompleteSubmission,
   retryAuthorization: mockRetryAuthorization,
   enterCreatedChannel: mockEnterCreatedChannel,
   cancel: mockCancel,
@@ -154,6 +156,8 @@ jest.mock("~/components/permission/SubjectSearchUserGroup", () => ({ SubjectSear
 
 describe("ChannelSettingsPage", () => {
   beforeEach(() => {
+    jest.clearAllMocks();
+    mockSubmit.mockResolvedValue({ status: "success", channelId: "channel-1" });
     mockParams = {};
     Object.assign(mockSettings, {
       isEditMode: false,
@@ -247,5 +251,34 @@ describe("ChannelSettingsPage", () => {
 
     fireEvent.click(screen.getByText("com_unified_permission.create"));
     expect(mockSubmit).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps edit mode open when one authorization item fails", async () => {
+    mockParams = { channelId: "channel-1" };
+    Object.assign(mockSettings, { isEditMode: true });
+    mockSubmit.mockResolvedValueOnce({
+      status: "permission_failed",
+      channelId: "channel-1",
+      authorizationResult: {
+        directAppliedCount: 0,
+        inviteCreatedCount: 0,
+        inviteExistingCount: 0,
+        failedCount: 1,
+        results: [],
+      },
+    });
+    render(<ChannelSettingsPage />);
+
+    fireEvent.click(screen.getByText("com_unified_permission.save"));
+
+    await waitFor(() =>
+      expect(mockShowToast).toHaveBeenCalledWith(
+        expect.objectContaining({ message: "com_invite.partial_failed" }),
+      ),
+    );
+    expect(mockCompleteSubmission).not.toHaveBeenCalled();
+    expect(mockShowToast).not.toHaveBeenCalledWith(
+      expect.objectContaining({ message: "com_subscription.save_success" }),
+    );
   });
 });

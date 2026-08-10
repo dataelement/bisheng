@@ -27,7 +27,11 @@ export function PermissionDraftEditor({
   const localize = useLocalize();
 
   const handleRelationChange = (row: PermissionDraftRow, modelId: string) => {
-    if (row.immutableCreator || !capabilities.canChangeRelation) return;
+    if (
+      row.immutableCreator
+      || row.authorizationStatus === "pending"
+      || !capabilities.canChangeRelation
+    ) return;
     const model = capabilities.relationModels.find((candidate) => candidate.id === modelId);
     if (!model || (row.subjectType !== "user" && model.relation === "owner")) return;
 
@@ -40,7 +44,11 @@ export function PermissionDraftEditor({
   };
 
   const handleRemove = (row: PermissionDraftRow) => {
-    if (row.immutableCreator || !capabilities.canRemove) return;
+    if (
+      row.immutableCreator
+      || row.authorizationStatus === "pending"
+      || !capabilities.canRemove
+    ) return;
     const rowKey = getPermissionDraftRowKey(row);
     onChange(value.filter((candidate) => getPermissionDraftRowKey(candidate) !== rowKey));
   };
@@ -52,16 +60,23 @@ export function PermissionDraftEditor({
         const relationModels = row.subjectType === "user"
           ? capabilities.relationModels
           : capabilities.relationModels.filter((model) => model.relation !== "owner");
+        const isPending = row.authorizationStatus === "pending";
         const canChangeRelation = !row.immutableCreator
+          && !isPending
           && capabilities.canChangeRelation
           && relationModels.length > 0;
-        const canRemove = !row.immutableCreator && capabilities.canRemove;
+        const canRemove = !row.immutableCreator && !isPending && capabilities.canRemove;
 
         return (
           <div key={rowKey} className="flex min-h-14 items-center gap-3 py-3">
             <span className="min-w-0 flex-1 truncate text-body text-text-1">
               {row.subjectName}
             </span>
+            {isPending && (
+              <span className="shrink-0 rounded bg-warning/10 px-2 py-0.5 text-caption text-warning">
+                {localize("com_invite.pending")}
+              </span>
+            )}
             <RelationSelect
               value={row.modelId ?? row.relation}
               onChange={(modelId) => handleRelationChange(row, modelId)}

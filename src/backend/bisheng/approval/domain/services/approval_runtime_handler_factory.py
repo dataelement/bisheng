@@ -32,6 +32,12 @@ async def build_runtime_handler(scenario_code: str) -> Any:
             update_member=SpaceChannelMemberDao.update,
             sync_permissions=KnowledgeSpaceService.sync_direct_space_user_permissions,
         )
+    if scenario_code == "resource_user_invite_confirmation":
+        from bisheng.approval.domain.services.resource_user_invite_scenario_handler import (
+            ResourceUserInviteScenarioHandler,
+        )
+
+        return ResourceUserInviteScenarioHandler()
     raise KeyError(f"handler not registered for scenario_code={scenario_code}")
 
 
