@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator, Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from dataclasses import dataclass, replace
@@ -78,6 +79,7 @@ SessionFactory = Callable[[], AbstractAsyncContextManager[AsyncSession]]
 ZERO_CHECKSUM = "0" * 64
 HIGHER_CONSISTENCY = "HIGHER_CONSISTENCY"
 CATALOG_STAGE_BATCH_SIZE = 80
+CATALOG_READ_CONCURRENCY = 8
 ACTIVE_OPERATION_STATUSES = (
     "PREPARED",
     "STAGING",
@@ -1087,10 +1089,7 @@ class OpenFGACatalogProjector:
     ) -> None:
         expected = self._expected_tuples(draft)
         await self._persist_plan(draft.release_id, expected)
-        present = {
-            (row["user"], row["relation"], row["object"])
-            for row in await self._client.read_tuples(consistency=HIGHER_CONSISTENCY)
-        }
+        present = await self._read_present(expected)
         missing = [row for row in expected if (row["user"], row["relation"], row["object"]) not in present]
         for index in range(0, len(missing), CATALOG_STAGE_BATCH_SIZE):
             batch = missing[index : index + CATALOG_STAGE_BATCH_SIZE]
@@ -1102,16 +1101,42 @@ class OpenFGACatalogProjector:
         self,
         draft: CatalogDraftSnapshot,
     ) -> None:
-        expected = {(row["user"], row["relation"], row["object"]) for row in self._expected_tuples(draft)}
-        present = {
-            (row["user"], row["relation"], row["object"])
-            for row in await self._client.read_tuples(consistency=HIGHER_CONSISTENCY)
-        }
+        planned = self._expected_tuples(draft)
+        expected = {(row["user"], row["relation"], row["object"]) for row in planned}
+        present = await self._read_present(planned)
         missing = expected - present
         if missing:
             raise PermissionProjectionFailedError(msg=f"Catalog staged tuple verification failed: {len(missing)}")
         if draft.model_release is None:
             raise PermissionPublishNotReadyError(msg="Catalog model release is missing")
+
+    async def _read_present(
+        self,
+        planned: list[dict[str, str]],
+    ) -> set[tuple[str, str, str]]:
+        """Read only the tuples this plan touches, one concrete object at a time.
+
+        An unfiltered Read walks the whole Store at 100 tuples per request, so
+        checking a few hundred Catalog tuples against a 77k-tuple Store cost
+        ~774 round trips — twice per publish, at HIGHER_CONSISTENCY. Scoping the
+        reads to the planned objects makes the cost proportional to the plan
+        instead of the Store, and the objects are independent so they overlap.
+        """
+
+        objects = sorted({row["object"] for row in planned})
+        if not objects:
+            return set()
+        semaphore = asyncio.Semaphore(CATALOG_READ_CONCURRENCY)
+
+        async def read(object_key: str) -> list[dict]:
+            async with semaphore:
+                return await self._client.read_tuples(
+                    object=object_key,
+                    consistency=HIGHER_CONSISTENCY,
+                )
+
+        pages = await asyncio.gather(*(read(key) for key in objects))
+        return {(row["user"], row["relation"], row["object"]) for page in pages for row in page}
 
     async def arm_recent_marker(
         self,
@@ -1149,9 +1174,12 @@ class OpenFGACatalogProjector:
         return _commit_checksum(changes)
 
     async def read_active_release_keys(self) -> frozenset[str]:
+        # OpenFGA rejects a tuple_key without an object type, so the filter has
+        # to name the type even though the prefix check below already does.
         rows = await self._client.read_tuples(
             user="user:*",
             relation="active",
+            object="permission_catalog_release:",
             consistency=HIGHER_CONSISTENCY,
         )
         prefix = "permission_catalog_release:"

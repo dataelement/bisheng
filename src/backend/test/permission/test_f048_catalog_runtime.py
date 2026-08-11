@@ -124,12 +124,17 @@ class InMemoryCatalogFGA:
         consistency: str | None = None,
     ) -> list[dict]:
         del consistency
+        # An object ending in ":" is a type filter, matching every id of that
+        # type — the same shape the real Read API accepts (and it requires a
+        # user alongside it, which this fake asserts rather than silently allows).
+        if object is not None and object.endswith(":") and not user:
+            raise AssertionError("type-only object filter needs a user")
         return [
             {"user": item_user, "relation": item_relation, "object": item_object}
             for item_user, item_relation, item_object in sorted(self.tuples)
             if (user is None or item_user == user)
             and (relation is None or item_relation == relation)
-            and (object is None or item_object == object)
+            and (object is None or item_object == object or (object.endswith(":") and item_object.startswith(object)))
         ]
 
     @staticmethod

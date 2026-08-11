@@ -270,3 +270,45 @@ def test_for_model_reuses_store_without_a_legacy_client(client: FGAClient) -> No
     assert migration_client.store_id == client.store_id
     assert migration_client.model_id == "model-target"
     assert migration_client is not client
+
+
+@pytest.mark.asyncio
+async def test_read_filter_requires_an_object_type(
+    client: FGAClient,
+) -> None:
+    """A filtered Read without an object type is rejected before it is sent.
+
+    OpenFGA answers such a filter with a generic validation_error. The Catalog
+    publish path issued one at its final commit step, so the failure only showed
+    up as a 500 after the whole publish had already run.
+    """
+
+    client._post = AsyncMock()
+
+    with pytest.raises(ValueError, match="object type"):
+        await client.read_tuples(user="user:*", relation="active")
+
+    with pytest.raises(ValueError, match="object type"):
+        await client.read_tuples(object="permission_catalog_release")
+
+    client._post.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_read_filter_requires_an_object_id_or_a_user(
+    client: FGAClient,
+) -> None:
+    """A type-only object filter is legal only when a user narrows it."""
+
+    client._post = AsyncMock()
+    with pytest.raises(ValueError, match="object id or a user"):
+        await client.read_tuples(object="permission_model_release:")
+    client._post.assert_not_awaited()
+
+    client._post = AsyncMock(return_value={"tuples": []})
+    assert await client.read_tuples(object="permission_model_release:", user="user:*") == []
+    _, body = client._post.call_args.args
+    assert body["tuple_key"] == {
+        "user": "user:*",
+        "object": "permission_model_release:",
+    }
