@@ -13,7 +13,7 @@ import {
 } from "@/controllers/API/knowledgeSpaceTagLibrary"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { cname } from "@/components/bs-ui/utils"
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { SourceFileLinks } from "./SourceFileLinks"
 import { BatchResultDialog, LibraryPickerDialog, RejectReasonDialog } from "./TagBatchDialogs"
@@ -26,9 +26,11 @@ import {
     formatDateTime,
     reviewRequestStatus,
     reviewStatusColorClass,
+    sourceLibraryNames,
     type TagConsoleFilterState,
     type TagConsoleReviewTab,
 } from "./tagConsoleTypes"
+import { distinctSourceSpaceIds, useApprovableLibraries } from "./useApprovableLibraries"
 
 const PAGE_SIZE = 20
 
@@ -132,7 +134,7 @@ export function ReviewTablePanel({ libraries, onReviewed }: ReviewTablePanelProp
     const isPendingTab = tab === "pending"
     // Checkbox + action columns exist only where rows can still be acted on;
     // the reviewed tab shows an outcome column instead.
-    const columnCount = isPendingTab ? 11 : 10
+    const columnCount = isPendingTab ? 12 : 11
 
     const selectedRows = rows.filter((row) => selectedKeys.includes(keyOf(row)))
     // Already-reviewed entries are read-only, so they take part in neither action.
@@ -160,6 +162,14 @@ export function ReviewTablePanel({ libraries, onReviewed }: ReviewTablePanelProp
         setReviewTarget(null)
         finishBatch(await captureAndAlertRequestErrorHoc(batchRejectTagConsoleApi(items, reason)))
     }
+
+    // One library is chosen for the whole batch, so only the ones bound to every
+    // selected tag's source can work — see useApprovableLibraries.
+    const approveSpaceIds = useMemo(
+        () => (approveOpen ? distinctSourceSpaceIds(actionableRows) : []),
+        [approveOpen, actionableRows],
+    )
+    const { libraries: approvableLibraries, loading: loadingLibraries } = useApprovableLibraries(approveSpaceIds)
 
     const allChecked = rows.length > 0 && selectedKeys.length === rows.length
 
@@ -222,6 +232,7 @@ export function ReviewTablePanel({ libraries, onReviewed }: ReviewTablePanelProp
                             {!isPendingTab && (
                                 <th className="px-3 py-3 font-medium">{t("build.tagConsole.status", "标签状态")}</th>
                             )}
+                            <th className="px-3 py-3 font-medium">{t("build.tagConsole.sourceLibrary", "标签来源库")}</th>
                             <th className="px-3 py-3 font-medium">{t("build.tagConsole.sourceKnowledge", "标签来源知识")}</th>
                             <th className="px-3 py-3 font-medium">{t("build.tagConsole.submitter", "提报者")}</th>
                             <th className="px-3 py-3 font-medium">{t("build.tagConsole.reviewer", "审核者")}</th>
@@ -300,6 +311,9 @@ export function ReviewTablePanel({ libraries, onReviewed }: ReviewTablePanelProp
                                                 : t("build.tagConsole.statusRejected", "已驳回")}
                                         </td>
                                     )}
+                                    <td className="max-w-48 px-3 py-3">
+                                        {sourceLibraryNames(row.source_files).join("、") || "-"}
+                                    </td>
                                     <td className="max-w-64 px-3 py-3">
                                         <SourceFileLinks files={row.source_files} />
                                     </td>
@@ -356,7 +370,12 @@ export function ReviewTablePanel({ libraries, onReviewed }: ReviewTablePanelProp
             <LibraryPickerDialog
                 open={approveOpen}
                 title={t("build.tagConsole.batchApprove", "批量入库")}
-                libraries={libraries}
+                libraries={approvableLibraries}
+                loading={loadingLibraries}
+                emptyHint={t(
+                    "build.tagConsole.noSharedLibrary",
+                    "所选标签来自不同知识库，没有共同关联的标签库。请分批处理。",
+                )}
                 saving={saving}
                 onOpenChange={setApproveOpen}
                 onConfirm={(libraryId) => handleApprove(libraryId, actionableRows.map(refOf))}

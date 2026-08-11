@@ -16,10 +16,15 @@ import {
     EMPTY_FILTERS,
     INITIAL_SELECTION,
     reviewRequestStatus,
+    sourceLibraryNames,
     selectLibrary,
     selectReviewEntry,
     type TagConsoleFilterState,
 } from "@/pages/BuildPage/bench/standalone/tagConsole/tagConsoleTypes"
+import {
+    distinctSourceSpaceIds,
+    intersectLibraries,
+} from "@/pages/BuildPage/bench/standalone/tagConsole/useApprovableLibraries"
 
 describe("left panel selection", () => {
     it("selecting a library toggles it and stays in library mode", () => {
@@ -163,5 +168,56 @@ describe("reviewRequestStatus", () => {
     it("narrows the reviewed tab to one outcome", () => {
         expect(reviewRequestStatus("reviewed", "approved")).toBe("approved")
         expect(reviewRequestStatus("reviewed", "rejected")).toBe("rejected")
+    })
+})
+
+describe("sourceLibraryNames", () => {
+    const file = (knowledge_name: string | null, file_id = 1) =>
+        ({ file_id, file_name: "a.docx", knowledge_id: 9, knowledge_name }) as any
+
+    it("lists each knowledge base once, in order", () => {
+        expect(sourceLibraryNames([file("热轧库"), file("冷轧库", 2), file("热轧库", 3)])).toEqual([
+            "热轧库",
+            "冷轧库",
+        ])
+    })
+
+    it("drops files whose knowledge base is missing or blank", () => {
+        expect(sourceLibraryNames([file(null), file("   ", 2), file("热轧库", 3)])).toEqual(["热轧库"])
+    })
+
+    it("survives a row with no source files", () => {
+        expect(sourceLibraryNames([])).toEqual([])
+        expect(sourceLibraryNames(undefined as any)).toEqual([])
+    })
+})
+
+describe("approvable libraries", () => {
+    const lib = (id: number, name = `lib${id}`) => ({ id, name }) as any
+
+    it("keeps only libraries every source knowledge base is bound to", () => {
+        const shared = intersectLibraries([
+            [lib(1), lib(2), lib(3)],
+            [lib(2), lib(3)],
+            [lib(3), lib(9)],
+        ])
+
+        expect(shared.map((l) => l.id)).toEqual([3])
+    })
+
+    it("a single source keeps its whole list, in order", () => {
+        expect(intersectLibraries([[lib(5), lib(1)]]).map((l) => l.id)).toEqual([5, 1])
+    })
+
+    it("no overlap means the batch has to be split, not an error", () => {
+        expect(intersectLibraries([[lib(1)], [lib(2)]])).toEqual([])
+        expect(intersectLibraries([])).toEqual([])
+    })
+
+    it("collects the distinct source knowledge bases of a selection", () => {
+        const row = (...ids: number[]) => ({ source_files: ids.map((knowledge_id) => ({ knowledge_id })) })
+
+        expect(distinctSourceSpaceIds([row(9, 3), row(3), row(1)])).toEqual([1, 3, 9])
+        expect(distinctSourceSpaceIds([{ source_files: [] }, {}])).toEqual([])
     })
 })

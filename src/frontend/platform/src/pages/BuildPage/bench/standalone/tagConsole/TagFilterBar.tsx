@@ -1,10 +1,10 @@
 import FilterByUser from "@/components/bs-comp/filterTableDataComponent/FilterByUser"
-import KnowledgeSelect from "@/components/bs-comp/selectComponent/knowledge"
 import { Button } from "@/components/bs-ui/button"
 import { Input } from "@/components/bs-ui/input"
 import { Label } from "@/components/bs-ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select"
 import { useTranslation } from "react-i18next"
+import { SourceKnowledgeSelect } from "./SourceKnowledgeSelect"
 import {
     EMPTY_PICK,
     RESOURCE_TYPES,
@@ -141,8 +141,7 @@ export function TagFilterBar({ filters, showStatus, onChange, onSearch, onReset 
                 </Field>
 
                 <Field label={t("build.tagConsole.sourceLibrary", "标签来源库")}>
-                    <KnowledgeSelect
-                        type="file"
+                    <SourceKnowledgeSelect
                         value={pickValue(filters.sourceKnowledge)}
                         onChange={(options: any) => patch({ sourceKnowledge: pickOne(options) })}
                     />

@@ -14,6 +14,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.database.models.review_tags import ApproveOrRejectEnum, ReviewTag, ReviewTagLink
 from bisheng.database.models.tag import Tag, TagBusinessTypeEnum, TagLink
+from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 from bisheng.knowledge.domain.models.knowledge_space_tag_library import KnowledgeSpaceTagLibrary
 from bisheng.workstation.domain.schemas.tag_console_schema import (
@@ -199,15 +200,36 @@ class TagConsoleRepositoryImpl:
             KnowledgeFile.tenant_id == tenant_id,
         )
         rows = (await self.session.exec(statement)).all()
+        space_names = await self.list_knowledge_names(
+            [knowledge_id for _, _, knowledge_id, _ in rows],
+            tenant_id=tenant_id,
+        )
         return {
             int(file_id): {
                 "file_id": int(file_id),
                 "file_name": file_name or "",
                 "knowledge_id": int(knowledge_id) if knowledge_id is not None else 0,
+                "knowledge_name": space_names.get(int(knowledge_id)) if knowledge_id is not None else None,
                 "parent_id": self.parent_folder_id_from_level_path(file_level_path),
             }
             for file_id, file_name, knowledge_id, file_level_path in rows
         }
+
+    async def list_knowledge_names(self, knowledge_ids: list[int], tenant_id: int) -> dict[int, str]:
+        """Names of the knowledge bases a page's source files belong to.
+
+        One query for the whole page — the 标签来源库 column would otherwise be a
+        lookup per file.
+        """
+        normalized = {int(knowledge_id) for knowledge_id in knowledge_ids if knowledge_id}
+        if not normalized:
+            return {}
+        statement = select(Knowledge.id, Knowledge.name).where(
+            Knowledge.id.in_(sorted(normalized)),
+            Knowledge.tenant_id == tenant_id,
+        )
+        rows = (await self.session.exec(statement)).all()
+        return {int(knowledge_id): name for knowledge_id, name in rows}
 
     # ------------------------------------------------------------------
     # Library mode — writes

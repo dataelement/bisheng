@@ -1437,6 +1437,7 @@
       "batchDelete": "Delete",
       "batchMove": "Move",
       "batchApprove": "Approve",
+      "noSharedLibrary": "The selected tags come from different knowledge bases with no tag library in common. Approve them in smaller batches.",
       "batchReject": "Reject",
       "handle": "Handle",
       "reviewTitle": "Tag review",
@@ -1453,6 +1454,7 @@
       "multiSpaceHint": "Produced in {{count}} knowledge spaces",
       "tagNamePlaceholder": "Enter a tag name",
       "selectUser": "Select a user",
+      "selectKnowledge": "Select a knowledge base",
       "tabPending": "Pending",
       "tabReviewed": "Reviewed",
       "emptyReviewed": "No reviewed tags"

@@ -7,10 +7,13 @@ The console has two modes backed by two different tables:
   ``(name, resource_type)`` — see :class:`TagConsoleReviewRef` for why.
 """
 
+import re
 from datetime import datetime
 from enum import Enum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+_DATE_ONLY = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 MAX_PAGE_SIZE = 200
 MAX_BATCH_SIZE = 500
@@ -43,6 +46,9 @@ class TagConsoleSourceFile(BaseModel):
     file_id: int
     file_name: str
     knowledge_id: int
+    # 标签来源库 — the knowledge base the file lives in. Shown as its own column,
+    # so the console does not have to resolve ids to names on the client.
+    knowledge_name: str | None = None
     parent_id: int | None = None
 
 
@@ -64,6 +70,21 @@ class TagConsoleFilter(BaseModel):
     review_time_end: datetime | None = None
     page: int = 1
     page_size: int = 20
+
+    @field_validator("create_time_end", "review_time_end", mode="before")
+    @classmethod
+    def _end_of_day(cls, value):
+        """A bare date as the upper bound means the end of that day.
+
+        The filter bar sends ``YYYY-MM-DD``, which parses to midnight. Compared
+        with ``<=`` that makes "从 8-11 到 8-11" match only rows stamped exactly
+        00:00:00 — i.e. picking one day returned nothing. Widening it here rather
+        than in the query keeps both listings and their counts consistent, and
+        an explicit timestamp from any other caller is left alone.
+        """
+        if isinstance(value, str) and _DATE_ONLY.match(value.strip()):
+            return f"{value.strip()}T23:59:59.999999"
+        return value
 
 
 # --------------------------------------------------------------------------

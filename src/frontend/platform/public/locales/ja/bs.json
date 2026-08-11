@@ -1420,6 +1420,7 @@
       "batchDelete": "一括削除",
       "batchMove": "一括移動",
       "batchApprove": "一括登録",
+      "noSharedLibrary": "選択したタグは異なるナレッジベース由来で、共通のタグライブラリがありません。分けて処理してください。",
       "batchReject": "一括却下",
       "handle": "処理",
       "reviewTitle": "タグ審査",
@@ -1436,6 +1437,7 @@
       "multiSpaceHint": "{{count}} 個のナレッジスペースで生成",
       "tagNamePlaceholder": "タグ名を入力",
       "selectUser": "ユーザーを選択",
+      "selectKnowledge": "ナレッジベースを選択",
       "tabPending": "審査待ち",
       "tabReviewed": "審査済み",
       "emptyReviewed": "審査済みタグはありません"

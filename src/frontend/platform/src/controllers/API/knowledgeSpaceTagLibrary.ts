@@ -235,6 +235,8 @@ export interface TagConsoleSourceFile {
   file_id: number
   file_name: string
   knowledge_id: number
+  /** 标签来源库 — the knowledge base this file lives in. */
+  knowledge_name?: string | null
   parent_id?: number | null
 }
 

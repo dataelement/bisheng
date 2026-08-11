@@ -1426,6 +1426,7 @@
       "batchDelete": "批量删除",
       "batchMove": "批量移动",
       "batchApprove": "批量入库",
+      "noSharedLibrary": "所选标签来自不同知识库，没有共同关联的标签库。请分批处理。",
       "batchReject": "批量驳回",
       "handle": "处理",
       "reviewTitle": "标签审核",
@@ -1442,6 +1443,7 @@
       "multiSpaceHint": "该标签在 {{count}} 个知识空间中产生",
       "tagNamePlaceholder": "请输入标签名称",
       "selectUser": "请选择用户",
+      "selectKnowledge": "请选择知识库",
       "tabPending": "待审核",
       "tabReviewed": "已审核",
       "emptyReviewed": "暂无已审核标签"
