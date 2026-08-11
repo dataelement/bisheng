@@ -31,6 +31,7 @@ from bisheng.knowledge.domain.constants import normalize_business_domain_code
 from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile, KnowledgeFileDao, KnowledgeFileStatus
 from bisheng.knowledge.domain.services.department_space_target_resolver import (
+    DepartmentSpaceTargetKind,
     DepartmentSpaceTargetResolver,
 )
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
@@ -579,7 +580,11 @@ class FilelibSyncService:
             return space
         if identity.target_space_department is None:
             raise FilelibSyncNotFoundError(msg="dynamic target department does not exist")
-        return await self._find_department_space(identity.target_space_department)
+        dynamic_source = str(self.file_sync_rule.target_space.dynamic_source or "")
+        return await self._find_department_space(
+            identity.target_space_department,
+            dynamic_source=dynamic_source,
+        )
 
     async def _resolve_personal_fallback_target(self, identity: ResolvedIdentity) -> ResolvedFileSyncTarget:
         space = await self.knowledge_space_service.ensure_personal_default_space()
@@ -699,12 +704,42 @@ class FilelibSyncService:
             return str(identity.caller_department.name or "")
         raise FilelibSyncInvalidParamsError(msg="invalid folder dynamic source in token rule")
 
-    async def _find_department_space(self, department: Department) -> Knowledge:
+    @staticmethod
+    def _target_space_kind_for_dynamic_source(dynamic_source: str) -> DepartmentSpaceTargetKind:
+        if dynamic_source == "responsible_person_id":
+            return DepartmentSpaceTargetKind.CLINIC
+        if dynamic_source == "department_id":
+            return DepartmentSpaceTargetKind.DEPARTMENT
+        raise FilelibSyncInvalidParamsError(msg="invalid dynamic source in token rule")
+
+    @staticmethod
+    def _target_department_ids(
+        department: Department,
+        kind: DepartmentSpaceTargetKind,
+    ) -> list[int]:
+        """Department libraries walk up the org tree; clinic spaces match self only."""
+        if kind == DepartmentSpaceTargetKind.CLINIC:
+            return [int(department.id)]
+        return FilelibSyncService._department_chain(department)
+
+    async def _find_department_space(
+        self,
+        department: Department,
+        *,
+        dynamic_source: str = "department_id",
+    ) -> Knowledge:
+        kind = self._target_space_kind_for_dynamic_source(dynamic_source)
+        department_ids = self._target_department_ids(department, kind)
         try:
-            space_id = await DepartmentSpaceTargetResolver.resolve([int(department.id)])
+            space_id = await DepartmentSpaceTargetResolver.resolve(
+                department_ids,
+                kind=kind,
+                allow_legacy=False,
+            )
         except DepartmentKnowledgeSpaceAmbiguousError as exc:
+            space_label = "clinic" if kind == DepartmentSpaceTargetKind.CLINIC else "department"
             raise FilelibSyncConflictError(
-                msg="multiple target knowledge spaces are bound to the department",
+                msg=f"multiple target {space_label} knowledge spaces are bound to the department",
             ) from exc
         if space_id is not None:
             space = await self.repository.find_knowledge_by_id(space_id)
@@ -713,18 +748,7 @@ class FilelibSyncService:
         raise FilelibSyncNotFoundError(msg=f"首钢股份知识管理平台不存在知识库{department.name}")
 
     async def _find_nearest_department_space(self, department: Department) -> Knowledge:
-        chain = self._department_chain(department)
-        try:
-            space_id = await DepartmentSpaceTargetResolver.resolve(chain)
-        except DepartmentKnowledgeSpaceAmbiguousError as exc:
-            raise FilelibSyncConflictError(
-                msg="multiple target knowledge spaces are bound to the department",
-            ) from exc
-        if space_id is not None:
-            space = await self.repository.find_knowledge_by_id(space_id)
-            if space is not None:
-                return space
-        raise FilelibSyncNotFoundError(msg=f"首钢股份知识管理平台不存在知识库{department.name}")
+        return await self._find_department_space(department, dynamic_source="department_id")
 
     @staticmethod
     def _department_chain(department: Department) -> list[int]:

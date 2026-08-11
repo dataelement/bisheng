@@ -29,6 +29,9 @@ from bisheng.open_endpoints.domain.schemas.filelib_sync import (
     FilelibSyncParams,
     FilelibSyncResponseData,
 )
+from bisheng.knowledge.domain.services.department_space_target_resolver import (
+    DepartmentSpaceTargetKind,
+)
 from bisheng.open_endpoints.domain.services.filelib_sync_service import (
     FilelibSyncService,
     ResolvedFileSyncTarget,
@@ -247,9 +250,51 @@ async def test_department_binding_is_selected():
         "bisheng.open_endpoints.domain.services.filelib_sync_service.DepartmentSpaceTargetResolver.resolve",
         new=AsyncMock(return_value=22),
     ) as resolve:
-        space = await _service(repository)._find_department_space(department)
+        space = await _service(repository)._find_department_space(
+            department,
+            dynamic_source="department_id",
+        )
     assert space.id == 22
-    resolve.assert_awaited_once_with([3])
+    resolve.assert_awaited_once_with(
+        [3, 2, 1],
+        kind=DepartmentSpaceTargetKind.DEPARTMENT,
+        allow_legacy=False,
+    )
+
+
+async def test_clinic_binding_is_selected_for_responsible_person_dynamic_source():
+    department = _department(3, "三级科室", "/1/2/3/")
+    repository = SimpleNamespace(
+        find_knowledge_by_id=AsyncMock(return_value=Knowledge(id=33, name="三级科室库", type=3)),
+    )
+    with patch(
+        "bisheng.open_endpoints.domain.services.filelib_sync_service.DepartmentSpaceTargetResolver.resolve",
+        new=AsyncMock(return_value=33),
+    ) as resolve:
+        space = await _service(repository)._find_department_space(
+            department,
+            dynamic_source="responsible_person_id",
+        )
+    assert space.id == 33
+    resolve.assert_awaited_once_with(
+        [3],
+        kind=DepartmentSpaceTargetKind.CLINIC,
+        allow_legacy=False,
+    )
+
+
+async def test_clinic_dynamic_source_does_not_walk_up_org_tree():
+    department = _department(3, "三级科室", "/1/2/3/")
+    repository = SimpleNamespace(find_knowledge_by_id=AsyncMock())
+    service = _service(repository)
+    assert service._target_department_ids(
+        department,
+        DepartmentSpaceTargetKind.CLINIC,
+    ) == [3]
+    assert service._target_department_ids(
+        department,
+        DepartmentSpaceTargetKind.DEPARTMENT,
+    ) == [3, 2, 1]
 
 
 async def test_nearest_department_binding_is_selected():
@@ -263,7 +308,11 @@ async def test_nearest_department_binding_is_selected():
     ) as resolve:
         space = await _service(repository)._find_nearest_department_space(department)
     assert space.id == 22
-    resolve.assert_awaited_once_with([3, 2, 1])
+    resolve.assert_awaited_once_with(
+        [3, 2, 1],
+        kind=DepartmentSpaceTargetKind.DEPARTMENT,
+        allow_legacy=False,
+    )
 
 
 async def test_ambiguous_department_binding_is_rejected_before_space_lookup():
@@ -274,7 +323,10 @@ async def test_ambiguous_department_binding_is_rejected_before_space_lookup():
         new=AsyncMock(side_effect=DepartmentKnowledgeSpaceAmbiguousError()),
     ):
         with pytest.raises(FilelibSyncConflictError, match="multiple target"):
-            await _service(repository)._find_department_space(department)
+            await _service(repository)._find_department_space(
+                department,
+                dynamic_source="department_id",
+            )
 
     repository.find_knowledge_by_id.assert_not_awaited()
 
