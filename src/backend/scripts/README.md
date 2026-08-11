@@ -322,6 +322,30 @@ bash scripts/backfill_knowledge_space_auto_tags.sh --apply --min-tags 3 --max-ta
 - `--scan-batch-size` 控制标签统计分批大小；`--batch-size` 控制实际打标签分批大小。
 - Link B 是否执行仍受 `review_tag_visible`、空间 `auto_tag_enabled`、Link A 应用标签数上限，以及 `--max-tags` 剩余额度约束。
 
+### `merge_duplicate_approved_tags.py`
+
+合并**审核通过时产生的重复标签行**。修复前，通过一个标签会写两次：一次把标签名注册进审核人选的标签库（提报者记成审核人、无审核留痕、无文件关联），一次把审核记录搬进 `tag` 但标签库取的是提出该标签的库。结果一次通过留下两行，落在两个不同的标签库里。
+
+按 `(tenant_id, name)` 分组，组内**没有文件关联且创建时间更晚**的那行是审核人选的库（保留），**有文件关联且更早**的那行是数据来源（合入后删除）。默认 dry-run。
+
+用法：
+
+```bash
+PYTHONPATH=./ .venv/bin/python scripts/merge_duplicate_approved_tags.py
+PYTHONPATH=./ .venv/bin/python scripts/merge_duplicate_approved_tags.py --tenant 1
+PYTHONPATH=./ .venv/bin/python scripts/merge_duplicate_approved_tags.py --apply
+
+# Docker 容器内（WORKDIR /app）：
+python scripts/merge_duplicate_approved_tags.py
+```
+
+说明：
+
+- 只处理**刚好两行、且能明确区分保留行/数据行**的组。三行以上、两行文件关联情况相同、创建时间无法区分先后的，一律跳过并打印原因，交人工判断。
+- 只碰 `business_type='tag_library'` 的行，应用标签 / 知识标签不受影响。
+- 单次事务，失败整体回滚；`--apply` 才会写库。
+- 仅适用于已经升级到带 `tag.reviewer_id` / `tag.review_time` 的环境；老版本库结构不会产生这种重复。
+
 ### `backfill_word_pdf_preview.py`
 
 给**存量 Word 文件**补生成 PDF 预览。新上传的 Word 在解析时会把 .docx 预览转成 PDF 存到 `preview/{file_id}.pdf` 并记到 `user_metadata.pdf_preview_object_name`，前端优先用它（LibreOffice 排版更接近 Word，避免电子印章/图形错位）。此功能上线前解析的旧文件没有这个字段，预览会回退到 .docx —— 本脚本离线复刻同样的步骤给这些文件补齐。串行执行，幂等（`pdf_preview_source_md5` 已匹配当前 md5 的跳过）；默认 dry-run，传 `--apply` 才转换并写库。
