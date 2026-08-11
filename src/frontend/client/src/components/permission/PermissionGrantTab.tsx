@@ -304,7 +304,7 @@ export function PermissionGrantTab({
             </label>
           )}
 
-        <div className="mt-4 flex h-10 shrink-0 items-center gap-4 overflow-hidden">
+        <div className="mt-4 flex h-10 shrink-0 items-center gap-4">
           <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
             <span className="shrink-0 text-sm font-normal leading-[22px] text-[#999999]">
               {`${localize("com_permission.selected_prefix")}${subjectLabel}:`}
