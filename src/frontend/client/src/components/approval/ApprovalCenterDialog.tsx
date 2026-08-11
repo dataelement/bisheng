@@ -24,6 +24,10 @@ import { Dialog, DialogContent } from "../ui/Dialog";
 import { ExpandableSearchField } from "../ui/ExpandableSearchField";
 import { resolveApprovalTaskSelection, type ApprovalTaskFilter } from "./approvalCenterFileChangeUtils";
 import { FileChangeBusinessProjection } from "./FileChangeBusinessProjection";
+import {
+  RESOURCE_USER_INVITE_SCENARIO_CODE,
+  ResourceUserInviteBusinessContent,
+} from "./ResourceUserInviteBusinessContent";
 
 type ApprovalCenterTarget = {
   tab?: ApprovalCenterTab;
@@ -711,7 +715,8 @@ function TaskDetailPanel({ detail, localize, onBack }: { detail: ApprovalTaskDet
   ];
 
   const detailEntries = Object.entries(detail.detail_snapshot ?? detail.payload_snapshot ?? {}).filter(
-    ([k, v]) => !DETAIL_INTERNAL_KEYS.has(k) && v !== undefined && v !== null && v !== "",
+    ([k, v]) => detail.scenario_code !== RESOURCE_USER_INVITE_SCENARIO_CODE
+      && !DETAIL_INTERNAL_KEYS.has(k) && v !== undefined && v !== null && v !== "",
   );
   const showContent = detailEntries.length > 0;
 
@@ -726,6 +731,7 @@ function TaskDetailPanel({ detail, localize, onBack }: { detail: ApprovalTaskDet
       </div>
 
       <FileChangeBusinessProjection detail={detail} localize={localize} />
+      <ResourceUserInviteBusinessContent detail={detail} localize={localize} />
 
       {showContent && (
         <div>
@@ -886,7 +892,8 @@ function RequestDetailPanel({ detail, localize, onBack }: { detail: ApprovalInst
   ];
 
   const detailEntries = Object.entries(detail.detail_snapshot ?? {}).filter(
-    ([k, v]) => !DETAIL_INTERNAL_KEYS.has(k) && k !== "reason" && v !== undefined && v !== null && v !== "",
+    ([k, v]) => detail.scenario_code !== RESOURCE_USER_INVITE_SCENARIO_CODE
+      && !DETAIL_INTERNAL_KEYS.has(k) && k !== "reason" && v !== undefined && v !== null && v !== "",
   );
 
   return (
@@ -900,6 +907,7 @@ function RequestDetailPanel({ detail, localize, onBack }: { detail: ApprovalInst
       </div>
 
       <FileChangeBusinessProjection detail={detail} localize={localize} />
+      <ResourceUserInviteBusinessContent detail={detail} localize={localize} />
 
       {detailEntries.length > 0 && (
         <div>
