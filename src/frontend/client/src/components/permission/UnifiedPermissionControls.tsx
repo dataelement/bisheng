@@ -15,8 +15,8 @@ const SECTION_ICONS: Record<
   SettingsSectionKind,
   ComponentType<{ className?: string }>
 > = {
-  basic: Outlined.BlocksAndArrows,
-  advanced: Outlined.Dashboard,
+  basic: Outlined.Layer,
+  advanced: Outlined.Setting,
   permission: Outlined.PeopleSafe,
 };
 
