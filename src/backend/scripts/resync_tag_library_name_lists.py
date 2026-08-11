@@ -61,10 +61,11 @@ _BACKEND_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if _BACKEND_ROOT not in sys.path:
     sys.path.insert(0, _BACKEND_ROOT)
 
+from loguru import logger  # noqa: E402
 from sqlalchemy import text as sa_text  # noqa: E402
 
 from bisheng.core.context.tenant import bypass_tenant_filter  # noqa: E402
-from bisheng.core.database import get_sync_db_session  # noqa: E402
+from bisheng.core.database import get_database_connection, get_sync_db_session  # noqa: E402
 from bisheng.knowledge.domain.services.tag_library_tag_service import TagLibraryTagService  # noqa: E402
 
 SCAN_SQL = sa_text("""
@@ -101,8 +102,19 @@ def _listed_names(*columns) -> int:
 
 
 async def _resync(library_ids: list[int]) -> None:
-    for library_id in library_ids:
-        await TagLibraryTagService.sync_library_name_lists(library_id)
+    try:
+        for library_id in library_ids:
+            await TagLibraryTagService.sync_library_name_lists(library_id)
+    finally:
+        # Close the pool while the loop is still running. Left to interpreter
+        # shutdown, the connections are finalised after `asyncio.run` has closed
+        # the loop and print a "Event loop is closed" traceback — the work is
+        # already committed by then, but a successful run looks like a failure.
+        try:
+            connection = await get_database_connection()
+            await connection.close()
+        except Exception:
+            logger.debug("database pool teardown failed", exc_info=True)
 
 
 def main() -> int:
