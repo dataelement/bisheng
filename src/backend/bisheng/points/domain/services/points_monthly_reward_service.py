@@ -8,6 +8,8 @@ from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
+from sqlmodel import select
+
 from bisheng.common.models.space_channel_member import (
     BusinessTypeEnum,
     MembershipStatusEnum,
@@ -23,11 +25,14 @@ from bisheng.points.domain.constants.monthly_reward_rules import (
     fixed_score,
     pick_highest_reward,
 )
+from bisheng.points.domain.constants.notify_templates import resolve_earn_notify
 from bisheng.points.domain.repositories.points_repository import PointsRepository
 from bisheng.points.domain.services.points_ledger_service import PointsLedgerService
-from bisheng.points.domain.services.points_notify_service import PointsNotifyService
+from bisheng.points.domain.services.points_notify_service import (
+    PointsNotifyService,
+    build_points_notify_service,
+)
 from bisheng.user.domain.models.user_role import UserRole
-from sqlmodel import select
 
 logger = logging.getLogger(__name__)
 SHANGHAI = ZoneInfo("Asia/Shanghai")
@@ -231,6 +236,7 @@ class PointsMonthlyRewardService:
         try:
             async with get_async_db_session() as session:
                 repo = PointsRepository(session)
+                # 入账会话不挂 MessageService，避免消息依赖阻断月奖。
                 ledger = PointsLedgerService(repo)
                 result = await ledger.award(
                     tenant_id=tenant_id,
@@ -247,15 +253,12 @@ class PointsMonthlyRewardService:
                 await session.commit()
             if result.replayed or result.skipped_cap:
                 return bool(result.replayed)
-            try:
-                await self.notify.notify(
-                    user_id=user_id,
-                    template_code="earn_publish",
-                    rule_name=rule_name,
-                    delta=score,
-                )
-            except Exception:
-                logger.exception("points.monthly.notify_failed user_id=%s", user_id)
+            await self._notify_earn(
+                user_id=user_id,
+                rule_code=rule_code,
+                rule_name=rule_name,
+                delta=score,
+            )
             return True
         except Exception:
             logger.exception(
@@ -265,6 +268,38 @@ class PointsMonthlyRewardService:
                 key,
             )
             return False
+
+    async def _notify_earn(
+        self,
+        *,
+        user_id: int,
+        rule_code: str,
+        rule_name: str,
+        delta: int,
+    ) -> None:
+        """账本提交后发送月奖站内信；注入 MessageService，失败不影响入账。"""
+        template, values = resolve_earn_notify(rule_code, rule_name=rule_name, delta=delta)
+        try:
+            # 已注入可用 message_service，或单测 mock：直接发；裸 PointsNotifyService() 则走工厂。
+            if self.notify is not None and (
+                not isinstance(self.notify, PointsNotifyService) or self.notify.message_service is not None
+            ):
+                await self.notify.notify(
+                    user_id=user_id,
+                    template_code=template,
+                    **values,
+                )
+                return
+            async with get_async_db_session() as session:
+                notify = await build_points_notify_service(session)
+                await notify.notify(
+                    user_id=user_id,
+                    template_code=template,
+                    **values,
+                )
+                await session.commit()
+        except Exception:
+            logger.exception("points.monthly.notify_failed user_id=%s", user_id)
 
     async def _collect_user_candidates(
         self,
@@ -331,7 +366,5 @@ class PointsMonthlyRewardService:
     async def _load_super_admin_ids() -> set[int]:
         """平台超管不获月奖（Q16）。"""
         async with get_async_db_session() as session:
-            rows = (
-                await session.exec(select(UserRole.user_id).where(UserRole.role_id == AdminRole))
-            ).all()
+            rows = (await session.exec(select(UserRole.user_id).where(UserRole.role_id == AdminRole))).all()
         return {int(r[0] if isinstance(r, tuple) else r) for r in rows}
