@@ -6,6 +6,7 @@ filters.
 """
 
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from unittest.mock import patch
 
 import pytest
@@ -14,6 +15,8 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     FileType,
     KnowledgeFile,
     KnowledgeFileDao,
+    KnowledgeFileEntryStatus,
+    KnowledgeFileEntryType,
     KnowledgeFileStatus,
 )
 
@@ -158,10 +161,10 @@ async def test_count_files_by_category_scopes_filters_by_document_type_in_bound_
     class FakeResult:
         def all(self):
             return [
-                (1, 10, "GF-STD-PP-001"),
-                (2, 10, "GF-POL-PP-002"),
-                (3, 20, "GF-STD-QM-003"),
-                (4, 10, "GF-PP-QM-004"),
+                (1, 1, 10, "GF-STD-PP-001"),
+                (2, 2, 10, "GF-POL-PP-002"),
+                (3, 3, 20, "GF-STD-QM-003"),
+                (4, 4, 10, "GF-PP-QM-004"),
             ]
 
     class FakeSession:
@@ -193,9 +196,9 @@ async def test_scoped_counts_include_only_explicit_grant_files_from_grant_only_p
     class CategoryResult:
         def all(self):
             return [
-                (1, 10, "GF-STD-PM-001"),
-                (2, 30, "GF-STD-PM-002"),
-                (3, 30, "GF-STD-PM-003"),
+                (1, 1, 10, "GF-STD-PM-001"),
+                (2, 2, 30, "GF-STD-PM-002"),
+                (3, 3, 30, "GF-STD-PM-003"),
             ]
 
     class FakeSession:
@@ -240,3 +243,203 @@ async def test_count_files_by_category_scopes_rejects_like_overfetch_on_non_docu
 async def test_count_files_by_category_scopes_empty_space_returns_zero():
     result = await KnowledgeFileDao.async_count_files_by_category_scopes({"STD": set()})
     assert result == {"STD": 0}
+
+
+@pytest.mark.asyncio
+async def test_count_files_by_category_scopes_matches_active_canonical_inventory(async_db_session):
+    common = {
+        "knowledge_id": 10,
+        "file_encoding": "GF-STD-PP-001",
+        "reference_document_id": 900,
+        "entry_status": KnowledgeFileEntryStatus.ACTIVE.value,
+    }
+    await _insert(
+        async_db_session,
+        file_name="manager.pdf",
+        entry_type=KnowledgeFileEntryType.MANAGER.value,
+        **common,
+    )
+    await _insert(
+        async_db_session,
+        file_name="publish.pdf",
+        entry_type=KnowledgeFileEntryType.PUBLISH.value,
+        **common,
+    )
+    await _insert(
+        async_db_session,
+        knowledge_id=10,
+        file_name="invalid.pdf",
+        file_encoding="GF-STD-PP-002",
+        reference_document_id=901,
+        entry_type=KnowledgeFileEntryType.PUBLISH.value,
+        entry_status=KnowledgeFileEntryStatus.INVALID.value,
+    )
+
+    with _patch_session_factory(async_db_session):
+        result = await KnowledgeFileDao.async_count_files_by_category_scopes({"STD": {10}})
+
+    assert result == {"STD": 1}
+
+
+@pytest.mark.asyncio
+async def test_portal_cursor_paginates_canonical_documents_without_cross_page_duplicates(async_db_session):
+    first = await _insert(
+        async_db_session,
+        knowledge_id=10,
+        file_name="manager.pdf",
+        file_encoding="GF-STD-PP-001",
+        reference_document_id=900,
+        entry_type=KnowledgeFileEntryType.MANAGER.value,
+        entry_status=KnowledgeFileEntryStatus.ACTIVE.value,
+        update_time=datetime(2026, 1, 3, tzinfo=timezone.utc),
+    )
+    await _insert(
+        async_db_session,
+        knowledge_id=20,
+        file_name="publish.pdf",
+        file_encoding="GF-STD-PP-001",
+        reference_document_id=900,
+        entry_type=KnowledgeFileEntryType.PUBLISH.value,
+        entry_status=KnowledgeFileEntryStatus.ACTIVE.value,
+        update_time=datetime(2026, 1, 2, tzinfo=timezone.utc),
+    )
+    second = await _insert(
+        async_db_session,
+        knowledge_id=10,
+        file_name="other.pdf",
+        file_encoding="GF-STD-PP-002",
+        reference_document_id=901,
+        entry_type=KnowledgeFileEntryType.MANAGER.value,
+        entry_status=KnowledgeFileEntryStatus.ACTIVE.value,
+        update_time=datetime(2026, 1, 1, tzinfo=timezone.utc),
+    )
+
+    with _patch_session_factory(async_db_session):
+        first_page = await KnowledgeFileDao.aget_file_by_space_filters_cursor(
+            knowledge_ids=[10, 20],
+            status=[KnowledgeFileStatus.SUCCESS.value],
+            document_type="STD",
+            business_domain_code="PP",
+            order_sort="desc",
+            limit=1,
+        )
+        second_page = await KnowledgeFileDao.aget_file_by_space_filters_cursor(
+            knowledge_ids=[10, 20],
+            status=[KnowledgeFileStatus.SUCCESS.value],
+            document_type="STD",
+            business_domain_code="PP",
+            order_sort="desc",
+            cursor=[first_page[-1].update_time, first_page[-1].id],
+            limit=1,
+        )
+
+    assert [item.id for item in first_page] == [first.id]
+    assert [item.id for item in second_page] == [second.id]
+
+
+@pytest.mark.asyncio
+async def test_navigation_counts_equal_all_canonical_cursor_pages(async_db_session):
+    common = {
+        "file_encoding": "GF-STD-PP-001",
+        "entry_status": KnowledgeFileEntryStatus.ACTIVE.value,
+    }
+    await _insert(
+        async_db_session,
+        knowledge_id=10,
+        file_name="manager.pdf",
+        reference_document_id=900,
+        entry_type=KnowledgeFileEntryType.MANAGER.value,
+        update_time=datetime(2026, 1, 3, tzinfo=timezone.utc),
+        **common,
+    )
+    await _insert(
+        async_db_session,
+        knowledge_id=20,
+        file_name="publish.pdf",
+        reference_document_id=900,
+        entry_type=KnowledgeFileEntryType.PUBLISH.value,
+        update_time=datetime(2026, 1, 2, tzinfo=timezone.utc),
+        **common,
+    )
+    await _insert(
+        async_db_session,
+        knowledge_id=10,
+        file_name="other.pdf",
+        reference_document_id=901,
+        entry_type=KnowledgeFileEntryType.MANAGER.value,
+        update_time=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        **common,
+    )
+    await _insert(
+        async_db_session,
+        knowledge_id=10,
+        file_name="invalid.pdf",
+        reference_document_id=902,
+        entry_type=KnowledgeFileEntryType.PUBLISH.value,
+        entry_status=KnowledgeFileEntryStatus.INVALID.value,
+        update_time=datetime(2025, 12, 31, tzinfo=timezone.utc),
+        file_encoding="GF-STD-PP-002",
+    )
+
+    with _patch_session_factory(async_db_session):
+        category_counts = await KnowledgeFileDao.async_count_files_by_category_scopes(
+            {"STD": {10, 20}}
+        )
+        domain_counts = await KnowledgeFileDao.async_count_files_by_domain_scopes(
+            {"PP": {10, 20}}
+        )
+        listed = []
+        cursor = None
+        while True:
+            page = await KnowledgeFileDao.aget_file_by_space_filters_cursor(
+                knowledge_ids=[10, 20],
+                status=[KnowledgeFileStatus.SUCCESS.value],
+                document_type="STD",
+                business_domain_code="PP",
+                order_sort="desc",
+                cursor=cursor,
+                limit=1,
+            )
+            if not page:
+                break
+            listed.extend(page)
+            cursor = [page[-1].update_time, page[-1].id]
+
+    canonical_ids = {int(item.reference_document_id or item.id) for item in listed}
+    assert category_counts == {"STD": len(listed)}
+    assert domain_counts == {"PP": len(listed)}
+    assert canonical_ids == {900, 901}
+
+
+@pytest.mark.asyncio
+async def test_portal_cursor_ranks_only_full_space_or_explicit_file_candidates(async_db_session):
+    await _insert(
+        async_db_session,
+        knowledge_id=30,
+        file_name="manager.pdf",
+        file_encoding="GF-STD-PP-001",
+        reference_document_id=900,
+        entry_type=KnowledgeFileEntryType.MANAGER.value,
+        entry_status=KnowledgeFileEntryStatus.ACTIVE.value,
+    )
+    explicit = await _insert(
+        async_db_session,
+        knowledge_id=30,
+        file_name="publish.pdf",
+        file_encoding="GF-STD-PP-001",
+        reference_document_id=900,
+        entry_type=KnowledgeFileEntryType.PUBLISH.value,
+        entry_status=KnowledgeFileEntryStatus.ACTIVE.value,
+    )
+
+    with _patch_session_factory(async_db_session):
+        result = await KnowledgeFileDao.aget_file_by_space_filters_cursor(
+            knowledge_ids=[30],
+            status=[KnowledgeFileStatus.SUCCESS.value],
+            document_type="STD",
+            business_domain_code="PP",
+            full_space_ids=[],
+            explicit_file_ids=[explicit.id],
+        )
+
+    assert [item.id for item in result] == [explicit.id]

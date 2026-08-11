@@ -29,6 +29,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     KnowledgeSpaceUpdateReq,
     ShougangPortalCategoryFileCountItem,
     ShougangPortalDomainFileCountItem,
+    ShougangPortalFileSearchResp,
 )
 from bisheng.knowledge.domain.services.knowledge_space_service import (
     KnowledgeSpaceService,
@@ -811,6 +812,63 @@ async def test_portal_counts_keep_grant_only_parent_at_exact_file_scope() -> Non
         {"STD": {10, 20}},
         {"STD": {3101}},
     )
+
+
+@pytest.mark.asyncio
+async def test_portal_counts_keep_explicit_empty_card_scope_empty() -> None:
+    login_user = Mock(user_id=7, user_name="访问者", tenant_id=1)
+    service = KnowledgeSpaceService(request=Mock(headers={}), login_user=login_user)
+    discovery = PortalDiscoveryResult(
+        discoverable_space_ids=[10, 20],
+        explicitly_visible_space_ids=[],
+        explicitly_visible_file_ids=[],
+        explicit_file_space_by_id={},
+        grant_parent_space_ids=[],
+        query_space_ids=[10, 20],
+        space_kind_by_id={10: "public", 20: "department"},
+        snapshot="snapshot-1",
+    )
+
+    with (
+        patch.object(
+            service,
+            "resolve_portal_discovery",
+            new_callable=AsyncMock,
+            return_value=discovery,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.async_count_files_by_domain_scopes",
+            new_callable=AsyncMock,
+            return_value={"PM": 0},
+        ) as count_domains,
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.async_count_files_by_category_scopes",
+            new_callable=AsyncMock,
+            return_value={"STD": 0},
+        ) as count_categories,
+    ):
+        await service.count_shougang_portal_domain_files(
+            [ShougangPortalDomainFileCountItem(code="PM", space_ids=[])],
+            discovery_scope="portal_configured",
+        )
+        await service.count_shougang_portal_category_files(
+            [ShougangPortalCategoryFileCountItem(code="STD", space_ids=[])],
+            discovery_scope="portal_configured",
+        )
+
+    count_domains.assert_awaited_once_with({"PM": set()}, {"PM": set()})
+    count_categories.assert_awaited_once_with({"STD": set()}, {"STD": set()})
+
+
+def test_portal_file_response_preserves_discovery_snapshot() -> None:
+    response = ShougangPortalFileSearchResp(
+        data=[],
+        has_more=False,
+        next_cursor=None,
+        discovery_snapshot="snapshot-1",
+    )
+
+    assert response.model_dump(mode="json")["discovery_snapshot"] == "snapshot-1"
 
 
 def test_safe_projection_only_redacts_discoverable_space_without_explicit_permission() -> None:

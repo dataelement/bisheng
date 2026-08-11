@@ -648,6 +648,7 @@ class ShougangPortalFileSearchResp(BaseModel):
     data: list[ShougangPortalFileItemResp] = Field(default_factory=list)
     has_more: bool = False
     next_cursor: str | None = None
+    discovery_snapshot: str = ""
 
 
 class ShougangPortalFileDetailResp(BaseModel):

@@ -72,6 +72,44 @@ describe("SubjectSearchUserTree", () => {
     jest.useRealTimers();
   });
 
+  it("shows department display names in the knowledge-resource user tree", async () => {
+    const loadDepartments = jest.fn().mockResolvedValue([
+      {
+        id: 10,
+        dept_id: "dept-10",
+        name: "北京首钢股份有限公司",
+        short_name: "首钢股份",
+        display_name: "首钢股份",
+        parent_id: null,
+        children: [],
+      },
+      {
+        id: 11,
+        dept_id: "dept-11",
+        name: "无简称部门",
+        short_name: null,
+        display_name: "无简称部门",
+        parent_id: null,
+        children: [],
+      },
+    ]);
+
+    render(
+      <SubjectSearchUserTree
+        value={[]}
+        onChange={jest.fn()}
+        resourceType="knowledge_space"
+        resourceId="space-1"
+        loadDepartments={loadDepartments}
+        grantUsersApi={jest.fn().mockResolvedValue([])}
+      />,
+    );
+
+    expect(await screen.findByText("首钢股份")).toHaveAttribute("title", "首钢股份");
+    expect(screen.getByText("无简称部门")).toHaveAttribute("title", "无简称部门");
+    expect(screen.queryByText("北京首钢股份有限公司")).not.toBeInTheDocument();
+  });
+
   it("loads direct members only after expanding a department and supports paging", async () => {
     const grantUsersApi = jest.fn().mockImplementation(
       async (_resourceType, _resourceId, params) => {

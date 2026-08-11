@@ -52,7 +52,7 @@ function getStorageFormat(file?: KnowledgeFile | null) {
 }
 
 function formatVersionText(versionNo?: number) {
-    return versionNo ? `1.${versionNo}.0` : "-";
+    return versionNo ? `${versionNo}.0` : "-";
 }
 
 function spaceLevelLabel(level?: SpaceLevel): string {

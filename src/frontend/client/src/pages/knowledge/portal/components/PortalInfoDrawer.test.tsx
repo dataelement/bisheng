@@ -51,3 +51,35 @@ describe("PortalInfoDrawer original origin", () => {
         expect(screen.queryByText("原始上传知识库")).not.toBeInTheDocument();
     });
 });
+
+describe("PortalInfoDrawer version number", () => {
+    it("formats the primary version number as a single decimal", () => {
+        render(
+            <PortalInfoDrawer
+                activePanel="properties"
+                activeSpace={{ id: "20", name: "当前知识库" } as any}
+                selectedFile={{
+                    id: "100",
+                    name: "制度.pdf",
+                    type: "pdf",
+                    tags: [],
+                    path: "",
+                    spaceId: "20",
+                    createdAt: "",
+                    updatedAt: "",
+                    version_no: 3,
+                } as any}
+                documentPath="/制度.pdf"
+                fileCategoryGroups={[]}
+                businessDomainOptions={[]}
+                encodingPrefix=""
+                onClose={jest.fn()}
+                onCopyShareLink={jest.fn()}
+                onPanelChange={jest.fn()}
+            />,
+        );
+
+        expect(screen.getByText("版本号")).toBeInTheDocument();
+        expect(screen.getByText("3.0")).toBeInTheDocument();
+    });
+});
