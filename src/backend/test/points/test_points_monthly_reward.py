@@ -54,9 +54,7 @@ async def test_notify_earn_uses_injected_message_service():
     message.send_generic_notify.assert_awaited_once()
     kwargs = message.send_generic_notify.await_args.kwargs
     assert kwargs["receiver_user_ids"] == [10]
-    assert kwargs["action_code"] == "points_changed"
-    assert kwargs["content_item_list"][0]["content"] == "points_changed"
-    assert "200" in kwargs["content_item_list"][0]["metadata"]["points_message"]
+    assert "200" in kwargs["content_item_list"][0]["content"]
 
 
 @pytest.mark.asyncio

@@ -17,31 +17,6 @@ def _notify_enabled() -> bool:
         return True
 
 
-def build_points_notify_content(*, template_code: str, message: str, values: dict) -> list[dict]:
-    """构造与站内信约定一致的积分通知 content。
-
-    system_text 必须是 action_code（供前端 i18n/路由），完整文案放在 metadata，
-    避免被当成未知 action 回退成「给你发送了一条通知」。
-    """
-    return [
-        {
-            "type": "system_text",
-            "content": POINTS_CHANGED_ACTION_CODE,
-            "metadata": {
-                "template_code": template_code,
-                "points_message": message,
-                "data": {
-                    "points_change": {
-                        "template_code": template_code,
-                        "message": message,
-                        **{k: values[k] for k in values},
-                    }
-                },
-            },
-        }
-    ]
-
-
 async def build_points_notify_service(session) -> "PointsNotifyService":
     """在 Worker / 旁路路径构造带 MessageService 的通知服务。
 
@@ -78,15 +53,11 @@ class PointsNotifyService:
             logger.info("积分通知跳过：notify_enabled=false user_id=%s", user_id)
             return
         try:
-            message = NOTIFY_TEMPLATES[template_code].format(**values)
+            content = NOTIFY_TEMPLATES[template_code].format(**values)
             await self.message_service.send_generic_notify(
                 sender=0,
                 receiver_user_ids=[user_id],
-                content_item_list=build_points_notify_content(
-                    template_code=template_code,
-                    message=message,
-                    values=values,
-                ),
+                content_item_list=[{"type": "system_text", "content": content}],
                 action_code=POINTS_CHANGED_ACTION_CODE,
             )
         except (KeyError, ValueError, TypeError) as exc:
