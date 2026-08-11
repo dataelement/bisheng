@@ -567,6 +567,40 @@ async def test_direct_stage_upload_bridges_original_name_before_using_legacy_own
     stage_service.consume.assert_awaited_once_with(stage.upload_id)
 
 
+async def test_folder_file_change_authorization_uses_folder_lookup_and_permission():
+    from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
+
+    owner = KnowledgeSpaceService(
+        request=MagicMock(),
+        login_user=SimpleNamespace(user_id=7, user_name="applicant", tenant_id=42),
+    )
+    folder = SimpleNamespace(id=5117, file_type=0, knowledge_id=81)
+    owner._get_folder_for_action = AsyncMock(return_value=folder)
+    owner._get_file_for_action = AsyncMock(side_effect=AssertionError("folder must not use file lookup"))
+    owner._require_permission_id = AsyncMock()
+    command = FileChangeRequestCommand(
+        action="rename",
+        space_id=81,
+        applicant_user_id=7,
+        applicant_user_name="applicant",
+        resource_type="folder",
+        resource_name="1234",
+        resource_id=5117,
+        action_snapshot={"new_name": "renamed"},
+    )
+
+    await owner.authorize_file_change(command)
+
+    owner._get_folder_for_action.assert_awaited_once_with(81, 5117)
+    owner._get_file_for_action.assert_not_awaited()
+    owner._require_permission_id.assert_awaited_once_with(
+        "folder",
+        5117,
+        "rename_folder",
+        space_id=81,
+    )
+
+
 async def test_failed_upload_cleanup_is_request_bound_permissionless_and_retry_idempotent(monkeypatch):
     from bisheng.knowledge.domain.repositories.knowledge_space_file_change_request_repository import (
         KnowledgeSpaceFileChangeRequestRepository,

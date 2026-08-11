@@ -16,7 +16,12 @@ from bisheng.permission.domain.services.permission_service import PermissionServ
 @pytest.fixture(autouse=True)
 def reset_tenant_context():
     token = current_tenant_id.set(None)
-    yield
+    with patch.object(
+        PermissionService,
+        "resolve_permanent_creator_user_ids_strict",
+        AsyncMock(return_value=set()),
+    ):
+        yield
     current_tenant_id.reset(token)
 
 
@@ -58,6 +63,59 @@ async def test_resolve_approvers_deduplicates_and_excludes_applicant():
         )
 
     assert result == [7, 11]
+
+
+async def test_resolve_approvers_includes_active_permanent_space_creator_without_owner_tuple():
+    set_current_tenant_id(17)
+
+    with (
+        patch.object(
+            PermissionService,
+            "resolve_resource_relation_user_ids_strict",
+            AsyncMock(return_value=set()),
+        ),
+        patch.object(
+            PermissionService,
+            "resolve_permanent_creator_user_ids_strict",
+            AsyncMock(return_value={7}),
+        ) as permanent_creators,
+    ):
+        result = await KnowledgeSpaceFileChangeApproverResolver.resolve_approver_user_ids(
+            tenant_id=17,
+            space_id=101,
+            applicant_user_id=None,
+        )
+
+    assert result == [7]
+    permanent_creators.assert_awaited_once_with(
+        tenant_id=17,
+        object_type="knowledge_space",
+        object_id="101",
+    )
+
+
+async def test_resolve_approvers_excludes_permanent_creator_when_creator_is_applicant():
+    set_current_tenant_id(17)
+
+    with (
+        patch.object(
+            PermissionService,
+            "resolve_resource_relation_user_ids_strict",
+            AsyncMock(return_value=set()),
+        ),
+        patch.object(
+            PermissionService,
+            "resolve_permanent_creator_user_ids_strict",
+            AsyncMock(return_value={7}),
+        ),
+    ):
+        result = await KnowledgeSpaceFileChangeApproverResolver.resolve_approver_user_ids(
+            tenant_id=17,
+            space_id=101,
+            applicant_user_id=7,
+        )
+
+    assert result == []
 
 
 async def test_resolve_approvers_returns_empty_only_for_authoritative_empty_result():

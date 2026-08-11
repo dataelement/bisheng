@@ -368,6 +368,42 @@ async def test_strict_relation_users_returns_empty_only_after_authoritative_empt
     assert fga.read_tuples.await_count == 2
 
 
+async def test_permanent_creator_resolution_returns_only_active_creator_in_tenant():
+    set_current_tenant_id(17)
+
+    with (
+        patch.object(PermissionService, "_get_resource_creator", AsyncMock(return_value=7)) as get_creator,
+        patch.object(
+            GrantSubjectQueryRepository,
+            "filter_active_user_ids_in_tenant",
+            AsyncMock(return_value={7}),
+        ) as active_users,
+    ):
+        result = await PermissionService.resolve_permanent_creator_user_ids_strict(
+            tenant_id=17,
+            object_type="knowledge_space",
+            object_id="101",
+        )
+
+    assert result == {7}
+    get_creator.assert_awaited_once_with("knowledge_space", "101")
+    active_users.assert_awaited_once_with(user_ids={7}, tenant_id=17)
+
+
+async def test_permanent_creator_resolution_is_empty_for_non_permanent_resource_types():
+    set_current_tenant_id(17)
+
+    with patch.object(PermissionService, "_get_resource_creator", AsyncMock()) as get_creator:
+        result = await PermissionService.resolve_permanent_creator_user_ids_strict(
+            tenant_id=17,
+            object_type="workflow",
+            object_id="flow-1",
+        )
+
+    assert result == set()
+    get_creator.assert_not_awaited()
+
+
 @pytest.mark.parametrize("context_tenant", [None, 1])
 async def test_strict_relation_users_requires_matching_explicit_tenant_context(context_tenant):
     if context_tenant is not None:

@@ -575,7 +575,14 @@ class MinioStorage(BaseStorage, ABC):
 
         self.minio_client_sync.remove_object(bucket_name, object_name)
 
-    async def get_share_link(self, object_name, bucket=None, clear_host: bool = True, expire_days: int = 7) -> str:
+    async def get_share_link(
+        self,
+        object_name,
+        bucket=None,
+        clear_host: bool = True,
+        expire_days: int = 7,
+        response_headers: dict[str, str] | None = None,
+    ) -> str:
         """
         DapatkanminioFile sharing link
         :param object_name:
@@ -586,10 +593,22 @@ class MinioStorage(BaseStorage, ABC):
         """
 
         return await asyncio.to_thread(
-            self.get_share_link_sync, object_name, bucket=bucket, clear_host=clear_host, expire_days=expire_days
+            self.get_share_link_sync,
+            object_name,
+            bucket=bucket,
+            clear_host=clear_host,
+            expire_days=expire_days,
+            response_headers=response_headers,
         )
 
-    def get_share_link_sync(self, object_name, bucket=None, clear_host: bool = True, expire_days: int = 7) -> str:
+    def get_share_link_sync(
+        self,
+        object_name,
+        bucket=None,
+        clear_host: bool = True,
+        expire_days: int = 7,
+        response_headers: dict[str, str] | None = None,
+    ) -> str:
         """
         Synchronous fetchminioFile sharing link, Default Removalhost<g id="Bold">Address:</g> urlwill go through the front endnginxProxy Access
         :param object_name:
@@ -606,7 +625,10 @@ class MinioStorage(BaseStorage, ABC):
             object_name = object_name[1:]
 
         share_link = self.share_minio_client.presigned_get_object(
-            bucket, object_name, expires=timedelta(days=expire_days)
+            bucket,
+            object_name,
+            expires=timedelta(days=expire_days),
+            response_headers=response_headers,
         )
         if clear_host:
             share_link = self.clear_minio_share_host(share_link)

@@ -727,9 +727,11 @@ class PermissionService:
                 if match is None:
                     raise ValueError(f"Unsupported OpenFGA subject: {raw_subject!r}")
                 subject_type, subject_id_text, member_suffix = match.groups()
-                if (subject_type == "user" and member_suffix is not None) or (
-                    subject_type == "department" and member_suffix != "#member"
-                ) or (subject_type == "user_group" and member_suffix not in {"#member", "#admin"}):
+                if (
+                    (subject_type == "user" and member_suffix is not None)
+                    or (subject_type == "department" and member_suffix != "#member")
+                    or (subject_type == "user_group" and member_suffix not in {"#member", "#admin"})
+                ):
                     raise ValueError(f"Unsupported OpenFGA subject: {raw_subject!r}")
 
                 subject_id = int(subject_id_text)
@@ -791,6 +793,41 @@ class PermissionService:
             return set()
         return await subject_repository.filter_active_user_ids_in_tenant(
             user_ids=user_ids,
+            tenant_id=int(tenant_id),
+        )
+
+    @classmethod
+    async def resolve_permanent_creator_user_ids_strict(
+        cls,
+        *,
+        tenant_id: int,
+        object_type: str,
+        object_id: str,
+    ) -> set[int]:
+        """Resolve active creators whose resource type defines permanent ownership.
+
+        The OpenFGA availability boundary remains the caller's responsibility;
+        this method only projects the established knowledge-space creator rule
+        after the caller has completed its strict relation read.
+        """
+        from bisheng.core.context.tenant import get_current_tenant_id
+
+        current_tenant_id = get_current_tenant_id()
+        if current_tenant_id is None or int(current_tenant_id) != int(tenant_id):
+            raise RuntimeError("a matching tenant context is required for permanent creator resolution")
+        if object_type != "knowledge_space":
+            return set()
+
+        creator_id = await cls._get_resource_creator(object_type, object_id)
+        if creator_id is None:
+            return set()
+
+        from bisheng.permission.domain.repositories.grant_subject_query_repository import (
+            GrantSubjectQueryRepository,
+        )
+
+        return await GrantSubjectQueryRepository().filter_active_user_ids_in_tenant(
+            user_ids={int(creator_id)},
             tenant_id=int(tenant_id),
         )
 

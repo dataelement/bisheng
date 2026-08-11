@@ -351,7 +351,7 @@ approver_source_types = knowledge_space_owner, knowledge_space_manager
 `KnowledgeSpaceFileChangeScenarioHandler`：
 
 - `build_title/build_detail`：输出空间、资源名称、动作、原值和目标值；不暴露 MinIO object name。
-- `resolve_approvers`：调用严格知识空间有效 owner/manager resolver（含允许的 userset 展开），去重并排除申请人；OpenFGA 不可用时抛可重试错误，不回退 membership。
+- `resolve_approvers`：先严格读取 OpenFGA owner/manager（含允许的 userset 展开），再合并当前租户内仍有效的知识空间数据库创建者；创建者按 F044 的永久 owner 语义生效，即使其 best-effort owner tuple 仍在补偿队列也不能产生 `approver_empty`。最终去重并排除申请人；OpenFGA 不可用时仍抛可重试错误，不把数据库创建者或 membership 当作故障降级。
 - `validate_decision`：处理前实时确认任务用户仍是目标空间 owner/manager；该校验是最终授权边界，不能因已完成对账而省略。
 - `authorize_view`：申请人或当前有效 owner/manager 可查看业务详情；former approver 仅保留历史 task，不再获得 snapshot/preview 权限。
 - `filter_visible_instances`：`list_my_tasks/my_requests` 的批量可见性 hook，同 tenant/space 合并 owner/manager 查询，避免逐 task OpenFGA N+1。
@@ -576,7 +576,7 @@ interface FileChangeApprovalView {
 | 13 | rename DB 更新与 chunk rebuild 入队是两步 | 名称已改但 outbox 重试再次改名，或索引仍是旧名 | rename checkpoint 观察目标名并幂等补派 rebuild |
 | 14 | approval snapshot 会返回给申请人/审批人 | 放入 object path 会泄露内部存储 | upload stage 保存 object name；detail_snapshot 只放业务字段 |
 | 15 | 现有 F025 repository 多次开 session/commit | “持有实例锁”仍可能半提交 task/instance/outbox | `ApprovalDecisionUnitOfWork` 一次提交 + post-commit effects |
-| 16 | 现有 owner/manager resolver 在 FGA 故障时会降级 | 故障可能被误判为无人审批或放行陈旧 manager | 文件变更 strict resolver，故障抛 18076，不改审批状态 |
+| 16 | 现有 owner/manager resolver 在 FGA 故障时会降级，且只读 tuple 会漏掉 F044 永久创建者 owner | 故障可能被误判为无人审批；创建者 tuple 补偿期间也会错误进入 `approver_empty` | 文件变更 strict resolver 始终要求 FGA 可用并解析显式 owner/manager，再合并当前租户有效的数据库创建者；故障抛 18076，不改审批状态 |
 | 17 | cancelled 历史 task 仍可让旧审批人在 F025 查看详情 | former manager 继续看到文件名和动作，违反 AC-14/23 | runtime handler `authorize_view` 接入 task/instance list/detail |
 | 18 | 默认 policy 开启但既有租户未必有场景 | 首次编辑操作报 scenario disabled | `ensure_system_file_change_scenario` 四入口幂等 bootstrap |
 | 19 | 当前 upload file_path 是短期 URL，原名仅短期缓存 | 长审批后不能预览/清理或名称退化 | `/knowledge/upload` 返回 opaque upload_id，元数据持久化 stage |

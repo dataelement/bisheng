@@ -2625,9 +2625,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 KnowledgeFileStatus.FAILED.value,
                 KnowledgeFileStatus.VIOLATION.value,
             }
-            raw_counts = {
-                folder_id: {"success": 0, "processing": 0, "failed": 0} for folder_id in folder_scopes
-            }
+            raw_counts = {folder_id: {"success": 0, "processing": 0, "failed": 0} for folder_id in folder_scopes}
             for folder_id, status, count in aggregate_rows:
                 normalized_folder_id = int(folder_id)
                 if status == KnowledgeFileStatus.SUCCESS.value:
@@ -4862,9 +4860,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             },
             headers={"tenant_id": int(tenant_id)},
         )
-        await self._cleanup_resource_tuples(
-            [("knowledge_file", int(file_id)) for file_id in file_ids]
-        )
+        await self._cleanup_resource_tuples([("knowledge_file", int(file_id)) for file_id in file_ids])
 
     async def build_file_change_command(
         self,
@@ -4987,10 +4983,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 await self.authorize_upload_stage(command.space_id)
             return
 
-        record = await self._get_file_for_action(command.resource_id, space_id=command.space_id)
-        is_folder = int(record.file_type) == FileType.DIR.value
-        if is_folder != (command.resource_type == "folder"):
-            raise SpaceFileNotFoundError()
+        is_folder = command.resource_type == "folder"
+        if is_folder:
+            record = await self._get_folder_for_action(command.space_id, command.resource_id)
+        else:
+            record = await self._get_file_for_action(command.resource_id, space_id=command.space_id)
         permission_id = f"{command.action}_{'folder' if is_folder else 'file'}"
         await self._require_permission_id(
             "folder" if is_folder else "knowledge_file",

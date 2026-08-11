@@ -49,7 +49,7 @@ class _Storage:
         self.copy_calls: list[tuple[str, str, str, str]] = []
         self.remove_calls: list[tuple[str, str]] = []
         self.existing_objects: set[tuple[str, str]] = set()
-        self.preview_calls: list[tuple[str, str, int]] = []
+        self.preview_calls: list[tuple[str, str, int, dict[str, str] | None]] = []
 
     async def copy_object(
         self,
@@ -70,8 +70,14 @@ class _Storage:
     async def object_exists(self, bucket_name: str, object_name: str) -> bool:
         return (bucket_name, object_name) in self.existing_objects
 
-    async def get_share_link(self, object_name: str, bucket: str, expire_days: int) -> str:
-        self.preview_calls.append((bucket, object_name, expire_days))
+    async def get_share_link(
+        self,
+        object_name: str,
+        bucket: str,
+        expire_days: int,
+        response_headers: dict[str, str] | None = None,
+    ) -> str:
+        self.preview_calls.append((bucket, object_name, expire_days, response_headers))
         return "https://preview.invalid/opaque-token"
 
 
@@ -296,7 +302,7 @@ async def test_cleanup_releases_capacity_removes_object_and_is_retry_idempotent(
     assert retried.state == KnowledgeSpaceUploadStageState.CLEANED
     assert storage.remove_calls == [
         (storage.tmp_bucket, stage.object_name),
-        (storage.bucket, f"knowledge-space-upload-stage/17/{stage.upload_id}"),
+        (storage.bucket, f"knowledge-space-upload-stage/17/{stage.upload_id}.bin"),
     ]
     assert replacement.id != stage.id
 
@@ -402,10 +408,10 @@ async def test_retain_bound_stage_copies_temporary_object_before_attached_state(
             storage.tmp_bucket,
             stage.object_name,
             storage.bucket,
-            f"knowledge-space-upload-stage/17/{stage.upload_id}",
+            f"knowledge-space-upload-stage/17/{stage.upload_id}.pdf",
         )
     ]
-    assert retained.object_name == f"knowledge-space-upload-stage/17/{stage.upload_id}"
+    assert retained.object_name == f"knowledge-space-upload-stage/17/{stage.upload_id}.pdf"
 
 
 async def test_tenant_capacity_includes_reserved_bytes_from_all_uploaders(stage_engine):
@@ -494,9 +500,33 @@ async def test_preview_is_short_lived_and_only_available_to_uploader_or_authoriz
         await service.create_preview_url(stage.upload_id, requester_user_id=8)
 
     assert storage.preview_calls == [
-        (storage.tmp_bucket, stage.object_name, 1),
-        (storage.tmp_bucket, stage.object_name, 1),
+        (
+            storage.tmp_bucket,
+            stage.object_name,
+            1,
+            {
+                "response-content-disposition": "inline; filename*=UTF-8''preview.pdf",
+                "response-content-type": "application/pdf",
+            },
+        ),
+        (
+            storage.tmp_bucket,
+            stage.object_name,
+            1,
+            {
+                "response-content-disposition": "inline; filename*=UTF-8''preview.pdf",
+                "response-content-type": "application/pdf",
+            },
+        ),
     ]
+
+
+def test_preview_headers_preserve_non_ascii_xlsx_name_and_content_type():
+    headers = KnowledgeSpaceUploadStageService._preview_response_headers("731时点-现存合并范围内法人企业.xlsx")
+
+    assert headers["response-content-disposition"].startswith("inline; filename*=UTF-8''731")
+    assert "%E6%97%B6%E7%82%B9" in headers["response-content-disposition"]
+    assert headers["response-content-type"] == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
 async def test_repository_queries_and_capacity_sums_always_have_explicit_tenant_predicates(stage_engine):

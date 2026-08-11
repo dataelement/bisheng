@@ -387,10 +387,17 @@ async def test_personal_space_owner_executes_directly_while_editor_uses_current_
         )
 
     service.owner_manager_checker = is_current_owner_or_manager
-    with patch.object(
-        PermissionService,
-        "resolve_resource_relation_user_ids_strict",
-        new=AsyncMock(return_value=[1]),
+    with (
+        patch.object(
+            PermissionService,
+            "resolve_resource_relation_user_ids_strict",
+            new=AsyncMock(return_value=set()),
+        ),
+        patch.object(
+            PermissionService,
+            "resolve_permanent_creator_user_ids_strict",
+            new=AsyncMock(return_value={1}),
+        ),
     ):
         owner = await service.request_change(
             _command(resource_id=501, applicant_user_id=1, applicant_user_name="owner")

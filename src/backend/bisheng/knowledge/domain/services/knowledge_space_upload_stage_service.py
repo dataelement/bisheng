@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import mimetypes
 from collections.abc import Awaitable, Callable
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from pathlib import PurePath
 from typing import Protocol
+from urllib.parse import quote
 from uuid import UUID, uuid4
 
 from loguru import logger
@@ -46,7 +49,13 @@ class UploadStageStorage(Protocol):
 
     async def object_exists(self, bucket_name: str, object_name: str) -> bool: ...
 
-    async def get_share_link(self, object_name: str, bucket: str, expire_days: int) -> str: ...
+    async def get_share_link(
+        self,
+        object_name: str,
+        bucket: str,
+        expire_days: int,
+        response_headers: dict[str, str] | None = None,
+    ) -> str: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -108,6 +117,27 @@ class KnowledgeSpaceUploadStageService:
 
     def _new_upload_id(self) -> str:
         return self._normalize_upload_id(self.upload_id_factory())
+
+    @staticmethod
+    def _file_suffix(file_name: str) -> str:
+        normalized_name = str(file_name or "").replace("\\", "/").rsplit("/", 1)[-1]
+        suffix = PurePath(normalized_name).suffix
+        if not suffix or len(suffix) > 32 or not suffix[1:].isalnum():
+            return ""
+        return suffix
+
+    @classmethod
+    def _permanent_object_name(cls, *, tenant_id: int, upload_id: str, file_name: str) -> str:
+        return f"{cls._OBJECT_PREFIX}{tenant_id}/{upload_id}{cls._file_suffix(file_name)}"
+
+    @staticmethod
+    def _preview_response_headers(file_name: str) -> dict[str, str]:
+        safe_name = str(file_name or "file").replace("\\", "/").rsplit("/", 1)[-1]
+        content_type = mimetypes.guess_type(safe_name)[0] or "application/octet-stream"
+        return {
+            "response-content-disposition": f"inline; filename*=UTF-8''{quote(safe_name, safe='')}",
+            "response-content-type": content_type,
+        }
 
     @staticmethod
     def _is_same_upload(
@@ -275,7 +305,11 @@ class KnowledgeSpaceUploadStageService:
             if stage.state != KnowledgeSpaceUploadStageState.ATTACHING:
                 raise SpaceFileChangeInvalidStateError()
             temporary_object_name = stage.object_name
-            permanent_object_name = f"{self._OBJECT_PREFIX}{tenant_id}/{normalized_upload_id}"
+            permanent_object_name = self._permanent_object_name(
+                tenant_id=tenant_id,
+                upload_id=normalized_upload_id,
+                file_name=stage.file_name,
+            )
 
         await self.storage.copy_object(
             source_bucket=self.storage.tmp_bucket,
@@ -374,9 +408,16 @@ class KnowledgeSpaceUploadStageService:
                 await repository.save(stage)
 
         await self.storage.remove_object(object_bucket, object_name)
-        permanent_object_name = f"{self._OBJECT_PREFIX}{tenant_id}/{normalized_upload_id}"
+        permanent_object_name = self._permanent_object_name(
+            tenant_id=tenant_id,
+            upload_id=normalized_upload_id,
+            file_name=stage.file_name,
+        )
         if object_bucket == self.storage.tmp_bucket:
             await self.storage.remove_object(self.storage.bucket, permanent_object_name)
+            legacy_permanent_object_name = f"{self._OBJECT_PREFIX}{tenant_id}/{normalized_upload_id}"
+            if legacy_permanent_object_name != permanent_object_name:
+                await self.storage.remove_object(self.storage.bucket, legacy_permanent_object_name)
 
         async with self.session_factory() as session:
             async with session.begin():
@@ -524,6 +565,7 @@ class KnowledgeSpaceUploadStageService:
                 stage.object_name,
                 bucket=self._bucket_for_object(stage.object_name),
                 expire_days=self.preview_expire_days,
+                response_headers=self._preview_response_headers(stage.file_name),
             )
 
     def _bucket_for_object(self, object_name: str) -> str:

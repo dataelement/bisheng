@@ -29,6 +29,16 @@ class KnowledgeSpaceFileChangeApproverResolver:
                 object_id=str(space_id),
                 relations=cls._APPROVER_RELATIONS,
             )
+            # Knowledge-space creators are permanent owners in the permission
+            # model even while their best-effort OpenFGA owner tuple is waiting
+            # for compensation. Keep the strict OpenFGA read above as the
+            # availability boundary, then merge the permission service result.
+            creator_ids = await PermissionService.resolve_permanent_creator_user_ids_strict(
+                tenant_id=int(tenant_id),
+                object_type="knowledge_space",
+                object_id=str(space_id),
+            )
+            resolved = set(resolved).union(creator_ids)
             excluded_user_id = int(applicant_user_id) if applicant_user_id is not None else None
             return sorted(
                 {int(user_id) for user_id in resolved if excluded_user_id is None or int(user_id) != excluded_user_id}

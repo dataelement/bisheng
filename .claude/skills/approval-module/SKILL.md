@@ -196,8 +196,10 @@ task/sibling/instance/log/exception/outbox 状态迁移。提交后才执行 out
 - **Handler**：`KnowledgeSpaceFileChangeScenarioHandler`
 - **固定配置**：始终 enabled、单 catch-all flow、单个 `or` 节点，审批人来源只能是
   `knowledge_space_owner + knowledge_space_manager`；管理端不得 disable/delete/改 route/flow/node
-- **动态资格**：OpenFGA 权威 owner/manager 是资格真相；查询故障 fail-closed。新管理员通过候选发现和对账补 task，
-  former approver 的 pending task 取消且失去详情可见性；最终 decision 前再次校验当前资格
+- **动态资格**：显式 owner/manager 由 OpenFGA 权威解析；知识空间数据库创建者按 F044 永久 owner 语义合并，
+  其 best-effort owner tuple 尚未补偿时仍可直接执行或审批。OpenFGA 查询故障始终 fail-closed，不以数据库创建者
+  降级绕过故障。新管理员通过候选发现和对账补 task，former approver 的 pending task 取消且失去详情可见性；
+  最终 decision 前再次校验当前资格
 - **异常策略**：只允许 `retry` 与 `cancel`。`approver_empty` retry 重新解析完整当前集合，
   `execute_failed` retry 进入 token-bound Deferred resume；禁止 assign/assign-flow/skip/mark-complete
 - **执行**：审批通过后可返回 `Deferred`；只有 durable step 的权威读后校验满足完成判据，才能把
