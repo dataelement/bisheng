@@ -1,4 +1,3 @@
-import { userContext } from "@/contexts/userContext";
 import {
   getFileChangePolicyApi,
   getFileChangeSettingsApi,
@@ -7,11 +6,15 @@ import {
   updateFileChangeSettingApi,
 } from "@/controllers/API/knowledgeSpaceFileChange";
 import KnowledgePage from "@/pages/KnowledgePage";
-import { FileChangeApprovalSettings } from "@/pages/KnowledgePage/FileChangeApprovalSettings";
+import {
+  FileChangeApprovalSettings,
+  type FileChangeApprovalSettingsHandle,
+} from "@/pages/KnowledgePage/FileChangeApprovalSettings";
 import { act, fireEvent, render, screen, waitFor, within } from "@/test/test-utils";
 import enKnowledge from "../../public/locales/en-US/knowledge.json";
 import jaKnowledge from "../../public/locales/ja/knowledge.json";
 import zhKnowledge from "../../public/locales/zh-Hans/knowledge.json";
+import { createRef } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const requestMocks = vi.hoisted(() => ({
@@ -122,25 +125,6 @@ function mockInitialRequests() {
     const current = settingsPage.data.find((row) => row.space_id === spaceId);
     return Promise.resolve({ ...current, ...(body as object) });
   });
-}
-
-function renderKnowledgePage(user: Record<string, unknown>) {
-  return render(
-    <userContext.Provider
-      value={
-        {
-          user,
-          setUser: vi.fn(),
-          savedComponents: [],
-          addSavedComponent: vi.fn(),
-          checkComponentsName: vi.fn(),
-          delComponent: vi.fn(),
-        } as never
-      }
-    >
-      <KnowledgePage />
-    </userContext.Provider>,
-  );
 }
 
 describe("knowledge space file-change approval API client", () => {
@@ -424,6 +408,27 @@ describe("FileChangeApprovalSettings", () => {
     expect(screen.getByText("Department Space")).toBeInTheDocument();
     expect(screen.queryByText("Public Space")).not.toBeInTheDocument();
   });
+
+  it("uses the parent save action when embedded in workbench settings", async () => {
+    const ref = createRef<FileChangeApprovalSettingsHandle>();
+    render(<FileChangeApprovalSettings ref={ref} embedded />);
+
+    const enabledSwitch = await screen.findByRole("switch", {
+      name: "fileChangeApproval.enabled",
+    });
+    expect(
+      screen.queryByRole("button", { name: "fileChangeApproval.save" }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(enabledSwitch);
+    await act(async () => {
+      expect(await ref.current?.save()).toBe(true);
+    });
+    expect(requestMocks.put).toHaveBeenCalledWith(
+      "/api/v1/knowledge/space/admin/file-change-configuration",
+      { policy: { enabled: false, scope: "per_space" }, settings: [] },
+    );
+  });
 });
 
 describe("knowledge file-change approval locales", () => {
@@ -443,27 +448,8 @@ describe("knowledge file-change approval locales", () => {
 });
 
 describe("KnowledgePage file-change approval entry", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockInitialRequests();
-  });
-
-  it.each([
-    { role: "admin", user_id: 1 },
-    { role: "user", is_global_super: true, user_id: 2 },
-    { role: "user", is_child_admin: true, user_id: 3 },
-  ])("shows the settings entry to platform and tenant admins", (user) => {
-    renderKnowledgePage(user);
-    expect(
-      screen.getByRole("tab", { name: "fileChangeApproval.tab" }),
-    ).toBeInTheDocument();
-  });
-
-  it.each([
-    { role: "user", user_id: 4 },
-    { role: "user", is_department_admin: true, user_id: 5 },
-  ])("hides the settings entry from non-tenant admins", (user) => {
-    renderKnowledgePage(user);
+  it("removes the legacy approval settings tab from the knowledge library", () => {
+    render(<KnowledgePage />);
     expect(
       screen.queryByRole("tab", { name: "fileChangeApproval.tab" }),
     ).not.toBeInTheDocument();

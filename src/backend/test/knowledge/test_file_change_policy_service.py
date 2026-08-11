@@ -202,6 +202,34 @@ async def test_private_space_never_requires_approval(policy_engine):
     assert await service.is_approval_required(space_id=101) is False
 
 
+async def test_settings_page_keeps_unconfigured_spaces_and_marks_department_spaces(policy_engine):
+    set_current_tenant_id(17)
+    await _insert_space(policy_engine, tenant_id=17, space_id=101)
+    await _insert_space(policy_engine, tenant_id=17, space_id=102)
+    async with AsyncSession(bind=policy_engine, expire_on_commit=False) as session:
+        async with session.begin():
+            session.add(
+                DepartmentKnowledgeSpace(
+                    tenant_id=17,
+                    department_id=300,
+                    space_id=102,
+                    created_by=1,
+                )
+            )
+
+    page = await _service(policy_engine).get_space_settings_page(
+        keyword=None,
+        page=1,
+        page_size=20,
+    )
+
+    assert page.total == 2
+    assert [(row.space_id, row.space_kind, row.approval_required) for row in page.data] == [
+        (101, "normal", True),
+        (102, "department", True),
+    ]
+
+
 async def test_failed_save_rolls_back_without_changing_effective_policy(policy_engine):
     set_current_tenant_id(17)
     service = _service(policy_engine)
@@ -348,10 +376,7 @@ async def test_bulk_configuration_preserves_group_and_department_space_sharing_r
         (103, AuthTypeEnum.PUBLIC),
     ]
     assert (binding.tenant_id, binding.department_id, binding.space_id) == (17, 300, 103)
-    assert [
-        (member.business_id, member.user_id, member.relation, member.membership_source)
-        for member in members
-    ] == [
+    assert [(member.business_id, member.user_id, member.relation, member.membership_source) for member in members] == [
         ("101", 9, ChannelRelationEnum.EDITOR, "manual"),
         ("103", 10, ChannelRelationEnum.VIEWER, "department_admin"),
     ]

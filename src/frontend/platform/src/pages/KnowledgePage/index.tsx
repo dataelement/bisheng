@@ -6,9 +6,6 @@ import {
 } from "../../components/bs-ui/tabs";
 
 import { useTranslation } from "react-i18next";
-import { useContext } from "react";
-import { userContext } from "@/contexts/userContext";
-import { FileChangeApprovalSettings } from "./FileChangeApprovalSettings";
 import KnowledgeFile from "./KnowledgeFile";
 import KnowledgeQa from "./KnowledgeQa";
 
@@ -20,17 +17,11 @@ declare global {
 
 export function KnowledgePage() {
   const { t } = useTranslation();
-  const { user } = useContext(userContext);
-  const canManageFileChangeApproval = Boolean(
-    user?.role === "admin" || user?.is_global_super || user?.is_child_admin,
-  );
 
   const defaultValue = (() => {
     const page = window.LibPage;
     if (!page) return "file";
-    if (page.type === "approval-settings" && !canManageFileChangeApproval)
-      return "file";
-    return page.type;
+    return page.type === "qa" ? "qa" : "file";
   })();
 
   return (
@@ -41,11 +32,6 @@ export function KnowledgePage() {
           <TabsTrigger value="qa" className="roundedrounded-xl">
             {t("lib.qaData")}
           </TabsTrigger>
-          {canManageFileChangeApproval && (
-            <TabsTrigger value="approval-settings">
-              {t("fileChangeApproval.tab", { ns: "knowledge" })}
-            </TabsTrigger>
-          )}
         </TabsList>
         <TabsContent value="qa">
           <KnowledgeQa />
@@ -53,11 +39,6 @@ export function KnowledgePage() {
         <TabsContent value="file">
           <KnowledgeFile />
         </TabsContent>
-        {canManageFileChangeApproval && (
-          <TabsContent value="approval-settings">
-            <FileChangeApprovalSettings />
-          </TabsContent>
-        )}
       </Tabs>
     </div>
   );

@@ -524,7 +524,7 @@ interface FileChangeApprovalView {
 
 #### Platform
 
-- 在现有 Platform `KnowledgePage` 的知识空间配置入口增加“知识空间文件变更审核”总控、范围和单空间表格，仅平台/租户管理员可见可写。
+- 在现有 Platform 工作台 `/build/client` 的“知识空间”配置页增加“知识空间文件变更审核”总控、范围和单空间表格，仅平台/租户管理员可见可写；知识库 `/filelib` 不再展示独立设置 Tab。
 - `controllers/API/knowledgeSpaceFileChange.ts` 封装管理 API；页面只保存本地表单，点击保存成功后才更新基线。
 - 总控与当前编辑过的单空间设置通过一次 `PUT .../file-change-configuration` 原子提交；失败时全部草稿保持 dirty，
   不得以 `Promise.all` 并发调用旧 policy/setting PUT 造成部分成功。
@@ -644,7 +644,7 @@ interface FileChangeApprovalView {
 
 ### 7.2 手工验证主路径
 
-环境启动后使用 Platform `http://localhost:3001/filelib` 配置策略，Client `http://localhost:4001/workspace/knowledge/space/{spaceId}` 验证文件页；准备租户 A/B 各一个 tenant admin、owner、manager、editor 和普通成员账号，不在文档保存密码。后端聚焦测试命令：`cd src/backend && uv run pytest test/approval/ test/knowledge/ -k "file_change or dynamic_approver"`。
+环境启动后使用 Platform `http://localhost:3001/build/client` 的“知识空间”Tab 配置策略，Client `http://localhost:4001/workspace/knowledge/space/{spaceId}` 验证文件页；准备租户 A/B 各一个 tenant admin、owner、manager、editor 和普通成员账号，不在文档保存密码。后端聚焦测试命令：`cd src/backend && uv run pytest test/approval/ test/knowledge/ -k "file_change or dynamic_approver"`。
 
 1. 租户 A 开启、租户 B 关闭，分别以 editor 上传同类型文件；A 仅出现在待审批上传，B 直接进入解析，且互不读取配置。
 2. A 的 owner 批准上传，确认解析期间只在独立列表显示 parsing，正式列表/F030/RAG/citation 均不可见；解析成功才发布，失败显示原因且重试不重新审批。

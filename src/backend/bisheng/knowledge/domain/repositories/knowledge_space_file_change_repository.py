@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from sqlalchemy import and_, func
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -209,40 +209,36 @@ class KnowledgeSpaceFileChangeRepository:
         total_statement = select(func.count(Knowledge.id)).where(*filters)
         total = int((await self.session.exec(total_statement)).one())
 
-        statement = (
-            select(
-                Knowledge,
-                KnowledgeSpaceFileChangeSetting,
-                DepartmentKnowledgeSpace.id,
-            )
-            .outerjoin(
-                KnowledgeSpaceFileChangeSetting,
-                and_(
-                    KnowledgeSpaceFileChangeSetting.tenant_id == int(tenant_id),
-                    KnowledgeSpaceFileChangeSetting.space_id == Knowledge.id,
-                ),
-            )
-            .outerjoin(
-                DepartmentKnowledgeSpace,
-                and_(
-                    DepartmentKnowledgeSpace.tenant_id == int(tenant_id),
-                    DepartmentKnowledgeSpace.space_id == Knowledge.id,
-                ),
-            )
+        space_statement = (
+            select(Knowledge)
             .where(*filters)
             .order_by(Knowledge.id.asc())
             .offset((int(page) - 1) * int(page_size))
             .limit(int(page_size))
         )
-        result = (await self.session.exec(statement)).all()
+        spaces = list((await self.session.exec(space_statement)).all())
+        space_ids = [int(space.id) for space in spaces]
+        if not space_ids:
+            return [], total
+
+        settings = await self.get_settings_by_space_ids(
+            tenant_id=tenant_id,
+            space_ids=space_ids,
+        )
+        settings_by_space_id = {int(setting.space_id): setting for setting in settings}
+        department_statement = select(DepartmentKnowledgeSpace.space_id).where(
+            DepartmentKnowledgeSpace.tenant_id == int(tenant_id),
+            DepartmentKnowledgeSpace.space_id.in_(space_ids),
+        )
+        department_space_ids = {int(space_id) for space_id in (await self.session.exec(department_statement)).all()}
         return (
             [
                 KnowledgeSpaceFileChangeSettingRow(
                     space=space,
-                    setting=setting,
-                    is_department=department_binding_id is not None,
+                    setting=settings_by_space_id.get(int(space.id)),
+                    is_department=int(space.id) in department_space_ids,
                 )
-                for space, setting, department_binding_id in result
+                for space in spaces
             ],
             total,
         )
@@ -253,38 +249,16 @@ class KnowledgeSpaceFileChangeRepository:
         tenant_id: int,
         space_id: int,
     ) -> KnowledgeSpaceFileChangeSettingRow | None:
-        statement = (
-            select(
-                Knowledge,
-                KnowledgeSpaceFileChangeSetting,
-                DepartmentKnowledgeSpace.id,
-            )
-            .outerjoin(
-                KnowledgeSpaceFileChangeSetting,
-                and_(
-                    KnowledgeSpaceFileChangeSetting.tenant_id == int(tenant_id),
-                    KnowledgeSpaceFileChangeSetting.space_id == Knowledge.id,
-                ),
-            )
-            .outerjoin(
-                DepartmentKnowledgeSpace,
-                and_(
-                    DepartmentKnowledgeSpace.tenant_id == int(tenant_id),
-                    DepartmentKnowledgeSpace.space_id == Knowledge.id,
-                ),
-            )
-            .where(
-                Knowledge.tenant_id == int(tenant_id),
-                Knowledge.id == int(space_id),
-                Knowledge.type == KnowledgeTypeEnum.SPACE.value,
-            )
-        )
-        result = (await self.session.exec(statement)).first()
-        if result is None:
+        space = await self.get_space(tenant_id=tenant_id, space_id=space_id)
+        if space is None:
             return None
-        space, setting, department_binding_id = result
+        setting = await self.get_setting(tenant_id=tenant_id, space_id=space_id)
+        department_statement = select(DepartmentKnowledgeSpace.id).where(
+            DepartmentKnowledgeSpace.tenant_id == int(tenant_id),
+            DepartmentKnowledgeSpace.space_id == int(space_id),
+        )
         return KnowledgeSpaceFileChangeSettingRow(
             space=space,
             setting=setting,
-            is_department=department_binding_id is not None,
+            is_department=(await self.session.exec(department_statement)).first() is not None,
         )

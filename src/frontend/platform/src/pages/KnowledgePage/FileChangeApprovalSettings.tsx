@@ -23,8 +23,10 @@ import {
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import {
   FormEvent,
+  forwardRef,
   useCallback,
   useEffect,
+  useImperativeHandle,
   useMemo,
   useRef,
   useState,
@@ -33,6 +35,11 @@ import { useTranslation } from "react-i18next";
 
 interface FileChangeApprovalSettingsProps {
   pageSize?: number;
+  embedded?: boolean;
+}
+
+export interface FileChangeApprovalSettingsHandle {
+  save: () => Promise<boolean>;
 }
 
 type SettingValues = Record<number, boolean>;
@@ -50,9 +57,13 @@ function mergeSettingValues(
   return next;
 }
 
-export function FileChangeApprovalSettings({
-  pageSize = 20,
-}: FileChangeApprovalSettingsProps) {
+export const FileChangeApprovalSettings = forwardRef<
+  FileChangeApprovalSettingsHandle,
+  FileChangeApprovalSettingsProps
+>(function FileChangeApprovalSettings(
+  { pageSize = 20, embedded = false },
+  ref,
+) {
   const { t } = useTranslation("knowledge");
   const [policyBaseline, setPolicyBaseline] =
     useState<KnowledgeSpaceFileChangePolicy | null>(null);
@@ -160,8 +171,9 @@ export function FileChangeApprovalSettings({
     setKeyword(keywordInput.trim());
   };
 
-  const handleSave = async () => {
-    if (!policyDraft || !hasChanges || saving) return;
+  const handleSave = useCallback(async (): Promise<boolean> => {
+    if (!policyDraft || saving) return false;
+    if (!hasChanges) return true;
     setSaving(true);
 
     const result = await captureAndAlertRequestErrorHoc(
@@ -190,7 +202,18 @@ export function FileChangeApprovalSettings({
       });
     }
     setSaving(false);
-  };
+    return Boolean(succeeded);
+  }, [
+    changedSpaceIds,
+    hasChanges,
+    policyChanged,
+    policyDraft,
+    saving,
+    settingDrafts,
+    t,
+  ]);
+
+  useImperativeHandle(ref, () => ({ save: handleSave }), [handleSave]);
 
   if (policyLoading) {
     return (
@@ -213,10 +236,18 @@ export function FileChangeApprovalSettings({
 
   return (
     <section
-      className="mx-auto w-full max-w-6xl px-2 pb-10"
+      className={
+        embedded ? "w-full" : "mx-auto w-full max-w-6xl px-2 pb-10"
+      }
       aria-labelledby="file-change-approval-title"
     >
-      <div className="flex flex-col gap-4 rounded-lg border bg-background p-5 shadow-sm sm:flex-row sm:items-start sm:justify-between">
+      <div
+        className={
+          embedded
+            ? "flex flex-col gap-4 border-t border-[#ECECEC] pt-6 sm:flex-row sm:items-start sm:justify-between"
+            : "flex flex-col gap-4 rounded-lg border bg-background p-5 shadow-sm sm:flex-row sm:items-start sm:justify-between"
+        }
+      >
         <div className="max-w-3xl">
           <h2
             id="file-change-approval-title"
@@ -228,14 +259,16 @@ export function FileChangeApprovalSettings({
             {t("fileChangeApproval.description")}
           </p>
         </div>
-        <LoadButton
-          className="min-h-11 min-w-24 self-start"
-          loading={saving}
-          disabled={!hasChanges}
-          onClick={() => void handleSave()}
-        >
-          {t("fileChangeApproval.save")}
-        </LoadButton>
+        {!embedded && (
+          <LoadButton
+            className="min-h-11 min-w-24 self-start"
+            loading={saving}
+            disabled={!hasChanges}
+            onClick={() => void handleSave()}
+          >
+            {t("fileChangeApproval.save")}
+          </LoadButton>
+        )}
       </div>
 
       <div className="mt-4 rounded-lg border bg-background p-5">
@@ -431,4 +464,4 @@ export function FileChangeApprovalSettings({
       )}
     </section>
   );
-}
+});

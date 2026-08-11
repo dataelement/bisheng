@@ -482,8 +482,8 @@
   **依赖**: T061
 
 - [x] **T063**: Platform 页面入口集成
-  **文件**: `src/frontend/platform/src/pages/KnowledgePage/index.tsx`
-  **逻辑**: 在 `/filelib` 仅对平台/租户管理员展示设置入口，不改变既有知识库详情主流程。
+  **文件**: `src/frontend/platform/src/pages/BuildPage/bench/KnowledgeSpace.tsx`, `src/frontend/platform/src/pages/KnowledgePage/index.tsx`
+  **逻辑**: 将租户级总控和按空间配置嵌入 `/build/client` 的“知识空间”配置页并接入底部统一保存；移除 `/filelib` 的独立设置 Tab，不改变既有知识库详情主流程。
   **依赖**: T062
 
 - [x] **T064**: Platform 配置组件测试
@@ -596,7 +596,7 @@
 
 - [x] **T082**: 前端 E2E 与人工验证清单
   **文件**: `features/v2.6.0/046-knowledge-space-file-change-approval/e2e-checklist.md`
-  **逻辑**: 使用 `/e2e-test` 产出 Platform `/filelib` 与 Client 空间页/审批中心的账号矩阵、操作步骤、预期状态和截图点；不保存密码。
+  **逻辑**: 使用 `/e2e-test` 产出 Platform `/build/client`“知识空间”配置页与 Client 空间页/审批中心的账号矩阵、操作步骤、预期状态和截图点；不保存密码。
   **覆盖 AC**: AC-04, AC-12, AC-14, AC-16, AC-17, AC-23, AC-33, AC-34, AC-35, AC-36, AC-37, AC-38, AC-41, AC-43, AC-45, AC-50, AC-51, AC-52, AC-53
   **依赖**: T064, T077, T080, T081
 

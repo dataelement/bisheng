@@ -152,6 +152,8 @@ task/sibling/instance/log/exception/outbox 状态迁移。提交后才执行 out
 | `src/frontend/client/src/layouts/MenuApprovalPluginGate.tsx` | 菜单审批路由守卫 |
 | `src/frontend/platform/src/pages/ApprovalPage/index.tsx` | 管理后台审批页（场景/分支/流程/节点/异常） |
 | `src/frontend/platform/src/controllers/API/approval.ts` | Platform 审批 API 封装 |
+| `src/frontend/platform/src/pages/BuildPage/bench/KnowledgeSpace.tsx` | 工作台“知识空间”配置页；承载 F046 租户级全局开关、按空间配置入口和统一保存动作 |
+| `src/frontend/platform/src/pages/KnowledgePage/FileChangeApprovalSettings.tsx` | F046 策略及按空间配置组件；嵌入工作台配置页，知识库列表页不再展示独立设置 Tab |
 
 ---
 
