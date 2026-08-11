@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from collections import OrderedDict
 from collections.abc import Awaitable, Callable
 
 from langchain.agents.middleware._retry import calculate_delay
@@ -123,6 +124,32 @@ _DELIVERABLE_TOOLS = frozenset({"write_file", "edit_file", "export_docx", "expor
 # the whole point of landing softly is to still produce the file.
 _POST_BUDGET_ALLOWED_TOOLS = _DELIVERABLE_TOOLS | {"write_todos"}
 
+# LangGraph's checkpoint-namespace level separator, mirroring
+# ``langgraph._internal._constants.NS_SEP``. Re-declared rather than imported: the
+# value is part of the checkpoint wire format and far more stable than the private
+# module path. Pinned by ``test/linsight/test_subagent_ns_contract.py``.
+_NS_SEP = "|"
+
+# Upper bound on live turn-budget buckets (see ``_budget_key``). Observed concurrent
+# delegations are single-digit; 128 is far above any real plan, and eviction is LRU
+# so an active bucket can never be pushed out by stale ones.
+_BUDGET_BUCKETS_MAX = 128
+
+# Tool calls that are PURE STATE MAINTENANCE: they move no work forward, they only
+# republish the plan. deepagents injects ``TodoListMiddleware`` into every subagent
+# unconditionally (``deepagents/graph.py:643-651``) — it is not part of the business
+# tool subset ``agent_factory._subagent_tools`` builds. Measured on v2.6.0-fix2: 10 of
+# a researcher's 29 model calls produced ``write_todos`` and nothing else, i.e. a third
+# of a 30-turn budget bought zero research. Those turns are refunded instead.
+_STATE_ONLY_TOOLS = frozenset({"write_todos"})
+
+# Refunds are CAPPED. Uncapped, a model looping on ``write_todos`` would never advance
+# the counter, the soft-landing ladder would never fire, and the run would die on
+# GraphRecursionError instead — the exact failure ``_resolve_recursion_limit`` exists
+# to prevent. The L3 tool-loop breaker cannot cover this either: it trips on tool
+# FAILURES, and ``write_todos`` succeeds every time.
+_MAX_STATE_ONLY_REFUNDS = 10
+
 _BUDGET_SPENT_TOOL_REPLY = (
     "⚠️ 本次任务的模型调用次数预算已用尽，{tool_name} 未被执行。"
     "请立即用已经掌握的材料完成交付：先用 write_file 把最终成果写入 output/ 目录下的交付文件，"
@@ -189,6 +216,30 @@ def _is_truncated_tool_call(response: object) -> bool:
 def _with_truncation_nudge(request: ModelRequest) -> ModelRequest:
     """A new request with the corrective nudge appended (ephemeral — retry only)."""
     return request.override(messages=[*request.messages, HumanMessage(content=_TRUNCATION_NUDGE)])
+
+
+def _is_state_only_turn(response: object) -> bool:
+    """True iff this model call produced ONLY pure state-maintenance tool calls.
+
+    Deliberately strict — a turn is refunded only when it demonstrably moved nothing
+    forward. Everything else still costs a turn:
+
+    - no ``AIMessage`` at all → unknown shape, stay conservative;
+    - no tool calls (a text-only close-out) → that IS the run's real last turn, and
+      refunding it would keep the ladder from ever reaching stage 3;
+    - any invalid/malformed tool call → the model attempted real work and failed;
+    - ``write_todos`` alongside any other tool → real work happened this turn.
+    """
+    ai = _response_ai_message(response)
+    if ai is None:
+        return False
+    if getattr(ai, "invalid_tool_calls", None):
+        return False
+    calls = getattr(ai, "tool_calls", None) or []
+    if not calls:
+        return False
+    names = {tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", None) for tc in calls}
+    return names <= _STATE_ONLY_TOOLS
 
 
 def _summarize_tool_calls(ai: AIMessage) -> list[str]:
@@ -268,15 +319,28 @@ class LinsightModelResilienceMiddleware(AgentMiddleware):
         self.max_degrade = max(0, max_degrade)
         self.truncation_retry_limit = max(0, truncation_retry_limit)
         self.is_subagent = is_subagent
+        # KNOWN GAP (not fixed here to keep the backport surface small): this counter
+        # has the same cross-``task``-call sharing problem the turn budget had — every
+        # delegation shares one ``max_degrade`` allowance. Bucket it on ``_budget_key``
+        # when touching this next.
         self._degrade_count = 0
-        # Turn budget. Per-instance, and each graph builds its own instance, so the
-        # main graph and the researcher subagent hold separate budgets. It resets
-        # whenever the agent is rebuilt — i.e. an ask_user resume grants a fresh
-        # allowance, matching LangGraph's own ``stop = step + recursion_limit + 1``
-        # recomputation on resume.
+        # Turn budget, bucketed per graph RUN rather than per middleware instance:
+        #
+        #   - main graph → exactly one bucket. One compiled Pregel loop, one allowance;
+        #     ``budget_sink`` semantics unchanged.
+        #   - subagent   → ONE BUCKET PER ``task`` TOOL CALL. deepagents compiles the
+        #     researcher ONCE (``subagents.py:584``) and every ``task`` call re-enters
+        #     that same runnable, so a single counter was silently shared: two parallel
+        #     researchers burned one 30-turn allowance between them and the second one
+        #     started already inside the soft-landing zone (measured, v2.6.0-fix2).
+        #
+        # Either way the budget resets when the agent is rebuilt — an ask_user resume
+        # grants a fresh allowance, matching LangGraph's own
+        # ``stop = step + recursion_limit + 1`` recomputation on resume.
         self.turn_limit = max(1, turn_limit)
         self.soft_landing_turns = max(0, soft_landing_turns)
-        self._turn_count = 0
+        self._turns: OrderedDict[str, int] = OrderedDict()
+        self._refunds: OrderedDict[str, int] = OrderedDict()
         # Optional shared dict the task executor reads after the run to tell the
         # user their result was wrapped up early.
         self._budget_sink = budget_sink
@@ -296,17 +360,83 @@ class LinsightModelResilienceMiddleware(AgentMiddleware):
             jitter=self.jitter,
         )
 
-    def _apply_turn_budget(self, request: ModelRequest) -> ModelRequest:
+    def _budget_key(self, request: object) -> str:
+        """Which turn-budget bucket this model/tool call belongs to.
+
+        Main graph → always the single default bucket. The main graph is ONE compiled
+        Pregel loop with ONE allowance, and its node namespace (``model:<uuid>``)
+        carries a fresh task id every turn, so bucketing it would hand it a brand-new
+        budget on every single call.
+
+        Subagent → the parent namespace of the current node. LangGraph gives each
+        ``task`` tool call its own PUSH task (one ``Send`` per tool call, whose task id
+        includes the Send index), and every node inside the resulting subgraph run is
+        namespaced ``<that tools task ns>|<node>:<node task id>``. Dropping the last
+        segment therefore yields a key that is CONSTANT across all turns of one
+        ``task`` call and DISTINCT between concurrent ones — pinned by
+        ``test/linsight/test_subagent_ns_contract.py``.
+
+        Anything unexpected (no runtime, as in unit tests or non-graph callers; or a
+        flat namespace, meaning the subagent graph ran un-nested) falls back to the
+        shared bucket, which is exactly the pre-fix behaviour — never worse.
+        """
+        if not self.is_subagent:
+            return ""
+        runtime = getattr(request, "runtime", None)
+        info = getattr(runtime, "execution_info", None)
+        ns = getattr(info, "checkpoint_ns", None)
+        if not isinstance(ns, str) or _NS_SEP not in ns:
+            return ""
+        return ns.rsplit(_NS_SEP, 1)[0]
+
+    def _turns_used(self, key: str = "") -> int:
+        return self._turns.get(key, 0)
+
+    def _bump_turn(self, key: str) -> int:
+        """Count one turn against ``key`` and return the new total (LRU-bounded)."""
+        used = self._turns.pop(key, 0) + 1
+        self._turns[key] = used  # re-insert → most-recently-used tail
+        while len(self._turns) > _BUDGET_BUCKETS_MAX:
+            evicted, _ = self._turns.popitem(last=False)
+            self._refunds.pop(evicted, None)
+        return used
+
+    def _refund_turn(self, key: str) -> None:
+        """Give a pure state-maintenance turn its budget back (bounded per bucket)."""
+        used = self._turns.get(key, 0)
+        if used <= 0:
+            return
+        if self._refunds.get(key, 0) >= _MAX_STATE_ONLY_REFUNDS:
+            return
+        self._turns[key] = used - 1
+        self._refunds[key] = self._refunds.get(key, 0) + 1
+
+    @property
+    def _turn_count(self) -> int:
+        """Turns used in the DEFAULT bucket — i.e. the whole budget for the main graph.
+
+        Read-only alias kept so main-graph call sites and existing tests read
+        unchanged; subagent buckets must be read via ``_turns_used(key)``.
+        """
+        return self._turns_used("")
+
+    def _apply_turn_budget(self, request: ModelRequest) -> tuple[ModelRequest, str]:
         """Count this turn and apply the soft-landing stage it falls into.
 
         Called ONCE per ``wrap_model_call`` — i.e. once per model node execution.
         The retry loops below re-enter ``handler`` without re-entering this, so a
         transient retry or a truncation nudge never burns turn budget.
+
+        Returns the (possibly nudged) request together with the budget key it was
+        counted against, so the caller can refund a pure state-maintenance turn once
+        the response makes that knowable.
         """
-        self._turn_count += 1
-        remaining = self.turn_limit - self._turn_count
+        key = self._budget_key(request)
+        graph = "sub" if self.is_subagent else "main"
+        count = self._bump_turn(key)
+        remaining = self.turn_limit - count
         if remaining > self.soft_landing_turns:
-            return request
+            return request, key
 
         self._mark_soft_landing()
         if remaining <= 0:
@@ -314,29 +444,35 @@ class LinsightModelResilienceMiddleware(AgentMiddleware):
             # routes the graph straight to END. This is what turns "budget
             # exhausted" into a normal completion instead of a recursion abort.
             logger.warning(
-                "[linsight-turn-budget] graph={} turn {}/{} — budget exhausted, forcing a text-only close-out",
-                "sub" if self.is_subagent else "main",
-                self._turn_count,
+                "[linsight-turn-budget] graph={} key={} turn {}/{} — budget exhausted, forcing a text-only close-out",
+                graph,
+                key or "-",
+                count,
                 self.turn_limit,
             )
-            return _with_wrap_up_nudge(request, _LAST_CHANCE_NUDGE, 0).override(tools=[])
+            return _with_wrap_up_nudge(request, _LAST_CHANCE_NUDGE, 0).override(tools=[]), key
         if remaining <= _WRITE_ONLY_TURNS_LEFT:
             logger.warning(
-                "[linsight-turn-budget] graph={} turn {}/{} — {} left, narrowing to deliverable tools",
-                "sub" if self.is_subagent else "main",
-                self._turn_count,
+                "[linsight-turn-budget] graph={} key={} turn {}/{} — {} left, narrowing to deliverable tools",
+                graph,
+                key or "-",
+                count,
                 self.turn_limit,
                 remaining,
             )
-            return _only_deliverable_tools(_with_wrap_up_nudge(request, _LAST_CHANCE_NUDGE, remaining))
+            return (
+                _only_deliverable_tools(_with_wrap_up_nudge(request, _LAST_CHANCE_NUDGE, remaining)),
+                key,
+            )
         logger.info(
-            "[linsight-turn-budget] graph={} turn {}/{} — {} left, nudging the model to wrap up",
-            "sub" if self.is_subagent else "main",
-            self._turn_count,
+            "[linsight-turn-budget] graph={} key={} turn {}/{} — {} left, nudging the model to wrap up",
+            graph,
+            key or "-",
+            count,
             self.turn_limit,
             remaining,
         )
-        return _with_wrap_up_nudge(request, _WRAP_UP_NUDGE, remaining)
+        return _with_wrap_up_nudge(request, _WRAP_UP_NUDGE, remaining), key
 
     def _budget_blocked_reply(self, request) -> ToolMessage | None:
         """Refuse an exploratory tool call once the turn budget is spent.
@@ -346,16 +482,18 @@ class LinsightModelResilienceMiddleware(AgentMiddleware):
         its wrap_tool_call is the outermost one — short-circuiting here also skips
         the inner guards, which is what we want for a call that never ran.
         """
-        if self._turn_count < self.turn_limit:
+        key = self._budget_key(request)
+        if self._turns_used(key) < self.turn_limit:
             return None
         tool_call = request.tool_call or {}
         name = tool_call.get("name")
         if name in _POST_BUDGET_ALLOWED_TOOLS:
             return None
         logger.warning(
-            "[linsight-turn-budget] graph={} budget spent ({}/{}) — refusing tool call '{}'",
+            "[linsight-turn-budget] graph={} key={} budget spent ({}/{}) — refusing tool call '{}'",
             "sub" if self.is_subagent else "main",
-            self._turn_count,
+            key or "-",
+            self._turns_used(key),
             self.turn_limit,
             name,
         )
@@ -383,7 +521,13 @@ class LinsightModelResilienceMiddleware(AgentMiddleware):
         return handler(request)
 
     def _mark_soft_landing(self) -> None:
-        """Flag the run as wrapped-up-early for the task executor's user-facing note."""
+        """Flag the run as wrapped-up-early for the task executor's user-facing note.
+
+        Deliberately sticky: a turn that triggered a wrap-up nudge and was then
+        refunded (``_refund_turn``) does NOT clear this. The nudge really was sent and
+        really did shape that turn, so telling the user their result was closed out
+        early is still true.
+        """
         if self._budget_sink is not None:
             self._budget_sink["soft_landing"] = True
 
@@ -415,7 +559,7 @@ class LinsightModelResilienceMiddleware(AgentMiddleware):
         # SEPARATE budgets so a truncation retry never eats the exception-retry
         # budget and vice-versa. ``current`` carries the (possibly nudged) request.
         # The turn budget is applied ONCE, outside the retry loop.
-        current = self._apply_turn_budget(request)
+        current, budget_key = self._apply_turn_budget(request)
         exc_attempts = 0
         trunc_attempts = 0
         while True:
@@ -450,6 +594,15 @@ class LinsightModelResilienceMiddleware(AgentMiddleware):
                 )
                 current = _with_truncation_nudge(current)
                 continue
+            # Two-phase turn accounting: the soft-landing STAGE had to be picked before
+            # the call (it shapes the request), but whether this turn did any real work
+            # is only knowable from the response. Refund here — the loop's SINGLE
+            # success exit — so a transient retry or a truncation nudge (both
+            # ``continue`` above) can never double-refund, and a degraded call (which
+            # returns from the except branch) is never refunded: it really did burn
+            # model calls.
+            if _is_state_only_turn(response):
+                self._refund_turn(budget_key)
             return response
 
     def wrap_model_call(
@@ -457,7 +610,7 @@ class LinsightModelResilienceMiddleware(AgentMiddleware):
         request: ModelRequest,
         handler: Callable[[ModelRequest], ModelResponse],
     ) -> ModelResponse | AIMessage:
-        current = self._apply_turn_budget(request)
+        current, budget_key = self._apply_turn_budget(request)
         exc_attempts = 0
         trunc_attempts = 0
         while True:
@@ -479,6 +632,10 @@ class LinsightModelResilienceMiddleware(AgentMiddleware):
                 trunc_attempts += 1
                 current = _with_truncation_nudge(current)
                 continue
+            # Refund a pure state-maintenance turn — see the async twin above for why
+            # this sits at the loop's single success exit.
+            if _is_state_only_turn(response):
+                self._refund_turn(budget_key)
             return response
 
 

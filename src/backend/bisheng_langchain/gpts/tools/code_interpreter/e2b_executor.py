@@ -8,7 +8,7 @@ from e2b.sandbox.filesystem.filesystem import EntryInfo, FileType, WriteEntry
 from e2b_code_interpreter import Result, Sandbox
 from loguru import logger
 
-from bisheng_langchain.gpts.tools.code_interpreter.base_executor import BaseExecutor
+from bisheng_langchain.gpts.tools.code_interpreter.base_executor import BaseExecutor, path_namespace_rules
 
 # F035 TC-4: copy-in/copy-out thresholds. The sandbox cannot reach MinIO, so the
 # worker mediates all file transfer (design §9.3.9).
@@ -77,7 +77,10 @@ class E2bCodeExecutor(BaseExecutor):
             "Write final deliverables to the RELATIVE directory `output/` (e.g. `output/report.pdf`) "
             "and intermediate files to `scratch/`. NEVER use an absolute path with a leading slash "
             "such as `/output/...` or `/scratch/...` — files written outside the current working "
-            "directory are DISCARDED and will NOT be delivered to the user."
+            "directory are DISCARDED and will NOT be delivered to the user. "
+            # include_skills=False: the sandbox copy-in snapshots the working dir
+            # before skills are materialised, so `skills/` is genuinely absent here.
+            + path_namespace_rules(include_skills=False)
         )
 
     def init_sandbox(self):
