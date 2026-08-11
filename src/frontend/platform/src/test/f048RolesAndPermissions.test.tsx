@@ -25,11 +25,11 @@ vi.mock(
   "@/pages/SystemPage/components/permission/ActionLevelBoard",
   () => ({
     ActionLevelBoard: (props: {
-      onCreateDraft: (change: {
+      onCreateDraft: (changes: {
         type: "ASSIGN_ACTION_LEVEL"
         action_code: string
         level: 2
-      }) => Promise<unknown>
+      }[]) => Promise<unknown>
       onReviewImpact: (draft: unknown) => void
     }) => {
       childCalls.actionBoard(props)
@@ -37,11 +37,13 @@ vi.mock(
         <button
           type="button"
           onClick={async () => {
-            const draft = await props.onCreateDraft({
-              type: "ASSIGN_ACTION_LEVEL",
-              action_code: "edit",
-              level: 2,
-            })
+            const draft = await props.onCreateDraft([
+              {
+                type: "ASSIGN_ACTION_LEVEL",
+                action_code: "edit",
+                level: 2,
+              },
+            ])
             props.onReviewImpact(draft)
           }}
         >
@@ -234,11 +236,13 @@ describe("F048 RolesAndPermissions", () => {
       expect(createPermissionCatalogDraftApi).toHaveBeenCalledWith({
         idempotency_key: expect.stringMatching(/^catalog-draft-/),
         base_release_id: 21,
-        change: {
-          type: "ASSIGN_ACTION_LEVEL",
-          action_code: "edit",
-          level: 2,
-        },
+        changes: [
+          {
+            type: "ASSIGN_ACTION_LEVEL",
+            action_code: "edit",
+            level: 2,
+          },
+        ],
       })
     })
     fireEvent.click(

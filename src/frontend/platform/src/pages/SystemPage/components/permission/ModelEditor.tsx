@@ -26,7 +26,7 @@ interface ModelEditorProps {
   disabled?: boolean
   onInitializePreset?: (preset: PermissionModelPreset) => void
   onCreateDraft: (
-    change: PermissionCatalogChange,
+    changes: PermissionCatalogChange[],
   ) => Promise<PermissionCatalogDraft>
   onReviewImpact: (draft: PermissionCatalogDraft) => void
 }
@@ -155,7 +155,7 @@ export function ModelEditor({
 
     setSaving(true)
     try {
-      setDraft(await onCreateDraft(change))
+      setDraft(await onCreateDraft([change]))
     } finally {
       setSaving(false)
     }
@@ -178,10 +178,12 @@ export function ModelEditor({
     if (disabled || saving || createMode || isStandard || active) return
     setSaving(true)
     try {
-      setDraft(await onCreateDraft({
-        type: "DELETE_MODEL",
-        model_key: model.key,
-      }))
+      setDraft(await onCreateDraft([
+        {
+          type: "DELETE_MODEL",
+          model_key: model.key,
+        },
+      ]))
     } finally {
       setSaving(false)
     }

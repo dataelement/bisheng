@@ -68,7 +68,12 @@
     "change": "アクションレベルを変更",
     "active": "アクション状態",
     "inactive": "無効",
-    "empty": "この領域にアクションはありません"
+    "empty": "この領域にアクションはありません",
+    "pendingChanges_one": "未公開の変更が 1 件あります",
+    "pendingChanges_other": "未公開の変更が {{count}} 件あります",
+    "publishChanges": "変更を公開",
+    "discardChanges": "変更を破棄",
+    "draftFailed": "変更ドラフトの作成に失敗しました。再試行してください。"
   },
   "model": {
     "title": "権限モデル",

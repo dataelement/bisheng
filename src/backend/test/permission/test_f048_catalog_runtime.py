@@ -345,10 +345,12 @@ async def test_action_level_draft_rebuilds_every_standard_and_custom_model(
         request=CatalogDraftRequest(
             idempotency_key="raise-edit",
             base_release_id=int(current.id),
-            change=CatalogChangeRequest(
-                type=CatalogChangeType.ASSIGN_ACTION_LEVEL,
-                action_code="edit",
-                level=3,
+            changes=(
+                CatalogChangeRequest(
+                    type=CatalogChangeType.ASSIGN_ACTION_LEVEL,
+                    action_code="edit",
+                    level=3,
+                ),
             ),
         ),
         operator_id=7,
@@ -451,10 +453,12 @@ async def test_catalog_publish_allows_visibility_only_grant_after_action_level_c
         request=CatalogDraftRequest(
             idempotency_key="raise-download",
             base_release_id=int(current.id),
-            change=CatalogChangeRequest(
-                type=CatalogChangeType.ASSIGN_ACTION_LEVEL,
-                action_code="download",
-                level=2,
+            changes=(
+                CatalogChangeRequest(
+                    type=CatalogChangeType.ASSIGN_ACTION_LEVEL,
+                    action_code="download",
+                    level=2,
+                ),
             ),
         ),
         operator_id=7,
@@ -491,10 +495,12 @@ async def test_catalog_publish_stages_complete_release_and_switches_once(
         request=CatalogDraftRequest(
             idempotency_key="disable-share",
             base_release_id=int(current.id),
-            change=CatalogChangeRequest(
-                type=CatalogChangeType.SET_ACTION_ACTIVE,
-                action_code="share",
-                active=False,
+            changes=(
+                CatalogChangeRequest(
+                    type=CatalogChangeType.SET_ACTION_ACTIVE,
+                    action_code="share",
+                    active=False,
+                ),
             ),
         ),
         operator_id=7,
@@ -567,10 +573,12 @@ async def test_catalog_create_is_idempotent_and_current_shape_is_complete(
     request = CatalogDraftRequest(
         idempotency_key="same-draft",
         base_release_id=int(current.id),
-        change=CatalogChangeRequest(
-            type=CatalogChangeType.SET_ALLOW_SAME_LEVEL,
-            model_key="manager",
-            allow_same_level=True,
+        changes=(
+            CatalogChangeRequest(
+                type=CatalogChangeType.SET_ALLOW_SAME_LEVEL,
+                model_key="manager",
+                allow_same_level=True,
+            ),
         ),
     )
 
@@ -829,3 +837,99 @@ async def test_inherited_roster_uses_nearest_custom_ancestor(
         (30, "LOCAL", None),
     ]
     assert has_more is False
+
+
+async def test_draft_folds_every_change_in_the_batch(
+    session_factory: SessionFactory,
+) -> None:
+    """A batch must publish all of its edits, not just the last one.
+
+    The board used to open a fresh draft off the CURRENT release per edit, so a
+    session of three tweaks produced three one-change drafts and publishing any
+    of them silently dropped the other two.
+    """
+
+    fga = InMemoryCatalogFGA()
+    marker = FakeCatalogMarker()
+    current = await _seed_current(session_factory, fga)
+    api = _api(session_factory, fga, marker)
+
+    draft = await api.create_draft(
+        request=CatalogDraftRequest(
+            idempotency_key="batch-of-three",
+            base_release_id=int(current.id),
+            changes=(
+                CatalogChangeRequest(
+                    type=CatalogChangeType.ASSIGN_ACTION_LEVEL,
+                    action_code="edit",
+                    level=3,
+                ),
+                CatalogChangeRequest(
+                    type=CatalogChangeType.ASSIGN_ACTION_LEVEL,
+                    action_code="rename",
+                    level=4,
+                ),
+                CatalogChangeRequest(
+                    type=CatalogChangeType.SET_ACTION_ACTIVE,
+                    action_code="unpublish",
+                    active=False,
+                ),
+            ),
+        ),
+        operator_id=7,
+    )
+
+    async with session_factory() as session:
+        rows = list(
+            (
+                await session.execute(
+                    select(PermissionAction).where(PermissionAction.catalog_release_id == draft["draft_id"])
+                )
+            ).scalars()
+        )
+    by_code = {row.code: row for row in rows}
+    assert by_code["edit"].level == 3
+    assert by_code["rename"].level == 4
+    assert by_code["unpublish"].active is False
+    # Untouched actions keep the base release's values.
+    assert by_code["delete"].level == 4
+
+
+async def test_a_later_change_in_the_batch_wins_over_an_earlier_one(
+    session_factory: SessionFactory,
+) -> None:
+    fga = InMemoryCatalogFGA()
+    marker = FakeCatalogMarker()
+    current = await _seed_current(session_factory, fga)
+    api = _api(session_factory, fga, marker)
+
+    draft = await api.create_draft(
+        request=CatalogDraftRequest(
+            idempotency_key="batch-overwrite",
+            base_release_id=int(current.id),
+            changes=(
+                CatalogChangeRequest(
+                    type=CatalogChangeType.ASSIGN_ACTION_LEVEL,
+                    action_code="edit",
+                    level=3,
+                ),
+                CatalogChangeRequest(
+                    type=CatalogChangeType.ASSIGN_ACTION_LEVEL,
+                    action_code="edit",
+                    level=4,
+                ),
+            ),
+        ),
+        operator_id=7,
+    )
+
+    async with session_factory() as session:
+        row = (
+            await session.execute(
+                select(PermissionAction).where(
+                    PermissionAction.catalog_release_id == draft["draft_id"],
+                    PermissionAction.code == "edit",
+                )
+            )
+        ).scalar_one()
+    assert row.level == 4

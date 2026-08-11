@@ -68,7 +68,12 @@
     "change": "调整动作等级",
     "active": "动作状态",
     "inactive": "已停用",
-    "empty": "此区域暂无动作"
+    "empty": "此区域暂无动作",
+    "pendingChanges_one": "有 1 项改动尚未发布",
+    "pendingChanges_other": "有 {{count}} 项改动尚未发布",
+    "publishChanges": "发布更改",
+    "discardChanges": "放弃更改",
+    "draftFailed": "生成变更草案失败，请重试"
   },
   "model": {
     "title": "权限模型",

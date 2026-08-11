@@ -68,7 +68,12 @@
     "change": "Change action level",
     "active": "Action status",
     "inactive": "Inactive",
-    "empty": "No actions in this area"
+    "empty": "No actions in this area",
+    "pendingChanges_one": "1 change is not published yet",
+    "pendingChanges_other": "{{count}} changes are not published yet",
+    "publishChanges": "Publish changes",
+    "discardChanges": "Discard changes",
+    "draftFailed": "Could not prepare the change draft. Try again."
   },
   "model": {
     "title": "Permission Model",
