@@ -27,6 +27,7 @@ export default function KnowledgeTagLibraryPage() {
     const [selection, setSelection] = useState<TagConsoleSelection>(INITIAL_SELECTION)
     const [libraries, setLibraries] = useState<KnowledgeSpaceTagLibraryListItem[]>([])
     const [pendingCount, setPendingCount] = useState(0)
+    const [libraryRefreshToken, setLibraryRefreshToken] = useState(0)
 
     const refreshPendingCount = useCallback(async () => {
         const res = await captureAndAlertRequestErrorHoc(getTagConsolePendingCountApi())
@@ -35,6 +36,16 @@ export default function KnowledgeTagLibraryPage() {
 
     useEffect(() => {
         void refreshPendingCount()
+    }, [refreshPendingCount])
+
+    /**
+     * Anything that writes tags changes a library's tag count, and approving
+     * also changes the pending badge — so both sides of the page have to be
+     * pulled again, not just the badge.
+     */
+    const handleTagsChanged = useCallback(() => {
+        void refreshPendingCount()
+        setLibraryRefreshToken((token) => token + 1)
     }, [refreshPendingCount])
 
     const handleLibrariesChanged = useCallback((rows: KnowledgeSpaceTagLibraryListItem[]) => {
@@ -69,15 +80,16 @@ export default function KnowledgeTagLibraryPage() {
                     onSelectLibrary={(libraryId) => setSelection((prev) => selectLibrary(prev, libraryId))}
                     onSelectReviewEntry={() => setSelection(selectReviewEntry())}
                     onLibrariesChanged={handleLibrariesChanged}
+                    refreshToken={libraryRefreshToken}
                 />
 
                 {selection.mode === "review" ? (
-                    <ReviewTablePanel libraries={libraries} onReviewed={refreshPendingCount} />
+                    <ReviewTablePanel libraries={libraries} onReviewed={handleTagsChanged} />
                 ) : (
                     <TagTablePanel
                         selectedLibraryIds={selection.selectedLibraryIds}
                         libraries={libraries}
-                        onLibraryContentChanged={refreshPendingCount}
+                        onLibraryContentChanged={handleTagsChanged}
                     />
                 )}
             </div>
