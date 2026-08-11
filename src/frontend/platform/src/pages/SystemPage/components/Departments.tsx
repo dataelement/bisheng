@@ -1,10 +1,7 @@
 import { useCallback, useContext, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Loader2 } from "lucide-react"
-import {
-  getDepartmentOrgLevelsApi,
-  getDepartmentTreeApi,
-} from "@/controllers/API/department"
+import { getDepartmentTreeApi } from "@/controllers/API/department"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { DepartmentTreeNode } from "@/types/api/department"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/bs-ui/tabs"
@@ -24,13 +21,10 @@ export default function Departments() {
   /** 与系统页「组织同步」一致：仅平台超级管理员（role=admin） */
   const isSuperAdmin = user?.role === "admin"
   const showTrafficControlTab = isSuperAdmin && appConfig.isPro
-  // 积分四级打标仅平台超管（与后端 points_auth / role=admin 对齐）。
-  const canSetCompanyRoot = user?.role === "admin" || !!user?.is_global_super
   const [tree, setTree] = useState<DepartmentTreeNode[]>([])
   // Start in loading so the first paint shows a spinner — /departments/tree
   // can take many seconds at scale (tens of thousands of departments).
   const [loadingTree, setLoadingTree] = useState(true)
-  const [orgLevelById, setOrgLevelById] = useState<Record<number, string | null>>({})
   const [selectedDeptId, setSelectedDeptId] = useState<string | null>(null)
   const [selectedDept, setSelectedDept] = useState<DepartmentTreeNode | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
@@ -53,17 +47,6 @@ export default function Departments() {
     setSelectedDept(fallback)
   }, [])
 
-  const loadOrgLevels = useCallback(() => {
-    captureAndAlertRequestErrorHoc(getDepartmentOrgLevelsApi()).then((rows) => {
-      if (!rows) return
-      const map: Record<number, string | null> = {}
-      for (const row of rows) {
-        map[Number(row.id)] = row.org_level ?? null
-      }
-      setOrgLevelById(map)
-    })
-  }, [])
-
   const loadTree = useCallback((removedDeptId?: string) => {
     setLoadingTree(true)
     captureAndAlertRequestErrorHoc(getDepartmentTreeApi())
@@ -83,8 +66,7 @@ export default function Departments() {
       .finally(() => {
         setLoadingTree(false)
       })
-    loadOrgLevels()
-  }, [loadOrgLevels, selectFallbackDepartment, selectedDeptId])
+  }, [selectFallbackDepartment, selectedDeptId])
 
   useEffect(() => {
     loadTree()
@@ -221,7 +203,6 @@ export default function Departments() {
             onCreateChild={handleCreateClick}
             scrollRequest={treeScrollRequest}
             onScrollRequestHandled={handleTreeScrollHandled}
-            orgLevelById={orgLevelById}
           />
         )}
         <button
@@ -252,17 +233,6 @@ export default function Departments() {
                 <h3 className="text-base font-semibold">{selectedDept.name}</h3>
                 {/* F027 AC-14: per-department member-count badge removed; the
                     tree-node response no longer carries this field. */}
-                {orgLevelById[selectedDept.id] ? (
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    {t("bs:department.orgLevelCurrent", {
-                      level: t(`bs:department.orgLevel.${orgLevelById[selectedDept.id]}`),
-                    })}
-                  </p>
-                ) : (
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    {t("bs:department.orgLevelUnset")}
-                  </p>
-                )}
               </div>
               <TabsList>
                 <TabsTrigger value="members">{t("bs:department.members")}</TabsTrigger>
@@ -292,9 +262,6 @@ export default function Departments() {
                 tree={tree}
                 onChanged={handleTreeChange}
                 onMarkAsTenant={multiTenantEnabled && user?.is_global_super ? handleMarkAsTenant : undefined}
-                orgLevel={orgLevelById[selectedDept.id] ?? null}
-                canSetCompanyRoot={canSetCompanyRoot}
-                onOrgLevelChanged={loadOrgLevels}
               />
             </TabsContent>
             {showTrafficControlTab && (
