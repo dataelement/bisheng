@@ -11,6 +11,7 @@ import type {
   PermissionCatalogDraft,
   PublishPermissionCatalogDraftRequest,
 } from "@/controllers/API/permission"
+import { formatDate } from "@/util/utils"
 import { AlertTriangle } from "lucide-react"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
@@ -44,6 +45,15 @@ function ImpactMetric({ label, value, testId }: ImpactMetricProps) {
       </dd>
     </div>
   )
+}
+
+// The backend sends UTC ISO-8601 with microseconds; rendering it raw showed
+// both an unreadable string and a time 8 hours off for CST operators. The
+// impact window is only 10 minutes, so keep seconds.
+function formatExpiry(iso: string): string {
+  const parsed = new Date(iso)
+  if (Number.isNaN(parsed.getTime())) return iso
+  return formatDate(parsed, "yyyy-MM-dd HH:mm:ss")
 }
 
 function createPublishIdempotencyKey(): string {
@@ -155,7 +165,7 @@ export function ImpactDialog({
         )}
 
         <p className="text-xs text-muted-foreground">
-          {t("impact.expiresAt", { value: draft.impact.expires_at })}
+          {t("impact.expiresAt", { value: formatExpiry(draft.impact.expires_at) })}
         </p>
 
         <DialogFooter>
