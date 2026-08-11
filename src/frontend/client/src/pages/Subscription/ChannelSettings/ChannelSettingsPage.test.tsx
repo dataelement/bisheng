@@ -10,7 +10,9 @@ const mockShowToast = jest.fn();
 const mockConfirm = jest.fn().mockResolvedValue(true);
 const mockSetVisibility = jest.fn();
 const mockReplaceRows = jest.fn();
-const mockSubmit = jest.fn().mockResolvedValue({ status: "success", channelId: "channel-1" });
+const mockSubmit = jest
+  .fn()
+  .mockResolvedValue({ status: "success", channelId: "channel-1" });
 const mockCompleteSubmission = jest.fn();
 const mockRetryAuthorization = jest.fn();
 const mockEnterCreatedChannel = jest.fn();
@@ -75,14 +77,28 @@ const mockSettings = {
   canManagePermissions: true,
   isChannelCreator: true,
   showPermissionSection: true,
-  relationModels: [{ id: "viewer-model", name: "Viewer", relation: "viewer", is_system: true }],
+  relationModels: [
+    { id: "viewer-model", name: "Viewer", relation: "viewer", is_system: true },
+  ],
   permissionDraft: {
-    rows: [{ subjectType: "user", subjectId: 1, subjectName: "Creator", relation: "owner", immutableCreator: true }],
+    rows: [
+      {
+        subjectType: "user",
+        subjectId: 1,
+        subjectName: "Creator",
+        relation: "owner",
+        immutableCreator: true,
+      },
+    ],
     replaceRows: mockReplaceRows,
     addRows: jest.fn(),
   },
   submitting: false,
-  authorizationRecovery: null as null | { channelId: string; grants: []; errorCode: number | null },
+  authorizationRecovery: null as null | {
+    channelId: string;
+    grants: [];
+    errorCode: number | null;
+  },
   submit: mockSubmit,
   completeSubmission: mockCompleteSubmission,
   retryAuthorization: mockRetryAuthorization,
@@ -95,12 +111,14 @@ jest.mock("react-router-dom", () => ({
 }));
 
 jest.mock("@bisheng/ui", () => ({
-  Button: (props: {
-    loading?: boolean;
-    color?: string;
-    variant?: string;
-    size?: string;
-  } & ButtonHTMLAttributes<HTMLButtonElement>) => {
+  Button: (
+    props: {
+      loading?: boolean;
+      color?: string;
+      variant?: string;
+      size?: string;
+    } & ButtonHTMLAttributes<HTMLButtonElement>,
+  ) => {
     const buttonProps = { ...props };
     delete buttonProps.loading;
     delete buttonProps.color;
@@ -113,6 +131,18 @@ jest.mock("@bisheng/ui", () => ({
 jest.mock("~/Providers", () => ({
   useToastContext: () => ({ showToast: mockShowToast }),
   useConfirm: () => mockConfirm,
+}));
+
+jest.mock("~/hooks", () => ({
+  useLocalize: () => (key: string) => key,
+  useAuthContext: () => ({
+    user: {
+      id: 99,
+      name: "Current user",
+      username: "current",
+      email: "current@example.com",
+    },
+  }),
 }));
 
 jest.mock("./useChannelSettingsForm", () => ({
@@ -133,26 +163,45 @@ jest.mock("../hooks/useCrawlQueue", () => ({
 jest.mock("../CreateChannel/AddSourceDropdown", () => ({
   AddSourceDropdown: () => <div data-testid="source-selector" />,
 }));
-jest.mock("../CreateChannel/CrawlQueuePanel", () => ({ CrawlQueuePanel: () => null }));
-jest.mock("../CreateChannel/CrawlPreviewDialog", () => ({ CrawlPreviewDialog: () => null }));
-jest.mock("../CreateChannel/CrawlFeedbackDialog", () => ({ CrawlFeedbackDialog: () => null }));
-jest.mock("../CreateChannel/FilterConditionEditor", () => ({ FilterConditionEditor: () => <div data-testid="filter-editor" /> }));
-jest.mock("../CreateChannel/SubChannelBlock", () => ({ SubChannelBlock: () => <div data-testid="sub-channel" /> }));
+jest.mock("../CreateChannel/CrawlQueuePanel", () => ({
+  CrawlQueuePanel: () => null,
+}));
+jest.mock("../CreateChannel/CrawlPreviewDialog", () => ({
+  CrawlPreviewDialog: () => null,
+}));
+jest.mock("../CreateChannel/CrawlFeedbackDialog", () => ({
+  CrawlFeedbackDialog: () => null,
+}));
+jest.mock("../CreateChannel/FilterConditionEditor", () => ({
+  FilterConditionEditor: () => <div data-testid="filter-editor" />,
+}));
+jest.mock("../CreateChannel/SubChannelBlock", () => ({
+  SubChannelBlock: () => <div data-testid="sub-channel" />,
+}));
 jest.mock("../CreateChannel/KnowledgeSyncSection", () => ({
   __esModule: true,
-  default: ({ isCreator }: { isCreator: boolean }) => isCreator
-    ? <div data-testid="knowledge-sync" />
-    : null,
+  default: ({ isCreator }: { isCreator: boolean }) =>
+    isCreator ? <div data-testid="knowledge-sync" /> : null,
 }));
 jest.mock("~/components/permission/PermissionDraftEditor", () => ({
   PermissionDraftEditor: ({ onChange }: { onChange: (rows: []) => void }) => (
-    <button type="button" onClick={() => onChange([])}>draft-change</button>
+    <button type="button" onClick={() => onChange([])}>
+      draft-change
+    </button>
   ),
 }));
-jest.mock("~/components/permission/RelationSelect", () => ({ RelationSelect: () => null }));
-jest.mock("~/components/permission/SubjectSearchUser", () => ({ SubjectSearchUser: () => null }));
-jest.mock("~/components/permission/SubjectSearchDepartment", () => ({ SubjectSearchDepartment: () => null }));
-jest.mock("~/components/permission/SubjectSearchUserGroup", () => ({ SubjectSearchUserGroup: () => null }));
+jest.mock("~/components/permission/RelationSelect", () => ({
+  RelationSelect: () => null,
+}));
+jest.mock("~/components/permission/SubjectSearchUser", () => ({
+  SubjectSearchUser: () => null,
+}));
+jest.mock("~/components/permission/SubjectSearchDepartment", () => ({
+  SubjectSearchDepartment: () => null,
+}));
+jest.mock("~/components/permission/SubjectSearchUserGroup", () => ({
+  SubjectSearchUserGroup: () => null,
+}));
 
 describe("ChannelSettingsPage", () => {
   beforeEach(() => {
@@ -170,7 +219,10 @@ describe("ChannelSettingsPage", () => {
       authorizationRecovery: null,
       submitting: false,
     });
-    Object.assign(mockBusiness, { visibility: "review", publishToSquare: "yes" });
+    Object.assign(mockBusiness, {
+      visibility: "review",
+      publishToSquare: "yes",
+    });
   });
 
   it("renders preserved channel fields in a responsive two-column settings layout", () => {
@@ -182,7 +234,9 @@ describe("ChannelSettingsPage", () => {
     expect(screen.getByTestId("knowledge-sync")).not.toBeNull();
     const businessColumn = screen.getByTestId("channel-business-column");
     expect(businessColumn.parentElement?.className).toContain("grid-cols-2");
-    expect(businessColumn.parentElement?.className).toContain("max-[768px]:grid-cols-1");
+    expect(businessColumn.parentElement?.className).toContain(
+      "max-[900px]:grid-cols-1",
+    );
 
     fireEvent.click(screen.getByText("draft-change"));
     expect(mockReplaceRows).toHaveBeenCalledWith([]);
@@ -222,23 +276,38 @@ describe("ChannelSettingsPage", () => {
   });
 
   it("hides share-only controls while private and defaults back to review when shared", () => {
-    Object.assign(mockBusiness, { visibility: "private", publishToSquare: "no" });
+    Object.assign(mockBusiness, {
+      visibility: "private",
+      publishToSquare: "no",
+    });
     render(<ChannelSettingsPage />);
 
     expect(screen.queryByText("draft-change")).toBeNull();
-    expect(screen.queryByText("com_unified_permission.publish_to_square")).toBeNull();
+    expect(
+      screen.queryByText("com_unified_permission.publish_to_square"),
+    ).toBeNull();
 
-    fireEvent.click(screen.getByText("com_unified_permission.shared"));
+    fireEvent.click(
+      screen.getByRole("radio", {
+        name: /com_unified_permission\.shared/,
+      }),
+    );
     expect(mockSetVisibility).toHaveBeenCalledWith("review");
   });
 
   it("offers permission-only recovery without submitting resource creation again", () => {
     Object.assign(mockSettings, {
-      authorizationRecovery: { channelId: "channel-1", grants: [], errorCode: 5001 },
+      authorizationRecovery: {
+        channelId: "channel-1",
+        grants: [],
+        errorCode: 5001,
+      },
     });
     render(<ChannelSettingsPage />);
 
-    fireEvent.click(screen.getByText("com_unified_permission.retry_permission"));
+    fireEvent.click(
+      screen.getByText("com_unified_permission.retry_permission"),
+    );
     fireEvent.click(screen.getByText("com_unified_permission.enter_channel"));
 
     expect(mockRetryAuthorization).toHaveBeenCalledTimes(1);
@@ -249,7 +318,7 @@ describe("ChannelSettingsPage", () => {
   it("submits the unified form once from the fixed action footer", () => {
     render(<ChannelSettingsPage />);
 
-    fireEvent.click(screen.getByText("com_unified_permission.create"));
+    fireEvent.click(screen.getByText("com_unified_permission.confirm_create"));
     expect(mockSubmit).toHaveBeenCalledTimes(1);
   });
 

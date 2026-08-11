@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   createSpaceApi,
@@ -26,7 +26,6 @@ import type {
   GrantItem,
   InitialPermissionResult,
   RelationModel,
-  SelectedSubject,
 } from "~/api/permission";
 import { usePermissionDraft } from "~/components/permission/usePermissionDraft";
 import type { PermissionDraftRow } from "~/components/permission/usePermissionDraft";
@@ -111,7 +110,9 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
   const [canManagePermissions, setCanManagePermissions] = useState(false);
   const [relationModels, setRelationModels] = useState<RelationModel[]>([]);
   const [createdSpace, setCreatedSpace] = useState<KnowledgeSpace | null>(null);
-  const [permissionRetryGrants, setPermissionRetryGrants] = useState<GrantItem[]>([]);
+  const [permissionRetryGrants, setPermissionRetryGrants] = useState<
+    GrantItem[]
+  >([]);
   const [authorizationFeedback, setAuthorizationFeedback] = useState<
     AuthorizationResult | InitialPermissionResult | null
   >(null);
@@ -263,44 +264,6 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
     };
   }, [mode, resetPermissionDraft, spaceId]);
 
-  const defaultNonOwnerRelationModel = useMemo(
-    () =>
-      relationModels.find((model) => model.relation === "editor") ??
-      relationModels.find((model) => model.relation === "viewer") ??
-      relationModels.find((model) => model.relation !== "owner"),
-    [relationModels],
-  );
-  const defaultUserRelationModel =
-    defaultNonOwnerRelationModel ?? relationModels[0];
-
-  const addSubjects = useCallback(
-    (subjects: SelectedSubject[]) => {
-      addPermissionRows(
-        subjects.flatMap((subject) => {
-          const model =
-            subject.type === "user"
-              ? defaultUserRelationModel
-              : defaultNonOwnerRelationModel;
-          if (!model) return [];
-          return [
-            {
-              subjectType: subject.type,
-              subjectId: subject.id,
-              subjectName: subject.name,
-              relation: model.relation,
-              modelId: model.id,
-              includeChildren:
-                subject.type === "department"
-                  ? (subject.include_children ?? true)
-                  : undefined,
-            },
-          ];
-        }),
-      );
-    },
-    [addPermissionRows, defaultNonOwnerRelationModel, defaultUserRelationModel],
-  );
-
   const buildResourcePayload = useCallback(() => {
     const customTags = parseKnowledgeSpaceCustomTags(form.autoTagCustomText);
     const autoTagEnabled = autoTagFeatureVisible && form.autoTagEnabled;
@@ -351,10 +314,12 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
         if (result.initialPermissionResult) {
           setAuthorizationFeedback(result.initialPermissionResult);
           if (result.initialPermissionResult.status === "failed") {
-            setPermissionRetryGrants(getFailedAuthorizationGrants(
-              grants,
-              result.initialPermissionResult.results,
-            ));
+            setPermissionRetryGrants(
+              getFailedAuthorizationGrants(
+                grants,
+                result.initialPermissionResult.results,
+              ),
+            );
           }
         }
         await queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
@@ -430,10 +395,9 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
         [],
       );
       setAuthorizationFeedback(result);
-      setPermissionRetryGrants(getFailedAuthorizationGrants(
-        permissionRetryGrants,
-        result.results,
-      ));
+      setPermissionRetryGrants(
+        getFailedAuthorizationGrants(permissionRetryGrants, result.results),
+      );
       if (result.failedCount > 0) {
         setPermissionRetryStatus("failed");
         return false;
@@ -457,12 +421,14 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
     canEdit,
     canManagePermissions,
     relationModels,
-    canAddNonUserSubjects: Boolean(defaultNonOwnerRelationModel),
+    canAddNonUserSubjects: relationModels.some(
+      (model) => model.relation !== "owner",
+    ),
     permissionRows,
     permissionDiff,
     permissionHasChanges,
     replacePermissionRows,
-    addSubjects,
+    addPermissionRows,
     createdSpace,
     permissionRetryStatus,
     authorizationFeedback,
