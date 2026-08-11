@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+import traceback
 
 from lxml import etree
 from pptx import Presentation
@@ -146,23 +147,35 @@ def main() -> int:
     args = parser.parse_args()
 
     if not os.path.exists(args.pptx):
-        print(f"文件不存在: {args.pptx}（用相对工作区根的路径，上传件通常在 uploads/ 下）")
+        print(f"[FATAL] 文件不存在: {args.pptx}（用相对工作区根的路径，上传件通常在 uploads/ 下）")
         return 0
 
-    prs = Presentation(args.pptx)
+    # Always exit 0: a non-zero exit makes the code interpreter return stderr and
+    # drop stdout, which would hide both this report and the reason it stopped.
+    try:
+        describe(args.pptx, args.layout)
+    except Exception:
+        print("[FATAL] 解析模板时出错：")
+        traceback.print_exc(file=sys.stdout)
+        print("常见原因：文件损坏、是加密文档、或其实是老式 .ppt/.pot（python-pptx 只认 .pptx/.potx）。")
+        print("→ 请用户另存为 .pptx 后重传；拿不到就放弃套模板，改按 SKILL.md §3 从零创建并告知用户。")
+    return 0
+
+
+def describe(path: str, only_layout: int | None) -> None:
+    prs = Presentation(path)
     w_in, h_in = _inch(prs.slide_width), _inch(prs.slide_height)
     ratio = "16:9" if abs(w_in / h_in - 16 / 9) < 0.02 else ("4:3" if abs(w_in / h_in - 4 / 3) < 0.02 else "自定义")
     print(f"=== 画布 ===\n  {w_in:.2f} × {h_in:.2f} in  ({ratio})  —— 不要改画布尺寸，沿用模板的")
 
     dump_theme(prs)
-    dump_layouts(prs, args.layout)
+    dump_layouts(prs, only_layout)
     dump_slides(prs)
 
     print("\n=== 下一步 ===")
     print("  1) 用 Presentation('该模板路径') 打开它当基底，不要 Presentation() 空开")
     print("  2) 按上面的索引 add_slide，按 idx 定位占位符，赋值 run.text 而不是 text_frame.text")
     print("  3) 删掉模板自带页里用不到的部分，最后另存到 output/")
-    return 0
 
 
 if __name__ == "__main__":

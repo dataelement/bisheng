@@ -22,7 +22,7 @@ Usage:
     python skills/bisheng-pptx/scripts/inspect_deck.py output/deck.pptx
     python skills/bisheng-pptx/scripts/inspect_deck.py output/deck.pptx --checks-only
 
-Exit code is 1 when at least one ERROR was found.
+Always exits 0, including on a fatal error — see the comment in main().
 """
 
 from __future__ import annotations
@@ -32,6 +32,7 @@ import math
 import os
 import re
 import sys
+import traceback
 from dataclasses import dataclass
 
 from pptx import Presentation
@@ -39,25 +40,52 @@ from pptx.enum.shapes import MSO_SHAPE_TYPE
 from pptx.enum.text import MSO_ANCHOR, MSO_AUTO_SIZE
 
 # --- tunables -------------------------------------------------------------
+#
+# House rule for every threshold below: the checker sits ONE NOTCH LOOSER than
+# the authoring spec (SKILL.md §7 and references/design-zh.md), and only shouts
+# on a clear violation. Rationale: an ERROR here is a hard delivery gate, so a
+# threshold set at the spec value would block decks that are merely at the edge
+# of the recommended range (e.g. design-zh allows 10-12pt captions — an ERROR at
+# "<12pt" would make a compliant deck unshippable, and the model would learn to
+# ignore the report). The spec stays the authority on how to lay a slide out;
+# this file only catches what is visibly broken.
+#
+# Every constant names the clause it derives from. Drift between the two used to
+# be invisible precisely because that anchor was missing — keep it, and keep the
+# Finding message consistent with the number that actually fires.
 
-DEFAULT_FONT_PT = 18.0
-DEFAULT_LINE_SPACING = 1.2
+DEFAULT_FONT_PT = 18.0  # technical fallback when the size is inherited and unreadable here
+DEFAULT_LINE_SPACING = 1.2  # technical fallback; design-zh section 4 recommends 1.2-1.4
 
+# ANCHOR: SKILL.md section 7, "text must never overflow its container"; design-zh
+# section 6, same clause. The spec is zero tolerance; this estimate carries about
+# +-10% of slack (the font metrics of the opening machine are unknowable), so WARN
+# starts at +5% over the box and ERROR at +30%.
 OVERFLOW_WARN_RATIO = 1.05
 OVERFLOW_ERROR_RATIO = 1.30
 
-MIN_FONT_WARN_PT = 11.0
+# ANCHOR: design-zh section 4, the font-size table — body 14-18pt, chart labels and
+# captions 10-12pt, "below 12pt counts as unreadable". WARN fires below the smallest
+# size the spec allows for ANY role (10pt), so a legitimate 10-12pt caption stays
+# silent; ERROR fires only where no role is readable at all (<8pt).
+MIN_FONT_WARN_PT = 10.0
 MIN_FONT_ERROR_PT = 8.0
 
+# ANCHOR: design-zh section 4, "keep >= 0.5 inch of margin on all four sides" = 36pt.
+# Fires at 0.3in, i.e. only when the shape visibly hugs the edge rather than merely
+# sitting below the recommendation.
 MARGIN_WARN_PT = 21.6  # 0.3 inch
 
+# ANCHOR: design-zh section 6 lists overlapping/clipped text among the "obviously AI"
+# defects, but gives no number. Text over text is a defect at a much lower threshold
+# than text over a shape: a big stat number sitting 30% into its own caption already
+# renders unreadable.
 OVERLAP_WARN_RATIO = 0.15
-# Text over text is a defect at a much lower threshold than text over a shape:
-# a big stat number sitting 44% into its own caption already renders unreadable.
 OVERLAP_ERROR_RATIO = 0.30
 
-# A "decoration" is a thin rule (timeline axis, divider) or a small mark (node
-# dot, icon). Text running across one of those is a real, visible defect —
+# ANCHOR: design-zh section 6.0, "not a single decorative rule", repeated in SKILL.md
+# section 7. A "decoration" is a thin rule (timeline axis, divider) or a small mark
+# (node dot, icon). Text running across one of those is a real, visible defect —
 # unlike text sitting on a card background, which is the intended design.
 DECOR_THIN_PT = 20.0
 DECOR_SMALL_AREA_PT = 2600.0  # ≈ 0.5 in²
@@ -383,16 +411,40 @@ def check_slide(slide, index: int, slide_w: float, slide_h: float) -> list[Findi
                 smallest = size if smallest is None else min(smallest, size)
         if smallest is not None:
             if smallest < MIN_FONT_ERROR_PT:
-                findings.append(Finding("ERROR", index, name, f"字号 {smallest:.0f}pt 过小，投影上不可读 → 至少 12pt"))
+                findings.append(
+                    Finding(
+                        "ERROR",
+                        index,
+                        name,
+                        f"字号 {smallest:.1f}pt 低于可读下限 {MIN_FONT_ERROR_PT:.0f}pt，投影上完全看不清"
+                        f" → 正文改到 14-18pt，注释类不低于 10pt",
+                    )
+                )
             elif smallest < MIN_FONT_WARN_PT:
-                findings.append(Finding("WARN", index, name, f"字号 {smallest:.0f}pt 偏小 → 正文建议 14-18pt"))
+                findings.append(
+                    Finding(
+                        "WARN",
+                        index,
+                        name,
+                        f"字号 {smallest:.1f}pt 低于注释类下限 {MIN_FONT_WARN_PT:.0f}pt"
+                        f" → 正文改到 14-18pt，注释类 10-12pt",
+                    )
+                )
 
         # margins from the canvas edge
         if not full_bleed:
             gaps = [left, top, slide_w - (left + width), slide_h - (top + height)]
             tight = min(gaps)
             if 0 <= tight < MARGIN_WARN_PT:
-                findings.append(Finding("WARN", index, name, f'离画布边缘只有 {tight:.0f}pt → 建议留 ≥22pt(0.3")'))
+                findings.append(
+                    Finding(
+                        "WARN",
+                        index,
+                        name,
+                        f"离画布边缘只有 {tight:.0f}pt，已低于贴边报警线 {MARGIN_WARN_PT:.0f}pt(0.3in)"
+                        f" → 往里挪，规范是四周留 ≥36pt(0.5in)",
+                    )
+                )
 
         # leftover placeholder copy
         for pattern, label in PLACEHOLDER_PATTERNS:
@@ -484,14 +536,28 @@ def main() -> int:
     args = parser.parse_args()
 
     if not os.path.exists(args.pptx):
-        print(f"文件不存在: {args.pptx}")
+        print(f"[FATAL] 文件不存在: {args.pptx}")
         print("请用相对工作区根的路径，例如 output/deck.pptx（不要带前导斜杠，也不要用宿主机绝对路径）。")
         return 0
 
-    prs = Presentation(args.pptx)
+    # Always exit 0, including on a crash: on a non-zero exit the code
+    # interpreter returns stderr and throws stdout away, which would delete this
+    # whole report. A traceback printed to stdout is far more useful than that.
+    try:
+        run_report(args.pptx, checks_only=args.checks_only)
+    except Exception:
+        print("[FATAL] 读取 / 体检 .pptx 时出错：")
+        traceback.print_exc(file=sys.stdout)
+        print("常见原因：文件损坏或写了一半、是加密文档、其实是老式 .ppt（python-pptx 只认 .pptx）。")
+        print("→ 重新跑一次构建脚本生成完整的 .pptx，再跑本脚本；老式 .ppt 请让用户另存为 .pptx。")
+    return 0
+
+
+def run_report(path: str, checks_only: bool) -> None:
+    prs = Presentation(path)
     slide_w, slide_h = _pt(prs.slide_width), _pt(prs.slide_height)
 
-    if not args.checks_only:
+    if not checks_only:
         dump_content(prs)
 
     findings: list[Finding] = []
@@ -513,10 +579,8 @@ def main() -> int:
         print(f"结论: 不通过 —— 有 {errors} 项必须修复。改构建脚本重新生成，再跑一次本脚本。")
     else:
         print("结论: 通过 —— 无必须修复项。WARN 逐条复核后即可交付。")
-    print("提示：溢出为估算值（真实换行取决于打开端字体），只作定位用，不必为 WARN 反复调参。")
-    # Always exit 0: on a non-zero exit the code interpreter returns stderr and
-    # throws stdout away, which would delete this whole report.
-    return 0
+    print("提示：体检阈值比 SKILL.md §7 / design-zh 的规范松一档，只在明显违规时出声；")
+    print("      没报 ERROR 不等于完全合规，排版仍以规范为准。溢出为估算值，不必为 WARN 反复调参。")
 
 
 if __name__ == "__main__":

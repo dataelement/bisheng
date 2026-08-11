@@ -4,9 +4,9 @@ description: >-
   制作 PowerPoint 演示文稿（.pptx）时使用：从零创建企业介绍、工作汇报、项目方案、产品发布、培训课件等幻灯片；
   按用户提供的模板（.pptx/.potx）套版生成；读取或改写已有 PPT。当用户说到「PPT」「幻灯片」「演示文稿」「汇报材料」
   「宣讲材料」「课件」「deck」「slides」「pptx」，或提出「做一个介绍 X 的 PPT」「按这个模板做一版」
-  「把这份材料做成 PPT」时触发。本技能给出 BiSheng 代码执行器里唯一可行的 python-pptx 生成路径
-  （该环境没有 Node/pptxgenjs/markitdown/LibreOffice 命令行默认配置），以及中文排版规范、模板套用方法、
-  交付前自检脚本。如果用户明确要的是网页翻页式 HTML 演示而不是 .pptx 文件，不要用本技能。
+  「把这份材料做成 PPT」时触发。本技能给出 BiSheng 代码执行器里可行的 python-pptx 生成路径，
+  以及中文排版规范、模板套用方法、交付前自检脚本。
+  如果用户明确要的是网页翻页式 HTML 演示而不是 .pptx 文件，不要用本技能。
 metadata:
   display-name: PPT 制作（BiSheng 适配）
 ---
@@ -27,7 +27,9 @@ metadata:
 | 项 | 事实 |
 |---|---|
 | **生成方式** | **只有 `python-pptx`**。它是后端 `pyproject.toml` 的正式依赖（main / 2.6 / 3.0 各线都有），`import pptx` 直接可用 |
-| 不存在的东西 | Node / npm / `pptxgenjs`、`markitdown`、`defusedxml`、`pdfplumber`/`pdfminer`/`PyPDF2`、`pandoc` 转 pptx |
+| 不存在的东西 | Node / npm / `pptxgenjs`、`markitdown`、`defusedxml`、`pdfplumber`/`pdfminer`/`PyPDF2`、`pdftoppm`、`zip`/`unzip` |
+| 存在但本技能不用 | `pandoc`（发布镜像装了 3.6.4 在 `/usr/bin`）。它能 `-o out.pptx`，但只会产出「标题＋项目符号」的裸版式：配色、版式、图表、图片位置全不可控，做出来必是"一眼 AI"的默认样式。要做能交付的 PPT 一律走 `python-pptx` |
+| **前提** | 本技能依赖包内脚本（`skills/bisheng-pptx/scripts/*.py`），只在默认的**本地执行器**下成立。若部署切到 **E2B 沙箱**：`skills/` 不进沙箱、单次上限降到 300 秒 —— 此时脚本调用会 `FileNotFoundError`。**改走纯 python-pptx 内联写法**（cookbook 的片段全部可用，只是不能 `import pptx_helpers`，把需要的函数抄进构建脚本），跳过自检脚本改为自己肉眼核对，并告知用户"当前环境无法运行技能自带的自检脚本" |
 | 其它可用库 | Pillow（图片）、PyMuPDF(`fitz`)（读 PDF/渲染）、matplotlib（图表图片）、pandas/numpy、openpyxl、python-docx、lxml |
 | 禁止 | `pip install`、`npm install`、任何联网假设（生产多为离线内网） |
 | 工作目录 | 执行器 cwd = 工作区根，**一律用相对路径** |
@@ -44,12 +46,13 @@ metadata:
 ### 1.1 先探一次环境（第一次执行代码时顺手做，只花一轮）
 
 ```python
-import shutil
+import os, shutil
 try:
     import pptx
     print("python-pptx OK", getattr(pptx, "__version__", ""))
 except ImportError:
     print("python-pptx MISSING")
+print("skills 可见:", os.path.isdir("skills/bisheng-pptx/scripts"))
 print("soffice:", shutil.which("soffice") or shutil.which("libreoffice") or "无（只影响预览渲染，不影响生成）")
 ```
 
@@ -57,6 +60,8 @@ print("soffice:", shutil.which("soffice") or shutil.which("libreoffice") or "无
   真遇到就是这套环境被裁剪过 —— **不要 `pip install`**（共享的离线环境，装了会污染所有租户）。
   直接告诉用户「当前环境缺少 python-pptx，无法生成 .pptx，需要运维在后端环境补装」，
   并问他是否接受改为其它形式的交付物。不要假装做出来了。
+- `skills 可见: False`：说明跑在 E2B 沙箱里（见 §1 的「前提」行）。本包的三个脚本一律调不动，
+  **不要反复重试路径** —— 直接改走纯 python-pptx 内联写法，自检改为自己核对，并把这个限制告诉用户。
 - `soffice` 没有、或后面渲染时报「无法加载源文件」：说明这台机器的 LibreOffice 没装 Impress 组件。
   **只影响 §5 的可选预览渲染，不影响 .pptx 的生成与交付** —— 跳过看图那一步，以体检结果为准即可。
 
@@ -106,7 +111,8 @@ print(r.stderr[-2000:] if r.stderr else "(no stderr)")
 import subprocess, sys
 r = subprocess.run([sys.executable, "skills/bisheng-pptx/scripts/probe_template.py", "uploads/模板.pptx"],
                    capture_output=True, text=True)
-print(r.stdout or r.stderr)
+print(r.stdout or "(no stdout)")
+print(r.stderr[-2000:] if r.stderr else "(no stderr)")
 ```
 
 它会打印画布尺寸、主题配色与字体、每个版式的索引与占位符 idx、以及模板自带的页。
@@ -131,25 +137,35 @@ print(r.stdout or r.stderr)
 import subprocess, sys
 r = subprocess.run([sys.executable, "skills/bisheng-pptx/scripts/inspect_deck.py", "output/xxx.pptx"],
                    capture_output=True, text=True)
-print(r.stdout or r.stderr)
+print(r.stdout or "(no stdout)")
+print(r.stderr[-2000:] if r.stderr else "(no stderr)")
 ```
 
 输出分两段：
 
 - **内容**：逐页文本 + 备注。用它核对错字、顺序、缺漏 —— 这是 `markitdown` 在本环境的替代品。
 - **体检**：ERROR 必须修完再交付；WARN 逐条复核；INFO 是设计建议。检查覆盖文字溢出、
-  自动撑高的框会压到谁、超出画布、文字区域重叠、字号过小、贴边、残留占位符（XXX/待填/"单击此处"）、
-  整页无视觉元素。
+  自动撑高的框会压到谁、关闭自动换行导致的截断（ERROR）、超出画布、文字区域重叠、
+  文字压在装饰线/小图形上（WARN）、字号过小、贴边、残留占位符（XXX/待填/"单击此处"）、
+  空占位符（WARN）、整页无视觉元素。
+
+**体检阈值比 §7 排版底线松一档**，只在明显违规时出声（例如字号 ERROR 在 8pt 才触发，
+而规范要求正文 14–18pt）。**没报 ERROR ≠ 符合规范** —— 排版仍按 §7 和 design-zh 自己把关。
 
 改完重新生成，再跑一次，直到「结论: 通过」。
 
-**可选 · 看渲染图**（模型支持读图时才有意义）：
+**可选 · 看渲染图**：
+
+> ⚠️ 仅在你确知当前模型支持读图时才做。渲染出的 PNG 会被编成真正的 base64 图片块发给模型厂商，
+> 而 BiSheng 默认的 Qwen/dashscope 通道**已知不接收 base64 图片** —— 读图很可能直接失败，
+> 甚至中断本次请求。拿不准就跳过，以体检结果为准。
 
 ```python
 import subprocess, sys
 r = subprocess.run([sys.executable, "skills/bisheng-pptx/scripts/render_deck.py", "output/xxx.pptx"],
                    capture_output=True, text=True)
-print(r.stdout or r.stderr)
+print(r.stdout or "(no stdout)")
+print(r.stderr[-2000:] if r.stderr else "(no stderr)")
 ```
 
 它把每页渲染成 `scratch/preview/<名字>/slide-N.png`，再用 `read_file` 逐张查看。

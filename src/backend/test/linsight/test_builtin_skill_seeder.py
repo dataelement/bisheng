@@ -254,15 +254,46 @@ async def test_tenant_context_is_restored_after_seeding(env):
 
 
 # ---------------------------------------------------------------------------
-# the bundle actually shipped in this repo
+# the bundles actually shipped in this repo
 # ---------------------------------------------------------------------------
-def test_the_shipped_bundles_are_valid():
-    """Guards the real directory: a malformed SKILL.md here would ship a skill
-    that silently never installs."""
+
+# Deliberately a membership list, not a count: adding a fourth bundle later must
+# not turn this guard red.
+SHIPPED_BUNDLES = ("bisheng-pptx", "bisheng-xlsx", "bisheng-docx")
+
+
+@pytest.mark.parametrize("name", SHIPPED_BUNDLES)
+def test_the_shipped_bundle_is_valid(name):
+    """Guards the real directory: every rule ``_read_bundle`` silently skips on
+    (name mismatch, empty description, unparsable frontmatter) ships a skill that
+    never installs and logs a warning nobody reads."""
     bundles = seeder.discover_builtin_bundles()
 
-    assert "bisheng-pptx" in bundles, "the PPT skill must ship with the backend package"
-    meta, files = bundles["bisheng-pptx"]
-    assert len(meta["description"]) <= 1024
+    assert name in bundles, f"{name} must ship with the backend package"
+    meta, files = bundles[name]
+
+    # The directory name IS the runtime skill id — deepagents resolves by path.
+    assert meta["name"] == name
+
+    description = str(meta.get("description") or "").strip()
+    assert description, "an empty description makes the seeder skip the bundle"
+    assert len(description) <= 1024, f"{name} description is {len(description)} chars"
+
+    metadata = meta.get("metadata")
+    assert isinstance(metadata, dict), f"{name} has no metadata mapping"
+    assert str(metadata.get("display-name") or "").strip(), (
+        f"{name} has no metadata.display-name — the picker would fall back to the raw slug"
+    )
+
     assert "SKILL.md" in files
     assert any(p.startswith("scripts/") for p in files)
+
+
+def test_no_shipped_bundle_is_silently_dropped():
+    """A bundle dir that fails validation disappears from the mapping instead of
+    raising, so compare directories on disk against what discovery returned."""
+    on_disk = {p.name for p in seeder.BUILTIN_SKILLS_DIR.iterdir() if p.is_dir() and p.name != "__pycache__"}
+
+    assert on_disk == set(seeder.discover_builtin_bundles()), (
+        "a bundle directory exists but discover_builtin_bundles() rejected it"
+    )

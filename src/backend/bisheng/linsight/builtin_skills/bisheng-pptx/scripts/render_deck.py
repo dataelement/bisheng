@@ -26,6 +26,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import traceback
 
 import fitz
 
@@ -106,11 +107,23 @@ def main() -> int:
     args = parser.parse_args()
 
     if not os.path.exists(args.pptx):
-        print(f"文件不存在: {args.pptx}（请用相对工作区根的路径，例如 output/deck.pptx，不要带前导斜杠）")
+        print(f"[FATAL] 文件不存在: {args.pptx}（请用相对工作区根的路径，例如 output/deck.pptx，不要带前导斜杠）")
         return 0
 
-    stem = os.path.splitext(os.path.basename(args.pptx))[0]
-    out_dir = args.outdir or os.path.join("scratch", "preview", stem)
+    # Always exit 0, including on a crash: a non-zero exit makes the code
+    # interpreter return stderr and drop stdout, hiding the reason.
+    try:
+        render(args.pptx, args.outdir, args.pages, args.width)
+    except Exception:
+        print("[FATAL] 渲染预览时出错：")
+        traceback.print_exc(file=sys.stdout)
+        print("视觉 QA 是可选步骤：跳过它，以 inspect_deck.py 的体检结果为准，不要因此重做 .pptx。")
+    return 0
+
+
+def render(pptx_path: str, outdir: str | None, pages: str | None, width_px: int) -> None:
+    stem = os.path.splitext(os.path.basename(pptx_path))[0]
+    out_dir = outdir or os.path.join("scratch", "preview", stem)
     os.makedirs(out_dir, exist_ok=True)
 
     # Stale frames from a previous run read as "my fix did not apply".
@@ -118,18 +131,16 @@ def main() -> int:
         if name.startswith("slide-") and name.endswith(".png"):
             os.remove(os.path.join(out_dir, name))
 
-    # Always exit 0 even when rendering is impossible: a non-zero exit makes the
-    # code interpreter return stderr and drop stdout, hiding the reason.
-    pdf_path = _to_pdf(args.pptx, out_dir)
+    pdf_path = _to_pdf(pptx_path, out_dir)
     if not pdf_path:
-        return 0
+        return
 
     written = []
     with fitz.open(pdf_path) as doc:
-        pages = _parse_pages(args.pages, doc.page_count)
-        for index in pages:
+        wanted = _parse_pages(pages, doc.page_count)
+        for index in wanted:
             page = doc[index]
-            zoom = args.width / page.rect.width if page.rect.width else 1.0
+            zoom = width_px / page.rect.width if page.rect.width else 1.0
             pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom))
             target = os.path.join(out_dir, f"slide-{index + 1}.png")
             pix.save(target)
@@ -138,10 +149,12 @@ def main() -> int:
     print(f"已渲染 {len(written)} 页（源 PDF: {pdf_path}）:")
     for path in written:
         print(f"  {path}")
-    print("\n用 read_file 逐张查看上面的路径。重点看：文字是否溢出/被截断、元素是否重叠、留白是否失衡。")
+    print("\n⚠️ 仅在你确知当前模型支持读图时才用 read_file 打开这些 PNG：它们会被编成 base64 图片块")
+    print("   发给模型厂商，而默认的 Qwen/dashscope 通道已知不接收 base64 图片，读图可能直接失败甚至")
+    print("   中断本次请求。拿不准就跳过，以 inspect_deck.py 的体检结果为准。")
+    print("看图时重点看：文字是否溢出/被截断、元素是否重叠、留白是否失衡。")
     print("注意：渲染用的中文字体是文泉驿正黑，与用户 PowerPoint 里的实际字体宽度不同 ——")
     print("      预览里的文字松紧只作参考，容器请留约 10% 余量，不要为了预览效果反复微调字号。")
-    return 0
 
 
 if __name__ == "__main__":

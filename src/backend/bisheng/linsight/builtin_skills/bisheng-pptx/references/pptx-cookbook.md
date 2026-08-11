@@ -290,7 +290,8 @@ print("OK:", os.path.getsize("output/思源电气企业介绍.pptx"), "bytes")
 import subprocess, sys
 r = subprocess.run([sys.executable, "skills/bisheng-pptx/scripts/inspect_deck.py",
                     "output/思源电气企业介绍.pptx"], capture_output=True, text=True)
-print(r.stdout or r.stderr)
+print(r.stdout or "(no stdout)")
+print(r.stderr[-2000:] if r.stderr else "(no stderr)")
 ```
 
 ## 10. python-pptx 做不到的事（别浪费轮次）
