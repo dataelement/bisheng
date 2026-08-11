@@ -796,6 +796,30 @@ class TagLibraryTagService:
         return list(dict.fromkeys([*(system_tags or []), *(manual_tags or [])]))
 
     @classmethod
+    async def sync_library_name_lists(cls, library_id: int) -> None:
+        """Rewrite a library's own name list from its ``tag`` rows.
+
+        A library keeps a second copy of its tag names in its ``tags`` /
+        ``ai_tags`` columns, left over from before the names lived in ``tag``.
+        Anything that writes tag rows directly has to call this, or the two
+        copies drift — and drift is not harmless: a library with no tag rows but
+        a non-empty name list looks to ``_ensure_tags_materialized`` like one the
+        migration missed, so it rebuilds every name and deleted tags come back.
+        """
+        from bisheng.knowledge.domain.models.knowledge_space_tag_library import (
+            KnowledgeSpaceTagLibraryDao,
+        )
+
+        system, manual, ai = await cls.list_tag_names(library_id)
+        non_ai = cls.non_ai_tag_names(system, manual)
+        await KnowledgeSpaceTagLibraryDao.aupdate(
+            library_id,
+            tags=non_ai,
+            ai_tags=ai,
+            tag_count=len(non_ai) + len(ai),
+        )
+
+    @classmethod
     async def count_tags(cls, library_id: int) -> int:
         system, manual, ai = await cls.list_tag_names(library_id)
         return len(system) + len(manual) + len(ai)
