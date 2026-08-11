@@ -124,6 +124,10 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
     KnowledgeSpaceTagLibraryListItem[]
   >([]);
   const [autoTagPreview, setAutoTagPreview] = useState<string[]>([]);
+  const [spaceKind, setSpaceKind] = useState<"normal" | "department">(
+    "normal",
+  );
+  const isDepartmentSpace = mode === "edit" && spaceKind === "department";
 
   const updateForm = useCallback(
     <K extends keyof KnowledgeSpaceSettingsFormState>(
@@ -190,6 +194,7 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
 
     const load = async () => {
       if (mode === "create") {
+        setSpaceKind("normal");
         try {
           const models =
             await getCreationGrantableRelationModels("knowledge_space");
@@ -223,10 +228,16 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
         ]);
         if (cancelled) return;
         setCanEdit(Boolean(editResult.allowed));
+        const loadedSpaceKind = space.spaceKind ?? "normal";
+        setSpaceKind(loadedSpaceKind);
         setForm({
           name: space.name,
           description: space.description ?? "",
-          visibility: space.visibility,
+          visibility:
+            loadedSpaceKind === "department" &&
+            space.visibility === VisibilityType.PRIVATE
+              ? VisibilityType.APPROVAL
+              : space.visibility,
           isReleased: space.isReleased,
           autoTagEnabled: Boolean(space.autoTagEnabled),
           autoTagMode: space.autoTagMode ?? "library",
@@ -267,12 +278,16 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
   const buildResourcePayload = useCallback(() => {
     const customTags = parseKnowledgeSpaceCustomTags(form.autoTagCustomText);
     const autoTagEnabled = autoTagFeatureVisible && form.autoTagEnabled;
+    const visibility =
+      isDepartmentSpace && form.visibility === VisibilityType.PRIVATE
+        ? VisibilityType.APPROVAL
+        : form.visibility;
     return {
       name: form.name.trim(),
       description: form.description.trim(),
-      auth_type: form.visibility,
+      auth_type: visibility,
       is_released:
-        form.visibility === VisibilityType.PRIVATE ? false : form.isReleased,
+        visibility === VisibilityType.PRIVATE ? false : form.isReleased,
       auto_tag_enabled: autoTagEnabled,
       auto_tag_library_id:
         autoTagEnabled && form.autoTagMode === "library"
@@ -281,7 +296,7 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
       auto_tag_custom_tags:
         autoTagEnabled && form.autoTagMode === "custom" ? customTags : null,
     };
-  }, [autoTagFeatureVisible, form]);
+  }, [autoTagFeatureVisible, form, isDepartmentSpace]);
 
   const submit = useCallback(async () => {
     if (!form.name.trim() || submitting || (!canEdit && !canManagePermissions))
@@ -420,6 +435,7 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
     submitError,
     canEdit,
     canManagePermissions,
+    isDepartmentSpace,
     relationModels,
     canAddNonUserSubjects: relationModels.some(
       (model) => model.relation !== "owner",

@@ -348,6 +348,80 @@ describe("KnowledgeSpaceSettingsPage", () => {
     ).toBeChecked();
   });
 
+  it("keeps department spaces shared while join review and member permissions remain configurable", async () => {
+    mockEditCapabilities(true, true);
+    mockedGetSpaceInfo.mockResolvedValue({
+      ...baseSpace,
+      spaceKind: "department",
+      visibility: VisibilityType.APPROVAL,
+    });
+
+    renderPage("/knowledge/space/7/settings");
+
+    const privateOption = await screen.findByRole("radio", {
+      name: /com_unified_permission\.private/,
+    });
+    const sharedOption = screen.getByRole("radio", {
+      name: /com_unified_permission\.shared/,
+    });
+    const reviewJoin = screen.getByRole("switch", {
+      name: "com_unified_permission.review_join",
+    });
+
+    expect((privateOption as HTMLButtonElement).disabled).toBe(true);
+    expect(sharedOption.getAttribute("data-state")).toBe("checked");
+    expect((reviewJoin as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.getByTestId("authorization-list")).not.toBeNull();
+
+    fireEvent.click(reviewJoin);
+    fireEvent.click(
+      screen.getByRole("button", { name: "com_unified_permission.save" }),
+    );
+
+    await waitFor(() =>
+      expect(mockedUpdateSpace).toHaveBeenCalledWith(
+        "7",
+        expect.objectContaining({ auth_type: VisibilityType.PUBLIC }),
+      ),
+    );
+  });
+
+  it("normalizes historical private department spaces back to shared approval on save", async () => {
+    mockEditCapabilities(true, true);
+    mockedGetSpaceInfo.mockResolvedValue({
+      ...baseSpace,
+      spaceKind: "department",
+      visibility: VisibilityType.PRIVATE,
+    });
+
+    renderPage("/knowledge/space/7/settings");
+
+    const privateOption = await screen.findByRole("radio", {
+      name: /com_unified_permission\.private/,
+    });
+    const sharedOption = screen.getByRole("radio", {
+      name: /com_unified_permission\.shared/,
+    });
+    const reviewJoin = screen.getByRole("switch", {
+      name: "com_unified_permission.review_join",
+    });
+
+    expect((privateOption as HTMLButtonElement).disabled).toBe(true);
+    expect(sharedOption.getAttribute("data-state")).toBe("checked");
+    expect(reviewJoin.getAttribute("data-state")).toBe("checked");
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "com_unified_permission.save" }),
+    );
+
+    await waitFor(() =>
+      expect(mockedUpdateSpace).toHaveBeenCalledWith(
+        "7",
+        expect.objectContaining({ auth_type: VisibilityType.APPROVAL }),
+      ),
+    );
+  });
+
   it("applies the model selected in the reused authorization dialog", async () => {
     mockedGetCreationModels.mockResolvedValue([
       relationModels[0],

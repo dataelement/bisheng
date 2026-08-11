@@ -161,6 +161,7 @@ export function KnowledgeSpaceSettingsPage() {
 
   const handleVisibilityModeChange = async (value: "private" | "shared") => {
     if (value === "private") {
+      if (settings.isDepartmentSpace) return;
       if (settings.mode === "edit" && !isPrivate) {
         const accepted = await confirm({
           description: localize(
@@ -545,6 +546,7 @@ export function KnowledgeSpaceSettingsPage() {
                         void handleVisibilityModeChange(value)
                       }
                       disabled={!settings.canEdit}
+                      privateDisabled={settings.isDepartmentSpace}
                       privateLabel={localize("com_unified_permission.private")}
                       privateDescription={localize(
                         "com_unified_permission.private_hint",

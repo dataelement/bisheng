@@ -41,6 +41,7 @@ interface AccessModeSelectorProps {
   sharedLabel: string;
   sharedDescription: string;
   disabled?: boolean;
+  privateDisabled?: boolean;
 }
 
 export function AccessModeSelector({
@@ -51,17 +52,20 @@ export function AccessModeSelector({
   sharedLabel,
   sharedDescription,
   disabled,
+  privateDisabled = false,
 }: AccessModeSelectorProps) {
   const options = [
     {
       value: "private" as const,
       label: privateLabel,
       description: privateDescription,
+      disabled: privateDisabled,
     },
     {
       value: "shared" as const,
       label: sharedLabel,
       description: sharedDescription,
+      disabled: false,
     },
   ];
 
@@ -79,6 +83,7 @@ export function AccessModeSelector({
         >
           <RadioGroup.Item
             value={option.value}
+            disabled={disabled || option.disabled}
             className="flex size-4 shrink-0 items-center justify-center rounded-full border-2 border-border-deep data-[state=checked]:border-blue-500 data-[state=checked]:bg-blue-500"
           >
             <RadioGroup.Indicator className="size-1 rounded-full bg-fill-1" />

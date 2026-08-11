@@ -91,6 +91,33 @@ async def test_department_space_update_rejects_public_to_private_before_cleanup_
     update_space.assert_not_awaited()
 
 
+async def test_department_space_update_rejects_explicit_private_for_historical_private_space():
+    space = _space(AuthTypeEnum.PRIVATE)
+    service = KnowledgeSpaceService(request=SimpleNamespace(), login_user=_login_user())
+
+    with (
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id",
+            new=AsyncMock(return_value=space),
+        ),
+        patch.object(service, "_require_permission_id", new_callable=AsyncMock),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.DepartmentKnowledgeSpaceDao.aget_by_space_id",
+            new=AsyncMock(return_value=SimpleNamespace(space_id=space.id, department_id=10)),
+        ),
+        patch.object(service, "_list_space_child_resources", new_callable=AsyncMock) as list_children,
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_space",
+            new_callable=AsyncMock,
+        ) as update_space,
+    ):
+        with pytest.raises(DepartmentSpacePrivateForbiddenError):
+            await service.update_knowledge_space(space.id, auth_type=AuthTypeEnum.PRIVATE)
+
+    list_children.assert_not_awaited()
+    update_space.assert_not_awaited()
+
+
 async def test_non_department_space_can_be_changed_to_private():
     space = _space(AuthTypeEnum.PUBLIC)
     service = KnowledgeSpaceService(request=SimpleNamespace(), login_user=_login_user())

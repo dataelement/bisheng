@@ -1849,7 +1849,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         await self._require_permission_id("knowledge_space", space_id, "edit_space")
 
         old_auth_type = space.auth_type
-        if auth_type == AuthTypeEnum.PRIVATE and old_auth_type != AuthTypeEnum.PRIVATE:
+        if auth_type == AuthTypeEnum.PRIVATE:
             department_binding = await DepartmentKnowledgeSpaceDao.aget_by_space_id(space_id)
             if department_binding is not None:
                 raise DepartmentSpacePrivateForbiddenError()
