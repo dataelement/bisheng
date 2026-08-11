@@ -293,8 +293,7 @@ async def _award_adopt(
 ) -> Sample:
     from bisheng.points.domain.services.points_award_hooks import notify_answer_adopted
 
-    # 压测用 answer_id 充当 question_id，保证幂等键唯一。
-    idem = f"earn:G4:{answer_id}:{user_id}"
+    idem = f"earn:G4:{answer_id}"
     ctx = (
         patch(
             "bisheng.points.domain.services.points_award_hooks._award_async_enabled",
@@ -308,7 +307,6 @@ async def _award_adopt(
         with ctx:
             await notify_answer_adopted(
                 tenant_id=TENANT_ID,
-                question_id=answer_id,
                 answer_id=answer_id,
                 answerer_id=user_id,
             )
@@ -426,7 +424,6 @@ async def run_scenario(
                 {
                     "event_type": "answer_adopted",
                     "tenant_id": TENANT_ID,
-                    "question_id": 1,
                     "answer_id": 1,
                     "answerer_id": USER_GZX01,
                 }

@@ -55,13 +55,9 @@ class FavoriteChangedEvent:
 
 @dataclass(frozen=True)
 class AnswerAdoptedEvent:
-    """问答答案被采纳后的 G4 发分上下文。
-
-    同题同回答者只发一次（幂等键含 question_id + answerer_id）。
-    """
+    """问答答案被采纳后的 G4 发分上下文。"""
 
     tenant_id: int
-    question_id: int
     answer_id: int
     answerer_id: int
 
@@ -300,8 +296,7 @@ class PointsAwardFacade:
         score = _fixed_score(rule.score_expr)
         if score <= 0:
             return AwardOutcome(skipped=True, reason="invalid_score")
-        # 同题同回答者只入账一次；同题他人采纳仍各自计分。
-        key = f"earn:G4:{event.question_id}:{payee}"
+        key = f"earn:G4:{event.answer_id}"
         result = await self.ledger.award(
             tenant_id=event.tenant_id,
             user_id=payee,
@@ -310,14 +305,12 @@ class PointsAwardFacade:
             rule_code="G4",
             idempotency_key=key,
             daily_cap=rule.daily_cap,
-            biz_type="question",
-            biz_id=str(event.question_id),
+            biz_type="answer",
+            biz_id=str(event.answer_id),
             beneficiary_role="answerer",
         )
         if result.skipped_cap:
             return AwardOutcome(skipped=True, reason="daily_cap", result=result)
-        if result.replayed:
-            return AwardOutcome(skipped=True, reason="already_awarded_for_question", result=result)
         return AwardOutcome.success(
             result=result,
             user_id=payee,
