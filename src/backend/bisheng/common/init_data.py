@@ -125,7 +125,7 @@ async def init_default_data():
                 await _backfill_guest_department_membership(session)
 
                 # Initialize preset approval scenarios (channel / knowledge-space subscribe)
-                await _init_default_approval_scenarios(session)
+                await _init_default_approval_scenarios(session, ensure_system_scenarios=True)
 
                 # Initialize preset application templates
                 templates = await session.exec(select(Template).limit(1))
@@ -348,7 +348,7 @@ _DEFAULT_APPROVAL_SCENARIO_SEEDS = [
 ]
 
 
-async def _init_default_approval_scenarios(session):
+async def _init_default_approval_scenarios(session, *, ensure_system_scenarios: bool = False):
     """Idempotently seed preset approval scenarios for the default tenant.
 
     Mirrors what the admin UI builds when an operator configures a scenario:
@@ -443,6 +443,17 @@ async def _init_default_approval_scenarios(session):
             )
             await session.commit()
             logger.info(f"Seeded approval scenario {seed['scenario_code']} (id={scenario.id}) for default tenant")
+
+        if ensure_system_scenarios:
+            from bisheng.approval.domain.services.approval_registry import (
+                ensure_system_file_change_scenario,
+            )
+
+            await ensure_system_file_change_scenario(
+                tenant_id=DEFAULT_TENANT_ID,
+                session=session,
+            )
+            await session.commit()
 
 
 async def _backfill_guest_department_membership(session):

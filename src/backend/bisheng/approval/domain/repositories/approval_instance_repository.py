@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from sqlmodel import select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.approval.domain.models.approval_instance import (
     ApprovalActionLog,
@@ -16,6 +17,8 @@ from bisheng.approval.domain.models.approval_instance import (
     ApprovalTask,
     ApprovalTaskStatus,
 )
+from bisheng.approval.domain.models.approval_scenario import ApprovalNodeDefinition
+from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.core.database import get_async_db_session
 
 
@@ -33,6 +36,152 @@ class ApprovalInstanceRepository:
         ApprovalInstanceStatus.APPROVED,
         ApprovalInstanceStatus.EXECUTING,
     )
+
+    @classmethod
+    def decision_session(cls):
+        """Return a session owned by a decision UoW.
+
+        The repository primitives below never commit.  Keeping the factory on
+        the repository also lets tests replace the database boundary once for
+        both legacy methods and the decision UoW.
+        """
+
+        return get_async_db_session()
+
+    @staticmethod
+    def _resolve_lock_tenant_id(tenant_id: int | None) -> int:
+        """Resolve the tenant before constructing any decision lock query."""
+
+        resolved = get_current_tenant_id() if tenant_id is None else tenant_id
+        if resolved is None or int(resolved) <= 0:
+            raise ValueError("a positive tenant_id is required for approval decision locks")
+        return int(resolved)
+
+    @classmethod
+    async def get_task_instance_id_in_session(
+        cls,
+        session: AsyncSession,
+        task_id: int,
+        *,
+        tenant_id: int | None = None,
+    ) -> int | None:
+        resolved_tenant_id = cls._resolve_lock_tenant_id(tenant_id)
+        statement = select(ApprovalTask.instance_id).where(
+            ApprovalTask.id == task_id,
+            ApprovalTask.tenant_id == resolved_tenant_id,
+        )
+        return (await session.exec(statement)).first()
+
+    @classmethod
+    async def is_task_pending_for_tenant(cls, *, task_id: int, tenant_id: int) -> bool:
+        resolved_tenant_id = cls._resolve_lock_tenant_id(tenant_id)
+        async with get_async_db_session() as session:
+            statement = select(ApprovalTask.id).where(
+                ApprovalTask.id == task_id,
+                ApprovalTask.tenant_id == resolved_tenant_id,
+                ApprovalTask.status == ApprovalTaskStatus.PENDING,
+            )
+            return (await session.exec(statement)).first() is not None
+
+    @classmethod
+    async def lock_instance_in_session(
+        cls,
+        session: AsyncSession,
+        instance_id: int,
+        *,
+        tenant_id: int | None = None,
+    ) -> ApprovalInstance | None:
+        resolved_tenant_id = cls._resolve_lock_tenant_id(tenant_id)
+        statement = (
+            select(ApprovalInstance)
+            .where(
+                ApprovalInstance.id == instance_id,
+                ApprovalInstance.tenant_id == resolved_tenant_id,
+            )
+            .with_for_update()
+        )
+        return (await session.exec(statement)).first()
+
+    @classmethod
+    async def lock_tasks_in_session(
+        cls,
+        session: AsyncSession,
+        instance_id: int,
+        *,
+        tenant_id: int | None = None,
+    ) -> list[ApprovalTask]:
+        resolved_tenant_id = cls._resolve_lock_tenant_id(tenant_id)
+        statement = (
+            select(ApprovalTask)
+            .where(
+                ApprovalTask.instance_id == instance_id,
+                ApprovalTask.tenant_id == resolved_tenant_id,
+            )
+            .order_by(ApprovalTask.node_order.asc(), ApprovalTask.id.asc())
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        return list((await session.exec(statement)).all())
+
+    @classmethod
+    async def lock_open_exceptions_and_outboxes_in_session(
+        cls,
+        session: AsyncSession,
+        instance_id: int,
+        *,
+        tenant_id: int | None = None,
+    ) -> tuple[list[ApprovalException], list[ApprovalOutbox]]:
+        resolved_tenant_id = cls._resolve_lock_tenant_id(tenant_id)
+        exceptions = list(
+            (
+                await session.exec(
+                    select(ApprovalException)
+                    .where(
+                        ApprovalException.instance_id == instance_id,
+                        ApprovalException.tenant_id == resolved_tenant_id,
+                        ApprovalException.status == "open",
+                    )
+                    .order_by(ApprovalException.id.asc())
+                    .with_for_update()
+                )
+            ).all()
+        )
+        outboxes = list(
+            (
+                await session.exec(
+                    select(ApprovalOutbox)
+                    .where(
+                        ApprovalOutbox.instance_id == instance_id,
+                        ApprovalOutbox.tenant_id == resolved_tenant_id,
+                    )
+                    .order_by(ApprovalOutbox.id.asc())
+                    .with_for_update()
+                )
+            ).all()
+        )
+        return exceptions, outboxes
+
+    @classmethod
+    async def list_flow_nodes_in_session(
+        cls,
+        session: AsyncSession,
+        *,
+        tenant_id: int,
+        flow_version_id: int,
+    ) -> list[ApprovalNodeDefinition]:
+        statement = (
+            select(ApprovalNodeDefinition)
+            .where(
+                ApprovalNodeDefinition.tenant_id == tenant_id,
+                ApprovalNodeDefinition.flow_version_id == flow_version_id,
+            )
+            .order_by(ApprovalNodeDefinition.node_order.asc(), ApprovalNodeDefinition.id.asc())
+        )
+        return list((await session.exec(statement)).all())
+
+    @classmethod
+    async def flush_decision_in_session(cls, session: AsyncSession) -> None:
+        await session.flush()
 
     @classmethod
     async def create_instance(cls, row: ApprovalInstance) -> ApprovalInstance:
@@ -171,18 +320,17 @@ class ApprovalInstanceRepository:
         now = datetime.utcnow()
         async with get_async_db_session() as session:
             async with session.begin():
-                task = (
-                    await session.exec(select(ApprovalTask).where(ApprovalTask.id == task_id).with_for_update())
-                ).first()
-                if task is None or task.status != ApprovalTaskStatus.PENDING:
+                instance_id = await cls.get_task_instance_id_in_session(session, task_id)
+                if instance_id is None:
                     return None
-                instance = (
-                    await session.exec(
-                        select(ApprovalInstance).where(ApprovalInstance.id == task.instance_id).with_for_update()
-                    )
-                ).first()
+                instance = await cls.lock_instance_in_session(session, instance_id)
+                tasks = await cls.lock_tasks_in_session(session, instance_id)
+                await cls.lock_open_exceptions_and_outboxes_in_session(session, instance_id)
+                task = next((row for row in tasks if row.id == task_id), None)
                 if (
-                    instance is None
+                    task is None
+                    or task.status != ApprovalTaskStatus.PENDING
+                    or instance is None
                     or instance.status != ApprovalInstanceStatus.PENDING
                     or task.approver_user_id != operator_user_id
                 ):
@@ -221,7 +369,7 @@ class ApprovalInstanceRepository:
                         detail={"task_id": task.id, "comment": comment},
                     )
                 )
-                await session.flush()
+                await cls.flush_decision_in_session(session)
             await session.refresh(task)
             await session.refresh(instance)
             if outbox is not None:
@@ -240,29 +388,19 @@ class ApprovalInstanceRepository:
         now = datetime.utcnow()
         async with get_async_db_session() as session:
             async with session.begin():
-                instance = (
-                    await session.exec(
-                        select(ApprovalInstance).where(ApprovalInstance.id == instance_id).with_for_update()
-                    )
-                ).first()
+                instance = await cls.lock_instance_in_session(session, instance_id)
                 if (
                     instance is None
                     or instance.status != ApprovalInstanceStatus.PENDING
                     or instance.applicant_user_id != applicant_user_id
                 ):
                     return None
-                pending_tasks = list(
-                    (
-                        await session.exec(
-                            select(ApprovalTask).where(
-                                ApprovalTask.instance_id == instance_id,
-                                ApprovalTask.status == ApprovalTaskStatus.PENDING,
-                            )
-                        )
-                    ).all()
-                )
+                tasks = await cls.lock_tasks_in_session(session, instance_id)
+                await cls.lock_open_exceptions_and_outboxes_in_session(session, instance_id)
+                pending_tasks = [task for task in tasks if task.status == ApprovalTaskStatus.PENDING]
                 for task in pending_tasks:
                     task.status = ApprovalTaskStatus.CANCELLED
+                    task.comment = reason
                     task.acted_at = now
                     session.add(task)
                 instance.status = ApprovalInstanceStatus.WITHDRAWN
@@ -277,7 +415,59 @@ class ApprovalInstanceRepository:
                         detail={"reason": reason},
                     )
                 )
-                await session.flush()
+                await cls.flush_decision_in_session(session)
+            await session.refresh(instance)
+        return instance
+
+    @classmethod
+    async def cancel_pending_instance(
+        cls,
+        *,
+        instance_id: int,
+        operator_user_id: int,
+        operator_user_name: str | None,
+        reason: str,
+    ) -> ApprovalInstance | None:
+        """Cancel a pending/exception instance using the decision lock order."""
+
+        now = datetime.utcnow()
+        async with get_async_db_session() as session:
+            async with session.begin():
+                instance = await cls.lock_instance_in_session(session, instance_id)
+                if instance is None or instance.status not in (
+                    ApprovalInstanceStatus.PENDING,
+                    ApprovalInstanceStatus.EXCEPTION,
+                ):
+                    return None
+                tasks = await cls.lock_tasks_in_session(session, instance_id)
+                exceptions, _outboxes = await cls.lock_open_exceptions_and_outboxes_in_session(
+                    session,
+                    instance_id,
+                )
+                for task in tasks:
+                    if task.status == ApprovalTaskStatus.PENDING:
+                        task.status = ApprovalTaskStatus.CANCELLED
+                        task.acted_at = now
+                        session.add(task)
+                for exception in exceptions:
+                    exception.status = "resolved"
+                    exception.resolved_action = "cancel"
+                    exception.resolved_by_user_id = operator_user_id
+                    exception.resolved_at = now
+                    session.add(exception)
+                instance.status = ApprovalInstanceStatus.CANCELLED
+                session.add(instance)
+                session.add(
+                    ApprovalActionLog(
+                        tenant_id=instance.tenant_id,
+                        instance_id=instance.id,
+                        action="cancelled",
+                        operator_user_id=operator_user_id,
+                        operator_user_name=operator_user_name,
+                        detail={"reason": reason},
+                    )
+                )
+                await cls.flush_decision_in_session(session)
             await session.refresh(instance)
         return instance
 

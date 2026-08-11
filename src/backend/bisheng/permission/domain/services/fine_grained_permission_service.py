@@ -130,6 +130,124 @@ class FineGrainedPermissionService:
         subject_strings.update(f"department:{item.department_id}#member" for item in user_departments)
         return subject_strings
 
+    @classmethod
+    async def has_effective_permission_id_strict(
+        cls,
+        login_user: UserPayload,
+        object_type: str,
+        object_id: str | int,
+        permission_id: str,
+        *,
+        tenant_id: int,
+        space_id: int | None = None,
+        allowed_unbound_direct_tuples: set[tuple[str, str, str]] | None = None,
+    ) -> bool:
+        """Evaluate one permission from strong tuples without DB fallback.
+
+        Binding metadata only interprets a tuple that OpenFGA just returned; it
+        is never an alternative authority. Legacy unbound tuples are accepted
+        only for caller-supplied direct-user projections (space creator/member
+        rows), preventing stale manager/editor bindings from reviving access.
+        """
+        from bisheng.core.context.tenant import get_current_tenant_id
+        from bisheng.core.openfga.exceptions import FGAConnectionError
+        from bisheng.permission.domain.repositories.grant_subject_query_repository import (
+            GrantSubjectQueryRepository,
+        )
+
+        current_tenant_id = get_current_tenant_id()
+        if current_tenant_id is None or int(current_tenant_id) != int(tenant_id):
+            raise RuntimeError("a matching tenant context is required for strict permission evaluation")
+
+        fga = await PermissionService._aget_fga()
+        if fga is None:
+            raise FGAConnectionError("OpenFGA client is unavailable")
+
+        direct_user = f"user:{int(login_user.user_id)}"
+        subject_repository = GrantSubjectQueryRepository()
+        if not await subject_repository.is_active_user_in_any_active_tenant(int(login_user.user_id)):
+            return False
+        if await fga.check(
+            user=direct_user,
+            relation="super_admin",
+            object="system:global",
+            consistency="HIGHER_CONSISTENCY",
+        ):
+            return True
+        subject_strings = await subject_repository.resolve_active_subject_strings_for_user(
+            user_id=int(login_user.user_id),
+            tenant_id=int(tenant_id),
+        )
+        if direct_user not in subject_strings:
+            return False
+        if await fga.check(
+            user=direct_user,
+            relation="admin",
+            object=f"tenant:{int(tenant_id)}",
+            consistency="HIGHER_CONSISTENCY",
+        ):
+            return True
+
+        models = await cls.get_relation_models_map()
+        bindings = await _get_bindings()
+        binding_index = cls.build_binding_index(bindings)
+        binding_department_paths = await cls.get_binding_department_paths(bindings)
+        lineage = await cls.build_resource_lineage(object_type, object_id, space_id=space_id)
+        nearest_binding_wins = object_type in {"folder", "knowledge_file"}
+        allowed_unbound = allowed_unbound_direct_tuples or set()
+        tuple_department_paths: dict[int, str] = {}
+
+        for resource_type, resource_id in lineage:
+            level_saw_matching_tuple = False
+            level_allowed = False
+            for tuple_resource_type in await cls._tuple_resource_types(resource_type, str(resource_id)):
+                tuples = await fga.read_tuples(
+                    object=f"{tuple_resource_type}:{resource_id}",
+                    consistency="HIGHER_CONSISTENCY",
+                )
+                binding_resource_type = (
+                    resource_type
+                    if tuple_resource_type != "knowledge_space" or resource_type != "knowledge_library"
+                    else "knowledge_library"
+                )
+                for tuple_data in tuples or []:
+                    tuple_user = tuple_data.get("user")
+                    relation = tuple_data.get("relation")
+                    if tuple_user not in subject_strings or not relation:
+                        continue
+                    level_saw_matching_tuple = True
+                    binding = await cls._resolve_binding_for_tuple(
+                        binding_resource_type,
+                        resource_id,
+                        tuple_user,
+                        relation,
+                        bindings,
+                        binding_department_paths,
+                        tuple_department_paths,
+                        binding_index=binding_index,
+                    )
+                    if binding is not None:
+                        model_id = binding.get("model_id")
+                        model = models.get(model_id) if model_id else None
+                        if model_id and model is None:
+                            continue
+                        granted = cls._permission_ids_for_relation(resource_type, relation, model)
+                    elif tuple_user == direct_user and (
+                        resource_type,
+                        str(resource_id),
+                        relation,
+                    ) in allowed_unbound:
+                        granted = cls.default_permission_ids_for_relation(resource_type, relation)
+                    else:
+                        granted = set()
+                    if str(permission_id) in granted:
+                        level_allowed = True
+            if level_allowed:
+                return True
+            if nearest_binding_wins and level_saw_matching_tuple:
+                return False
+        return False
+
     @staticmethod
     async def get_binding_department_paths(bindings: list[dict]) -> dict[int, str]:
         department_ids = {

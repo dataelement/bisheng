@@ -29,10 +29,11 @@ def _get_scm_role_to_fga() -> dict:
     global SCM_ROLE_TO_FGA
     if not SCM_ROLE_TO_FGA:
         from bisheng.common.models.space_channel_member import UserRoleEnum
+
         SCM_ROLE_TO_FGA = {
-            UserRoleEnum.CREATOR: 'owner',
-            UserRoleEnum.ADMIN: 'manager',
-            UserRoleEnum.MEMBER: 'viewer',
+            UserRoleEnum.CREATOR: "owner",
+            UserRoleEnum.ADMIN: "manager",
+            UserRoleEnum.MEMBER: "viewer",
         }
     return SCM_ROLE_TO_FGA
 
@@ -57,14 +58,15 @@ class OwnerService:
         ``enforce_fga_success=True``.
         """
         from bisheng.permission.domain.services.permission_service import PermissionService
+
         await PermissionService.authorize(
             object_type=object_type,
             object_id=object_id,
             grants=[
                 AuthorizeGrantItem(
-                    subject_type='user',
+                    subject_type="user",
                     subject_id=user_id,
-                    relation='owner',
+                    relation="owner",
                     include_children=False,
                 ),
             ],
@@ -82,7 +84,7 @@ class OwnerService:
         try:
             _run_async_safe(cls.write_owner_tuple(user_id, object_type, object_id))
         except Exception as e:
-            logger.warning('Failed to write owner tuple (sync) for %s:%s: %s', object_type, object_id, e)
+            logger.warning("Failed to write owner tuple (sync) for %s:%s: %s", object_type, object_id, e)
 
     @classmethod
     def delete_resource_tuples_sync(
@@ -94,7 +96,7 @@ class OwnerService:
         try:
             _run_async_safe(cls.delete_resource_tuples(object_type, object_id))
         except Exception as e:
-            logger.warning('Failed to delete tuples (sync) for %s:%s: %s', object_type, object_id, e)
+            logger.warning("Failed to delete tuples (sync) for %s:%s: %s", object_type, object_id, e)
 
     @classmethod
     async def check_is_owner(
@@ -105,9 +107,10 @@ class OwnerService:
     ) -> bool:
         """Check if user is the owner of a resource."""
         from bisheng.permission.domain.services.permission_service import PermissionService
+
         return await PermissionService.check(
             user_id=user_id,
-            relation='owner',
+            relation="owner",
             object_type=object_type,
             object_id=object_id,
         )
@@ -124,28 +127,92 @@ class OwnerService:
         Does not raise on failure — logs warning and returns (AC-03).
         """
         from bisheng.permission.domain.services.permission_service import PermissionService
+
         fga = PermissionService._get_fga()
         if fga is None:
-            logger.warning('FGAClient not available for tuple cleanup: %s:%s', object_type, object_id)
+            logger.warning("FGAClient not available for tuple cleanup: %s:%s", object_type, object_id)
             return
         try:
-            tuples = await fga.read_tuples(object=f'{object_type}:{object_id}')
+            tuples = await fga.read_tuples(object=f"{object_type}:{object_id}")
             if not tuples:
                 return
             from bisheng.permission.domain.schemas.tuple_operation import TupleOperation
+
             operations = [
                 TupleOperation(
-                    action='delete',
-                    user=t['user'],
-                    relation=t['relation'],
-                    object=t['object'],
+                    action="delete",
+                    user=t["user"],
+                    relation=t["relation"],
+                    object=t["object"],
                 )
                 for t in tuples
             ]
             await PermissionService.batch_write_tuples(operations)
-            logger.info('Cleaned up %d tuples for %s:%s', len(operations), object_type, object_id)
+            logger.info("Cleaned up %d tuples for %s:%s", len(operations), object_type, object_id)
         except Exception as e:
-            logger.warning('Failed to cleanup tuples for %s:%s: %s', object_type, object_id, e)
+            logger.warning("Failed to cleanup tuples for %s:%s: %s", object_type, object_id, e)
+
+    @classmethod
+    async def delete_resource_tuples_strict(
+        cls,
+        object_type: str,
+        object_id: str,
+    ) -> int:
+        """Delete and verify all tuples, propagating infrastructure failure.
+
+        Durable deletion workers must not acknowledge a best-effort cleanup as
+        success. The legacy delete path keeps using the tolerant method above.
+        """
+
+        from bisheng.permission.domain.schemas.tuple_operation import TupleOperation
+        from bisheng.permission.domain.services.permission_service import PermissionService
+
+        fga = PermissionService._get_fga()
+        if fga is None:
+            raise RuntimeError("FGA client is unavailable for strict tuple cleanup")
+        object_key = f"{object_type}:{object_id}"
+        tuples = await fga.read_tuples(object=object_key, consistency="HIGHER_CONSISTENCY")
+        operations = [
+            TupleOperation(
+                action="delete",
+                user=tuple_row["user"],
+                relation=tuple_row["relation"],
+                object=tuple_row["object"],
+            )
+            for tuple_row in tuples
+        ]
+        if operations:
+            await PermissionService.batch_write_tuples(
+                operations,
+                raise_on_failure=True,
+                stop_on_failure=True,
+                recovery_owner="caller",
+            )
+        remaining = await fga.read_tuples(object=object_key, consistency="HIGHER_CONSISTENCY")
+        if remaining:
+            raise RuntimeError(f"FGA tuple cleanup verification failed for {object_key}")
+        return len(operations)
+
+    @classmethod
+    async def read_relation_subjects_strict(
+        cls,
+        object_type: str,
+        object_id: str,
+        relation: str,
+    ) -> set[str]:
+        """Read one resource relation with authoritative consistency."""
+
+        from bisheng.permission.domain.services.permission_service import PermissionService
+
+        fga = await PermissionService._aget_fga()
+        if fga is None:
+            raise RuntimeError("FGA client is unavailable for strict tuple verification")
+        rows = await fga.read_tuples(
+            object=f"{object_type}:{object_id}",
+            relation=str(relation),
+            consistency="HIGHER_CONSISTENCY",
+        )
+        return {str(row["user"]) for row in rows}
 
     @classmethod
     async def delete_non_owner_resource_tuples(
@@ -161,30 +228,32 @@ class OwnerService:
         warning and returns 0 on failure (mirrors ``delete_resource_tuples``).
         """
         from bisheng.permission.domain.services.permission_service import PermissionService
+
         fga = PermissionService._get_fga()
         if fga is None:
-            logger.warning('FGAClient not available for tuple cleanup: %s:%s', object_type, object_id)
+            logger.warning("FGAClient not available for tuple cleanup: %s:%s", object_type, object_id)
             return 0
         try:
-            tuples = await fga.read_tuples(object=f'{object_type}:{object_id}')
+            tuples = await fga.read_tuples(object=f"{object_type}:{object_id}")
             from bisheng.permission.domain.schemas.tuple_operation import TupleOperation
+
             operations = [
                 TupleOperation(
-                    action='delete',
-                    user=t['user'],
-                    relation=t['relation'],
-                    object=t['object'],
+                    action="delete",
+                    user=t["user"],
+                    relation=t["relation"],
+                    object=t["object"],
                 )
                 for t in (tuples or [])
-                if t.get('relation') != 'owner'
+                if t.get("relation") != "owner"
             ]
             if not operations:
                 return 0
             await PermissionService.batch_write_tuples(operations)
-            logger.info('Cleaned up %d non-owner tuples for %s:%s', len(operations), object_type, object_id)
+            logger.info("Cleaned up %d non-owner tuples for %s:%s", len(operations), object_type, object_id)
             return len(operations)
         except Exception as e:
-            logger.warning('Failed to cleanup non-owner tuples for %s:%s: %s', object_type, object_id, e)
+            logger.warning("Failed to cleanup non-owner tuples for %s:%s: %s", object_type, object_id, e)
             return 0
 
     @classmethod
@@ -200,24 +269,27 @@ class OwnerService:
         Single authorize() call with revoke old + grant new.
         """
         from bisheng.permission.domain.services.permission_service import PermissionService
+
+        grants = [
+            AuthorizeGrantItem(
+                subject_type="user",
+                subject_id=to_user_id,
+                relation="owner",
+                include_children=False,
+            ),
+        ]
+        revokes = [
+            AuthorizeRevokeItem(
+                subject_type="user",
+                subject_id=from_user_id,
+                relation="owner",
+                include_children=False,
+            ),
+        ]
         await PermissionService.authorize(
             object_type=object_type,
             object_id=object_id,
-            grants=[
-                AuthorizeGrantItem(
-                    subject_type='user',
-                    subject_id=to_user_id,
-                    relation='owner',
-                    include_children=False,
-                ),
-            ],
+            grants=grants,
             enforce_fga_success=True,
-            revokes=[
-                AuthorizeRevokeItem(
-                    subject_type='user',
-                    subject_id=from_user_id,
-                    relation='owner',
-                    include_children=False,
-                ),
-            ],
+            revokes=revokes,
         )

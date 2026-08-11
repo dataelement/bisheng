@@ -1,5 +1,11 @@
 # register tasks
 from bisheng.worker.admin_scope.tasks import admin_scope_cleanup
+from bisheng.worker.approval.file_change_tasks import (
+    cleanup_all_file_change_residue as cleanup_all_file_change_residue,
+    compensate_all_file_change_execution_steps as compensate_all_file_change_execution_steps,
+    reconcile_all_file_change_approvers as reconcile_all_file_change_approvers,
+    watchdog_all_file_change_executions as watchdog_all_file_change_executions,
+)
 from bisheng.worker.approval.tasks import execute_approval_outbox, retry_approval_outbox
 from bisheng.worker.information.article import sync_information_article
 from bisheng.worker.information.reconcile import reconcile_all_tenants

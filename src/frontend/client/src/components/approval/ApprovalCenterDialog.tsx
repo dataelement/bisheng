@@ -19,8 +19,11 @@ import { useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
 import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
+import { dispatchFileChangeApprovalRefresh } from "~/events/fileChangeApprovalEvents";
 import { Dialog, DialogContent } from "../ui/Dialog";
 import { ExpandableSearchField } from "../ui/ExpandableSearchField";
+import { resolveApprovalTaskSelection, type ApprovalTaskFilter } from "./approvalCenterFileChangeUtils";
+import { FileChangeBusinessProjection } from "./FileChangeBusinessProjection";
 
 type ApprovalCenterTarget = {
   tab?: ApprovalCenterTab;
@@ -34,9 +37,16 @@ export interface ApprovalCenterDialogProps {
   target?: ApprovalCenterTarget;
 }
 
-type TaskFilter = "pending_me" | "processed";
 type RequestsFilter = "in_progress" | "completed";
 const IN_PROGRESS_STATUSES = new Set(["pending", "exception", "execute_failed"]);
+const FILE_CHANGE_SCENARIO_CODE = "knowledge_space_file_change_request";
+
+function fileChangeSpaceId(detail: ApprovalTaskDetail | ApprovalInstanceDetail | null): number | undefined {
+  if (detail?.scenario_code !== FILE_CHANGE_SCENARIO_CODE) return undefined;
+  const rawSpaceId = detail.payload_snapshot?.space_id;
+  const spaceId = Number(rawSpaceId);
+  return Number.isSafeInteger(spaceId) && spaceId > 0 ? spaceId : undefined;
+}
 
 function getId(item: { task_id?: number; id?: number; instance_id?: number } | null | undefined, type: "task" | "instance"): number | null {
   const raw = type === "task" ? (item?.task_id ?? item?.id) : ((item as any)?.instance_id ?? item?.id);
@@ -173,7 +183,7 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
   // Compact (<768px) is a master-detail flow: "list" shows the nav rail + list, "detail" shows the
   // selected item full-screen with a back action. Ignored at >=768px where both panes are side-by-side.
   const [compactView, setCompactView] = useState<"list" | "detail">("list");
-  const [taskFilter, setTaskFilter] = useState<TaskFilter>("pending_me");
+  const [taskFilter, setTaskFilter] = useState<ApprovalTaskFilter>("pending_me");
   const [requestsFilter, setRequestsFilter] = useState<RequestsFilter>("in_progress");
 
   const [taskItems, setTaskItems] = useState<ApprovalTaskItem[]>([]);
@@ -231,28 +241,24 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
     try {
       const resp = await listMyApprovalTasksApi();
       setTaskItems(resp.data);
-      // Prefer the explicit task id; otherwise resolve the task from the notification's
-      // instance id. Channel/space subscribe approval notifications only carry instance_id,
-      // so without this fallback the jump would land on the first task instead of the right one.
-      let resolvedTask: ApprovalTaskItem | null =
-        preferredId ? resp.data.find((t) => getId(t, "task") === preferredId) ?? null : null;
-      if (!resolvedTask && preferredInstanceId) {
-        const matches = resp.data.filter((t) => t.instance_id === preferredInstanceId);
-        resolvedTask = matches.find((t) => t.status === "pending") ?? matches[0] ?? null;
+      const selection = resolveApprovalTaskSelection(
+        resp.data,
+        taskFilter,
+        preferredId,
+        preferredInstanceId,
+      );
+      if (selection.filter !== taskFilter) setTaskFilter(selection.filter);
+      setSelectedTaskId(selection.selectedTaskId);
+      setTaskDetail(null);
+      if (selection.selectedTaskId) {
+        setLoadingDetail(true);
+        try {
+          setTaskDetail(await getMyApprovalTaskDetailApi(selection.selectedTaskId));
+        } catch {
+          // Visibility can change between list and detail calls. Never retain an older snapshot.
+          setSelectedTaskId(null);
+        }
       }
-      // Switch the sub-filter so the resolved task is actually visible in the left list.
-      let targetFilter = taskFilter;
-      if (resolvedTask) {
-        targetFilter = resolvedTask.status === "pending" ? "pending_me" : "processed";
-        if (targetFilter !== taskFilter) setTaskFilter(targetFilter);
-      }
-      const visibleItems = targetFilter === "pending_me"
-        ? resp.data.filter((t) => t.status === "pending")
-        : resp.data.filter((t) => t.status !== "pending");
-      const nextId = (resolvedTask ? getId(resolvedTask, "task") : null) ?? getId(visibleItems[0], "task");
-      setSelectedTaskId(nextId);
-      if (nextId) { setLoadingDetail(true); setTaskDetail(await getMyApprovalTaskDetailApi(nextId)); }
-      else setTaskDetail(null);
     } finally { setLoadingList(false); setLoadingDetail(false); }
   };
 
@@ -329,7 +335,16 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
     if (!selectedTaskId) return;
     setActionLoading(true);
     const comment = decisionComment.trim() || (action === "approve" ? "同意" : "驳回");
-    try { await decideApprovalTaskApi(selectedTaskId, { action, comment }); setDecisionComment(""); await loadTasks(selectedTaskId); toast(true); }
+    const refreshSpaceId = fileChangeSpaceId(taskDetail);
+    try {
+      await decideApprovalTaskApi(selectedTaskId, { action, comment });
+      setDecisionComment("");
+      if (refreshSpaceId != null) dispatchFileChangeApprovalRefresh(refreshSpaceId);
+      // A processed task must leave the pending list. Reload without carrying its old id,
+      // otherwise loadTasks resolves it as processed and silently switches the sub-filter.
+      await loadTasks();
+      toast(true);
+    }
     catch { toast(false); } finally { setActionLoading(false); }
   };
   const runWithdraw = () => {
@@ -340,8 +355,10 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
     if (!selectedInstanceId) return;
     setWithdrawDialogOpen(false);
     setActionLoading(true);
+    const refreshSpaceId = fileChangeSpaceId(requestDetail);
     try {
       await withdrawApprovalInstanceApi(selectedInstanceId, { reason: withdrawReason.trim() || undefined });
+      if (refreshSpaceId != null) dispatchFileChangeApprovalRefresh(refreshSpaceId);
       toast(true);
       const resp = await listMyApprovalRequestsApi();
       setRequestItems(resp.data);
@@ -435,7 +452,7 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
             <div className={cn("flex min-h-0 flex-col border-r border-[#f2f3f5] bg-white", compactView === "detail" && "hidden md:flex")}>
               <div className="flex gap-2 px-3 pt-3 pb-2">
                 {activeTab === "my_tasks"
-                  ? (["pending_me", "processed"] as TaskFilter[]).map((f) => (
+                  ? (["pending_me", "processed"] as ApprovalTaskFilter[]).map((f) => (
                       <button key={f} type="button"
                         className={cn(
                           "h-auto whitespace-nowrap rounded-none border-0 border-b-2 border-transparent bg-transparent px-2 py-[5px] text-sm leading-none transition-colors fine-pointer:hover:text-[#212121]",
@@ -708,6 +725,8 @@ function TaskDetailPanel({ detail, localize, onBack }: { detail: ApprovalTaskDet
         <InfoGrid rows={basicRows} />
       </div>
 
+      <FileChangeBusinessProjection detail={detail} localize={localize} />
+
       {showContent && (
         <div>
           <div className="mb-2 text-[14px] font-medium text-text-primary">{localize("com_approval_section_business_content")}</div>
@@ -879,6 +898,8 @@ function RequestDetailPanel({ detail, localize, onBack }: { detail: ApprovalInst
         <div className="mb-2 text-[14px] font-medium text-text-primary">{localize("com_approval_section_basic_info")}</div>
         <InfoGrid rows={basicRows} />
       </div>
+
+      <FileChangeBusinessProjection detail={detail} localize={localize} />
 
       {detailEntries.length > 0 && (
         <div>

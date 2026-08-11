@@ -434,6 +434,45 @@
   "tagNameMaxLength": "标签名不能超过 {{count}} 个字符",
   "tagDeleted": "删除成功",
   "tagOperationRequiresCompletedFiles": "仅已完成文件支持添加标签",
+  "fileChangeApproval": {
+    "departmentHint": "部门知识空间",
+    "description": "配置非私密知识空间中的文件上传，以及文件和文件夹的重命名、移动、删除是否需要审批。",
+    "empty": "未找到知识空间",
+    "enabled": "启用文件变更审批",
+    "enabledHint": "关闭后，当前租户内的文件变更均无需审批。",
+    "loadFailed": "审批策略加载失败",
+    "loading": "加载中...",
+    "nonPrivate": "非私密",
+    "normalSpace": "普通知识空间",
+    "privateBypass": "私密（免审批）",
+    "retry": "重试",
+    "save": "保存设置",
+    "saveSuccess": "设置保存成功",
+    "saveSuccessHint": "最新审批设置已生效。",
+    "scope": {
+      "allSpaces": "全部知识空间",
+      "allSpacesHint": "所有非私密知识空间的文件变更均需审批。",
+      "perSpace": "按知识空间配置",
+      "perSpaceHint": "分别设置每个非私密知识空间是否需要审批。",
+      "title": "审批范围"
+    },
+    "searchLabel": "搜索知识空间",
+    "searchPlaceholder": "搜索知识空间名称",
+    "settingsLoadFailed": "知识空间设置加载失败",
+    "spaceToggleLabel": "文件变更需审批：",
+    "tab": "文件变更审批设置",
+    "spaces": {
+      "description": "私密知识空间始终免审批，部门知识空间不能设为私密。",
+      "title": "知识空间设置"
+    },
+    "table": {
+      "kind": "空间类型",
+      "required": "是否需要审批",
+      "space": "知识空间",
+      "visibility": "可见范围"
+    },
+    "title": "知识空间文件变更审批"
+  },
   "qa": {},
   "legacyFormatNotSupported": "旧版文件格式暂不支持预览"
 }

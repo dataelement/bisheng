@@ -5,9 +5,10 @@
 > 本文档只回答做什么、验收标准与范围边界。实现方案、数据模型、接口、服务拆分和文件清单在后续 `design.md` 中确定。
 
 **关联 PRD**: [0811 中粮需求响应 §1.4 新增文件变更审核（新方案）](https://dataelem.feishu.cn/wiki/MWHZwS0mbihH7NkbBvpckvSRnwc)
+**Feature ID**: F046
 **优先级**: P0
 **所属版本**: v2.6.0
-**依赖**: F025-approval-center-unification（统一审批中心）、F034-knowledge-space-file-move（文件/文件夹移动能力）、现有知识空间上传、重命名与删除能力
+**依赖**: F025-approval-center-unification（统一审批中心）、F027-knowledge-space-permission-integration（正式列表）、F029-knowledge-qa-permission-filter（检索与引用）、F030-knowledge-resource-unified-api（OpenAPI）、F034-knowledge-space-file-move（文件/文件夹移动能力）、F044-unified-permission-entry（统一空间设置）、现有知识空间上传、重命名与删除能力
 
 > **范围边界**
 > - **本次纳入**：
@@ -86,9 +87,9 @@
 
 ### 2.3 删除文件与文件夹审核
 
-- **AC-22** — WHEN 编辑者对需要审核的知识空间正式文件或文件夹发起删除，THE SYSTEM SHALL 在删除审批执行成功前继续保留该资源；文件及文件夹下既有内容的目录展示、搜索、问答和引用保持可用。
+- **AC-22** — WHEN 编辑者对需要审核的知识空间正式文件或文件夹发起删除，THE SYSTEM SHALL 在不可逆删除 cutover 提交前继续保留该资源，文件及文件夹下既有内容的目录展示、搜索、问答、引用、预览和下载保持可用；cutover 提交后即使外部 purge 尚未完成或失败，也 SHALL 由 deletion guard 在全部正式读路径持续排除该资源，且不得复活残留数据。
 - **AC-23** — WHILE 正式文件或文件夹处于“审批中”，THE SYSTEM SHALL 在资源列表中保留并展示该资源；申请人和当前有效审核人可以查看审批详情及动作“删除”，其他有权访问该资源的用户不得看到申请人、审核状态或原因。
-- **AC-24** — WHEN 任一当前有效审核人同意删除申请且正式删除执行成功，THE SYSTEM SHALL 按既有删除语义清理目标文件或文件夹及其既有关联内容、版本、索引、向量和存储对象。
+- **AC-24** — WHEN 任一当前有效审核人同意删除申请，THE SYSTEM SHALL 仅在正式 DB 删除已提交，且 FGA、MinIO、Elasticsearch、Milvus 四类 purge 均按本次 immutable manifest 完成权威读后验证后，才把删除申请与 F025 实例置为执行成功；任一 purge 未验证时 SHALL 保持执行中或执行失败，不得显示为执行成功。
 - **AC-25** — WHEN 删除审批被拒绝、撤回或取消，THE SYSTEM SHALL 保持目标文件或文件夹及其内容的位置、名称、发布和可用状态不变。
 - **AC-26** — WHEN 用户批量删除多个文件或文件夹，THE SYSTEM SHALL 按资源分别判断并返回“已删除”或“审批中”，客户端仅移除已经删除成功的资源。
 - **AC-27** — WHEN 操作者清理尚未正式入库的待审批上传文件，THE SYSTEM SHALL 不适用正式文件删除审核规则。
@@ -99,7 +100,7 @@
 - **AC-29** — WHEN 任一当前有效审核人同意申请，THE SYSTEM SHALL 通过该申请并结束其余同节点待办。
 - **AC-30** — IF 审核人在处理前已失去该知识空间的所有者或管理者身份，THEN THE SYSTEM SHALL 禁止其继续处理该审批任务。
 - **AC-31** — WHILE 正式文件或文件夹存在任一未结束的变更审批，THE SYSTEM SHALL 禁止对该资源再次发起重命名、移动或删除审批，不得因操作类型不同而创建新的并行审批；目标为文件夹时，该限制同时覆盖其全部子资源。
-- **AC-32** — WHEN 审批通过后的正式上传、重命名、移动或删除执行失败，THE SYSTEM SHALL 明确展示执行失败，且不得把业务未生效的申请展示为执行成功。
+- **AC-32** — WHEN 审批通过后的正式上传、重命名、移动或删除执行失败，THE SYSTEM SHALL 明确展示执行失败，且不得把业务未生效或删除外部 purge 未全部验证的申请展示为执行成功。删除在 DB cutover 后失败时 SHALL 保持 deletion guard，F025/outbox 进入 `EXECUTE_FAILED/FAILED`；重新执行必须使用新 token，并仅续跑未成功的 purge step，全部验证成功后才在同一 UoW 完成 F025、request 终态并退役 guard footprint。
 
 ### 2.5 文件页与审批中心联动
 
@@ -165,8 +166,8 @@
 
 ## 相关文档
 
-- 设计真相: `design.md`（待 spec 确认后创建）
-- 执行与落档: `tasks.md`（待设计确认后创建）
+- 设计真相: [design.md](./design.md)
+- 执行与落档: `tasks.md`（设计审查通过后创建）
 - 版本契约: [features/v2.6.0/release-contract.md](../release-contract.md)
 - 架构约束: [docs/constitution.md](../../../docs/constitution.md)
 - 审批中心基线: [F025 spec](../025-approval-center-unification/spec.md)

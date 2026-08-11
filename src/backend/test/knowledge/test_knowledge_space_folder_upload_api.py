@@ -33,7 +33,7 @@ def test_folder_upload_request_schema_shape():
 
 
 def test_folder_upload_endpoint_registered_and_delegates():
-    """POST /{space_id}/folders/upload exists, takes FolderUploadReq, calls upload_folder_items."""
+    """F046 keeps the route while accepting opaque staged-upload items."""
     ep_file = _BACKEND_ROOT / "knowledge" / "api" / "endpoints" / "knowledge_space.py"
     source = ep_file.read_text()
     fn = _find_func(source, "upload_folder")
@@ -41,8 +41,8 @@ def test_folder_upload_endpoint_registered_and_delegates():
     decos = "\n".join(ast.get_source_segment(source, d) for d in fn.decorator_list)
     assert "folders/upload" in decos
     annotations = {a.arg: getattr(a.annotation, "id", None) for a in fn.args.args}
-    assert annotations.get("req") == "FolderUploadReq"
-    assert "upload_folder_items" in ast.get_source_segment(source, fn)
+    assert annotations.get("req") == "KnowledgeSpaceFolderUploadStageReq"
+    assert "_request_item_changes" in ast.get_source_segment(source, fn)
 
 
 def test_service_upload_folder_items_signature():

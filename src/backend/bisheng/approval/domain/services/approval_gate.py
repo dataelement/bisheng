@@ -3,6 +3,8 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+from sqlmodel.ext.asyncio.session import AsyncSession
+
 from bisheng.approval.domain.models.approval_instance import (
     ApprovalActionLog,
     ApprovalException,
@@ -20,6 +22,12 @@ from bisheng.approval.domain.schemas.approval_center_schema import (
     ApprovalGateDecision,
     ApprovalGateRequest,
     ApprovalGateResult,
+)
+from bisheng.approval.domain.services.approval_uow import (
+    ApprovalGateUowResult,
+    ApprovalPostCommitEffect,
+    SessionBoundApprovalInstanceRepository,
+    build_post_commit_effect,
 )
 from bisheng.common.errcode.approval import (
     ApprovalConfirmationFlowRequiredError,
@@ -93,6 +101,43 @@ class ApprovalGate:
         self.route_matcher = route_matcher or self._match_first_route
 
     async def request_or_pass(self, req: ApprovalGateRequest) -> ApprovalGateResult:
+        return await self._request_or_pass(req, post_commit_effects=None)
+
+    async def request_or_pass_in_uow(
+        self,
+        req: ApprovalGateRequest,
+        *,
+        session: AsyncSession,
+    ) -> ApprovalGateUowResult:
+        """Create the Approval bundle inside the caller-owned transaction.
+
+        The caller must commit the session before invoking
+        ``run_post_commit_effects`` on the returned value.
+        """
+
+        post_commit_effects: list[ApprovalPostCommitEffect] = []
+        session_bound_gate = ApprovalGate(
+            registry=self.registry,
+            scenario_repository=self.scenario_repository,
+            instance_repository=SessionBoundApprovalInstanceRepository(session),
+            route_matcher=self.route_matcher,
+        )
+        result = await session_bound_gate._request_or_pass(
+            req,
+            post_commit_effects=post_commit_effects,
+        )
+        return ApprovalGateUowResult(
+            result=result,
+            post_commit_effects=post_commit_effects,
+            transaction_is_active=session.in_transaction,
+        )
+
+    async def _request_or_pass(
+        self,
+        req: ApprovalGateRequest,
+        *,
+        post_commit_effects: list[ApprovalPostCommitEffect] | None,
+    ) -> ApprovalGateResult:
         handler = await self.registry.get_handler(req.scenario_code)
         uses_business_key_dedupe = getattr(handler, "dedupe_scope", None) == "business_key"
         if not uses_business_key_dedupe:
@@ -132,6 +177,7 @@ class ApprovalGate:
                 raise ApprovalConfirmationFlowRequiredError()
             return await self._create_exception_result(
                 req=req,
+                post_commit_effects=post_commit_effects,
                 scenario_name=scenario.scenario_name,
                 handler_key=req.scenario_code,
                 business_name=business_name,
@@ -172,8 +218,17 @@ class ApprovalGate:
                     payload_snapshot=req.payload_snapshot,
                 )
             )
-            self._dispatch_outbox_task(outbox.id)
-            await AuditLogDao.ainsert_v2(
+            await self._run_or_defer_effect(
+                post_commit_effects,
+                "dispatch_approval_outbox",
+                self._dispatch_outbox_task,
+                outbox.id,
+                req.tenant_id,
+            )
+            await self._run_or_defer_effect(
+                post_commit_effects,
+                "audit_approval_route_pass",
+                AuditLogDao.ainsert_v2,
                 tenant_id=req.tenant_id,
                 operator_id=0,
                 operator_tenant_id=req.tenant_id,
@@ -202,6 +257,7 @@ class ApprovalGate:
                 raise ApprovalConfirmationFlowRequiredError()
             return await self._create_exception_result(
                 req=req,
+                post_commit_effects=post_commit_effects,
                 scenario_name=scenario.scenario_name,
                 handler_key=req.scenario_code,
                 business_name=business_name,
@@ -219,6 +275,7 @@ class ApprovalGate:
                 raise ApprovalConfirmationFlowRequiredError()
             return await self._create_exception_result(
                 req=req,
+                post_commit_effects=post_commit_effects,
                 scenario_name=scenario.scenario_name,
                 handler_key=req.scenario_code,
                 business_name=business_name,
@@ -288,7 +345,10 @@ class ApprovalGate:
                     detail={},
                 ),
             )
-            await AuditLogDao.ainsert_v2(
+            await self._run_or_defer_effect(
+                post_commit_effects,
+                "audit_resource_user_invite_request",
+                AuditLogDao.ainsert_v2,
                 tenant_id=req.tenant_id,
                 operator_id=req.applicant_user_id,
                 operator_tenant_id=req.tenant_id,
@@ -362,7 +422,10 @@ class ApprovalGate:
                 detail={},
             )
         )
-        await AuditLogDao.ainsert_v2(
+        await self._run_or_defer_effect(
+            post_commit_effects,
+            "audit_approval_request_submit",
+            AuditLogDao.ainsert_v2,
             tenant_id=req.tenant_id,
             operator_id=req.applicant_user_id,
             operator_tenant_id=req.tenant_id,
@@ -392,6 +455,7 @@ class ApprovalGate:
         self,
         *,
         req: ApprovalGateRequest,
+        post_commit_effects: list[ApprovalPostCommitEffect] | None,
         scenario_name: str,
         handler_key: str,
         business_name: str,
@@ -451,7 +515,10 @@ class ApprovalGate:
         )
         # Audit the submission even when the instance lands in exception state — every
         # instance creation must leave a trace per the approval module compliance rule.
-        await AuditLogDao.ainsert_v2(
+        await self._run_or_defer_effect(
+            post_commit_effects,
+            "audit_approval_request_exception",
+            AuditLogDao.ainsert_v2,
             tenant_id=req.tenant_id,
             operator_id=req.applicant_user_id,
             operator_tenant_id=req.tenant_id,
@@ -477,7 +544,10 @@ class ApprovalGate:
             ip_address=req.ip_address,
         )
         # Notify tenant admins so they can handle the exception
-        await self._notify_admins_of_exception(
+        await self._run_or_defer_effect(
+            post_commit_effects,
+            "notify_approval_exception_admins",
+            self._notify_admins_of_exception,
             tenant_id=req.tenant_id,
             applicant_user_id=req.applicant_user_id,
             exception_type=exception_type,
@@ -491,11 +561,29 @@ class ApprovalGate:
         )
 
     @staticmethod
-    def _dispatch_outbox_task(outbox_id: int) -> None:
+    async def _run_or_defer_effect(
+        post_commit_effects: list[ApprovalPostCommitEffect] | None,
+        name: str,
+        callback: Callable[..., Any],
+        /,
+        *args: Any,
+        **kwargs: Any,
+    ) -> None:
+        effect = build_post_commit_effect(name, callback, *args, **kwargs)
+        if post_commit_effects is None:
+            await effect.run()
+            return
+        post_commit_effects.append(effect)
+
+    @staticmethod
+    def _dispatch_outbox_task(outbox_id: int, tenant_id: int) -> None:
+        tenant_id = int(tenant_id)
+        if tenant_id <= 0:
+            raise ValueError("a positive tenant_id is required to dispatch an approval outbox")
         try:
             from bisheng.worker.approval.tasks import execute_approval_outbox
 
-            execute_approval_outbox.delay(outbox_id)
+            execute_approval_outbox.apply_async(args=[outbox_id], headers={"tenant_id": tenant_id})
         except Exception:
             import logging
 

@@ -233,6 +233,26 @@ class CeleryConf(BaseModel):
                 "task": "bisheng.worker.knowledge.scheduler.reconcile_file_scheduler_task",
                 "schedule": 300.0,
             }
+        if "file_change_approver_reconcile" not in self.beat_schedule:
+            self.beat_schedule["file_change_approver_reconcile"] = {
+                "task": "bisheng.worker.approval.file_change_tasks.reconcile_all_file_change_approvers",
+                "schedule": 300.0,
+            }
+        if "file_change_deferred_watchdog" not in self.beat_schedule:
+            self.beat_schedule["file_change_deferred_watchdog"] = {
+                "task": "bisheng.worker.approval.file_change_tasks.watchdog_all_file_change_executions",
+                "schedule": 60.0,
+            }
+        if "file_change_execution_compensation" not in self.beat_schedule:
+            self.beat_schedule["file_change_execution_compensation"] = {
+                "task": "bisheng.worker.approval.file_change_tasks.compensate_all_file_change_execution_steps",
+                "schedule": 60.0,
+            }
+        if "file_change_cleanup" not in self.beat_schedule:
+            self.beat_schedule["file_change_cleanup"] = {
+                "task": "bisheng.worker.approval.file_change_tasks.cleanup_all_file_change_residue",
+                "schedule": 300.0,
+            }
 
         # convert str to crontab
         for key, task_info in self.beat_schedule.items():

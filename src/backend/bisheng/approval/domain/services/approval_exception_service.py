@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from typing import Any
 
 from bisheng.approval.domain.models.approval_instance import (
     ApprovalActionLog,
+    ApprovalException,
+    ApprovalExceptionType,
     ApprovalInstanceStatus,
     ApprovalOutbox,
     ApprovalOutboxStatus,
@@ -25,6 +28,95 @@ class ApprovalExceptionService:
     def __init__(self, *, instance_repository) -> None:
         self.instance_repository = instance_repository
 
+    @staticmethod
+    async def ensure_approver_empty_locked(
+        *,
+        session,
+        instance,
+        node_code: str,
+        node_name: str,
+        node_order: int,
+        node_mode: str,
+        open_exceptions: list[ApprovalException],
+    ) -> tuple[ApprovalException, bool]:
+        """Ensure one open approver-empty exception while the instance is locked.
+
+        This primitive never commits and never sends notifications. The caller
+        owns the instance-first transaction and any post-commit effects.
+        """
+
+        matching = [
+            row
+            for row in open_exceptions
+            if row.exception_type == ApprovalExceptionType.APPROVER_EMPTY
+            and ApprovalExceptionService._exception_matches_node(row, node_code, node_order)
+        ]
+        if matching:
+            instance.status = ApprovalInstanceStatus.EXCEPTION
+            instance.current_node_name = node_name
+            session.add(instance)
+            return matching[0], False
+
+        exception = ApprovalException(
+            tenant_id=instance.tenant_id,
+            instance_id=instance.id,
+            exception_type=ApprovalExceptionType.APPROVER_EMPTY,
+            detail={
+                "scenario_code": instance.scenario_code,
+                "business_key": instance.business_key,
+                "node_code": node_code,
+                "node_name": node_name,
+                "node_order": node_order,
+                "node_mode": node_mode,
+            },
+        )
+        instance.status = ApprovalInstanceStatus.EXCEPTION
+        instance.current_node_name = node_name
+        session.add(instance)
+        session.add(exception)
+        await session.flush()
+        open_exceptions.append(exception)
+        return exception, True
+
+    @staticmethod
+    async def resolve_approver_empty_locked(
+        *,
+        session,
+        instance,
+        node_code: str,
+        node_order: int,
+        open_exceptions: list[ApprovalException],
+    ) -> bool:
+        """Resolve only this node's open approver-empty exception in-place."""
+
+        matching = [
+            row
+            for row in open_exceptions
+            if row.exception_type == ApprovalExceptionType.APPROVER_EMPTY
+            and ApprovalExceptionService._exception_matches_node(row, node_code, node_order)
+        ]
+        if not matching:
+            return False
+
+        now = datetime.utcnow()
+        for exception in matching:
+            exception.status = "resolved"
+            exception.resolved_by_user_id = None
+            exception.resolved_action = "approvers_reconciled"
+            exception.resolved_at = now
+            session.add(exception)
+        matching_ids = {row.id for row in matching}
+        if not any(row.id not in matching_ids for row in open_exceptions):
+            instance.status = ApprovalInstanceStatus.PENDING
+        session.add(instance)
+        await session.flush()
+        return True
+
+    @staticmethod
+    def _exception_matches_node(exception: ApprovalException, node_code: str, node_order: int) -> bool:
+        detail = exception.detail or {}
+        return detail.get("node_code") == node_code and detail.get("node_order") == node_order
+
     @classmethod
     async def retry_exception_api(
         cls,
@@ -38,6 +130,23 @@ class ApprovalExceptionService:
         service = cls(instance_repository=ApprovalInstanceRepository)
         exception = await service._get_exception(exception_id)
         instance = await service._get_instance(exception.instance_id)
+        runtime_handler = await service._build_handler(instance.handler_key or instance.scenario_code)
+        policy = getattr(runtime_handler, "exception_action_policy", None)
+        if policy is not None:
+            allowed = await policy(
+                action=action,
+                instance=instance,
+                exception=exception,
+                operator_user_id=operator_user_id,
+            )
+            if not allowed:
+                raise PermissionError(f"exception action not allowed for {instance.scenario_code}: {action}")
+            if action == "retry" and exception.exception_type == ApprovalExceptionType.APPROVER_EMPTY:
+                return await service._retry_dynamic_exception_in_uow(
+                    exception_id=exception_id,
+                    operator_user_id=operator_user_id,
+                    ip_address=ip_address,
+                )
 
         if action == "skip_node":
             await service.skip_node(exception_id=exception_id, resolved_by_user_id=operator_user_id)
@@ -128,7 +237,7 @@ class ApprovalExceptionService:
         elif exception.exception_type == "approver_empty":
             from bisheng.common.errcode.approval import ApprovalApproverEmptyError
 
-            route_rule, flow_version_id, node = await service._resolve_retry_route(instance)
+            _route_rule, _flow_version_id, node = await service._resolve_retry_route(instance)
             handler = await service._build_handler(instance.scenario_code)
             req = service._build_gate_request(instance)
             approver_user_ids = await handler.resolve_approvers(getattr(node, "approver_config", {}) or {}, req)
@@ -169,6 +278,23 @@ class ApprovalExceptionService:
         service = cls(instance_repository=ApprovalInstanceRepository)
         exception = await service._get_exception(exception_id)
         instance = await service._get_instance(exception.instance_id)
+        runtime_handler = await service._build_handler(instance.handler_key or instance.scenario_code)
+        policy = getattr(runtime_handler, "exception_action_policy", None)
+        if policy is not None:
+            allowed = await policy(
+                action="cancel",
+                instance=instance,
+                exception=exception,
+                operator_user_id=operator_user_id,
+            )
+            if not allowed:
+                raise PermissionError(f"exception action not allowed for {instance.scenario_code}: cancel")
+            return await service._cancel_dynamic_exception_in_uow(
+                exception_id=exception_id,
+                operator_user_id=operator_user_id,
+                reason=reason.strip(),
+                ip_address=ip_address,
+            )
 
         # Cancel all pending tasks
         tasks = await service.instance_repository.list_tasks(instance.id)
@@ -223,6 +349,149 @@ class ApprovalExceptionService:
             instance_id=instance.id,
             scenario_code=instance.scenario_code,
             reason=reason.strip(),
+        )
+        return {"exception_id": exception_id, "instance_id": instance.id, "status": "cancelled"}
+
+    async def _retry_dynamic_exception_in_uow(
+        self,
+        *,
+        exception_id: int,
+        operator_user_id: int,
+        ip_address: str | None,
+    ) -> dict:
+        """Strictly reconcile a dynamic exception under the decision lock order."""
+
+        lookup = await self._get_exception(exception_id)
+        post_commit_effects = ()
+        async with self.instance_repository.decision_session() as session:
+            async with session.begin():
+                instance = await self.instance_repository.lock_instance_in_session(session, lookup.instance_id)
+                if instance is None:
+                    raise ValueError(f"instance not found: {lookup.instance_id}")
+                await self.instance_repository.lock_tasks_in_session(session, instance.id)
+                exceptions, _outboxes = await self.instance_repository.lock_open_exceptions_and_outboxes_in_session(
+                    session,
+                    instance.id,
+                )
+                exception = next((row for row in exceptions if row.id == exception_id), None)
+                if exception is None:
+                    raise ValueError(f"open exception not found: {exception_id}")
+                handler = await self._build_handler(instance.handler_key or instance.scenario_code)
+                policy = getattr(handler, "exception_action_policy", None)
+                if policy is None or not await policy(
+                    action="retry",
+                    instance=instance,
+                    exception=exception,
+                    operator_user_id=operator_user_id,
+                ):
+                    raise PermissionError(f"exception action not allowed for {instance.scenario_code}: retry")
+                reconcile = getattr(handler, "reconcile_pending_approvers", None)
+                if reconcile is None:
+                    raise ValueError(f"dynamic retry is not supported for {instance.scenario_code}")
+                result = await reconcile(
+                    session=session,
+                    instance=instance,
+                    trigger="exception_retry",
+                )
+                post_commit_effects = tuple(getattr(result, "post_commit_effects", ()))
+                await self.instance_repository.flush_decision_in_session(session)
+                status = "resolved" if exception.status == "resolved" else "open"
+
+        for effect in post_commit_effects:
+            await effect.run()
+        await self._write_audit_log(
+            action="approval.exception.retry",
+            tenant_id=instance.tenant_id,
+            operator_user_id=operator_user_id,
+            operator_tenant_id=instance.tenant_id,
+            exception_id=exception_id,
+            instance_id=instance.id,
+            exception_type=exception.exception_type,
+            ip_address=ip_address,
+        )
+        return {"exception_id": exception_id, "instance_id": instance.id, "status": status}
+
+    async def _cancel_dynamic_exception_in_uow(
+        self,
+        *,
+        exception_id: int,
+        operator_user_id: int,
+        reason: str,
+        ip_address: str | None,
+    ) -> dict:
+        """Cancel a dynamic instance atomically after its scenario policy allows it."""
+
+        lookup = await self._get_exception(exception_id)
+        async with self.instance_repository.decision_session() as session:
+            async with session.begin():
+                instance = await self.instance_repository.lock_instance_in_session(session, lookup.instance_id)
+                if instance is None:
+                    raise ValueError(f"instance not found: {lookup.instance_id}")
+                tasks = await self.instance_repository.lock_tasks_in_session(session, instance.id)
+                exceptions, _outboxes = await self.instance_repository.lock_open_exceptions_and_outboxes_in_session(
+                    session,
+                    instance.id,
+                )
+                exception = next((row for row in exceptions if row.id == exception_id), None)
+                if exception is None:
+                    raise ValueError(f"open exception not found: {exception_id}")
+                handler = await self._build_handler(instance.handler_key or instance.scenario_code)
+                policy = getattr(handler, "exception_action_policy", None)
+                if policy is None or not await policy(
+                    action="cancel",
+                    instance=instance,
+                    exception=exception,
+                    operator_user_id=operator_user_id,
+                ):
+                    raise PermissionError(f"exception action not allowed for {instance.scenario_code}: cancel")
+
+                now = datetime.utcnow()
+                for task in tasks:
+                    if task.status == ApprovalTaskStatus.PENDING:
+                        task.status = ApprovalTaskStatus.CANCELLED
+                        task.acted_at = now
+                        session.add(task)
+                for open_exception in exceptions:
+                    open_exception.status = "resolved"
+                    open_exception.resolved_by_user_id = operator_user_id
+                    open_exception.resolved_action = "cancel"
+                    open_exception.resolved_at = now
+                    session.add(open_exception)
+                instance.status = ApprovalInstanceStatus.CANCELLED
+                session.add(instance)
+                session.add(
+                    ApprovalActionLog(
+                        tenant_id=instance.tenant_id,
+                        instance_id=instance.id,
+                        action="cancelled",
+                        operator_user_id=operator_user_id,
+                        detail={"reason": reason, "exception_id": exception_id},
+                    )
+                )
+                await self.instance_repository.flush_decision_in_session(session)
+
+        await self._write_audit_log(
+            action="approval.exception.cancel",
+            tenant_id=instance.tenant_id,
+            operator_user_id=operator_user_id,
+            operator_tenant_id=instance.tenant_id,
+            exception_id=exception_id,
+            instance_id=instance.id,
+            exception_type=exception.exception_type,
+            reason=reason,
+            ip_address=ip_address,
+        )
+        on_cancelled = getattr(handler, "on_cancelled", None)
+        if callable(on_cancelled):
+            await on_cancelled(instance.id, instance.payload_snapshot or {}, reason)
+        await self._notify_user(
+            sender=operator_user_id,
+            receiver_user_id=instance.applicant_user_id,
+            action_code="approval_exception_cancelled",
+            business_name=instance.business_name,
+            instance_id=instance.id,
+            scenario_code=instance.scenario_code,
+            reason=reason,
         )
         return {"exception_id": exception_id, "instance_id": instance.id, "status": "cancelled"}
 
@@ -336,11 +605,14 @@ class ApprovalExceptionService:
         )
 
     @staticmethod
-    def _dispatch_outbox(outbox_id: int) -> None:
+    def _dispatch_outbox(outbox_id: int, *, tenant_id: int) -> None:
         try:
             from bisheng.worker.approval.tasks import execute_approval_outbox
 
-            execute_approval_outbox.delay(outbox_id)
+            execute_approval_outbox.apply_async(
+                args=[outbox_id],
+                headers={"tenant_id": tenant_id},
+            )
         except Exception:
             logger.exception("failed to dispatch approval outbox task: outbox_id=%s", outbox_id)
 
@@ -414,7 +686,7 @@ class ApprovalExceptionService:
                     payload_snapshot=instance.payload_snapshot,
                 )
             )
-            self._dispatch_outbox(outbox.id)
+            self._dispatch_outbox(outbox.id, tenant_id=instance.tenant_id)
             return
 
         handler = await self._build_handler(instance.scenario_code)
@@ -521,9 +793,33 @@ class ApprovalExceptionService:
             raise ValueError(f"outbox not found for instance: {instance.id}")
         outbox = outboxes[-1]
         handler = await self._build_handler(scenario_code)
+        if scenario_code == "knowledge_space_file_change_request":
+            from bisheng.approval.domain.services.approval_outbox_service import ApprovalOutboxService
+
+            dispatch_resumed_execution = getattr(handler, "dispatch_resumed_execution", None)
+            if dispatch_resumed_execution is None:
+                raise TypeError("F046 deferred handler must implement post-commit resume dispatch")
+
+            async def dispatch_after_commit(outbox_id: int, execution_token: str):
+                return await dispatch_resumed_execution(
+                    outbox_id=int(outbox_id),
+                    execution_token=str(execution_token),
+                    tenant_id=int(instance.tenant_id),
+                )
+
+            resumed_token = await ApprovalOutboxService(
+                instance_repository=self.instance_repository
+            ).resume_deferred_execution(
+                tenant_id=int(instance.tenant_id),
+                instance_id=int(instance.id),
+                outbox_id=int(outbox.id),
+                handler=handler,
+                post_commit_dispatch=dispatch_after_commit,
+            )
+            return resumed_token is not None
         try:
             await handler.on_approved(instance.id, outbox.payload_snapshot)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             outbox.status = ApprovalOutboxStatus.FAILED
             outbox.retry_count += 1
             outbox.error_summary = str(exc)
@@ -670,7 +966,7 @@ class ApprovalExceptionService:
                     payload_snapshot=instance.payload_snapshot,
                 )
             )
-            ApprovalGate._dispatch_outbox_task(outbox.id)
+            ApprovalGate._dispatch_outbox_task(outbox.id, tenant_id=instance.tenant_id)
             await self._resolve_exception(exception, operator_user_id, "assign_flow")
             return
 

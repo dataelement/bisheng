@@ -77,16 +77,33 @@ def _stub_enrich_passthrough(svc: CitationResolveService, monkeypatch):
 
 
 def _stub_post_filter(monkeypatch, allowed_by_space: dict[int, set[int]]):
-    """Patch KnowledgeFileVisibilityService.post_filter_visible_files."""
+    """Patch the F029-only layer; F046 remains neutral in these tests."""
+
+    async def keep_persisted_location(self, items, login_user):
+        del self, login_user
+        return list(items)
+
+    monkeypatch.setattr(CitationResolveService, "_canonicalize_rag_items", keep_persisted_location)
+    monkeypatch.setattr(CitationResolveService, "_project_old_file_names", keep_persisted_location)
 
     async def fake_post(self, space_id, file_ids):
         return {fid for fid in file_ids if fid in allowed_by_space.get(int(space_id), set())}
 
     monkeypatch.setattr(
         "bisheng.knowledge.domain.services.knowledge_file_visibility_service."
-        "KnowledgeFileVisibilityService.post_filter_visible_files",
+        "KnowledgeFileVisibilityService.post_filter_rebac_visible_files",
         fake_post,
     )
+
+    async def all_file_change_visible(self, items, login_user):
+        del self, login_user
+        return {
+            int(item.sourcePayload.documentId)
+            for item in items
+            if item.type == CitationType.RAG and item.sourcePayload.documentId is not None
+        }
+
+    monkeypatch.setattr(CitationResolveService, "_file_change_visible_ids", all_file_change_visible)
 
 
 # ---------------------------------------------------------------------------

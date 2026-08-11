@@ -12,11 +12,18 @@ import { useConfirm, useToastContext } from "~/Providers";
 import { useLocalize } from "~/hooks";
 
 import { showMoveUndoToast } from "../components/moveUndoToast";
+import {
+    buildDirectMoveUndoEntries,
+    dispatchFileChangeApprovalRefresh,
+    isFileChangeMutationLocked,
+    shouldRetryLegacyPartialMove,
+} from "./fileMutationUtils";
 
 type Localize = ReturnType<typeof useLocalize>;
 
 /** i18n key for a per-item rejection reason (name_conflict differs by item type). */
 function reasonLabelKey(entry: InvalidEntry): string {
+    if (!entry.reason) return "com_knowledge.move_failed";
     if (entry.reason === "name_conflict") {
         return entry.type === "folder"
             ? "com_knowledge.move_reason_name_conflict_folder"
@@ -33,9 +40,9 @@ function reasonLabelKey(entry: InvalidEntry): string {
 function describeInvalid(invalid: InvalidEntry[], localize: Localize): string {
     const groups = new Map<string, string[]>();
     for (const entry of invalid) {
-        const label = localize(reasonLabelKey(entry));
+        const label = entry.errorMessage || localize(reasonLabelKey(entry));
         const names = groups.get(label) ?? [];
-        names.push(entry.name);
+        names.push(entry.name || String(entry.id));
         groups.set(label, names);
     }
     return Array.from(groups.entries())
@@ -69,8 +76,9 @@ export function useKnowledgeMove({ spaceId, onMoved }: UseKnowledgeMoveArgs) {
     const [pendingItems, setPendingItems] = useState<KnowledgeFile[]>([]);
 
     const openMove = useCallback((items: KnowledgeFile[]) => {
-        if (!items.length) return;
-        setPendingItems(items);
+        const mutableItems = items.filter((item) => !isFileChangeMutationLocked(item));
+        if (!mutableItems.length) return;
+        setPendingItems(mutableItems);
         setMoveDialogOpen(true);
     }, []);
 
@@ -157,9 +165,10 @@ export function useKnowledgeMove({ spaceId, onMoved }: UseKnowledgeMoveArgs) {
         async (moved: MovedEntry[]) => {
             const groups = new Map<number | null, MovedEntry[]>();
             for (const m of moved) {
-                const list = groups.get(m.old_parent_id) ?? [];
+                const oldParentId = m.old_parent_id ?? null;
+                const list = groups.get(oldParentId) ?? [];
                 list.push(m);
-                groups.set(m.old_parent_id, list);
+                groups.set(oldParentId, list);
             }
             try {
                 for (const [parentId, items] of groups) {
@@ -192,7 +201,8 @@ export function useKnowledgeMove({ spaceId, onMoved }: UseKnowledgeMoveArgs) {
             crossSpace: boolean,
             targetFolderName?: string,
         ) => {
-            if (!items.length) return;
+            const mutableItems = items.filter((item) => !isFileChangeMutationLocked(item));
+            if (!mutableItems.length) return;
             if (crossSpace) {
                 const ok = await confirm({
                     title: localize("com_knowledge.move_cross_space_confirm_title"),
@@ -205,16 +215,15 @@ export function useKnowledgeMove({ spaceId, onMoved }: UseKnowledgeMoveArgs) {
 
             let result: MoveResult;
             try {
-                result = await runMove(items, targetSpaceId, targetFolderId, false);
+                result = await runMove(mutableItems, targetSpaceId, targetFolderId, false);
             } catch (err) {
                 showToast({ message: resolveErrorMessage(err), status: "error" });
                 throw err;
             }
 
-            // Some items were rejected; nothing was moved yet (reject-all). Always
-            // a dialog listing the blocked items by reason + 【移动其余文件】【取消移动】
-            // (even when ALL are blocked — "移动其余" then simply moves nothing).
-            if (result.invalid.length > 0) {
+            // Legacy F034 used reject-all + skip_invalid. F046 commits each item
+            // independently, so retry only the unmistakable legacy response shape.
+            if (shouldRetryLegacyPartialMove(result)) {
                 const ok = await confirm({
                     title: localize("com_knowledge.move_partial_title"),
                     description: describeInvalid(result.invalid, localize),
@@ -223,18 +232,28 @@ export function useKnowledgeMove({ spaceId, onMoved }: UseKnowledgeMoveArgs) {
                 });
                 if (!ok) throw new Error("move:cancelled");
                 try {
-                    result = await runMove(items, targetSpaceId, targetFolderId, true);
+                    result = await runMove(mutableItems, targetSpaceId, targetFolderId, true);
                 } catch (err) {
                     showToast({ message: resolveErrorMessage(err), status: "error" });
                     throw err;
                 }
             }
 
-            const movedCount = result.moved.length;
-            const movedEntries = result.moved;
-            onMoved();
+            result.invalid.forEach((item) => {
+                showToast({
+                    message: item.errorMessage
+                        ? `${item.name || item.id}: ${item.errorMessage}`
+                        : describeInvalid([item], localize),
+                    status: "error",
+                });
+            });
+            if (result.pending.length > 0) dispatchFileChangeApprovalRefresh(spaceId);
 
-            if (crossSpace) {
+            const movedCount = result.moved.length;
+            const movedEntries = buildDirectMoveUndoEntries(result.moved, mutableItems, crossSpace);
+            if (movedCount > 0 || result.pending.length > 0) onMoved();
+
+            if (crossSpace && movedCount > 0) {
                 showToast({
                     message: localize("com_knowledge.move_cross_success", { 0: movedCount }),
                     status: "success",
@@ -253,7 +272,7 @@ export function useKnowledgeMove({ spaceId, onMoved }: UseKnowledgeMoveArgs) {
                 });
             }
         },
-        [confirm, localize, runMove, showToast, resolveErrorMessage, onMoved, undoMove],
+        [confirm, localize, runMove, showToast, resolveErrorMessage, onMoved, spaceId, undoMove],
     );
 
     /** Dialog `onConfirm` — moves the items the picker was opened for. */

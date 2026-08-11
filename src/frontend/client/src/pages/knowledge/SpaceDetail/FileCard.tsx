@@ -17,6 +17,7 @@ import { useInlineRename } from "../hooks/useInlineRename";
 import { formatTimeCard, getKnowledgeApprovalStatusLabel, isKnowledgeApprovalRejected, isKnowledgeItemPreviewable, isKnowledgeItemUploading } from "../knowledgeUtils";
 import { useLocalize, useMediaQuery } from "~/hooks";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
+import { getFileChangeLockState } from "../hooks/useFileChangeApproval";
 
 const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -82,6 +83,7 @@ interface FileCardProps {
     onFolderDragOver?: (e: React.DragEvent) => void;
     onFolderDragLeave?: () => void;
     onFolderDrop?: (e: React.DragEvent) => void;
+    onOpenApprovalDetail?: (requestId: number) => void;
 }
 
 export function FileCard({
@@ -121,6 +123,7 @@ export function FileCard({
     onFolderDragOver,
     onFolderDragLeave,
     onFolderDrop,
+    onOpenApprovalDetail,
 }: FileCardProps) {
     const localize = useLocalize();
     /** True when primary input is mouse + hover: actions reveal on card hover. Touch / coarse pointer: keep actions visible (viewport width does not matter). */
@@ -130,6 +133,7 @@ export function FileCard({
     const isCreating = !!file.isCreating;
     // Uploading placeholder cards have no backend identity yet — not movable.
     const isUploading = isKnowledgeItemUploading(file);
+    const fileChangeLock = getFileChangeLockState(file);
     const [hovered, setHovered] = useState(false);
     const [moreMenuOpen, setMoreMenuOpen] = useState(false);
     // F040: resolve this file's action permissions lazily, only when the menu opens.
@@ -195,6 +199,22 @@ export function FileCard({
      * Covers all non-success states: parsing-like (neutral grey) + error / approval (colored).
      */
     const renderStatusOverlayTag = (inline = false) => {
+        if (fileChangeLock.showBadge && file.fileChangeApproval) {
+            const pill = (
+                <button
+                    type="button"
+                    className="inline-flex items-center justify-center gap-1 rounded bg-blue-500/[0.07] px-2 text-caption text-blue-500"
+                    onClick={(event) => {
+                        event.stopPropagation();
+                        onOpenApprovalDetail?.(file.fileChangeApproval!.requestId);
+                    }}
+                >
+                    <span className="size-1 rounded-full bg-blue-500" />
+                    {localize("com_approval_status_pending")}
+                </button>
+            );
+            return inline ? pill : <div className="absolute bottom-1 left-1 z-20">{pill}</div>;
+        }
         // Uploading folder placeholder: a neutral "uploading" pill in the same
         // bottom-left slot as the file status tags — no spinner over the icon.
         if (isUploadingFolderPlaceholder) {
@@ -394,14 +414,15 @@ export function FileCard({
             )}
             {canRename && (
                 <ActionMenuItem
-                    onClick={(e) => { e.stopPropagation(); startRenaming(); }}
+                    disabled={fileChangeLock.locked}
+                    onClick={(e) => { e.stopPropagation(); if (!fileChangeLock.locked) startRenaming(); }}
                     icon={<Outlined.Edit />}
                     label={localize("com_knowledge.rename")}
                 />
             )}
             {showMoveItem && (
                 <ActionMenuItem
-                    disabled={!canMove || isUploading}
+                    disabled={!canMove || isUploading || fileChangeLock.locked}
                     onClick={(e) => { e.stopPropagation(); onMove?.(); }}
                     icon={<Outlined.MoveToFolder />}
                     label={localize("com_knowledge.move")}
@@ -431,7 +452,8 @@ export function FileCard({
             {canDelete && (
                 <ActionMenuItem
                     danger
-                    onClick={(e) => { e.stopPropagation(); onDelete(); }}
+                    disabled={fileChangeLock.locked}
+                    onClick={(e) => { e.stopPropagation(); if (!fileChangeLock.locked) onDelete(); }}
                     icon={<Outlined.Delete />}
                     label={localize("com_knowledge.delete")}
                 />
@@ -786,9 +808,10 @@ export function FileCard({
                                 )}
                                 {canRename && (
                                     <ActionMenuItem
+                                        disabled={fileChangeLock.locked}
                                         onClick={(e) => {
                                             e.stopPropagation();
-                                            startRenaming();
+                                            if (!fileChangeLock.locked) startRenaming();
                                         }}
                                         icon={<Outlined.Edit />}
                                         label={localize("com_knowledge.rename")}
@@ -796,7 +819,7 @@ export function FileCard({
                                 )}
                                 {showMoveItem && (
                                     <ActionMenuItem
-                                        disabled={!canMove || isUploading}
+                                        disabled={!canMove || isUploading || fileChangeLock.locked}
                                         onClick={(e) => { e.stopPropagation(); onMove?.(); }}
                                         icon={<Outlined.MoveToFolder />}
                                         label={localize("com_knowledge.move")}
@@ -826,7 +849,8 @@ export function FileCard({
                                 {canDelete && (
                                     <ActionMenuItem
                                         danger
-                                        onClick={(e) => { e.stopPropagation(); onDelete(); }}
+                                        disabled={fileChangeLock.locked}
+                                        onClick={(e) => { e.stopPropagation(); if (!fileChangeLock.locked) onDelete(); }}
                                         icon={<Outlined.Delete />}
                                         label={localize("com_knowledge.delete")}
                                     />

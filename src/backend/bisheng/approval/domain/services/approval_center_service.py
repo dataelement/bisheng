@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from datetime import datetime
 
 from loguru import logger
@@ -18,6 +19,7 @@ from bisheng.approval.domain.repositories.approval_query_repository import Appro
 from bisheng.approval.domain.schemas.approval_center_schema import ApprovalGateDecision, ApprovalGateRequest
 from bisheng.approval.domain.services.approval_gate import ApprovalGate
 from bisheng.approval.domain.services.approval_registry import ApprovalRegistry
+from bisheng.approval.domain.services.approval_runtime_handler_factory import build_runtime_handler
 from bisheng.approval.domain.services.menu_access_handler import MenuAccessApprovalHandler
 from bisheng.approval.domain.services.user_menu_access_service import UserMenuAccessService
 from bisheng.common.errcode.approval import (
@@ -41,18 +43,50 @@ class _SystemLoginUser:
         return True
 
 
+@dataclass
+class _DecisionPostCommitEffects:
+    """Keep durable execution dispatch ahead of best-effort notifications."""
+
+    durable: list[tuple] = field(default_factory=list)
+    best_effort: list[tuple] = field(default_factory=list)
+
+    def append(self, effect: tuple) -> None:
+        self.best_effort.append(effect)
+
+    def append_durable(self, effect: tuple) -> None:
+        self.durable.append(effect)
+
+
 class ApprovalCenterService:
+    DYNAMIC_DISCOVERY_LIMIT = 100
+    DYNAMIC_DISCOVERY_MAX_BATCHES = 5
+
     def __init__(self, *, instance_repository) -> None:
         self.instance_repository = instance_repository
 
     @classmethod
     async def list_my_tasks(cls, *, tenant_id: int, approver_user_id: int):
+        await cls._prepare_dynamic_tasks(
+            tenant_id=tenant_id,
+            approver_user_id=approver_user_id,
+            trigger="approval_center_query",
+        )
         tasks = await ApprovalQueryRepository.list_tasks_by_approver(tenant_id, approver_user_id)
         if not tasks:
             return {"data": [], "total": 0}
 
         instance_ids = list({t.instance_id for t in tasks})
         instances = await ApprovalInstanceRepository.get_instances_by_ids(instance_ids)
+        visible_instances = await cls._filter_visible_instances(
+            instances=instances,
+            tenant_id=tenant_id,
+            viewer_user_id=approver_user_id,
+        )
+        visible_instance_ids = {instance.id for instance in visible_instances}
+        tasks = [task for task in tasks if task.instance_id in visible_instance_ids]
+        instances = visible_instances
+        if not tasks:
+            return {"data": [], "total": 0}
         instance_map = {inst.id: inst for inst in instances}
 
         dept_ids = [inst.applicant_department_id for inst in instances if inst.applicant_department_id]
@@ -98,6 +132,149 @@ class ApprovalCenterService:
         return {"data": data, "total": len(data)}
 
     @classmethod
+    async def count_pending_tasks(cls, *, tenant_id: int, approver_user_id: int) -> int:
+        result = await cls.list_my_tasks(
+            tenant_id=tenant_id,
+            approver_user_id=approver_user_id,
+        )
+        return sum(1 for row in result["data"] if row["status"] == ApprovalTaskStatus.PENDING)
+
+    @classmethod
+    async def count_unread_tasks(cls, *, tenant_id: int, approver_user_id: int) -> int:
+        # ApprovalTask has no separate read receipt; pending is the authoritative
+        # unread badge source and must use the same discovery/visibility path.
+        return await cls.count_pending_tasks(
+            tenant_id=tenant_id,
+            approver_user_id=approver_user_id,
+        )
+
+    @classmethod
+    async def _prepare_dynamic_tasks(
+        cls,
+        *,
+        tenant_id: int,
+        approver_user_id: int,
+        trigger: str,
+    ) -> None:
+        try:
+            handler = await build_runtime_handler("knowledge_space_file_change_request")
+        except KeyError:
+            return
+        discover = getattr(handler, "discover_candidate_instances", None)
+        reconcile = getattr(handler, "reconcile_candidate_instance", None)
+        if discover is None or reconcile is None:
+            return
+        after_instance_id = 0
+        for _batch_index in range(cls.DYNAMIC_DISCOVERY_MAX_BATCHES):
+            try:
+                instance_ids = await discover(
+                    tenant_id=tenant_id,
+                    viewer_user_id=approver_user_id,
+                    after_instance_id=after_instance_id,
+                    limit=cls.DYNAMIC_DISCOVERY_LIMIT,
+                )
+            except Exception:
+                logger.exception(
+                    "dynamic approval discovery failed closed: tenant_id={} viewer_user_id={} after_instance_id={}",
+                    tenant_id,
+                    approver_user_id,
+                    after_instance_id,
+                )
+                return
+            if not instance_ids:
+                return
+            for instance_id in instance_ids:
+                try:
+                    result = await reconcile(
+                        instance_id=instance_id,
+                        trigger=trigger,
+                    )
+                except Exception:
+                    logger.exception(
+                        "dynamic approval reconciliation failed closed: instance_id={} trigger={}",
+                        instance_id,
+                        trigger,
+                    )
+                    continue
+                # Runtime adapters normally own their UoW and effects.
+                # Supporting a raw result keeps the hook composable for
+                # session-bound adapters.
+                if result is not None and not callable(getattr(result, "run_post_commit_effects", None)):
+                    for effect in getattr(result, "post_commit_effects", ()):
+                        await effect.run()
+            after_instance_id = max(int(instance_id) for instance_id in instance_ids)
+            if len(instance_ids) < cls.DYNAMIC_DISCOVERY_LIMIT:
+                return
+
+    @classmethod
+    async def _filter_visible_instances(
+        cls,
+        *,
+        instances: list[ApprovalInstance],
+        tenant_id: int,
+        viewer_user_id: int,
+    ) -> list[ApprovalInstance]:
+        visible: list[ApprovalInstance] = []
+        by_scenario: dict[str, list[ApprovalInstance]] = {}
+        for instance in instances:
+            by_scenario.setdefault(instance.handler_key or instance.scenario_code, []).append(instance)
+        for handler_key, scenario_instances in by_scenario.items():
+            try:
+                handler = await build_runtime_handler(handler_key)
+            except KeyError:
+                visible.extend(scenario_instances)
+                continue
+            filter_hook = getattr(handler, "filter_visible_instances", None)
+            if filter_hook is None:
+                visible.extend(scenario_instances)
+                continue
+            try:
+                filtered = await filter_hook(
+                    instances=scenario_instances,
+                    viewer_user_id=viewer_user_id,
+                    tenant_id=tenant_id,
+                )
+            except Exception:
+                logger.exception(
+                    "dynamic approval visibility filter failed closed: handler_key={} viewer_user_id={}",
+                    handler_key,
+                    viewer_user_id,
+                )
+                continue
+            visible.extend(filtered)
+        return visible
+
+    @classmethod
+    async def _authorize_view(cls, *, instance: ApprovalInstance, viewer_user_id: int) -> bool | None:
+        try:
+            handler = await build_runtime_handler(instance.handler_key or instance.scenario_code)
+        except KeyError:
+            return None
+        authorize = getattr(handler, "authorize_view", None)
+        if authorize is None:
+            return None
+        try:
+            return bool(await authorize(instance=instance, viewer_user_id=viewer_user_id))
+        except Exception:
+            logger.exception(
+                "dynamic approval view authorization failed closed: instance_id={} viewer_user_id={}",
+                instance.id,
+                viewer_user_id,
+            )
+            return False
+
+    @classmethod
+    async def _get_business_status_projection(cls, *, instance: ApprovalInstance):
+        try:
+            handler = await build_runtime_handler(instance.handler_key or instance.scenario_code)
+        except KeyError:
+            return None
+        projection_hook = getattr(handler, "get_business_status_projection", None)
+        if projection_hook is None:
+            return None
+        return await projection_hook(instance=instance)
+
+    @classmethod
     async def get_task_detail(cls, *, task_id: int, login_user):
         task = await ApprovalInstanceRepository.get_task(task_id)
         if task is None:
@@ -107,8 +284,13 @@ class ApprovalCenterService:
             raise ApprovalRequestNotFoundError()
         if instance.tenant_id != login_user.tenant_id:
             raise ApprovalRequestPermissionDeniedError()
-        if (
-            not login_user.is_admin()
+        runtime_visible = await cls._authorize_view(
+            instance=instance,
+            viewer_user_id=login_user.user_id,
+        )
+        if runtime_visible is False or (
+            runtime_visible is None
+            and not login_user.is_admin()
             and task.approver_user_id != login_user.user_id
             and instance.applicant_user_id != login_user.user_id
         ):
@@ -157,6 +339,8 @@ class ApprovalCenterService:
             revoked_ids = await UserMenuAccessRepository.get_revoked_instance_ids([instance.id])
             grant_revoked = instance.id in revoked_ids
 
+        business_status_projection = await cls._get_business_status_projection(instance=instance)
+
         return {
             "task_id": task.id,
             "instance_id": task.instance_id,
@@ -176,6 +360,7 @@ class ApprovalCenterService:
             "reason": instance.reason,
             "create_time": instance.create_time,
             "update_time": task.update_time,
+            "business_status_projection": business_status_projection,
             "flow_nodes": flow_nodes,
             "tasks": [
                 {
@@ -280,6 +465,11 @@ class ApprovalCenterService:
     @classmethod
     async def list_my_requests(cls, *, tenant_id: int, applicant_user_id: int):
         rows = await ApprovalQueryRepository.list_instances_by_applicant(tenant_id, applicant_user_id)
+        rows = await cls._filter_visible_instances(
+            instances=rows,
+            tenant_id=tenant_id,
+            viewer_user_id=applicant_user_id,
+        )
         if not rows:
             return {"data": [], "total": 0}
 
@@ -322,8 +512,14 @@ class ApprovalCenterService:
             raise ApprovalRequestNotFoundError()
         if instance.tenant_id != login_user.tenant_id:
             raise ApprovalRequestPermissionDeniedError()
+        runtime_visible = await cls._authorize_view(
+            instance=instance,
+            viewer_user_id=login_user.user_id,
+        )
+        if runtime_visible is False:
+            raise ApprovalRequestPermissionDeniedError()
         tasks = await ApprovalInstanceRepository.list_tasks(instance.id)
-        if not login_user.is_admin():
+        if runtime_visible is None and not login_user.is_admin():
             visible_task_owner = any(task.approver_user_id == login_user.user_id for task in tasks)
             if instance.applicant_user_id != login_user.user_id and not visible_task_owner:
                 raise ApprovalRequestPermissionDeniedError()
@@ -372,6 +568,8 @@ class ApprovalCenterService:
                 for nd in node_defs
             ]
 
+        business_status_projection = await cls._get_business_status_projection(instance=instance)
+
         return {
             "instance_id": instance.id,
             "scenario_code": instance.scenario_code,
@@ -388,6 +586,7 @@ class ApprovalCenterService:
             "current_approver_names": current_approver_names,
             "create_time": instance.create_time,
             "update_time": instance.update_time,
+            "business_status_projection": business_status_projection,
             "tasks": [
                 {
                     "task_id": task.id,
@@ -431,103 +630,65 @@ class ApprovalCenterService:
             raise ValueError(f"instance not found: {instance_id}")
         if instance.applicant_user_id != operator_user_id:
             raise PermissionError("only applicant can withdraw")
-        if instance.scenario_code == "resource_user_invite_confirmation":
-            tasks = await ApprovalInstanceRepository.list_tasks(instance.id)
-            saved = await ApprovalInstanceRepository.withdraw_pending_instance(
-                instance_id=instance.id,
-                applicant_user_id=operator_user_id,
-                operator_user_name=operator_user_name,
-                reason=reason,
-            )
-            if saved is None:
-                raise ApprovalRequestAlreadyProcessedError()
-            await cls._write_audit_log(
-                tenant_id=saved.tenant_id,
-                operator_user_id=operator_user_id,
-                operator_tenant_id=saved.tenant_id,
-                action="approval.request.withdraw",
-                target_id=str(saved.id),
-                reason=reason,
-                metadata={"instance_id": saved.id, "scenario_code": saved.scenario_code},
-                operator_name=operator_user_name,
-                object_name=saved.business_name,
-                ip_address=ip_address,
-            )
-            receiver_ids = list({task.approver_user_id for task in tasks if task.approver_user_id != operator_user_id})
-            if receiver_ids:
-                await cls._send_invite_notify_best_effort(
-                    sender=operator_user_id,
-                    receiver_user_ids=receiver_ids,
-                    action_code="resource_user_invite_failed",
-                    business_name=saved.business_name,
-                    instance_id=saved.id,
-                    scenario_code=saved.scenario_code,
-                    reason=reason or "邀请已撤回",
-                )
-            return await cls.get_instance_detail(
-                instance_id=saved.id,
-                login_user=_SystemLoginUser(operator_user_id, tenant_id=saved.tenant_id),
-            )
         tasks = await ApprovalInstanceRepository.list_tasks(instance.id)
-        for task in tasks:
-            if task.status == ApprovalTaskStatus.PENDING:
-                task.status = ApprovalTaskStatus.CANCELLED
-                task.acted_at = datetime.utcnow()
-                await ApprovalInstanceRepository.update_task(task)
-        instance.status = ApprovalInstanceStatus.WITHDRAWN
-        await ApprovalInstanceRepository.update_instance(instance)
-        await ApprovalInstanceRepository.create_action_log(
-            ApprovalActionLog(
-                tenant_id=instance.tenant_id,
-                instance_id=instance.id,
-                action="withdrawn",
-                operator_user_id=operator_user_id,
-                operator_user_name=operator_user_name,
-                detail={"reason": reason},
-            )
+        saved = await ApprovalInstanceRepository.withdraw_pending_instance(
+            instance_id=instance.id,
+            applicant_user_id=operator_user_id,
+            operator_user_name=operator_user_name,
+            reason=reason,
         )
+        if saved is None:
+            raise ApprovalRequestAlreadyProcessedError()
         await cls._write_audit_log(
-            tenant_id=instance.tenant_id,
+            tenant_id=saved.tenant_id,
             operator_user_id=operator_user_id,
-            operator_tenant_id=instance.tenant_id,
+            operator_tenant_id=saved.tenant_id,
             action="approval.request.withdraw",
-            target_id=str(instance.id),
+            target_id=str(saved.id),
             reason=reason,
             metadata={
-                "instance_id": instance.id,
-                "scenario_code": instance.scenario_code,
-                "handler": instance.handler_key or instance.scenario_code,
+                "instance_id": saved.id,
+                "scenario_code": saved.scenario_code,
+                "handler": saved.handler_key or saved.scenario_code,
             },
             operator_name=operator_user_name,
-            object_name=instance.business_name,
+            object_name=saved.business_name,
             ip_address=ip_address,
         )
-        # Notify approvers who had tasks on this instance
-        task_approver_ids = list({t.approver_user_id for t in tasks if t.approver_user_id != operator_user_id})
-        if task_approver_ids:
-            await cls._send_approval_notify(
+        receiver_ids = list({task.approver_user_id for task in tasks if task.approver_user_id != operator_user_id})
+        if receiver_ids:
+            notify = (
+                cls._send_invite_notify_best_effort
+                if saved.scenario_code == "resource_user_invite_confirmation"
+                else cls._send_approval_notify
+            )
+            notify_reason = reason
+            if saved.scenario_code == "resource_user_invite_confirmation" and not notify_reason:
+                notify_reason = "邀请已撤回"
+            await notify(
                 sender=operator_user_id,
-                receiver_user_ids=task_approver_ids,
-                action_code="approval_instance_withdrawn",
-                business_name=instance.business_name,
-                instance_id=instance.id,
-                scenario_code=instance.scenario_code,
+                receiver_user_ids=receiver_ids,
+                action_code=(
+                    "resource_user_invite_failed"
+                    if saved.scenario_code == "resource_user_invite_confirmation"
+                    else "approval_instance_withdrawn"
+                ),
+                business_name=saved.business_name,
+                instance_id=saved.id,
+                scenario_code=saved.scenario_code,
+                reason=notify_reason,
+            )
+        if saved.scenario_code != "resource_user_invite_confirmation":
+            await cls._run_terminal_hook_best_effort(
+                "on_withdrawn",
+                saved.handler_key or saved.scenario_code,
+                saved.id,
+                payload=saved.payload_snapshot or {},
                 reason=reason,
             )
-        try:
-            from bisheng.approval.domain.services.approval_runtime_handler_factory import build_runtime_handler
-
-            handler = await build_runtime_handler(instance.handler_key or instance.scenario_code)
-            await handler.on_withdrawn(instance.id, instance.payload_snapshot or {}, reason)
-        except Exception:
-            import logging
-
-            logging.getLogger(__name__).exception(
-                "withdraw_instance: on_withdrawn hook failed for instance %s", instance.id
-            )
         return await cls.get_instance_detail(
-            instance_id=instance.id,
-            login_user=_SystemLoginUser(operator_user_id, tenant_id=instance.tenant_id),
+            instance_id=saved.id,
+            login_user=_SystemLoginUser(operator_user_id, tenant_id=saved.tenant_id),
         )
 
     @classmethod
@@ -694,6 +855,534 @@ class ApprovalCenterService:
                 )
         return {"revoked_keys": [row.menu_key for row in rows], "instance_id": instance_id}
 
+    async def decide_instance_for_current_approver(
+        self,
+        *,
+        instance_id: int,
+        action: str,
+        operator_user_id: int,
+        operator_user_name: str,
+        operator_tenant_id: int,
+        comment: str | None = None,
+        ip_address: str | None = None,
+    ) -> dict:
+        """Decide the current user's pending task from an instance-oriented UI."""
+
+        return await self._decide_in_uow(
+            instance_id=instance_id,
+            task_id=None,
+            action=action,
+            operator_user_id=operator_user_id,
+            operator_user_name=operator_user_name,
+            operator_tenant_id=operator_tenant_id,
+            operator_is_admin=False,
+            comment=comment,
+            ip_address=ip_address,
+        )
+
+    @staticmethod
+    async def _reconcile_pending_approvers_locked(*, session, instance: ApprovalInstance, trigger: str) -> tuple:
+        """Run an optional scenario-owned assignee reconciliation hook.
+
+        F025 scenarios without dynamic assignees intentionally have no hook.
+        F046 supplies it in T011/T012; keeping this optional preserves existing
+        scenarios while ensuring both decision entry points reread afterwards.
+        """
+
+        try:
+            handler = await build_runtime_handler(instance.handler_key or instance.scenario_code)
+        except KeyError:
+            return ()
+        reconcile = getattr(handler, "reconcile_pending_approvers", None)
+        if reconcile is None:
+            return ()
+        result = await reconcile(session=session, instance=instance, trigger=trigger)
+        return tuple(getattr(result, "post_commit_effects", ()))
+
+    @staticmethod
+    async def _authorize_decision(*, handler, instance: ApprovalInstance, operator_user_id: int) -> None:
+        authorize = getattr(handler, "authorize_decision", None)
+        if authorize is None:
+            authorize = getattr(handler, "validate_decision", None)
+        if authorize is not None and not await authorize(
+            instance=instance,
+            operator_user_id=operator_user_id,
+        ):
+            raise ApprovalRequestPermissionDeniedError()
+
+    async def _decide_in_uow(
+        self,
+        *,
+        instance_id: int | None,
+        task_id: int | None,
+        action: str,
+        operator_user_id: int,
+        operator_user_name: str,
+        operator_tenant_id: int,
+        operator_is_admin: bool,
+        comment: str | None,
+        ip_address: str | None,
+    ) -> dict:
+        if action not in {"approve", "reject"}:
+            raise ValueError(f"unsupported approval action: {action}")
+
+        post_commit_effects = _DecisionPostCommitEffects()
+        async with self.instance_repository.decision_session() as session:
+            async with session.begin():
+                if instance_id is None:
+                    instance_id = await self.instance_repository.get_task_instance_id_in_session(
+                        session,
+                        task_id,
+                        tenant_id=operator_tenant_id,
+                    )
+                if instance_id is None:
+                    raise ApprovalRequestNotFoundError()
+
+                instance = await self.instance_repository.lock_instance_in_session(
+                    session,
+                    instance_id,
+                    tenant_id=operator_tenant_id,
+                )
+                if instance is None:
+                    raise ApprovalRequestNotFoundError()
+                if int(instance.tenant_id) != int(operator_tenant_id):
+                    raise ApprovalRequestPermissionDeniedError()
+                tasks = await self.instance_repository.lock_tasks_in_session(
+                    session,
+                    instance.id,
+                    tenant_id=operator_tenant_id,
+                )
+                await self.instance_repository.lock_open_exceptions_and_outboxes_in_session(
+                    session,
+                    instance.id,
+                    tenant_id=operator_tenant_id,
+                )
+
+                reconcile_effects = await self._reconcile_pending_approvers_locked(
+                    session=session,
+                    instance=instance,
+                    trigger="decision",
+                )
+                tasks = await self.instance_repository.lock_tasks_in_session(
+                    session,
+                    instance.id,
+                    tenant_id=operator_tenant_id,
+                )
+                if task_id is None:
+                    operator_tasks = [
+                        row
+                        for row in tasks
+                        if row.status == ApprovalTaskStatus.PENDING and row.approver_user_id == operator_user_id
+                    ]
+                    task = operator_tasks[0] if operator_tasks else None
+                    if task is None:
+                        raise ApprovalRequestPermissionDeniedError()
+                else:
+                    task = next((row for row in tasks if row.id == task_id), None)
+                    if task is None:
+                        raise ApprovalRequestNotFoundError()
+
+                try:
+                    runtime_handler = await build_runtime_handler(instance.handler_key or instance.scenario_code)
+                except KeyError:
+                    runtime_handler = None
+                if runtime_handler is not None:
+                    await self._authorize_decision(
+                        handler=runtime_handler,
+                        instance=instance,
+                        operator_user_id=operator_user_id,
+                    )
+
+                result = await self._decide_locked_task(
+                    session=session,
+                    instance=instance,
+                    task=task,
+                    tasks=tasks,
+                    action=action,
+                    operator_user_id=operator_user_id,
+                    operator_user_name=operator_user_name,
+                    operator_tenant_id=operator_tenant_id,
+                    operator_is_admin=operator_is_admin,
+                    comment=comment,
+                    ip_address=ip_address,
+                    post_commit_effects=post_commit_effects,
+                )
+                self._append_reconcile_effects(
+                    post_commit_effects=post_commit_effects,
+                    reconcile_effects=reconcile_effects or (),
+                    tasks=tasks,
+                )
+                await self.instance_repository.flush_decision_in_session(session)
+
+        await self._run_decision_post_commit_effects(post_commit_effects)
+        return result
+
+    @staticmethod
+    def _append_reconcile_effects(
+        *,
+        post_commit_effects: _DecisionPostCommitEffects,
+        reconcile_effects,
+        tasks: list[ApprovalTask],
+    ) -> None:
+        task_status_by_id = {int(task.id): task.status for task in tasks if task.id is not None}
+        prefix = "notify_dynamic_approval_task:"
+        for effect in reconcile_effects:
+            if effect.name.startswith(prefix):
+                try:
+                    task_id = int(effect.name.removeprefix(prefix))
+                except ValueError:
+                    task_id = None
+                if task_id is not None and task_status_by_id.get(task_id) != ApprovalTaskStatus.PENDING:
+                    continue
+            post_commit_effects.append((effect.run, (), {}))
+
+    @staticmethod
+    async def _run_decision_post_commit_effects(post_commit_effects: _DecisionPostCommitEffects) -> None:
+        for callback, args, kwargs in (*post_commit_effects.durable, *post_commit_effects.best_effort):
+            try:
+                effect_result = callback(*args, **kwargs)
+                if hasattr(effect_result, "__await__"):
+                    await effect_result
+            except Exception:
+                logger.exception(
+                    "approval decision post-commit effect failed: callback={}",
+                    getattr(callback, "__qualname__", repr(callback)),
+                )
+
+    async def _decide_locked_task(
+        self,
+        *,
+        session,
+        instance: ApprovalInstance,
+        task: ApprovalTask,
+        tasks: list[ApprovalTask],
+        action: str,
+        operator_user_id: int,
+        operator_user_name: str,
+        operator_tenant_id: int,
+        operator_is_admin: bool,
+        comment: str | None,
+        ip_address: str | None,
+        post_commit_effects: _DecisionPostCommitEffects,
+    ) -> dict:
+        if instance.tenant_id != operator_tenant_id:
+            raise ApprovalRequestPermissionDeniedError()
+        if instance.status != ApprovalInstanceStatus.PENDING or task.status != ApprovalTaskStatus.PENDING:
+            raise ApprovalRequestAlreadyProcessedError()
+
+        is_self_confirmation = instance.scenario_code == "resource_user_invite_confirmation"
+        if is_self_confirmation:
+            target_user_id = int((instance.payload_snapshot or {}).get("target_user_id", 0))
+            if task.approver_user_id != operator_user_id or target_user_id != operator_user_id:
+                raise ApprovalRequestPermissionDeniedError()
+        elif not operator_is_admin and task.approver_user_id != operator_user_id:
+            raise ApprovalRequestPermissionDeniedError()
+
+        now = datetime.utcnow()
+        same_node_tasks = [row for row in tasks if row.node_code == task.node_code]
+        task.comment = comment
+        task.acted_at = now
+        instance.latest_approver_user_id = operator_user_id
+        outbox: ApprovalOutbox | None = None
+
+        if action == "reject":
+            task.status = ApprovalTaskStatus.REJECTED
+            for sibling in same_node_tasks:
+                if sibling.id != task.id and sibling.status == ApprovalTaskStatus.PENDING:
+                    sibling.status = ApprovalTaskStatus.CANCELLED
+                    sibling.acted_at = now
+                    session.add(sibling)
+            instance.status = ApprovalInstanceStatus.REJECTED
+        else:
+            task.status = ApprovalTaskStatus.APPROVED
+            node_approved = task.node_mode == "or" or all(
+                row.id == task.id or row.status == ApprovalTaskStatus.APPROVED for row in same_node_tasks
+            )
+            if task.node_mode == "or":
+                for sibling in same_node_tasks:
+                    if sibling.id != task.id and sibling.status == ApprovalTaskStatus.PENDING:
+                        sibling.status = ApprovalTaskStatus.SKIPPED
+                        sibling.acted_at = now
+                        session.add(sibling)
+            if node_approved:
+                outbox = await self._advance_after_node_approved_locked(
+                    session=session,
+                    instance=instance,
+                    current_node_order=task.node_order,
+                    operator_user_id=operator_user_id,
+                    post_commit_effects=post_commit_effects,
+                )
+
+        session.add(task)
+        session.add(instance)
+        session.add(
+            ApprovalActionLog(
+                tenant_id=instance.tenant_id,
+                instance_id=instance.id,
+                action="approved" if action == "approve" else "rejected",
+                operator_user_id=operator_user_id,
+                operator_user_name=operator_user_name,
+                detail={"task_id": task.id, "comment": comment},
+            )
+        )
+        post_commit_effects.append(
+            (
+                self.__class__._write_audit_log,
+                (),
+                {
+                    "tenant_id": instance.tenant_id,
+                    "operator_user_id": operator_user_id,
+                    "operator_tenant_id": instance.tenant_id,
+                    "action": "approval.task.approve" if action == "approve" else "approval.task.reject",
+                    "target_type": "approval_task",
+                    "target_id": str(task.id),
+                    "reason": comment,
+                    "metadata": {
+                        "instance_id": instance.id,
+                        "task_id": task.id,
+                        "scenario_code": instance.scenario_code,
+                        "handler": instance.handler_key or instance.scenario_code,
+                    },
+                    "operator_name": operator_user_name,
+                    "object_name": instance.business_name,
+                    "ip_address": ip_address,
+                },
+            )
+        )
+        if action == "reject":
+            if is_self_confirmation:
+                post_commit_effects.append(
+                    (
+                        self.__class__._send_invite_notify_best_effort,
+                        (),
+                        {
+                            "sender": operator_user_id,
+                            "receiver_user_ids": [instance.applicant_user_id],
+                            "action_code": "resource_user_invite_failed",
+                            "business_name": instance.business_name,
+                            "instance_id": instance.id,
+                            "scenario_code": instance.scenario_code,
+                            "reason": comment or "invitation rejected",
+                        },
+                    )
+                )
+            else:
+                post_commit_effects.append(
+                    (
+                        self.__class__._send_approval_notify,
+                        (),
+                        {
+                            "sender": operator_user_id,
+                            "receiver_user_ids": [instance.applicant_user_id],
+                            "action_code": "approval_task_rejected",
+                            "business_name": instance.business_name,
+                            "instance_id": instance.id,
+                            "scenario_code": instance.scenario_code,
+                            "reason": comment,
+                        },
+                    )
+                )
+                post_commit_effects.append(
+                    (
+                        self.__class__._run_terminal_hook_best_effort,
+                        ("on_rejected", instance.handler_key or instance.scenario_code, instance.id),
+                        {"payload": instance.payload_snapshot or {}, "reason": comment},
+                    )
+                )
+
+        return {
+            "task_id": task.id,
+            "instance_id": instance.id,
+            "status": task.status,
+            "instance_status": instance.status,
+            "outbox_id": outbox.id if outbox else None,
+        }
+
+    async def _advance_after_node_approved_locked(
+        self,
+        *,
+        session,
+        instance: ApprovalInstance,
+        current_node_order: int,
+        operator_user_id: int,
+        post_commit_effects: _DecisionPostCommitEffects,
+    ) -> ApprovalOutbox | None:
+        next_node = None
+        if instance.flow_version_id:
+            node_defs = await self.instance_repository.list_flow_nodes_in_session(
+                session,
+                tenant_id=instance.tenant_id,
+                flow_version_id=instance.flow_version_id,
+            )
+            next_node = next((node for node in node_defs if node.node_order > current_node_order), None)
+
+        if next_node is None:
+            return await self._finalize_instance_locked(
+                session=session,
+                instance=instance,
+                operator_user_id=operator_user_id,
+                post_commit_effects=post_commit_effects,
+            )
+
+        from types import SimpleNamespace
+
+        from bisheng.approval.domain.services.approval_runtime_handler_factory import build_runtime_handler
+
+        try:
+            handler = await build_runtime_handler(instance.handler_key or instance.scenario_code)
+        except KeyError:
+            return await self._finalize_instance_locked(
+                session=session,
+                instance=instance,
+                operator_user_id=operator_user_id,
+                post_commit_effects=post_commit_effects,
+            )
+
+        req = SimpleNamespace(
+            tenant_id=instance.tenant_id,
+            applicant_user_id=instance.applicant_user_id,
+            applicant_user_name=instance.applicant_user_name,
+            applicant_department_id=instance.applicant_department_id,
+            payload_snapshot=instance.payload_snapshot or {},
+            business_resource_id=instance.business_resource_id,
+            business_resource_type=instance.business_resource_type,
+            business_key=instance.business_key,
+            business_name=instance.business_name,
+            reason=instance.reason,
+            scenario_code=instance.scenario_code,
+        )
+        approvers = await handler.resolve_approvers(next_node.approver_config or {}, req)
+        if not approvers:
+            from bisheng.approval.domain.models.approval_instance import ApprovalException, ApprovalExceptionType
+
+            instance.status = ApprovalInstanceStatus.EXCEPTION
+            instance.current_node_name = next_node.node_name
+            session.add(
+                ApprovalException(
+                    tenant_id=instance.tenant_id,
+                    instance_id=instance.id,
+                    exception_type=ApprovalExceptionType.APPROVER_EMPTY,
+                    detail={
+                        "scenario_code": instance.scenario_code,
+                        "business_key": instance.business_key,
+                        "node_code": next_node.node_code,
+                        "node_name": next_node.node_name,
+                        "node_order": next_node.node_order,
+                        "node_mode": next_node.node_mode,
+                    },
+                )
+            )
+            post_commit_effects.append(
+                (
+                    self.__class__._notify_admins_of_approver_empty,
+                    (),
+                    {
+                        "tenant_id": instance.tenant_id,
+                        "applicant_user_id": instance.applicant_user_id,
+                        "business_name": instance.business_name,
+                        "instance_id": instance.id,
+                        "scenario_code": instance.scenario_code,
+                    },
+                )
+            )
+            return None
+
+        instance.current_node_name = next_node.node_name
+        for approver_user_id in approvers:
+            next_task = ApprovalTask(
+                tenant_id=instance.tenant_id,
+                instance_id=instance.id,
+                flow_version_id=instance.flow_version_id,
+                node_code=next_node.node_code,
+                node_name=next_node.node_name,
+                node_order=next_node.node_order,
+                approver_user_id=approver_user_id,
+                approver_source_type="resolved",
+                node_mode=next_node.node_mode,
+                status=ApprovalTaskStatus.PENDING,
+            )
+            session.add(next_task)
+            await session.flush()
+            post_commit_effects.append(
+                (
+                    self.__class__._send_approval_notify,
+                    (),
+                    {
+                        "sender": instance.applicant_user_id,
+                        "receiver_user_ids": [next_task.approver_user_id],
+                        "action_code": "approval_task_pending",
+                        "business_name": instance.business_name,
+                        "instance_id": instance.id,
+                        "scenario_code": instance.scenario_code,
+                        "task_id": next_task.id,
+                    },
+                )
+            )
+        return None
+
+    async def _finalize_instance_locked(
+        self,
+        *,
+        session,
+        instance: ApprovalInstance,
+        operator_user_id: int,
+        post_commit_effects: _DecisionPostCommitEffects,
+    ) -> ApprovalOutbox:
+        instance.status = ApprovalInstanceStatus.APPROVED
+        instance.current_node_name = None
+        outbox = ApprovalOutbox(
+            tenant_id=instance.tenant_id,
+            instance_id=instance.id,
+            handler_key=instance.handler_key or instance.scenario_code,
+            status=ApprovalOutboxStatus.PENDING,
+            payload_snapshot=instance.payload_snapshot or {},
+        )
+        session.add(outbox)
+        await session.flush()
+        post_commit_effects.append_durable((self.__class__._dispatch_outbox, (outbox.id, int(instance.tenant_id)), {}))
+        if instance.scenario_code != "resource_user_invite_confirmation":
+            post_commit_effects.append(
+                (
+                    self.__class__._send_approval_notify,
+                    (),
+                    {
+                        "sender": operator_user_id,
+                        "receiver_user_ids": [instance.applicant_user_id],
+                        "action_code": "approval_instance_approved",
+                        "business_name": instance.business_name or "",
+                        "instance_id": instance.id,
+                        "scenario_code": instance.scenario_code,
+                    },
+                )
+            )
+        return outbox
+
+    @staticmethod
+    async def _notify_admins_of_approver_empty(**kwargs) -> None:
+        from bisheng.approval.domain.services.approval_notification_service import ApprovalNotificationService
+
+        await ApprovalNotificationService.notify_admins(
+            action_code="approval_exception_approver_empty",
+            **kwargs,
+        )
+
+    @staticmethod
+    async def _run_terminal_hook_best_effort(
+        hook_name: str,
+        handler_key: str,
+        instance_id: int,
+        *,
+        payload: dict,
+        reason: str | None,
+    ) -> None:
+        try:
+            from bisheng.approval.domain.services.approval_runtime_handler_factory import build_runtime_handler
+
+            handler = await build_runtime_handler(handler_key)
+            await getattr(handler, hook_name)(instance_id, payload, reason)
+        except Exception:
+            logger.exception("approval terminal hook failed: instance_id={} hook={}", instance_id, hook_name)
+
     async def decide_task(
         self,
         *,
@@ -706,6 +1395,19 @@ class ApprovalCenterService:
         comment: str | None = None,
         ip_address: str | None = None,
     ) -> None:
+        if self.instance_repository is ApprovalInstanceRepository:
+            await self._decide_in_uow(
+                instance_id=None,
+                task_id=task_id,
+                action=action,
+                operator_user_id=operator_user_id,
+                operator_user_name=operator_user_name,
+                operator_tenant_id=operator_tenant_id,
+                operator_is_admin=operator_is_admin,
+                comment=comment,
+                ip_address=ip_address,
+            )
+            return
         task = await self.instance_repository.get_task(task_id)
         if task is None:
             raise ApprovalRequestNotFoundError()
@@ -745,7 +1447,7 @@ class ApprovalCenterService:
                 ip_address=ip_address,
             )
             if decision.outbox is not None:
-                self.__class__._dispatch_outbox(decision.outbox.id)
+                self.__class__._dispatch_outbox(decision.outbox.id, int(instance.tenant_id))
             else:
                 await self.__class__._send_invite_notify_best_effort(
                     sender=operator_user_id,
@@ -916,7 +1618,7 @@ class ApprovalCenterService:
                     payload_snapshot=instance.payload_snapshot,
                 )
             )
-            self.__class__._dispatch_outbox(outbox.id)
+            self.__class__._dispatch_outbox(outbox.id, int(instance.tenant_id))
             await self.__class__._send_approval_notify(
                 sender=operator_user_id,
                 receiver_user_ids=[instance.applicant_user_id],
@@ -954,7 +1656,7 @@ class ApprovalCenterService:
                     payload_snapshot=instance.payload_snapshot,
                 )
             )
-            self.__class__._dispatch_outbox(outbox.id)
+            self.__class__._dispatch_outbox(outbox.id, int(instance.tenant_id))
             await self.__class__._send_approval_notify(
                 sender=operator_user_id,
                 receiver_user_ids=[instance.applicant_user_id],
@@ -1085,10 +1787,13 @@ class ApprovalCenterService:
             )
 
     @staticmethod
-    def _dispatch_outbox(outbox_id: int) -> None:
+    def _dispatch_outbox(outbox_id: int, tenant_id: int) -> None:
         from bisheng.worker.approval.tasks import execute_approval_outbox
 
-        execute_approval_outbox.delay(outbox_id)
+        tenant_id = int(tenant_id)
+        if tenant_id <= 0:
+            raise ValueError("a positive tenant_id is required to dispatch an approval outbox")
+        execute_approval_outbox.apply_async(args=[outbox_id], headers={"tenant_id": tenant_id})
 
     @classmethod
     async def _write_audit_log(

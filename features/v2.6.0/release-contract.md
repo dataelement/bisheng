@@ -30,6 +30,7 @@
 | —（无新增领域对象；在 F029 拥有的 citation 链路上叠加 `accessScope` 分级） | F041-knowledge-space-select-flow-assistant | 4 入口（助手应用、工作流助手/知识库问答/知识库检索节点）知识库选择器新增「知识空间」tab + 检索；仅读取 / 调用现有 `KnowledgeSpaceService` / `KnowledgeSpaceChatService`（多态检索）/ F029 `KnowledgeFileVisibilityService`（`view_file` 双层过滤）/ 工作流节点 / 助手检索链路；两节点仅改**显示名**；在 F029 拥有的 `MessageCitation` / citation registry 上新增 `accessScope`（`per_user` / `shared`）字段与 resolve 分支（属 INV-7 例外的协同改动，经 F029 owner 认可）；不新增领域对象 / 表 / DAO 入口 / 对外 API / 错误码 |
 | —（无新增领域对象；统一资源设置与授权 UI 编排） | F044-unified-permission-entry | 知识空间与频道的新建/设置改为统一完整页面；扩展现有创建请求携带初始授权，资源创建后调用两类资源现有授权 Service 批量写入；新增一个创建阶段只读候选查询路径。频道授权写行为仍归 F026，部门空间授权范围仍归 F033；不新增权限写路径、角色、权限 ID、可见性状态、表、迁移或错误码 |
 | —（无新增领域对象；ApprovalInstance/Task 投影为个人邀请事实） | F045-personal-user-invite-confirmation | 复用 F025 Approval* 聚合实现知识空间/频道新增个人用户的一人一单本人确认，并在 F044 client 权限页投影待生效状态；Approval* 写行为仍归 F025，频道授权写行为仍归 F026，统一创建/设置 UI 仍归 F044。F045 不新增邀请表、权限角色、权限 ID 或迁移；协同扩展 F025 错误码 18118 |
+| KnowledgeSpaceFileChangePolicy / KnowledgeSpaceFileChangeSetting / KnowledgeSpaceUploadStage / KnowledgeSpaceFileChangeRequest / KnowledgeSpaceFileChangeFootprint / KnowledgeSpaceFileChangeExecutionStep | F046-knowledge-space-file-change-approval | 拥有租户文件变更审核策略、单空间配置、上传对象暂存、正式资源变更申请、真实执行 footprint 与 durable saga step 生命周期。正式 `KnowledgeFile` / `KnowledgeDocument` 的上传、重命名、移动、删除仍只调用 Knowledge/F034 权威 Service；Approval* 写行为仍归 F025，F046 仅通过 F025 新增的原子动态审批人/实例决策/Deferred 执行 Service 协同扩展，不直接写 Approval* 表 |
 
 **规则**：
 - 非 Owner Feature 的 AC 中不得出现其他对象的"创建/修改/删除"行为，只能"读取"或"调用" Owner 的 Service
@@ -50,6 +51,7 @@
 | INV-5 | 流程变更采用版本快照模型；已发起实例继续使用其创建时的流程版本，新配置仅影响后续新申请 | ApprovalFlowVersion, ApprovalInstance | F025 |
 | INV-6 | 走 ReBAC 过滤的高频列表接口采用 cursor-based 分页：请求用 `cursor` 透传上一页位置，响应含 `has_more: bool` 与 `next_cursor: string\|null`，**不再返 `total` / `page_num`**；后端不得为算 total 而扫描全部 batch；cursor 编码统一走 `common/cursor.py`（schema `{"v":1, "k":[...]}`，base64url）；cursor 解析失败必须明确报错（`*InvalidCursorError`），不得静默 fallback 首页。**例外（F040 登记）**：① WHERE 列表结果集由 per-user 成员关系 / 部门子树天然有界且**无深翻语义**（如 `/space/joined`·`/space/department`），可保留全返回、不强制 cursor，但其逐项 N+1 权限检查必须批量化；② 遗留多端消费的 `/chat/online`·`/workstation/app/uncategorized` 在兼容窗口内保留 `page/limit` 裸列表，但内部必须使用 keyset 有界扫描、不得 count/fetch-all、仅扫描到目标页可见前缀；未来 cursor 化须另立契约迁移全部调用方 | 所有走 ReBAC 过滤的列表接口 | F027（例外 F040） |
 | INV-7 | 知识空间内容的"AI 问答可检索可见性"必须是"列表 UI 可见性"的子集；即对任意 `(user, space, file)`，若用户在列表 UI 中不可见该 `file`（`view_file ∉ effective_permissions`），则任何 AI 问答入口都不得让该 `file` 的 chunk / 文件名 / 来源出现在模型上下文、回答引用、角标溯源 `/api/v1/citations/resolve` 响应的结构化字段中。**例外（F041 登记）**：**工作流 / 助手应用入口**的知识空间检索由「用户知识库权限校验」开关控制（4 入口统一，默认关）——开关 OFF 时该入口按**配置者** `view_file` 过滤检索（共享配置者可见范围、**永不越过配置者本人的可见边界**），其产生的 citation 标为 `shared`，溯源解析**不整条剔除**且返回来源元数据（文件名 / 知识库名 / snippet / 可点角标），但完整文件预览 / 下载 URL 仍按**运行使用者** `view_file` 把关；开关 ON（按运行使用者 `view_file`，`per_user`）及**直接空间 AI 问答入口（F029）**维持本不变量的强制语义完全不变 | KnowledgeSpace, Folder, KnowledgeFile, MessageCitation | F029（例外 F041） |
+| INV-8 | 经文件变更审批上传的原文件在审批完成前不得创建正式 `KnowledgeFile`；审批通过后创建的处理中文件在解析成功前仍属于 F046 的未发布资源，只能出现在独立变更列表且仅申请人/当前有效审核人可见。所有正式列表、搜索、F030 OpenAPI、RAG 检索和 citation 链路必须排除未发布资源；解析成功后才解除发布门禁，解析重试复用原审批 | KnowledgeSpaceUploadStage, KnowledgeSpaceFileChangeRequest, KnowledgeFile, KnowledgeDocument, MessageCitation | F046（协同影响 F029/F030） |
 
 **规则**：
 - 新增不变量：先在此表追加，再写 AC
@@ -77,6 +79,7 @@
 | F041-knowledge-space-select-flow-assistant | F029, F030 | 接盘 F029 明确排除的「工作流节点 / 运行用户身份」检索权限过滤遗留项；4 入口知识库选择器新增知识空间 tab、两节点仅改显示名；「用户知识库权限校验」开关（4 入口统一、默认关）**ON** 时按**运行使用者** `view_file` 双层过滤、**OFF** 时按**配置者** `view_file` 过滤（借用配置者可见范围、不越其边界；均复用 F029 `KnowledgeFileVisibilityService`）；复用 F030 `type=3` 同表多态 + `row.type` 分派；**登记 INV-7 例外**（工作流/助手入口开关可选、默认关，含检索侧与溯源侧 `shared` 分级）；在 F029 citation 链路新增 `accessScope` 分级 + resolve 分支；不新增领域对象 / 表 / 对外 API / 错误码 |
 | F044-unified-permission-entry | F026, F033 | 统一知识空间与频道的新建/设置入口；现有创建请求增加可选初始授权参数，创建完成后复用 F026 频道授权写行为及现有知识空间授权服务；仅新增一个创建阶段只读候选查询路径，不新增权限写路径、领域对象、表、迁移、权限 ID、错误码或不变量 |
 | F045-personal-user-invite-confirmation | F025, F026, F033, F044 | 仅处理知识空间/频道新增个人用户：复用 F044 create/settings 与 `initial_permissions`，按用户进入 F025 本人确认并由 outbox 调用知识空间/F026 频道授权 Service；部门/用户组及已有个人授权修改/移除保持直接授权；不新增邀请表或不变量，协同扩展 approval 错误码 18118 |
+| F046-knowledge-space-file-change-approval | F025, F027, F029, F030, F034, F044 | 新增租户/单空间文件变更审核策略、上传对象暂存、真实执行 footprint、durable execution step、正式资源重命名/移动/删除审批、动态 owner/manager 待办对账及私密/部门空间边界；列表沿用 F027 cursor，发布门禁协同 F029/F030，移动/文件夹上传复用 F034，策略 UI 落在 F044 统一知识空间配置入口；新增 6 个 F046 领域对象，不新增 Approval* 对象 |
 
 ---
 
@@ -93,6 +96,7 @@
 | 109 | knowledge | F032 沿用现有 `common/errcode/knowledge.py`，新增 `OfdConvertError`(10917)；不得与既有 10915/10916/10962 冲突 |
 | 110 | linsight | F035 沿用现有 `common/errcode/linsight.py`，Skill 管理占用段位 **11050–11069**。实际落码：**11051** 校验失败 / **11052** 超 10MB / **11053** 不存在 / **11054** 无权限 / **11055** 重名 / **11056–11058** GitHub 导入。✅ 原占用段内/邻近的存量 SOP 检索·管理错误码（11010/11011/11050/11060/11070/11100/11110/11150/11160/11170/11171，design §8.6 计划下线）已随 SOP 残留代码移除（2026-06-17，见变更历史），段位腾空；Skill 码沿用已发布编号、不回迁腾空槽位（已发布编码不重编） |
 | 180 | knowledge_space | F034 沿用现有 `common/errcode/knowledge_space.py`，新增 `SpaceMoveInvalidTargetError`(18033) / `SpaceFolderUploadCountExceededError`(18025)；复用 18011（层级）/ 18012（文件夹重名）/ 18021 / 18024（容量）/ 18040 / 18041（跨租户）；§5.5 文件夹上传租户容量超限复用 190 段 19403 |
+| 180 | knowledge_space | F046 沿用现有 `common/errcode/knowledge_space.py`，预留 18072–18076：变更审批冲突、申请不存在、申请状态不可处理、部门空间禁止私密、动态审核人暂不可用；审批任务通用错误继续复用 F025 的 181 段 |
 
 ---
 
@@ -120,3 +124,4 @@
 | 2026-07-13 | F040 增补应用列表性能兼容窗口：`/chat/online` 与 `/workstation/app/uncategorized` 保留既有 `page/limit` 裸列表契约，内部改 DM8-safe keyset 有界扫描、权限预过滤 + 精确复核、页内装饰；INV-6 例外补充“不得 count/fetch-all、仅扫描到目标页可见前缀”；无表/迁移/API/错误码变化 | F040 |
 | 2026-08-07 | 登记 F044 统一权限设置入口：表 1 标注无新增领域对象（统一 UI 编排，现有创建请求携带初始授权并在创建后调用两类资源现有授权 Service；新增一个创建阶段只读候选查询路径），表 3 追加依赖 F026/F033；资源 CRUD、频道授权、部门空间范围继续由原 owner 负责；不新增权限写路径、表、迁移、权限 ID、错误码或不变量 | F044 |
 | 2026-08-10 | 登记 F045 个人用户邀请本人确认：不新增邀请表，以 F025 ApprovalInstance/Task 为邀请事实并由 outbox 执行；依赖 F025/F026/F033/F044，复用 F044 client 统一创建/设置入口；Approval*、频道授权与 UI 所有权不变；协同占用 approval 错误码 18118 | F045 |
+| 2026-08-10 | 登记 F046 知识空间文件与文件夹变更审核：新增租户策略/单空间配置/上传暂存/变更申请/footprint/execution step 六个领域对象，依赖 F025/F027/F029/F030/F034/F044；新增 INV-8 未发布文件门禁，协同扩展 F025 动态审批人原子 Service 与 Deferred 执行契约，预留 18072–18076 | F046（协同影响 F025/F029/F030/F044） |

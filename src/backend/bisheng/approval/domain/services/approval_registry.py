@@ -2,12 +2,152 @@ from __future__ import annotations
 
 from typing import Any
 
+from sqlalchemy.exc import IntegrityError
+from sqlmodel import select
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from bisheng.approval.domain.models.approval_scenario import (
+    ApprovalFlowDefinition,
+    ApprovalFlowVersion,
+    ApprovalNodeDefinition,
+    ApprovalRouteRule,
+    ApprovalScenario,
+)
 from bisheng.approval.domain.schemas.approval_center_schema import ApprovalScenarioPreset
+from bisheng.core.context.tenant import bypass_tenant_filter
+from bisheng.core.database import get_async_db_session
+
+SYSTEM_FILE_CHANGE_SCENARIO_CODE = "knowledge_space_file_change_request"
+SYSTEM_FILE_CHANGE_FLOW_CODE = "knowledge_space_file_change_default_flow"
+SYSTEM_FILE_CHANGE_APPROVER_SOURCES = [
+    {"type": "knowledge_space_owner"},
+    {"type": "knowledge_space_manager"},
+]
+
+
+async def _ensure_system_file_change_scenario_in_session(
+    *,
+    tenant_id: int,
+    session: AsyncSession,
+) -> ApprovalScenario:
+    try:
+        async with session.begin_nested():
+            with bypass_tenant_filter():
+                existing = (
+                    await session.exec(
+                        select(ApprovalScenario).where(
+                            ApprovalScenario.tenant_id == tenant_id,
+                            ApprovalScenario.scenario_code == SYSTEM_FILE_CHANGE_SCENARIO_CODE,
+                        )
+                    )
+                ).first()
+                if existing is not None:
+                    return existing
+
+                scenario = ApprovalScenario(
+                    tenant_id=tenant_id,
+                    scenario_code=SYSTEM_FILE_CHANGE_SCENARIO_CODE,
+                    scenario_name="知识空间文件变更审批",
+                    enabled=True,
+                )
+                session.add(scenario)
+                await session.flush()
+                await session.refresh(scenario)
+
+                flow = ApprovalFlowDefinition(
+                    tenant_id=tenant_id,
+                    scenario_id=scenario.id,
+                    flow_code=SYSTEM_FILE_CHANGE_FLOW_CODE,
+                    flow_name="默认文件变更审批流程",
+                    is_active=True,
+                )
+                session.add(flow)
+                await session.flush()
+                await session.refresh(flow)
+
+                node_snapshot = {
+                    "node_code": "knowledge_space_owner_manager",
+                    "node_name": "知识空间负责人审批",
+                    "node_order": 1,
+                    "node_mode": "or",
+                    "approver_config": {"sources": SYSTEM_FILE_CHANGE_APPROVER_SOURCES},
+                }
+                version = ApprovalFlowVersion(
+                    tenant_id=tenant_id,
+                    flow_definition_id=flow.id,
+                    version_no=1,
+                    is_active=True,
+                    definition_snapshot={"nodes": [node_snapshot]},
+                )
+                session.add(version)
+                await session.flush()
+                await session.refresh(version)
+
+                session.add(
+                    ApprovalNodeDefinition(
+                        tenant_id=tenant_id,
+                        flow_version_id=version.id,
+                        **node_snapshot,
+                    )
+                )
+                session.add(
+                    ApprovalRouteRule(
+                        tenant_id=tenant_id,
+                        scenario_id=scenario.id,
+                        route_name="默认分支",
+                        route_type="flow",
+                        sort_order=1,
+                        flow_definition_id=flow.id,
+                        match_config={},
+                        enabled=True,
+                    )
+                )
+                await session.flush()
+                return scenario
+    except IntegrityError:
+        # The savepoint owns the failed INSERT. The caller's outer transaction
+        # remains active and must never be rolled back by this helper.
+        with bypass_tenant_filter():
+            existing = (
+                await session.exec(
+                    select(ApprovalScenario)
+                    .where(
+                        ApprovalScenario.tenant_id == tenant_id,
+                        ApprovalScenario.scenario_code == SYSTEM_FILE_CHANGE_SCENARIO_CODE,
+                    )
+                    .with_for_update()
+                )
+            ).first()
+        if existing is None:
+            raise
+        return existing
+
+
+async def ensure_system_file_change_scenario(
+    *,
+    tenant_id: int,
+    session: AsyncSession | None = None,
+) -> ApprovalScenario:
+    """Create the immutable F046 approval bundle once for a tenant."""
+    if session is not None:
+        return await _ensure_system_file_change_scenario_in_session(
+            tenant_id=tenant_id,
+            session=session,
+        )
+
+    async with get_async_db_session() as owned_session:
+        scenario = await ensure_system_file_change_scenario(
+            tenant_id=tenant_id,
+            session=owned_session,
+        )
+        await owned_session.commit()
+        return scenario
 
 
 class ApprovalRegistry:
     def __init__(self) -> None:
         self._presets: dict[str, ApprovalScenarioPreset] = {}
+        self._hidden_preset_codes: set[str] = set()
         self._handlers: dict[str, Any] = {}
 
     @classmethod
@@ -56,13 +196,28 @@ class ApprovalRegistry:
                 approver_source_types=["invited_user"],
             )
         )
+        registry.register_preset(
+            ApprovalScenarioPreset(
+                scenario_code=SYSTEM_FILE_CHANGE_SCENARIO_CODE,
+                scenario_name="知识空间文件变更审批",
+                handler_key=SYSTEM_FILE_CHANGE_SCENARIO_CODE,
+                condition_fields=["applicant_role", "action", "resource_type"],
+                approver_source_types=[
+                    "knowledge_space_owner",
+                    "knowledge_space_manager",
+                ],
+            ),
+            hidden=True,
+        )
         return registry
 
-    def register_preset(self, preset: ApprovalScenarioPreset) -> None:
+    def register_preset(self, preset: ApprovalScenarioPreset, *, hidden: bool = False) -> None:
         self._presets[preset.scenario_code] = preset
+        if hidden:
+            self._hidden_preset_codes.add(preset.scenario_code)
 
     def list_presets(self) -> list[ApprovalScenarioPreset]:
-        return list(self._presets.values())
+        return [preset for code, preset in self._presets.items() if code not in self._hidden_preset_codes]
 
     def get_preset(self, scenario_code: str) -> ApprovalScenarioPreset | None:
         return self._presets.get(scenario_code)

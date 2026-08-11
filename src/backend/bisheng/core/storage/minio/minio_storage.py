@@ -247,7 +247,7 @@ class MinioStorage(BaseStorage, ABC):
             ],
         }
         try:
-            policy = self.minio_client_sync.get_bucket_policy(self.bucket)
+            self.minio_client_sync.get_bucket_policy(self.bucket)
         except Exception as e:
             if str(e).find("NoSuchBucketPolicy") == -1:
                 raise e

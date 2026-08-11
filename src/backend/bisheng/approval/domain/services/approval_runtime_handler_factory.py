@@ -38,6 +38,12 @@ async def build_runtime_handler(scenario_code: str) -> Any:
         )
 
         return ResourceUserInviteScenarioHandler()
+    if scenario_code == "knowledge_space_file_change_request":
+        from bisheng.knowledge.domain.services.knowledge_space_file_change_scenario_handler import (
+            KnowledgeSpaceFileChangeScenarioHandler,
+        )
+
+        return KnowledgeSpaceFileChangeScenarioHandler()
     raise KeyError(f"handler not registered for scenario_code={scenario_code}")
 
 

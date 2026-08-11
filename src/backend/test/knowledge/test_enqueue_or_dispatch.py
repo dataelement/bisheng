@@ -1,6 +1,8 @@
 from unittest.mock import MagicMock
 
-from bisheng.core.context.tenant import get_current_tenant_id
+import pytest
+
+from bisheng.core.context.tenant import current_tenant_id, get_current_tenant_id
 from bisheng.worker.knowledge.scheduler import enqueue_or_dispatch
 
 
@@ -19,6 +21,73 @@ def test_fair_off_uses_direct_apply_async(monkeypatch):
     )
 
     apply_async.assert_called_once_with(args=[42, "pk", "cb"], queue="ocr_celery")
+
+
+def test_direct_dispatch_threads_stable_idempotency_and_tenant_header(monkeypatch):
+    apply_async = MagicMock()
+    monkeypatch.setattr("bisheng.worker.knowledge.scheduler._parse_apply_async", apply_async)
+    monkeypatch.setattr("bisheng.worker.knowledge.scheduler._fair_scheduler_enabled", lambda: False)
+    monkeypatch.setattr("bisheng.worker.knowledge.scheduler.decide_queue", lambda name: "knowledge_celery")
+    token = current_tenant_id.set(42)
+    try:
+        enqueue_or_dispatch(
+            user_id=7,
+            file_id=42,
+            file_name="a.pdf",
+            preview_cache_key="pk",
+            callback_url=None,
+            idempotency_key="f046:81:upload.parse",
+        )
+    finally:
+        current_tenant_id.reset(token)
+
+    apply_async.assert_called_once_with(
+        args=[42, "pk", ""],
+        queue="knowledge_celery",
+        task_id="f046:81:upload.parse",
+        headers={"tenant_id": 42},
+    )
+
+
+def test_idempotent_direct_dispatch_rejects_missing_tenant_context(monkeypatch):
+    apply_async = MagicMock()
+    monkeypatch.setattr("bisheng.worker.knowledge.scheduler._parse_apply_async", apply_async)
+    monkeypatch.setattr("bisheng.worker.knowledge.scheduler._fair_scheduler_enabled", lambda: False)
+    monkeypatch.setattr("bisheng.worker.knowledge.scheduler.decide_queue", lambda name: "knowledge_celery")
+    token = current_tenant_id.set(None)
+    try:
+        with pytest.raises(RuntimeError, match="tenant context"):
+            enqueue_or_dispatch(
+                user_id=7,
+                file_id=42,
+                file_name="a.pdf",
+                preview_cache_key="pk",
+                callback_url=None,
+                idempotency_key="f046:81:upload.parse",
+            )
+    finally:
+        current_tenant_id.reset(token)
+    apply_async.assert_not_called()
+
+
+def test_idempotent_fair_enqueue_rejects_missing_tenant_context(monkeypatch):
+    sched = MagicMock()
+    monkeypatch.setattr("bisheng.worker.knowledge.scheduler.FileScheduler", lambda: sched)
+    monkeypatch.setattr("bisheng.worker.knowledge.scheduler._fair_scheduler_enabled", lambda: True)
+    token = current_tenant_id.set(None)
+    try:
+        with pytest.raises(RuntimeError, match="tenant context"):
+            enqueue_or_dispatch(
+                user_id=7,
+                file_id=42,
+                file_name="a.pdf",
+                preview_cache_key="pk",
+                callback_url=None,
+                idempotency_key="f046:81:upload.parse",
+            )
+    finally:
+        current_tenant_id.reset(token)
+    sched.enqueue_file.assert_not_called()
 
 
 def test_fair_on_calls_enqueue_and_trigger(monkeypatch):
@@ -46,6 +115,43 @@ def test_fair_on_calls_enqueue_and_trigger(monkeypatch):
         callback_url="cb",
         file_ext="pdf",
         tenant_id=get_current_tenant_id(),
+        idempotency_key=None,
+        ttl_seconds=604800,
+    )
+    trigger.assert_called_once_with()
+
+
+def test_fair_on_persists_stable_idempotency_key_with_owning_tenant(monkeypatch):
+    sched = MagicMock()
+    trigger = MagicMock()
+    monkeypatch.setattr("bisheng.worker.knowledge.scheduler.FileScheduler", lambda: sched)
+    monkeypatch.setattr("bisheng.worker.knowledge.scheduler._fair_scheduler_enabled", lambda: True)
+    monkeypatch.setattr(
+        "bisheng.worker.knowledge.scheduler.trigger_dispatch_task",
+        MagicMock(delay=trigger),
+    )
+    token = current_tenant_id.set(42)
+    try:
+        enqueue_or_dispatch(
+            user_id=7,
+            file_id=42,
+            file_name="a.pdf",
+            preview_cache_key="pk",
+            callback_url=None,
+            idempotency_key="f046:81:upload.parse",
+        )
+    finally:
+        current_tenant_id.reset(token)
+
+    sched.enqueue_file.assert_called_once_with(
+        user_id="7",
+        file_id="42",
+        preview_cache_key="pk",
+        callback_url="",
+        file_ext="pdf",
+        tenant_id=42,
+        idempotency_key="f046:81:upload.parse",
+        ttl_seconds=604800,
     )
     trigger.assert_called_once_with()
 

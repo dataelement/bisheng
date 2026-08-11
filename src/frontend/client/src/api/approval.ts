@@ -1,6 +1,11 @@
 // @ts-strict-ignore
 import request from "./request";
-import { FileStatus, FileType, type KnowledgeFile } from "./knowledge";
+import {
+  FileStatus,
+  FileType,
+  type FileChangeApprovalStatus,
+  type KnowledgeFile,
+} from "./knowledge";
 
 interface ApiResponse<T> {
   status_code: number;
@@ -58,6 +63,7 @@ export interface ApprovalTaskDetail extends ApprovalTaskItem {
   detail_snapshot?: Record<string, any>;
   payload_snapshot?: Record<string, any>;
   detail?: Record<string, any>;
+  business_status_projection?: FileChangeBusinessStatusProjection | Record<string, unknown>;
   flow_nodes?: ApprovalFlowNode[];
   tasks?: ApprovalTaskItem[];
   action_logs?: Array<{
@@ -82,6 +88,7 @@ export interface ApprovalInstanceDetail extends ApprovalInstanceItem {
   revoked_keys?: string[];
   payload_snapshot?: Record<string, any>;
   detail_snapshot?: Record<string, any>;
+  business_status_projection?: FileChangeBusinessStatusProjection | Record<string, unknown>;
   tasks?: ApprovalTaskItem[];
   flow_nodes?: ApprovalFlowNode[];
   action_logs?: Array<{
@@ -92,6 +99,33 @@ export interface ApprovalInstanceDetail extends ApprovalInstanceItem {
     detail?: Record<string, any>;
   }>;
 }
+
+export interface FileChangeBusinessStatusProjection {
+  status: FileChangeApprovalStatus;
+  failure_reason?: string | null;
+  request_id?: number;
+  executed_resource_id?: number | null;
+}
+
+export interface BatchFileChangeApprovalItemResult {
+  changeRequestId: number;
+  approvalInstanceId: number;
+  result: "approved" | "invalid" | "failed";
+  latestStatus: string;
+  errorCode?: number;
+  errorMessage?: string;
+  retryable: boolean;
+}
+
+export interface BatchFileChangeApprovalResult {
+  successCount: number;
+  failureCount: number;
+  items: BatchFileChangeApprovalItemResult[];
+}
+
+export type BatchFileChangeApprovalInput =
+  | { approval_instance_ids: number[]; change_request_ids?: never }
+  | { change_request_ids: number[]; approval_instance_ids?: never };
 
 export interface ApprovalSettings {
   approval_enabled: boolean;
@@ -190,6 +224,18 @@ export async function withdrawApprovalInstanceApi(
 ): Promise<ApprovalInstanceDetail> {
   const response = await request.post<ApiResponse<ApprovalInstanceDetail>>(
     `/api/v1/approval/instances/${instanceId}/withdraw`,
+    data,
+  );
+  return unwrapPayload(response);
+}
+
+/** Approve F046 instances by current dynamic approver; each item commits independently. */
+export async function batchApproveFileChangesApi(
+  spaceId: string,
+  data: BatchFileChangeApprovalInput,
+): Promise<BatchFileChangeApprovalResult> {
+  const response = await request.post<ApiResponse<BatchFileChangeApprovalResult>>(
+    `/api/v1/knowledge/space/${spaceId}/file-changes/batch-approve`,
     data,
   );
   return unwrapPayload(response);

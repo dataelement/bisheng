@@ -428,6 +428,45 @@
   "appendTitleTooltipImageAlt": "チャンクに章題を追加する場合の説明図",
   "maxChunkSize": "最大分割長",
   "hfFilterTooltip": "解析時にヘッダーとフッターの内容を自動的にフィルタリングします",
+  "fileChangeApproval": {
+    "departmentHint": "部門ナレッジスペース",
+    "description": "非公開以外のナレッジスペースで、ファイルのアップロードおよびファイルやフォルダーの名前変更、移動、削除に承認を必要とするか設定します。",
+    "empty": "ナレッジスペースが見つかりません",
+    "enabled": "ファイル変更の承認を有効にする",
+    "enabledHint": "無効にすると、現在のテナントではファイル変更に承認が不要になります。",
+    "loadFailed": "承認ポリシーを読み込めませんでした",
+    "loading": "読み込み中...",
+    "nonPrivate": "非公開以外",
+    "normalSpace": "通常のナレッジスペース",
+    "privateBypass": "非公開（承認対象外）",
+    "retry": "再試行",
+    "save": "設定を保存",
+    "saveSuccess": "設定を保存しました",
+    "saveSuccessHint": "更新した承認設定が適用されました。",
+    "scope": {
+      "allSpaces": "すべてのナレッジスペース",
+      "allSpacesHint": "非公開以外のすべてのナレッジスペースで、ファイル変更に承認を必須とします。",
+      "perSpace": "ナレッジスペースごとに設定",
+      "perSpaceHint": "非公開以外のナレッジスペースごとに承認要否を設定します。",
+      "title": "承認範囲"
+    },
+    "searchLabel": "ナレッジスペースを検索",
+    "searchPlaceholder": "ナレッジスペース名で検索",
+    "settingsLoadFailed": "ナレッジスペース設定を読み込めませんでした",
+    "spaceToggleLabel": "ファイル変更に承認を必須にする：",
+    "tab": "ファイル変更の承認設定",
+    "spaces": {
+      "description": "非公開のナレッジスペースは常に承認対象外です。部門ナレッジスペースを非公開にはできません。",
+      "title": "ナレッジスペース設定"
+    },
+    "table": {
+      "kind": "スペース種別",
+      "required": "承認必須",
+      "space": "ナレッジスペース",
+      "visibility": "公開範囲"
+    },
+    "title": "ナレッジスペースのファイル変更承認"
+  },
   "qa": {},
   "legacyFormatNotSupported": "旧形式のファイルはプレビューできません"
 }

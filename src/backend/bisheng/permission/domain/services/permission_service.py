@@ -320,6 +320,7 @@ class PermissionService:
         revokes: list[AuthorizeRevokeItem] = None,
         enforce_fga_success: bool = False,
         recovery_owner: str = "service",
+        dispatch_file_change_approver_reconcile: bool = True,
     ) -> None:
         """Grant or revoke permissions on a resource.
 
@@ -401,6 +402,27 @@ class PermissionService:
             stop_on_failure=enforce_fga_success,
             recovery_owner=recovery_owner,
         )
+
+        if enforce_fga_success and dispatch_file_change_approver_reconcile:
+            try:
+                from bisheng.permission.domain.services.file_change_approver_reconcile_dispatcher import (
+                    dispatch_file_change_approver_reconcile_for_permission_change,
+                )
+
+                resource_tenant_id = await cls.resolve_resource_tenant_id(
+                    object_type,
+                    object_id,
+                )
+                await dispatch_file_change_approver_reconcile_for_permission_change(
+                    resource_type=object_type,
+                    resource_id=object_id,
+                    grants=grants or (),
+                    revokes=revokes or (),
+                    tenant_id=resource_tenant_id,
+                )
+            except Exception:
+                # Beat/lazy reconciliation repairs a missed permission-event dispatch.
+                logger.exception("post-authorize F046 approver reconcile dispatch failed")
 
         # Invalidate cache for directly affected users
         if affected_user_ids:
@@ -611,8 +633,8 @@ class PermissionService:
             deduped.append(op)
         return deduped
 
-    # Regex to parse FGA subject: "user:7", "department:5#member", "user_group:3#member"
-    _SUBJECT_RE = re.compile(r"^(user|department|user_group):(\d+)(#member)?$")
+    # Regex to parse FGA subject usersets supported by the permission model.
+    _SUBJECT_RE = re.compile(r"^(user|department|user_group):(\d+)(#member|#admin)?$")
 
     @classmethod
     async def get_resource_permissions(
@@ -645,6 +667,132 @@ class PermissionService:
         except Exception as e:
             logger.error("Error reading resource permissions: %s", e)
             return []
+
+    @classmethod
+    async def resolve_resource_relation_user_ids_strict(
+        cls,
+        *,
+        tenant_id: int,
+        object_type: str,
+        object_id: str,
+        relations: tuple[str, ...],
+    ) -> set[int]:
+        """Resolve relation subjects to concrete users without outage fallback.
+
+        Unlike :meth:`get_resource_permissions`, this authorization-boundary API
+        never converts OpenFGA or subject-expansion failures into an empty result.
+        Callers may therefore treat an empty set as an authoritative answer.
+        Department grants are already expanded to one tuple per included
+        department when written, so each ``department:id#member`` tuple expands
+        only that exact department here.
+        """
+        from bisheng.core.context.tenant import get_current_tenant_id
+
+        current_tenant_id = get_current_tenant_id()
+        if current_tenant_id is None or int(current_tenant_id) != int(tenant_id):
+            raise RuntimeError("a matching tenant context is required for strict permission resolution")
+        if not object_type or not object_id:
+            raise ValueError("object_type and object_id are required")
+
+        normalized_relations = tuple(dict.fromkeys(str(relation) for relation in relations if relation))
+        if not normalized_relations:
+            raise ValueError("at least one relation is required")
+
+        fga = await cls._aget_fga()
+        if fga is None:
+            raise FGAConnectionError("OpenFGA client is unavailable")
+
+        from bisheng.permission.domain.repositories.grant_subject_query_repository import (
+            GrantSubjectQueryRepository,
+        )
+
+        object_ref = f"{object_type}:{object_id}"
+        subject_repository = GrantSubjectQueryRepository()
+        direct_user_ids: set[int] = set()
+        department_ids: set[int] = set()
+        group_member_ids: set[int] = set()
+        group_admin_ids: set[int] = set()
+        for relation in normalized_relations:
+            tuples = await fga.read_tuples(
+                object=object_ref,
+                relation=relation,
+                consistency="HIGHER_CONSISTENCY",
+            )
+            for item in tuples or []:
+                if item.get("object") != object_ref or item.get("relation") != relation:
+                    raise ValueError("OpenFGA returned a tuple outside the requested relation scope")
+
+                raw_subject = item.get("user", "")
+                match = cls._SUBJECT_RE.fullmatch(raw_subject)
+                if match is None:
+                    raise ValueError(f"Unsupported OpenFGA subject: {raw_subject!r}")
+                subject_type, subject_id_text, member_suffix = match.groups()
+                if (subject_type == "user" and member_suffix is not None) or (
+                    subject_type == "department" and member_suffix != "#member"
+                ) or (subject_type == "user_group" and member_suffix not in {"#member", "#admin"}):
+                    raise ValueError(f"Unsupported OpenFGA subject: {raw_subject!r}")
+
+                subject_id = int(subject_id_text)
+                if subject_type == "user":
+                    direct_user_ids.add(subject_id)
+                elif subject_type == "department":
+                    department_ids.add(subject_id)
+                elif member_suffix == "#admin":
+                    group_admin_ids.add(subject_id)
+                else:
+                    group_member_ids.add(subject_id)
+
+        department_members = (
+            await subject_repository.resolve_exact_department_member_user_ids_batch(
+                department_ids=department_ids,
+                tenant_id=int(tenant_id),
+            )
+            if department_ids
+            else {}
+        )
+        invalid_department_ids = department_ids.difference(department_members)
+        if invalid_department_ids:
+            raise ValueError(
+                f"OpenFGA department subjects are outside tenant {tenant_id}: {sorted(invalid_department_ids)}"
+            )
+
+        group_members = (
+            await subject_repository.resolve_user_group_member_user_ids_batch(
+                group_ids=group_member_ids,
+                tenant_id=int(tenant_id),
+            )
+            if group_member_ids
+            else {}
+        )
+        invalid_group_ids = group_member_ids.difference(group_members)
+        if invalid_group_ids:
+            raise ValueError(f"OpenFGA user-group subjects are outside tenant {tenant_id}: {sorted(invalid_group_ids)}")
+
+        group_admins = (
+            await subject_repository.resolve_user_group_admin_user_ids_batch(
+                group_ids=group_admin_ids,
+                tenant_id=int(tenant_id),
+            )
+            if group_admin_ids
+            else {}
+        )
+        invalid_admin_group_ids = group_admin_ids.difference(group_admins)
+        if invalid_admin_group_ids:
+            raise ValueError(
+                f"OpenFGA user-group subjects are outside tenant {tenant_id}: {sorted(invalid_admin_group_ids)}"
+            )
+
+        user_ids = direct_user_ids.union(
+            *(member_ids for member_ids in department_members.values()),
+            *(member_ids for member_ids in group_members.values()),
+            *(member_ids for member_ids in group_admins.values()),
+        )
+        if not user_ids:
+            return set()
+        return await subject_repository.filter_active_user_ids_in_tenant(
+            user_ids=user_ids,
+            tenant_id=int(tenant_id),
+        )
 
     @classmethod
     async def _enrich_permission_tuples(
@@ -1745,6 +1893,15 @@ class PermissionService:
         return cls._get_fga()
 
     # ── F013 helpers (Tenant tree) ──────────────────────────────
+
+    @classmethod
+    async def resolve_resource_tenant_id(cls, object_type: str, object_id: str) -> int | None:
+        """Public owner API for the authoritative resource tenant id."""
+
+        tenant_id = await cls._resolve_resource_tenant(object_type, object_id)
+        if tenant_id is None or isinstance(tenant_id, bool) or int(tenant_id) <= 0:
+            return None
+        return int(tenant_id)
 
     @classmethod
     async def _resolve_resource_tenant(cls, object_type: str, object_id: str):

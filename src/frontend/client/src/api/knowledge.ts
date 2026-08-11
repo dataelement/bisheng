@@ -199,6 +199,8 @@ export interface KnowledgeFile {
     approvalReason?: string;
     fileEncoding?: string | null;        // mapped from file_encoding
     isPendingApproval?: boolean;
+    /** Present only for the applicant/current approver; inherited locks have no root badge. */
+    fileChangeApproval?: FileChangeApprovalView;
     version_no?: number;          // primary version number; absent for folders / legacy files
     is_multi_version?: boolean;   // true when the document has >=2 versions
     has_similar?: boolean;        // true when similar_status === 1 (pending review)
@@ -277,6 +279,7 @@ interface RawSpaceChild {
     approval_status?: string;
     approval_reason?: string;
     is_pending_approval?: boolean;
+    file_change_approval?: RawFileChangeApprovalView | null;
 }
 
 /** Raw file record returned by addFiles / knowledge file APIs */
@@ -305,15 +308,224 @@ interface RawKnowledgeFile {
     tags?: Array<{ id: number; name: string }>;
 }
 
-/** Upload API response */
+/** Legacy upload response plus the opaque knowledge-space stage metadata. */
 export interface UploadFileResponse {
-    file_name: string;
     file_path: string;
-    flowId: string | null;
-    relative_path: string | null;
-    repeat: boolean;
-    repeat_file_name: string | null;
-    repeat_update_time: string | null;
+    upload_id?: string;
+    space_id?: number;
+    file_name: string;
+    file_size: number;
+    content_hash?: string | null;
+    state: "uploaded" | "attached" | "consumed" | "cleanup_pending" | "cleaned";
+    expire_at?: string;
+    create_time?: string | null;
+}
+
+export type FileChangeDecision = "direct" | "pending" | "invalid";
+export type FileChangeAction = "upload" | "rename" | "move" | "delete";
+export type FileChangeResourceType = "staged_upload" | "file" | "folder";
+export type FileChangeApprovalStatus =
+    | "pending"
+    | "approver_empty"
+    | "exception"
+    | "approved"
+    | "rejected"
+    | "withdrawn"
+    | "cancelled"
+    | "executing"
+    | "parsing"
+    | "parse_failed"
+    | "execute_failed"
+    | "executed"
+    | "published";
+
+export interface FileMutationItemResult {
+    inputId: string;
+    resourceType: "file" | "folder";
+    decision: FileChangeDecision;
+    resource?: KnowledgeFile;
+    approvalInstanceId?: number;
+    changeRequestId?: number;
+    errorCode?: number;
+    errorMessage?: string;
+}
+
+export interface FileMutationResult {
+    decision: FileChangeDecision;
+    resource?: KnowledgeFile;
+    approvalInstanceId?: number;
+    changeRequestId?: number;
+    errorCode?: number;
+    errorMessage?: string;
+}
+
+export interface ResourceMutationItemResult {
+    id: number;
+    type: "file" | "folder";
+    resource?: KnowledgeFile;
+    approvalInstanceId?: number;
+    changeRequestId?: number;
+    errorCode?: number;
+    errorMessage?: string;
+}
+
+export interface FileBatchMutationResult {
+    completed: ResourceMutationItemResult[];
+    pending: ResourceMutationItemResult[];
+    invalid: ResourceMutationItemResult[];
+}
+
+export interface FileChangeApprovalView {
+    status: "pending" | "exception" | "approved" | "executing" | "execute_failed";
+    action: Exclude<FileChangeAction, "upload">;
+    instanceId: number;
+    requestId: number;
+    canApprove: boolean;
+    inherited: boolean;
+    rootResourceId: number;
+}
+
+export interface FileChangeActionDetail {
+    oldName?: string;
+    newName?: string;
+    sourcePath?: string;
+    targetPath?: string;
+    sourceParentId?: number;
+    targetSpaceId?: number;
+    targetParentId?: number;
+    relativePath?: string;
+}
+
+export interface FileChangeDetail {
+    requestId: number;
+    spaceId: number;
+    action: FileChangeAction;
+    resourceType: FileChangeResourceType;
+    resourceId?: number;
+    uploadId?: string;
+    resourceName: string;
+    fileSize?: number;
+    contentHash?: string;
+    applicantUserId: number;
+    applicantUserName?: string;
+    approvalInstanceId?: number;
+    status: FileChangeApprovalStatus;
+    actionDetail: FileChangeActionDetail;
+    canApprove: boolean;
+    failureReason?: string;
+    createTime?: string;
+    updateTime?: string;
+}
+
+export interface PendingUploadFileChange {
+    requestId: number;
+    approvalInstanceId?: number;
+    uploadId: string;
+    fileName: string;
+    fileSize: number;
+    contentHash?: string;
+    applicantUserId: number;
+    applicantUserName?: string;
+    status: FileChangeApprovalStatus;
+    canApprove: boolean;
+    failureReason?: string;
+    createTime?: string;
+    updateTime?: string;
+}
+
+export interface FileChangeCursorPage<T> {
+    data: T[];
+    pageSize: number;
+    hasMore: boolean;
+    nextCursor?: string;
+}
+
+interface RawFileMutationItemResult {
+    input_id: string;
+    resource_type: "file" | "folder";
+    decision: FileChangeDecision;
+    resource?: RawSpaceChild | null;
+    approval_instance_id?: number | null;
+    change_request_id?: number | null;
+    error_code?: number | null;
+    error_message?: string | null;
+}
+
+interface RawFileMutationResult {
+    decision: FileChangeDecision;
+    resource?: RawSpaceChild | null;
+    approval_instance_id?: number | null;
+    change_request_id?: number | null;
+    error_code?: number | null;
+    error_message?: string | null;
+}
+
+interface RawFileChangeApprovalView {
+    status: FileChangeApprovalView["status"];
+    action: FileChangeApprovalView["action"];
+    instance_id: number;
+    request_id: number;
+    can_approve: boolean;
+    inherited?: boolean;
+    root_resource_id: number;
+}
+
+interface RawResourceMutationItemResult {
+    id: number;
+    type: "file" | "folder";
+    resource?: RawSpaceChild | null;
+    approval_instance_id?: number | null;
+    change_request_id?: number | null;
+    error_code?: number | null;
+    error_message?: string | null;
+}
+
+interface RawFileChangeActionDetail {
+    old_name?: string | null;
+    new_name?: string | null;
+    source_path?: string | null;
+    target_path?: string | null;
+    source_parent_id?: number | null;
+    target_space_id?: number | null;
+    target_parent_id?: number | null;
+    relative_path?: string | null;
+}
+
+interface RawFileChangeDetail {
+    request_id: number;
+    space_id: number;
+    action: FileChangeAction;
+    resource_type: FileChangeResourceType;
+    resource_id?: number | null;
+    upload_id?: string | null;
+    resource_name: string;
+    file_size?: number | null;
+    content_hash?: string | null;
+    applicant_user_id: number;
+    applicant_user_name?: string | null;
+    approval_instance_id?: number | null;
+    status: FileChangeApprovalStatus;
+    action_detail?: RawFileChangeActionDetail;
+    can_approve?: boolean;
+    failure_reason?: string | null;
+    create_time?: string | null;
+    update_time?: string | null;
+}
+
+interface RawPendingUploadFileChange {
+    request_id: number;
+    approval_instance_id?: number | null;
+    upload_id: string;
+    file_name: string;
+    file_size: number;
+    content_hash?: string | null;
+    applicant_user_id: number;
+    applicant_user_name?: string | null;
+    status: FileChangeApprovalStatus;
+    can_approve?: boolean;
+    failure_reason?: string | null;
+    create_time?: string | null;
+    update_time?: string | null;
 }
 
 // ─────────────────────────────────────────────
@@ -624,6 +836,19 @@ function mapChild(raw: any, spaceId: string): KnowledgeFile {
                 ? statusVal.toLowerCase() as FileStatus
                 : undefined;
 
+    const rawFileChangeApproval = raw?.file_change_approval as RawFileChangeApprovalView | undefined;
+    const fileChangeApproval: FileChangeApprovalView | undefined = rawFileChangeApproval
+        ? {
+            status: rawFileChangeApproval.status,
+            action: rawFileChangeApproval.action,
+            instanceId: rawFileChangeApproval.instance_id,
+            requestId: rawFileChangeApproval.request_id,
+            canApprove: rawFileChangeApproval.can_approve,
+            inherited: Boolean(rawFileChangeApproval.inherited),
+            rootResourceId: rawFileChangeApproval.root_resource_id,
+        }
+        : undefined;
+
     return {
         id: idVal !== undefined && idVal !== null ? String(idVal) : "",
         name: String(nameVal),
@@ -648,6 +873,7 @@ function mapChild(raw: any, spaceId: string): KnowledgeFile {
         approvalStatus: raw?.approval_status ?? undefined,
         approvalReason: raw?.approval_reason ?? undefined,
         isPendingApproval: Boolean(raw?.is_pending_approval),
+        fileChangeApproval,
         fileEncoding: raw?.file_encoding ?? null,
         version_no: raw?.version_no !== undefined && raw?.version_no !== null ? Number(raw.version_no) : undefined,
         is_multi_version: Boolean(raw?.is_multi_version),
@@ -1411,36 +1637,35 @@ export async function renameFolderApi(
     space_id: string,
     folder_id: string,
     name: string
-): Promise<void> {
+): Promise<FileMutationResult> {
     const res = await request.put(
         `/api/v1/knowledge/space/${space_id}/folders/${folder_id}`,
         { name }
-    ) as ApiResponse<RawSpaceChild> & { message?: string; msg?: string };
+    ) as ApiResponse<RawFileMutationResult> & { message?: string; msg?: string };
     if (res?.status_code !== undefined && res.status_code !== 200) {
         throw new Error(res.status_message || res.message || res.msg || "rename folder failed");
     }
+    return mapFileMutation(res.data, space_id);
 }
 
 /**
  * Delete a folder (recursively deletes all children)
  */
-export async function deleteFolderApi(space_id: string, folder_id: string): Promise<void> {
+export async function deleteFolderApi(space_id: string, folder_id: string): Promise<FileMutationResult> {
     const res = await request.delete(
         `/api/v1/knowledge/space/${space_id}/folders/${folder_id}`
-    ) as ApiResponse<null> & { message?: string; msg?: string };
+    ) as ApiResponse<RawFileMutationResult> & { message?: string; msg?: string };
     if (res?.status_code !== undefined && res.status_code !== 200) {
         throw new Error(res.status_message || res.message || res.msg || "delete folder failed");
     }
+    return mapFileMutation(res.data, space_id);
 }
 
 // ─────────────────────────────────────────────
 // API functions — File management
 // ─────────────────────────────────────────────
 
-/**
- * Step 1: Upload a file to the server and get back its server path
- * Returns the upload response containing file_path to use in addFilesApi
- */
+/** Upload a file into a server-owned stage and return only its opaque id and metadata. */
 export async function uploadFileToServerApi(
     space_id: string,
     file: File,
@@ -1464,37 +1689,71 @@ export async function uploadFileToServerApi(
         (err as any).errorData = res.data;
         throw err;
     }
-    if (!res?.data?.file_path) {
-        throw new Error("upload file failed: missing file path");
+    if (!res?.data?.upload_id) {
+        throw new Error("upload file failed: missing upload id");
     }
     return res.data;
 }
 
-/**
- * Step 2: Register uploaded file paths into a knowledge space
- */
+function mapFileMutationItem(raw: RawFileMutationItemResult, spaceId: string): FileMutationItemResult {
+    const resource = raw.resource ? mapChild(raw.resource, spaceId) : undefined;
+    if (resource && raw.resource?.status === 3) {
+        (resource as KnowledgeFile & { _raw?: RawSpaceChild })._raw = raw.resource;
+    }
+    return {
+        inputId: raw.input_id,
+        resourceType: raw.resource_type,
+        decision: raw.decision,
+        resource,
+        approvalInstanceId: raw.approval_instance_id ?? undefined,
+        changeRequestId: raw.change_request_id ?? undefined,
+        errorCode: raw.error_code ?? undefined,
+        errorMessage: raw.error_message ?? undefined,
+    };
+}
+
+function mapFileMutation(raw: RawFileMutationResult, spaceId: string): FileMutationResult {
+    return {
+        decision: raw.decision,
+        resource: raw.resource ? mapChild(raw.resource, spaceId) : undefined,
+        approvalInstanceId: raw.approval_instance_id ?? undefined,
+        changeRequestId: raw.change_request_id ?? undefined,
+        errorCode: raw.error_code ?? undefined,
+        errorMessage: raw.error_message ?? undefined,
+    };
+}
+
+function mapResourceMutationItem(
+    raw: RawResourceMutationItemResult,
+    spaceId: string,
+): ResourceMutationItemResult {
+    return {
+        id: raw.id,
+        type: raw.type,
+        resource: raw.resource ? mapChild(raw.resource, spaceId) : undefined,
+        approvalInstanceId: raw.approval_instance_id ?? undefined,
+        changeRequestId: raw.change_request_id ?? undefined,
+        errorCode: raw.error_code ?? undefined,
+        errorMessage: raw.error_message ?? undefined,
+    };
+}
+
+/** Attach opaque upload stages to direct or approval-backed file mutations. */
 export async function addFilesApi(
     space_id: string,
-    data: { file_path: string[]; parent_id?: number | null }
-): Promise<KnowledgeFile[]> {
+    data: { upload_ids: string[]; parent_id?: number | null }
+): Promise<FileMutationItemResult[]> {
     const res = await request.post(
         `/api/v1/knowledge/space/${space_id}/files`,
         data,
         { showError: true }
-    ) as ApiResponse<RawSpaceChild[]> & { message?: string; msg?: string };
+    ) as ApiResponse<RawFileMutationItemResult[]> & { message?: string; msg?: string };
     if (res?.status_code !== undefined && res.status_code !== 200) {
         throw new Error(res.status_message || res.message || res.msg || "register files failed");
     }
-    const payload: any = res?.data ?? {};
-    const list = extractList<RawSpaceChild>(payload);
-    return list.map(raw => {
-        const file = mapChild(raw, space_id);
-        // Preserve raw object for status 3 (duplicate) so retry API can use it
-        if (raw?.status === 3) {
-            (file as any)._raw = raw;
-        }
-        return file;
-    });
+    return extractList<RawFileMutationItemResult>(res?.data).map((raw) =>
+        mapFileMutationItem(raw, space_id)
+    );
 }
 
 export async function importWebLinkApi(
@@ -1518,11 +1777,10 @@ export async function importWebLinkApi(
     return mapChild(res.data, space_id);
 }
 
-/** One file of a folder upload: uploaded body path + its path inside the picked folder. */
+/** One staged file and its path inside the picked folder. */
 export interface FolderUploadItemPayload {
-    file_path: string;
+    upload_id: string;
     relative_path: string;
-    size: number;
 }
 
 /**
@@ -1538,23 +1796,144 @@ export interface FolderUploadItemPayload {
 export async function uploadFolderApi(
     space_id: string,
     data: { parent_id?: number | null; items: FolderUploadItemPayload[] }
-): Promise<KnowledgeFile[]> {
+): Promise<FileMutationItemResult[]> {
     const res = await request.post(
         `/api/v1/knowledge/space/${space_id}/folders/upload`,
         data,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         { skip403Redirect: true } as any,
-    ) as ApiResponse<RawSpaceChild[]>;
-    const payload: any = res?.data ?? {};
-    const list = extractList<RawSpaceChild>(payload);
-    return list.map(raw => {
-        const file = mapChild(raw, space_id);
-        // Preserve raw object for status 3 (duplicate) so retry API can use it
-        if (raw?.status === 3) {
-            (file as any)._raw = raw;
-        }
-        return file;
+    ) as ApiResponse<RawFileMutationItemResult[]>;
+    return extractList<RawFileMutationItemResult>(res?.data).map((raw) =>
+        mapFileMutationItem(raw, space_id)
+    );
+}
+
+function mapFileChangeActionDetail(raw: RawFileChangeActionDetail = {}): FileChangeActionDetail {
+    return {
+        oldName: raw.old_name ?? undefined,
+        newName: raw.new_name ?? undefined,
+        sourcePath: raw.source_path ?? undefined,
+        targetPath: raw.target_path ?? undefined,
+        sourceParentId: raw.source_parent_id ?? undefined,
+        targetSpaceId: raw.target_space_id ?? undefined,
+        targetParentId: raw.target_parent_id ?? undefined,
+        relativePath: raw.relative_path ?? undefined,
+    };
+}
+
+function mapFileChangeDetail(raw: RawFileChangeDetail): FileChangeDetail {
+    return {
+        requestId: raw.request_id,
+        spaceId: raw.space_id,
+        action: raw.action,
+        resourceType: raw.resource_type,
+        resourceId: raw.resource_id ?? undefined,
+        uploadId: raw.upload_id ?? undefined,
+        resourceName: raw.resource_name,
+        fileSize: raw.file_size ?? undefined,
+        contentHash: raw.content_hash ?? undefined,
+        applicantUserId: raw.applicant_user_id,
+        applicantUserName: raw.applicant_user_name ?? undefined,
+        approvalInstanceId: raw.approval_instance_id ?? undefined,
+        status: raw.status,
+        actionDetail: mapFileChangeActionDetail(raw.action_detail),
+        canApprove: Boolean(raw.can_approve),
+        failureReason: raw.failure_reason ?? undefined,
+        createTime: raw.create_time ?? undefined,
+        updateTime: raw.update_time ?? undefined,
+    };
+}
+
+function mapPendingUploadFileChange(raw: RawPendingUploadFileChange): PendingUploadFileChange {
+    return {
+        requestId: raw.request_id,
+        approvalInstanceId: raw.approval_instance_id ?? undefined,
+        uploadId: raw.upload_id,
+        fileName: raw.file_name,
+        fileSize: raw.file_size,
+        contentHash: raw.content_hash ?? undefined,
+        applicantUserId: raw.applicant_user_id,
+        applicantUserName: raw.applicant_user_name ?? undefined,
+        status: raw.status,
+        canApprove: Boolean(raw.can_approve),
+        failureReason: raw.failure_reason ?? undefined,
+        createTime: raw.create_time ?? undefined,
+        updateTime: raw.update_time ?? undefined,
+    };
+}
+
+export async function listPendingUploadFileChangesApi(
+    spaceId: string,
+    params: { statuses?: FileChangeApprovalStatus[]; cursor?: string; pageSize?: number } = {},
+): Promise<FileChangeCursorPage<PendingUploadFileChange>> {
+    const res = await request.get<ApiResponse<{
+        data: RawPendingUploadFileChange[];
+        page_size: number;
+        has_more: boolean;
+        next_cursor?: string | null;
+    }>>(`/api/v1/knowledge/space/${spaceId}/file-changes/uploads`, {
+        params: {
+            status: params.statuses,
+            cursor: params.cursor,
+            page_size: params.pageSize,
+        },
+        paramsSerializer: request.paramsSerializer,
     });
+    const payload = res.data;
+    return {
+        data: extractList<RawPendingUploadFileChange>(payload?.data).map(mapPendingUploadFileChange),
+        pageSize: Number(payload?.page_size ?? params.pageSize ?? 20),
+        hasMore: Boolean(payload?.has_more),
+        nextCursor: payload?.next_cursor ?? undefined,
+    };
+}
+
+export async function getFileChangeDetailApi(
+    spaceId: string,
+    requestId: number,
+): Promise<FileChangeDetail> {
+    const res = await request.get<ApiResponse<RawFileChangeDetail>>(
+        `/api/v1/knowledge/space/${spaceId}/file-changes/${requestId}`,
+    );
+    return mapFileChangeDetail(res.data);
+}
+
+export interface FileChangePreview {
+    previewUrl: string;
+    originalUrl?: string;
+}
+
+export async function getFileChangePreviewApi(
+    spaceId: string,
+    requestId: number,
+): Promise<FileChangePreview> {
+    const res = await request.get<ApiResponse<{ preview_url: string; original_url?: string }>>(
+        `/api/v1/knowledge/space/${spaceId}/file-changes/${requestId}/preview`,
+    );
+    return {
+        previewUrl: res.data.preview_url,
+        originalUrl: res.data.original_url,
+    };
+}
+
+export async function retryFileChangeIngestApi(
+    spaceId: string,
+    requestId: number,
+): Promise<FileChangeDetail> {
+    const res = await request.post(
+        `/api/v1/knowledge/space/${spaceId}/file-changes/${requestId}/retry-ingest`,
+    ) as ApiResponse<RawFileChangeDetail>;
+    return mapFileChangeDetail(res.data);
+}
+
+export async function cleanupUploadFileChangeApi(
+    spaceId: string,
+    requestId: number,
+): Promise<FileChangeDetail> {
+    const res = await request.delete<ApiResponse<RawFileChangeDetail>>(
+        `/api/v1/knowledge/space/${spaceId}/file-changes/${requestId}`,
+    );
+    return mapFileChangeDetail(res.data);
 }
 
 /**
@@ -1586,15 +1965,28 @@ export async function renameFileApi(
     space_id: string,
     file_id: string,
     name: string
-): Promise<void> {
-    return request.put(`/api/v1/knowledge/space/${space_id}/files/${file_id}`, { name });
+): Promise<FileMutationResult> {
+    const res = await request.put(
+        `/api/v1/knowledge/space/${space_id}/files/${file_id}`,
+        { name },
+    ) as ApiResponse<RawFileMutationResult> & { message?: string; msg?: string };
+    if (res?.status_code !== undefined && res.status_code !== 200) {
+        throw new Error(res.status_message || res.message || res.msg || "rename file failed");
+    }
+    return mapFileMutation(res.data, space_id);
 }
 
 /**
  * Delete a single file
  */
-export async function deleteFileApi(space_id: string, file_id: string): Promise<void> {
-    return request.delete(`/api/v1/knowledge/space/${space_id}/files/${file_id}`);
+export async function deleteFileApi(space_id: string, file_id: string): Promise<FileMutationResult> {
+    const res = await request.delete<ApiResponse<RawFileMutationResult> & { message?: string; msg?: string }>(
+        `/api/v1/knowledge/space/${space_id}/files/${file_id}`,
+    );
+    if (res?.status_code !== undefined && res.status_code !== 200) {
+        throw new Error(res.status_message || res.message || res.msg || "delete file failed");
+    }
+    return mapFileMutation(res.data, space_id);
 }
 
 // ─────────────────────────────────────────────
@@ -1610,8 +2002,9 @@ export interface MovedEntry {
     id: number;
     type: "file" | "folder";
     /** Source parent folder id (null = space root); used for same-space undo. */
-    old_parent_id: number | null;
-    cross_space: boolean;
+    old_parent_id?: number | null;
+    cross_space?: boolean;
+    resource?: KnowledgeFile;
 }
 
 /** Reason a single item could not be moved (per-item, batch-safe). */
@@ -1626,12 +2019,15 @@ export type MoveInvalidReason =
 export interface InvalidEntry {
     id: number;
     type: "file" | "folder";
-    name: string;
-    reason: MoveInvalidReason;
+    name?: string;
+    reason?: MoveInvalidReason;
+    errorCode?: number;
+    errorMessage?: string;
 }
 
 export interface MoveResult {
     moved: MovedEntry[];
+    pending: ResourceMutationItemResult[];
     invalid: InvalidEntry[];
 }
 
@@ -1655,7 +2051,11 @@ export async function moveFilesApi(
         target_folder_id:
             params.target_folder_id != null ? Number(params.target_folder_id) : null,
         skip_invalid: params.skip_invalid ?? false,
-    })) as ApiResponse<MoveResult> & { message?: string; msg?: string };
+    })) as ApiResponse<{
+        moved: Array<RawResourceMutationItemResult & Partial<MovedEntry>>;
+        pending: RawResourceMutationItemResult[];
+        invalid: Array<RawResourceMutationItemResult & Partial<InvalidEntry>>;
+    }> & { message?: string; msg?: string };
     if (res?.status_code !== undefined && res.status_code !== 200) {
         const err = new Error(
             res.status_message || res.message || res.msg || "move failed"
@@ -1663,7 +2063,19 @@ export async function moveFilesApi(
         err.status_code = res.status_code;
         throw err;
     }
-    return res.data;
+    return {
+        moved: (res.data?.moved ?? []).map((item) => ({
+            ...mapResourceMutationItem(item, space_id),
+            old_parent_id: item.old_parent_id,
+            cross_space: item.cross_space,
+        })),
+        pending: (res.data?.pending ?? []).map((item) => mapResourceMutationItem(item, space_id)),
+        invalid: (res.data?.invalid ?? []).map((item) => ({
+            ...mapResourceMutationItem(item, space_id),
+            name: item.name,
+            reason: item.reason,
+        })),
+    };
 }
 
 // ─────────────────────────────────────────────
@@ -1676,14 +2088,45 @@ export async function moveFilesApi(
 export async function batchDeleteApi(
     space_id: string,
     data: { file_ids?: number[]; folder_ids?: number[] }
-): Promise<void> {
+): Promise<FileBatchMutationResult> {
     const res = await request.post(
         `/api/v1/knowledge/space/${space_id}/files/batch-delete`,
         data
-    ) as ApiResponse<null> & { message?: string; msg?: string };
+    ) as ApiResponse<{
+        deleted: RawResourceMutationItemResult[];
+        pending: RawResourceMutationItemResult[];
+        invalid: RawResourceMutationItemResult[];
+    }> & { message?: string; msg?: string };
     if (res?.status_code !== undefined && res.status_code !== 200) {
         throw new Error(res.status_message || res.message || res.msg || "batch delete failed");
     }
+    return {
+        completed: (res.data?.deleted ?? []).map((item) => mapResourceMutationItem(item, space_id)),
+        pending: (res.data?.pending ?? []).map((item) => mapResourceMutationItem(item, space_id)),
+        invalid: (res.data?.invalid ?? []).map((item) => mapResourceMutationItem(item, space_id)),
+    };
+}
+
+export async function batchRenameApi(
+    spaceId: string,
+    data: { items: Array<{ id: number; type: "file" | "folder"; name: string }> },
+): Promise<FileBatchMutationResult> {
+    const res = await request.post(
+        `/api/v1/knowledge/space/${spaceId}/files/batch-rename`,
+        data,
+    ) as ApiResponse<{
+        renamed: RawResourceMutationItemResult[];
+        pending: RawResourceMutationItemResult[];
+        invalid: RawResourceMutationItemResult[];
+    }> & { message?: string; msg?: string };
+    if (res?.status_code !== undefined && res.status_code !== 200) {
+        throw new Error(res.status_message || res.message || res.msg || "batch rename failed");
+    }
+    return {
+        completed: (res.data?.renamed ?? []).map((item) => mapResourceMutationItem(item, spaceId)),
+        pending: (res.data?.pending ?? []).map((item) => mapResourceMutationItem(item, spaceId)),
+        invalid: (res.data?.invalid ?? []).map((item) => mapResourceMutationItem(item, spaceId)),
+    };
 }
 
 /**

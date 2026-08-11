@@ -37,6 +37,7 @@ from bisheng.approval.domain.repositories.approval_instance_repository import Ap
 from bisheng.approval.domain.repositories.approval_scenario_repository import ApprovalScenarioRepository
 from bisheng.approval.domain.services.approval_center_service import ApprovalCenterService
 from bisheng.common.errcode.approval import ApprovalRequestPermissionDeniedError
+from bisheng.core.context.tenant import current_tenant_id
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -83,6 +84,11 @@ async def repos(db_engine, monkeypatch):
         "bisheng.approval.domain.repositories.approval_instance_repository.get_async_db_session",
         _factory,
     )
+    tenant_token = current_tenant_id.set(1)
+    try:
+        yield
+    finally:
+        current_tenant_id.reset(tenant_token)
 
 
 # ---------------------------------------------------------------------------
@@ -310,7 +316,11 @@ async def test_last_node_approval_finalizes_instance(repos):
 
     with (
         _service_infra_mocked(),
-        patch.object(ApprovalCenterService, "_dispatch_outbox", side_effect=lambda oid: dispatched.append(oid)),
+        patch.object(
+            ApprovalCenterService,
+            "_dispatch_outbox",
+            side_effect=lambda oid, _tenant_id: dispatched.append(oid),
+        ),
     ):
         service = ApprovalCenterService(instance_repository=ApprovalInstanceRepository)
         await service.decide_task(

@@ -100,6 +100,10 @@ class KnowledgeSpaceChatService:
         svc = self._permission_service()
         file_record = await svc._require_file_relation(file_id, "can_read", space_id=space_id)
         await svc._require_permission_id("knowledge_file", file_id, "view_file", space_id=space_id)
+        await self._visibility_service().require_file_change_visible(
+            space_id=space_id,
+            resource_id=file_id,
+        )
         return file_record
 
     @staticmethod
@@ -537,7 +541,12 @@ class KnowledgeSpaceChatService:
                 max_content=max_content,
                 sort_by_source_and_index=True,
             )
-            docs: list[Document] = await retriever_tool.ainvoke(query)
+            projected_query = await visibility.project_mutation_retrieval_query(
+                space_id=space.id,
+                query=query,
+            )
+            docs: list[Document] = await retriever_tool.ainvoke(projected_query)
+            docs = await visibility.project_mutation_retrieval_names(space_id=space.id, documents=docs)
 
             unique_file_ids = {
                 int(d.metadata.get("document_id"))
@@ -940,22 +949,17 @@ class KnowledgeSpaceChatService:
         if tag_names and not target_file_ids:
             return []
 
-        milvus_kwargs, es_kwargs = await self._build_folder_search_kwargs(kb_id, target_file_ids)
-        if milvus_kwargs is None and es_kwargs is None:
-            return []
-
-        milvus_vector = await KnowledgeRag.init_knowledge_milvus_vectorstore(self.login_user.user_id, knowledge=space)
-        es_vector = await KnowledgeRag.init_knowledge_es_vectorstore(knowledge=space)
-        vector_retriever = milvus_vector.as_retriever(search_kwargs=milvus_kwargs)
-        es_retriever = es_vector.as_retriever(search_kwargs=es_kwargs)
-
-        retriever_tool = KnowledgeRetrieverTool(
-            vector_retriever=vector_retriever,
-            elastic_retriever=es_retriever,
+        # F030 OpenAPI retrieval must share the exact same two-layer visibility
+        # path as knowledge-space chat. Besides ReBAC and primary-version
+        # filtering, this composes F046's unpublished/deletion hard deny at
+        # both index and result layers. Keeping the final post-filter is
+        # essential because stale Milvus/ES chunks can outlive a DB cutover.
+        docs = await self._retrieve_and_filter(
+            space=space,
+            query=query,
+            candidate_file_ids=target_file_ids,
             max_content=max_content,
-            sort_by_source_and_index=False,
         )
-        docs: list[Document] = await retriever_tool.ainvoke(query)
         return [(kb_id, d) for d in docs]
 
     async def _aretrieve_chunks_dispatch(

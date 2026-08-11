@@ -38,6 +38,7 @@ class ApprovalExceptionType:
 class ApprovalOutboxStatus:
     PENDING = "pending"
     PROCESSING = "processing"
+    DEFERRED = "deferred"
     SUCCESS = "success"
     FAILED = "failed"
 
@@ -143,6 +144,9 @@ class ApprovalOutboxBase(SQLModelSerializable):
     retry_count: int = Field(default=0, sa_column=Column(Integer, nullable=False, server_default=text("0")))
     payload_snapshot: dict = Field(default_factory=dict, sa_column=Column(JsonType, nullable=False))
     error_summary: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    execution_token: str | None = Field(default=None, sa_column=Column(String(64), nullable=True))
+    deferred_deadline: datetime | None = Field(default=None, sa_column=Column(DateTime, nullable=True))
+    heartbeat_at: datetime | None = Field(default=None, sa_column=Column(DateTime, nullable=True))
     create_time: datetime | None = Field(
         default=None, sa_column=Column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP"))
     )

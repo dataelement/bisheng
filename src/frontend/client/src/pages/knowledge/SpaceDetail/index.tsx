@@ -53,6 +53,8 @@ import { VersionManagementDialog } from "./VersionManagementDialog";
 import { VersionHistorySheet } from "./VersionHistorySheet";
 import { SimilarDocumentDialog } from "./SimilarDocumentDialog";
 import { SelectionPathBreadcrumb } from "./SelectionPathBreadcrumb";
+import { PendingFileChangesPanel } from "./PendingFileChangesPanel";
+import { FileChangeApprovalDetail } from "./FileChangeApprovalDetail";
 import { canOpenPermissionDialog, checkPermission } from "~/api/permission";
 import {
     hasKnowledgeSpacePermission,
@@ -71,6 +73,7 @@ import {
 } from "~/components/SidebarListMoreMenu";
 import { cn, getFullWidthLength } from "~/utils";
 import { knowledgeUploadCapabilities } from "../knowledgeUploadCapabilities";
+import { getFileChangeLockState, useFileChangeApproval } from "../hooks/useFileChangeApproval";
 
 interface KnowledgeSpaceContentProps {
     space: KnowledgeSpace;
@@ -821,6 +824,39 @@ export function KnowledgeSpaceContent({
             dispatchKnowledgeSpaceFilesRefresh();
         },
     });
+    const fileChangeApproval = useFileChangeApproval({
+        spaceId: space.id,
+        onFormalFilesRefresh: () => onDeleteFile(""),
+    });
+    const handleFileChangePreview = async (requestId: number) => {
+        try {
+            const result = await fileChangeApproval.preview(requestId);
+            window.open(result.previewUrl, "_blank", "noopener,noreferrer");
+        } catch {
+            showToast({ message: localize("com_knowledge.file_change_preview_failed"), status: "error" });
+        }
+    };
+    const handleFileChangeCleanup = async (requestId: number) => {
+        try {
+            await fileChangeApproval.cleanup(requestId);
+        } catch {
+            showToast({ message: localize("com_approval_toast_failed"), status: "error" });
+        }
+    };
+    const handleFileChangeRetry = async (requestId: number) => {
+        try {
+            await fileChangeApproval.retryIngest(requestId);
+        } catch {
+            showToast({ message: localize("com_knowledge.retry_failed"), status: "error" });
+        }
+    };
+    const handleBatchApproveFileChanges = async (requestIds: number[]) => {
+        try {
+            await fileChangeApproval.batchApprove(requestIds);
+        } catch {
+            showToast({ message: localize("com_approval_toast_failed"), status: "error" });
+        }
+    };
     const handleBatchMove = () => {
         const selected = displayFiles.filter((f) => selectedFiles.has(f.id));
         // Uploading placeholders have no backend id yet → can't be moved. Surface
@@ -1020,10 +1056,11 @@ export function KnowledgeSpaceContent({
     // move flow warns about them and lets the user move the rest (handleBatchMove).
     const canBatchMove =
         selectedList.length > 0 &&
+        selectedList.every((file) => !getFileChangeLockState(file).locked) &&
         (!hasFoldersSelected || canMoveFolder) &&
         (!selectionHasFile || canMoveFile);
     const canBatchDelete = selectedList.length > 0 && selectedList.every((file) =>
-        deleteEntryIds.has(file.id)
+        deleteEntryIds.has(file.id) && !getFileChangeLockState(file).locked
     );
     const canBatchDownload = selectedList.length > 0 && selectedList.every((file) =>
         downloadEntryIds.has(file.id)
@@ -1345,6 +1382,23 @@ export function KnowledgeSpaceContent({
             </div>
             )}
 
+            <PendingFileChangesPanel
+                items={fileChangeApproval.pendingItems}
+                loading={fileChangeApproval.pendingLoading}
+                statusFilter={fileChangeApproval.statusFilter}
+                onStatusFilterChange={fileChangeApproval.setStatusFilter}
+                onOpenDetail={fileChangeApproval.openDetail}
+                onPreview={(requestId) => { void handleFileChangePreview(requestId); }}
+                onCleanup={(requestId) => { void handleFileChangeCleanup(requestId); }}
+                onRetry={(requestId) => { void handleFileChangeRetry(requestId); }}
+                onBatchApprove={(requestIds) => { void handleBatchApproveFileChanges(requestIds); }}
+                batchApproving={fileChangeApproval.batchApproving}
+                batchResult={fileChangeApproval.batchApprovalResult}
+                hasMore={fileChangeApproval.pendingHasMore}
+                fetchingMore={fileChangeApproval.pendingFetchingMore}
+                onLoadMore={() => { void fileChangeApproval.fetchPendingNextPage(); }}
+            />
+
             {/* Content Container：中间区域滚动；手机端分页栏在下方 shrink-0，不随列表滚走 */}
             <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                 <div
@@ -1466,7 +1520,8 @@ export function KnowledgeSpaceContent({
                                             isFolderDragOver={cardDrag.dragOverFolderId === file.id}
                                             onFolderDragOver={cardDrag.handleFolderDragOver(file)}
                                             onFolderDragLeave={cardDrag.handleFolderDragLeave(file)}
-                                            onFolderDrop={cardDrag.handleFolderDrop(file)}
+                                                onFolderDrop={cardDrag.handleFolderDrop(file)}
+                                                onOpenApprovalDetail={fileChangeApproval.openDetail}
                                         />
                                     </div>
                                 ))}
@@ -1512,8 +1567,9 @@ export function KnowledgeSpaceContent({
                                     sortDirection={sortDirection}
                                     onSort={handleSort}
                                     highlightedTagIds={searchTagIds}
-                                    highlightKeyword={searchQuery}
-                                />
+                                        highlightKeyword={searchQuery}
+                                        onOpenApprovalDetail={fileChangeApproval.openDetail}
+                                    />
                             </div>
                         </div>
                     )}
@@ -1681,6 +1737,19 @@ export function KnowledgeSpaceContent({
                 currentSpaceId={space.id}
                 currentSpaceName={space.name}
                 onConfirm={handleMoveConfirm}
+            />
+
+            <FileChangeApprovalDetail
+                open={fileChangeApproval.detailRequestId != null}
+                onOpenChange={(open) => { if (!open) fileChangeApproval.closeDetail(); }}
+                detail={fileChangeApproval.detail}
+                loading={fileChangeApproval.detailLoading}
+                approving={fileChangeApproval.batchApproving}
+                batchResult={fileChangeApproval.batchApprovalResult}
+                onApprove={(requestId) => { void handleBatchApproveFileChanges([requestId]); }}
+                onPreview={(requestId) => { void handleFileChangePreview(requestId); }}
+                onRetry={(requestId) => { void handleFileChangeRetry(requestId); }}
+                onCleanup={(requestId) => { void handleFileChangeCleanup(requestId); }}
             />
 
             {versionManagementEnabled && (

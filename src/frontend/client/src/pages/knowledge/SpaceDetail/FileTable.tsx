@@ -29,6 +29,7 @@ import { useGetBsConfig } from "~/hooks/queries/endpoints/queries";
 import { useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
+import { getFileChangeLockState } from "../hooks/useFileChangeApproval";
 
 const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -194,9 +195,14 @@ function useScrollShadow(scrollRef: React.RefObject<HTMLDivElement | null>) {
 // ============================================================
 // Status pill — matches the card-view tag (Figma 11671:34506). Neutral grey for
 // in-progress states (parsing / queueing / rebuilding / uploading), red for errors,
-// blue for pending approval, green for success.
-const StatusBadge = ({ status, file }: { status: FileStatus; file?: KnowledgeFile }) => {
+// blue for pending approval. Normal successful resources intentionally have no pill.
+const StatusBadge = ({ status, file, onOpenApprovalDetail }: {
+    status: FileStatus;
+    file?: KnowledgeFile;
+    onOpenApprovalDetail?: (requestId: number) => void;
+}) => {
     const localize = useLocalize();
+    const fileChangeLock = file ? getFileChangeLockState(file) : { locked: false, showBadge: false };
     const approvalStatusLabel = file ? getKnowledgeApprovalStatusLabel(file) : null;
     const statusReason = file?.approvalReason?.trim() || file?.errorMessage?.trim() || null;
 
@@ -204,7 +210,6 @@ const StatusBadge = ({ status, file }: { status: FileStatus; file?: KnowledgeFil
     const neutralTone: Tone = { bg: "bg-[#f2f4f7]", text: "text-[#6b7785]", dot: "bg-[#6b7785]" };
     const errorTone: Tone = { bg: "bg-[#fff2f0]", text: "text-[#f53f3f]", dot: "bg-[#f53f3f]" };
     const infoTone: Tone = { bg: "bg-blue-50", text: "text-blue-500", dot: "bg-blue-500" };
-    const successTone: Tone = { bg: "bg-[#e8ffea]", text: "text-[#00b42a]", dot: "bg-[#00b42a]" };
 
     const wrapWithReason = (node: React.ReactNode) => {
         // Skip tooltip for queueing status
@@ -224,12 +229,28 @@ const StatusBadge = ({ status, file }: { status: FileStatus; file?: KnowledgeFil
     let label: string;
     let tone: Tone;
 
+    if (fileChangeLock.showBadge && file?.fileChangeApproval) {
+        return (
+            <button
+                type="button"
+                className="inline-flex shrink-0 items-center gap-1 rounded bg-blue-500/[0.07] px-2 text-caption leading-5 text-blue-500"
+                onClick={(event) => {
+                    event.stopPropagation();
+                    onOpenApprovalDetail?.(file.fileChangeApproval!.requestId);
+                }}
+            >
+                <span className="size-1 rounded-full bg-blue-500" />
+                {localize("com_approval_status_pending")}
+            </button>
+        );
+    }
+    if (status === FileStatus.SUCCESS && !approvalStatusLabel) return null;
+
     if (approvalStatusLabel) {
         label = approvalStatusLabel;
         tone = (file && isKnowledgeApprovalRejected(file)) ? errorTone : infoTone;
     } else {
         const config: Record<string, { label: string; tone: Tone }> = {
-            [FileStatus.SUCCESS]: { label: localize("com_knowledge.success"), tone: successTone },
             [FileStatus.PROCESSING]: { label: localize("com_knowledge.parsing_status"), tone: neutralTone },
             [FileStatus.WAITING]: { label: localize("com_knowledge.queueing_status"), tone: neutralTone },
             [FileStatus.REBUILDING]: { label: localize("com_knowledge.rebuilding_status"), tone: neutralTone },
@@ -600,14 +621,19 @@ interface FileTableProps {
     onScroll?: React.UIEventHandler<HTMLDivElement>;
     /** Extra spacing reserved below the last row (e.g. to clear a floating bottom dock). */
     bottomSpacing?: number;
+    onOpenApprovalDetail?: (requestId: number) => void;
 }
 
-export function FileTable({ files, onEnsureFilePermissions, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, currentUserRole, onDownload, onEditTags, onRename, onDelete, onRetry, onNavigateFolder, onPreview, onValidateName, onCancelCreate, permissionEntryIds, renameEntryIds, deleteEntryIds, downloadEntryIds, onManagePermission, onMove, canMoveFile = false, canMoveFolder = false, onMoveToFolder, versionManagementEnabled = false, onOpenVersionManagement, onOpenVersionHistory, canManageMembers = false, sortBy, sortDirection, onSort, highlightedTagIds, highlightKeyword, onScroll, bottomSpacing = 0 }: FileTableProps) {
+export function FileTable({ files, onEnsureFilePermissions, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, currentUserRole, onDownload, onEditTags, onRename, onDelete, onRetry, onNavigateFolder, onPreview, onValidateName, onCancelCreate, permissionEntryIds, renameEntryIds, deleteEntryIds, downloadEntryIds, onManagePermission, onMove, canMoveFile = false, canMoveFolder = false, onMoveToFolder, versionManagementEnabled = false, onOpenVersionManagement, onOpenVersionHistory, canManageMembers = false, sortBy, sortDirection, onSort, highlightedTagIds, highlightKeyword, onScroll, bottomSpacing = 0, onOpenApprovalDetail }: FileTableProps) {
     const { columnWidths, onResizeStart } = useResizableColumns();
     const scrollRef = useRef<HTMLDivElement>(null);
     const hScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
     const { showLeftShadow, showRightShadow } = useScrollShadow(scrollRef);
-    const showStatusColumn = isAdmin || files.some((file) => Boolean(file.approvalStatus));
+    const showStatusColumn = files.some((file) => Boolean(
+        file.approvalStatus
+        || getFileChangeLockState(file).showBadge
+        || (file.type !== FileType.FOLDER && file.status && file.status !== FileStatus.SUCCESS),
+    ));
     const localize = useLocalize();
 
     // Shougang feature gate
@@ -765,6 +791,7 @@ export function FileTable({ files, onEnsureFilePermissions, selectedFiles, handl
                                 onFolderDragOver={handleFolderDragOver(file)}
                                 onFolderDragLeave={handleFolderDragLeave(file)}
                                 onFolderDrop={handleFolderDrop(file)}
+                                onOpenApprovalDetail={onOpenApprovalDetail}
                             />
                         ))}
                     </TableBody>
@@ -827,6 +854,7 @@ function FileRow({
     onFolderDragOver,
     onFolderDragLeave,
     onFolderDrop,
+    onOpenApprovalDetail,
 }: {
     file: KnowledgeFile;
     onEnsureFilePermissions?: (file: KnowledgeFile) => void;
@@ -868,6 +896,7 @@ function FileRow({
     onFolderDragOver?: (e: React.DragEvent) => void;
     onFolderDragLeave?: () => void;
     onFolderDrop?: (e: React.DragEvent) => void;
+    onOpenApprovalDetail?: (requestId: number) => void;
 }) {
     const localize = useLocalize();
     const [moreMenuOpen, setMoreMenuOpen] = useState(false);
@@ -883,6 +912,7 @@ function FileRow({
     const isCreating = !!file.isCreating;
     // Uploading placeholder rows have no backend identity yet — not movable.
     const isUploading = isKnowledgeItemUploading(file);
+    const fileChangeLock = getFileChangeLockState(file);
     // A folder still uploading its batch: masked (50% faded content), shows an
     // "uploading" tag, not clickable, checkbox greyed-out — mirrors the card view.
     const isUploadingFolderPlaceholder = isFolder && isUploading;
@@ -938,9 +968,10 @@ function FileRow({
             )}
             {canRename && (
                 <ActionMenuItem
+                    disabled={fileChangeLock.locked}
                     onClick={(e) => {
                         e.stopPropagation();
-                        startRenaming();
+                        if (!fileChangeLock.locked) startRenaming();
                     }}
                     icon={<Outlined.Edit />}
                     label={localize("com_knowledge.rename")}
@@ -948,7 +979,7 @@ function FileRow({
             )}
             {showMoveItem && (
                 <ActionMenuItem
-                    disabled={!canMove || isUploading}
+                    disabled={!canMove || isUploading || fileChangeLock.locked}
                     onClick={(e) => {
                         e.stopPropagation();
                         onMove?.();
@@ -1000,9 +1031,10 @@ function FileRow({
             {canDelete && (
                 <ActionMenuItem
                     danger
+                    disabled={fileChangeLock.locked}
                     onClick={(e) => {
                         e.stopPropagation();
-                        onDelete();
+                        if (!fileChangeLock.locked) onDelete();
                     }}
                     icon={<Outlined.Delete />}
                     label={localize("com_knowledge.delete")}
@@ -1156,8 +1188,8 @@ function FileRow({
                     )}
                     {/* Inline status tag — non-folder files in any non-success state,
                         plus the uploading-folder placeholder ("上传中"). */}
-                    {file.status && ((!isFolder && file.status !== FileStatus.SUCCESS) || isUploadingFolderPlaceholder) && (
-                        <StatusBadge status={file.status} file={file} />
+                    {(fileChangeLock.showBadge || (file.status && ((!isFolder && file.status !== FileStatus.SUCCESS) || isUploadingFolderPlaceholder))) && (
+                        <StatusBadge status={file.status ?? FileStatus.SUCCESS} file={file} onOpenApprovalDetail={onOpenApprovalDetail} />
                     )}
                     {/* Similar-document tag — occupies the same slot as the status tag
                         (mutually exclusive: it only shows on SUCCESS files, the status tag

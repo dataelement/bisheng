@@ -39,7 +39,6 @@ from bisheng.common.errcode.resource_owner_transfer import (
     ResourceTransferReceiverOutOfTenantError,
     ResourceTransferSelfError,
     ResourceTransferTxFailedError,
-    ResourceTransferUnsupportedTypeError,
 )
 from bisheng.core.context.tenant import bypass_tenant_filter
 from bisheng.core.database import get_async_db_session
@@ -68,6 +67,7 @@ class ResourceRow:
     """Row returned by ``_resolve_resources`` — minimal projection used by
     the subsequent MySQL update and FGA tuple flip.
     """
+
     resource_type: str
     id: Union[int, str]
     user_id: int
@@ -89,7 +89,7 @@ class ResourceOwnershipService:
         to_user_id: int,
         resource_types: List[str],
         resource_ids: Optional[List[Union[int, str]]] = None,
-        reason: str = '',
+        reason: str = "",
         operator: Any = None,
     ) -> Dict[str, Any]:
         """Transfer owner of ``from_user_id``'s resources to ``to_user_id``
@@ -117,12 +117,15 @@ class ResourceOwnershipService:
 
         # 4. Resolve resources owned by from_user within tenant
         resources = await cls._resolve_resources(
-            tenant_id, from_user_id, resource_types, resource_ids,
+            tenant_id,
+            from_user_id,
+            resource_types,
+            resource_ids,
         )
         if len(resources) > MAX_BATCH:
             raise ResourceTransferBatchLimitError()
         if not resources:
-            return {'transferred_count': 0, 'transfer_log_id': None}
+            return {"transferred_count": 0, "transfer_log_id": None}
 
         # 5. Transactional flip: MySQL → OpenFGA (crash_safe) → audit
         transfer_log_id = cls._make_transfer_log_id()
@@ -131,10 +134,30 @@ class ResourceOwnershipService:
             await cls._flip_fga_owner_tuples(resources, from_user_id, to_user_id)
         except Exception as exc:  # noqa: BLE001
             logger.error(
-                'transfer_owner transaction failed tenant=%s from=%s to=%s: %s',
-                tenant_id, from_user_id, to_user_id, exc,
+                "transfer_owner transaction failed tenant=%s from=%s to=%s: %s",
+                tenant_id,
+                from_user_id,
+                to_user_id,
+                exc,
             )
             raise ResourceTransferTxFailedError() from exc
+
+        knowledge_space_ids = sorted(
+            {
+                int(resource.id)
+                for resource in resources
+                if resource.resource_type == "knowledge_space" and str(resource.id).isdigit()
+            }
+        )
+        if knowledge_space_ids:
+            from bisheng.permission.domain.services.file_change_approver_reconcile_dispatcher import (
+                dispatch_file_change_approver_reconcile_for_spaces,
+            )
+
+            await dispatch_file_change_approver_reconcile_for_spaces(
+                space_ids=knowledge_space_ids,
+                tenant_id=tenant_id,
+            )
 
         await cls._safe_audit(
             tenant_id=tenant_id,
@@ -146,8 +169,8 @@ class ResourceOwnershipService:
             reason=reason,
         )
         return {
-            'transferred_count': len(resources),
-            'transfer_log_id': transfer_log_id,
+            "transferred_count": len(resources),
+            "transfer_log_id": transfer_log_id,
         }
 
     @classmethod
@@ -164,32 +187,27 @@ class ResourceOwnershipService:
         with bypass_tenant_filter():
             async with get_async_db_session() as session:
                 for meta in REGISTRY.values():
-                    sql = (
-                        f'SELECT user_id, COUNT(*) FROM {meta.table} '
-                        f'WHERE tenant_id = :tid AND user_id IS NOT NULL'
-                    )
+                    sql = f"SELECT user_id, COUNT(*) FROM {meta.table} WHERE tenant_id = :tid AND user_id IS NOT NULL"
                     if meta.type_filter_sql:
-                        sql += f' AND {meta.type_filter_sql}'
-                    sql += ' GROUP BY user_id'
-                    rows = (
-                        await session.execute(text(sql), {'tid': tenant_id})
-                    ).all()
+                        sql += f" AND {meta.type_filter_sql}"
+                    sql += " GROUP BY user_id"
+                    rows = (await session.execute(text(sql), {"tid": tenant_id})).all()
                     for uid, count in rows:
                         if uid is None:
                             continue
-                        counts_by_user[int(uid)] = (
-                            counts_by_user.get(int(uid), 0) + int(count)
-                        )
+                        counts_by_user[int(uid)] = counts_by_user.get(int(uid), 0) + int(count)
 
         pending: List[Dict[str, Any]] = []
         for uid, count in counts_by_user.items():
             leaf = await cls._resolve_leaf_tenant(uid)
             if leaf != tenant_id:
-                pending.append({
-                    'user_id': uid,
-                    'resource_count': count,
-                    'current_leaf_tenant_id': leaf,
-                })
+                pending.append(
+                    {
+                        "user_id": uid,
+                        "resource_count": count,
+                        "current_leaf_tenant_id": leaf,
+                    }
+                )
         return pending
 
     # -----------------------------------------------------------------------
@@ -201,12 +219,12 @@ class ResourceOwnershipService:
         """AC-03: owner / tenant admin / global super — one of the three."""
         if operator is None:
             raise ResourceTransferPermissionError()
-        if getattr(operator, 'user_id', None) == from_user_id:
+        if getattr(operator, "user_id", None) == from_user_id:
             return  # owner themselves
-        is_super = getattr(operator, 'is_global_super', None)
+        is_super = getattr(operator, "is_global_super", None)
         if callable(is_super) and is_super():
             return  # global super (tenant-wide)
-        is_admin = getattr(operator, 'is_admin', None)
+        is_admin = getattr(operator, "is_admin", None)
         if callable(is_admin) and is_admin():
             return  # tenant admin (F013 will narrow this into is_tenant_admin)
         raise ResourceTransferPermissionError()
@@ -256,15 +274,21 @@ class ResourceOwnershipService:
                 for rt in resource_types:
                     meta = get_meta(rt)
                     rows = await cls._select_resources(
-                        session, meta, tenant_id, from_user_id, resource_ids,
+                        session,
+                        meta,
+                        tenant_id,
+                        from_user_id,
+                        resource_ids,
                     )
                     for row in rows:
-                        results.append(ResourceRow(
-                            resource_type=rt,
-                            id=row[0],
-                            user_id=int(row[1]) if row[1] is not None else 0,
-                            tenant_id=int(row[2]) if row[2] is not None else 0,
-                        ))
+                        results.append(
+                            ResourceRow(
+                                resource_type=rt,
+                                id=row[0],
+                                user_id=int(row[1]) if row[1] is not None else 0,
+                                tenant_id=int(row[2]) if row[2] is not None else 0,
+                            )
+                        )
         return results
 
     @classmethod
@@ -276,22 +300,19 @@ class ResourceOwnershipService:
         from_user_id: int,
         resource_ids: Optional[List[Union[int, str]]],
     ) -> List[Tuple[Any, Any, Any]]:
-        sql = (
-            f'SELECT id, user_id, tenant_id FROM {meta.table} '
-            f'WHERE user_id = :uid AND tenant_id = :tid'
-        )
+        sql = f"SELECT id, user_id, tenant_id FROM {meta.table} WHERE user_id = :uid AND tenant_id = :tid"
         if meta.type_filter_sql:
-            sql += f' AND {meta.type_filter_sql}'
+            sql += f" AND {meta.type_filter_sql}"
 
-        params: Dict[str, Any] = {'uid': from_user_id, 'tid': tenant_id}
+        params: Dict[str, Any] = {"uid": from_user_id, "tid": tenant_id}
 
         if resource_ids:
             coerced = cls._coerce_ids(meta, resource_ids)
             if not coerced:
                 return []
-            sql += ' AND id IN :ids'
-            stmt = text(sql).bindparams(bindparam('ids', expanding=True))
-            params['ids'] = coerced
+            sql += " AND id IN :ids"
+            stmt = text(sql).bindparams(bindparam("ids", expanding=True))
+            params["ids"] = coerced
         else:
             stmt = text(sql)
 
@@ -300,7 +321,8 @@ class ResourceOwnershipService:
 
     @staticmethod
     def _coerce_ids(
-        meta: ResourceTypeMeta, raw_ids: List[Union[int, str]],
+        meta: ResourceTypeMeta,
+        raw_ids: List[Union[int, str]],
     ) -> List[Union[int, str]]:
         """Silently drop ids whose type doesn't match the target table's
         id_type (e.g. numeric ids sent to the Flow UUID table). The
@@ -325,7 +347,9 @@ class ResourceOwnershipService:
 
     @classmethod
     async def _bulk_update_user_ids(
-        cls, resources: List[ResourceRow], to_user_id: int,
+        cls,
+        resources: List[ResourceRow],
+        to_user_id: int,
     ) -> None:
         """Per-table ``UPDATE SET user_id = :uid WHERE id IN (...)``.
 
@@ -345,11 +369,10 @@ class ResourceOwnershipService:
                 try:
                     for rt, ids in by_type.items():
                         meta = get_meta(rt)
-                        stmt = text(
-                            f'UPDATE {meta.table} SET user_id = :uid '
-                            f'WHERE id IN :ids'
-                        ).bindparams(bindparam('ids', expanding=True))
-                        await session.execute(stmt, {'uid': to_user_id, 'ids': ids})
+                        stmt = text(f"UPDATE {meta.table} SET user_id = :uid WHERE id IN :ids").bindparams(
+                            bindparam("ids", expanding=True)
+                        )
+                        await session.execute(stmt, {"uid": to_user_id, "ids": ids})
                     await session.commit()
                 except Exception:
                     await session.rollback()
@@ -379,16 +402,29 @@ class ResourceOwnershipService:
             return
         ops: List[TupleOperation] = []
         for r in resources:
-            obj = f'{r.resource_type}:{r.id}'
-            ops.append(TupleOperation(
-                action='delete', user=f'user:{from_user_id}',
-                relation='owner', object=obj,
-            ))
-            ops.append(TupleOperation(
-                action='write', user=f'user:{to_user_id}',
-                relation='owner', object=obj,
-            ))
-        await PermissionService.batch_write_tuples(ops, crash_safe=True)
+            obj = f"{r.resource_type}:{r.id}"
+            ops.append(
+                TupleOperation(
+                    action="delete",
+                    user=f"user:{from_user_id}",
+                    relation="owner",
+                    object=obj,
+                )
+            )
+            ops.append(
+                TupleOperation(
+                    action="write",
+                    user=f"user:{to_user_id}",
+                    relation="owner",
+                    object=obj,
+                )
+            )
+        await PermissionService.batch_write_tuples(
+            ops,
+            crash_safe=True,
+            raise_on_failure=True,
+            stop_on_failure=True,
+        )
 
     # -----------------------------------------------------------------------
     # Audit
@@ -415,27 +451,29 @@ class ResourceOwnershipService:
                 ids_by_type.setdefault(r.resource_type, []).append(r.id)
             await AuditLogDao.ainsert_v2(
                 tenant_id=tenant_id,
-                operator_id=getattr(operator, 'user_id', 0) or 0,
+                operator_id=getattr(operator, "user_id", 0) or 0,
                 operator_tenant_id=cls._resolve_operator_tenant_id(
-                    operator, tenant_id,
+                    operator,
+                    tenant_id,
                 ),
                 action=TenantAuditAction.RESOURCE_TRANSFER_OWNER.value,
-                target_type='resource_batch',
+                target_type="resource_batch",
                 target_id=transfer_log_id,
                 reason=reason or None,
                 metadata={
-                    'from': from_user_id,
-                    'to': to_user_id,
-                    'count': len(resources),
-                    'resource_types': sorted(ids_by_type.keys()),
-                    'resource_ids_by_type': ids_by_type,
+                    "from": from_user_id,
+                    "to": to_user_id,
+                    "count": len(resources),
+                    "resource_types": sorted(ids_by_type.keys()),
+                    "resource_ids_by_type": ids_by_type,
                 },
             )
         except Exception as exc:  # noqa: BLE001
             logger.error(
-                'audit_log insert failed for resource.transfer_owner '
-                'tenant=%s transfer_log=%s: %s',
-                tenant_id, transfer_log_id, exc,
+                "audit_log insert failed for resource.transfer_owner tenant=%s transfer_log=%s: %s",
+                tenant_id,
+                transfer_log_id,
+                exc,
             )
 
     @staticmethod
@@ -448,13 +486,13 @@ class ResourceOwnershipService:
         Falls back to the resource tenant_id when the operator shape is
         unknown (test doubles, system triggers).
         """
-        scope = getattr(operator, 'admin_scope_tenant_id', None)
+        scope = getattr(operator, "admin_scope_tenant_id", None)
         if scope:
             return int(scope)
-        is_super = getattr(operator, 'is_global_super', None)
+        is_super = getattr(operator, "is_global_super", None)
         if callable(is_super) and is_super():
             return ROOT_TENANT_ID
-        op_tenant = getattr(operator, 'tenant_id', None)
+        op_tenant = getattr(operator, "tenant_id", None)
         if op_tenant:
             return int(op_tenant)
         return tenant_id
@@ -463,4 +501,4 @@ class ResourceOwnershipService:
     def _make_transfer_log_id() -> str:
         """``txn_YYYYMMDD_<8hex>`` — mirrors the PRD §5.6.3.1 sample
         response ``txn_20260420_abc123``."""
-        return f'txn_{datetime.utcnow():%Y%m%d}_{uuid.uuid4().hex[:8]}'
+        return f"txn_{datetime.utcnow():%Y%m%d}_{uuid.uuid4().hex[:8]}"

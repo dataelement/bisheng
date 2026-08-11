@@ -20,6 +20,7 @@ from bisheng.approval.domain.models.approval_instance import (
     ApprovalTaskStatus,
 )
 from bisheng.approval.domain.repositories.approval_instance_repository import ApprovalInstanceRepository
+from bisheng.core.context.tenant import current_tenant_id
 
 
 def _instance(*, applicant: int = 7, status: str = ApprovalInstanceStatus.PENDING):
@@ -66,8 +67,12 @@ async def invite_repo_db(monkeypatch):
     monkeypatch.setattr(
         "bisheng.approval.domain.repositories.approval_instance_repository.get_async_db_session", factory
     )
-    yield
-    await engine.dispose()
+    tenant_token = current_tenant_id.set(1)
+    try:
+        yield
+    finally:
+        current_tenant_id.reset(tenant_token)
+        await engine.dispose()
 
 
 async def test_find_blocking_invite_ignores_applicant(invite_repo_db):
