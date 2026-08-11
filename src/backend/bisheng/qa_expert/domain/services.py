@@ -495,7 +495,7 @@ class QuestionService:
         return question
 
     async def adopt_answer(self, question_id: int, answer_id: int, operator_id: int) -> Question:
-        """采纳最佳回答：同题最多 3 条；已采纳幂等；G4 按同题同回答者只发一次。"""
+        """采纳最佳回答：同题最多 3 条；已采纳幂等；G4 仍按 answer_id。"""
         question = await self.repository.get_by_id(question_id)
         if not question:
             raise QuestionNotFoundError()
@@ -550,7 +550,6 @@ class QuestionService:
             if answerer_id:
                 await notify_answer_adopted(
                     tenant_id=int(get_current_tenant_id() or DEFAULT_TENANT_ID),
-                    question_id=int(question_id),
                     answer_id=int(answer_id),
                     answerer_id=answerer_id,
                 )
