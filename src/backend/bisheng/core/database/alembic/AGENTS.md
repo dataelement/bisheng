@@ -142,6 +142,19 @@ grandfathered: do **not** edit released migrations, but never add new ones like 
     constraints. Keep names stable so schema inspection remains understandable.
   - Identifiers come back **uppercase** from DM8 reflection — compare
     case-insensitively (the `*_exists` helpers already do).
+- **Charset and collation follow the database defaults.** New migrations must not
+  normally pass MySQL-specific table options such as `mysql_charset` or
+  `mysql_collate` to `op.create_table()`. Charset and collation are deployment-level
+  database policy; hard-coding them in one migration makes schemas differ by creation
+  path, embeds MySQL-only semantics in a MySQL/DM8 codebase, and may change sorting or
+  uniqueness behaviour unexpectedly. Keep the corresponding SQLModel `__table_args__`
+  consistent with this rule so `create_all()` and Alembic do not create different table
+  definitions. An explicit table charset/collation is allowed only when it is a
+  documented data-contract requirement that cannot safely inherit the database default;
+  explain the exception in the migration and review its DM8 behaviour. A MySQL client
+  connection charset (for example `charset=utf8mb4`) controls transport encoding and
+  does not establish the database or table default. Do not edit an already-released
+  migration merely to remove legacy charset/collation options.
 - **Reusable DDL guards** go in `alembic_helpers/online.py` (`table_exists`,
   `column_exists`) so revisions stay thin. Do **not** treat `alembic_helpers/f011.py`
   as a template — it holds read-then-write *data* logic from a pre-rule revision, which
