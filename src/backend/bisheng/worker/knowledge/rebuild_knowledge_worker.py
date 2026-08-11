@@ -68,28 +68,33 @@ def rebuild_knowledge_celery(knowledge_id: int, new_model_id: int, invoke_user_i
                 file.remark = KnowledgeFileFailedError(data={"exception": "rebuild error"}).to_json_str()
                 KnowledgeFileDao.update(file)
 
-        # 5. Update knowledge base status
+        # 5. Release the container; the failure lives on the files that failed.
+        # Marking the whole knowledge FAILED existed to drive a later automatic
+        # rebuild, which no longer happens — a failed file is recovered by
+        # re-parsing it. All that flag does now is take the entire knowledge
+        # down: permission targets require PUBLISHED, so a single bad file made
+        # the space unreachable and reported it as "invalid resource type or ID".
         if failed_files:
             # DeleteesIndex andmilvusCollections to avoid data inconsistencies
             _delete_es_files(knowledge, failed_files)
-
-            knowledge.state = KnowledgeState.FAILED.value
             logger.error(f"knowledge_id={knowledge_id} rebuild failed, failed_files={failed_files}")
         else:
-            knowledge.state = KnowledgeState.PUBLISHED.value
             logger.info(f"knowledge_id={knowledge_id} rebuild completed successfully")
 
+        knowledge.state = KnowledgeState.PUBLISHED.value
         KnowledgeDao.update_one(knowledge)
 
         return f"knowledge {knowledge_id} rebuild completed"
 
     except Exception as e:
         logger.exception(f"rebuild_knowledge_celery error: {e!s}")
-        # Unexpected handles during asynchronous tasksknowledgeSet to4
+        # Leave the knowledge usable rather than stranding it in REBUILDING: the
+        # run is over either way, and the per-file status already records what
+        # did not make it.
         try:
             knowledge = KnowledgeDao.query_by_id(knowledge_id)
             if knowledge:
-                knowledge.state = KnowledgeState.FAILED.value
+                knowledge.state = KnowledgeState.PUBLISHED.value
                 KnowledgeDao.update_one(knowledge)
         except Exception as e2:
             logger.exception(f"Failed to update knowledge state after error: {e2!s}")

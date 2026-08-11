@@ -448,6 +448,29 @@ config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/converge_media_no_asr_
 config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/converge_media_no_asr_transcript.py --file-id 456 --apply
 ```
 
+### `converge_knowledge_rebuild_failed_state.py`
+
+把重建失败留下的**容器级** `FAILED` 状态收敛回 `PUBLISHED`。
+
+背景：重建 worker 过去只要有一个文件重建失败，就把整个知识库/知识空间标成
+`KnowledgeState.FAILED`。这个标记本是给"下次自动重建"用的，但失败文件已经不能自动
+重建、必须走重新解析，所以它只剩副作用：权限目标解析要求容器处于 `PUBLISHED`
+(`knowledge_permission_service.py`)，于是一个坏文件让整个空间在权限层面"不存在"，
+接口报 19003「资源类型或 ID 无效」，用户进不去。服务端已不再写这个状态
+(`rebuild_knowledge_worker.py`)；本脚本收敛存量。
+
+只改容器状态，**不碰文件状态**——哪些文件失败仍记录在 `knowledge_file` 上，重新解析
+要靠它。`--scope space`（默认）只处理知识空间；`all` 再加普通知识库与个人知识库。
+QA 知识库不在范围内，其 `FAILED` 由 `worker/knowledge/qa.py` 另行写入、语义未变。
+
+Usage (from `src/backend/`，默认 dry-run):
+
+```bash
+config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/converge_knowledge_rebuild_failed_state.py
+config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/converge_knowledge_rebuild_failed_state.py --apply
+config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/converge_knowledge_rebuild_failed_state.py --scope all --apply
+```
+
 ### `backfill_knowledge_space_user_pin.py`
 
 F037：知识空间置顶从 `space_channel_member.is_pinned` 解耦到独立的 `knowledge_space_user_pin` 表（置顶是纯个人偏好，不再寄生在成员关系上）。本脚本把历史置顶迁移到新表，让升级后用户保留已置顶的空间。
