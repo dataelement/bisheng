@@ -10,7 +10,10 @@ import {
 } from "~/api/channels";
 import type { SubjectType } from "~/api/permission";
 import { NotificationSeverity } from "~/common";
-import { PermissionDraftPickerDialog } from "~/components/permission/PermissionDraftPickerDialog";
+import {
+  PermissionDraftPickerDialog,
+  type PermissionDraftSearchApi,
+} from "~/components/permission/PermissionDraftPickerDialog";
 import { SettingsFooter } from "~/components/permission/UnifiedPermissionControls";
 import type { PermissionDraftRow } from "~/components/permission/usePermissionDraft";
 import { LoadingIcon } from "~/components/ui/icon/Loading";
@@ -61,6 +64,51 @@ export function ChannelSettingsPage() {
         relation: model.relation,
       })),
     [localize, relationModels],
+  );
+  const permissionSearchApi = useMemo<PermissionDraftSearchApi | undefined>(
+    () =>
+      isEditMode
+        ? {
+            grantUsersApi: (_resourceType, resourceId, params, config) =>
+              getChannelGrantSubjectsUsersApi(resourceId, params, config),
+            grantDepartmentChildrenApi: (
+              _resourceType,
+              resourceId,
+              parentId,
+              config,
+            ) =>
+              getChannelGrantSubjectsDepartmentChildrenApi(
+                resourceId,
+                parentId,
+                config,
+              ),
+            grantDepartmentSearchApi: (
+              _resourceType,
+              resourceId,
+              keyword,
+              limit,
+              config,
+            ) =>
+              searchChannelGrantSubjectsDepartmentsApi(
+                resourceId,
+                keyword,
+                limit,
+                config,
+              ),
+            grantUserGroupsApi: (
+              _resourceType,
+              resourceId,
+              params,
+              config,
+            ) =>
+              getChannelGrantSubjectsUserGroupsApi(
+                resourceId,
+                params,
+                config,
+              ),
+          }
+        : undefined,
+    [isEditMode],
   );
   const creatorRow = useMemo<PermissionDraftRow | null>(() => {
     if (isEditMode || !user) return null;
@@ -353,49 +401,7 @@ export function ChannelSettingsPage() {
           (model) => model.relation !== "owner",
         )}
         onConfirm={settings.permissionDraft.addRows}
-        searchApi={
-          settings.isEditMode
-            ? {
-                grantUsersApi: (_resourceType, resourceId, params, config) =>
-                  getChannelGrantSubjectsUsersApi(resourceId, params, config),
-                grantDepartmentChildrenApi: (
-                  _resourceType,
-                  resourceId,
-                  parentId,
-                  config,
-                ) =>
-                  getChannelGrantSubjectsDepartmentChildrenApi(
-                    resourceId,
-                    parentId,
-                    config,
-                  ),
-                grantDepartmentSearchApi: (
-                  _resourceType,
-                  resourceId,
-                  keyword,
-                  limit,
-                  config,
-                ) =>
-                  searchChannelGrantSubjectsDepartmentsApi(
-                    resourceId,
-                    keyword,
-                    limit,
-                    config,
-                  ),
-                grantUserGroupsApi: (
-                  _resourceType,
-                  resourceId,
-                  params,
-                  config,
-                ) =>
-                  getChannelGrantSubjectsUserGroupsApi(
-                    resourceId,
-                    params,
-                    config,
-                  ),
-              }
-            : undefined
-        }
+        searchApi={permissionSearchApi}
       />
       {previewItem?.preview && (
         <CrawlPreviewDialog

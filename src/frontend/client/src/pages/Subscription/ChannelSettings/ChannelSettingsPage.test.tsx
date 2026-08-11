@@ -17,6 +17,7 @@ const mockCompleteSubmission = jest.fn();
 const mockRetryAuthorization = jest.fn();
 const mockEnterCreatedChannel = jest.fn();
 const mockCancel = jest.fn();
+const mockPermissionPickerRender = jest.fn();
 let mockParams: { channelId?: string } = {};
 
 const mockBusiness = {
@@ -190,6 +191,12 @@ jest.mock("~/components/permission/PermissionDraftEditor", () => ({
     </button>
   ),
 }));
+jest.mock("~/components/permission/PermissionDraftPickerDialog", () => ({
+  PermissionDraftPickerDialog: (props: { searchApi?: unknown }) => {
+    mockPermissionPickerRender(props);
+    return null;
+  },
+}));
 jest.mock("~/components/permission/RelationSelect", () => ({
   RelationSelect: () => null,
 }));
@@ -255,6 +262,22 @@ describe("ChannelSettingsPage", () => {
 
     expect(screen.getByTestId("channel-business-column")).not.toBeNull();
     expect(screen.queryByTestId("channel-permission-column")).toBeNull();
+  });
+
+  it("keeps edit-mode permission search adapters stable across rerenders", () => {
+    mockParams = { channelId: "channel-1" };
+    Object.assign(mockSettings, { isEditMode: true });
+
+    const view = render(<ChannelSettingsPage />);
+    const firstSearchApi = mockPermissionPickerRender.mock.calls.at(-1)?.[0]
+      .searchApi;
+
+    view.rerender(<ChannelSettingsPage />);
+
+    const secondSearchApi = mockPermissionPickerRender.mock.calls.at(-1)?.[0]
+      .searchApi;
+    expect(firstSearchApi).toBeDefined();
+    expect(secondSearchApi).toBe(firstSearchApi);
   });
 
   it("does not expose creator-only knowledge sync to a granted owner", () => {
