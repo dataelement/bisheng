@@ -1,7 +1,6 @@
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
 import { Button } from "@/components/bs-ui/button"
 import { Checkbox } from "@/components/bs-ui/checkBox"
-import { Input } from "@/components/bs-ui/input"
 import { Label } from "@/components/bs-ui/label"
 import MultiSelect from "@/components/bs-ui/select/multi"
 import { Separator } from "@/components/bs-ui/separator"
