@@ -345,6 +345,58 @@ class KnowledgeContainerPermissionPort(Protocol):
     async def sync_public_reader(self, **kwargs): ...
 
 
+_CONTAINER_KINDS = {
+    "knowledge_space": {"SPACE"},
+    "knowledge_library": {"NORMAL", "QA"},
+}
+
+
+def _container_rejection(
+    record: KnowledgeContainerPermissionRecord | None,
+    actor: PermissionActor,
+    resource_type: str,
+    resource_id: str,
+    *,
+    allowed_statuses: set[str],
+) -> str | None:
+    """Name why a container cannot serve as a permission target, or None.
+
+    The reason never reaches the caller: `permission_error_response` flattens
+    every rejection into the same 19003 body so that a missing resource and one
+    in another tenant stay indistinguishable. It goes to the log instead —
+    without it, "Invalid resource type or ID" covers seven different causes, and
+    a space stuck at status=FAILED reads exactly like a typo in the id.
+    """
+
+    if record is None:
+        return "NOT_FOUND"
+    if resource_type not in _CONTAINER_KINDS:
+        return "UNSUPPORTED_RESOURCE_TYPE"
+    if record.resource_type != resource_type or record.resource_id != resource_id:
+        return "IDENTITY_MISMATCH"
+    if record.kind not in _CONTAINER_KINDS[resource_type]:
+        return f"KIND_MISMATCH:{record.kind}"
+    if record.status not in allowed_statuses:
+        return f"STATUS_NOT_USABLE:{record.status}"
+    if record.tenant_id != actor.current_tenant_id and not actor.super_admin:
+        return "TENANT_MISMATCH"
+    return None
+
+
+def _reject_container(
+    reason: str,
+    resource_type: str,
+    resource_id: str,
+) -> PermissionInvalidResourceError:
+    logger.warning(
+        "permission target rejected: reason=%s resource=%s:%s",
+        reason,
+        resource_type,
+        resource_id,
+    )
+    return PermissionInvalidResourceError()
+
+
 class F048KnowledgeContainerPermissionAdapter:
     """Keep container business validation outside the permission domain."""
 
@@ -639,20 +691,15 @@ class F048KnowledgeContainerPermissionAdapter:
         resource_type: str,
         resource_id: str,
     ) -> VerifiedPermissionTarget:
-        expected_kinds = {
-            "knowledge_space": {"SPACE"},
-            "knowledge_library": {"NORMAL", "QA"},
-        }
-        if (
-            record is None
-            or resource_type not in expected_kinds
-            or record.resource_type != resource_type
-            or record.resource_id != resource_id
-            or record.status != "PUBLISHED"
-            or record.kind not in expected_kinds[resource_type]
-            or (record.tenant_id != actor.current_tenant_id and not actor.super_admin)
-        ):
-            raise PermissionInvalidResourceError()
+        reason = _container_rejection(
+            record,
+            actor,
+            resource_type,
+            resource_id,
+            allowed_statuses={"PUBLISHED"},
+        )
+        if reason is not None:
+            raise _reject_container(reason, resource_type, resource_id)
         return VerifiedPermissionTarget.from_business_service(
             tenant_id=record.tenant_id,
             resource_type=record.resource_type,
@@ -668,20 +715,15 @@ class F048KnowledgeContainerPermissionAdapter:
         resource_type: str,
         resource_id: str,
     ) -> VerifiedPermissionTarget:
-        expected_kinds = {
-            "knowledge_space": {"SPACE"},
-            "knowledge_library": {"NORMAL", "QA"},
-        }
-        if (
-            record is None
-            or resource_type not in expected_kinds
-            or record.resource_type != resource_type
-            or record.resource_id != resource_id
-            or record.status not in {state.name for state in KnowledgeState}
-            or record.kind not in expected_kinds[resource_type]
-            or (record.tenant_id != actor.current_tenant_id and not actor.super_admin)
-        ):
-            raise PermissionInvalidResourceError()
+        reason = _container_rejection(
+            record,
+            actor,
+            resource_type,
+            resource_id,
+            allowed_statuses={state.name for state in KnowledgeState},
+        )
+        if reason is not None:
+            raise _reject_container(reason, resource_type, resource_id)
         return VerifiedPermissionTarget.from_business_service(
             tenant_id=record.tenant_id,
             resource_type=record.resource_type,
