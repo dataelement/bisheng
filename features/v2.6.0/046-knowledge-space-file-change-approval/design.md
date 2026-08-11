@@ -457,7 +457,7 @@ F034 `POST /knowledge/space/{space_id}/files/move` 保留 `moved/invalid`，新�
 
 #### 4.5.3 待审批上传和资源审批详情
 
-- `GET /knowledge/space/{space_id}/file-changes/uploads?status=&cursor=&page_size=`：申请人看自己的记录；当前 owner/manager 看可审批记录。响应为 F027 `PageInfiniteCursorData{data,page_size,has_more,next_cursor}`，不返回 object name。
+- `GET /knowledge/space/{space_id}/file-changes/uploads?status=&cursor=&page_size=`：申请人看自己的未清理记录；当前 owner/manager 看未清理的可审批记录。`cleanup_state=success` 的申请保留为审批审计数据，但必须退出待审批文件列表。响应为 F027 `PageInfiniteCursorData{data,page_size,has_more,next_cursor}`，不返回 object name。
 - `GET /knowledge/space/{space_id}/file-changes/{request_id}`：返回动作详情和可见的审批/执行摘要；former approver 不可见。
 - `GET /knowledge/space/{space_id}/file-changes/{request_id}/preview`：申请人/当前有效审核人获取 stage 或未发布正式文件的短时预览 URL。
 - `POST /knowledge/space/{space_id}/file-changes/{request_id}/retry-ingest`：仅 `parse_failed/execute_failed` upload 可调用；委托 F025 `resume_deferred_execution()` 在实例锁内生成新 token，并通过 handler `prepare_resume` 原子恢复 request/outbox/instance/未完成 steps，提交后复用 `executed_resource_id` 和既有解析重试链路，不创建审批。

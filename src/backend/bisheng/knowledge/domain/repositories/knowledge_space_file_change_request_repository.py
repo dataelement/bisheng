@@ -25,6 +25,7 @@ from bisheng.knowledge.domain.models.knowledge_space_file_change_execution_step 
 )
 from bisheng.knowledge.domain.models.knowledge_space_file_change_request import (
     KnowledgeSpaceFileChangeAction,
+    KnowledgeSpaceFileChangeCleanupState,
     KnowledgeSpaceFileChangeExecutionState,
     KnowledgeSpaceFileChangeRequest,
 )
@@ -253,6 +254,7 @@ class KnowledgeSpaceFileChangeRequestRepository:
         statement = self._read_base_statement(tenant_id=tenant_id, space_id=space_id).where(
             KnowledgeSpaceFileChangeRequest.action == KnowledgeSpaceFileChangeAction.UPLOAD,
             KnowledgeSpaceFileChangeRequest.upload_stage_id.is_not(None),
+            KnowledgeSpaceFileChangeRequest.cleanup_state != KnowledgeSpaceFileChangeCleanupState.SUCCESS,
         )
         if applicant_user_id is not None:
             statement = statement.where(KnowledgeSpaceFileChangeRequest.applicant_user_id == int(applicant_user_id))

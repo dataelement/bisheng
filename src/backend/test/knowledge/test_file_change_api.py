@@ -291,6 +291,7 @@ def _request_view(
     action: str = "upload",
     upload_id: str | None = "upload-41",
     executed_resource_id: int | None = None,
+    cleanup_state: str = "none",
 ):
     request = SimpleNamespace(
         id=41,
@@ -312,7 +313,7 @@ def _request_view(
         executed_resource_id=executed_resource_id,
         execution_state="failed" if instance_status == "execute_failed" else "not_started",
         execution_checkpoint={"failure_reason": "parser failed"},
-        cleanup_state="none",
+        cleanup_state=cleanup_state,
         create_time=datetime(2026, 8, 11, 9, 0, 0),
         update_time=datetime(2026, 8, 11, 9, 5, 0),
     )
@@ -512,6 +513,22 @@ async def test_upload_list_uses_one_batch_projection_for_multiple_rows_without_p
     assert [row.status for row in result.data] == ["parsing", "parse_failed"]
     batch_loader.assert_awaited_once_with([first, second])
     per_row_loader.assert_not_awaited()
+
+
+async def test_upload_list_hides_cleanup_success_even_if_repository_returns_stale_row():
+    cleaned = _request_view(instance_status="cancelled", cleanup_state="success")
+    service, repository = _application_service(view=cleaned)
+
+    result = await service.list_uploads(
+        space_id=101,
+        viewer=_user(),
+        status=None,
+        cursor=None,
+        page_size=20,
+    )
+
+    assert result.data == []
+    repository.list_upload_request_views.assert_awaited_once()
 
 
 async def test_upload_list_status_union_refills_from_raw_cursor_without_n_plus_one():
@@ -862,6 +879,39 @@ async def test_repository_read_projection_is_tenant_space_bound_and_uses_latest_
     assert has_more is False
     assert file_statuses == {}
     assert steps == {own_request_id: []}
+
+
+async def test_repository_upload_list_excludes_cleanup_success_but_keeps_audit_detail(file_change_api_engine):
+    request_id, _ = await _seed_read_view(file_change_api_engine, tenant_id=42, space_id=101, suffix=45)
+    factory = async_sessionmaker(file_change_api_engine, class_=AsyncSession, expire_on_commit=False)
+
+    async with factory() as session:
+        request = await session.get(KnowledgeSpaceFileChangeRequest, request_id)
+        assert request is not None
+        request.cleanup_state = "success"
+        session.add(request)
+        await session.commit()
+
+    async with factory() as session:
+        repository = KnowledgeSpaceFileChangeRequestRepository(session)
+        audit_detail = await repository.get_request_view(
+            tenant_id=42,
+            space_id=101,
+            request_id=request_id,
+        )
+        page, has_more = await repository.list_upload_request_views(
+            tenant_id=42,
+            space_id=101,
+            applicant_user_id=7,
+            instance_statuses=None,
+            after_create_time=None,
+            after_request_id=0,
+            limit=20,
+        )
+
+    assert audit_detail is not None
+    assert page == []
+    assert has_more is False
 
 
 async def test_repository_batch_projection_ignores_same_tenant_file_from_another_space(file_change_api_engine):

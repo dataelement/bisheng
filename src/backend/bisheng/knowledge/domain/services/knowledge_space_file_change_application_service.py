@@ -20,6 +20,7 @@ from bisheng.common.errcode.knowledge_space import (
 from bisheng.core.database import get_async_db_session
 from bisheng.knowledge.domain.models.knowledge_space_file_change_request import (
     KnowledgeSpaceFileChangeAction,
+    KnowledgeSpaceFileChangeCleanupState,
 )
 from bisheng.knowledge.domain.repositories.knowledge_space_file_change_request_repository import (
     FILE_CHANGE_SCENARIO_CODE,
@@ -261,6 +262,13 @@ class KnowledgeSpaceFileChangeApplicationService:
                     request = view.request
                     cursor_create_time = request.create_time
                     cursor_request_id = int(request.id)
+                    # Cleanup keeps the request/approval rows for audit, but the
+                    # staged file no longer exists and must leave this working
+                    # list immediately. Keep this guard even though the owner
+                    # repository applies the same predicate so alternative test
+                    # repositories cannot re-expose a cleaned upload.
+                    if request.cleanup_state == KnowledgeSpaceFileChangeCleanupState.SUCCESS:
+                        continue
                     projection = self._normalize_projection(
                         view,
                         projections.get(int(request.id)),
