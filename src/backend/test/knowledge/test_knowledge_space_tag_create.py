@@ -515,6 +515,12 @@ async def test_add_space_tag_creates_review_tag_with_tenant_id(service):
             "_require_review_tag_feature_enabled",
             new_callable=AsyncMock,
         ),
+        patch.object(
+            service,
+            "_should_skip_space_tag_review",
+            new_callable=AsyncMock,
+            return_value=False,
+        ),
         patch(
             "bisheng.knowledge.domain.services.knowledge_space_service.ReviewTagDao.ainsert_review_tag",
             new_callable=AsyncMock,
@@ -977,3 +983,134 @@ async def test_partition_file_tag_ids_routes_review_ids_when_not_present_in_tag_
 
     assert tag_ids == []
     assert review_tag_ids == [101, 102, 103]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("level", "role", "is_dept_admin", "expected"),
+    [
+        ("public", "admin", False, True),
+        ("public", "creator", False, True),
+        ("public", "member", False, False),
+        ("department", "admin", False, True),
+        ("department", "member", True, False),
+        ("team", "admin", False, False),
+        ("team", "member", True, True),
+        ("team_ks", None, True, True),
+        ("personal", "creator", False, False),
+        ("personal", None, True, True),
+    ],
+)
+async def test_should_skip_space_tag_review_matrix(service, level, role, is_dept_admin, expected):
+    from bisheng.common.models.space_channel_member import UserRoleEnum
+
+    role_enum = None
+    if role == "admin":
+        role_enum = UserRoleEnum.ADMIN
+    elif role == "creator":
+        role_enum = UserRoleEnum.CREATOR
+    elif role == "member":
+        role_enum = UserRoleEnum.MEMBER if hasattr(UserRoleEnum, "MEMBER") else "member"
+
+    with (
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceScopeDao.aget_by_space_id",
+            new_callable=AsyncMock,
+            return_value=SimpleNamespace(level=level),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_get_active_member_role",
+            new_callable=AsyncMock,
+            return_value=role_enum,
+        ) as mock_role,
+        patch(
+            "bisheng.database.models.department.DepartmentDao.aget_user_admin_departments",
+            new_callable=AsyncMock,
+            return_value=[SimpleNamespace(id=1)] if is_dept_admin else [],
+        ) as mock_depts,
+    ):
+        result = await service._should_skip_space_tag_review(137)
+
+    assert result is expected
+    if level in ("public", "department"):
+        mock_role.assert_awaited_once()
+        mock_depts.assert_not_awaited()
+    else:
+        mock_depts.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_add_space_tag_exempt_writes_approved_library_tag(service):
+    approved = SimpleNamespace(
+        id=88,
+        name="免审标签",
+        business_type="tag_library",
+        resource_type="manual_tag",
+    )
+
+    with (
+        patch.object(service, "_require_permission_id", new_callable=AsyncMock),
+        patch.object(service, "_find_space_tag_by_name", new_callable=AsyncMock, return_value=None),
+        patch.object(
+            service,
+            "_resolve_primary_library_for_space",
+            new_callable=AsyncMock,
+            return_value=5,
+        ),
+        patch.object(service, "_require_review_tag_feature_enabled", new_callable=AsyncMock),
+        patch.object(
+            service,
+            "_should_skip_space_tag_review",
+            new_callable=AsyncMock,
+            return_value=True,
+        ),
+        patch.object(
+            service,
+            "_create_approved_space_tag",
+            new_callable=AsyncMock,
+            return_value=approved,
+        ) as mock_create,
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.ReviewTagDao.ainsert_review_tag",
+            new_callable=AsyncMock,
+        ) as mock_insert,
+    ):
+        result = await service.add_space_tag(137, "免审标签")
+
+    assert result is approved
+    mock_create.assert_awaited_once_with(137, 5, "免审标签")
+    mock_insert.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_create_approved_space_tag_appends_to_bound_library(service):
+    approved = SimpleNamespace(id=88, name="免审标签", business_type="tag_library")
+    append_mock = AsyncMock()
+
+    with (
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceTagLibraryService"
+        ) as library_cls,
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.TagLibraryTagService.find_library_tag_by_name",
+            new_callable=AsyncMock,
+            return_value=approved,
+        ) as find_mock,
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.TagLibraryTagService.get_or_create_library_tag_async",
+            new_callable=AsyncMock,
+        ) as create_mock,
+    ):
+        library_cls.return_value.append_review_tag = append_mock
+        result = await service._create_approved_space_tag(137, 5, "免审标签")
+
+    assert result is approved
+    append_mock.assert_awaited_once_with(
+        library_id=5,
+        knowledge_id=137,
+        tag_name="免审标签",
+        review_resource_type="manual_tag",
+        require_bound_library=True,
+    )
+    find_mock.assert_awaited_once()
+    create_mock.assert_not_awaited()

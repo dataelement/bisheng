@@ -150,19 +150,21 @@ function mergeSpaceTagsWithInitial(tags: SpaceTag[], initialTags: FileTag[]): Sp
     return merged;
 }
 
+/**
+ * 规范化创建接口返回的标签：免审/已通过走 tag_ids，待审走 review_tag_ids。
+ * 后端 lookup 包装会为正式 Tag 补 review_status=1；缺省时仍按待审处理以兼容旧 mock。
+ */
 function normalizeCreatedSpaceTag(tag: SpaceTag, reviewTagEnabled: boolean): SpaceTag {
     if (!reviewTagEnabled) {
         return tag;
     }
-    // add_space_tag always creates a pending ReviewTag row (business_type may be
-    // tag_library), so a freshly created tag without an approved status is pending.
     if (tag.review_status === 1 || tag.review_status === 2) {
         return tag;
     }
     if (tag.review_status === 0) {
         return tag;
     }
-    // API may omit review_status in the create payload; treat as pending review.
+    // 创建接口偶发省略 review_status：缺省按待审，避免误绑正式标签 ID
     return { ...tag, review_status: 0, resource_type: tag.resource_type || "manual_tag" };
 }
 

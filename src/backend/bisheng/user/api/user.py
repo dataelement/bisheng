@@ -197,6 +197,9 @@ async def get_info(login_user: LoginUser = Depends(LoginUser.get_login_user)):
     admin_group = [one.group_id for one in admin_group]
     dept_admin_depts = await DepartmentDao.aget_user_admin_departments(user_id)
     is_department_admin = bool(dept_admin_depts)
+    from bisheng.workstation.domain.services.workstation_tags_service import user_can_review_tags
+
+    can_review_tags = await user_can_review_tags(login_user)
     role, web_menu = await login_user.get_roles_web_menu(
         db_user,
         is_department_admin=is_department_admin,
@@ -250,6 +253,7 @@ async def get_info(login_user: LoginUser = Depends(LoginUser.get_login_user)):
             admin_groups=admin_group,
             can_manage_user_groups=can_manage_user_groups,
             is_department_admin=is_department_admin,
+            can_review_tags=can_review_tags,
             department_name=department_name,
             is_global_super=is_global_super,
             is_child_admin=is_child_admin,

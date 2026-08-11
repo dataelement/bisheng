@@ -669,8 +669,10 @@ async def add_space_tags(
     tag_name: str = Body(..., embed=True, description="标签名称"),
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ):
+    # 统一走 lookup 响应：正式 Tag 无 review_status 时补成已通过，避免前端误判为待审
     result = await svc.add_space_tag(space_id, tag_name)
-    return resp_200(result)
+    payload = await svc._build_tag_lookup_resp(space_id, result)
+    return resp_200(payload)
 
 
 @router.delete("/{space_id}/tag")
