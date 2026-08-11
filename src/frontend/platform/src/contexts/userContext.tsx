@@ -1,5 +1,5 @@
 import { toast } from "@/components/bs-ui/toast/use-toast";
-import { resolveRoutePermissions } from "@/routes";
+import { resolveAdminLandingPath, resolveRoutePermissions } from "@/routes";
 import { getWorkspaceClientUrl } from "@/utils/workspaceUrl";
 import i18next from "i18next";
 import { ReactNode, createContext, useLayoutEffect, useState } from "react";
@@ -131,11 +131,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
         getUserInfo().then(res => {
             setUser(res.user_id ? res : null)
             const { user_id } = res;
-            // Apply the same fallback that routes/index.tsx uses, so
-            // department-admins and child-admins reach pages whose menu key the
-            // backend strips from web_menu (e.g. `sys`, `model`). Without this,
-            // the route-level guard below would still redirect to /403 even
-            // though `getPrivateRouter` admits the route.
+            // Apply the same Child Admin compatibility grants used by the route layer.
             const web_menu: string[] = resolveRoutePermissions(res);
 
             localStorage.setItem('UUR_INFO', user_id ? String(user_id) : '');
@@ -199,40 +195,16 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
             // Jump to the route based on permissions
             if (pathName === '/admin') {
-                const MENU_ROUTE_MAP = [
-                    { key: 'board', path: '/dashboard' },
-                    { key: 'build', path: '/build/apps' },
-                    { key: 'knowledge', path: '/filelib' },
-                    { key: 'model', path: '/model/management' },
-                    { key: 'evaluation', path: '/evaluation' },
-                    { key: 'mark_task', path: '/label' }, // 与角色菜单 third_id 一致
-                    // admin/workstation are entry-level keys, not content menus;
-                    // excluded intentionally — fallback handles the no-match case.
-                ];
-                const target = MENU_ROUTE_MAP.find(item => web_menu.includes(item.key));
-                if (target) {
-                    history.pushState(null, '', BASE_URL + target.path);
-                } else {
-                    // No accessible content menu. If approval mode is on, land on the
-                    // first approvable menu so the user sees an apply button.
-                    // Otherwise fall back to the generic placeholder.
-                    const APPROVABLE_ORDER = ['board', 'build', 'knowledge', 'model', 'evaluation', 'mark_task', 'log'];
-                    // Admin-area approval scope (legacy global flag as fallback).
-                    const adminApprovalMode = res.menu_approval_mode_admin ?? res.menu_approval_mode;
-                    const firstApprovable = adminApprovalMode
-                        ? APPROVABLE_ORDER[0]
-                        : null;
-                    const fallback = firstApprovable
-                        ? `/menu-pending?menu=${firstApprovable}`
-                        : '/menu-pending';
-                    history.pushState(null, '', BASE_URL + fallback);
-                }
+                const adminApprovalMode = Boolean(res.menu_approval_mode_admin ?? res.menu_approval_mode);
+                const target = resolveAdminLandingPath(web_menu, adminApprovalMode);
+                history.pushState(null, '', BASE_URL + target);
             } else {
                 // 403
                 const MENU_KEY_MAP: Record<string, string> = {
                     '/dashboard': 'board',
                     '/build/apps': 'build',
                     '/filelib': 'knowledge',
+                    '/dataset': 'dataset',
                     '/model/management': 'model',
                     '/evaluation': 'evaluation',
                     '/label': 'mark_task',

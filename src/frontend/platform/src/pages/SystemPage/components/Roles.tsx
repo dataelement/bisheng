@@ -55,6 +55,7 @@ const ADMIN_CHILD_MENUS = [
   "build",
   "create_app",
   "evaluation",
+  "dataset",
   "mark_task",
 ] as const
 /**
@@ -174,6 +175,7 @@ export default function Roles() {
       // `create_app` 依赖 `build`：只有当构建开启时渲染，关闭构建时级联移除。
       { id: "create_app", label: t("menu.createApp"), parentMenuId: "build" as const },
       { id: "evaluation", label: t("menu.evaluation") },
+      { id: "dataset", label: t("menu.dataset") },
       { id: "mark_task", label: t("menu.annotation") },
     ],
     [t]

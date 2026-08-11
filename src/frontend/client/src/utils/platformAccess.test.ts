@@ -44,6 +44,16 @@ describe('canOpenPlatformAdminPanel', () => {
 });
 
 describe('canOpenWorkbench', () => {
+  it('does not grant workbench access from department-admin identity alone', () => {
+    expect(
+      canOpenWorkbench({
+        role: 'user',
+        plugins: ['admin', 'system_config', 'sys'],
+        is_department_admin: true,
+      }),
+    ).toBe(false);
+  });
+
   it('returns false when the user only has workbench child menu permissions', () => {
     expect(
       canOpenWorkbench({

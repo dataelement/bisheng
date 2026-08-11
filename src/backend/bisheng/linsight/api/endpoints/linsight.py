@@ -138,12 +138,17 @@ async def linsight_file_download(
 
     # judge permission
     if session_version_model.user_id != login_user.user_id and not login_user.is_admin():
-        # Access by sharing a link
-        if (
-            share_link is None
-            or share_link.meta_data is None
-            or share_link.meta_data.get("versionId") != session_version_id
-        ):
+        # Access by sharing a link. Both share shapes grant, same as
+        # session-version-list / execute-task-detail: a workbench_chat share
+        # carries resource_id = the session and no versionId, and its recipient
+        # must still be able to open the task's output files.
+        shared_to_session = share_link is not None and share_link.resource_id == session_version_model.session_id
+        shared_to_version = (
+            share_link is not None
+            and share_link.meta_data is not None
+            and share_link.meta_data.get("versionId") == session_version_id
+        )
+        if not (shared_to_session or shared_to_version):
             raise UnAuthorizedError()
 
     minio_client = await get_minio_storage()

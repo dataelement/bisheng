@@ -706,7 +706,7 @@ async def test_get_frequently_used_flows_filters_by_view_app_permission_id():
             "add_extra_field",
             return_value=app_rows,
             create=True,
-        ),
+        ) as mock_add_extra_field,
         patch.object(
             WorkFlowService,
             "aenrich_apps_can_share",
@@ -718,16 +718,40 @@ async def test_get_frequently_used_flows_filters_by_view_app_permission_id():
             workflow_module.ApplicationPermissionService,
             "get_app_permission_map_async",
             new_callable=AsyncMock,
-            return_value={"asst-1": {"view_app"}},
-        ),
+            side_effect=[
+                {"asst-1": {"view_app"}},
+                {"asst-1": {"edit_app"}},
+            ],
+        ) as mock_permission_map,
     ):
         data, total = await WorkFlowService.get_frequently_used_flows(login_user, "app", 1, 8)
 
     login_user.aget_merged_rebac_app_resource_ids.assert_not_awaited()
     login_user.get_merged_rebac_app_resource_ids.assert_not_called()
     assert "id_extra" not in mock_get_all_apps.call_args.kwargs
+    assert mock_permission_map.await_count == 2
+    mock_add_extra_field.assert_called_once_with(login_user, app_rows, writeable_ids={"asst-1"})
     assert total == 1
     assert data == app_rows
+
+
+@pytest.mark.asyncio
+async def test_aget_writeable_app_ids_returns_empty_set_instead_of_sync_fallback():
+    workflow_module = _load_workflow_service_module()
+    WorkFlowService = workflow_module.WorkFlowService
+    login_user = SimpleNamespace(is_admin=lambda: False)
+    app_rows = [{"id": "wf-1", "flow_type": FlowType.WORKFLOW.value}]
+
+    with patch.object(
+        workflow_module.ApplicationPermissionService,
+        "get_app_permission_map_async",
+        new_callable=AsyncMock,
+        return_value={"wf-1": set()},
+    ) as mock_permission_map:
+        writeable_ids = await WorkFlowService.aget_writeable_app_ids(login_user, app_rows)
+
+    mock_permission_map.assert_awaited_once_with(login_user, app_rows, ["edit_app"])
+    assert writeable_ids == set()
 
 
 @pytest.mark.asyncio

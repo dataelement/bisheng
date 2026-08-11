@@ -30,7 +30,14 @@ SKILL_MD = "SKILL.md"
 BUILTIN_DIR = "built-in"
 TENANT_SKILLS_DIR = "data/skills"
 
-MAX_BUNDLE_SIZE = 10 * 1024 * 1024  # whole bundle, aligned with deepagents MAX_SKILL_FILE_SIZE
+# Upload payload limit: the .md / .zip / .skill bytes that arrive over HTTP.
+MAX_BUNDLE_SIZE = 10 * 1024 * 1024
+# Unpacked limit: sum of every extracted file's contents (also the GitHub import's
+# total download size). Deliberately larger than the upload limit — an archive of
+# pptx templates/fonts/images compresses well and expands past 10MB while the .zip
+# itself is far below it. This line is the zip-bomb guard, not a second copy of the
+# upload limit. (deepagents' MAX_SKILL_FILE_SIZE is a per-SKILL.md cap, unrelated.)
+MAX_UNPACKED_SIZE = 100 * 1024 * 1024
 MAX_NAME_LEN = 64
 MAX_DESCRIPTION_LEN = 1024
 MAX_DISPLAY_NAME_LEN = 255
@@ -96,6 +103,17 @@ def parse_skill_md(text: str) -> tuple[dict, str]:
     return meta, text[match.end() :]
 
 
+def render_skill_md(meta: dict, body: str) -> str:
+    """Render SKILL.md from an arbitrary frontmatter mapping + body.
+
+    Keeps every frontmatter key as-is (document order preserved) — used when an
+    imported bundle's frontmatter must be rewritten without dropping foreign keys
+    like ``license`` or ``allowed-tools``.
+    """
+    front = yaml.safe_dump(meta, allow_unicode=True, sort_keys=False, default_flow_style=False).rstrip("\n")
+    return f"---\n{front}\n---\n\n{body.strip()}\n"
+
+
 def compose_skill_md(
     name: str,
     description: str,
@@ -115,8 +133,7 @@ def compose_skill_md(
         metadata.update({k: str(v) for k, v in extra_metadata.items()})
     if metadata:
         meta["metadata"] = metadata
-    front = yaml.safe_dump(meta, allow_unicode=True, sort_keys=False, default_flow_style=False).rstrip("\n")
-    return f"---\n{front}\n---\n\n{body.rstrip()}\n"
+    return render_skill_md(meta, body)
 
 
 def unpack_zip_bytes(data: bytes) -> dict[str, bytes]:

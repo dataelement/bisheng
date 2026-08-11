@@ -11,7 +11,7 @@
  *  - open && previewFile       → in-place preview view (fig. preview)
  */
 import { useEffect, useState } from 'react';
-import { openHtmlArtifactViewer, type ArtifactFile } from './artifactUtils';
+import { isHtmlArtifact, openHtmlArtifactViewer, type ArtifactFile } from './artifactUtils';
 
 export function useWorkspacePanel(versionId: string) {
     const [open, setOpen] = useState(false);
@@ -48,7 +48,7 @@ export function useWorkspacePanel(versionId: string) {
     /** Preview a file in place. html artifacts still open in the standalone tab
      *  (needs versionId to resolve the MinIO object key into a presigned link). */
     const openPreview = (file: ArtifactFile) => {
-        if (file.file_name?.toLowerCase().endsWith('.html')) {
+        if (isHtmlArtifact(file)) {
             openHtmlArtifactViewer(file, versionId);
             return;
         }

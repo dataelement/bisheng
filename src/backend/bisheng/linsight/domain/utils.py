@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import re
 import uuid
 from typing import Any
 
@@ -318,6 +319,132 @@ async def get_final_result_file(
 
 # Filename of the synthesized fallback report (design §9.3.2 output/ zone).
 FALLBACK_REPORT_NAME = "报告.md"
+
+
+# --- Phantom deliverable detection ------------------------------------------
+# A model sometimes signs off with "已保存为 详细分析报告.md" having never called
+# write_file. That is a MODEL defect, and the kernel prompt already forbids it
+# (agent_factory §3 and §风格). What the platform owes is evidence, not a repair:
+# an earlier revision of this module answered the false claim by creating the
+# file, which left the run looking healthy and made the defect unmeasurable.
+
+# Extensions the delivery contract can actually produce. Deliberately the same set
+# the client treats as a deliverable link (artifactUtils.DELIVERABLE_LINK_EXT) so a
+# link rendered "未生成" in the UI and a phantom logged here can never disagree.
+# .md alone would miss the likeliest claim of all: steps 3c/3d make export_docx /
+# export_pdf the closing action, so "已导出 报告.docx" is exactly where a run that
+# ran out of turns stops.
+_DELIVERABLE_EXTS = (".md", ".markdown", ".html", ".htm", ".docx", ".pdf")
+_DELIVERABLE_EXT_RE = "(?:md|markdown|html?|docx|pdf)"
+
+# Markdown link, captured as a PAIR: the visible text and the target. Only the
+# target carries the path, so only the target can decide the zone — see
+# _is_deliverable_claim.
+_CLAIMED_LINK_RE = re.compile(
+    rf"\[([^\]\n]+\.{_DELIVERABLE_EXT_RE})\]\(([^)\n]+)\)|\[[^\]\n]*\]\(([^)\n]+\.{_DELIVERABLE_EXT_RE})\)",
+    re.IGNORECASE,
+)
+# Prose claim. The save verb is load-bearing: without it a bare mention
+# ("整理成 总结.md 交给团队") is a plan, not a claim.
+_CLAIMED_PROSE_RE = re.compile(
+    r"(?:已(?:将)?(?:保存|写入|生成|导出)|保存至|保存为|导出为|内容已保存至)"
+    rf"\s*[「\"'`【\[]?((?:[^\s。，,；;\n「」\"'`】\]<>]+/)*[^\s。，,；;\n「」\"'`】\]<>/]+\.{_DELIVERABLE_EXT_RE})",
+    re.IGNORECASE,
+)
+# Bare output/ path anywhere in the answer.
+_CLAIMED_OUTPUT_PATH_RE = re.compile(
+    rf"(?<![\w/])({OUTPUT_ZONE}/[^\s。，,；;\n「」\"'`】\]<>()]+\.{_DELIVERABLE_EXT_RE})",
+    re.IGNORECASE,
+)
+
+# Anything with a URL scheme (http:, https:, //cdn…, data:) is a citation, not a
+# claim about this run's workspace.
+_URL_SCHEME_RE = re.compile(r"^(?:[a-z][a-z0-9+.-]*:)?//|^[a-z][a-z0-9+.-]*:", re.IGNORECASE)
+
+
+def _is_deliverable_claim(ref: str) -> bool:
+    """Whether a captured reference is a claim about THIS run's deliverables.
+
+    A model may legitimately cite an external URL ending in .pdf, quote back an
+    uploaded source under uploads/, or point at an intermediate note in scratch/.
+    None of those are deliverables — select_deliverables excludes those zones
+    outright — so counting them as claims would make the detector fire on nearly
+    every turn that reads a user file, and the signal would be worthless inside a
+    week. Only a bare filename (which the delivery contract reads as output/) or
+    an explicit output/ path qualifies.
+    """
+    ref = (ref or "").strip().replace("\\", "/")
+    if not ref or _URL_SCHEME_RE.match(ref):
+        return False
+    return _zone_of(ref.lstrip("/")) in ("", OUTPUT_ZONE)
+
+
+def _sanitize_deliverable_filename(name: str | None) -> str | None:
+    """Keep only a safe deliverable basename from a model-supplied reference."""
+    if not name:
+        return None
+    cleaned = os.path.basename(name.replace("\\", "/").strip())
+    if not cleaned or cleaned in {".", ".."} or ".." in cleaned:
+        return None
+    if not cleaned.lower().endswith(_DELIVERABLE_EXTS):
+        return None
+    if len(cleaned) > 200:
+        return None
+    return cleaned
+
+
+def extract_claimed_deliverable_filenames(answer: str) -> list[str]:
+    """Deliverable filenames the answer claims to have produced, in order.
+
+    Detection only — nothing here materialises anything.
+    """
+    text = (answer or "").strip()
+    if not text:
+        return []
+    refs: list[str] = []
+    for match in _CLAIMED_LINK_RE.finditer(text):
+        text_ref, target, target_only = match.group(1), match.group(2), match.group(3)
+        # The target decides the zone for both halves: a link written
+        # [briefing.md](uploads/briefing.md) has a bare-looking text but is a
+        # reference to the user's own upload, not a claim.
+        if text_ref is not None:
+            if _is_deliverable_claim(target):
+                refs.append(text_ref)
+        elif target_only is not None:
+            refs.append(target_only)
+    for pattern in (_CLAIMED_PROSE_RE, _CLAIMED_OUTPUT_PATH_RE):
+        refs.extend(match.group(1) for match in pattern.finditer(text))
+
+    seen: set[str] = set()
+    names: list[str] = []
+    for ref in refs:
+        if not _is_deliverable_claim(ref):
+            continue
+        name = _sanitize_deliverable_filename(ref)
+        if not name or name.lower() in seen:
+            continue
+        seen.add(name.lower())
+        names.append(name)
+    return names
+
+
+def detect_phantom_deliverables(answer: str, final_files: list[dict] | None) -> list[str]:
+    """Deliverables the answer claims exist that the run never actually produced.
+
+    Compared against the REAL file list rather than only running when it is empty,
+    so "wrote a.md, claimed a.md and b.md" is caught too — that is the common
+    shape, and the one a fabricating fallback could never have surfaced.
+
+    Case-insensitive on purpose: a case-only mismatch is a resolver problem, not
+    evidence that the model lied, and a false accusation is worse than a miss in
+    something whose only job is diagnosis.
+    """
+    claimed = extract_claimed_deliverable_filenames(answer)
+    if not claimed:
+        return []
+    real = {(f.get("file_name") or "").strip().lower() for f in (final_files or [])}
+    real.discard("")
+    return [name for name in claimed if name.lower() not in real]
 
 
 async def build_fallback_report_file(session_model: LinsightSessionVersion, answer: str, file_dir: str) -> list[dict]:

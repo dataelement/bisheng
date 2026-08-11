@@ -160,14 +160,57 @@ class FileEntry:
         }
 
 
-def normalize_workspace_path(path: str) -> str:
+# First segments that only ever appear in a container/host path, never as a
+# workspace zone. Used ONLY to word the error message — never to pick a file.
+_HOST_ROOT_HINTS = frozenset({"root", "home", "tmp", "var", "usr", "opt", "mnt", "media", "Users", "app"})
+
+
+def strip_executor_host_prefix(path: str, file_dir: str | None) -> tuple[str, bool]:
+    """Drop the code interpreter's host-directory prefix; return ``(path, stripped)``.
+
+    The interpreter's cwd IS this session's workspace cache dir, so the model routinely
+    reports host paths like ``/root/.cache/bisheng/linsight/<svid8>/output/qa/s08.png``
+    and then hands one back to ``read_file``. Without this the leading slash was simply
+    dropped, producing the nonsense key ``workspace/<svid>/root/.cache/...`` and a bare
+    "File not found" that never hinted at the real problem.
+
+    ONE rule, deliberately: the full ``file_dir`` followed by ``/`` (or an exact
+    match). Never a mere ancestor segment, so a workspace that genuinely contains
+    ``root/report.md`` keeps it, and a near-miss sibling like ``/tmp/ws/<svid8>x/...``
+    is left alone.
+
+    A "strip any sibling task dir under the same parent" rule was considered — it
+    would also catch the model quoting a path from an EARLIER turn's log — and
+    rejected: it cannot distinguish a real sibling task dir from a directory that
+    merely shares the parent, so it would silently reinterpret paths it has no
+    business touching. Rewriting a path must be provably unambiguous; opening the
+    wrong file is worse than an error message. Guessing belongs in the error text
+    (``WorkspaceBackend._not_found_error``), never in file selection.
+    """
+    if not file_dir or not path.startswith("/"):
+        return path, False
+    root = os.path.normpath(file_dir)
+    if path == root:
+        return "", True
+    if path.startswith(root + "/"):
+        return path[len(root) + 1 :], True
+    return path, False
+
+
+def normalize_workspace_path(path: str, file_dir: str | None = None) -> str:
     """Normalize a workspace path to a relative key; reject ``..`` traversal.
 
     Accepts both absolute (``/output/a.md``) and relative (``output/a.md``) forms
     and returns a clean relative key (``output/a.md``). Raises ``ValueError`` on
     any ``..`` segment so a model/tool cannot escape the session workspace.
+
+    ``file_dir`` is optional so this stays a plain function other modules can call
+    (and test) without a backend; when given, a code-interpreter host path is folded
+    back to its workspace key first. Traversal is validated AFTER stripping, so
+    ``<file_dir>/../../etc/passwd`` still raises.
     """
-    p = (path or "").strip().lstrip("/")
+    stripped, _ = strip_executor_host_prefix((path or "").strip(), file_dir)
+    p = stripped.lstrip("/")
     parts: list[str] = []
     for seg in p.split("/"):
         if seg in ("", "."):
@@ -357,12 +400,49 @@ class WorkspaceBackend(FilesystemBackend):
         os.makedirs(self.file_dir, exist_ok=True)
 
     # -- key / cache helpers ------------------------------------------------
+    def _ws_rel(self, path: str) -> str:
+        """``normalize_workspace_path`` bound to this session's executor cache dir.
+
+        Every tool entry point goes through here so a host path pasted back from the
+        code interpreter resolves instead of turning into a bogus key.
+        """
+        rel = normalize_workspace_path(path, file_dir=self.file_dir)
+        if rel != (path or "").strip().lstrip("/"):
+            logger.info("workspace path: folded executor host path {} -> {}", path, rel)
+        return rel
+
     def _object_key(self, rel_path: str) -> str:
         """Map a workspace-relative path to its MinIO object key."""
         return f"{WORKSPACE_PREFIX}/{self.svid}/{rel_path}"
 
     def _cache_path(self, rel_path: str) -> Path:
         return Path(self.file_dir) / rel_path
+
+    def _not_found_error(self, file_path: str) -> str:
+        """ "File not found" plus, when warranted, WHY the path could not resolve.
+
+        A bare "File 'X' not found" was actively unhelpful for the most common
+        failure: handing back a code-interpreter host path. Naming the two
+        namespaces is what lets the model fix it in one step instead of retrying
+        the same path.
+        """
+        _, stripped = strip_executor_host_prefix((file_path or "").strip(), self.file_dir)
+        if stripped:
+            rel = normalize_workspace_path(file_path, file_dir=self.file_dir)
+            return (
+                f"File '{file_path}' not found. (Interpreted as workspace path '{rel}' — the code "
+                f"interpreter's working directory IS the workspace root.) Nothing exists there; "
+                f"call ls to see what the workspace holds."
+            )
+        head = (file_path or "").strip().lstrip("/").split("/", 1)[0]
+        if file_path.startswith("/") and head in _HOST_ROOT_HINTS:
+            return (
+                f"File '{file_path}' not found. NOTE: this looks like a path on the code "
+                f"interpreter's HOST filesystem. The file tools take WORKSPACE paths only — the "
+                f"interpreter's working directory IS the workspace root, so its 'output/a.png' is "
+                f"'/output/a.png' here. Retry with the workspace path, or call ls to list it."
+            )
+        return f"File '{file_path}' not found"
 
     def _bucket(self) -> str:
         return self.minio.bucket
@@ -425,7 +505,7 @@ class WorkspaceBackend(FilesystemBackend):
 
     # -- write --------------------------------------------------------------
     def write(self, file_path: str, content) -> WriteResult:
-        rel = normalize_workspace_path(file_path)
+        rel = self._ws_rel(file_path)
         data = self._to_bytes(content)
         # cache first (fast local), then write-through to MinIO (truth).
         self._cache_write(rel, data)
@@ -434,10 +514,10 @@ class WorkspaceBackend(FilesystemBackend):
 
     # -- read ---------------------------------------------------------------
     def read(self, file_path: str, offset: int = 0, limit: int = 2000) -> ReadResult:
-        rel = normalize_workspace_path(file_path)
+        rel = self._ws_rel(file_path)
         data = self._materialize(rel)
         if data is None:
-            return ReadResult(error=f"File '{file_path}' not found")
+            return ReadResult(error=self._not_found_error(file_path))
         text = _decode_workspace_text(data, rel)
         if text is None:
             # Binary: offset/limit are meaningless here (slicing bytes by "lines"
@@ -451,7 +531,7 @@ class WorkspaceBackend(FilesystemBackend):
 
     # -- ls (authoritative from MinIO) --------------------------------------
     def ls(self, path: str = "") -> LsResult:
-        rel_prefix = normalize_workspace_path(path) if path else ""
+        rel_prefix = self._ws_rel(path) if path else ""
         object_prefix = f"{WORKSPACE_PREFIX}/{self.svid}/"
         if rel_prefix:
             object_prefix += rel_prefix
@@ -486,10 +566,10 @@ class WorkspaceBackend(FilesystemBackend):
         new_string: str,
         replace_all: bool = False,
     ) -> EditResult:
-        rel = normalize_workspace_path(file_path)
+        rel = self._ws_rel(file_path)
         data = self._materialize(rel)
         if data is None:
-            return EditResult(error=f"File '{file_path}' not found")
+            return EditResult(error=self._not_found_error(file_path))
         text = _decode_workspace_text(data, rel)
         if text is None:
             # Refuse BEFORE any write. A replace-decode here would turn every
@@ -523,7 +603,7 @@ class WorkspaceBackend(FilesystemBackend):
     def glob(self, pattern: str, path: str | None = None) -> GlobResult:
         import fnmatch
 
-        base = normalize_workspace_path(path) if path else ""
+        base = self._ws_rel(path) if path else ""
         ls_res = self.ls(base)
         if ls_res.error is not None:
             return GlobResult(error=ls_res.error)
@@ -540,7 +620,7 @@ class WorkspaceBackend(FilesystemBackend):
     def grep(self, pattern: str, path: str | None = None, glob: str | None = None) -> GrepResult:
         from deepagents.backends.protocol import GrepMatch
 
-        base = normalize_workspace_path(path) if path else ""
+        base = self._ws_rel(path) if path else ""
         ls_res = self.ls(base)
         if ls_res.error is not None:
             return GrepResult(error=ls_res.error)
@@ -586,7 +666,7 @@ class WorkspaceBackend(FilesystemBackend):
         responses: list = []
         for raw_path, content in files:
             try:
-                rel = normalize_workspace_path(raw_path)
+                rel = self._ws_rel(raw_path)
                 data = self._to_bytes(content)
                 self._cache_write(rel, data)
                 self._minio_put_sync(rel, data)
@@ -602,7 +682,7 @@ class WorkspaceBackend(FilesystemBackend):
         responses: list = []
         for raw_path in paths:
             try:
-                rel = normalize_workspace_path(raw_path)
+                rel = self._ws_rel(raw_path)
             except ValueError:
                 responses.append(FileDownloadResponse(path=raw_path, error="invalid_path"))
                 continue
@@ -615,7 +695,7 @@ class WorkspaceBackend(FilesystemBackend):
 
     # -- async surface (write-through truth uses real async MinIO) ----------
     async def awrite(self, file_path: str, content) -> WriteResult:
-        rel = normalize_workspace_path(file_path)
+        rel = self._ws_rel(file_path)
         data = self._to_bytes(content)
         await asyncio.to_thread(self._cache_write, rel, data)
         await self.minio.put_object(
@@ -626,7 +706,7 @@ class WorkspaceBackend(FilesystemBackend):
         return WriteResult(path="/" + rel)
 
     async def aread(self, file_path: str, offset: int = 0, limit: int = 2000) -> ReadResult:
-        rel = normalize_workspace_path(file_path)
+        rel = self._ws_rel(file_path)
         data = await asyncio.to_thread(self._cache_read, rel)
         if data is None:
             try:
@@ -646,7 +726,7 @@ class WorkspaceBackend(FilesystemBackend):
             if data is not None:
                 await asyncio.to_thread(self._cache_write, rel, data)
         if data is None:
-            return ReadResult(error=f"File '{file_path}' not found")
+            return ReadResult(error=self._not_found_error(file_path))
         text = _decode_workspace_text(data, rel)
         if text is None:
             # Same contract as the sync path: binary is decided whole, never sliced.
@@ -689,7 +769,7 @@ class WorkspaceBackend(FilesystemBackend):
         cross-turn seed, has to be materialized before the tool list is built or it
         is invisible to Python code even though ``ls`` shows it.
         """
-        rel = normalize_workspace_path(file_path)
+        rel = self._ws_rel(file_path)
         data = self._materialize(rel)
         if data is None:
             return None

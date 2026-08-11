@@ -25,13 +25,13 @@ import httpx
 from loguru import logger
 
 from bisheng.common.errcode.linsight import (
-    SkillFileTooLargeError,
+    SkillBundleTooLargeError,
     SkillGitHubFetchError,
     SkillGitHubRateLimitError,
     SkillGitHubUrlInvalidError,
     SkillValidationError,
 )
-from bisheng.linsight.domain.services.skill_store import MAX_BUNDLE_SIZE, SKILL_MD
+from bisheng.linsight.domain.services.skill_store import MAX_UNPACKED_SIZE, SKILL_MD
 
 GITHUB_HOSTS = {"github.com", "www.github.com"}
 RAW_HOSTS = {"raw.githubusercontent.com", "codeload.github.com"}
@@ -133,8 +133,10 @@ async def fetch_skill_files(target: GithubTarget) -> dict[str, bytes]:
                 if len(files) >= MAX_FILES:
                     raise SkillGitHubFetchError(msg=f"skill directory has more than {MAX_FILES} files")
                 total_size += int(item.get("size") or 0)
-                if total_size > MAX_BUNDLE_SIZE:
-                    raise SkillFileTooLargeError()
+                # Raw file sizes — unpacked semantics, so this shares the upload path's
+                # unpacked limit rather than the (compressed) upload payload limit.
+                if total_size > MAX_UNPACKED_SIZE:
+                    raise SkillBundleTooLargeError()
                 files[rel] = await _download_raw(client, item.get("download_url"))
             # symlinks / submodules are intentionally ignored — not portable as bundle assets.
 

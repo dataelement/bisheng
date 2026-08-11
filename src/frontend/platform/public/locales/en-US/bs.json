@@ -2669,13 +2669,14 @@
       "requirementsTitle": "File requirements",
       "reqMd": ".md file must contain YAML frontmatter (name and description required)",
       "reqZip": ".zip / .skill archive must include SKILL.md at root; assets allowed",
-      "reqSize": "Whole bundle ≤ 10MB",
+      "reqSize": "Uploaded file ≤ 10MB; unpacked contents ≤ 100MB",
       "githubUrlPlaceholder": "https://github.com/owner/repo/tree/main/path/to/skill",
       "githubHint": "Paste a GitHub URL pointing to a skill directory (must contain SKILL.md)",
       "githubReqHost": "Public github.com repositories only",
       "githubReqDir": "URL must point to a directory containing SKILL.md; branch names with slashes are not supported",
       "unsupported": "Unsupported file type — please import .md / .zip / .skill",
-      "confirm": "Import"
+      "confirm": "Import",
+      "normalized": "Imported — skill ID was normalized to {{to}} (originally {{from}})"
     },
     "detailSheet": {
       "files": "Files",
@@ -2684,8 +2685,10 @@
       "readonlyAsset": "Assets are read-only; re-upload the bundle to update"
     },
     "errors": {
-      "validation": "Validation failed: invalid frontmatter or skill ID (archive must contain SKILL.md)",
-      "tooLarge": "File exceeds the 10MB limit",
+      "validation": "Validation failed: invalid frontmatter or skill ID",
+      "validationDetail": "Validation failed: {{detail}}",
+      "tooLarge": "Uploaded file exceeds the 10MB limit, please trim it and retry",
+      "bundleTooLarge": "Unpacked bundle contents exceed the 100MB limit, please trim the bundled assets and retry",
       "notFound": "Skill not found",
       "noPermission": "No permission for this operation",
       "duplicate": "A skill with the same display name or skill ID already exists",

@@ -458,6 +458,7 @@
   "com_linsight_output_files": "出力ファイル {{0}}",
   "com_linsight_save_as": "名前を付けて保存",
   "com_linsight_preview": "プレビュー",
+  "com_linsight_opens_in_new_tab": "新しいタブで開きます",
   "com_linsight_workspace": "ワークスペース",
   "com_linsight_workspace_empty": "出力ファイルはまだありません",
   "com_linsight_workspace_uploaded": "アップロードしたファイル",
@@ -468,6 +469,8 @@
   "com_linsight_exit_fullscreen": "全画面を終了",
   "com_linsight_download_to_view": "ダウンロードして表示",
   "com_linsight_preview_unsupported": "このファイル形式はオンラインプレビューに対応していません",
+  "com_linsight_deliverable_not_generated": "（未生成）",
+  "com_linsight_deliverable_not_generated_hint": "モデルはこのファイルに言及しましたが、実際には生成していないため、開けません。",
   "com_linsight_preview_load_failed": "ファイルの読み込みに失敗しました",
   "com_linsight_download_failed": "ダウンロードに失敗しました。後でもう一度お試しください",
   "com_linsight_exporting": "エクスポート中です。しばらくお待ちください…",
@@ -2267,6 +2270,10 @@
   "com_approval_search_placeholder": "申請者・シナリオ・ファイルを検索",
   "knowledge_qa_noVisibleContent": "アクセス権限のあるリソースに該当する内容が見つかりませんでした。",
   "workstation": {
+    "toc": {
+      "label": "目次",
+      "open": "目次を表示"
+    },
     "messageExport": {
       "entry": "エクスポート",
       "exportAsWord": "Word でエクスポート",

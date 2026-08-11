@@ -8,10 +8,25 @@ import BookOpen from '~/components/ui/icon/BookOpen';
 import BooksIcon from '~/components/ui/icon/Books';
 import type { TaskModeKnowledgeItem, TaskModeSkill } from '~/store/linsight';
 
+export interface ContextAttachmentFile {
+    clientId: string;
+    name: string;
+    isUploading?: boolean;
+    file_id?: string;
+    filepath?: string;
+    filename?: string;
+    file_name?: string;
+    parsing_status?: string;
+}
+
 interface ContextChipsProps {
     skills: TaskModeSkill[];
     knowledge: TaskModeKnowledgeItem[];
-    files: any[];
+    /** Files in picker order; supersedes legacy `files` + `uploadingFiles` split. */
+    attachmentFiles?: ContextAttachmentFile[];
+    /** @deprecated use attachmentFiles */
+    files?: any[];
+    /** @deprecated use attachmentFiles */
     uploadingFiles?: { id: string; name: string }[];
     onRemoveSkill: (skill: TaskModeSkill) => void;
     onRemoveKnowledge: (item: TaskModeKnowledgeItem) => void;
@@ -48,32 +63,46 @@ const Chip = ({
 export function ContextChips({
     skills,
     knowledge,
-    files,
+    attachmentFiles,
+    files = [],
     uploadingFiles = [],
     onRemoveSkill,
     onRemoveKnowledge,
     onRemoveFile,
 }: ContextChipsProps) {
+    const orderedFiles: ContextAttachmentFile[] = attachmentFiles ?? [
+        ...uploadingFiles.map((file) => ({
+            clientId: file.id,
+            name: file.name,
+            isUploading: true,
+        })),
+        ...files.map((file) => ({
+            clientId: file.clientId || file.file_id || file.filepath || file.name,
+            name: file.filename || file.file_name || file.name || '',
+            isUploading: false,
+            ...file,
+        })),
+    ];
+
     const isEmpty =
-        skills.length === 0 && knowledge.length === 0 && files.length === 0 && uploadingFiles.length === 0;
+        skills.length === 0 && knowledge.length === 0 && orderedFiles.length === 0;
     if (isEmpty) return null;
 
     return (
         <div className="mb-2 max-h-[72px] overflow-y-auto">
             <div className="flex flex-wrap gap-1">
-                {uploadingFiles.map((file) => (
+                {orderedFiles.map((file) => (
                     <Chip
-                        key={`uploading-${file.id}`}
-                        icon={<Loader2 className="mr-1 size-4 shrink-0 animate-spin text-[#999]" />}
+                        key={`att-${file.clientId}`}
+                        icon={
+                            file.isUploading ? (
+                                <Loader2 className="mr-1 size-4 shrink-0 animate-spin text-[#999]" />
+                            ) : (
+                                <Paperclip className="mr-1 size-4 shrink-0 text-[#999]" />
+                            )
+                        }
                         label={file.name}
-                    />
-                ))}
-                {files.map((file) => (
-                    <Chip
-                        key={file.file_id || file.filepath || file.name}
-                        icon={<Paperclip className="mr-1 size-4 shrink-0 text-[#999]" />}
-                        label={file.filename || file.file_name || file.name || ''}
-                        onRemove={() => onRemoveFile(file)}
+                        onRemove={file.isUploading ? undefined : () => onRemoveFile(file)}
                     />
                 ))}
                 {skills.map((skill) => (

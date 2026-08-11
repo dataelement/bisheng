@@ -30,11 +30,12 @@ from __future__ import annotations
 
 import asyncio
 import time
+from collections import OrderedDict
 from collections.abc import Awaitable, Callable
 
 from langchain.agents.middleware._retry import calculate_delay
 from langchain.agents.middleware.types import AgentMiddleware, ModelRequest, ModelResponse
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from loguru import logger
 
 from bisheng.common.services.llm_error_classifier import Behavior, classify_behavior
@@ -75,6 +76,114 @@ _TRUNCATION_NUDGE = (
 _TRUNCATION_FINISH_REASONS = frozenset({"length", "max_tokens", "max_output_tokens"})
 
 
+# ---------------------------------------------------------------------------
+# Turn budget + soft landing
+#
+# The run's real gate is a MODEL-TURN budget, not LangGraph's ``recursion_limit``
+# (which counts super-steps: ~4 per turn, so its number never matches operator
+# intuition). Counting here — inside ``wrap_model_call`` — is deliberate: wrap
+# hooks are NOT compiled into graph nodes, so this costs zero super-steps.
+# langchain's own ``ModelCallLimitMiddleware`` implements before_model +
+# after_model, which would add two nodes per turn (4 -> 6 super-steps) and shrink
+# the usable turn count instead of protecting it; it also hard-jumps to END,
+# giving the model no chance to write its deliverable.
+#
+# Instead the budget lands in three stages, so the run ENDS ITSELF cleanly rather
+# than being cut down mid-thought and salvaged afterwards:
+#   1. nudge      — tell the model to wrap up while it still has every tool;
+#   2. write-only — narrow the tool set to the ones that produce deliverables;
+#   3. no tools   — nothing is offered to the model, and ``wrap_tool_call`` refuses
+#                   anything exploratory it calls anyway, so the only way forward
+#                   is a text answer: the graph reaches END on its own and the run
+#                   completes normally (no apology path).
+#
+# Stages 1-2 are hints — they shape ``request.tools``, which only controls what the
+# model is TOLD it has. Stage 3 needs the tool-layer refusal to actually bind; see
+# ``_POST_BUDGET_ALLOWED_TOOLS``.
+# ---------------------------------------------------------------------------
+
+# Turns left at which stage 2 kicks in (stage 1 is configurable, stage 3 is zero).
+_WRITE_ONLY_TURNS_LEFT = 2
+
+# Tools still offered in stage 2: the ones that put a deliverable on disk.
+_DELIVERABLE_TOOLS = frozenset({"write_file", "edit_file", "export_docx", "export_pdf"})
+
+# Tools that remain EXECUTABLE after the budget is spent (stage 3's hard stop).
+#
+# Narrowing ``request.tools`` alone cannot enforce a budget: with an empty list
+# langchain skips ``bind_tools`` entirely (factory.py — ``if final_tools:``), so the
+# request merely omits the tools parameter, while ToolNode still holds every tool
+# from compile time. A model that has seen hundreds of tool calls in its history
+# keeps emitting them and they keep executing — measured on 114: a 6-turn budget
+# ran 8 turns. Blocking at ``wrap_tool_call`` is the enforceable layer, because it
+# runs INSIDE ToolNode where the model cannot route around it.
+#
+# ``write_todos`` is allowed through deliberately: it is the only channel that
+# syncs task progress to the UI, so blocking it would leave a finished run
+# displaying "3/5". The deliverable writers are allowed for the obvious reason —
+# the whole point of landing softly is to still produce the file.
+_POST_BUDGET_ALLOWED_TOOLS = _DELIVERABLE_TOOLS | {"write_todos"}
+
+# LangGraph's checkpoint-namespace level separator, mirroring
+# ``langgraph._internal._constants.NS_SEP``. Re-declared rather than imported: the
+# value is part of the checkpoint wire format and far more stable than the private
+# module path. Pinned by ``test/linsight/test_subagent_ns_contract.py``.
+_NS_SEP = "|"
+
+# Upper bound on live turn-budget buckets (see ``_budget_key``). Observed concurrent
+# delegations are single-digit; 128 is far above any real plan, and eviction is LRU
+# so an active bucket can never be pushed out by stale ones.
+_BUDGET_BUCKETS_MAX = 128
+
+# Tool calls that are PURE STATE MAINTENANCE: they move no work forward, they only
+# republish the plan. deepagents injects ``TodoListMiddleware`` into every subagent
+# unconditionally (``deepagents/graph.py:643-651``) — it is not part of the business
+# tool subset ``agent_factory._subagent_tools`` builds. Measured on v2.6.0-fix2: 10 of
+# a researcher's 29 model calls produced ``write_todos`` and nothing else, i.e. a third
+# of a 30-turn budget bought zero research. Those turns are refunded instead.
+_STATE_ONLY_TOOLS = frozenset({"write_todos"})
+
+# Refunds are CAPPED. Uncapped, a model looping on ``write_todos`` would never advance
+# the counter, the soft-landing ladder would never fire, and the run would die on
+# GraphRecursionError instead — the exact failure ``_resolve_recursion_limit`` exists
+# to prevent. The L3 tool-loop breaker cannot cover this either: it trips on tool
+# FAILURES, and ``write_todos`` succeeds every time.
+_MAX_STATE_ONLY_REFUNDS = 10
+
+_BUDGET_SPENT_TOOL_REPLY = (
+    "⚠️ 本次任务的模型调用次数预算已用尽，{tool_name} 未被执行。"
+    "请立即用已经掌握的材料完成交付：先用 write_file 把最终成果写入 output/ 目录下的交付文件，"
+    "再直接用文字给出结论。不要再调用任何检索、读取或代码执行类工具。"
+)
+
+_WRAP_UP_NUDGE = (
+    "⚠️ 本次任务的模型调用次数预算即将耗尽（剩余约 {remaining} 次）。请立即停止新的探索性调用，"
+    "用已经掌握的材料完成交付：先把最终成果写入 output/ 目录下的交付文件，再用一段话说明结论。"
+    "不要再开启新的分支任务或反复验证。"
+)
+
+_LAST_CHANCE_NUDGE = (
+    "⚠️ 这是最后的收尾机会（剩余约 {remaining} 次模型调用），当前只提供写文件/导出工具。"
+    "请立刻把已完成的内容写入 output/ 目录下的交付文件，不要再做任何检查、验证或探索。"
+)
+
+
+def _with_wrap_up_nudge(request: ModelRequest, template: str, remaining: int) -> ModelRequest:
+    """Append the wrap-up instruction to THIS request only (never to graph state).
+
+    Same ephemeral shape as ``_with_truncation_nudge``: appended at the tail of
+    the message list (the strongest position) rather than into the system
+    message, which would change the cached prefix on every single turn.
+    """
+    return request.override(messages=[*request.messages, HumanMessage(content=template.format(remaining=remaining))])
+
+
+def _only_deliverable_tools(request: ModelRequest) -> ModelRequest:
+    """Narrow the bound tools to the deliverable writers (stage 2)."""
+    kept = [t for t in request.tools if getattr(t, "name", None) in _DELIVERABLE_TOOLS]
+    return request.override(tools=kept)
+
+
 def _response_ai_message(response: object) -> AIMessage | None:
     """Extract the model's ``AIMessage`` from a handler result (ModelResponse | AIMessage)."""
     if isinstance(response, AIMessage):
@@ -107,6 +216,30 @@ def _is_truncated_tool_call(response: object) -> bool:
 def _with_truncation_nudge(request: ModelRequest) -> ModelRequest:
     """A new request with the corrective nudge appended (ephemeral — retry only)."""
     return request.override(messages=[*request.messages, HumanMessage(content=_TRUNCATION_NUDGE)])
+
+
+def _is_state_only_turn(response: object) -> bool:
+    """True iff this model call produced ONLY pure state-maintenance tool calls.
+
+    Deliberately strict — a turn is refunded only when it demonstrably moved nothing
+    forward. Everything else still costs a turn:
+
+    - no ``AIMessage`` at all → unknown shape, stay conservative;
+    - no tool calls (a text-only close-out) → that IS the run's real last turn, and
+      refunding it would keep the ladder from ever reaching stage 3;
+    - any invalid/malformed tool call → the model attempted real work and failed;
+    - ``write_todos`` alongside any other tool → real work happened this turn.
+    """
+    ai = _response_ai_message(response)
+    if ai is None:
+        return False
+    if getattr(ai, "invalid_tool_calls", None):
+        return False
+    calls = getattr(ai, "tool_calls", None) or []
+    if not calls:
+        return False
+    names = {tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", None) for tc in calls}
+    return names <= _STATE_ONLY_TOOLS
 
 
 def _summarize_tool_calls(ai: AIMessage) -> list[str]:
@@ -172,6 +305,9 @@ class LinsightModelResilienceMiddleware(AgentMiddleware):
         max_degrade: int = 3,
         truncation_retry_limit: int = 2,
         is_subagent: bool = False,
+        turn_limit: int = 115,
+        soft_landing_turns: int = 8,
+        budget_sink: dict | None = None,
     ) -> None:
         super().__init__()
         self.tools = []  # registers no extra tools
@@ -183,7 +319,31 @@ class LinsightModelResilienceMiddleware(AgentMiddleware):
         self.max_degrade = max(0, max_degrade)
         self.truncation_retry_limit = max(0, truncation_retry_limit)
         self.is_subagent = is_subagent
+        # KNOWN GAP (not fixed here to keep the backport surface small): this counter
+        # has the same cross-``task``-call sharing problem the turn budget had — every
+        # delegation shares one ``max_degrade`` allowance. Bucket it on ``_budget_key``
+        # when touching this next.
         self._degrade_count = 0
+        # Turn budget, bucketed per graph RUN rather than per middleware instance:
+        #
+        #   - main graph → exactly one bucket. One compiled Pregel loop, one allowance;
+        #     ``budget_sink`` semantics unchanged.
+        #   - subagent   → ONE BUCKET PER ``task`` TOOL CALL. deepagents compiles the
+        #     researcher ONCE (``subagents.py:584``) and every ``task`` call re-enters
+        #     that same runnable, so a single counter was silently shared: two parallel
+        #     researchers burned one 30-turn allowance between them and the second one
+        #     started already inside the soft-landing zone (measured, v2.6.0-fix2).
+        #
+        # Either way the budget resets when the agent is rebuilt — an ask_user resume
+        # grants a fresh allowance, matching LangGraph's own
+        # ``stop = step + recursion_limit + 1`` recomputation on resume.
+        self.turn_limit = max(1, turn_limit)
+        self.soft_landing_turns = max(0, soft_landing_turns)
+        self._turns: OrderedDict[str, int] = OrderedDict()
+        self._refunds: OrderedDict[str, int] = OrderedDict()
+        # Optional shared dict the task executor reads after the run to tell the
+        # user their result was wrapped up early.
+        self._budget_sink = budget_sink
 
     @property
     def name(self) -> str:
@@ -199,6 +359,177 @@ class LinsightModelResilienceMiddleware(AgentMiddleware):
             max_delay=self.max_delay,
             jitter=self.jitter,
         )
+
+    def _budget_key(self, request: object) -> str:
+        """Which turn-budget bucket this model/tool call belongs to.
+
+        Main graph → always the single default bucket. The main graph is ONE compiled
+        Pregel loop with ONE allowance, and its node namespace (``model:<uuid>``)
+        carries a fresh task id every turn, so bucketing it would hand it a brand-new
+        budget on every single call.
+
+        Subagent → the parent namespace of the current node. LangGraph gives each
+        ``task`` tool call its own PUSH task (one ``Send`` per tool call, whose task id
+        includes the Send index), and every node inside the resulting subgraph run is
+        namespaced ``<that tools task ns>|<node>:<node task id>``. Dropping the last
+        segment therefore yields a key that is CONSTANT across all turns of one
+        ``task`` call and DISTINCT between concurrent ones — pinned by
+        ``test/linsight/test_subagent_ns_contract.py``.
+
+        Anything unexpected (no runtime, as in unit tests or non-graph callers; or a
+        flat namespace, meaning the subagent graph ran un-nested) falls back to the
+        shared bucket, which is exactly the pre-fix behaviour — never worse.
+        """
+        if not self.is_subagent:
+            return ""
+        runtime = getattr(request, "runtime", None)
+        info = getattr(runtime, "execution_info", None)
+        ns = getattr(info, "checkpoint_ns", None)
+        if not isinstance(ns, str) or _NS_SEP not in ns:
+            return ""
+        return ns.rsplit(_NS_SEP, 1)[0]
+
+    def _turns_used(self, key: str = "") -> int:
+        return self._turns.get(key, 0)
+
+    def _bump_turn(self, key: str) -> int:
+        """Count one turn against ``key`` and return the new total (LRU-bounded)."""
+        used = self._turns.pop(key, 0) + 1
+        self._turns[key] = used  # re-insert → most-recently-used tail
+        while len(self._turns) > _BUDGET_BUCKETS_MAX:
+            evicted, _ = self._turns.popitem(last=False)
+            self._refunds.pop(evicted, None)
+        return used
+
+    def _refund_turn(self, key: str) -> None:
+        """Give a pure state-maintenance turn its budget back (bounded per bucket)."""
+        used = self._turns.get(key, 0)
+        if used <= 0:
+            return
+        if self._refunds.get(key, 0) >= _MAX_STATE_ONLY_REFUNDS:
+            return
+        self._turns[key] = used - 1
+        self._refunds[key] = self._refunds.get(key, 0) + 1
+
+    @property
+    def _turn_count(self) -> int:
+        """Turns used in the DEFAULT bucket — i.e. the whole budget for the main graph.
+
+        Read-only alias kept so main-graph call sites and existing tests read
+        unchanged; subagent buckets must be read via ``_turns_used(key)``.
+        """
+        return self._turns_used("")
+
+    def _apply_turn_budget(self, request: ModelRequest) -> tuple[ModelRequest, str]:
+        """Count this turn and apply the soft-landing stage it falls into.
+
+        Called ONCE per ``wrap_model_call`` — i.e. once per model node execution.
+        The retry loops below re-enter ``handler`` without re-entering this, so a
+        transient retry or a truncation nudge never burns turn budget.
+
+        Returns the (possibly nudged) request together with the budget key it was
+        counted against, so the caller can refund a pure state-maintenance turn once
+        the response makes that knowable.
+        """
+        key = self._budget_key(request)
+        graph = "sub" if self.is_subagent else "main"
+        count = self._bump_turn(key)
+        remaining = self.turn_limit - count
+        if remaining > self.soft_landing_turns:
+            return request, key
+
+        self._mark_soft_landing()
+        if remaining <= 0:
+            # No tools at all: the model can only produce a text answer, which
+            # routes the graph straight to END. This is what turns "budget
+            # exhausted" into a normal completion instead of a recursion abort.
+            logger.warning(
+                "[linsight-turn-budget] graph={} key={} turn {}/{} — budget exhausted, forcing a text-only close-out",
+                graph,
+                key or "-",
+                count,
+                self.turn_limit,
+            )
+            return _with_wrap_up_nudge(request, _LAST_CHANCE_NUDGE, 0).override(tools=[]), key
+        if remaining <= _WRITE_ONLY_TURNS_LEFT:
+            logger.warning(
+                "[linsight-turn-budget] graph={} key={} turn {}/{} — {} left, narrowing to deliverable tools",
+                graph,
+                key or "-",
+                count,
+                self.turn_limit,
+                remaining,
+            )
+            return (
+                _only_deliverable_tools(_with_wrap_up_nudge(request, _LAST_CHANCE_NUDGE, remaining)),
+                key,
+            )
+        logger.info(
+            "[linsight-turn-budget] graph={} key={} turn {}/{} — {} left, nudging the model to wrap up",
+            graph,
+            key or "-",
+            count,
+            self.turn_limit,
+            remaining,
+        )
+        return _with_wrap_up_nudge(request, _WRAP_UP_NUDGE, remaining), key
+
+    def _budget_blocked_reply(self, request) -> ToolMessage | None:
+        """Refuse an exploratory tool call once the turn budget is spent.
+
+        Returns the stand-in ToolMessage to hand back instead of running the tool,
+        or None to let the call through. This middleware is FIRST in the stack, so
+        its wrap_tool_call is the outermost one — short-circuiting here also skips
+        the inner guards, which is what we want for a call that never ran.
+        """
+        key = self._budget_key(request)
+        if self._turns_used(key) < self.turn_limit:
+            return None
+        tool_call = request.tool_call or {}
+        name = tool_call.get("name")
+        if name in _POST_BUDGET_ALLOWED_TOOLS:
+            return None
+        logger.warning(
+            "[linsight-turn-budget] graph={} key={} budget spent ({}/{}) — refusing tool call '{}'",
+            "sub" if self.is_subagent else "main",
+            key or "-",
+            self._turns_used(key),
+            self.turn_limit,
+            name,
+        )
+        # Deliberately NOT status="error". An error ToolMessage feeds the L3
+        # tool-loop breaker's consecutive-failure counter, and enough refusals in a
+        # row would abort the run into the apology path — the very outcome this
+        # ladder exists to prevent. A plain result also ends any failure streak the
+        # breaker was tracking, which is correct: nothing failed here.
+        return ToolMessage(
+            content=_BUDGET_SPENT_TOOL_REPLY.format(tool_name=name),
+            tool_call_id=tool_call.get("id", ""),
+            name=name,
+        )
+
+    async def awrap_tool_call(self, request, handler):
+        blocked = self._budget_blocked_reply(request)
+        if blocked is not None:
+            return blocked
+        return await handler(request)
+
+    def wrap_tool_call(self, request, handler):
+        blocked = self._budget_blocked_reply(request)
+        if blocked is not None:
+            return blocked
+        return handler(request)
+
+    def _mark_soft_landing(self) -> None:
+        """Flag the run as wrapped-up-early for the task executor's user-facing note.
+
+        Deliberately sticky: a turn that triggered a wrap-up nudge and was then
+        refunded (``_refund_turn``) does NOT clear this. The nudge really was sent and
+        really did shape that turn, so telling the user their result was closed out
+        early is still true.
+        """
+        if self._budget_sink is not None:
+            self._budget_sink["soft_landing"] = True
 
     def _degrade_or_raise(self, exc: Exception) -> AIMessage:
         # Main graph: a no-tool-call synthetic message would just end the main
@@ -227,7 +558,8 @@ class LinsightModelResilienceMiddleware(AgentMiddleware):
         # exc_attempts (transient failures) and trunc_attempts (L2 truncation) use
         # SEPARATE budgets so a truncation retry never eats the exception-retry
         # budget and vice-versa. ``current`` carries the (possibly nudged) request.
-        current = request
+        # The turn budget is applied ONCE, outside the retry loop.
+        current, budget_key = self._apply_turn_budget(request)
         exc_attempts = 0
         trunc_attempts = 0
         while True:
@@ -262,6 +594,15 @@ class LinsightModelResilienceMiddleware(AgentMiddleware):
                 )
                 current = _with_truncation_nudge(current)
                 continue
+            # Two-phase turn accounting: the soft-landing STAGE had to be picked before
+            # the call (it shapes the request), but whether this turn did any real work
+            # is only knowable from the response. Refund here — the loop's SINGLE
+            # success exit — so a transient retry or a truncation nudge (both
+            # ``continue`` above) can never double-refund, and a degraded call (which
+            # returns from the except branch) is never refunded: it really did burn
+            # model calls.
+            if _is_state_only_turn(response):
+                self._refund_turn(budget_key)
             return response
 
     def wrap_model_call(
@@ -269,7 +610,7 @@ class LinsightModelResilienceMiddleware(AgentMiddleware):
         request: ModelRequest,
         handler: Callable[[ModelRequest], ModelResponse],
     ) -> ModelResponse | AIMessage:
-        current = request
+        current, budget_key = self._apply_turn_budget(request)
         exc_attempts = 0
         trunc_attempts = 0
         while True:
@@ -291,15 +632,33 @@ class LinsightModelResilienceMiddleware(AgentMiddleware):
                 trunc_attempts += 1
                 current = _with_truncation_nudge(current)
                 continue
+            # Refund a pure state-maintenance turn — see the async twin above for why
+            # this sits at the loop's single success exit.
+            if _is_state_only_turn(response):
+                self._refund_turn(budget_key)
             return response
 
 
-def build_resilience_middleware(linsight_conf, *, is_subagent: bool) -> LinsightModelResilienceMiddleware:
-    """Construct a middleware instance from ``LinsightConf`` (one per graph)."""
+def build_resilience_middleware(
+    linsight_conf, *, is_subagent: bool, budget_sink: dict | None = None
+) -> LinsightModelResilienceMiddleware:
+    """Construct a middleware instance from ``LinsightConf`` (one per graph).
+
+    ``budget_sink`` is the task executor's shared dict; only the main graph passes
+    one, so a subagent wrapping up early never adds a note to the user's result.
+    """
+    turn_limit = (
+        getattr(linsight_conf, "max_model_turns_subagent", 30)
+        if is_subagent
+        else getattr(linsight_conf, "max_model_turns", 115)
+    )
     return LinsightModelResilienceMiddleware(
         max_retries=getattr(linsight_conf, "retry_num", 3),
         initial_delay=float(getattr(linsight_conf, "retry_sleep", 5)),
         max_degrade=getattr(linsight_conf, "max_degrade", 3),
         truncation_retry_limit=getattr(linsight_conf, "truncation_retry_limit", 2),
         is_subagent=is_subagent,
+        turn_limit=turn_limit,
+        soft_landing_turns=getattr(linsight_conf, "soft_landing_turns", 8),
+        budget_sink=budget_sink,
     )
