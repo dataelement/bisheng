@@ -48,8 +48,6 @@ celery_task:
       queue: knowledge_celery
     bisheng.worker.knowledge.pdf_artifact_worker.generate_knowledge_file_pdf_celery:
       queue: knowledge_pdf_celery
-    bisheng.worker.points.tasks.process_points_award_event:
-      queue: points_award_celery
     bisheng.worker.knowledge.*: # 其他知识库后台任务
       queue: celery
     bisheng.worker.workflow.*: # 工作流相关任务

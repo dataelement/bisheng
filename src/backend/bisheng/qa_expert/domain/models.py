@@ -112,10 +112,10 @@ class Question:
         if expert_id not in self.invited_experts:
             self.invited_experts.append(expert_id)
     
-    def adopt_answer(self, answer_id: int, *, adopted_count: int = 0):
-        """采纳最佳回答（同题最多 3 条；adopted_count 为当前未删除已采纳数）。"""
-        if adopted_count >= 3:
-            raise ValueError("每个问题最多采纳 3 个最佳答案")
+    def adopt_answer(self, answer_id: int):
+        """采纳最佳回答"""
+        if self.status == QuestionStatus.SOLVED:
+            raise ValueError("问题已有最佳回答，不能重复采纳")
         self.adopted_answer_id = answer_id
         self.status = QuestionStatus.SOLVED
         self.updated_at = datetime.utcnow()

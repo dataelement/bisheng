@@ -35,16 +35,6 @@ redis_url: "redis://192.168.106.171:6379/11"
 
 # celery的broken地址
 celery_redis_url: "redis://192.168.106.171:6379/13"
-
-# 积分系统开关（compose-dev 挂载为 /app/bisheng/config.yaml）
-points:
-  enabled: true
-  award_async_enabled: true
-  notify_enabled: true
-  sync_outbox_enabled: false
-  rank_cron_enabled: true
-  monthly_reward_enabled: true
-
 celery_task:
   # 文件解析处理的速率 多少文件并发每秒。不能高于celery的worker并发数
   knowledge_file_time_limit: null  # 每秒处理10个文件  null: 表示无限制
@@ -58,8 +48,6 @@ celery_task:
       queue: knowledge_celery
     bisheng.worker.knowledge.pdf_artifact_worker.generate_knowledge_file_pdf_celery:
       queue: knowledge_pdf_celery
-    bisheng.worker.points.tasks.process_points_award_event:
-      queue: points_award_celery
     bisheng.worker.knowledge.*: # 其他知识库后台任务
       queue: celery
     bisheng.worker.workflow.*: # 工作流相关任务
