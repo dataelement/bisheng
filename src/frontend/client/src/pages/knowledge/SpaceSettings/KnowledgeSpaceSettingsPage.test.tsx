@@ -26,6 +26,41 @@ jest.mock("~/Providers", () => ({
 
 jest.mock("~/hooks", () => ({
   useLocalize: () => (key: string) => key,
+  useAuthContext: () => ({
+    user: {
+      id: 99,
+      name: "Current user",
+      username: "current",
+      email: "current@example.com",
+    },
+  }),
+}));
+
+jest.mock("~/components/permission/RelationSelect", () => ({
+  RelationSelect: ({
+    value,
+    onChange,
+    options,
+    disabled,
+  }: {
+    value: string;
+    onChange: (value: string) => void;
+    options: Array<{ id: string; name: string }>;
+    disabled?: boolean;
+  }) => (
+    <select
+      aria-label="permission-model"
+      value={value}
+      disabled={disabled}
+      onChange={(event) => onChange(event.target.value)}
+    >
+      {options.map((option) => (
+        <option key={option.id} value={option.id}>
+          {option.name}
+        </option>
+      ))}
+    </select>
+  ),
 }));
 
 jest.mock("~/components/permission/SubjectSearchUser", () => ({
@@ -80,6 +115,9 @@ jest.mock("~/components/permission/PermissionDraftEditor", () => ({
   }) => (
     <div data-testid="permission-editor">
       <span>{value.length}</span>
+      <span data-testid="draft-relations">
+        {value.map((row) => String(row.relation)).join(",")}
+      </span>
       {value.length > 0 && (
         <button
           type="button"
@@ -158,6 +196,14 @@ const relationModels = [
     is_system: true,
   },
 ];
+
+const viewerRelationModel = {
+  id: "viewer",
+  name: "Viewer",
+  relation: "viewer" as const,
+  permissions: ["read_space"],
+  is_system: true,
+};
 
 const ownerOnlyRelationModels = [
   {
@@ -268,24 +314,58 @@ describe("KnowledgeSpaceSettingsPage", () => {
     renderPage("/knowledge/create");
     expect(await screen.findByTestId("authorization-list")).not.toBeNull();
     expect(
-      screen
-        .getByRole("radio", { name: "com_unified_permission.join_review" })
-        .getAttribute("data-state"),
-    ).toBe("checked");
+      screen.getByRole("switch", {
+        name: "com_unified_permission.review_join",
+      }),
+    ).toBeChecked();
 
     fireEvent.click(
-      screen.getByRole("radio", { name: "com_unified_permission.private" }),
+      screen.getByRole("radio", {
+        name: /com_unified_permission\.private/,
+      }),
     );
     expect(screen.queryByTestId("authorization-list")).toBeNull();
 
     fireEvent.click(
-      screen.getByRole("radio", { name: "com_unified_permission.shared" }),
+      screen.getByRole("radio", {
+        name: /com_unified_permission\.shared/,
+      }),
     );
     expect(
-      screen
-        .getByRole("radio", { name: "com_unified_permission.join_review" })
-        .getAttribute("data-state"),
-    ).toBe("checked");
+      screen.getByRole("switch", {
+        name: "com_unified_permission.review_join",
+      }),
+    ).toBeChecked();
+  });
+
+  it("applies the model selected in the reused authorization dialog", async () => {
+    mockedGetCreationModels.mockResolvedValue([
+      relationModels[0],
+      viewerRelationModel,
+    ]);
+    renderPage("/knowledge/create");
+    await screen.findByTestId("permission-section");
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "com_unified_permission.add_authorization",
+      }),
+    );
+    fireEvent.click(await screen.findByText("select-user"));
+    fireEvent.change(
+      screen.getByRole("combobox", { name: "permission-model" }),
+      {
+        target: { value: "editor" },
+      },
+    );
+    const addButtons = screen.getAllByRole("button", {
+      name: "com_unified_permission.add_authorization",
+    });
+    fireEvent.click(addButtons[addButtons.length - 1]);
+
+    expect(screen.getByTestId("draft-relations").textContent).toContain(
+      "editor",
+    );
   });
 
   it("keeps the created resource and retries only authorization after initial grant failure", async () => {
@@ -315,7 +395,9 @@ describe("KnowledgeSpaceSettingsPage", () => {
       },
     );
     fireEvent.click(
-      screen.getByRole("button", { name: "com_unified_permission.create" }),
+      screen.getByRole("button", {
+        name: "com_unified_permission.confirm_create",
+      }),
     );
 
     expect(
@@ -370,7 +452,9 @@ describe("KnowledgeSpaceSettingsPage", () => {
       },
     );
     fireEvent.click(
-      screen.getByRole("button", { name: "com_unified_permission.create" }),
+      screen.getByRole("button", {
+        name: "com_unified_permission.confirm_create",
+      }),
     );
 
     await waitFor(() =>
@@ -467,7 +551,9 @@ describe("KnowledgeSpaceSettingsPage", () => {
     renderPage("/knowledge/space/7/settings");
     await screen.findByTestId("permission-section");
     fireEvent.click(
-      screen.getByRole("radio", { name: "com_unified_permission.private" }),
+      screen.getByRole("radio", {
+        name: /com_unified_permission\.private/,
+      }),
     );
     await waitFor(() =>
       expect(screen.queryByTestId("authorization-list")).toBeNull(),

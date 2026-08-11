@@ -1,5 +1,7 @@
 import { Button } from "@bisheng/ui";
+import { Outlined } from "bisheng-icons";
 import { useLocalize } from "~/hooks";
+import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
 import { RelationSelect } from "./RelationSelect";
 import type { RelationModelOption } from "./RelationSelect";
 import {
@@ -13,7 +15,7 @@ export interface PermissionDraftEditorCapabilities {
   relationModels: RelationModelOption[];
 }
 
-interface PermissionDraftEditorProps {
+export interface PermissionDraftEditorProps {
   value: PermissionDraftRow[];
   onChange: (value: PermissionDraftRow[]) => void;
   capabilities: PermissionDraftEditorCapabilities;
@@ -46,7 +48,7 @@ export function PermissionDraftEditor({
   };
 
   return (
-    <div className="flex flex-col divide-y divide-border-base">
+    <div className="flex flex-col divide-y divide-dashed divide-border-base">
       {value.map((row) => {
         const rowKey = getPermissionDraftRowKey(row);
         const relationModels = row.subjectType === "user"
@@ -58,27 +60,41 @@ export function PermissionDraftEditor({
         const canRemove = !row.immutableCreator && capabilities.canRemove;
 
         return (
-          <div key={rowKey} className="flex min-h-14 items-center gap-3 py-3">
-            <span className="min-w-0 flex-1 truncate text-body text-text-1">
-              {row.subjectName}
-            </span>
-            <RelationSelect
-              value={row.modelId ?? row.relation}
-              onChange={(modelId) => handleRelationChange(row, modelId)}
-              options={relationModels}
-              disabled={!canChangeRelation}
-              className="w-32"
-            />
+          <div key={rowKey} className="flex min-h-11 items-center gap-3 py-2">
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-fill-4 text-caption text-white">
+                {row.subjectName.trim().slice(0, 1).toUpperCase()}
+              </span>
+              <span className="min-w-0 truncate text-body text-text-1">{row.subjectName}</span>
+            </div>
+            {row.immutableCreator ? (
+              <span className="px-2 text-body text-text-3">{localize("creator")}</span>
+            ) : (
+              <RelationSelect
+                value={row.modelId ?? row.relation}
+                onChange={(modelId) => handleRelationChange(row, modelId)}
+                options={relationModels}
+                disabled={!canChangeRelation}
+                className="w-32"
+              />
+            )}
             {canRemove && (
-              <Button
-                type="button"
-                color="danger"
-                variant="text"
-                size="small"
-                onClick={() => handleRemove(row)}
-              >
-                {localize("com_permission.remove")}
-              </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    color="danger"
+                    variant="text"
+                    size="small"
+                    iconOnly
+                    aria-label={localize("com_permission.remove")}
+                    onClick={() => handleRemove(row)}
+                  >
+                    <Outlined.Delete className="size-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{localize("com_permission.remove")}</TooltipContent>
+              </Tooltip>
             )}
           </div>
         );

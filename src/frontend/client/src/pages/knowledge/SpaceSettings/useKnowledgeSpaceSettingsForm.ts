@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   createSpaceApi,
@@ -20,7 +20,7 @@ import {
   getGrantableRelationModels,
   getResourcePermissions,
 } from "~/api/permission";
-import type { RelationModel, SelectedSubject } from "~/api/permission";
+import type { RelationModel } from "~/api/permission";
 import { usePermissionDraft } from "~/components/permission/usePermissionDraft";
 import type { PermissionDraftRow } from "~/components/permission/usePermissionDraft";
 
@@ -245,44 +245,6 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
     };
   }, [mode, resetPermissionDraft, spaceId]);
 
-  const defaultNonOwnerRelationModel = useMemo(
-    () =>
-      relationModels.find((model) => model.relation === "editor") ??
-      relationModels.find((model) => model.relation === "viewer") ??
-      relationModels.find((model) => model.relation !== "owner"),
-    [relationModels],
-  );
-  const defaultUserRelationModel =
-    defaultNonOwnerRelationModel ?? relationModels[0];
-
-  const addSubjects = useCallback(
-    (subjects: SelectedSubject[]) => {
-      addPermissionRows(
-        subjects.flatMap((subject) => {
-          const model =
-            subject.type === "user"
-              ? defaultUserRelationModel
-              : defaultNonOwnerRelationModel;
-          if (!model) return [];
-          return [
-            {
-              subjectType: subject.type,
-              subjectId: subject.id,
-              subjectName: subject.name,
-              relation: model.relation,
-              modelId: model.id,
-              includeChildren:
-                subject.type === "department"
-                  ? (subject.include_children ?? true)
-                  : undefined,
-            },
-          ];
-        }),
-      );
-    },
-    [addPermissionRows, defaultNonOwnerRelationModel, defaultUserRelationModel],
-  );
-
   const buildResourcePayload = useCallback(() => {
     const customTags = parseKnowledgeSpaceCustomTags(form.autoTagCustomText);
     const autoTagEnabled = autoTagFeatureVisible && form.autoTagEnabled;
@@ -415,12 +377,14 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
     canEdit,
     canManagePermissions,
     relationModels,
-    canAddNonUserSubjects: Boolean(defaultNonOwnerRelationModel),
+    canAddNonUserSubjects: relationModels.some(
+      (model) => model.relation !== "owner",
+    ),
     permissionRows,
     permissionDiff,
     permissionHasChanges,
     replacePermissionRows,
-    addSubjects,
+    addPermissionRows,
     createdSpace,
     permissionRetryStatus,
     retryInitialPermissions,
