@@ -952,7 +952,7 @@ describe("PortalKnowledgeWorkbench", () => {
 
         fireEvent.click(within(rail).getByRole("button", { name: "属性" }));
         expect(drawer).toHaveTextContent("2.0 KB");
-        expect(drawer).toHaveTextContent("1.3.0");
+        expect(drawer).toHaveTextContent("3.0");
     });
 
     test("department admins cannot edit or redistribute a shared entry without capability snapshot", async () => {
@@ -1305,7 +1305,7 @@ describe("PortalKnowledgeWorkbench", () => {
         });
         expect(drawer).toHaveTextContent("PM / 设备");
         expect(drawer).toHaveTextContent("制度");
-        expect(drawer).toHaveTextContent("1.2.0");
+        expect(drawer).toHaveTextContent("2.0");
 
         fireEvent.click(within(drawer).getByRole("tab", { name: "时间" }));
         expect(drawer).toHaveTextContent("2026-07-08 09:10:11");
@@ -4512,7 +4512,7 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(within(drawer).getByText("md")).toBeInTheDocument();
         expect(within(drawer).getByText("数据库优化")).toBeInTheDocument();
         expect(within(drawer).getByText("性能提升")).toBeInTheDocument();
-        expect(within(drawer).getByText("1.1.0")).toBeInTheDocument();
+        expect(within(drawer).getByText("1.0")).toBeInTheDocument();
 
         fireEvent.click(within(rail).getByRole("button", { name: "侧边栏展开和关闭" }));
         expect(screen.queryByTestId("portal-info-drawer")).not.toBeInTheDocument();

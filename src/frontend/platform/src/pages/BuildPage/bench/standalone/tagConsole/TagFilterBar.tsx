@@ -1,14 +1,15 @@
 import FilterByUser from "@/components/bs-comp/filterTableDataComponent/FilterByUser"
+import KnowledgeSelect from "@/components/bs-comp/selectComponent/knowledge"
 import { Button } from "@/components/bs-ui/button"
 import { Input } from "@/components/bs-ui/input"
 import { Label } from "@/components/bs-ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select"
 import { useTranslation } from "react-i18next"
 import {
-    EMPTY_USER_PICK,
+    EMPTY_PICK,
     RESOURCE_TYPES,
     type TagConsoleFilterState,
-    type TagConsoleUserPick,
+    type TagConsolePick,
 } from "./tagConsoleTypes"
 
 interface TagFilterBarProps {
@@ -42,36 +43,51 @@ export function TagFilterBar({ filters, showStatus, onChange, onSearch, onReset 
         return t("build.tagSourceManual", "人工标签")
     }
 
-    // FilterByUser is a multi-select, but the API takes a single id — keep the
-    // last picked value so the control stays usable without a new component.
-    // The name has to be carried along: the control renders the option label,
-    // so feeding it back an id with an empty label shows an empty box.
-    const userValue = (pick: TagConsoleUserPick) =>
-        pick.id ? [{ label: pick.name, value: pick.id }] : []
-    const pickUser = (options: { label: string; value: string }[]): TagConsoleUserPick => {
-        if (!options?.length) return EMPTY_USER_PICK
+    // The user and knowledge pickers are multi-selects, but the API takes a
+    // single id — keep the last picked value so they stay usable without new
+    // components. The name has to be carried along: they render the option
+    // label, so feeding back an id with an empty label shows an empty box.
+    const pickValue = (pick: TagConsolePick) => (pick.id ? [{ label: pick.name, value: pick.id }] : [])
+    const pickOne = (options: { label: string; value: string | number }[]): TagConsolePick => {
+        if (!options?.length) return EMPTY_PICK
         const picked = options[options.length - 1]
-        return { id: picked.value, name: picked.label }
+        return { id: String(picked.value), name: picked.label }
     }
+
+    /**
+     * A date input only opens its calendar from the small icon by default,
+     * which is an easy target to miss. Open it from anywhere in the field.
+     *
+     * Guarded on both sides: browsers without `showPicker` keep today's
+     * icon-only behaviour, and the call throws if the picker is already open.
+     */
+    const openDatePicker = (event: React.MouseEvent<HTMLInputElement>) => {
+        const input = event.currentTarget
+        try {
+            input.showPicker?.()
+        } catch {
+            // Already open — nothing to do.
+        }
+    }
+
+    const dateField = (key: keyof TagConsoleFilterState) => (
+        <Input
+            type="date"
+            className="flex-1 cursor-pointer"
+            value={filters[key] as string}
+            onClick={openDatePicker}
+            onChange={(e) => patch({ [key]: e.target.value } as Partial<TagConsoleFilterState>)}
+        />
+    )
 
     const dateRange = (
         startKey: "createTimeStart" | "reviewTimeStart",
         endKey: "createTimeEnd" | "reviewTimeEnd",
     ) => (
         <div className="flex items-center gap-1.5">
-            <Input
-                type="date"
-                className="flex-1"
-                value={filters[startKey]}
-                onChange={(e) => patch({ [startKey]: e.target.value } as Partial<TagConsoleFilterState>)}
-            />
+            {dateField(startKey)}
             <span className="shrink-0 text-xs text-muted-foreground">{t("build.tagConsole.to", "至")}</span>
-            <Input
-                type="date"
-                className="flex-1"
-                value={filters[endKey]}
-                onChange={(e) => patch({ [endKey]: e.target.value } as Partial<TagConsoleFilterState>)}
-            />
+            {dateField(endKey)}
         </div>
     )
 
@@ -105,7 +121,7 @@ export function TagFilterBar({ filters, showStatus, onChange, onSearch, onReset 
                     </Field>
                 )}
 
-                <Field label={t("build.tagSource", "标签来源")}>
+                <Field label={t("build.tagConsole.tagType", "标签类型")}>
                     <Select
                         value={filters.resourceType || "all"}
                         onValueChange={(value) => patch({ resourceType: value === "all" ? "" : value })}
@@ -124,19 +140,27 @@ export function TagFilterBar({ filters, showStatus, onChange, onSearch, onReset 
                     </Select>
                 </Field>
 
+                <Field label={t("build.tagConsole.sourceLibrary", "标签来源库")}>
+                    <KnowledgeSelect
+                        type="file"
+                        value={pickValue(filters.sourceKnowledge)}
+                        onChange={(options: any) => patch({ sourceKnowledge: pickOne(options) })}
+                    />
+                </Field>
+
                 <Field label={t("build.tagConsole.submitter", "提报者")}>
                     <FilterByUser
-                        value={userValue(filters.submitter)}
+                        value={pickValue(filters.submitter)}
                         placeholder={t("build.tagConsole.selectUser", "请选择用户")}
-                        onChange={(options: any) => patch({ submitter: pickUser(options) })}
+                        onChange={(options: any) => patch({ submitter: pickOne(options) })}
                     />
                 </Field>
 
                 <Field label={t("build.tagConsole.reviewer", "审核者")}>
                     <FilterByUser
-                        value={userValue(filters.reviewer)}
+                        value={pickValue(filters.reviewer)}
                         placeholder={t("build.tagConsole.selectUser", "请选择用户")}
-                        onChange={(options: any) => patch({ reviewer: pickUser(options) })}
+                        onChange={(options: any) => patch({ reviewer: pickOne(options) })}
                     />
                 </Field>
 

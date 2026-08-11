@@ -21,6 +21,7 @@ class TagRepositoryImpl:
         *,
         reviewer_id: int | None = None,
         review_time: datetime | None = None,
+        target_library_id: int | None = None,
     ):
         """Move an approved tag from ``review_tag`` into ``tag``.
 
@@ -29,22 +30,54 @@ class TagRepositoryImpl:
         it back from. ``review_time`` is likewise passed in rather than copied:
         the source row is still unreviewed at this point, the service marks it
         only after the move.
+
+        ``target_library_id`` is the library the **reviewer chose**, and it wins
+        over the id recorded on the review row. That recorded id says where the
+        tag was *proposed*, not where the reviewer decided it belongs; trusting
+        it filed every approval into the proposing library instead.
+
+        The approval flow registers the name into the chosen library first, which
+        already leaves a row there. This updates that row rather than inserting a
+        second one — two rows per approval, one holding the audit trail in the
+        wrong library and one holding nothing in the right one, was the bug.
         """
-        tag = Tag()
-        tag.name = review_tag.name
-        tag.business_id = self._resolve_approved_tag_business_id(review_tag)
-        tag.business_type = TagBusinessTypeEnum.TAG_LIBRARY.value
-        # Stays the original proposer; the reviewer is a separate column.
-        tag.user_id = review_tag.user_id
-        tag.tenant_id = review_tag.tenant_id
-        tag.resource_type = review_tag.resource_type
+        business_id = (
+            TagLibraryTagService._business_id(target_library_id)
+            if target_library_id is not None
+            else self._resolve_approved_tag_business_id(review_tag)
+        )
+        tag = await self.find_library_tag(review_tag.name, business_id, review_tag.tenant_id)
+        if tag is None:
+            tag = Tag()
+            tag.name = review_tag.name
+            tag.business_id = business_id
+            tag.business_type = TagBusinessTypeEnum.TAG_LIBRARY.value
+            tag.tenant_id = review_tag.tenant_id
+            # Only set on insert: an existing row's classification belongs to the
+            # library, which may have filed the name differently on purpose.
+            tag.resource_type = review_tag.resource_type
+            self.session.add(tag)
+        # Authoritative either way — the row left by the library registration
+        # carries the reviewer as its creator and "now" as its creation time.
+        tag.user_id = review_tag.user_id  # the original proposer, not the reviewer
         tag.create_time = review_tag.create_time
         tag.update_time = review_tag.update_time
         tag.reviewer_id = reviewer_id
         tag.review_time = review_time
-        self.session.add(tag)
         await self.session.flush()
+
+        existing_links = set(
+            (
+                await self.session.exec(
+                    select(TagLink.resource_id, TagLink.resource_type).where(TagLink.tag_id == tag.id)
+                )
+            ).all()
+        )
         for link in review_tag_link:
+            # Re-approving the same file must not stack duplicate links, which
+            # would inflate 已标识知识数.
+            if (link.resource_id, link.resource_type) in existing_links:
+                continue
             taglink = TagLink()
             taglink.tag_id = tag.id
             taglink.resource_id = link.resource_id
@@ -54,7 +87,21 @@ class TagRepositoryImpl:
             taglink.create_time = link.create_time
             taglink.update_time = link.update_time
             self.session.add(taglink)
+            existing_links.add((link.resource_id, link.resource_type))
             await self.session.flush()
+
+    async def find_library_tag_in(self, name: str, library_id: int, tenant_id: int | None) -> Tag | None:
+        """By library id, for callers that do not know the encoded business_id."""
+        return await self.find_library_tag(name, TagLibraryTagService._business_id(library_id), tenant_id)
+
+    async def find_library_tag(self, name: str, business_id: str | None, tenant_id: int | None) -> Tag | None:
+        statement = select(Tag).where(
+            Tag.name == name,
+            Tag.tenant_id == tenant_id,
+            Tag.business_type == TagBusinessTypeEnum.TAG_LIBRARY.value,
+            Tag.business_id == business_id,
+        )
+        return (await self.session.exec(statement)).first()
 
     @staticmethod
     def _resolve_approved_tag_business_id(review_tag: ReviewTag) -> str | None:

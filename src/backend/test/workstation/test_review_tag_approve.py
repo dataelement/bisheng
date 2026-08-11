@@ -113,6 +113,9 @@ async def test_approve_review_tag_imports_to_selected_library():
         1,
         skip_library_add=True,
         space_ids=None,
+        # The chosen library travels with the move; without it the tag would be
+        # filed under whichever library proposed it.
+        target_library_id=10,
     )
     service.review_tags_repository.approve_review_tag.assert_awaited_once()
     service.session.commit.assert_awaited_once()

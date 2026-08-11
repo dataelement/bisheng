@@ -6,6 +6,7 @@ import type {
 } from "~/api/permission";
 import { Checkbox } from "~/components/ui/Checkbox";
 import { useLocalize } from "~/hooks";
+import { resolveDepartmentDisplayName } from "~/utils/departmentDisplayName";
 import {
   Building2,
   ChevronDown,
@@ -379,6 +380,11 @@ export function SubjectSearchUserTree({
     if (isSearching && !searchVisibleDepartmentIds.has(node.id)) return null;
     const isExpanded = isSearching || expanded.has(node.id);
     const state = nodeStates[String(node.id)] ?? EMPTY_NODE_STATE;
+    const displayName = resolveDepartmentDisplayName({
+      displayName: node.display_name,
+      shortName: node.short_name,
+      name: node.name,
+    });
     return (
       <div key={node.id}>
         <button
@@ -390,7 +396,7 @@ export function SubjectSearchUserTree({
         >
           {isExpanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
           <Building2 className="size-4 text-gray-400" />
-          <span className="truncate" title={node.name}>{node.name}</span>
+          <span className="truncate" title={displayName}>{displayName}</span>
         </button>
         {isExpanded && (
           <div>

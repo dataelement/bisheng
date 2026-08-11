@@ -1027,6 +1027,40 @@ class KnowledgeSpaceService(KnowledgeUtils):
             raise SpacePermissionDeniedError()
         return resolved
 
+    async def _require_file_metadata_edit_permission(
+        self,
+        file_record: KnowledgeFile,
+    ):
+        """Gate metadata edits (encoding, tags) for non-distribution files.
+
+        Distribution manager entries keep the canonical content-manager gate.
+        Ordinary files follow upload permission on the file's own parent
+        container (folder when present, otherwise the space), matching the
+        portal UI and ``update_file_encoding``.
+        """
+        resolved = await self._require_document_content_manager(file_record)
+        if resolved is not None:
+            return resolved
+
+        ancestor_folder_ids = [
+            int(part) for part in (file_record.file_level_path or "").split("/") if part
+        ]
+        parent_folder_id = ancestor_folder_ids[-1] if ancestor_folder_ids else None
+        if parent_folder_id:
+            await self._require_permission_id(
+                "folder",
+                parent_folder_id,
+                _UPLOAD_FILE_TO_FOLDER_PERMISSION_ID,
+                space_id=file_record.knowledge_id,
+            )
+        else:
+            await self._require_permission_id(
+                "knowledge_space",
+                file_record.knowledge_id,
+                _UPLOAD_FILE_TO_SPACE_PERMISSION_ID,
+            )
+        return None
+
     async def _mark_document_content_changed(
         self,
         file_record: KnowledgeFile,
@@ -5359,7 +5393,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             for domain in domains:
                 requested_ids = {
                     int(space_id) for space_id in domain.space_ids if int(space_id) > 0
-                } or set(discovery.query_space_ids)
+                }
                 visible_scopes.setdefault(domain.code, set()).update(
                     requested_ids & full_space_ids
                 )
@@ -5402,7 +5436,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             for category in categories:
                 requested_ids = {
                     int(space_id) for space_id in category.space_ids if int(space_id) > 0
-                } or set(discovery.query_space_ids)
+                }
                 visible_scopes.setdefault(category.code, set()).update(
                     requested_ids & full_space_ids
                 )
@@ -8413,6 +8447,15 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         visible_files: list[KnowledgeFile] = []
         fetch_limit = max(limit + 1, PORTAL_LIST_CURSOR_SCAN_BATCH_SIZE)
+        discovery = getattr(self, "_portal_discovery_result", None)
+        full_space_ids: list[int] | None = None
+        explicit_file_ids: list[int] | None = None
+        if req.discovery_scope in {"portal_public", "portal_configured"} and discovery is not None:
+            full_space_ids = sorted(
+                set(discovery.discoverable_space_ids)
+                | set(discovery.explicitly_visible_space_ids)
+            )
+            explicit_file_ids = list(discovery.explicitly_visible_file_ids)
         while True:
             raw_files = await KnowledgeFileDao.aget_file_by_space_filters_cursor(
                 knowledge_ids=space_ids,
@@ -8424,6 +8467,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 document_type=req.document_type,
                 file_subcategory_code=req.file_subcategory_code,
                 business_domain_code=req.business_domain_code,
+                full_space_ids=full_space_ids,
+                explicit_file_ids=explicit_file_ids,
                 order_sort=order_sort,
                 cursor=batch_cursor,
                 limit=fetch_limit,
@@ -9853,17 +9898,21 @@ class KnowledgeSpaceService(KnowledgeUtils):
             "next_cursor": next_cursor,
         }
 
-    @staticmethod
     def _build_shougang_portal_cursor_response(
+        self,
         items: list[ShougangPortalFileItemResp],
         has_more: bool,
         next_cursor: str | None,
     ) -> dict:
-        return {
+        payload = {
             "data": [item.model_dump(mode="json") for item in items],
             "has_more": has_more,
             "next_cursor": next_cursor,
         }
+        discovery = getattr(self, "_portal_discovery_result", None)
+        if discovery is not None:
+            payload["discovery_snapshot"] = discovery.snapshot
+        return payload
 
     @staticmethod
     def _build_shougang_portal_qa_paged_response(
@@ -16101,27 +16150,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         encoding segments so list APIs and reparses keep the edited selection.
         """
         file_record = await self._get_file_for_action(file_id)
-        resolved = await self._require_document_content_manager(file_record)
-        # Editing file category / business domain follows the upload permission, on the
-        # same container the upload flow checks: the file's parent folder when it lives
-        # in one, otherwise the space. The per-file 'rename_file' action was subject to
-        # nearest-binding overrides that strip container-level grants from individual
-        # files, so managers who could upload still couldn't edit encoding.
-        ancestor_folder_ids = [int(part) for part in (file_record.file_level_path or "").split("/") if part]
-        parent_folder_id = ancestor_folder_ids[-1] if ancestor_folder_ids else None
-        if parent_folder_id:
-            await self._require_permission_id(
-                "folder",
-                parent_folder_id,
-                _UPLOAD_FILE_TO_FOLDER_PERMISSION_ID,
-                space_id=file_record.knowledge_id,
-            )
-        else:
-            await self._require_permission_id(
-                "knowledge_space",
-                file_record.knowledge_id,
-                _UPLOAD_FILE_TO_SPACE_PERMISSION_ID,
-            )
+        resolved = await self._require_file_metadata_edit_permission(file_record)
 
         cleaned = encoding.strip()
         if not cleaned:
@@ -16989,14 +17018,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         before_tags = [
             str(item.get("name") or "") for item in (await self._load_file_tags_batch([file_id])).get(file_id, [])
         ]
-        resolved = await self._require_document_content_manager(file_record)
-        if resolved is None:
-            await self._require_permission_id(
-                "knowledge_file",
-                file_id,
-                "rename_file",
-                space_id=space_id,
-            )
+        resolved = await self._require_file_metadata_edit_permission(file_record)
 
         resource_id = str(file_id)
         resource_type = ResourceTypeEnum.SPACE_FILE
@@ -17057,15 +17079,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         resolved_by_file_id = {}
         for file_record in files:
-            resolved = await self._require_document_content_manager(file_record)
+            resolved = await self._require_file_metadata_edit_permission(file_record)
             resolved_by_file_id[int(file_record.id)] = resolved
-            if resolved is None:
-                await self._require_permission_id(
-                    "knowledge_file",
-                    file_record.id,
-                    "rename_file",
-                    space_id=space_id,
-                )
 
         for file_record in files:
             if normalized_tag_ids:

@@ -565,12 +565,19 @@ class TagLibraryTagService:
         name: str,
         resource_type: str,
     ) -> tuple:
+        """Fields carried across a library rebuild.
+
+        ``(create_time, user_id, reviewer_id, review_time)`` — the last two were
+        added with the review audit trail (F079). Rebuilding drops whatever is
+        not listed here, so a new column on ``tag`` that must survive an edit to
+        the library has to be added in this tuple too.
+        """
         if (name, resource_type) in existing_meta:
             return existing_meta[(name, resource_type)]
         for alt_type in (TagResourceTypeEnum.SYSTEM_TAG.value, TagResourceTypeEnum.MANUAL_TAG.value):
             if alt_type != resource_type and (name, alt_type) in existing_meta:
                 return existing_meta[(name, alt_type)]
-        return None, None
+        return None, None, None, None
 
     @classmethod
     async def _resolve_file_tag_ids(
@@ -1214,7 +1221,10 @@ class TagLibraryTagService:
                     )
                 )
             ).all()
-            existing_meta = {(tag.name, tag.resource_type): (tag.create_time, tag.user_id) for tag in existing}
+            existing_meta = {
+                (tag.name, tag.resource_type): (tag.create_time, tag.user_id, tag.reviewer_id, tag.review_time)
+                for tag in existing
+            }
             old_id_by_key: dict[tuple[str, str], int] = {}
             for tag in existing:
                 if tag.id is not None and tag.name:
@@ -1228,7 +1238,9 @@ class TagLibraryTagService:
             now = datetime.now()
             for name in system:
                 resource_type = TagResourceTypeEnum.SYSTEM_TAG.value
-                prev_create_time, prev_user_id = cls._existing_tag_meta(existing_meta, name, resource_type)
+                prev_create_time, prev_user_id, prev_reviewer_id, prev_review_time = cls._existing_tag_meta(
+                    existing_meta, name, resource_type
+                )
                 session.add(
                     Tag(
                         name=name,
@@ -1239,11 +1251,17 @@ class TagLibraryTagService:
                         resource_type=resource_type,
                         create_time=prev_create_time or now,
                         update_time=now,
+                        # Rebuilding a library must not erase who approved the
+                        # tag and when — that trail has no other home.
+                        reviewer_id=prev_reviewer_id,
+                        review_time=prev_review_time,
                     )
                 )
             for name in manual:
                 resource_type = TagResourceTypeEnum.MANUAL_TAG.value
-                prev_create_time, prev_user_id = cls._existing_tag_meta(existing_meta, name, resource_type)
+                prev_create_time, prev_user_id, prev_reviewer_id, prev_review_time = cls._existing_tag_meta(
+                    existing_meta, name, resource_type
+                )
                 session.add(
                     Tag(
                         name=name,
@@ -1254,11 +1272,17 @@ class TagLibraryTagService:
                         resource_type=resource_type,
                         create_time=prev_create_time or now,
                         update_time=now,
+                        # Rebuilding a library must not erase who approved the
+                        # tag and when — that trail has no other home.
+                        reviewer_id=prev_reviewer_id,
+                        review_time=prev_review_time,
                     )
                 )
             for name in ai:
                 resource_type = TagResourceTypeEnum.AI_AUTO_TAG.value
-                prev_create_time, prev_user_id = cls._existing_tag_meta(existing_meta, name, resource_type)
+                prev_create_time, prev_user_id, prev_reviewer_id, prev_review_time = cls._existing_tag_meta(
+                    existing_meta, name, resource_type
+                )
                 session.add(
                     Tag(
                         name=name,
@@ -1269,6 +1293,10 @@ class TagLibraryTagService:
                         resource_type=resource_type,
                         create_time=prev_create_time or now,
                         update_time=now,
+                        # Rebuilding a library must not erase who approved the
+                        # tag and when — that trail has no other home.
+                        reviewer_id=prev_reviewer_id,
+                        review_time=prev_review_time,
                     )
                 )
             await session.flush()

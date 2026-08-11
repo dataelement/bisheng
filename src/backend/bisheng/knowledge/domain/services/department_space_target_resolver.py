@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from enum import Enum
 
 from bisheng.common.errcode.knowledge_space import (
     DepartmentKnowledgeSpaceAmbiguousError,
@@ -15,11 +16,24 @@ from bisheng.knowledge.domain.models.knowledge_space_scope import (
 )
 
 
+class DepartmentSpaceTargetKind(str, Enum):
+    """Which knowledge-space type to pick from department_knowledge_space bindings."""
+
+    DEPARTMENT = "department"
+    CLINIC = "clinic"
+
+
 class DepartmentSpaceTargetResolver:
     """Resolve one deterministic target space from a nearest-first department chain."""
 
     @classmethod
-    async def resolve(cls, department_ids: Sequence[int]) -> int | None:
+    async def resolve(
+        cls,
+        department_ids: Sequence[int],
+        *,
+        kind: DepartmentSpaceTargetKind = DepartmentSpaceTargetKind.DEPARTMENT,
+        allow_legacy: bool = True,
+    ) -> int | None:
         ordered_department_ids = list(dict.fromkeys(int(one) for one in department_ids))
         if not ordered_department_ids:
             return None
@@ -43,26 +57,40 @@ class DepartmentSpaceTargetResolver:
             if not department_bindings:
                 continue
 
-            department_space_ids = sorted(
+            candidate_space_ids = sorted(
                 {
                     int(binding.space_id)
                     for binding in department_bindings
-                    if cls._is_department_scope(
+                    if cls._matches_kind(
                         scope_map.get(int(binding.space_id)),
-                        department_id,
+                        department_id=department_id,
+                        kind=kind,
                     )
                 }
             )
-            if department_space_ids:
+            if candidate_space_ids:
                 return cls._require_single_candidate(
                     department_id,
-                    department_space_ids,
+                    candidate_space_ids,
                 )
 
-            legacy_space_ids = sorted({int(binding.space_id) for binding in department_bindings})
-            return cls._require_single_candidate(department_id, legacy_space_ids)
+            if allow_legacy and kind == DepartmentSpaceTargetKind.DEPARTMENT:
+                legacy_space_ids = sorted({int(binding.space_id) for binding in department_bindings})
+                return cls._require_single_candidate(department_id, legacy_space_ids)
 
         return None
+
+    @classmethod
+    def _matches_kind(
+        cls,
+        scope,
+        *,
+        department_id: int,
+        kind: DepartmentSpaceTargetKind,
+    ) -> bool:
+        if kind == DepartmentSpaceTargetKind.DEPARTMENT:
+            return cls._is_department_scope(scope, department_id)
+        return cls._is_clinic_scope(scope)
 
     @staticmethod
     def _is_department_scope(scope, department_id: int) -> bool:
@@ -71,6 +99,14 @@ class DepartmentSpaceTargetResolver:
             and scope.level == KnowledgeSpaceLevelEnum.DEPARTMENT
             and scope.owner_type == KnowledgeSpaceOwnerTypeEnum.DEPARTMENT
             and int(scope.owner_id) == department_id
+        )
+
+    @staticmethod
+    def _is_clinic_scope(scope) -> bool:
+        return (
+            scope is not None
+            and KnowledgeSpaceLevelEnum.is_team_level(scope.level)
+            and scope.owner_type == KnowledgeSpaceOwnerTypeEnum.USER
         )
 
     @staticmethod

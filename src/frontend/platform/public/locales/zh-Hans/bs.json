@@ -1402,6 +1402,8 @@
       "noLibrary": "暂无标签库",
       "noBoundSpace": "暂无关联知识空间",
       "status": "标签状态",
+      "tagType": "标签类型",
+      "sourceLibrary": "标签来源库",
       "statusAll": "全部",
       "statusPending": "待审核",
       "statusApproved": "已通过",

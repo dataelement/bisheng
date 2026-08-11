@@ -42,7 +42,35 @@ class TagConsoleRepositoryImpl:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _tag_field_filters(req: TagConsoleFilter, tenant_id: int) -> list:
+    def _source_space_clause(link_model, tag_id_column, tenant_id: int, knowledge_id: int):
+        """Rows whose source files live in the given knowledge space.
+
+        Neither ``tag`` nor ``review_tag`` records the space a tag came from, so
+        provenance is matched through the file link. Deleted links are not
+        excluded: rejecting soft-deletes them and those rows must still be
+        findable by their source.
+
+        Same shape for both tables, hence the passed-in link model.
+        """
+        return exists(
+            select(1)
+            .select_from(link_model)
+            .join(
+                KnowledgeFile,
+                # Compare as integers: resource_id is varchar, and CAST(id AS CHAR)
+                # hits collation mismatches on MySQL.
+                KnowledgeFile.id == cast(link_model.resource_id, Integer),
+            )
+            .where(
+                link_model.tag_id == tag_id_column,
+                link_model.tenant_id == tenant_id,
+                KnowledgeFile.tenant_id == tenant_id,
+                KnowledgeFile.knowledge_id == knowledge_id,
+            )
+        )
+
+    @classmethod
+    def _tag_field_filters(cls, req: TagConsoleFilter, tenant_id: int) -> list:
         """Where-clauses over ``tag`` shared by library mode and the approved half
         of the reviewed listing.
 
@@ -73,6 +101,8 @@ class TagConsoleRepositoryImpl:
             clauses.append(Tag.review_time >= req.review_time_start)
         if req.review_time_end is not None:
             clauses.append(Tag.review_time <= req.review_time_end)
+        if req.source_knowledge_id is not None:
+            clauses.append(cls._source_space_clause(TagLink, Tag.id, tenant_id, req.source_knowledge_id))
         return clauses
 
     @classmethod
@@ -368,6 +398,8 @@ class TagConsoleRepositoryImpl:
             clauses.append(ReviewTag.review_time >= req.review_time_start)
         if req.review_time_end is not None:
             clauses.append(ReviewTag.review_time <= req.review_time_end)
+        if req.source_knowledge_id is not None:
+            clauses.append(cls._source_space_clause(ReviewTagLink, ReviewTag.id, tenant_id, req.source_knowledge_id))
         return clauses
 
     async def search_review_tags(

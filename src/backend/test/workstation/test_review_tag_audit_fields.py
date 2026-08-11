@@ -81,10 +81,20 @@ def _added_tag(session: MagicMock) -> Tag:
     return tags[0]
 
 
-def _build_tag_repository() -> tuple[TagRepositoryImpl, MagicMock]:
+def _build_tag_repository(existing: Tag | None = None) -> tuple[TagRepositoryImpl, MagicMock]:
+    """A session whose reads come back empty unless a row is handed in.
+
+    The move now looks for a row already sitting in the target library — the one
+    left behind by registering the tag name there — so the mock has to answer
+    that lookup as well as record the writes.
+    """
     session = MagicMock()
     session.add = MagicMock()
     session.flush = AsyncMock()
+    result = MagicMock()
+    result.first = MagicMock(return_value=existing)
+    result.all = MagicMock(return_value=[])
+    session.exec = AsyncMock(return_value=result)
     return TagRepositoryImpl(session=session), session
 
 

@@ -81,6 +81,19 @@ describe("buildSearchParams", () => {
         expect(params.submitter_id).toBe(101)
         expect(params.reviewer_id).toBe(103)
     })
+
+    it("sends the source knowledge base as an id", () => {
+        const filters: TagConsoleFilterState = {
+            ...EMPTY_FILTERS,
+            sourceKnowledge: { id: "109", name: "gzx0187的知识库" },
+        }
+
+        expect(buildSearchParams(filters, 1, 20).source_knowledge_id).toBe(109)
+    })
+
+    it("omits the source knowledge base when nothing is picked", () => {
+        expect(buildSearchParams(EMPTY_FILTERS, 1, 20).source_knowledge_id).toBeUndefined()
+    })
 })
 
 describe("buildTagFileDetailUrl", () => {

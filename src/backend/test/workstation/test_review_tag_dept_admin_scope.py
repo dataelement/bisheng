@@ -211,6 +211,9 @@ async def test_approve_passes_space_ids_to_repository():
         1,
         skip_library_add=True,
         space_ids={100},
+        # The reviewer's choice now travels with the move, so it lands in that
+        # library instead of the one that proposed the tag.
+        target_library_id=10,
     )
 
 
