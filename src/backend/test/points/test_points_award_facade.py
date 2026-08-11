@@ -272,8 +272,29 @@ async def test_g3_tier_differential_and_lifetime_cap():
 async def test_g4_answer_adopted():
     repo = FakeAwardRepository({"G4": _rule("G4", beneficiary="answerer", score=3)})
     outcome = await _facade(repo).on_answer_adopted(
-        AnswerAdoptedEvent(tenant_id=1, answer_id=55, answerer_id=6)
+        AnswerAdoptedEvent(tenant_id=1, question_id=100, answer_id=55, answerer_id=6)
     )
     assert not outcome.skipped
-    assert "earn:G4:55" in repo.logs
+    assert "earn:G4:100:6" in repo.logs
     assert repo.account.balance == 3
+
+
+@pytest.mark.asyncio
+async def test_g4_same_answerer_once_per_question():
+    """同题同人多条回答被采纳，G4 只入账一次。"""
+    repo = FakeAwardRepository({"G4": _rule("G4", beneficiary="answerer", score=3)})
+    facade = _facade(repo)
+    first = await facade.on_answer_adopted(
+        AnswerAdoptedEvent(tenant_id=1, question_id=100, answer_id=55, answerer_id=6)
+    )
+    second = await facade.on_answer_adopted(
+        AnswerAdoptedEvent(tenant_id=1, question_id=100, answer_id=56, answerer_id=6)
+    )
+    other = await facade.on_answer_adopted(
+        AnswerAdoptedEvent(tenant_id=1, question_id=100, answer_id=57, answerer_id=7)
+    )
+    assert not first.skipped
+    assert second.skipped and second.reason == "already_awarded_for_question"
+    assert not other.skipped
+    assert repo.account.balance == 6
+    assert set(repo.logs) == {"earn:G4:100:6", "earn:G4:100:7"}
