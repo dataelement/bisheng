@@ -1027,6 +1027,40 @@ class KnowledgeSpaceService(KnowledgeUtils):
             raise SpacePermissionDeniedError()
         return resolved
 
+    async def _require_file_metadata_edit_permission(
+        self,
+        file_record: KnowledgeFile,
+    ):
+        """Gate metadata edits (encoding, tags) for non-distribution files.
+
+        Distribution manager entries keep the canonical content-manager gate.
+        Ordinary files follow upload permission on the file's own parent
+        container (folder when present, otherwise the space), matching the
+        portal UI and ``update_file_encoding``.
+        """
+        resolved = await self._require_document_content_manager(file_record)
+        if resolved is not None:
+            return resolved
+
+        ancestor_folder_ids = [
+            int(part) for part in (file_record.file_level_path or "").split("/") if part
+        ]
+        parent_folder_id = ancestor_folder_ids[-1] if ancestor_folder_ids else None
+        if parent_folder_id:
+            await self._require_permission_id(
+                "folder",
+                parent_folder_id,
+                _UPLOAD_FILE_TO_FOLDER_PERMISSION_ID,
+                space_id=file_record.knowledge_id,
+            )
+        else:
+            await self._require_permission_id(
+                "knowledge_space",
+                file_record.knowledge_id,
+                _UPLOAD_FILE_TO_SPACE_PERMISSION_ID,
+            )
+        return None
+
     async def _mark_document_content_changed(
         self,
         file_record: KnowledgeFile,
@@ -16137,27 +16171,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         encoding segments so list APIs and reparses keep the edited selection.
         """
         file_record = await self._get_file_for_action(file_id)
-        resolved = await self._require_document_content_manager(file_record)
-        # Editing file category / business domain follows the upload permission, on the
-        # same container the upload flow checks: the file's parent folder when it lives
-        # in one, otherwise the space. The per-file 'rename_file' action was subject to
-        # nearest-binding overrides that strip container-level grants from individual
-        # files, so managers who could upload still couldn't edit encoding.
-        ancestor_folder_ids = [int(part) for part in (file_record.file_level_path or "").split("/") if part]
-        parent_folder_id = ancestor_folder_ids[-1] if ancestor_folder_ids else None
-        if parent_folder_id:
-            await self._require_permission_id(
-                "folder",
-                parent_folder_id,
-                _UPLOAD_FILE_TO_FOLDER_PERMISSION_ID,
-                space_id=file_record.knowledge_id,
-            )
-        else:
-            await self._require_permission_id(
-                "knowledge_space",
-                file_record.knowledge_id,
-                _UPLOAD_FILE_TO_SPACE_PERMISSION_ID,
-            )
+        resolved = await self._require_file_metadata_edit_permission(file_record)
 
         cleaned = encoding.strip()
         if not cleaned:
@@ -17025,14 +17039,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         before_tags = [
             str(item.get("name") or "") for item in (await self._load_file_tags_batch([file_id])).get(file_id, [])
         ]
-        resolved = await self._require_document_content_manager(file_record)
-        if resolved is None:
-            await self._require_permission_id(
-                "knowledge_file",
-                file_id,
-                "rename_file",
-                space_id=space_id,
-            )
+        resolved = await self._require_file_metadata_edit_permission(file_record)
 
         resource_id = str(file_id)
         resource_type = ResourceTypeEnum.SPACE_FILE
@@ -17093,15 +17100,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         resolved_by_file_id = {}
         for file_record in files:
-            resolved = await self._require_document_content_manager(file_record)
+            resolved = await self._require_file_metadata_edit_permission(file_record)
             resolved_by_file_id[int(file_record.id)] = resolved
-            if resolved is None:
-                await self._require_permission_id(
-                    "knowledge_file",
-                    file_record.id,
-                    "rename_file",
-                    space_id=space_id,
-                )
 
         for file_record in files:
             if normalized_tag_ids:
