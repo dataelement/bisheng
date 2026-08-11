@@ -11,22 +11,24 @@
    文件关联），但标签库取的是 ``review_tag.business_id``，也就是
    **提出该标签的库**，而不是审核人选的那个。
 
-于是一次通过留下两行，分别落在两个不同的标签库里：库对的那行没数据，
-数据对的那行库不对。修复已在代码里（搬迁改用审核人选的库，并且改成更新
-第 1 步留下的那行而不是再插一条），本脚本负责清理修复之前产生的存量数据。
+于是一次通过留下两行。历史上出现过两种形态：
+
+- **跨库重复**：两行落在不同标签库 —— 库对的那行没数据，数据对的那行库不对。
+- **同库重复**：搬迁已经用对了标签库，但"这行是不是已经存在"的查询受 MySQL
+  REPEATABLE READ 影响看不见第 1 步刚提交的行，于是在同一个库里又插了一条。
+
+两种都已在代码里修掉，本脚本负责清理修复之前产生的存量数据。
 
 ## 合并规则
 
-按 ``(tenant_id, name)`` 分组——标签名本来就要求租户内全局唯一，一个名字
-出现在两个标签库里本身就是非法状态。组内：
+按 ``(tenant_id, name)`` 分组。**有文件关联的那行**是数据行 —— 只有搬迁写出来的
+行才带文件关联，原提报人、原创建时间、审核留痕也都在它身上；没有文件关联的那行
+是第 1 步留下的空壳。
 
-- **保留行（keeper）**：没有文件关联、创建时间更晚的那行 —— 第 1 步的产物，
-  它所在的库就是审核人真正选的库。
-- **数据行（donor）**：有文件关联、创建时间更早的那行 —— 第 2 步的产物。
-
-合并动作：把 donor 的 ``user_id`` / ``create_time`` / ``reviewer_id`` /
-``review_time`` 写到 keeper 上，把 donor 的 ``tag_link`` 改挂到 keeper，
-然后删除 donor。结果是一行，库对、数据也对。
+- **跨库**：留下**空壳所在的库**（那才是审核人选的），把数据行的
+  ``user_id`` / ``create_time`` / ``reviewer_id`` / ``review_time`` 和文件关联
+  搬过去，然后删掉数据行。
+- **同库**：不存在"哪个库才对"的问题，直接留下数据行、删掉空壳，**不改任何字段**。
 
 ## 用法
 
@@ -134,6 +136,17 @@ class Row:
         )
 
 
+def _carries_the_data(row: Row) -> bool:
+    """Whether this row holds the real values rather than being a placeholder.
+
+    The file links are the tell: only the row written by moving the review
+    record has them, and it is also the one carrying the original proposer,
+    submission time and audit trail. Copying fields off a placeholder would
+    blank exactly what the merge is meant to preserve.
+    """
+    return row.link_count > 0
+
+
 def classify(rows: list[Row]) -> tuple[Row | None, Row | None, str | None]:
     """Return ``(keeper, donor, skip_reason)`` for one duplicated name.
 
@@ -151,7 +164,13 @@ def classify(rows: list[Row]) -> tuple[Row | None, Row | None, str | None]:
 
     keeper, donor = without_links[0], with_links[0]
     if keeper.business_id == donor.business_id:
-        return None, None, "两行在同一个标签库，不是本 bug 的形态"
+        # 同一个库里的两行 —— 修复过程中的第二种形态：搬迁已经用对了标签库，
+        # 但"这行是不是已经存在"的查询受 MySQL REPEATABLE READ 影响看不见
+        # 注册那一步刚提交的行，于是在同一个库里又插了一条。
+        #
+        # 这时没有"哪个库才对"的问题，只需要留下有数据的那行、删掉空壳，
+        # 所以 keeper/donor 与跨库的情况正好相反。
+        return donor, keeper, None
     if keeper.create_time is None or donor.create_time is None:
         return None, None, "创建时间缺失，无法确认先后"
     if keeper.create_time < donor.create_time:
@@ -196,17 +215,20 @@ def main() -> int:
     print()
 
     if plans:
-        print("将要合并（保留库 <- 数据来源）:")
+        print("将要合并（保留 <- 合入）:")
         for name, keeper, donor in plans:
             print(f"  「{name}」 tenant={keeper.tenant_id}")
             print(f"      保留 {keeper}")
             print(f"      合入 {donor}")
-            print(
-                f"      -> 提报者 {keeper.user_id} 改为 {donor.user_id}，"
-                f"创建时间 {keeper.create_time} 改为 {donor.create_time}，"
-                f"审核留痕 {donor.reviewer_id}/{donor.review_time}，"
-                f"迁移 {donor.link_count} 条文件关联"
-            )
+            if _carries_the_data(donor):
+                print(
+                    f"      -> 提报者 {keeper.user_id} 改为 {donor.user_id}，"
+                    f"创建时间 {keeper.create_time} 改为 {donor.create_time}，"
+                    f"审核留痕 {donor.reviewer_id}/{donor.review_time}，"
+                    f"迁移 {donor.link_count} 条文件关联"
+                )
+            else:
+                print("      -> 同库重复，保留行数据不变，仅删除空壳行")
         print()
 
     if skipped:
@@ -225,16 +247,17 @@ def main() -> int:
 
     with bypass_tenant_filter(), get_sync_db_session() as session:
         for _name, keeper, donor in plans:
-            session.execute(
-                MERGE_TAG_SQL,
-                {
-                    "keeper_id": keeper.id,
-                    "user_id": donor.user_id,
-                    "create_time": donor.create_time,
-                    "reviewer_id": donor.reviewer_id,
-                    "review_time": donor.review_time,
-                },
-            )
+            if _carries_the_data(donor):
+                session.execute(
+                    MERGE_TAG_SQL,
+                    {
+                        "keeper_id": keeper.id,
+                        "user_id": donor.user_id,
+                        "create_time": donor.create_time,
+                        "reviewer_id": donor.reviewer_id,
+                        "review_time": donor.review_time,
+                    },
+                )
             # A file already linked to the keeper must not gain a second link.
             session.execute(DROP_CLASHING_LINKS_SQL, {"keeper_id": keeper.id, "donor_id": donor.id})
             session.execute(MOVE_LINKS_SQL, {"keeper_id": keeper.id, "donor_id": donor.id})
