@@ -92,3 +92,27 @@ async def test_points_notify_respects_notify_enabled_false():
     ):
         await svc.notify(user_id=1, template_code="earn_favorite", delta=5)
     message.send_generic_notify.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_points_notify_payload_uses_action_code_in_system_text():
+    """system_text 为 action_code，完整文案放 metadata，供前端正确渲染。"""
+    from bisheng.points.domain.services.points_notify_service import PointsNotifyService
+
+    message = SimpleNamespace(send_generic_notify=AsyncMock())
+    svc = PointsNotifyService(message_service=message)
+    with patch(
+        "bisheng.points.domain.services.points_notify_service._notify_enabled",
+        return_value=True,
+    ):
+        await svc.notify(
+            user_id=4,
+            template_code="earn_publish",
+            rule_name="上传部门库文档",
+            delta=2,
+        )
+    kwargs = message.send_generic_notify.await_args.kwargs
+    assert kwargs["action_code"] == "points_changed"
+    item = kwargs["content_item_list"][0]
+    assert item["content"] == "points_changed"
+    assert item["metadata"]["points_message"] == "你因「上传部门库文档」获得 2 积分。"

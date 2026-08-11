@@ -390,6 +390,7 @@
   "com_notifications_action_request_knowledge_space": "申请加入你{{target}}的知识空间",
   "com_notifications_action_generic": "给你发送了一条通知",
   "com_notifications_action_generic_with_target": "给你发送了一条通知",
+  "com_notifications_action_points_changed": "{{message}}",
   "com_notifications_action_request_menu_access": "申请访问菜单「{{target}}」",
   "com_notifications_action_approval_task_pending": "请审批「{{target}}」的申请",
   "com_notifications_action_approval_task_rejected": "拒绝了你「{{target}}」的审批申请",
