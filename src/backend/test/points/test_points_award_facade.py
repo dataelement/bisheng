@@ -143,6 +143,9 @@ async def test_p7b_awards_when_operator_is_manager_but_payee_is_not():
     assert not outcome.skipped
     assert repo.account.balance == 3
     assert outcome.result.applied_delta == 3
+    assert outcome.should_notify
+    assert outcome.notify_user_id == 5
+    assert outcome.rule_code == "G1"
 
 
 @pytest.mark.asyncio

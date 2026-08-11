@@ -39,6 +39,25 @@ def test_pick_highest_reward():
 
 
 @pytest.mark.asyncio
+async def test_notify_earn_uses_injected_message_service():
+    """月奖通知优先使用已注入 MessageService 的 PointsNotifyService。"""
+    from bisheng.points.domain.services.points_notify_service import PointsNotifyService
+
+    message = SimpleNamespace(send_generic_notify=AsyncMock())
+    service = PointsMonthlyRewardService(notify=PointsNotifyService(message_service=message))
+    await service._notify_earn(
+        user_id=10,
+        rule_code="M1",
+        rule_name="公共库所有者月奖",
+        delta=200,
+    )
+    message.send_generic_notify.assert_awaited_once()
+    kwargs = message.send_generic_notify.await_args.kwargs
+    assert kwargs["receiver_user_ids"] == [10]
+    assert "200" in kwargs["content_item_list"][0]["content"]
+
+
+@pytest.mark.asyncio
 async def test_run_for_tenant_skips_no_login_and_awards_highest():
     service = PointsMonthlyRewardService(
         login_users_fn=AsyncMock(return_value={10}),
