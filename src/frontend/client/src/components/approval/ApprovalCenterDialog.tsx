@@ -22,7 +22,12 @@ import { cn } from "~/utils";
 import { dispatchFileChangeApprovalRefresh } from "~/events/fileChangeApprovalEvents";
 import { Dialog, DialogContent } from "../ui/Dialog";
 import { ExpandableSearchField } from "../ui/ExpandableSearchField";
-import { resolveApprovalTaskSelection, type ApprovalTaskFilter } from "./approvalCenterFileChangeUtils";
+import {
+  FILE_CHANGE_SCENARIO_CODE,
+  resolveApprovalTaskSelection,
+  type ApprovalTaskFilter,
+} from "./approvalCenterFileChangeUtils";
+import { FileChangeBusinessContent } from "./FileChangeBusinessContent";
 import { FileChangeBusinessProjection } from "./FileChangeBusinessProjection";
 import {
   RESOURCE_USER_INVITE_SCENARIO_CODE,
@@ -43,7 +48,6 @@ export interface ApprovalCenterDialogProps {
 
 type RequestsFilter = "in_progress" | "completed";
 const IN_PROGRESS_STATUSES = new Set(["pending", "exception", "execute_failed"]);
-const FILE_CHANGE_SCENARIO_CODE = "knowledge_space_file_change_request";
 
 function fileChangeSpaceId(detail: ApprovalTaskDetail | ApprovalInstanceDetail | null): number | undefined {
   if (detail?.scenario_code !== FILE_CHANGE_SCENARIO_CODE) return undefined;
@@ -716,6 +720,7 @@ function TaskDetailPanel({ detail, localize, onBack }: { detail: ApprovalTaskDet
 
   const detailEntries = Object.entries(detail.detail_snapshot ?? detail.payload_snapshot ?? {}).filter(
     ([k, v]) => detail.scenario_code !== RESOURCE_USER_INVITE_SCENARIO_CODE
+      && detail.scenario_code !== FILE_CHANGE_SCENARIO_CODE
       && !DETAIL_INTERNAL_KEYS.has(k) && v !== undefined && v !== null && v !== "",
   );
   const showContent = detailEntries.length > 0;
@@ -731,6 +736,7 @@ function TaskDetailPanel({ detail, localize, onBack }: { detail: ApprovalTaskDet
       </div>
 
       <FileChangeBusinessProjection detail={detail} localize={localize} />
+      <FileChangeBusinessContent detail={detail} localize={localize} />
       <ResourceUserInviteBusinessContent detail={detail} localize={localize} />
 
       {showContent && (
@@ -893,6 +899,7 @@ function RequestDetailPanel({ detail, localize, onBack }: { detail: ApprovalInst
 
   const detailEntries = Object.entries(detail.detail_snapshot ?? {}).filter(
     ([k, v]) => detail.scenario_code !== RESOURCE_USER_INVITE_SCENARIO_CODE
+      && detail.scenario_code !== FILE_CHANGE_SCENARIO_CODE
       && !DETAIL_INTERNAL_KEYS.has(k) && k !== "reason" && v !== undefined && v !== null && v !== "",
   );
 
@@ -907,6 +914,7 @@ function RequestDetailPanel({ detail, localize, onBack }: { detail: ApprovalInst
       </div>
 
       <FileChangeBusinessProjection detail={detail} localize={localize} />
+      <FileChangeBusinessContent detail={detail} localize={localize} />
       <ResourceUserInviteBusinessContent detail={detail} localize={localize} />
 
       {detailEntries.length > 0 && (

@@ -2,7 +2,7 @@ import type { ApprovalTaskItem } from "~/api/approval";
 
 export type ApprovalTaskFilter = "pending_me" | "processed";
 
-const FILE_CHANGE_SCENARIO_CODE = "knowledge_space_file_change_request";
+export const FILE_CHANGE_SCENARIO_CODE = "knowledge_space_file_change_request";
 const BUSINESS_PROJECTION_STATUSES = new Set([
   "pending",
   "approver_empty",

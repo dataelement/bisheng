@@ -140,4 +140,35 @@ describe("ApprovalCenterDialog F046 interactions", () => {
     expect(mockedGetTask).not.toHaveBeenCalledWith(999);
     expect(screen.queryByText("file-999.pdf")).toBeNull();
   });
+
+  it("renders file change business fields without internal snapshot keys or values", async () => {
+    const only = task(1);
+    mockedListTasks.mockResolvedValue({ data: [only], total: 1 });
+    mockedGetTask.mockResolvedValue({
+      ...detail(only),
+      detail_snapshot: {
+        change_request_id: 2,
+        resource_type: "staged_upload",
+        resource_name: "information_source.xlsx",
+        action: "upload",
+        action_label: "RAW_UPLOAD_LABEL",
+        change: {
+          relative_path: "reports/information_source.xlsx",
+        },
+      },
+    });
+
+    render(<ApprovalCenterDialog open onOpenChange={jest.fn()} />);
+
+    expect(await screen.findByText("com_knowledge.file_change_action")).toBeTruthy();
+    expect(screen.getByText("com_knowledge.file_change_action_upload")).toBeTruthy();
+    expect(screen.getByText("com_knowledge.file_name")).toBeTruthy();
+    expect(screen.getByText("information_source.xlsx")).toBeTruthy();
+    expect(screen.getByText("reports/information_source.xlsx")).toBeTruthy();
+    expect(screen.queryByText("change_request_id")).toBeNull();
+    expect(screen.queryByText("resource_type")).toBeNull();
+    expect(screen.queryByText("staged_upload")).toBeNull();
+    expect(screen.queryByText("RAW_UPLOAD_LABEL")).toBeNull();
+    expect(screen.queryByText("[object Object]")).toBeNull();
+  });
 });
