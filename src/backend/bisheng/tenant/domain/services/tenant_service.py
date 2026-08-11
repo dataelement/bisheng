@@ -137,6 +137,17 @@ class TenantService:
 
             await WorkStationService.acopy_root_builtin_tools_to_tenant(tenant.id)
 
+            # Step 6: seed the kernel's built-in Linsight skills. Startup seeding
+            # only covers tenants that existed then, so without this a tenant
+            # created later would never get them. Best-effort: a skill is not
+            # worth failing tenant creation over, and the next restart re-seeds.
+            try:
+                from bisheng.linsight.domain.services.builtin_skill_seeder import seed_builtin_skills
+
+                await seed_builtin_skills([tenant.id])
+            except Exception:
+                logger.warning("built-in skill seeding failed for new tenant %s", tenant.id, exc_info=True)
+
             return _safe_tenant_dump(tenant)
 
         except TenantCodeDuplicateError:

@@ -101,6 +101,15 @@ async def lifespan(app: FastAPI):
             await backfill_linsight_default_model()
         except Exception:
             logger.exception("linsight default-model backfill failed; continuing startup")
+        # Ships the kernel's built-in skills into every tenant so a fresh deploy
+        # has them without any operator step. Content-addressed and idempotent:
+        # an unchanged image costs a few file reads.
+        try:
+            from bisheng.linsight.domain.services.builtin_skill_seeder import seed_builtin_skills
+
+            await seed_builtin_skills()
+        except Exception:
+            logger.exception("built-in linsight skill seeding failed; continuing startup")
         # LangfuseInstance.update()
         yield
     finally:

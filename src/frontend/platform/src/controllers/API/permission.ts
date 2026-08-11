@@ -83,7 +83,7 @@ export interface PermissionCatalogChange {
 export interface CreatePermissionCatalogDraftRequest {
   idempotency_key: string
   base_release_id: number
-  change: PermissionCatalogChange
+  changes: PermissionCatalogChange[]
 }
 
 export interface PermissionCatalogImpact {

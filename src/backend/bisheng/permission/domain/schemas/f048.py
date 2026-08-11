@@ -186,7 +186,10 @@ class CatalogChangeRequest(StrictRequestModel):
 class CatalogDraftRequest(StrictRequestModel):
     idempotency_key: str = Field(min_length=1, max_length=64)
     base_release_id: int = Field(gt=0)
-    change: CatalogChangeRequest
+    # A draft carries the whole edit batch. One change per draft forced the UI to
+    # open a fresh draft off the CURRENT release for every edit, so publishing
+    # applied only the last one and silently dropped the rest.
+    changes: tuple[CatalogChangeRequest, ...] = Field(min_length=1, max_length=50)
 
 
 class CatalogImpactDTO(BaseModel):

@@ -491,9 +491,8 @@ class KnowledgeService(KnowledgeUtils):
                 batch_action_map = await cls.permission_service.get_knowledge_action_map_async(
                     login_user,
                     [int(one.id) for one in batch],
-                    _KNOWLEDGE_LIST_ACTIONS,
+                    [action],
                 )
-                action_map.update(batch_action_map)
                 authorized.extend(one for one in batch if action in batch_action_map.get(int(one.id), set()))
                 if len(batch) < _KNOWLEDGE_PERMISSION_SCAN_BATCH_SIZE:
                     break
@@ -515,9 +514,8 @@ class KnowledgeService(KnowledgeUtils):
                 batch_action_map = await cls.permission_service.get_knowledge_action_map_async(
                     login_user,
                     [int(one.id) for one in batch],
-                    _KNOWLEDGE_LIST_ACTIONS,
+                    [action],
                 )
-                action_map.update(batch_action_map)
                 res.extend(one for one in batch if action in batch_action_map.get(int(one.id), set()))
                 if len(res) >= fetch_limit or len(batch) < _KNOWLEDGE_PERMISSION_SCAN_BATCH_SIZE:
                     break
@@ -541,6 +539,17 @@ class KnowledgeService(KnowledgeUtils):
         has_more = len(res) > page_size
         if has_more:
             res = res[:page_size]
+
+        # The other list actions only decorate the rows that survived, so they
+        # are resolved once the page is known. Asking for all of them per
+        # candidate multiplied the scan by the number of actions, and that cost
+        # grew with every extra scan round instead of with the page.
+        if res:
+            action_map = await cls.permission_service.get_knowledge_action_map_async(
+                login_user,
+                [int(one.id) for one in res],
+                _KNOWLEDGE_LIST_ACTIONS,
+            )
 
         # ---- 4. Enrich + build response ----
         enrich_start = perf_counter()

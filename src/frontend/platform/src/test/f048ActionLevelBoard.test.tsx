@@ -82,7 +82,7 @@ describe("ActionLevelBoard", () => {
     )
   })
 
-  it("creates a server draft for keyboard and drag changes before impact review", async () => {
+  it("keeps edits local until the whole batch is published", async () => {
     render(
       <ActionLevelBoard
         actions={actions}
@@ -93,13 +93,6 @@ describe("ActionLevelBoard", () => {
 
     fireEvent.change(screen.getByLabelText("actionLevel.change.edit"), {
       target: { value: "3" },
-    })
-    await waitFor(() => {
-      expect(onCreateDraft).toHaveBeenCalledWith({
-        type: "ASSIGN_ACTION_LEVEL",
-        action_code: "edit",
-        level: 3,
-      })
     })
     expect(
       screen.getByTestId("action-level-zone-3"),
@@ -116,19 +109,101 @@ describe("ActionLevelBoard", () => {
     fireEvent.drop(screen.getByTestId("action-level-zone-2"), {
       dataTransfer,
     })
-    await waitFor(() => {
-      expect(onCreateDraft).toHaveBeenLastCalledWith({
-        type: "ASSIGN_ACTION_LEVEL",
-        action_code: "visible",
-        level: 2,
-      })
-    })
 
-    fireEvent.click(screen.getByRole("button", { name: "impact.review" }))
+    // Editing must not reach the server: one draft per edit meant publishing
+    // applied only the last one and silently dropped the rest.
+    expect(onCreateDraft).not.toHaveBeenCalled()
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "actionLevel.pendingChanges",
+    )
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "actionLevel.publishChanges" }),
+    )
+    await waitFor(() => {
+      expect(onCreateDraft).toHaveBeenCalledTimes(1)
+    })
+    expect(onCreateDraft).toHaveBeenCalledWith([
+      { type: "ASSIGN_ACTION_LEVEL", action_code: "visible", level: 2 },
+      { type: "ASSIGN_ACTION_LEVEL", action_code: "edit", level: 3 },
+    ])
     expect(onReviewImpact).toHaveBeenCalledWith(draft)
   })
 
-  it("shows scope and drafts active-state changes without publishing", async () => {
+  it("drops a change once the action is moved back where it started", () => {
+    render(
+      <ActionLevelBoard
+        actions={actions}
+        onCreateDraft={onCreateDraft}
+        onReviewImpact={onReviewImpact}
+      />,
+    )
+
+    fireEvent.change(screen.getByLabelText("actionLevel.change.visible"), {
+      target: { value: "3" },
+    })
+    expect(screen.getByRole("status")).toBeInTheDocument()
+
+    // Re-query: moving zones remounts the card, so the old node is detached.
+    fireEvent.change(screen.getByLabelText("actionLevel.change.visible"), {
+      target: { value: "1" },
+    })
+    expect(screen.queryByRole("status")).not.toBeInTheDocument()
+    expect(
+      screen.getByRole("button", { name: "actionLevel.publishChanges" }),
+    ).toBeDisabled()
+  })
+
+  it("discards every pending change back to the published release", () => {
+    render(
+      <ActionLevelBoard
+        actions={actions}
+        onCreateDraft={onCreateDraft}
+        onReviewImpact={onReviewImpact}
+      />,
+    )
+
+    fireEvent.change(screen.getByLabelText("actionLevel.change.edit"), {
+      target: { value: "3" },
+    })
+    fireEvent.click(screen.getByLabelText("actionLevel.active.delete"))
+    expect(screen.getByRole("status")).toBeInTheDocument()
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "actionLevel.discardChanges" }),
+    )
+
+    expect(screen.queryByRole("status")).not.toBeInTheDocument()
+    expect(onCreateDraft).not.toHaveBeenCalled()
+    expect(
+      screen.getByTestId("action-level-zone-unassigned"),
+    ).toContainElement(screen.getByTestId("permission-action-edit"))
+  })
+
+  it("surfaces a failure to prepare the draft", async () => {
+    onCreateDraft.mockRejectedValueOnce(new Error("boom"))
+    render(
+      <ActionLevelBoard
+        actions={actions}
+        onCreateDraft={onCreateDraft}
+        onReviewImpact={onReviewImpact}
+      />,
+    )
+
+    fireEvent.change(screen.getByLabelText("actionLevel.change.edit"), {
+      target: { value: "3" },
+    })
+    fireEvent.click(
+      screen.getByRole("button", { name: "actionLevel.publishChanges" }),
+    )
+
+    expect(
+      await screen.findByRole("alert"),
+    ).toHaveTextContent("actionLevel.draftFailed")
+    expect(onReviewImpact).not.toHaveBeenCalled()
+  })
+
+  it("shows resource scope and the inactive marker", () => {
     render(
       <ActionLevelBoard
         actions={actions}
@@ -146,15 +221,5 @@ describe("ActionLevelBoard", () => {
     expect(screen.getByTestId("permission-action-delete")).toHaveTextContent(
       "actionLevel.inactive",
     )
-
-    fireEvent.click(screen.getByLabelText("actionLevel.active.delete"))
-    await waitFor(() => {
-      expect(onCreateDraft).toHaveBeenCalledWith({
-        type: "SET_ACTION_ACTIVE",
-        action_code: "delete",
-        active: true,
-      })
-    })
-    expect(onReviewImpact).not.toHaveBeenCalled()
   })
 })

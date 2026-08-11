@@ -38,7 +38,7 @@ class F048ProcessManagerPort(Protocol):
 
     async def heartbeat(self) -> bool: ...
 
-    async def mark_migration_required(self) -> None: ...
+    async def mark_migration_required(self, *, reason: str = ...) -> None: ...
 
     def readiness(self) -> dict: ...
 
@@ -78,15 +78,21 @@ def register_f048_permission_runtime_context(
     async def initialize() -> ProcessPermissionRuntime:
         manager = app_context.get_context("openfga")
         client = await manager.async_get_instance()
-        if manager.readiness().get("migration_required"):
-            raise PermissionPublishNotReadyError(msg="Permission data migration is required")
+        readiness = manager.readiness()
+        if readiness.get("migration_required"):
+            # Report what actually latched the gate. A fenced Catalog left by a
+            # crashed publish reported "migration is required" here, which sent
+            # the operator looking for a migration that was never pending.
+            raise PermissionPublishNotReadyError(
+                msg=str(readiness.get("error") or "Permission data migration is required")
+            )
         try:
             runtime = await initializer(client)
         except (
             AuthorizationModelMismatchError,
             PermissionPublishNotReadyError,
-        ):
-            await manager.mark_migration_required()
+        ) as exc:
+            await manager.mark_migration_required(reason=str(exc) or "permission_data_migration_required")
             raise
         await bind_f048_process_runtime(
             manager,

@@ -58,6 +58,7 @@ export function DashboardSidebar({
     const {
         permissions: dashboardPermissions,
         loading: permissionsLoading,
+        privileged,
     } = useDashboardPermissions(dashboardIds)
 
     const canCreate = useMemo(() => {
@@ -65,13 +66,15 @@ export function DashboardSidebar({
     }, [user])
 
     const filteredDashboards = useMemo(() => {
-        const visibleDashboards = dashboards.filter((dashboard) =>
-            dashboardPermissions[String(dashboard.id)]?.includes("visible"),
+        const visibleDashboards = dashboards.filter(
+            (dashboard) =>
+                privileged ||
+                Object.hasOwn(dashboardPermissions, String(dashboard.id)),
         )
         if (!searchQuery.trim()) return visibleDashboards
 
         return visibleDashboards.filter((dashboard) => dashboard.title.toLowerCase().includes(searchQuery.toLowerCase()))
-    }, [dashboardPermissions, dashboards, searchQuery])
+    }, [dashboardPermissions, dashboards, privileged, searchQuery])
 
     const handleSearch = useMiniDebounce((e: React.ChangeEvent<HTMLInputElement>) => {
         setSearchQuery(e.target.value)
@@ -248,7 +251,9 @@ export function DashboardSidebar({
                                     onShare={onShare}
                                     onDelete={handleDelete}
                                     permissionActions={dashboardPermissions[String(dashboard.id)] ?? []}
-                                    onPermission={dashboardPermissions[String(dashboard.id)]?.includes("manage_permission")
+                                    visible
+                                    privileged={privileged}
+                                    onPermission={privileged || dashboardPermissions[String(dashboard.id)]?.includes("manage_permission")
                                         ? (d) => { setPermTarget({ id: String(d.id), name: d.title }); setPermDialogOpen(true); }
                                         : undefined}
                                 />

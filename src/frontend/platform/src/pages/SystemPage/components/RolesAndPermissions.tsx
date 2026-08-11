@@ -68,7 +68,7 @@ interface ModelCatalogPanelProps {
   selectedModelKey: string | null
   onSelectModel: (modelKey: string) => void
   onCreateDraft: (
-    change: PermissionCatalogChange,
+    changes: PermissionCatalogChange[],
   ) => Promise<PermissionCatalogDraft>
   onReviewImpact: (draft: PermissionCatalogDraft) => void
 }
@@ -205,13 +205,13 @@ export function RolesAndPermissions() {
   }, [isPlatformSuperAdmin, loadCatalog])
 
   const handleCreateDraft = async (
-    change: PermissionCatalogChange,
+    changes: PermissionCatalogChange[],
   ): Promise<PermissionCatalogDraft> => {
     if (!catalog) throw new Error("permission Catalog is not loaded")
     return await createPermissionCatalogDraftApi({
       idempotency_key: createIdempotencyKey("catalog-draft"),
       base_release_id: catalog.id,
-      change,
+      changes,
     })
   }
 

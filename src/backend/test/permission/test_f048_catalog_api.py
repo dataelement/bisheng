@@ -99,11 +99,13 @@ def test_catalog_get_and_draft_round_trip_use_unified_response() -> None:
             json={
                 "idempotency_key": "draft-1",
                 "base_release_id": 12,
-                "change": {
-                    "type": "ASSIGN_ACTION_LEVEL",
-                    "action_code": "edit",
-                    "level": 2,
-                },
+                "changes": [
+                    {
+                        "type": "ASSIGN_ACTION_LEVEL",
+                        "action_code": "edit",
+                        "level": 2,
+                    }
+                ],
             },
         ).json()
         fetched = client.get("/api/v1/permissions/catalog/drafts/13").json()
@@ -143,12 +145,14 @@ def test_catalog_semantic_errors_are_translated_to_unified_codes() -> None:
                 json={
                     "idempotency_key": "draft-invalid",
                     "base_release_id": 12,
-                    "change": {
-                        "type": "UPDATE_MODEL",
-                        "model_key": "owner",
-                        "name": "forbidden",
-                        "action_codes": ["unknown-action"],
-                    },
+                    "changes": [
+                        {
+                            "type": "UPDATE_MODEL",
+                            "model_key": "owner",
+                            "name": "forbidden",
+                            "action_codes": ["unknown-action"],
+                        }
+                    ],
                 },
             ).json()
         assert body["status_code"] == expected

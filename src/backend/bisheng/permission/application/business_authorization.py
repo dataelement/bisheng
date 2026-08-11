@@ -76,6 +76,13 @@ async def batch_check_business_actions(
         return {}
 
     actor = await resolve_permission_actor(login_user)
+    if actor.super_admin:
+        # The decision layer already allows a super admin unconditionally, but it
+        # only says so after every candidate has been resolved — several queries
+        # each, per action. Listing a page of 100 candidates against 5 actions
+        # therefore paid 500 resolutions to reach a foregone conclusion.
+        return {resource_id: frozenset(normalized_actions) for resource_id in normalized_ids}
+
     registry = await get_f048_resource_registry()
     result: dict[str, set[str]] = {resource_id: set() for resource_id in normalized_ids}
     runtime = await get_f048_runtime()

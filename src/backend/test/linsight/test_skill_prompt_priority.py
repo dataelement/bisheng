@@ -70,10 +70,12 @@ def test_export_fallback_is_forbidden_when_a_code_executor_is_bound(has_kb):
     assert "bisheng_code_interpreter" in prompt
     # The ban is not absolute — a repeatedly failing executor may still fall back.
     assert "兜底" in prompt
-    # Executor output lands in the local workspace dir, NOT in the object-storage
-    # view ls/glob read. Without saying so the model burns turns hunting the file
-    # it just wrote (observed: 5 tool calls of ls/glob/shutil before giving up).
-    assert "不会**出现在 ls / glob" in prompt
+    # Executor output is mirrored into the workspace, so ls/glob DO surface it —
+    # but success is judged by the execution result, not by a lookup. Without this
+    # the model burns turns hunting the file it just wrote (observed: 5 tool calls
+    # of ls/glob/shutil before giving up) and sometimes regenerates it wholesale.
+    assert "exitcode 0" in prompt
+    assert "不要反复 ls / glob 找它" in prompt
 
 
 @pytest.mark.parametrize("has_kb", [True, False])

@@ -1,3 +1,4 @@
+import os
 import re
 from abc import ABC, abstractmethod
 from datetime import timedelta
@@ -104,6 +105,10 @@ class BaseExecutor(ABC):
         self.minio = minio
         # 将代码生成的文件同步到本地的路径
         self.local_sync_path = kwargs.get("local_sync_path", None)
+        # Object-storage prefix of the session workspace (``workspace/<svid>``).
+        # Set by the linsight tool binder; empty for every other caller, which
+        # simply disables the mirror in ``sync_to_workspace``.
+        self.workspace_prefix = kwargs.get("workspace_prefix", None)
 
     @abstractmethod
     def run(self, code: str) -> Any:
@@ -147,6 +152,69 @@ class BaseExecutor(ABC):
             return ""
         lines = "\n".join(f"- {old} -> {new}" for old, new in moved)
         return RELOCATED_PATH_NOTICE_HEADER + lines
+
+    def sync_to_workspace(self, dir_path: str, rel_paths: list[str]) -> int:
+        """Mirror this run's files into the session workspace prefix. Returns the count.
+
+        The executor writes to a LOCAL working dir that is deleted when the task
+        ends (``_cleanup_resources``), while ``workspace/<svid>/`` in object storage
+        is what the file tools (``ls`` / ``read_file``) actually see and what the
+        next turn inherits via ``seed_workspace_from_previous``. Without this
+        mirror a code-generated deliverable exists ONLY on that local disk, which
+        produced two long-standing defects:
+
+          * the model cannot ``ls`` the file it just wrote (the prompt had to carry
+            an explicit "trust exitcode 0, do not go looking for it" caveat);
+          * a follow-up turn runs under a fresh svid whose workspace seeds from the
+            previous one's ``output/`` — empty, because nothing was ever written
+            there — so "把封面加个副标题" finds no deck and can only regenerate.
+
+        Deletions are deliberately NOT mirrored: this runs off a created/modified
+        diff, and reconciling removals would mean trusting a partially-failed run
+        to delete objects the harvester may still need.
+
+        Best-effort by design — a mirror failure must never fail the run. The local
+        copy is still what ``get_final_result_file`` harvests, so the user gets the
+        deliverable either way.
+        """
+        if not self.minio or not self.workspace_prefix or not rel_paths:
+            return 0
+
+        bucket = self.minio.get("public_bucket") or "bisheng"
+        prefix = self.workspace_prefix.strip("/")
+        try:
+            minio_client = self._minio_client()
+        except Exception:
+            logger.exception("workspace mirror: minio client init failed; local copy is unaffected")
+            return 0
+
+        synced = 0
+        for rel in rel_paths:
+            # Normalise once: a leading slash would make os.path.join return the
+            # absolute path and silently skip the file.
+            rel_key = rel.replace(os.sep, "/").lstrip("/")
+            local_path = os.path.join(dir_path, rel_key)
+            if not os.path.isfile(local_path):
+                continue
+            object_name = f"{prefix}/{rel_key}"
+            try:
+                minio_client.fput_object(bucket_name=bucket, object_name=object_name, file_path=local_path)
+                synced += 1
+            except Exception:
+                # One unmirrored file degrades ls/continuity for that file only.
+                logger.exception("workspace mirror failed for {}", object_name)
+        if synced:
+            logger.debug("workspace mirror: {} file(s) -> {}/{}", synced, bucket, prefix)
+        return synced
+
+    def _minio_client(self) -> Minio:
+        return Minio(
+            endpoint=self.minio.get("endpoint"),
+            access_key=self.minio.get("access_key"),
+            secret_key=self.minio.get("secret_key"),
+            secure=self.minio.get("schema") or self.minio.get("secure"),
+            cert_check=self.minio.get("cert_check"),
+        )
 
     def upload_minio(
         self,

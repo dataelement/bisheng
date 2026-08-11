@@ -1472,7 +1472,9 @@ class LinsightWorkbenchImpl:
         await redis_client.aset(key=key, value=parse_result, expiration=60 * 60 * cls.CACHE_EXPIRATION_HOURS)
 
     @classmethod
-    async def _init_bisheng_code_tool(cls, selected_tool_ids: list[int], file_dir: str, user_id: int) -> list[BaseTool]:
+    async def _init_bisheng_code_tool(
+        cls, selected_tool_ids: list[int], file_dir: str, user_id: int, session_version_id: str | None = None
+    ) -> list[BaseTool]:
         """Initialize the code interpreter separately (it needs the workspace dir bound).
 
         ``selected_tool_ids`` is the user's per-turn tool selection. The id is
@@ -1491,6 +1493,14 @@ class LinsightWorkbenchImpl:
         if "local" not in code_config["config"]:
             code_config["config"]["local"] = {}
         code_config["config"]["local"]["local_sync_path"] = file_dir
+        if session_version_id:
+            from bisheng.linsight.domain.services.workspace_backend import WORKSPACE_PREFIX
+
+            # Lets the executor mirror what it writes into ``workspace/<svid>/``.
+            # Without it the local working dir is the ONLY copy, so the file tools
+            # cannot see a code-generated deliverable and the next turn's
+            # seed-from-previous finds an empty ``output/``.
+            code_config["config"]["local"]["workspace_prefix"] = f"{WORKSPACE_PREFIX}/{session_version_id}"
         if "e2b" not in code_config["config"]:
             code_config["config"]["e2b"] = {}
         code_config["config"]["e2b"]["local_sync_path"] = file_dir
@@ -1574,7 +1584,10 @@ class LinsightWorkbenchImpl:
         if need_upload and file_dir:
             try:
                 bisheng_code_tool = await cls._init_bisheng_code_tool(
-                    tool_ids, file_dir, user_id=session_version.user_id
+                    tool_ids,
+                    file_dir,
+                    user_id=session_version.user_id,
+                    session_version_id=session_version.id,
                 )
                 tools.extend(bisheng_code_tool)
             except Exception:

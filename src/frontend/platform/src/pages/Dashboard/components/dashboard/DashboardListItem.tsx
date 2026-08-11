@@ -28,6 +28,10 @@ interface DashboardListItemProps {
     onPermission?: (dashboard: Dashboard) => void
     permissionBadge?: React.ReactNode
     permissionActions: string[]
+    /** Resolved by the owner of the permission lookup, not re-derived here. */
+    visible?: boolean
+    /** Admins are waved through on identity, so they hold no grants to read. */
+    privileged?: boolean
 }
 
 export function DashboardListItem({
@@ -42,6 +46,8 @@ export function DashboardListItem({
     onPermission,
     permissionBadge,
     permissionActions,
+    visible = false,
+    privileged = false,
 }: DashboardListItemProps) {
     const { t } = useTranslation("dashboard")
 
@@ -62,10 +68,13 @@ export function DashboardListItem({
         }
     }, [isEditing])
 
-    const canView = permissionActions.includes("visible")
-    const canEdit = permissionActions.includes("edit")
-    const canDelete = permissionActions.includes("delete")
-    const canManagePermission = permissionActions.includes("manage_permission")
+    // The sidebar only renders items it already resolved as visible; "visible"
+    // is a relation in the permission model, never one of the returned actions.
+    const canView = privileged || visible
+    const canEdit = privileged || permissionActions.includes("edit")
+    const canDelete = privileged || permissionActions.includes("delete")
+    const canManagePermission =
+        privileged || permissionActions.includes("manage_permission")
 
     const handleDoubleClick = () => {
         if (canEdit) setIsEditing(true)

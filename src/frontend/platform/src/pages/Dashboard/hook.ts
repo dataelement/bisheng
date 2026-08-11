@@ -36,9 +36,23 @@ function getDashboardPermissionActions(
     return request
 }
 
+/**
+ * Resolve what the current user may do on each dashboard.
+ *
+ * A resource is visible exactly when its `my-permissions` request succeeded:
+ * the endpoint checks visibility at its entrance and errors out otherwise. The
+ * returned `actions` never carry "visible" — it is a relation in the permission
+ * model, not one of the twelve business actions — so presence in the map, not
+ * the action list, is the visibility signal.
+ *
+ * `privileged` short-circuits admins. The backend already waves them through on
+ * identity alone, but that same shortcut means they hold no grant rows, so their
+ * action list comes back empty and everything would read as forbidden.
+ */
 export function useDashboardPermissions(resourceIds: string[]): {
     permissions: DashboardPermissionMap
     loading: boolean
+    privileged: boolean
 } {
     const normalizedIds = useMemo(
         () => Array.from(new Set(resourceIds.map(String))).sort(),
@@ -47,11 +61,12 @@ export function useDashboardPermissions(resourceIds: string[]): {
     const idsKey = normalizedIds.join(",")
     const { user } = useContext(userContext)
     const userId = user?.user_id == null ? "" : String(user.user_id)
+    const privileged = user?.role === "admin"
     const [permissions, setPermissions] = useState<DashboardPermissionMap>({})
     const [loading, setLoading] = useState(false)
 
     useEffect(() => {
-        if (!normalizedIds.length) {
+        if (privileged || !normalizedIds.length) {
             setPermissions({})
             setLoading(false)
             return
@@ -83,9 +98,9 @@ export function useDashboardPermissions(resourceIds: string[]): {
         return () => {
             cancelled = true
         }
-    }, [idsKey, userId])
+    }, [idsKey, userId, privileged])
 
-    return { permissions, loading }
+    return { permissions, loading, privileged }
 }
 
 export const usePublishDashboard = () => {

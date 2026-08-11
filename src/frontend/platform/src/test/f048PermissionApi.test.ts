@@ -36,11 +36,13 @@ describe("F048 Platform permission API", () => {
     await createPermissionCatalogDraftApi({
       idempotency_key: "draft-1",
       base_release_id: 12,
-      change: {
-        type: "ASSIGN_ACTION_LEVEL",
-        action_code: "edit",
-        level: 2,
-      },
+      changes: [
+        {
+          type: "ASSIGN_ACTION_LEVEL",
+          action_code: "edit",
+          level: 2,
+        },
+      ],
     })
     await getPermissionCatalogDraftApi(13)
     await publishPermissionCatalogDraftApi(13, {

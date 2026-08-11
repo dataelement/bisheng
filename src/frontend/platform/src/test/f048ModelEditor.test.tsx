@@ -106,11 +106,13 @@ describe("ModelEditor", () => {
     fireEvent.click(screen.getByRole("button", { name: "model.save" }))
 
     await waitFor(() => {
-      expect(onCreateDraft).toHaveBeenCalledWith({
-        type: "SET_ALLOW_SAME_LEVEL",
-        model_key: "manager",
-        allow_same_level: true,
-      })
+      expect(onCreateDraft).toHaveBeenCalledWith([
+        {
+          type: "SET_ALLOW_SAME_LEVEL",
+          model_key: "manager",
+          allow_same_level: true,
+        },
+      ])
     })
   })
 
@@ -137,14 +139,16 @@ describe("ModelEditor", () => {
     fireEvent.click(screen.getByRole("button", { name: "model.save" }))
 
     await waitFor(() => {
-      expect(onCreateDraft).toHaveBeenCalledWith({
-        type: "UPDATE_MODEL",
-        model_key: "collaborator",
-        name: "Workflow collaborator",
-        action_codes: ["visible", "edit"],
-        active: false,
-        allow_same_level: false,
-      })
+      expect(onCreateDraft).toHaveBeenCalledWith([
+        {
+          type: "UPDATE_MODEL",
+          model_key: "collaborator",
+          name: "Workflow collaborator",
+          action_codes: ["visible", "edit"],
+          active: false,
+          allow_same_level: false,
+        },
+      ])
     })
     expect(screen.getByTestId("model-derived-level")).toHaveTextContent("2")
   })
@@ -216,13 +220,15 @@ describe("ModelEditor", () => {
     fireEvent.click(save)
 
     await waitFor(() => {
-      expect(onCreateDraft).toHaveBeenCalledWith({
-        type: "CREATE_MODEL",
-        name: "Reviewer",
-        action_codes: ["visible"],
-        active: true,
-        allow_same_level: false,
-      })
+      expect(onCreateDraft).toHaveBeenCalledWith([
+        {
+          type: "CREATE_MODEL",
+          name: "Reviewer",
+          action_codes: ["visible"],
+          active: true,
+          allow_same_level: false,
+        },
+      ])
     })
   })
 
@@ -250,10 +256,12 @@ describe("ModelEditor", () => {
     )
     fireEvent.click(screen.getByRole("button", { name: "model.delete" }))
     await waitFor(() => {
-      expect(onCreateDraft).toHaveBeenCalledWith({
-        type: "DELETE_MODEL",
-        model_key: "collaborator",
-      })
+      expect(onCreateDraft).toHaveBeenCalledWith([
+        {
+          type: "DELETE_MODEL",
+          model_key: "collaborator",
+        },
+      ])
     })
   })
 
