@@ -81,17 +81,6 @@ class PermissionDeniedError(BaseErrorCode):
     Msg = "Permission denied"
 
 
-class AdoptLimitExceededError(BaseErrorCode):
-    """每个问题最多采纳 3 个最佳答案"""
-
-    Code = 10906
-    Msg = "每个问题最多采纳 3 个最佳答案"
-
-
-# 同题未删除回答中，adopted=true 的上限
-MAX_ADOPTED_ANSWERS_PER_QUESTION = 3
-
-
 class QAExpertStatsService:
     """Expert QA statistics service."""
 
@@ -495,70 +484,35 @@ class QuestionService:
         return question
 
     async def adopt_answer(self, question_id: int, answer_id: int, operator_id: int) -> Question:
-        """采纳最佳回答：同题最多 3 条；已采纳幂等；G4 按同题同回答者只发一次。"""
+        """采纳最佳回答"""
         question = await self.repository.get_by_id(question_id)
         if not question:
             raise QuestionNotFoundError()
 
         # 只有提问者可以采纳
         if question.user_id != operator_id:
-            raise PermissionDeniedError(msg="Only question author can adopt answer")
+            raise PermissionDeniedError(message="Only question author can adopt answer")
 
         answer = await self.answer_repo.get_by_id(answer_id)
-        if not answer or int(getattr(answer, "status", 0) or 0) == 3:
+        if not answer:
             raise AnswerNotFoundError()
 
         if answer.question_id != question_id:
-            raise InvalidInvitationError(msg="Answer does not belong to this question")
+            raise InvalidInvitationError(message="Answer does not belong to this question")
 
-        # 已采纳：幂等返回，不重复加采纳数 / 通知 / G4 旁路
-        if bool(getattr(answer, "adopted", False)):
-            logger.info(
-                "Answer %s already adopted for question %s; idempotent return",
-                answer_id,
-                question_id,
-            )
-            return question
-
-        adopted_count = await self.answer_repo.count_adopted_by_question_id(question_id)
-        if adopted_count >= MAX_ADOPTED_ANSWERS_PER_QUESTION:
-            raise AdoptLimitExceededError()
-
-        # 更新问题状态（adopted_answer_id = 最近一次采纳）
+        # 更新问题状态
         question.adopted_answer_id = answer_id
         question.status = 1  # 已解决
         await self.repository.update(question_id, adopted_answer_id=answer_id, status=1)
 
-        # 采纳标记以 adopted 为准；status 保持与现网写路径一致（列表过滤看 status!=3）
+        # 更新回答状态
+        answer.status = 1  # 已采纳
         await self.answer_repo.update(answer_id, status=1, adopted=True)
-        if getattr(answer, "expert_id", None):
-            await self.expert_repo.increment_adoption_count(answer.expert_id, count=1)
+        # 增加采纳采纳数
+        await self.expert_repo.increment_adoption_count(answer.expert_id, count=1)
 
         # 发送采纳通知
         await self._send_adoption_notification(question, answer)
-
-        # 积分旁路：给回答者发 G4；expert.user_id 才是平台用户 ID。
-        try:
-            from bisheng.core.context.tenant import DEFAULT_TENANT_ID, get_current_tenant_id
-            from bisheng.points.domain.services.points_award_hooks import notify_answer_adopted
-
-            answerer_id = None
-            if getattr(answer, "expert_id", None):
-                expert = await self.expert_repo.get_by_id(answer.expert_id)
-                if expert is not None and getattr(expert, "user_id", None) is not None:
-                    answerer_id = int(expert.user_id)
-            if answerer_id:
-                await notify_answer_adopted(
-                    tenant_id=int(get_current_tenant_id() or DEFAULT_TENANT_ID),
-                    question_id=int(question_id),
-                    answer_id=int(answer_id),
-                    answerer_id=answerer_id,
-                )
-        except Exception:
-            logger.exception(
-                "points.award.hooks adopt notify failed answer_id=%s",
-                answer_id,
-            )
 
         logger.info(f"Answer {answer_id} adopted for question {question_id}")
         return question

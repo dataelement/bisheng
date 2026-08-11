@@ -563,51 +563,9 @@ export function NotificationsDialog({
         return getActionCode(notification);
     };
 
-    /** 积分站内信：文案在 metadata，system_text 仅为 action_code。 */
-    const getPointsNotifyText = (notification: MessageItem): string => {
-        const parts = Array.isArray(notification.content) ? notification.content : [];
-        for (const part of parts as any[]) {
-            const meta = part?.metadata ?? {};
-            const fromMeta =
-                meta?.points_message ??
-                meta?.data?.points_change?.message;
-            if (typeof fromMeta === "string" && fromMeta.trim()) {
-                return fromMeta.trim();
-            }
-        }
-        // 兼容首版错误 payload：把完整中文塞进了 system_text
-        const systemText = parts.find((c: any) => c?.type === "system_text")?.content;
-        if (
-            typeof systemText === "string" &&
-            systemText.trim() &&
-            systemText.trim() !== "points_changed" &&
-            /积分|分/.test(systemText)
-        ) {
-            return systemText.trim();
-        }
-        return "";
-    };
-
-    const isPointsChangedNotification = (notification: MessageItem): boolean => {
-        return (
-            notification.action_code === "points_changed" ||
-            getSystemTextCode(notification) === "points_changed"
-        );
-    };
-
     const getNotificationText = (notification: MessageItem) => {
         const targetName = getTargetName(notification);
         const actionCode = getSystemTextCode(notification);
-        // 积分消息优先展示后端模板文案，避免回退成「给你发送了一条通知」
-        if (
-            notification.action_code === "points_changed" ||
-            actionCode === "points_changed"
-        ) {
-            const pointsText = getPointsNotifyText(notification);
-            if (pointsText) {
-                return { text: pointsText, targetName: "", showApproval: false };
-            }
-        }
         const actionTextKey = NOTIFICATION_ACTION_TEXT_KEYS[actionCode] || (actionCode ? `com_notifications_action_${actionCode}` : "");
         const fallbackText = notification.content?.map((c) => c.content).filter(Boolean).join("") || "";
         const businessUrlPart = notification.content?.find((c: any) => c?.type === "business_url") as any;
@@ -1047,10 +1005,7 @@ export function NotificationsDialog({
 
                     {/* Message text */}
                     <div className={cn("flex min-w-0 flex-1 gap-1 text-[14px]", isTouchMobile ? "flex-col" : "flex-row flex-wrap items-center gap-1", textColor)}>
-                        {/* 系统积分通知无发送人：不展示空的 @ */}
-                        {userName && !isPointsChangedNotification(notification) ? (
-                            <span className="shrink-0 font-medium hover:text-[#165dff]">@{userName}</span>
-                        ) : null}
+                        <span className="shrink-0 font-medium hover:text-[#165dff]">@{userName}</span>
                         <span className="min-w-0">
                             {!targetSplitMatch && canNavigateTarget && (
                                 <span
