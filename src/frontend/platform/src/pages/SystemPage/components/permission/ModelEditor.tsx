@@ -11,6 +11,9 @@ import type {
 import { ShieldAlert } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { actionLabel } from "./actionLabels"
+
+const BLANK_PRESET_KEY = "__blank__"
 
 interface PermissionModelPreset {
   key: string
@@ -162,6 +165,17 @@ export function ModelEditor({
   }
 
   const handleApplyPreset = () => {
+    // The blank option is the only way back to an empty selection: picking the
+    // placeholder just disabled the button, so a model could gain actions from a
+    // preset but never be cleared again.
+    if (selectedPreset === BLANK_PRESET_KEY) {
+      const blank = { key: BLANK_PRESET_KEY, name: t("model.preset.blank"), action_codes: [] }
+      setSelected(new Set())
+      setAllowSameLevel(false)
+      setDraft(null)
+      onInitializePreset?.(blank)
+      return
+    }
     const preset = presets.find((item) => item.key === selectedPreset)
     if (!preset) return
     const initializedPreset = {
@@ -211,7 +225,7 @@ export function ModelEditor({
         </span>
       </div>
 
-      {presets.length > 0 && !isStandard && (
+      {!isStandard && (
         <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
           <label className="text-sm font-medium text-foreground">
             <span className="mb-1 block">{t("model.preset.label")}</span>
@@ -223,6 +237,7 @@ export function ModelEditor({
               className="min-h-11 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <option value="">{t("model.preset.select")}</option>
+              <option value={BLANK_PRESET_KEY}>{t("model.preset.blank")}</option>
               {presets.map((preset) => (
                 <option key={preset.key} value={preset.key}>
                   {preset.name}
@@ -276,7 +291,7 @@ export function ModelEditor({
               />
               <span className="min-w-0 flex-1">
                 <span className="block font-medium text-foreground">
-                  {action.name}
+                  {actionLabel(t, action.code, action.name)}
                 </span>
                 <span className="block truncate text-xs text-muted-foreground">
                   {action.code}

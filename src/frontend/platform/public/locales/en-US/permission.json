@@ -97,7 +97,8 @@
     "preset": {
       "label": "Initialization Preset",
       "select": "Select a preset",
-      "apply": "Apply Preset"
+      "apply": "Apply Preset",
+      "blank": "Blank model (no actions preselected)"
     }
   },
   "impact": {
@@ -186,5 +187,30 @@
     "manageGrants": "Manage Grants",
     "loading": "Loading resource permissions…",
     "loadFailed": "Failed to load resource permissions"
+  },
+  "actionName": {
+    "create_folder": "Create folder",
+    "delete": "Delete",
+    "download": "Download",
+    "edit": "Edit",
+    "manage_permission": "Manage permissions",
+    "move": "Move",
+    "publish": "Publish",
+    "rename": "Rename",
+    "share": "Share",
+    "unpublish": "Unpublish",
+    "upload_file": "Upload file",
+    "use": "Use"
+  },
+  "resourceTypeName": {
+    "assistant": "Assistant",
+    "channel": "Channel",
+    "dashboard": "Dashboard",
+    "folder": "Folder",
+    "knowledge_file": "File",
+    "knowledge_library": "Knowledge base",
+    "knowledge_space": "Knowledge space",
+    "tool": "Tool",
+    "workflow": "Workflow"
   }
 }

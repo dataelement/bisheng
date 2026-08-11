@@ -10,6 +10,7 @@ import { cn } from "@/utils"
 import { GripVertical, ShieldAlert } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { actionLabel, resourceTypeLabel } from "./actionLabels"
 
 interface ActionLevelBoardProps {
   actions: PermissionCatalogAction[]
@@ -248,7 +249,7 @@ export function ActionLevelBoard({
                           <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0">
                               <p className="truncate text-sm font-medium text-foreground">
-                                {action.name}
+                                {actionLabel(t, action.code, action.name)}
                               </p>
                               <p className="truncate text-xs text-muted-foreground">
                                 {action.code}
@@ -276,7 +277,7 @@ export function ActionLevelBoard({
                                 key={resourceType}
                                 className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground"
                               >
-                                {resourceType}
+                                {resourceTypeLabel(t, resourceType)}
                               </span>
                             ))}
                           </div>

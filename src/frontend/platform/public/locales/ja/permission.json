@@ -97,7 +97,8 @@
     "preset": {
       "label": "初期化プリセット",
       "select": "プリセットを選択",
-      "apply": "プリセットを適用"
+      "apply": "プリセットを適用",
+      "blank": "空のモデル（アクション未選択）"
     }
   },
   "impact": {
@@ -186,5 +187,30 @@
     "manageGrants": "付与を管理",
     "loading": "リソース権限を読み込み中…",
     "loadFailed": "リソース権限を読み込めませんでした"
+  },
+  "actionName": {
+    "create_folder": "フォルダ作成",
+    "delete": "削除",
+    "download": "ダウンロード",
+    "edit": "編集",
+    "manage_permission": "権限管理",
+    "move": "移動",
+    "publish": "公開",
+    "rename": "名前を変更",
+    "share": "共有",
+    "unpublish": "公開停止",
+    "upload_file": "ファイルアップロード",
+    "use": "使用"
+  },
+  "resourceTypeName": {
+    "assistant": "アシスタント",
+    "channel": "チャンネル",
+    "dashboard": "ダッシュボード",
+    "folder": "フォルダ",
+    "knowledge_file": "ファイル",
+    "knowledge_library": "ナレッジベース",
+    "knowledge_space": "ナレッジスペース",
+    "tool": "ツール",
+    "workflow": "ワークフロー"
   }
 }

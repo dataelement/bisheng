@@ -191,6 +191,62 @@ describe("ModelEditor", () => {
     expect(screen.getByTestId("model-derived-level")).toHaveTextContent("2")
   })
 
+  it("offers a blank preset that clears the selection", () => {
+    // Picking the placeholder only disabled the button, so a model could gain
+    // actions from a preset but never be emptied again.
+    render(
+      <ModelEditor
+        model={{
+          ...customModel,
+          action_codes: ["visible", "edit"],
+          derived_level: 2,
+        }}
+        actions={actions}
+        presets={[
+          { key: "reviewer", name: "Reviewer", action_codes: ["visible", "edit"] },
+        ]}
+        onInitializePreset={onInitializePreset}
+        onCreateDraft={onCreateDraft}
+        onReviewImpact={onReviewImpact}
+      />,
+    )
+
+    expect(screen.getByLabelText("model.action.edit")).toBeChecked()
+
+    fireEvent.change(screen.getByLabelText("model.preset.label"), {
+      target: { value: "__blank__" },
+    })
+    fireEvent.click(screen.getByRole("button", { name: "model.preset.apply" }))
+
+    expect(screen.getByLabelText("model.action.edit")).not.toBeChecked()
+    expect(screen.getByLabelText("model.action.visible")).not.toBeChecked()
+    expect(onInitializePreset).toHaveBeenCalledWith({
+      key: "__blank__",
+      name: "model.preset.blank",
+      action_codes: [],
+    })
+  })
+
+  it("offers the blank preset even when the server ships none", () => {
+    render(
+      <ModelEditor
+        model={{ ...customModel, action_codes: ["edit"], derived_level: 2 }}
+        actions={actions}
+        presets={[]}
+        onInitializePreset={onInitializePreset}
+        onCreateDraft={onCreateDraft}
+        onReviewImpact={onReviewImpact}
+      />,
+    )
+
+    fireEvent.change(screen.getByLabelText("model.preset.label"), {
+      target: { value: "__blank__" },
+    })
+    fireEvent.click(screen.getByRole("button", { name: "model.preset.apply" }))
+
+    expect(screen.getByLabelText("model.action.edit")).not.toBeChecked()
+  })
+
   it("creates only a non-empty custom model", async () => {
     render(
       <ModelEditor

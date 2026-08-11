@@ -97,7 +97,8 @@
     "preset": {
       "label": "初始化预设",
       "select": "选择预设",
-      "apply": "应用预设"
+      "apply": "应用预设",
+      "blank": "空白模型（不预选动作）"
     }
   },
   "impact": {
@@ -186,5 +187,30 @@
     "manageGrants": "管理授权",
     "loading": "正在加载资源权限…",
     "loadFailed": "资源权限加载失败"
+  },
+  "actionName": {
+    "create_folder": "新建文件夹",
+    "delete": "删除",
+    "download": "下载",
+    "edit": "编辑",
+    "manage_permission": "权限管理",
+    "move": "移动",
+    "publish": "发布",
+    "rename": "重命名",
+    "share": "分享",
+    "unpublish": "取消发布",
+    "upload_file": "上传文件",
+    "use": "使用"
+  },
+  "resourceTypeName": {
+    "assistant": "助手",
+    "channel": "频道",
+    "dashboard": "看板",
+    "folder": "文件夹",
+    "knowledge_file": "文件",
+    "knowledge_library": "知识库",
+    "knowledge_space": "知识空间",
+    "tool": "工具",
+    "workflow": "工作流"
   }
 }

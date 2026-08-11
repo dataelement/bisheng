@@ -223,3 +223,37 @@ describe("ActionLevelBoard", () => {
     )
   })
 })
+
+describe("action labels", () => {
+  const onCreateDraft = vi.fn()
+  const onReviewImpact = vi.fn()
+
+  it("labels actions and resource types by code, not by the stored English name", () => {
+    // The catalog seeds `name` to the code itself, so the panel used to render
+    // "manage_permission" / "knowledge_file" at users. One column cannot serve
+    // three languages, so the label is resolved from the code.
+    render(
+      <ActionLevelBoard
+        actions={[
+          {
+            code: "manage_permission",
+            name: "manage_permission",
+            level: 3 as const,
+            active: true,
+            sort_order: 1,
+            resource_types: ["knowledge_file" as const, "folder" as const],
+          },
+        ]}
+        onCreateDraft={onCreateDraft}
+        onReviewImpact={onReviewImpact}
+      />,
+    )
+
+    const card = screen.getByTestId("permission-action-manage_permission")
+    expect(card).toHaveTextContent("actionName.manage_permission")
+    expect(card).toHaveTextContent("resourceTypeName.knowledge_file")
+    expect(card).toHaveTextContent("resourceTypeName.folder")
+    // The raw code stays visible underneath as the technical identifier.
+    expect(card).toHaveTextContent("manage_permission")
+  })
+})
