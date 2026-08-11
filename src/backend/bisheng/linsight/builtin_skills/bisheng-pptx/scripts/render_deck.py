@@ -106,7 +106,7 @@ def main() -> int:
     args = parser.parse_args()
 
     if not os.path.exists(args.pptx):
-        print(f"文件不存在: {args.pptx}（注意用相对路径，且代码执行器写的文件不出现在 ls 里）")
+        print(f"文件不存在: {args.pptx}（请用相对工作区根的路径，例如 output/deck.pptx，不要带前导斜杠）")
         return 0
 
     stem = os.path.splitext(os.path.basename(args.pptx))[0]

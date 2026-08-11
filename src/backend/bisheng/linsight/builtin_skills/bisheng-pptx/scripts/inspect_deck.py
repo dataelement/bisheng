@@ -485,7 +485,7 @@ def main() -> int:
 
     if not os.path.exists(args.pptx):
         print(f"文件不存在: {args.pptx}")
-        print("用相对工作区根的路径；代码执行器写的文件不会出现在 ls/glob 里，但路径是有效的。")
+        print("请用相对工作区根的路径，例如 output/deck.pptx（不要带前导斜杠，也不要用宿主机绝对路径）。")
         return 0
 
     prs = Presentation(args.pptx)
