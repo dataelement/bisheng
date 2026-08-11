@@ -206,9 +206,12 @@ class RagNode(RagUtils):
         system_prompt.replace('{', '{{').replace('}', '}}')
         self._log_system_prompt.append(system_prompt)
 
+        # Merge citation rules into the main system prompt so we only emit a
+        # single system message. Qwen / DeepSeek and other domestic LLM APIs
+        # reject requests with more than one system message ("System message
+        # must be at the beginning"), which broke RAG for those providers.
         messages_general = [
-            SystemMessagePromptTemplate.from_template(system_prompt),
-            SystemMessagePromptTemplate.from_template(CITATION_PROMPT_RULES),
+            SystemMessagePromptTemplate.from_template(system_prompt + "\n\n" + CITATION_PROMPT_RULES),
             HumanMessagePromptTemplate.from_template(user_prompt),
         ]
         self._qa_prompt = ChatPromptTemplate.from_messages(messages_general)
