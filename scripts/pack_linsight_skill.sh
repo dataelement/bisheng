@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Package a Linsight skill bundle into an importable .zip.
 #
-#   bash scripts/pack_linsight_skill.sh linsight-skills/bisheng-pptx [outdir]
+#   bash scripts/pack_linsight_skill.sh src/backend/bisheng/linsight/builtin_skills/bisheng-pptx [outdir]
 #
 # Validates the constraints the backend enforces on import (SKILL.md at the
 # archive root, kebab-case name matching the directory, size caps) so failures

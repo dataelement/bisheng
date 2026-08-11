@@ -1,14 +1,36 @@
-# 灵思技能包源码
+# 灵思技能包编写指南
 
-这里放**灵思（Linsight）任务模式**技能包的源码 —— 就是管理端「灵思 → 技能」里上传的那种 zip。
+本文讲**灵思（Linsight）任务模式**技能包怎么写、怎么随部署分发。
 与仓库里的 `.claude/skills`、`.agents/skills`（Claude Code 自己的技能）**没有任何关系**，两者互不通用。
 
-技能包不随后端发布，运行时数据落在 `SKILLS_ROOT`（默认 `src/backend/data/linsight_skills/`，已 gitignore）。
-源码放在这里只是为了版本管理和评审。
+## 内置技能：放哪、怎么生效
+
+源码放在 **`src/backend/bisheng/linsight/builtin_skills/<name>/`** —— 必须在 `src/backend/` 之内，
+因为 `src/backend/Dockerfile` 是 `COPY ./ ./`，构建上下文就是 `src/backend`，仓库根的目录不会进镜像。
+放在包内之后，docker 镜像、裸机 rsync、pip 安装都自动带上。
 
 | 目录 | 说明 |
 |---|---|
 | `bisheng-pptx/` | PPT 制作技能（BiSheng 适配版）。用 python-pptx 生成 .pptx，含排版规范、模板套用、交付前自检脚本 |
+
+生效链路是**应用启动时自动 seed**（`domain/services/builtin_skill_seeder.py`，挂在 `main.py` 的
+lifespan 上，和既有的两个 backfill 同一位置）：读包 → 遍历活跃租户 → 写入
+`SKILLS_ROOT/data/skills/{tenant_id}/<name>/` 并建 `linsight_skill` 行（`source='builtin'`）。
+所以 `docker compose up` 起来技能就在选择器里，**不需要任何运维脚本**。
+
+几条设计约束，加新内置技能前先了解：
+
+- **幂等靠内容比对**：磁盘上已装的 bundle 与镜像里的逐字节比，不同才重写。升级镜像重启即更新，
+  没变的话只花几次文件读取。
+- **用户改过的永不覆盖**：管理端编辑内置技能会把 `source` 翻成 `manual`（`SkillService._mark_forked`），
+  该租户的副本从此不再被 seed 覆盖。这是刻意的——升级时静默回滚客户的修改，比让副本漂移糟糕得多。
+- **新租户会补种**：启动 seed 只覆盖当时存在的租户，所以 `TenantService.acreate_tenant` 的 Step 6
+  也会为新租户 seed 一次。
+- **每租户一份物理拷贝**。现在这个包 80KB，100 个租户 8MB 可忽略；但如果将来内置技能带模板库/字体
+  （官方 `presentations` 包 4.7MB），就该改走「只读目录 + DB 只存指针」的形态。
+- **不要写进 Alembic 迁移**：项目铁律是 revision 只做 DDL，数据 seed 一律走独立流程。
+
+**不打算内置的技能**（客户定制、一次性）不用放这里，直接用下面的打包流程做成 zip 在管理端导入即可。
 
 ### bisheng-pptx 的环境前提（实测）
 
@@ -32,7 +54,7 @@
 ## 打包与导入
 
 ```bash
-bash scripts/pack_linsight_skill.sh linsight-skills/bisheng-pptx
+bash scripts/pack_linsight_skill.sh src/backend/bisheng/linsight/builtin_skills/bisheng-pptx
 # → dist/bisheng-pptx.zip
 ```
 
