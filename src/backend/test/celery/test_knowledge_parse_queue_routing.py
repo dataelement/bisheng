@@ -13,6 +13,8 @@ from bisheng.core.config.celery_queues import (
     KNOWLEDGE_PARSE_TASKS,
     KNOWLEDGE_PDF_QUEUE,
     PDF_ARTIFACT_TASK,
+    POINTS_AWARD_QUEUE,
+    POINTS_AWARD_TASK,
     WORKFLOW_CELERY_QUEUE,
     build_celery_task_routes,
 )
@@ -86,12 +88,26 @@ def test_non_parse_tasks_route_to_default_queue(task_name: str):
     ("task_name", "expected_queue"),
     [
         (PDF_ARTIFACT_TASK, KNOWLEDGE_PDF_QUEUE),
+        (POINTS_AWARD_TASK, POINTS_AWARD_QUEUE),
         ("bisheng.worker.workflow.tasks.run_workflow", WORKFLOW_CELERY_QUEUE),
         ("bisheng.worker.approval.tasks.execute_approval_outbox", WORKFLOW_CELERY_QUEUE),
     ],
 )
 def test_protected_non_default_routes_are_unchanged(task_name: str, expected_queue: str):
     assert _resolve_queue(task_name, build_celery_task_routes({})) == expected_queue
+
+
+def test_other_points_tasks_do_not_use_award_queue():
+    """刷榜/月奖等非发分任务不进 points_award_celery（无显式路由时 Celery 落 default）。"""
+    routes = build_celery_task_routes({})
+    for task_name in (
+        "bisheng.worker.points.tasks.refresh_points_rank_snapshots",
+        "bisheng.worker.points.tasks.run_monthly_admin_rewards",
+        "bisheng.worker.points.tasks.reconcile_point_balances",
+    ):
+        queue = _resolve_queue(task_name, routes)
+        assert queue != POINTS_AWARD_QUEUE
+        assert queue in (None, DEFAULT_CELERY_QUEUE)
 
 
 def test_legacy_broad_knowledge_route_cannot_capture_non_parse_tasks():
@@ -155,6 +171,23 @@ def test_worker_entrypoints_keep_default_queue_consumers_enabled():
         assert "start_default" in source
         assert "-Q celery" in source
         assert "--prefetch-multiplier=1" in source
+
+
+def test_worker_entrypoints_include_points_award_in_worker_bundle():
+    """发分队列必须进 All-in-one worker；本地也可单独 entrypoint.sh points_award。"""
+    backend = (BACKEND_DIR / "entrypoint.sh").read_text(encoding="utf-8")
+    deploy = (PROJECT_DIR / "docker/bisheng/entrypoint.sh").read_text(encoding="utf-8")
+
+    for source in (backend, deploy):
+        assert "start_points_award" in source
+        assert "points_award_celery" in source
+        assert "points_award" in source
+
+    backend_bundle = backend.split("start_all_workers()", 1)[1].split('case "$START_MODE"', 1)[0]
+    assert "start_points_award" in backend_bundle
+
+    deploy_bundle = deploy.split('elif [ "$start_mode" = "worker" ]', 1)[1].split("else", 1)[0]
+    assert "start_points_award" in deploy_bundle
 
 
 def test_non_parse_production_dispatches_do_not_target_knowledge_queue():

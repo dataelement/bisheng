@@ -3,7 +3,7 @@ Expert QA Pydantic Schemas - 请求/响应数据模型
 """
 
 from datetime import datetime
-from typing import Any, List, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -18,7 +18,7 @@ BOOLEAN_TRUE_BYTES_VALUES = {b"\x01", b"1"}
 BOOLEAN_FALSE_BYTES_VALUES = {b"\x00", b"", b"0"}
 
 
-def _decode_db_text(value: Any) -> Optional[str]:
+def _decode_db_text(value: Any) -> str | None:
     if value is None:
         return None
     if isinstance(value, str):
@@ -69,31 +69,57 @@ def _coerce_db_bool(value: Any) -> bool:
 # ==================== 专家 Schemas ====================
 
 
+class ModerateDeleteRequest(BaseModel):
+    """平台超管违规删除问题/回答/评论；可选按 R* 扣分。"""
+
+    target_type: str = Field(..., description="question | answer | comment")
+    target_id: int = Field(..., ge=1)
+    # 空/省略 = 只删除不扣分
+    rule_code: str | None = Field(default=None, max_length=32)
+    remark: str | None = Field(default=None, max_length=200)
+
+    @field_validator("target_type")
+    @classmethod
+    def _validate_target_type(cls, value: str) -> str:
+        normalized = (value or "").strip().lower()
+        if normalized not in {"question", "answer", "comment"}:
+            raise ValueError("target_type must be question, answer or comment")
+        return normalized
+
+    @field_validator("rule_code")
+    @classmethod
+    def _normalize_rule_code(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip().upper()
+        return normalized or None
+
+
 class ExpertCreateRequest(BaseModel):
     """创建专家 - 请求"""
 
     expert_name: str = Field(..., description="专家名称")
-    introduction: Optional[str] = Field(None, description="专家介绍")
-    depart_ment: Optional[str] = Field(default=[], description="所属部门")
-    user_id: Optional[int] = Field(None, description="关联用户ID（可选）")
-    major: Optional[str] = Field(None, description="所属专业")
-    position: Optional[str] = Field(None, description="所属岗位")
-    job_family: Optional[str] = Field(None, description="所属岗位族")
-    job_category: Optional[str] = Field(None, description="所属岗位分类")
-    wechat_user_id: Optional[str] =  Field(None, description="绑定企业微信用户id")
+    introduction: str | None = Field(None, description="专家介绍")
+    depart_ment: str | None = Field(default=[], description="所属部门")
+    user_id: int | None = Field(None, description="关联用户ID（可选）")
+    major: str | None = Field(None, description="所属专业")
+    position: str | None = Field(None, description="所属岗位")
+    job_family: str | None = Field(None, description="所属岗位族")
+    job_category: str | None = Field(None, description="所属岗位分类")
+    wechat_user_id: str | None =  Field(None, description="绑定企业微信用户id")
 
 
 class ExpertUpdateRequest(BaseModel):
     """更新专家 - 请求"""
 
-    expert_name: Optional[str] = None
-    introduction: Optional[str] = None
-    depart_ment: Optional[str] = None
-    major: Optional[str] = Field(None, description="所属专业")
-    position: Optional[str] = Field(None, description="所属岗位")
-    job_family: Optional[str] = Field(None, description="所属岗位族")
-    job_category: Optional[str] = Field(None, description="所属岗位分类")
-    wechat_user_id: Optional[str] =  Field(None, description="绑定企业微信用户id")
+    expert_name: str | None = None
+    introduction: str | None = None
+    depart_ment: str | None = None
+    major: str | None = Field(None, description="所属专业")
+    position: str | None = Field(None, description="所属岗位")
+    job_family: str | None = Field(None, description="所属岗位族")
+    job_category: str | None = Field(None, description="所属岗位分类")
+    wechat_user_id: str | None =  Field(None, description="绑定企业微信用户id")
 
 
 class ExpertResponse(BaseModel):
@@ -102,15 +128,15 @@ class ExpertResponse(BaseModel):
     id: int
     user_id: int
     expert_name: str
-    introduction: Optional[str]
-    depart_ment: Optional[str] = None
-    department_id: Optional[int | str] = None
-    position: Optional[str] = None
-    job_family: Optional[str] = None
-    job_category: Optional[str] = None
-    major: Optional[str] = None
+    introduction: str | None
+    depart_ment: str | None = None
+    department_id: int | str | None = None
+    position: str | None = None
+    job_family: str | None = None
+    job_category: str | None = None
+    major: str | None = None
     level: str
-    business_domains: List[str]
+    business_domains: list[str]
     verified: bool
     answer_count: int
     adoption_count: int
@@ -137,15 +163,15 @@ class QuestionCreateRequest(BaseModel):
     description: str = Field(..., min_length=0, description="问题描述")
     business_domain: str = Field(..., description="所属业务域")
 
-    attachments: Optional[str] = Field(default=None, description="附件列表")
-    related_docs: Optional[str] = Field(default=None, description="关联文档ID")
+    attachments: str | None = Field(default=None, description="附件列表")
+    related_docs: str | None = Field(default=None, description="关联文档ID")
 
-    invited_experts: Optional[str] = Field(default=None, description="邀请专家ID，多个用分号;分割")
-    experts_names: Optional[str] = Field(default=None, description="邀请专家名称，多个用分号;分割")
+    invited_experts: str | None = Field(default=None, description="邀请专家ID，多个用分号;分割")
+    experts_names: str | None = Field(default=None, description="邀请专家名称，多个用分号;分割")
 
-    image_url: Optional[str] = Field(default=None, max_length=1024, schema_extra={"comment": "图片URL"})
-    file_url: Optional[str] = Field(default=None, max_length=1024, schema_extra={"comment": "文件URL"})
-    file_name: Optional[str] = Field(default=None, max_length=512, schema_extra={"comment": "文件名"})
+    image_url: str | None = Field(default=None, max_length=1024, schema_extra={"comment": "图片URL"})
+    file_url: str | None = Field(default=None, max_length=1024, schema_extra={"comment": "文件URL"})
+    file_name: str | None = Field(default=None, max_length=512, schema_extra={"comment": "文件名"})
 
     @field_validator("description")
     @classmethod
@@ -171,22 +197,22 @@ class QuestionCreateRequest(BaseModel):
 class QuestionUpdateRequest(BaseModel):
     """更新问题 - 请求"""
 
-    title: Optional[str] = None
-    description: Optional[str] = None
-    business_domain: Optional[str] = None
-    attachments: Optional[str] = Field(default=None, description="附件列表")
-    related_docs: Optional[str] = Field(default=None, description="关联文档ID")
-    invited_experts: Optional[str] = Field(default=None, description="邀请专家ID，多个用分号;分割")
-    experts_names: Optional[str] = Field(default=None, description="邀请专家名称，多个用分号;分割")
-    image_url: Optional[str] = Field(default=None, max_length=1024, description="图片URL")
-    file_url: Optional[str] = Field(default=None, max_length=1024, description="文件URL")
-    file_name: Optional[str] = Field(default=None, max_length=512, description="文件名")
+    title: str | None = None
+    description: str | None = None
+    business_domain: str | None = None
+    attachments: str | None = Field(default=None, description="附件列表")
+    related_docs: str | None = Field(default=None, description="关联文档ID")
+    invited_experts: str | None = Field(default=None, description="邀请专家ID，多个用分号;分割")
+    experts_names: str | None = Field(default=None, description="邀请专家名称，多个用分号;分割")
+    image_url: str | None = Field(default=None, max_length=1024, description="图片URL")
+    file_url: str | None = Field(default=None, max_length=1024, description="文件URL")
+    file_name: str | None = Field(default=None, max_length=512, description="文件名")
     status: int | str | None = Field(default=None, description="状态: unsolved/solved/closed/pending")
-    created_by: Optional[str] = Field(default=None, description="创建人")
+    created_by: str | None = Field(default=None, description="创建人")
 
     @field_validator("description")
     @classmethod
-    def sanitize_description(cls, value: Optional[str]) -> Optional[str]:
+    def sanitize_description(cls, value: str | None) -> str | None:
         return sanitize_question_description(value) if value is not None else None
 
     @field_validator("invited_experts", mode="before")
@@ -252,14 +278,14 @@ class QuestionDetailResponse(BaseModel):
     status: str
     user_id: int
     anonymous: bool
-    attachments: Optional[str] = Field(default=None, description="分号分隔的附件URL或业务ID")
-    related_docs: Optional[str] = None
-    invited_experts: Optional[str] = None
-    experts_names: Optional[str] = Field(default=None, description="邀请专家名称，多个用分号;分割")
-    adopted_answer_id: Optional[int]
-    image_url: Optional[str] = Field(default=None, description="图片URL")
-    file_url: Optional[str] = Field(default=None, description="文件URL")
-    file_name: Optional[str] = Field(default=None, description="文件名")
+    attachments: str | None = Field(default=None, description="分号分隔的附件URL或业务ID")
+    related_docs: str | None = None
+    invited_experts: str | None = None
+    experts_names: str | None = Field(default=None, description="邀请专家名称，多个用分号;分割")
+    adopted_answer_id: int | None
+    image_url: str | None = Field(default=None, description="图片URL")
+    file_url: str | None = Field(default=None, description="文件URL")
+    file_name: str | None = Field(default=None, description="文件名")
     vote_count: int
     answer_count: int
     view_count: int
@@ -267,8 +293,8 @@ class QuestionDetailResponse(BaseModel):
     updated_at: datetime
 
     # 展开的关系数据（可选）
-    answers: Optional[List["AnswerDetailResponse"]] = None
-    expert_status: Optional[dict] = None  # 专家回复状态
+    answers: list["AnswerDetailResponse"] | None = None
+    expert_status: dict | None = None  # 专家回复状态
 
     class Config:
         from_attributes = True
@@ -282,18 +308,18 @@ class AnswerCreateRequest(BaseModel):
 
     question_id: int = Field(..., description="问题ID")
     content: str = Field(..., min_length=1, description="回答内容")
-    attachments: Optional[str] = Field(default=None, description="附件列表")
-    related_docs: Optional[str] = Field(default=None, description="关联文档ID")
-    images_url: Optional[str] = Field(default=None, description="图片URL")
+    attachments: str | None = Field(default=None, description="附件列表")
+    related_docs: str | None = Field(default=None, description="关联文档ID")
+    images_url: str | None = Field(default=None, description="图片URL")
 
 
 class AnswerUpdateRequest(BaseModel):
     """更新回答 - 请求"""
 
-    content: Optional[str] = None
-    attachments: Optional[str] = Field(default=None, description="分号分隔的附件URL或业务ID")
-    related_docs: Optional[str] = None
-    images_url: Optional[str] = Field(default=None, description="分号分隔的图片URL")
+    content: str | None = None
+    attachments: str | None = Field(default=None, description="分号分隔的附件URL或业务ID")
+    related_docs: str | None = None
+    images_url: str | None = Field(default=None, description="分号分隔的图片URL")
 
 
 class AnswerDetailResponse(BaseModel):
@@ -302,22 +328,22 @@ class AnswerDetailResponse(BaseModel):
     id: int
     question_id: int
     user_id: int
-    expert_id: Optional[int]
+    expert_id: int | None
     content: str
     status: str
-    attachments: Optional[str] = Field(default=None, description="分号分隔的附件URL或业务ID")
-    related_docs: Optional[str] = None
-    images_url: Optional[str] = Field(default=None, description="分号分隔的图片URL")
+    attachments: str | None = Field(default=None, description="分号分隔的附件URL或业务ID")
+    related_docs: str | None = None
+    images_url: str | None = Field(default=None, description="分号分隔的图片URL")
     vote_count: int
     comment_count: int
     created_at: datetime
     updated_at: datetime
 
     # 专家信息（如果是专家回答）
-    expert_info: Optional[ExpertResponse] = None
+    expert_info: ExpertResponse | None = None
 
     # 评论列表（可选）
-    comments: Optional[List["CommentDetailResponse"]] = None
+    comments: list["CommentDetailResponse"] | None = None
 
     class Config:
         from_attributes = True
@@ -332,14 +358,14 @@ class CommentCreateRequest(BaseModel):
     answer_id: int = Field(..., description="回答ID")
     content: str = Field(..., description="评论内容")
     is_follow_up: bool = Field(default=False, description="是否为追问")
-    question_id: Optional[int] = Field(None, description="问题ID（仅追问时需要）")
+    question_id: int | None = Field(None, description="问题ID（仅追问时需要）")
 
 
 class GetCommentsRequest(BaseModel):
     """获取评论/追问 - 请求"""
 
     answer_id: int = Field(..., ge=0, description="Answer ID. Use 0 to query question follow-ups.")
-    question_id: Optional[int] = Field(None, ge=0, description="Required when answer_id is 0.")
+    question_id: int | None = Field(None, ge=0, description="Required when answer_id is 0.")
     page: int = Field(default=1, ge=1)
     page_size: int = Field(default=100, ge=1, le=1000)
 
@@ -358,7 +384,7 @@ class CommentDetailResponse(BaseModel):
     answer_id: int
     question_id: int
     user_id: int
-    user_name: Optional[str] = None
+    user_name: str | None = None
     content: str
     is_follow_up: bool
     vote_count: int
@@ -386,7 +412,7 @@ class CommentDetailResponse(BaseModel):
 class CommentPageData(BaseModel):
     """Comment list page response."""
 
-    comments: List[CommentDetailResponse]
+    comments: list[CommentDetailResponse]
     total: int
 
 
@@ -433,8 +459,8 @@ class QANotificationResponse(BaseModel):
 class QuestionListQuery(BaseModel):
     """问题列表查询条件"""
 
-    domain: Optional[str] = Field(None, description="业务域")
-    status: Optional[int] = Field(0, description="状态: unsolved/solved/closed")
+    domain: str | None = Field(None, description="业务域")
+    status: int | None = Field(0, description="状态: unsolved/solved/closed")
     sort_by: str = Field(default="latest", description="排序: latest/hottest/unanswered")
     page: int = Field(default=1, ge=1)
     page_size: int = Field(default=20, ge=1, le=100)
@@ -448,9 +474,9 @@ class QuestionListQuery(BaseModel):
 class ExpertListQuery(BaseModel):
     """专家列表查询条件"""
 
-    business_domain: Optional[str] = None
-    level: Optional[str] = None
-    keyword: Optional[str] = None
+    business_domain: str | None = None
+    level: str | None = None
+    keyword: str | None = None
     page: int = Field(default=1, ge=1)
     page_size: int = Field(default=20, ge=1, le=100)
 
@@ -497,7 +523,7 @@ class QAExpertStatsResponse(BaseModel):
 class QuestionPageData(BaseModel):
     """问题列表页面数据"""
 
-    questions: List[QuestionSimpleResponse]
+    questions: list[QuestionSimpleResponse]
     total: int
-    business_domains: List[str]  # 所有业务域
+    business_domains: list[str]  # 所有业务域
     stats: QuestionStatsResponse

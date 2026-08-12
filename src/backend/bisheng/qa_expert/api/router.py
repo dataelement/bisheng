@@ -53,6 +53,13 @@ router.add_api_route("/questions/{question_id}/answers", endpoints.get_answersby
 router.add_api_route("/comments", endpoints.create_comment, methods=["POST"])
 router.add_api_route("/allcomments", endpoints.get_allcomments, methods=["POST"])
 
+# 平台超管违规删除（含积分扣减 / 补扣队列）
+router.add_api_route(
+    "/admin/moderate-delete",
+    endpoints.moderate_delete,
+    methods=["POST"],
+)
+
 # 投票
 router.add_api_route("/votes/question", endpoints.vote_question, methods=["POST"])
 router.add_api_route("/votes/answer", endpoints.vote_answer, methods=["POST"])

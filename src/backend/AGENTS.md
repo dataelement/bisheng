@@ -63,6 +63,9 @@ uv run uvicorn bisheng.main:app --host 0.0.0.0 --port 7860 --workers 1 --no-acce
 # Celery (one terminal per queue)
 uv run celery -A bisheng.worker.main worker -l info -c 20  -P threads -Q knowledge_celery -n knowledge@%h
 uv run celery -A bisheng.worker.main worker -l info -c 100 -P threads -Q workflow_celery  -n workflow@%h
+uv run celery -A bisheng.worker.main worker -l info -c 20  -P threads -Q points_award_celery -n points_award@%h
+# Local points award only: `sh entrypoint.sh points_award` (or the command above).
+# Compose `entrypoint.sh worker` already includes points_award_celery.
 uv run celery -A bisheng.worker.main beat -l info
 
 # Linsight Worker (optional)
@@ -238,7 +241,8 @@ Independent Worker process, decoupled from API via Redis queue.
 | `knowledge_celery` | 20 threads | Document parsing, embedding, vector writes |
 | `knowledge_pdf_celery` | 2 threads | Unified PDF validation/conversion; independent low-concurrency Worker (`sh entrypoint.sh pdf`) |
 | `workflow_celery` | 100 threads | Workflow DAG execution |
-| `celery` (default) | 100 threads | Telemetry stats |
+| `points_award_celery` | 20 threads | Points async award (`process_points_award_event`); `sh entrypoint.sh points_award` for local-only |
+| `celery` (default) | 100 threads | Telemetry stats, points rank/monthly/reconcile, org_sync, permission, etc. |
 
 Beat tasks: telemetry sync at 00:30, intelligence center articles at 05:30 daily.
 Worker heartbeat: writes to Redis (`celery_worker_alive_queues`) every 5 seconds.
