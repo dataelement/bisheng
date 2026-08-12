@@ -17,6 +17,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_file_change_schema import 
     BatchApprovalResp,
     KnowledgeSpaceFileChangeConfigurationResp,
     KnowledgeSpaceFileChangeConfigurationUpdateReq,
+    KnowledgeSpaceFileChangeDecisionReq,
     KnowledgeSpaceFileChangeDetailResp,
     KnowledgeSpaceFileChangePolicyResp,
     KnowledgeSpaceFileChangePolicyUpdateReq,
@@ -211,6 +212,7 @@ CurrentUser = Depends(UserPayload.get_login_user)
 )
 async def list_pending_uploads(
     space_id: int,
+    parent_id: int | None = Query(default=None, ge=1),
     status: list[str] | None = Query(default=None),
     cursor: str | None = Query(default=None),
     page_size: int = Query(default=20, ge=1, le=100),
@@ -221,10 +223,34 @@ async def list_pending_uploads(
     return resp_200(
         await service.list_uploads(
             space_id=space_id,
+            parent_id=parent_id,
             viewer=viewer,
             statuses=status,
             cursor=cursor,
             page_size=page_size,
+        )
+    )
+
+
+@file_change_router.post(
+    "/{request_id}/decision",
+    response_model=UnifiedResponseModel[KnowledgeSpaceFileChangeDetailResp],
+)
+async def decide_file_change_upload(
+    space_id: int,
+    request_id: int,
+    body: KnowledgeSpaceFileChangeDecisionReq,
+    viewer: UserPayload = CurrentUser,
+    _: None = RejectCallerTenant,
+    service: KnowledgeSpaceFileChangeApplicationService = Depends(get_file_change_application_service),
+) -> Any:
+    return resp_200(
+        await service.decide_upload(
+            space_id=space_id,
+            request_id=request_id,
+            action=body.action,
+            comment=body.comment,
+            viewer=viewer,
         )
     )
 

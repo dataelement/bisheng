@@ -18,6 +18,7 @@ import { formatTimeCard, getKnowledgeApprovalStatusLabel, isKnowledgeApprovalRej
 import { useLocalize, useMediaQuery } from "~/hooks";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
 import { getFileChangeLockState } from "../hooks/useFileChangeApproval";
+import { PendingUploadApprovalActions } from "./PendingUploadApprovalActions";
 
 const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -84,6 +85,9 @@ interface FileCardProps {
     onFolderDragLeave?: () => void;
     onFolderDrop?: (e: React.DragEvent) => void;
     onOpenApprovalDetail?: (requestId: number) => void;
+    onPreviewPendingUpload?: (requestId: number) => void;
+    onDecidePendingUpload?: (requestId: number, action: "approve" | "reject") => void;
+    pendingUploadDeciding?: boolean;
 }
 
 export function FileCard({
@@ -124,6 +128,9 @@ export function FileCard({
     onFolderDragLeave,
     onFolderDrop,
     onOpenApprovalDetail,
+    onPreviewPendingUpload,
+    onDecidePendingUpload,
+    pendingUploadDeciding = false,
 }: FileCardProps) {
     const localize = useLocalize();
     /** True when primary input is mouse + hover: actions reveal on card hover. Touch / coarse pointer: keep actions visible (viewport width does not matter). */
@@ -131,6 +138,7 @@ export function FileCard({
         "(hover: hover) and (pointer: fine)",
     );
     const isCreating = !!file.isCreating;
+    const pendingUpload = file.pendingUploadApproval;
     // Uploading placeholder cards have no backend identity yet — not movable.
     const isUploading = isKnowledgeItemUploading(file);
     const fileChangeLock = getFileChangeLockState(file);
@@ -190,7 +198,7 @@ export function FileCard({
 
     // formatTime is now imported from ../knowledgeUtils
 
-    const nameToneClass = isKnowledgeItemPreviewable(file)
+    const nameToneClass = (pendingUpload || isKnowledgeItemPreviewable(file))
         ? "text-[#212121]"
         : "text-[#999]";
 
@@ -199,6 +207,26 @@ export function FileCard({
      * Covers all non-success states: parsing-like (neutral grey) + error / approval (colored).
      */
     const renderStatusOverlayTag = (inline = false) => {
+        if (pendingUpload) {
+            const failed = pendingUpload.status === "execute_failed";
+            const pill = (
+                <button
+                    type="button"
+                    className={cn(
+                        "inline-flex items-center justify-center gap-1 rounded px-2 text-caption",
+                        failed ? "bg-danger/10 text-danger" : "bg-success/10 text-success",
+                    )}
+                    onClick={(event) => {
+                        event.stopPropagation();
+                        onOpenApprovalDetail?.(pendingUpload.requestId);
+                    }}
+                >
+                    <span className={cn("size-1 rounded-full", failed ? "bg-danger" : "bg-success")} />
+                    {localize(`com_knowledge.file_change_status_${pendingUpload.status}`)}
+                </button>
+            );
+            return inline ? pill : <div className="absolute bottom-1 left-1 z-20">{pill}</div>;
+        }
         if (fileChangeLock.showBadge && file.fileChangeApproval) {
             const pill = (
                 <button
@@ -357,6 +385,10 @@ export function FileCard({
             return;
         }
 
+        if (pendingUpload) {
+            onPreviewPendingUpload?.(pendingUpload.requestId);
+            return;
+        }
         if (!isKnowledgeItemPreviewable(file)) return;
 
         // Space square drawer sets disableClickNavigate to avoid relying on default navigation;
@@ -377,7 +409,7 @@ export function FileCard({
     const showVersionHistory = versionManagementEnabled && !isFolder && Boolean(file.is_multi_version) && Boolean(onOpenVersionHistory);
     const showMoveItem = Boolean(onMove) && !isCreating;
     // Placeholder has only a temp id (no backend identity) — suppress all row actions.
-    const showMoreMenu = !isUploadingFolderPlaceholder && (canDownload || isAdmin || canRename || canDelete || Boolean(onManagePermission) || showMoveItem || showVersionManagement || showVersionHistory);
+    const showMoreMenu = !pendingUpload && !isUploadingFolderPlaceholder && (canDownload || isAdmin || canRename || canDelete || Boolean(onManagePermission) || showMoveItem || showVersionManagement || showVersionHistory);
     /** 有「更多」时下载只在菜单内；无更多（普通成员/预览）时单独显示下载图标 */
     const showInlineDownloadButton = canDownload && !hideDownloadActions && !showMoreMenu;
     const showMenuDownloadItem = canDownload && !hideDownloadActions;
@@ -386,7 +418,7 @@ export function FileCard({
         !isCreating &&
         !isRenaming &&
         !isUploadingFolderPlaceholder &&
-        (isFolder || isKnowledgeItemPreviewable(file));
+        (Boolean(pendingUpload) || isFolder || isKnowledgeItemPreviewable(file));
 
     // Shared action-menu items, reused by the "..." dropdown and the right-click menu.
     const moreMenuItems = (
@@ -485,6 +517,7 @@ export function FileCard({
                     // background spans the full width.
                     "flex items-center gap-2 px-4 py-3",
                     cardOpensPreviewOrFolder ? "cursor-pointer" : "cursor-default",
+                    pendingUpload && "bg-success/5",
                 )}
                 style={
                     isSelected
@@ -547,8 +580,16 @@ export function FileCard({
                     </div>
                 </div>
 
+                {pendingUpload?.canApprove && (
+                    <PendingUploadApprovalActions
+                        requestId={pendingUpload.requestId}
+                        disabled={pendingUploadDeciding}
+                        onDecide={onDecidePendingUpload}
+                    />
+                )}
+
                 {/* Circular selection checkbox on the far right */}
-                {!hideSelectionCheckbox && !isUploadingFolderPlaceholder && (
+                {!pendingUpload && !hideSelectionCheckbox && !isUploadingFolderPlaceholder && (
                     <RoundCheckbox
                         className="shrink-0"
                         checked={isSelected}
@@ -561,7 +602,7 @@ export function FileCard({
 
     return (
         <Card
-            draggable={cardDraggable && !isCreating && !isUploading}
+            draggable={!pendingUpload && cardDraggable && !isCreating && !isUploading}
             onDragStart={cardDraggable ? onCardDragStart : undefined}
             onDragOver={isFolder && !isUploadingFolderPlaceholder ? onFolderDragOver : undefined}
             onDragLeave={isFolder && !isUploadingFolderPlaceholder ? onFolderDragLeave : undefined}
@@ -572,7 +613,9 @@ export function FileCard({
                 cardOpensPreviewOrFolder ? "cursor-pointer" : "cursor-default",
                 isSelected
                     ? "bg-blue-50"
-                    : isNotParsed
+                    : pendingUpload
+                      ? "bg-success/5"
+                      : isNotParsed
                         ? "bg-[#fbfbfb]"
                         : "bg-white",
                 isSelected
@@ -624,7 +667,7 @@ export function FileCard({
                 {isUploadingFolderPlaceholder && (
                     <div className="pointer-events-none absolute inset-0 z-10 bg-white/50" />
                 )}
-                {!hideSelectionCheckbox && mobileListMode && (
+                {!pendingUpload && !hideSelectionCheckbox && mobileListMode && (
                     <div className="hidden max-[767px]:flex max-[767px]:shrink-0 max-[767px]:items-center max-[767px]:justify-center max-[767px]:pl-1 max-[767px]:pr-0.5">
                         <Checkbox
                             className={isSelected ? "border-primary" : "border-gray-400"}
@@ -656,7 +699,7 @@ export function FileCard({
                         {renderSimilarTag(true)}
                     </div>
 
-                    {!hideSelectionCheckbox && !isUploadingFolderPlaceholder && (
+                    {!pendingUpload && !hideSelectionCheckbox && !isUploadingFolderPlaceholder && (
                         <div
                             className={cn(
                                 "absolute left-2 top-2 z-10 transition-opacity",
@@ -690,6 +733,13 @@ export function FileCard({
                                     : "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100"
                             )}
                         >
+                            {pendingUpload?.canApprove && (
+                                <PendingUploadApprovalActions
+                                    requestId={pendingUpload.requestId}
+                                    disabled={pendingUploadDeciding}
+                                    onDecide={onDecidePendingUpload}
+                                />
+                            )}
                             {showInlineDownloadButton && (
                                 <Button
                                     variant="outline"

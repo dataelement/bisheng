@@ -56,7 +56,7 @@ class KnowledgeSpaceFileChangeApplicationService:
     delegated exclusively to F025 Center/Exception public services.
     """
 
-    _CURSOR_CONTEXT = "knowledge-space-file-change-uploads:v1"
+    _CURSOR_CONTEXT = "knowledge-space-file-change-uploads:v2"
     _MAX_UPLOAD_SCAN_BATCHES = 5
     _DEFAULT_UPLOAD_WORKLIST_STATUSES = (
         "pending",
@@ -195,12 +195,22 @@ class KnowledgeSpaceFileChangeApplicationService:
         return view, can_approve
 
     @classmethod
-    def _decode_upload_cursor(cls, cursor: str | None) -> tuple[datetime | None, int]:
+    def _upload_cursor_context(cls, *, space_id: int, parent_id: int | None) -> str:
+        directory = "root" if parent_id is None else str(int(parent_id))
+        return f"{cls._CURSOR_CONTEXT}:{int(space_id)}:{directory}"
+
+    @classmethod
+    def _decode_upload_cursor(
+        cls,
+        cursor: str | None,
+        *,
+        context: str,
+    ) -> tuple[datetime | None, int]:
         try:
             decoded = decode_cursor(
                 cursor,
                 expected_key_len=2,
-                expected_context=cls._CURSOR_CONTEXT,
+                expected_context=context,
             )
         except CursorDecodeError as exc:
             raise KnowledgeSpaceInvalidCursorError(exception=exc) from exc
@@ -215,6 +225,7 @@ class KnowledgeSpaceFileChangeApplicationService:
         self,
         *,
         space_id: int,
+        parent_id: int | None = None,
         viewer,
         statuses: Sequence[str] | None = None,
         status: str | None = None,
@@ -235,7 +246,8 @@ class KnowledgeSpaceFileChangeApplicationService:
                 for instance_status in self._STATUS_TO_INSTANCE[projected_status]
             )
         )
-        after_create_time, after_request_id = self._decode_upload_cursor(cursor)
+        cursor_context = self._upload_cursor_context(space_id=space_id, parent_id=parent_id)
+        after_create_time, after_request_id = self._decode_upload_cursor(cursor, context=cursor_context)
         # One strict owner/manager check per page; former tasks never influence visibility.
         can_manage_space = bool(
             await self.current_approver_checker(
@@ -253,6 +265,7 @@ class KnowledgeSpaceFileChangeApplicationService:
                 rows, repository_has_more = await repository.list_upload_request_views(
                     tenant_id=tenant_id,
                     space_id=int(space_id),
+                    parent_id=parent_id,
                     applicant_user_id=None if can_manage_space else int(viewer.user_id),
                     instance_statuses=instance_statuses or None,
                     after_create_time=cursor_create_time,
@@ -293,6 +306,7 @@ class KnowledgeSpaceFileChangeApplicationService:
                             file_name=str(request.file_name or view.instance.business_name),
                             file_size=int(request.file_size or 0),
                             content_hash=request.content_hash,
+                            parent_id=request.source_parent_id,
                             applicant_user_id=int(request.applicant_user_id),
                             applicant_user_name=view.instance.applicant_user_name,
                             status=projected_status,
@@ -312,7 +326,7 @@ class KnowledgeSpaceFileChangeApplicationService:
         if raw_has_more and cursor_create_time is not None:
             next_cursor = encode_cursor(
                 (cursor_create_time, int(cursor_request_id)),
-                context=self._CURSOR_CONTEXT,
+                context=cursor_context,
             )
         return KnowledgeSpacePendingUploadCursorResp(
             data=items,
@@ -329,6 +343,49 @@ class KnowledgeSpaceFileChangeApplicationService:
             viewer=viewer,
         )
         return await self._build_detail(view=view, can_approve=can_approve)
+
+    async def decide_upload(
+        self,
+        *,
+        space_id: int,
+        request_id: int,
+        action: str,
+        comment: str | None,
+        viewer,
+    ) -> KnowledgeSpaceFileChangeDetailResp:
+        view, can_approve = await self._require_visible(
+            tenant_id=self._tenant_id(viewer),
+            space_id=space_id,
+            request_id=request_id,
+            viewer=viewer,
+        )
+        if (
+            view.request.action != KnowledgeSpaceFileChangeAction.UPLOAD
+            or not can_approve
+            or view.instance.status != ApprovalInstanceStatus.PENDING
+            or action not in {"approve", "reject"}
+        ):
+            raise SpaceFileChangeInvalidStateError()
+        try:
+            await self.approval_center.decide_instance_for_current_approver(
+                instance_id=int(view.instance.id),
+                action=action,
+                operator_user_id=int(viewer.user_id),
+                operator_user_name=str(getattr(viewer, "user_name", "")),
+                operator_tenant_id=self._tenant_id(viewer),
+                comment=comment,
+            )
+        except ApprovalRequestPermissionDeniedError as exc:
+            # A manager removed during the decision race must not retain an
+            # existence oracle for this request.
+            raise SpaceFileChangeRequestNotFoundError() from exc
+        async with self._repository() as repository:
+            latest = await repository.get_request_view(
+                tenant_id=self._tenant_id(viewer),
+                space_id=int(space_id),
+                request_id=int(request_id),
+            )
+        return await self._build_detail(view=latest or view, can_approve=False)
 
     async def _build_detail(
         self,

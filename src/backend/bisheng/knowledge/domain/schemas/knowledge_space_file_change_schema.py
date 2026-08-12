@@ -263,6 +263,7 @@ class KnowledgeSpacePendingUploadItemResp(_FileChangeOutput):
     file_name: str
     file_size: int = Field(ge=0)
     content_hash: str | None = None
+    parent_id: int | None = None
     applicant_user_id: int
     applicant_user_name: str | None = None
     status: FileChangeApprovalStatus
@@ -274,6 +275,11 @@ class KnowledgeSpacePendingUploadItemResp(_FileChangeOutput):
 
 class KnowledgeSpacePendingUploadCursorResp(PageInfiniteCursorData[KnowledgeSpacePendingUploadItemResp]):
     pass
+
+
+class KnowledgeSpaceFileChangeDecisionReq(_FileChangeInput):
+    action: Literal["approve", "reject"]
+    comment: str | None = Field(default=None, max_length=1000)
 
 
 class BatchApprovalReq(_FileChangeInput):

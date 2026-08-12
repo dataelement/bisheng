@@ -7,14 +7,15 @@ import {
 } from "~/api/approval";
 import {
     cleanupUploadFileChangeApi,
+    decidePendingUploadFileChangeApi,
     getFileChangeDetailApi,
     listPendingUploadFileChangesApi,
     retryFileChangeIngestApi,
-    type FileChangeApprovalStatus,
     type FileChangeDetail,
     type KnowledgeFile,
     type PendingUploadFileChange,
 } from "~/api/knowledge";
+import { getFileTypeFromName } from "../knowledgeUtils";
 
 import { FILE_CHANGE_APPROVAL_REFRESH_EVENT } from "~/events/fileChangeApprovalEvents";
 
@@ -69,6 +70,26 @@ export function selectApprovablePendingUploads(
     return items.filter((item) => item.status === "pending" && item.canApprove);
 }
 
+export function projectPendingUploadAsKnowledgeFile(
+    item: PendingUploadFileChange,
+    spaceId: string,
+): KnowledgeFile {
+    const timestamp = item.updateTime ?? item.createTime ?? "";
+    return {
+        id: `pending-upload:${item.requestId}`,
+        name: item.fileName,
+        type: getFileTypeFromName(item.fileName),
+        size: item.fileSize,
+        tags: [],
+        path: "",
+        parentId: item.parentId == null ? undefined : String(item.parentId),
+        spaceId,
+        createdAt: item.createTime ?? timestamp,
+        updatedAt: timestamp,
+        pendingUploadApproval: item,
+    };
+}
+
 export function buildFileChangeActionRows(detail: FileChangeDetail): FileChangeActionRow[] {
     const rows: FileChangeActionRow[] = [];
     if (detail.action === "rename") {
@@ -103,25 +124,25 @@ export function summarizeBatchApprovalResult(
 
 interface UseFileChangeApprovalOptions {
     spaceId?: string;
+    parentId?: string;
     enabled?: boolean;
     onFormalFilesRefresh?: () => void | Promise<void>;
 }
 
 export function useFileChangeApproval({
     spaceId,
+    parentId,
     enabled = true,
     onFormalFilesRefresh,
 }: UseFileChangeApprovalOptions) {
     const queryClient = useQueryClient();
-    const [statusFilter, setStatusFilter] = useState<FileChangeApprovalStatus[]>([]);
     const [detailRequestId, setDetailRequestId] = useState<number | null>(null);
-    const normalizedStatusFilter = [...statusFilter].sort();
-    const pendingQueryKey = ["knowledge-file-change-uploads", spaceId, normalizedStatusFilter] as const;
+    const pendingQueryKey = ["knowledge-file-change-uploads", spaceId, parentId ?? null] as const;
 
     const pendingQuery = useInfiniteQuery({
         queryKey: pendingQueryKey,
         queryFn: ({ pageParam }) => listPendingUploadFileChangesApi(spaceId!, {
-            statuses: normalizedStatusFilter,
+            parentId,
             cursor: pageParam,
             pageSize: 100,
         }),
@@ -168,6 +189,11 @@ export function useFileChangeApproval({
         mutationFn: (requestId: number) => cleanupUploadFileChangeApi(spaceId!, requestId),
         onSettled: refreshAll,
     });
+    const decisionMutation = useMutation({
+        mutationFn: ({ requestId, action }: { requestId: number; action: "approve" | "reject" }) =>
+            decidePendingUploadFileChangeApi(spaceId!, requestId, action),
+        onSettled: refreshAll,
+    });
 
     const closeDetail = useCallback(() => setDetailRequestId(null), []);
     const refreshFormalFiles = useCallback(() => {
@@ -184,8 +210,6 @@ export function useFileChangeApproval({
         pendingHasMore: pendingQuery.hasNextPage,
         pendingFetchingMore: pendingQuery.isFetchingNextPage,
         fetchPendingNextPage: pendingQuery.fetchNextPage,
-        statusFilter,
-        setStatusFilter,
         refreshAll,
         refreshFormalFiles,
         detailRequestId,
@@ -200,5 +224,7 @@ export function useFileChangeApproval({
         batchApprove: batchApproveMutation.mutateAsync,
         batchApproving: batchApproveMutation.isPending,
         batchApprovalResult: batchApproveMutation.data,
+        decide: decisionMutation.mutateAsync,
+        deciding: decisionMutation.isPending,
     };
 }

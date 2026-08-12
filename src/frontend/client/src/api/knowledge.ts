@@ -201,6 +201,8 @@ export interface KnowledgeFile {
     isPendingApproval?: boolean;
     /** Present only for the applicant/current approver; inherited locks have no root badge. */
     fileChangeApproval?: FileChangeApprovalView;
+    /** UI-only projection of a staged upload that has not become a formal file yet. */
+    pendingUploadApproval?: PendingUploadFileChange;
     version_no?: number;          // primary version number; absent for folders / legacy files
     is_multi_version?: boolean;   // true when the document has >=2 versions
     has_similar?: boolean;        // true when similar_status === 1 (pending review)
@@ -424,6 +426,7 @@ export interface PendingUploadFileChange {
     fileName: string;
     fileSize: number;
     contentHash?: string;
+    parentId?: number;
     applicantUserId: number;
     applicantUserName?: string;
     status: FileChangeApprovalStatus;
@@ -519,6 +522,7 @@ interface RawPendingUploadFileChange {
     file_name: string;
     file_size: number;
     content_hash?: string | null;
+    parent_id?: number | null;
     applicant_user_id: number;
     applicant_user_name?: string | null;
     status: FileChangeApprovalStatus;
@@ -1852,6 +1856,7 @@ function mapPendingUploadFileChange(raw: RawPendingUploadFileChange): PendingUpl
         fileName: raw.file_name,
         fileSize: raw.file_size,
         contentHash: raw.content_hash ?? undefined,
+        parentId: raw.parent_id ?? undefined,
         applicantUserId: raw.applicant_user_id,
         applicantUserName: raw.applicant_user_name ?? undefined,
         status: raw.status,
@@ -1864,7 +1869,7 @@ function mapPendingUploadFileChange(raw: RawPendingUploadFileChange): PendingUpl
 
 export async function listPendingUploadFileChangesApi(
     spaceId: string,
-    params: { statuses?: FileChangeApprovalStatus[]; cursor?: string; pageSize?: number } = {},
+    params: { parentId?: string; statuses?: FileChangeApprovalStatus[]; cursor?: string; pageSize?: number } = {},
 ): Promise<FileChangeCursorPage<PendingUploadFileChange>> {
     const res = await request.get<ApiResponse<{
         data: RawPendingUploadFileChange[];
@@ -1873,6 +1878,7 @@ export async function listPendingUploadFileChangesApi(
         next_cursor?: string | null;
     }>>(`/api/v1/knowledge/space/${spaceId}/file-changes/uploads`, {
         params: {
+            parent_id: params.parentId,
             status: params.statuses,
             cursor: params.cursor,
             page_size: params.pageSize,
@@ -1886,6 +1892,19 @@ export async function listPendingUploadFileChangesApi(
         hasMore: Boolean(payload?.has_more),
         nextCursor: payload?.next_cursor ?? undefined,
     };
+}
+
+export async function decidePendingUploadFileChangeApi(
+    spaceId: string,
+    requestId: number,
+    action: "approve" | "reject",
+    comment?: string,
+): Promise<FileChangeDetail> {
+    const res = await request.post<ApiResponse<RawFileChangeDetail>>(
+        `/api/v1/knowledge/space/${spaceId}/file-changes/${requestId}/decision`,
+        { action, comment },
+    );
+    return mapFileChangeDetail(res.data);
 }
 
 export async function getFileChangeDetailApi(

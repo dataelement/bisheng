@@ -15,6 +15,7 @@ import {
     buildFileChangeActionRows,
     getFileChangeLockState,
     mergeFileChangeApprovalEnrichment,
+    projectPendingUploadAsKnowledgeFile,
     selectApprovablePendingUploads,
     summarizeBatchApprovalResult,
     useFileChangeApproval,
@@ -101,6 +102,30 @@ describe("F046 file change approval projection", () => {
         expect(selectApprovablePendingUploads(uploads).map((item) => item.requestId)).toEqual([1]);
     });
 
+    it("projects a staged upload into its directory without creating a formal file identity", () => {
+        const pending: PendingUploadFileChange = {
+            requestId: 41,
+            approvalInstanceId: 31,
+            uploadId: "upload-41",
+            fileName: "budget.xlsx",
+            fileSize: 123,
+            parentId: 55,
+            applicantUserId: 2,
+            status: "pending",
+            canApprove: true,
+            createTime: "2026-08-12T09:00:00",
+        };
+
+        expect(projectPendingUploadAsKnowledgeFile(pending, "101")).toMatchObject({
+            id: "pending-upload:41",
+            name: "budget.xlsx",
+            type: FileType.XLSX,
+            parentId: "55",
+            spaceId: "101",
+            pendingUploadApproval: pending,
+        });
+    });
+
     it("keeps cursor pages in one infinite pending-upload list", async () => {
         const first: PendingUploadFileChange = {
             requestId: 1,
@@ -122,20 +147,20 @@ describe("F046 file change approval projection", () => {
         );
 
         const { result } = renderHook(
-            () => useFileChangeApproval({ spaceId: "101" }),
+            () => useFileChangeApproval({ spaceId: "101", parentId: "55" }),
             { wrapper },
         );
 
         await waitFor(() => expect(result.current.pendingItems).toEqual([first]));
         expect(mockedListPending).toHaveBeenNthCalledWith(1, "101", {
-            statuses: [],
+            parentId: "55",
             cursor: undefined,
             pageSize: 100,
         });
         await act(async () => { await result.current.fetchPendingNextPage(); });
         await waitFor(() => expect(result.current.pendingItems).toEqual([first, second]));
         expect(mockedListPending).toHaveBeenNthCalledWith(2, "101", {
-            statuses: [],
+            parentId: "55",
             cursor: "cursor-1",
             pageSize: 100,
         });

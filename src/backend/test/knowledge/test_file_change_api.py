@@ -19,6 +19,7 @@ from bisheng.approval.domain.models.approval_instance import (
     ApprovalOutbox,
 )
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode.approval import ApprovalRequestPermissionDeniedError
 from bisheng.common.errcode.knowledge_space import (
     KnowledgeSpaceInvalidCursorError,
     SpaceFileChangeInvalidStateError,
@@ -88,6 +89,7 @@ def _api_service():
         file_name="budget.pdf",
         file_size=123,
         content_hash="sha256",
+        parent_id=55,
         applicant_user_id=7,
         applicant_user_name="editor",
         status=FileChangeApprovalStatus.PENDING,
@@ -107,6 +109,7 @@ def _api_service():
         create_preview=AsyncMock(return_value={"preview_url": "https://preview.invalid/token"}),
         retry_ingest=AsyncMock(return_value=_detail(status=FileChangeApprovalStatus.PARSING)),
         cleanup_upload=AsyncMock(return_value=_detail(status=FileChangeApprovalStatus.WITHDRAWN)),
+        decide_upload=AsyncMock(return_value=_detail(status=FileChangeApprovalStatus.APPROVED)),
         batch_approve=AsyncMock(
             return_value=BatchApprovalResp(
                 success_count=1,
@@ -152,7 +155,7 @@ def test_upload_cursor_list_and_detail_preview_contracts():
     with TestClient(app) as client:
         listing = client.get(
             "/api/v1/knowledge/space/101/file-changes/uploads",
-            params={"status": "pending", "cursor": "cursor-1", "page_size": 20},
+            params={"parent_id": 55, "status": "pending", "cursor": "cursor-1", "page_size": 20},
         )
         detail = client.get("/api/v1/knowledge/space/101/file-changes/41")
         preview = client.get("/api/v1/knowledge/space/101/file-changes/41/preview")
@@ -167,6 +170,7 @@ def test_upload_cursor_list_and_detail_preview_contracts():
                 "file_name": "budget.pdf",
                 "file_size": 123,
                 "content_hash": "sha256",
+                "parent_id": 55,
                 "applicant_user_id": 7,
                 "applicant_user_name": "editor",
                 "status": "pending",
@@ -184,8 +188,9 @@ def test_upload_cursor_list_and_detail_preview_contracts():
     assert detail.json()["data"]["action"] == "upload"
     assert preview.json()["data"] == {"preview_url": "https://preview.invalid/token"}
     list_call = service.list_uploads.await_args.kwargs
-    assert {key: list_call[key] for key in ("space_id", "statuses", "cursor", "page_size")} == {
+    assert {key: list_call[key] for key in ("space_id", "parent_id", "statuses", "cursor", "page_size")} == {
         "space_id": 101,
+        "parent_id": 55,
         "statuses": ["pending"],
         "cursor": "cursor-1",
         "page_size": 20,
@@ -209,13 +214,17 @@ def test_upload_cursor_list_accepts_repeated_statuses_as_union():
     assert service.list_uploads.await_args.kwargs["statuses"] == ["pending", "parsing"]
 
 
-def test_retry_cleanup_and_batch_approve_return_latest_per_item_status():
+def test_retry_cleanup_decision_and_batch_approve_return_latest_per_item_status():
     service = _api_service()
     app = _mount_app(service)
 
     with TestClient(app) as client:
         retried = client.post("/api/v1/knowledge/space/101/file-changes/41/retry-ingest")
         cleaned = client.delete("/api/v1/knowledge/space/101/file-changes/41")
+        decided = client.post(
+            "/api/v1/knowledge/space/101/file-changes/41/decision",
+            json={"action": "reject", "comment": "duplicate"},
+        )
         batched = client.post(
             "/api/v1/knowledge/space/101/file-changes/batch-approve",
             json={"change_request_ids": [41, 42]},
@@ -225,6 +234,10 @@ def test_retry_cleanup_and_batch_approve_return_latest_per_item_status():
     assert retried.json()["data"]["status"] == "parsing"
     assert cleaned.status_code == 200
     assert cleaned.json()["data"]["status"] == "withdrawn"
+    assert decided.status_code == 200
+    decision_call = service.decide_upload.await_args.kwargs
+    assert decision_call["action"] == "reject"
+    assert decision_call["comment"] == "duplicate"
     assert batched.status_code == 200
     assert batched.json()["data"] == {
         "successCount": 1,
@@ -292,6 +305,7 @@ def _request_view(
     upload_id: str | None = "upload-41",
     executed_resource_id: int | None = None,
     cleanup_state: str = "none",
+    parent_id: int | None = None,
 ):
     request = SimpleNamespace(
         id=41,
@@ -306,7 +320,7 @@ def _request_view(
         file_name="budget.pdf",
         file_size=123,
         content_hash="sha256",
-        source_parent_id=None,
+        source_parent_id=parent_id,
         target_space_id=None,
         target_parent_id=None,
         action_snapshot={"new_name": "budget-v2.pdf"},
@@ -471,6 +485,71 @@ async def test_upload_list_rejects_malformed_or_cross_context_cursor():
         )
 
     repository.list_upload_request_views.assert_not_awaited()
+
+
+async def test_upload_cursor_cannot_be_reused_in_another_directory():
+    service, repository = _application_service(view=_request_view())
+    repository.list_upload_request_views.return_value = ([_request_view()], True)
+
+    root_page = await service.list_uploads(
+        space_id=101,
+        parent_id=None,
+        viewer=_user(),
+        cursor=None,
+        page_size=20,
+    )
+    assert root_page.next_cursor is not None
+
+    with pytest.raises(KnowledgeSpaceInvalidCursorError):
+        await service.list_uploads(
+            space_id=101,
+            parent_id=55,
+            viewer=_user(),
+            cursor=root_page.next_cursor,
+            page_size=20,
+        )
+
+
+@pytest.mark.parametrize("action", ["approve", "reject"])
+async def test_current_approver_can_decide_pending_upload(action):
+    service, _ = _application_service(
+        view=_request_view(applicant_user_id=8),
+        current_approver=True,
+    )
+
+    await service.decide_upload(
+        space_id=101,
+        request_id=41,
+        action=action,
+        comment=None,
+        viewer=_user(user_id=9),
+    )
+
+    service.approval_center.decide_instance_for_current_approver.assert_awaited_once_with(
+        instance_id=31,
+        action=action,
+        operator_user_id=9,
+        operator_user_name="user-9",
+        operator_tenant_id=42,
+        comment=None,
+    )
+
+
+async def test_decision_race_hides_request_after_approver_is_removed():
+    service, _ = _application_service(
+        view=_request_view(applicant_user_id=8),
+        current_approver=True,
+    )
+    service.approval_center.decide_instance_for_current_approver.side_effect = ApprovalRequestPermissionDeniedError()
+
+    with pytest.raises(SpaceFileChangeRequestNotFoundError):
+        await service.decide_upload(
+            space_id=101,
+            request_id=41,
+            action="approve",
+            comment=None,
+            viewer=_user(user_id=9),
+        )
 
 
 async def test_upload_list_uses_one_batch_projection_for_multiple_rows_without_per_row_loader():
@@ -775,7 +854,7 @@ async def file_change_api_engine():
     await engine.dispose()
 
 
-async def _seed_read_view(engine, *, tenant_id: int, space_id: int, suffix: int):
+async def _seed_read_view(engine, *, tenant_id: int, space_id: int, suffix: int, parent_id: int | None = None):
     factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     async with factory() as session:
         stage = KnowledgeSpaceUploadStage(
@@ -820,6 +899,7 @@ async def _seed_read_view(engine, *, tenant_id: int, space_id: int, suffix: int)
             file_name=stage.file_name,
             file_size=stage.file_size,
             content_hash=stage.content_hash,
+            source_parent_id=parent_id,
         )
         session.add(request)
         session.add(
@@ -856,21 +936,39 @@ async def _seed_read_view(engine, *, tenant_id: int, space_id: int, suffix: int)
 
 async def test_repository_read_projection_is_tenant_space_bound_and_uses_latest_outbox(file_change_api_engine):
     own_request_id, _ = await _seed_read_view(file_change_api_engine, tenant_id=42, space_id=101, suffix=41)
-    await _seed_read_view(file_change_api_engine, tenant_id=43, space_id=101, suffix=42)
+    child_request_id, _ = await _seed_read_view(
+        file_change_api_engine,
+        tenant_id=42,
+        space_id=101,
+        suffix=43,
+        parent_id=55,
+    )
+    foreign_request_id, _ = await _seed_read_view(file_change_api_engine, tenant_id=43, space_id=101, suffix=42)
     factory = async_sessionmaker(file_change_api_engine, class_=AsyncSession, expire_on_commit=False)
 
     async with factory() as session:
         repository = KnowledgeSpaceFileChangeRequestRepository(session)
         own = await repository.get_request_view(tenant_id=42, space_id=101, request_id=own_request_id)
-        foreign = await repository.get_request_view(tenant_id=42, space_id=101, request_id=own_request_id + 1)
+        foreign = await repository.get_request_view(tenant_id=42, space_id=101, request_id=foreign_request_id)
         page, has_more = await repository.list_upload_request_views(
             tenant_id=42,
             space_id=101,
+            parent_id=None,
             applicant_user_id=7,
             instance_statuses=("execute_failed",),
             after_create_time=None,
             after_request_id=0,
             limit=1,
+        )
+        child_page, child_has_more = await repository.list_upload_request_views(
+            tenant_id=42,
+            space_id=101,
+            parent_id=55,
+            applicant_user_id=7,
+            instance_statuses=("execute_failed",),
+            after_create_time=None,
+            after_request_id=0,
+            limit=20,
         )
         file_statuses, steps = await repository.load_business_projection_facts(
             tenant_id=42,
@@ -884,6 +982,8 @@ async def test_repository_read_projection_is_tenant_space_bound_and_uses_latest_
     assert foreign is None
     assert [row.request.id for row in page] == [own_request_id]
     assert has_more is False
+    assert [row.request.id for row in child_page] == [child_request_id]
+    assert child_has_more is False
     assert file_statuses == {}
     assert steps == {own_request_id: []}
 
@@ -909,6 +1009,7 @@ async def test_repository_upload_list_excludes_cleanup_success_but_keeps_audit_d
         page, has_more = await repository.list_upload_request_views(
             tenant_id=42,
             space_id=101,
+            parent_id=None,
             applicant_user_id=7,
             instance_statuses=None,
             after_create_time=None,

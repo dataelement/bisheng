@@ -154,6 +154,8 @@ task/sibling/instance/log/exception/outbox 状态迁移。提交后才执行 out
 | `src/frontend/platform/src/controllers/API/approval.ts` | Platform 审批 API 封装 |
 | `src/frontend/platform/src/pages/BuildPage/bench/KnowledgeSpace.tsx` | 工作台“知识空间”配置页；承载 F046 租户级全局开关、按空间配置入口和统一保存动作 |
 | `src/frontend/platform/src/pages/KnowledgePage/FileChangeApprovalSettings.tsx` | F046 策略及按空间配置组件；嵌入工作台配置页，知识库列表页不再展示独立设置 Tab |
+| `src/frontend/client/src/pages/knowledge/SpaceDetail/index.tsx` | F046 待审上传按 `source_parent_id` 投影到当前知识空间目录的普通文件列表；暂存记录不提前创建正式 `KnowledgeFile` |
+| `src/frontend/client/src/pages/knowledge/hooks/useFileChangeApproval.ts` | F046 当前目录待审上传查询、虚拟文件行投影、详情及同意/拒绝 mutation |
 
 ---
 
@@ -202,6 +204,10 @@ task/sibling/instance/log/exception/outbox 状态迁移。提交后才执行 out
   最终 decision 前再次校验当前资格
 - **异常策略**：只允许 `retry` 与 `cancel`。`approver_empty` retry 重新解析完整当前集合，
   `execute_failed` retry 进入 token-bound Deferred resume；禁止 assign/assign-flow/skip/mark-complete
+- **列表投影**：待审上传仍是 `knowledge_space_upload_stage + knowledge_space_file_change_request`，不提前生成正式
+  `KnowledgeFile`。Client 按 request 的 `source_parent_id` 查询并投影成不可选择、不可移动/重命名的虚拟文件行；
+  根目录仅展示 `source_parent_id IS NULL`，子目录仅展示等于当前目录 ID 的记录。列表内预览继续读取暂存对象，
+  当前审批人可直接同意/拒绝，状态标签可进入完整详情及异常重试/清理。
 - **执行**：审批通过后可返回 `Deferred`；只有 durable step 的权威读后校验满足完成判据，才能把
   outbox/instance 置 success/executed。upload 的完成判据固定为正式文件图已提交、OpenFGA 权限写入成功且普通文件
   解析调度已接收；之后的解析、索引、向量化成功或失败只属于文件生命周期，不回写或回退审批状态。
@@ -356,6 +362,7 @@ PUT    /knowledge/space/admin/file-change-configuration       # 当前租户 pol
 GET    /knowledge/space/{space_id}/file-changes/uploads
 GET    /knowledge/space/{space_id}/file-changes/{request_id}
 GET    /knowledge/space/{space_id}/file-changes/{request_id}/preview
+POST   /knowledge/space/{space_id}/file-changes/{request_id}/decision  # approve/reject，委托 F025 instance 决策
 POST   /knowledge/space/{space_id}/file-changes/{request_id}/retry-ingest
 DELETE /knowledge/space/{space_id}/file-changes/{request_id}
 POST   /knowledge/space/{space_id}/file-changes/batch-approve

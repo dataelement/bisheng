@@ -53,7 +53,6 @@ import { VersionManagementDialog } from "./VersionManagementDialog";
 import { VersionHistorySheet } from "./VersionHistorySheet";
 import { SimilarDocumentDialog } from "./SimilarDocumentDialog";
 import { SelectionPathBreadcrumb } from "./SelectionPathBreadcrumb";
-import { PendingFileChangesPanel } from "./PendingFileChangesPanel";
 import { FileChangeApprovalDetail } from "./FileChangeApprovalDetail";
 import { canOpenPermissionDialog, checkPermission } from "~/api/permission";
 import {
@@ -73,7 +72,7 @@ import {
 } from "~/components/SidebarListMoreMenu";
 import { cn, getFullWidthLength } from "~/utils";
 import { knowledgeUploadCapabilities } from "../knowledgeUploadCapabilities";
-import { getFileChangeLockState, useFileChangeApproval } from "../hooks/useFileChangeApproval";
+import { getFileChangeLockState, projectPendingUploadAsKnowledgeFile, useFileChangeApproval } from "../hooks/useFileChangeApproval";
 
 interface KnowledgeSpaceContentProps {
     space: KnowledgeSpace;
@@ -187,6 +186,16 @@ export function KnowledgeSpaceContent({
     const isH5 = usePrefersMobileLayout();
     const fileListScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
     const tableScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
+    const [searchQuery, setSearchQuery] = useState("");
+    const [searchTagIds, setSearchTagIds] = useState<number[]>([]);
+    const fileChangeApproval = useFileChangeApproval({
+        spaceId: space.id,
+        parentId: currentFolderId,
+        onFormalFilesRefresh: () => onDeleteFile(""),
+    });
+    const pendingUploadFiles = fileChangeApproval.pendingItems.map((item) =>
+        projectPendingUploadAsKnowledgeFile(item, space.id),
+    );
     const displayFiles = [
         ...(creatingFolder ? [creatingFolder] : []),
         // In-progress folder upload: show its placeholder card (keyed to the space +
@@ -207,20 +216,22 @@ export function KnowledgeSpaceContent({
                 String(f.spaceId) === String(space.id) &&
                 String(f.parentId ?? "") === String(currentFolderId ?? ""),
         ),
+        ...(searchQuery.trim().length === 0 && searchTagIds.length === 0 ? pendingUploadFiles : []),
         ...files
     ];
 
     // Infinite scroll: trigger the next page when the scroll container nears its bottom.
     const handleListScroll = (e: React.UIEvent<HTMLDivElement>) => {
-        if (!hasMore || loading) return;
         const el = e.currentTarget;
-        if (el.scrollHeight - el.scrollTop - el.clientHeight <= 240) {
+        if (el.scrollHeight - el.scrollTop - el.clientHeight > 240) return;
+        if (fileChangeApproval.pendingHasMore && !fileChangeApproval.pendingFetchingMore) {
+            void fileChangeApproval.fetchPendingNextPage();
+        }
+        if (hasMore && !loading) {
             onLoadMore();
         }
     };
 
-    const [searchQuery, setSearchQuery] = useState("");
-    const [searchTagIds, setSearchTagIds] = useState<number[]>([]);
     const [viewMode, setViewModeState] = useState<"card" | "list">(() => {
         if (typeof window === "undefined") return "list";
         return localStorage.getItem("knowledge-view-mode") === "card" ? "card" : "list";
@@ -398,7 +409,7 @@ export function KnowledgeSpaceContent({
     const [deleteEntryIds, setDeleteEntryIds] = useState<Set<string>>(new Set());
     const [downloadEntryIds, setDownloadEntryIds] = useState<Set<string>>(new Set());
     const permissionEntryProbeKey = displayFiles
-        .filter((file) => !file.isCreating && /^\d+$/.test(String(file.id)))
+        .filter((file) => !file.pendingUploadApproval && !file.isCreating && /^\d+$/.test(String(file.id)))
         .map((file) => `${file.id}:${file.type}`)
         .join("|");
     const canUseAddActions = (canCreateFolder || canUploadFile) && !isSearching;
@@ -743,7 +754,7 @@ export function KnowledgeSpaceContent({
 
     const handleSelectFile = (fileId: string, selected: boolean) => {
         const target = displayFiles.find((f) => f.id === fileId);
-        if (target && isFolderUploadPlaceholder(target)) return;
+        if (target && (target.pendingUploadApproval || isFolderUploadPlaceholder(target))) return;
         const newSelected = new Set(selectedFiles);
         if (selected) {
             newSelected.add(fileId);
@@ -769,7 +780,7 @@ export function KnowledgeSpaceContent({
     const handleSelectAll = (isAllSelectedOnPage: boolean) => {
         const newSelected = new Set(selectedFiles);
         // Skip uploading folder placeholders so select-all never picks them up.
-        const selectable = displayFiles.filter((f) => !isFolderUploadPlaceholder(f));
+        const selectable = displayFiles.filter((f) => !f.pendingUploadApproval && !isFolderUploadPlaceholder(f));
         if (isAllSelectedOnPage) {
             selectable.forEach(f => newSelected.delete(f.id));
         } else {
@@ -824,10 +835,6 @@ export function KnowledgeSpaceContent({
             dispatchKnowledgeSpaceFilesRefresh();
         },
     });
-    const fileChangeApproval = useFileChangeApproval({
-        spaceId: space.id,
-        onFormalFilesRefresh: () => onDeleteFile(""),
-    });
     const handleFileChangePreview = (requestId: number) => {
         const pendingFile = fileChangeApproval.pendingItems.find((item) => item.requestId === requestId);
         if (!pendingFile) {
@@ -854,6 +861,14 @@ export function KnowledgeSpaceContent({
     const handleBatchApproveFileChanges = async (requestIds: number[]) => {
         try {
             await fileChangeApproval.batchApprove(requestIds);
+        } catch {
+            showToast({ message: localize("com_approval_toast_failed"), status: "error" });
+        }
+    };
+    const handlePendingUploadDecision = async (requestId: number, action: "approve" | "reject") => {
+        try {
+            await fileChangeApproval.decide({ requestId, action });
+            showToast({ message: localize("com_approval_toast_success"), status: "success" });
         } catch {
             showToast({ message: localize("com_approval_toast_failed"), status: "error" });
         }
@@ -1383,23 +1398,6 @@ export function KnowledgeSpaceContent({
             </div>
             )}
 
-            <PendingFileChangesPanel
-                items={fileChangeApproval.pendingItems}
-                loading={fileChangeApproval.pendingLoading}
-                statusFilter={fileChangeApproval.statusFilter}
-                onStatusFilterChange={fileChangeApproval.setStatusFilter}
-                onOpenDetail={fileChangeApproval.openDetail}
-                onPreview={handleFileChangePreview}
-                onCleanup={(requestId) => { void handleFileChangeCleanup(requestId); }}
-                onRetry={(requestId) => { void handleFileChangeRetry(requestId); }}
-                onBatchApprove={(requestIds) => { void handleBatchApproveFileChanges(requestIds); }}
-                batchApproving={fileChangeApproval.batchApproving}
-                batchResult={fileChangeApproval.batchApprovalResult}
-                hasMore={fileChangeApproval.pendingHasMore}
-                fetchingMore={fileChangeApproval.pendingFetchingMore}
-                onLoadMore={() => { void fileChangeApproval.fetchPendingNextPage(); }}
-            />
-
             {/* Content Container：中间区域滚动；手机端分页栏在下方 shrink-0，不随列表滚走 */}
             <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                 <div
@@ -1440,7 +1438,7 @@ export function KnowledgeSpaceContent({
                     {suppressList ? (
                         // Search page before any query — intentionally empty.
                         <div className="min-h-0 flex-1" />
-                    ) : (loading && displayFiles.length === 0) ? (
+                    ) : ((loading || fileChangeApproval.pendingLoading) && displayFiles.length === 0) ? (
                         // Space switching / first load: show a spinner instead of the
                         // "no files here" empty illustration. The fileManager hook clears
                         // `files` immediately on activeSpace change, so this branch fires
@@ -1521,8 +1519,11 @@ export function KnowledgeSpaceContent({
                                             isFolderDragOver={cardDrag.dragOverFolderId === file.id}
                                             onFolderDragOver={cardDrag.handleFolderDragOver(file)}
                                             onFolderDragLeave={cardDrag.handleFolderDragLeave(file)}
-                                                onFolderDrop={cardDrag.handleFolderDrop(file)}
-                                                onOpenApprovalDetail={fileChangeApproval.openDetail}
+                                            onFolderDrop={cardDrag.handleFolderDrop(file)}
+                                            onOpenApprovalDetail={fileChangeApproval.openDetail}
+                                            onPreviewPendingUpload={handleFileChangePreview}
+                                            onDecidePendingUpload={handlePendingUploadDecision}
+                                            pendingUploadDeciding={fileChangeApproval.deciding}
                                         />
                                     </div>
                                 ))}
@@ -1568,9 +1569,12 @@ export function KnowledgeSpaceContent({
                                     sortDirection={sortDirection}
                                     onSort={handleSort}
                                     highlightedTagIds={searchTagIds}
-                                        highlightKeyword={searchQuery}
-                                        onOpenApprovalDetail={fileChangeApproval.openDetail}
-                                    />
+                                    highlightKeyword={searchQuery}
+                                    onOpenApprovalDetail={fileChangeApproval.openDetail}
+                                    onPreviewPendingUpload={handleFileChangePreview}
+                                    onDecidePendingUpload={handlePendingUploadDecision}
+                                    pendingUploadDeciding={fileChangeApproval.deciding}
+                                />
                             </div>
                         </div>
                     )}

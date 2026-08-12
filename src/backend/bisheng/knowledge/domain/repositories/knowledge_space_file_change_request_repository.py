@@ -244,6 +244,7 @@ class KnowledgeSpaceFileChangeRequestRepository:
         *,
         tenant_id: int,
         space_id: int,
+        parent_id: int | None,
         applicant_user_id: int | None,
         instance_statuses: Sequence[str] | None,
         after_create_time: datetime | None,
@@ -256,6 +257,10 @@ class KnowledgeSpaceFileChangeRequestRepository:
             KnowledgeSpaceFileChangeRequest.upload_stage_id.is_not(None),
             KnowledgeSpaceFileChangeRequest.cleanup_state != KnowledgeSpaceFileChangeCleanupState.SUCCESS,
         )
+        if parent_id is None:
+            statement = statement.where(KnowledgeSpaceFileChangeRequest.source_parent_id.is_(None))
+        else:
+            statement = statement.where(KnowledgeSpaceFileChangeRequest.source_parent_id == int(parent_id))
         if applicant_user_id is not None:
             statement = statement.where(KnowledgeSpaceFileChangeRequest.applicant_user_id == int(applicant_user_id))
         if instance_statuses:

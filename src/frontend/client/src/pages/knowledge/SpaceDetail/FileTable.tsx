@@ -30,6 +30,7 @@ import { useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
 import { getFileChangeLockState } from "../hooks/useFileChangeApproval";
+import { PendingUploadApprovalActions } from "./PendingUploadApprovalActions";
 
 const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -205,6 +206,7 @@ const StatusBadge = ({ status, file, onOpenApprovalDetail }: {
     const fileChangeLock = file ? getFileChangeLockState(file) : { locked: false, showBadge: false };
     const approvalStatusLabel = file ? getKnowledgeApprovalStatusLabel(file) : null;
     const statusReason = file?.approvalReason?.trim() || file?.errorMessage?.trim() || null;
+    const pendingUpload = file?.pendingUploadApproval;
 
     type Tone = { bg: string; text: string; dot: string };
     const neutralTone: Tone = { bg: "bg-[#f2f4f7]", text: "text-[#6b7785]", dot: "bg-[#6b7785]" };
@@ -229,6 +231,25 @@ const StatusBadge = ({ status, file, onOpenApprovalDetail }: {
     let label: string;
     let tone: Tone;
 
+    if (pendingUpload) {
+        const failed = pendingUpload.status === "execute_failed";
+        return (
+            <button
+                type="button"
+                className={cn(
+                    "inline-flex shrink-0 items-center gap-1 rounded px-2 text-caption leading-5",
+                    failed ? "bg-danger/10 text-danger" : "bg-success/10 text-success",
+                )}
+                onClick={(event) => {
+                    event.stopPropagation();
+                    onOpenApprovalDetail?.(pendingUpload.requestId);
+                }}
+            >
+                <span className={cn("size-1 rounded-full", failed ? "bg-danger" : "bg-success")} />
+                {localize(`com_knowledge.file_change_status_${pendingUpload.status}`)}
+            </button>
+        );
+    }
     if (fileChangeLock.showBadge && file?.fileChangeApproval) {
         return (
             <button
@@ -435,6 +456,7 @@ function FileTableHeader({
     showStatusColumn,
     isAllSelected,
     isIndeterminate,
+    hasSelectableFiles,
     onSelectAll,
     shougangEnabled,
 }: {
@@ -449,6 +471,7 @@ function FileTableHeader({
     showStatusColumn: boolean;
     isAllSelected: boolean;
     isIndeterminate: boolean;
+    hasSelectableFiles: boolean;
     onSelectAll: () => void;
     shougangEnabled: boolean;
 }) {
@@ -471,6 +494,7 @@ function FileTableHeader({
                         <Checkbox
                             className="border-gray-400 data-[state=checked]:border-primary"
                             checked={isIndeterminate ? "indeterminate" : isAllSelected}
+                            disabled={!hasSelectableFiles}
                             onCheckedChange={onSelectAll}
                         />
                     </div>
@@ -622,15 +646,19 @@ interface FileTableProps {
     /** Extra spacing reserved below the last row (e.g. to clear a floating bottom dock). */
     bottomSpacing?: number;
     onOpenApprovalDetail?: (requestId: number) => void;
+    onPreviewPendingUpload?: (requestId: number) => void;
+    onDecidePendingUpload?: (requestId: number, action: "approve" | "reject") => void;
+    pendingUploadDeciding?: boolean;
 }
 
-export function FileTable({ files, onEnsureFilePermissions, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, currentUserRole, onDownload, onEditTags, onRename, onDelete, onRetry, onNavigateFolder, onPreview, onValidateName, onCancelCreate, permissionEntryIds, renameEntryIds, deleteEntryIds, downloadEntryIds, onManagePermission, onMove, canMoveFile = false, canMoveFolder = false, onMoveToFolder, versionManagementEnabled = false, onOpenVersionManagement, onOpenVersionHistory, canManageMembers = false, sortBy, sortDirection, onSort, highlightedTagIds, highlightKeyword, onScroll, bottomSpacing = 0, onOpenApprovalDetail }: FileTableProps) {
+export function FileTable({ files, onEnsureFilePermissions, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, currentUserRole, onDownload, onEditTags, onRename, onDelete, onRetry, onNavigateFolder, onPreview, onValidateName, onCancelCreate, permissionEntryIds, renameEntryIds, deleteEntryIds, downloadEntryIds, onManagePermission, onMove, canMoveFile = false, canMoveFolder = false, onMoveToFolder, versionManagementEnabled = false, onOpenVersionManagement, onOpenVersionHistory, canManageMembers = false, sortBy, sortDirection, onSort, highlightedTagIds, highlightKeyword, onScroll, bottomSpacing = 0, onOpenApprovalDetail, onPreviewPendingUpload, onDecidePendingUpload, pendingUploadDeciding = false }: FileTableProps) {
     const { columnWidths, onResizeStart } = useResizableColumns();
     const scrollRef = useRef<HTMLDivElement>(null);
     const hScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
     const { showLeftShadow, showRightShadow } = useScrollShadow(scrollRef);
     const showStatusColumn = files.some((file) => Boolean(
-        file.approvalStatus
+        file.pendingUploadApproval
+        || file.approvalStatus
         || getFileChangeLockState(file).showBadge
         || (file.type !== FileType.FOLDER && file.status && file.status !== FileStatus.SUCCESS),
     ));
@@ -705,7 +733,7 @@ export function FileTable({ files, onEnsureFilePermissions, selectedFiles, handl
 
     // Uploading folder placeholders aren't selectable — exclude them so the header
     // checkbox can still reach the "all selected" state and select-all skips them.
-    const selectableFiles = files.filter((f) => !(f.type === FileType.FOLDER && isKnowledgeItemUploading(f)));
+    const selectableFiles = files.filter((f) => !f.pendingUploadApproval && !(f.type === FileType.FOLDER && isKnowledgeItemUploading(f)));
     const isAllSelected = selectableFiles.length > 0 && selectableFiles.every((f) => selectedFiles.has(f.id));
     const isIndeterminate = !isAllSelected && selectableFiles.some((f) => selectedFiles.has(f.id));
 
@@ -741,6 +769,7 @@ export function FileTable({ files, onEnsureFilePermissions, selectedFiles, handl
                         showStatusColumn={showStatusColumn}
                         isAllSelected={isAllSelected}
                         isIndeterminate={isIndeterminate}
+                        hasSelectableFiles={selectableFiles.length > 0}
                         onSelectAll={() => handleSelectAll(isAllSelected)}
                         shougangEnabled={shougangEnabled}
                     />
@@ -792,6 +821,9 @@ export function FileTable({ files, onEnsureFilePermissions, selectedFiles, handl
                                 onFolderDragLeave={handleFolderDragLeave(file)}
                                 onFolderDrop={handleFolderDrop(file)}
                                 onOpenApprovalDetail={onOpenApprovalDetail}
+                                onPreviewPendingUpload={onPreviewPendingUpload}
+                                onDecidePendingUpload={onDecidePendingUpload}
+                                pendingUploadDeciding={pendingUploadDeciding}
                             />
                         ))}
                     </TableBody>
@@ -855,6 +887,9 @@ function FileRow({
     onFolderDragLeave,
     onFolderDrop,
     onOpenApprovalDetail,
+    onPreviewPendingUpload,
+    onDecidePendingUpload,
+    pendingUploadDeciding = false,
 }: {
     file: KnowledgeFile;
     onEnsureFilePermissions?: (file: KnowledgeFile) => void;
@@ -897,6 +932,9 @@ function FileRow({
     onFolderDragLeave?: () => void;
     onFolderDrop?: (e: React.DragEvent) => void;
     onOpenApprovalDetail?: (requestId: number) => void;
+    onPreviewPendingUpload?: (requestId: number) => void;
+    onDecidePendingUpload?: (requestId: number, action: "approve" | "reject") => void;
+    pendingUploadDeciding?: boolean;
 }) {
     const localize = useLocalize();
     const [moreMenuOpen, setMoreMenuOpen] = useState(false);
@@ -910,6 +948,7 @@ function FileRow({
     const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
     const isFolder = file.type === FileType.FOLDER;
     const isCreating = !!file.isCreating;
+    const pendingUpload = file.pendingUploadApproval;
     // Uploading placeholder rows have no backend identity yet — not movable.
     const isUploading = isKnowledgeItemUploading(file);
     const fileChangeLock = getFileChangeLockState(file);
@@ -918,9 +957,11 @@ function FileRow({
     const isUploadingFolderPlaceholder = isFolder && isUploading;
     // 每格统一底色 + 同一套 transition，避免固定列用 group-hover、其余列透出 tr:hover 时不同步闪一下
     // F034: 拖拽悬停的目标文件夹整行高亮（比选中态更深的蓝，明确"放到这里"）
-    const rowBg = isFolderDragOver
-        ? "bg-blue-100 transition-colors duration-150"
-        : isSelected
+    const rowBg = pendingUpload
+        ? "bg-success/5 transition-colors duration-150 group-hover:bg-success/10"
+        : isFolderDragOver
+          ? "bg-blue-100 transition-colors duration-150"
+          : isSelected
             ? "bg-blue-50 transition-colors duration-150 group-hover:bg-[#F8F8F8]"
             : "bg-white transition-colors duration-150 group-hover:bg-[#f7f7f7]";
     const {
@@ -951,8 +992,8 @@ function FileRow({
     const showVersionManagement = versionManagementEnabled && !isFolder && file.status === FileStatus.SUCCESS && isAdmin && Boolean(onOpenVersionManagement);
     const showVersionHistory = versionManagementEnabled && !isFolder && Boolean(file.is_multi_version) && Boolean(onOpenVersionHistory);
     // Placeholder has only a temp id (no backend identity) — suppress all row actions.
-    const showMoreMenu = !isUploadingFolderPlaceholder && (canDownload || isAdmin || canRename || canDelete || Boolean(onManagePermission) || showMoveItem || showVersionManagement || showVersionHistory);
-    const namePreviewable = isKnowledgeItemPreviewable(file);
+    const showMoreMenu = !pendingUpload && !isUploadingFolderPlaceholder && (canDownload || isAdmin || canRename || canDelete || Boolean(onManagePermission) || showMoveItem || showVersionManagement || showVersionHistory);
+    const namePreviewable = Boolean(pendingUpload) || isKnowledgeItemPreviewable(file);
     // Shared action-menu items, reused by the row "..." dropdown and the right-click menu.
     const moreMenuItems = (
         <>
@@ -1059,6 +1100,13 @@ function FileRow({
         <div
             className="flex h-full items-center justify-start gap-1 pl-1.5 pr-2"
         >
+            {pendingUpload?.canApprove && (
+                <PendingUploadApprovalActions
+                    requestId={pendingUpload.requestId}
+                    disabled={pendingUploadDeciding}
+                    onDecide={onDecidePendingUpload}
+                />
+            )}
             {canDownload && (
                 <button
                     type="button"
@@ -1093,7 +1141,7 @@ function FileRow({
     return (
         <TableRow
             data-knowledge-file-item
-            draggable={rowDraggable && !isCreating && !isRenaming && !isUploading}
+            draggable={!pendingUpload && rowDraggable && !isCreating && !isRenaming && !isUploading}
             onDragStart={rowDraggable ? onRowDragStart : undefined}
             onDragOver={isFolder && !isUploadingFolderPlaceholder ? onFolderDragOver : undefined}
             onDragLeave={isFolder && !isUploadingFolderPlaceholder ? onFolderDragLeave : undefined}
@@ -1113,7 +1161,7 @@ function FileRow({
                 style={{ width: columnWidths.checkbox, minWidth: columnWidths.checkbox, maxWidth: columnWidths.checkbox }}
             >
                 <div className="flex items-center justify-center">
-                    <Checkbox
+                    {!pendingUpload && <Checkbox
                         checked={isSelected}
                         onCheckedChange={onSelect}
                         disabled={isUploadingFolderPlaceholder}
@@ -1122,7 +1170,7 @@ function FileRow({
                             isSelected && "border-primary",
                             isUploadingFolderPlaceholder && "cursor-not-allowed opacity-50",
                         )}
-                    />
+                    />}
                 </div>
             </TableCell>
 
@@ -1174,6 +1222,10 @@ function FileRow({
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     if (isUploadingFolderPlaceholder) return;
+                                    if (pendingUpload) {
+                                        onPreviewPendingUpload?.(pendingUpload.requestId);
+                                        return;
+                                    }
                                     if (isFolder) {
                                         onNavigateFolder?.();
                                         return;
@@ -1188,7 +1240,7 @@ function FileRow({
                     )}
                     {/* Inline status tag — non-folder files in any non-success state,
                         plus the uploading-folder placeholder ("上传中"). */}
-                    {(fileChangeLock.showBadge || (file.status && ((!isFolder && file.status !== FileStatus.SUCCESS) || isUploadingFolderPlaceholder))) && (
+                    {(pendingUpload || fileChangeLock.showBadge || (file.status && ((!isFolder && file.status !== FileStatus.SUCCESS) || isUploadingFolderPlaceholder))) && (
                         <StatusBadge status={file.status ?? FileStatus.SUCCESS} file={file} onOpenApprovalDetail={onOpenApprovalDetail} />
                     )}
                     {/* Similar-document tag — occupies the same slot as the status tag
