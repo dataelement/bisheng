@@ -12,11 +12,14 @@ from __future__ import annotations
 
 import inspect
 import json
+import pathlib
 
 from langchain_core.documents import Document
 
 from bisheng.api.v1.callback import AsyncGptsDebugCallbackHandler, _dump_run_log
 from bisheng.tool.domain.langchain.knowledge import KnowledgeRagTool
+
+BACKEND_ROOT = pathlib.Path(__file__).resolve().parents[2]
 
 
 def test_a_document_answer_still_serializes() -> None:
@@ -59,3 +62,23 @@ def test_the_retriever_is_an_internal_step_not_a_tool_call() -> None:
         assert "knowledge_retriever_tool.ainvoke" not in source
     assert "knowledge_retriever_tool._run(query)" in inspect.getsource(KnowledgeRagTool._run)
     assert "knowledge_retriever_tool._arun(query)" in inspect.getsource(KnowledgeRagTool._arun)
+
+
+def test_no_citation_wrapper_reopens_a_run_for_the_retriever() -> None:
+    """The citation wrappers bypass the knowledge tool and drive the retriever.
+
+    Four copies of the same few lines — the assistant's, the workflow agent
+    node's, daily chat's, and the RAG node's. Fixing only the one that was
+    reported would leave the identical stray entry in the other three.
+    """
+
+    roots = [
+        "bisheng/api/services/assistant_agent.py",
+        "bisheng/workflow/nodes/agent/agent.py",
+        "bisheng/workstation/domain/services/chat_service.py",
+        "bisheng/workflow/common/knowledge.py",
+    ]
+    for relative in roots:
+        source = (BACKEND_ROOT / relative).read_text(encoding="utf-8")
+        assert "knowledge_retriever_tool.invoke" not in source, relative
+        assert "knowledge_retriever_tool.ainvoke" not in source, relative

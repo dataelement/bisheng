@@ -222,17 +222,21 @@ export function PermissionGrantTab({
 
   const canEdit =
     context.mode === "CUSTOM" && context.can_manage_permission
+  // Anyone already holding a grant here is checked and locked, whichever model
+  // it is. Granting them again under a second model produced a duplicate row in
+  // the roster — two permissions for one person, of which only the higher one
+  // means anything. Changing someone's model is the roster's job, not this
+  // panel's.
   const disabledSubjectIds = useMemo(
     () =>
       assignees
         .filter(
           (assignee) =>
-            assignee.subject.type === subjectType &&
-            assignee.model.key === selectedModelKey,
+            assignee.subject.type === subjectType && assignee.scope === "LOCAL",
         )
         .map((assignee) => Number(assignee.subject.id))
         .filter(Number.isFinite),
-    [assignees, selectedModelKey, subjectType],
+    [assignees, subjectType],
   )
 
   const mutate = async (

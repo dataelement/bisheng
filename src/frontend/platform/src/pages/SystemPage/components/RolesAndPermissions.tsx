@@ -228,8 +228,12 @@ export function RolesAndPermissions() {
    *
    * Deleting used to mean deactivate, publish, delete, publish — four steps for
    * one removal, and the middle publish was easy to skip, leaving the model in
-   * place. A deletable model is inactive and referenced by no grant, so there is
-   * nothing for a separate impact review to weigh.
+   * place. A deletable model is switched off (the editor will not offer deletion
+   * otherwise) and referenced by no grant, so there is nothing for a separate
+   * impact review to weigh. When the author has flipped the switch but not yet
+   * published it, that deactivation rides along in this batch — the server
+   * judges the precondition on what the batch publishes, not on the release it
+   * started from.
    */
   const handleDeleteModel = async (modelKey: string, wasActive: boolean) => {
     if (!catalog) throw new Error("permission Catalog is not loaded")
@@ -247,13 +251,19 @@ export function RolesAndPermissions() {
         confirmed: true,
       })
       setSelectedModelKey(null)
-    } catch {
+    } catch (error) {
       // Nothing else reports this: the request layer only auto-toasts a couple of
       // special codes, and a failed publish would otherwise close the dialog and
-      // leave the model in place with no explanation.
+      // leave the model in place with no explanation. 25004 covers several model
+      // -state conflicts, so name the one in the way — "state does not allow
+      // this" leaves the author with nothing to act on.
+      const detail = (error as { data?: { reason?: string; reference_count?: number } })?.data
       message({
         variant: "error",
-        description: t("model.deleteFailed"),
+        description:
+          detail?.reason === "referenced_by_grants"
+            ? t("model.deleteBlockedByGrants", { count: detail.reference_count ?? 0 })
+            : t("model.deleteFailed"),
       })
     }
   }

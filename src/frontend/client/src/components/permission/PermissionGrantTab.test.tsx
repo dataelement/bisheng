@@ -9,6 +9,12 @@ import type {
 } from "~/api/permission";
 import { PermissionGrantTab } from "./PermissionGrantTab";
 
+jest.mock("~/hooks/AuthContext", () => ({
+  // Not the creator of anything in these fixtures: the top-tier guard reads the
+  // viewer from the roster, and none of them carry a CREATOR row.
+  useAuthContext: () => ({ user: { id: "auth-user" } }),
+}));
+
 jest.mock("~/api/permission", () => ({
   getGrantablePermissionModels: jest.fn(),
   mutateResourceGrants: jest.fn(),
@@ -252,7 +258,9 @@ describe("F048 Client PermissionGrantTab", () => {
     ).toBeDisabled();
   });
 
-  it("allows one subject to hold different models without duplicating a model", async () => {
+  it("locks a subject who already holds a grant, whatever model is selected", async () => {
+    // Granting the same person under a second model put two rows in the roster,
+    // of which only the higher one means anything.
     render(
       <PermissionGrantTab
         resourceType="channel"
@@ -269,12 +277,28 @@ describe("F048 Client PermissionGrantTab", () => {
       screen.getByLabelText("f048_permission.grant.add_model"),
       { target: { value: "editor" } },
     );
-    expect(screen.getByTestId("disabled-user-ids")).toBeEmptyDOMElement();
-    // Still selectable under another model, but the picker has to say the
-    // subject already holds one — otherwise an existing grant looks untouched.
+    expect(screen.getByTestId("disabled-user-ids")).toHaveTextContent("99");
+    // The badge says which model they hold, so the locked row explains itself.
     expect(screen.getByTestId("granted-user-labels")).toHaveTextContent(
       "99=Viewer",
     );
+  });
+
+  it("leaves a subject who only inherits a grant selectable", async () => {
+    // An inherited grant is not a local one: granting them here is a real
+    // action, not a duplicate.
+    render(
+      <PermissionGrantTab
+        resourceType="channel"
+        resourceId="channel-1"
+        context={context}
+        assignees={[existing("55", { scope: "INHERITED" })]}
+        onSuccess={jest.fn()}
+      />,
+    );
+
+    await screen.findByTestId("disabled-user-ids");
+    expect(screen.getByTestId("disabled-user-ids")).toBeEmptyDOMElement();
   });
 
   it("does not label a subject whose only grant is inherited", async () => {

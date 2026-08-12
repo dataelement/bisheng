@@ -16,9 +16,11 @@ import type {
 } from "~/api/permission";
 import { Button, Checkbox } from "~/components/ui";
 import { useLocalize } from "~/hooks";
+import { useAuthContext } from "~/hooks/AuthContext";
 import { SubjectSearchDepartment } from "./SubjectSearchDepartment";
 import { SubjectSearchUser } from "./SubjectSearchUser";
 import { SubjectSearchUserGroup } from "./SubjectSearchUserGroup";
+import { canManageLevel, viewerIsCreator } from "./topTierGuard";
 
 const SUBJECT_TYPES: SubjectType[] = ["user", "department", "user_group"];
 
@@ -90,6 +92,12 @@ export function PermissionGrantTab({
   const handleIncludeChildrenChange =
     onIncludeChildrenChange ?? setInternalIncludeChildren;
 
+  const { user } = useAuthContext();
+  const isCreator = useMemo(
+    () => viewerIsCreator(assignees, user?.id),
+    [assignees, user?.id],
+  );
+
   useEffect(() => {
     let cancelled = false;
     setModelsLoading(true);
@@ -97,7 +105,11 @@ export function PermissionGrantTab({
     void getGrantablePermissionModels(resourceType, resourceId)
       .then((result) => {
         if (cancelled) return;
-        const activeModels = result.filter((model) => model.active);
+        // Hiding the edit control on existing owner rows would be pointless if
+        // the same viewer could still grant a fresh one here.
+        const activeModels = result.filter(
+          (model) => model.active && canManageLevel(model.level, isCreator),
+        );
         setModels(activeModels);
         setSelectedModelKey((current) =>
           activeModels.some((model) => model.key === current)
@@ -115,7 +127,7 @@ export function PermissionGrantTab({
     return () => {
       cancelled = true;
     };
-  }, [resourceId, resourceType]);
+  }, [resourceId, resourceType, isCreator]);
 
   useEffect(() => {
     setTargetModels({});
@@ -130,34 +142,34 @@ export function PermissionGrantTab({
     setSelectedSubjects([]);
   }, [fixedSubjectType, resourceId]);
 
+  // Anyone already holding a grant here is checked and locked, whichever model
+  // it is. Granting them again under a second model produced a duplicate row in
+  // the roster — two permissions for one person, of which only the higher one
+  // means anything. Changing someone's model is the roster's job, not this
+  // panel's.
   const disabledSubjectIds = useMemo(
     () => [
       ...assignees
         .filter(
           (assignee) =>
-            assignee.subject.type === subjectType &&
-            assignee.model.key === selectedModelKey,
+            assignee.subject.type === subjectType && assignee.scope === "LOCAL",
         )
         .map((assignee) => Number(assignee.subject.id))
         .filter(Number.isFinite),
       ...queuedAdds
         .filter(
-          (change) =>
-            change.op === "ADD" &&
-            change.model_key === selectedModelKey &&
-            change.subject.type === subjectType,
+          (change) => change.op === "ADD" && change.subject.type === subjectType,
         )
         .map((change) =>
           change.op === "ADD" ? Number(change.subject.id) : Number.NaN,
         )
         .filter(Number.isFinite),
     ],
-    [assignees, queuedAdds, selectedModelKey, subjectType],
+    [assignees, queuedAdds, subjectType],
   );
 
-  // A subject may hold several models at once, so an existing grant does not
-  // always disable the row. Label it with the model it already holds instead —
-  // otherwise a person granted under another model looks untouched here.
+  // The badge names which model they already hold, so a locked row explains
+  // itself rather than just refusing to be clicked.
   const grantedModelLabels = useMemo(() => {
     const names: Record<string, string[]> = {};
     for (const assignee of assignees) {

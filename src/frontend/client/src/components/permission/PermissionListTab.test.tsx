@@ -10,6 +10,12 @@ import type {
 } from "~/api/permission";
 import { PermissionListTab } from "./PermissionListTab";
 
+jest.mock("~/hooks/AuthContext", () => ({
+  // Not the creator of anything in these fixtures: the top-tier guard reads the
+  // viewer from the roster, and none of them carry a CREATOR row.
+  useAuthContext: () => ({ user: { id: "auth-user" } }),
+}));
+
 jest.mock("~/api/permission", () => ({
   getGrantablePermissionModels: jest.fn(),
   getMyResourcePermissions: jest.fn(),
@@ -106,6 +112,33 @@ describe("F048 Client PermissionListTab", () => {
     expect(
       screen.getByText(/f048_permission\.source\.include_children/),
     ).toBeInTheDocument();
+  });
+
+  it("locks owner rows for an owner who is not the creator", async () => {
+    // The creator's own row is already protected by the server; what this hides
+    // is one ordinary owner editing another — peers of the same trust tier.
+    mockedGetGrants.mockResolvedValueOnce({
+      data: [
+        assignee("9", "DIRECT", {
+          subject: { type: "user", id: "8", name: "Bob" },
+          model: { key: "standard-owner", name: "Owner", level: 4, active: true },
+        }),
+      ],
+      page_size: 50,
+      has_more: false,
+      next_cursor: null,
+    });
+
+    render(
+      <PermissionListTab
+        resourceType="knowledge_space"
+        resourceId="space-1"
+        context={context}
+      />,
+    );
+
+    const ownerRow = await screen.findByTestId("permission-assignee-9");
+    expect(ownerRow).toHaveAttribute("data-editable", "false");
   });
 
   it("renders protected and inherited grants as read-only and paginates by cursor", async () => {

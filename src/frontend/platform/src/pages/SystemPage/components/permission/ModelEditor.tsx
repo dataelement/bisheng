@@ -1,3 +1,4 @@
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip"
 import { Button } from "@/components/bs-ui/button"
 import { Checkbox } from "@/components/bs-ui/checkBox"
 import { Input } from "@/components/bs-ui/input"
@@ -199,10 +200,14 @@ export function ModelEditor({
   }
 
   const handleDelete = () => {
-    if (disabled || saving || createMode || isStandard) return
-    // Deletion carries its own deactivation and publishes itself: the model is
-    // referenced by no grant, so there is nothing to review, and the old
-    // deactivate-publish-delete-publish dance lost people halfway through.
+    if (disabled || saving || createMode || isStandard || active) return
+    // Deleting publishes itself — the old deactivate-publish-delete-publish
+    // dance lost people halfway through. Turning the model off stays the
+    // author's move, since it is the one precondition they can see and undo,
+    // but the switch they just flipped counts: gating on the *saved* state
+    // meant flipping it off changed nothing until a separate publish, which
+    // reads as a dead button. `model.active` tells the caller whether that
+    // deactivation still has to ride along in the same batch.
     bsConfirm({
       desc: t("model.confirmDelete", { name: model.name }),
       okTxt: t("model.delete"),
@@ -384,15 +389,28 @@ export function ModelEditor({
 
       <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t p-4">
         {!isStandard && !createMode && (
-          <Button
-            type="button"
-            variant="outline"
-            className="min-h-11 text-red-700"
-            disabled={disabled || saving}
-            onClick={handleDelete}
-          >
-            {t("model.delete")}
-          </Button>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                {/* A disabled button swallows pointer events, so the tooltip
+                    needs a wrapper to hear the hover. */}
+                <span className="inline-flex">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="min-h-11 text-red-700"
+                    disabled={disabled || saving || active}
+                    onClick={handleDelete}
+                  >
+                    {t("model.delete")}
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              {active && (
+                <TooltipContent>{t("model.disableBeforeDelete")}</TooltipContent>
+              )}
+            </Tooltip>
+          </TooltipProvider>
         )}
         <Button
           type="button"

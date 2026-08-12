@@ -317,12 +317,32 @@ describe("ModelEditor", () => {
     ).toBeInTheDocument()
   })
 
-  it("deletes in one action, carrying its own deactivation", async () => {
+  it("will not delete a model that is still switched on", async () => {
+    // Turning it off is the one precondition the author can see and undo, and
+    // the server refuses the deletion anyway. Doing it for them hid what the
+    // deletion cost.
+    render(
+      <ModelEditor
+        model={customModel}
+        actions={actions}
+        onCreateDraft={onCreateDraft}
+        onDeleteModel={onDeleteModel}
+        onReviewImpact={onReviewImpact}
+      />,
+    )
+
+    const button = screen.getByRole("button", { name: "model.delete" })
+    expect(button).toBeDisabled()
+    fireEvent.click(button)
+    expect(onDeleteModel).not.toHaveBeenCalled()
+  })
+
+  it("deletes an inactive model in one action", async () => {
     // Deleting used to mean deactivate, publish, delete, publish. The middle
     // publish was easy to skip, and the model then survived the refresh.
     render(
       <ModelEditor
-        model={customModel}
+        model={{ ...customModel, active: false }}
         actions={actions}
         onCreateDraft={onCreateDraft}
         onDeleteModel={onDeleteModel}
@@ -334,16 +354,19 @@ describe("ModelEditor", () => {
     fireEvent.click(screen.getByRole("button", { name: "model.delete" }))
 
     await waitFor(() => {
-      expect(onDeleteModel).toHaveBeenCalledWith(customModel.key, true)
+      expect(onDeleteModel).toHaveBeenCalledWith(customModel.key, false)
     })
     // No draft is left dangling for someone to publish later.
     expect(onCreateDraft).not.toHaveBeenCalled()
   })
 
-  it("tells an already-inactive model apart so it is not deactivated twice", async () => {
+  it("frees the delete button as soon as the switch is turned off", async () => {
+    // Reading the saved state instead meant flipping the switch changed
+    // nothing until a separate publish — the button just sat there dead. The
+    // unpublished deactivation is handed to the caller to send along.
     render(
       <ModelEditor
-        model={{ ...customModel, active: false }}
+        model={customModel}
         actions={actions}
         onCreateDraft={onCreateDraft}
         onDeleteModel={onDeleteModel}
@@ -351,10 +374,15 @@ describe("ModelEditor", () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole("button", { name: "model.delete" }))
+    expect(screen.getByRole("button", { name: "model.delete" })).toBeDisabled()
+    fireEvent.click(screen.getByLabelText("model.active"))
+
+    const button = screen.getByRole("button", { name: "model.delete" })
+    expect(button).toBeEnabled()
+    fireEvent.click(button)
 
     await waitFor(() => {
-      expect(onDeleteModel).toHaveBeenCalledWith(customModel.key, false)
+      expect(onDeleteModel).toHaveBeenCalledWith(customModel.key, true)
     })
   })
 
