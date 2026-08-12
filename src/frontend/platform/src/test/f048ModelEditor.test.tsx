@@ -78,7 +78,8 @@ const draft = {
 }
 
 vi.mock("@/components/bs-ui/alertDialog/useConfirm", () => ({
-  bsConfirm: (params: any) => params.onOk?.(() => {}),
+  bsConfirm: (params: { onOk?: (next: () => void) => void }) =>
+    params.onOk?.(() => {}),
 }))
 
 describe("ModelEditor", () => {
