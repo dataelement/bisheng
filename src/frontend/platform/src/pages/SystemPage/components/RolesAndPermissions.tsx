@@ -210,13 +210,17 @@ export function RolesAndPermissions() {
 
   const handleCreateDraft = async (
     changes: PermissionCatalogChange[],
+    config: { silent?: boolean } = {},
   ): Promise<PermissionCatalogDraft> => {
     if (!catalog) throw new Error("permission Catalog is not loaded")
-    return await createPermissionCatalogDraftApi({
-      idempotency_key: createIdempotencyKey("catalog-draft"),
-      base_release_id: catalog.id,
-      changes,
-    })
+    return await createPermissionCatalogDraftApi(
+      {
+        idempotency_key: createIdempotencyKey("catalog-draft"),
+        base_release_id: catalog.id,
+        changes,
+      },
+      config,
+    )
   }
 
   const handleReviewImpact = (draft: PermissionCatalogDraft) => {
@@ -244,12 +248,20 @@ export function RolesAndPermissions() {
         ]
       : [{ type: "DELETE_MODEL", model_key: modelKey }]
     try {
-      const draft = await handleCreateDraft(changes)
-      await handlePublish(draft.draft_id, {
-        expected_current_release_id: catalog.id,
-        idempotency_key: createIdempotencyKey("catalog-publish"),
-        confirmed: true,
-      })
+      // Deletion is refused while drafting, not at publish — ask for the
+      // envelope on both legs or the reason is lost on the first one.
+      const draft = await handleCreateDraft(changes, { silent: true })
+      await handlePublish(
+        draft.draft_id,
+        {
+          expected_current_release_id: catalog.id,
+          idempotency_key: createIdempotencyKey("catalog-publish"),
+          confirmed: true,
+        },
+        // Ask for the envelope: the failure below needs the reason the server
+        // sent, and the default rejection is a bare message string.
+        { silent: true },
+      )
       setSelectedModelKey(null)
     } catch (error) {
       // Nothing else reports this: the request layer only auto-toasts a couple of
@@ -257,7 +269,9 @@ export function RolesAndPermissions() {
       // leave the model in place with no explanation. 25004 covers several model
       // -state conflicts, so name the one in the way — "state does not allow
       // this" leaves the author with nothing to act on.
-      const detail = (error as { data?: { reason?: string; reference_count?: number } })?.data
+      const detail = (
+        error as { data?: { reason?: string; reference_count?: number } } | null
+      )?.data
       message({
         variant: "error",
         description:
@@ -271,8 +285,9 @@ export function RolesAndPermissions() {
   const handlePublish = async (
     draftId: number,
     payload: PublishPermissionCatalogDraftRequest,
+    config: { silent?: boolean } = {},
   ) => {
-    await publishPermissionCatalogDraftApi(draftId, payload)
+    await publishPermissionCatalogDraftApi(draftId, payload, config)
     setImpactDraft(null)
     await loadCatalog()
     message({

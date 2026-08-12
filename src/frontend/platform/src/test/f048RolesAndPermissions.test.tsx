@@ -15,6 +15,7 @@ const childCalls = vi.hoisted(() => ({
   actionBoard: vi.fn(),
   modelEditor: vi.fn(),
   impactDialog: vi.fn(),
+  message: vi.fn(),
 }))
 
 vi.mock("@/pages/SystemPage/components/Roles", () => ({
@@ -55,11 +56,21 @@ vi.mock(
 )
 
 vi.mock("@/pages/SystemPage/components/permission/ModelEditor", () => ({
-  ModelEditor: (props: { model: { key: string }; createMode?: boolean }) => {
+  ModelEditor: (props: {
+    model: { key: string }
+    createMode?: boolean
+    onDeleteModel?: (modelKey: string, wasActive: boolean) => Promise<void>
+  }) => {
     childCalls.modelEditor(props)
     return (
       <div data-testid="model-editor">
         {props.createMode ? "create" : props.model.key}
+        <button
+          type="button"
+          onClick={() => void props.onDeleteModel?.(props.model.key, false)}
+        >
+          model-editor.delete
+        </button>
       </div>
     )
   },
@@ -95,6 +106,10 @@ vi.mock("@/pages/SystemPage/components/permission/ImpactDialog", () => ({
       </button>
     )
   },
+}))
+
+vi.mock("@/components/bs-ui/toast/use-toast", () => ({
+  message: (...args: unknown[]) => childCalls.message(...args),
 }))
 
 vi.mock("@/controllers/API/permission", () => ({
@@ -233,27 +248,34 @@ describe("F048 RolesAndPermissions", () => {
     )
 
     await waitFor(() => {
-      expect(createPermissionCatalogDraftApi).toHaveBeenCalledWith({
-        idempotency_key: expect.stringMatching(/^catalog-draft-/),
-        base_release_id: 21,
-        changes: [
-          {
-            type: "ASSIGN_ACTION_LEVEL",
-            action_code: "edit",
-            level: 2,
-          },
-        ],
-      })
+      expect(createPermissionCatalogDraftApi).toHaveBeenCalledWith(
+        {
+          idempotency_key: expect.stringMatching(/^catalog-draft-/),
+          base_release_id: 21,
+          changes: [
+            {
+              type: "ASSIGN_ACTION_LEVEL",
+              action_code: "edit",
+              level: 2,
+            },
+          ],
+        },
+        {},
+      )
     })
     fireEvent.click(
       await screen.findByRole("button", { name: "impact-dialog.publish" }),
     )
     await waitFor(() => {
-      expect(publishPermissionCatalogDraftApi).toHaveBeenCalledWith(31, {
-        expected_current_release_id: 21,
-        idempotency_key: "catalog-publish-test",
-        confirmed: true,
-      })
+      expect(publishPermissionCatalogDraftApi).toHaveBeenCalledWith(
+        31,
+        {
+          expected_current_release_id: 21,
+          idempotency_key: "catalog-publish-test",
+          confirmed: true,
+        },
+        {},
+      )
       expect(getPermissionCatalogApi).toHaveBeenCalledTimes(2)
     })
   })
@@ -286,5 +308,57 @@ describe("F048 RolesAndPermissions", () => {
         }),
       }),
     )
+  })
+
+  it("names the blocker when a model cannot be deleted", async () => {
+    // 25004 covers several model-state conflicts, so its shared copy says only
+    // "state does not allow this". The count is the actionable part: it tells
+    // the author how much has to be moved off the model first.
+    //
+    // The refusal lands on the *draft* leg — the batch is validated as it is
+    // drafted, so a fix that only listened to the publish leg never saw it.
+    vi.mocked(createPermissionCatalogDraftApi).mockRejectedValueOnce({
+      status_code: 25004,
+      data: { reason: "referenced_by_grants", reference_count: 3 },
+    })
+
+    renderWithUser({ role: "admin", is_global_super: true })
+    await waitFor(() => expect(getPermissionCatalogApi).toHaveBeenCalled())
+    const modelsTab = screen.getByRole("tab", { name: "catalog.models" })
+    fireEvent.mouseDown(modelsTab)
+    fireEvent.click(modelsTab)
+
+    fireEvent.click(await screen.findByText("model-editor.delete"))
+
+    await waitFor(() => {
+      expect(childCalls.message).toHaveBeenCalledWith({
+        variant: "error",
+        description: "model.deleteBlockedByGrants",
+      })
+    })
+  })
+
+  it("falls back to the plain failure when the server sends no reason", async () => {
+    vi.mocked(publishPermissionCatalogDraftApi).mockRejectedValueOnce(
+      "some other failure",
+    )
+    vi.mocked(createPermissionCatalogDraftApi).mockResolvedValueOnce({
+      draft_id: 31,
+    } as never)
+
+    renderWithUser({ role: "admin", is_global_super: true })
+    await waitFor(() => expect(getPermissionCatalogApi).toHaveBeenCalled())
+    const modelsTab = screen.getByRole("tab", { name: "catalog.models" })
+    fireEvent.mouseDown(modelsTab)
+    fireEvent.click(modelsTab)
+
+    fireEvent.click(await screen.findByText("model-editor.delete"))
+
+    await waitFor(() => {
+      expect(childCalls.message).toHaveBeenCalledWith({
+        variant: "error",
+        description: "model.deleteFailed",
+      })
+    })
   })
 })

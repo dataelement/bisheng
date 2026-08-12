@@ -59,6 +59,8 @@ describe("F048 Platform permission API", () => {
       1,
       "/api/v1/permissions/catalog/drafts",
       expect.objectContaining({ base_release_id: 12 }),
+      // Off unless a caller asks for the envelope to explain a failure.
+      { silent: undefined },
     )
     expect(requestMocks.get).toHaveBeenNthCalledWith(
       2,
@@ -72,6 +74,8 @@ describe("F048 Platform permission API", () => {
         idempotency_key: "publish-1",
         confirmed: true,
       },
+      // Off unless a caller asks for the envelope to explain a failure.
+      { silent: undefined },
     )
   })
 
