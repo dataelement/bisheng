@@ -1,5 +1,6 @@
 import { Button } from "@bisheng/ui";
 import type { SubjectType } from "~/api/permission";
+import { EmptyStateIllustration } from "~/components/illustrations";
 import { useLocalize } from "~/hooks";
 import { PermissionDraftEditor, type PermissionDraftEditorCapabilities } from "./PermissionDraftEditor";
 import { getPermissionDraftRowKey, type PermissionDraftRow } from "./usePermissionDraft";
@@ -64,18 +65,32 @@ export function PermissionDraftPanel({
             color="primary"
             variant="filled"
             size="small"
+            className="h-7"
             onClick={onAddAuthorization}
           >
             {localize("com_unified_permission.add_authorization")}
           </Button>
         )}
       </div>
-      <div className="max-h-[480px] min-h-11 overflow-y-auto rounded-xl border border-border-base px-3">
-        <PermissionDraftEditor
-          value={visibleRows}
-          onChange={handleVisibleRowsChange}
-          capabilities={capabilities}
-        />
+      <div
+        className="h-[400px] overflow-y-auto rounded-xl border border-border-base bg-white px-3"
+        data-testid="authorization-list-body"
+      >
+        {visibleRows.length === 0 ? (
+          <div className="flex h-full items-center justify-center">
+            <EmptyStateIllustration
+              role="img"
+              aria-label={localize("com_subscription.no_data")}
+              className="size-[120px]"
+            />
+          </div>
+        ) : (
+          <PermissionDraftEditor
+            value={visibleRows}
+            onChange={handleVisibleRowsChange}
+            capabilities={capabilities}
+          />
+        )}
       </div>
     </div>
   );

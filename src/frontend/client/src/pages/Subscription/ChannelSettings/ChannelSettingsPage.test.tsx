@@ -229,7 +229,35 @@ describe("ChannelSettingsPage", () => {
     Object.assign(mockBusiness, {
       visibility: "review",
       publishToSquare: "yes",
+      contentFilter: false,
+      createSubChannel: false,
+      subChannels: [],
     });
+  });
+
+  it("keeps channel and sub-channel filter surfaces white", () => {
+    Object.assign(mockBusiness, {
+      contentFilter: true,
+      createSubChannel: true,
+      subChannels: [
+        {
+          id: "sub-1",
+          name: "Sub channel",
+          collapsed: false,
+          groups: [],
+          topRelation: "and",
+        },
+      ],
+    });
+
+    render(<ChannelSettingsPage />);
+
+    expect(
+      screen.getByTestId("channel-filter-conditions").className,
+    ).toContain("bg-white");
+    expect(screen.getByTestId("sub-channel-list").className).toContain(
+      "bg-white",
+    );
   });
 
   it("renders preserved channel fields in a responsive two-column settings layout", () => {
@@ -237,16 +265,42 @@ describe("ChannelSettingsPage", () => {
 
     expect(screen.getByDisplayValue("Existing channel")).not.toBeNull();
     expect(screen.getByDisplayValue("Existing description")).not.toBeNull();
+    expect(screen.getByDisplayValue("Existing channel").className).toContain(
+      "bg-white",
+    );
+    expect(
+      screen.getByDisplayValue("Existing description").className,
+    ).toContain("bg-white");
     expect(screen.getByTestId("source-selector")).not.toBeNull();
     expect(screen.getByTestId("knowledge-sync")).not.toBeNull();
     const businessColumn = screen.getByTestId("channel-business-column");
+    const settingsSurface = businessColumn.closest("main");
+    expect(settingsSurface?.className).toContain("w-full");
+    expect(settingsSurface?.className).not.toContain("max-w-[1368px]");
+    expect(settingsSurface?.className).not.toContain("rounded-xl");
+    expect(settingsSurface?.parentElement?.className).not.toContain("p-2");
     expect(businessColumn.parentElement?.className).toContain("grid-cols-2");
     expect(businessColumn.parentElement?.className).toContain(
       "max-[900px]:grid-cols-1",
     );
+    expect(screen.getByTestId("authorization-list-body").className).toContain(
+      "h-[400px]",
+    );
+    expect(
+      screen.getByRole("button", {
+        name: "com_unified_permission.add_authorization",
+      }).className,
+    ).toContain("h-7");
 
     fireEvent.click(screen.getByText("draft-change"));
     expect(mockReplaceRows).toHaveBeenCalledWith([]);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "com_permission.subject_department" }),
+    );
+    expect(
+      screen.getByRole("img", { name: "com_subscription.no_data" }),
+    ).not.toBeNull();
   });
 
   it("hides access and authorization content for an edit-only collaborator", () => {

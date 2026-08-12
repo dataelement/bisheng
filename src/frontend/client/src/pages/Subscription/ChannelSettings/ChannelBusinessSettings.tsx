@@ -115,9 +115,9 @@ export function ChannelBusinessSettings({
                 placeholder={settings.localize(
                   "com_subscription.enter_channel_name",
                 )}
-                className="h-8 rounded-md pr-14"
+                className="h-8 rounded-md bg-white pr-14 placeholder:text-[#999999]"
               />
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-body-sm text-text-3">
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-body-sm text-[#999999]">
                 {Math.ceil(getFullWidthLength(form.channelName))}/
                 {MAX_CHANNEL_NAME}
               </span>
@@ -137,7 +137,7 @@ export function ChannelBusinessSettings({
               placeholder={settings.localize(
                 "com_subscription.enter_channel_description",
               )}
-              className="min-h-20 resize-none rounded-md shadow-none"
+              className="min-h-20 resize-none rounded-md bg-white shadow-none placeholder:text-[#999999]"
             />
           </div>
         </div>
@@ -161,13 +161,15 @@ export function ChannelBusinessSettings({
               onCheckedChange={form.handleContentFilterToggle}
             />
             {form.contentFilter && (
-              <FilterConditionEditor
-                groups={form.filterGroups}
-                topRelation={form.topFilterRelation}
-                onGroupsChange={form.setFilterGroups}
-                onTopRelationChange={form.setTopFilterRelation}
-                disableFirstConditionDelete
-              />
+              <div className="bg-white" data-testid="channel-filter-conditions">
+                <FilterConditionEditor
+                  groups={form.filterGroups}
+                  topRelation={form.topFilterRelation}
+                  onGroupsChange={form.setFilterGroups}
+                  onTopRelationChange={form.setTopFilterRelation}
+                  disableFirstConditionDelete
+                />
+              </div>
             )}
           </div>
           <div className="space-y-3">
@@ -180,7 +182,10 @@ export function ChannelBusinessSettings({
               onCheckedChange={form.handleCreateSubChannelToggle}
             />
             {form.createSubChannel && (
-              <div className="overflow-hidden rounded-lg border border-border-base">
+              <div
+                className="overflow-hidden rounded-lg border border-border-base bg-white"
+                data-testid="sub-channel-list"
+              >
                 {form.subChannels.map((subChannel) => (
                   <SubChannelBlock
                     key={subChannel.id}
