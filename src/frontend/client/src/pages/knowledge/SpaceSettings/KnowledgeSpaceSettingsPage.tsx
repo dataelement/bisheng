@@ -1,5 +1,5 @@
 import { Outlined } from "bisheng-icons";
-import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useMemo, useRef, useState, type ChangeEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { VisibilityType } from "~/api/knowledge";
 import type { SubjectType } from "~/api/permission";
@@ -27,6 +27,7 @@ import { Textarea } from "~/components/ui/Textarea";
 import { useAuthContext, useLocalize } from "~/hooks";
 import { useConfirm, useToastContext } from "~/Providers";
 import { getFullWidthLength, truncateByFullWidth } from "~/utils";
+import { extractApiStatusCode } from "~/pages/Subscription/errorUtils";
 import { CreatedPermissionFailureState } from "./CreatedPermissionFailureState";
 import {
   parseKnowledgeSpaceCustomTags,
@@ -50,14 +51,6 @@ export function KnowledgeSpaceSettingsPage() {
   const customTagsInputRef = useRef<HTMLInputElement | null>(null);
   const nameComposingRef = useRef(false);
   const descriptionComposingRef = useRef(false);
-
-  useEffect(() => {
-    if (!settings.submitError) return;
-    showToast({
-      message: settings.submitError.message,
-      severity: NotificationSeverity.ERROR,
-    });
-  }, [settings.submitError, showToast]);
 
   const isPrivate = settings.form.visibility === VisibilityType.PRIVATE;
   const relationModels = useMemo(
@@ -187,8 +180,13 @@ export function KnowledgeSpaceSettingsPage() {
         severity: NotificationSeverity.SUCCESS,
       });
       navigate(spaceId ? `/knowledge/space/${spaceId}` : "/knowledge");
-    } catch {
-      // The form hook normalizes and exposes submit errors for the toast effect.
+    } catch (error) {
+      if (!extractApiStatusCode(error)) {
+        showToast({
+          message: localize("com_knowledge.operation_failed_retry"),
+          severity: NotificationSeverity.ERROR,
+        });
+      }
     }
   };
 

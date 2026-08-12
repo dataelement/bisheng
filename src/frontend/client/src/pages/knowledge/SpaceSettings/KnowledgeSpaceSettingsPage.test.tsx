@@ -17,11 +17,14 @@ import {
   getGrantableRelationModels,
   getResourcePermissions,
 } from "~/api/permission";
+import { NotificationSeverity } from "~/common";
 import { KnowledgeSpaceSettingsPage } from "./KnowledgeSpaceSettingsPage";
+
+const mockShowToast = jest.fn();
 
 jest.mock("~/Providers", () => ({
   useConfirm: () => jest.fn().mockResolvedValue(true),
-  useToastContext: () => ({ showToast: jest.fn() }),
+  useToastContext: () => ({ showToast: mockShowToast }),
 }));
 
 jest.mock("~/hooks", () => ({
@@ -593,5 +596,53 @@ describe("KnowledgeSpaceSettingsPage", () => {
       ),
     );
     expect(mockedAuthorize).not.toHaveBeenCalled();
+  });
+
+  it("leaves business-error feedback to the global request interceptor", async () => {
+    mockEditCapabilities(true, true);
+    mockedGetPermissions.mockResolvedValue([
+      {
+        subject_type: "user",
+        subject_id: 9,
+        subject_name: "Ada",
+        relation: "owner",
+        model_id: "owner",
+        is_creator: false,
+      },
+    ]);
+    mockedAuthorize.mockRejectedValue(
+      Object.assign(new Error("Permission request failed"), {
+        status_code: 422,
+      }),
+    );
+
+    renderPage("/knowledge/space/7/settings");
+    await screen.findByText("change-relation");
+    fireEvent.click(screen.getByText("change-relation"));
+    fireEvent.click(
+      screen.getByRole("button", { name: "com_unified_permission.save" }),
+    );
+
+    await waitFor(() => expect(mockedAuthorize).toHaveBeenCalled());
+    expect(mockShowToast).not.toHaveBeenCalled();
+  });
+
+  it("shows one page fallback for errors not handled globally", async () => {
+    mockEditCapabilities(true, true);
+    mockedUpdateSpace.mockRejectedValue(new Error("Network Error"));
+
+    renderPage("/knowledge/space/7/settings");
+    await screen.findByDisplayValue("Product docs");
+    fireEvent.click(
+      screen.getByRole("button", { name: "com_unified_permission.save" }),
+    );
+
+    await waitFor(() =>
+      expect(mockShowToast).toHaveBeenCalledWith({
+        message: "com_knowledge.operation_failed_retry",
+        severity: NotificationSeverity.ERROR,
+      }),
+    );
+    expect(mockShowToast).toHaveBeenCalledTimes(1);
   });
 });
