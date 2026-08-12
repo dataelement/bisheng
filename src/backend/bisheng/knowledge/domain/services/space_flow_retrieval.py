@@ -273,9 +273,11 @@ class SpaceKnowledgeRetrieverTool(KnowledgeRetrieverTool):
     """F041 drop-in replacement for ``KnowledgeRetrieverTool`` that retrieves from
     knowledge spaces through the F029 view_file filter.
 
-    Exposes the same ``invoke({"query": ...})`` / ``ainvoke`` contract so the agent
-    node and assistant (which reach into ``tool.knowledge_retriever_tool``) work
-    unchanged. Sync ``_run`` hops onto the single persistent loop via
+    Exposes the same ``_run(query)`` / ``_arun(query)`` contract so the agent node
+    and assistant (which reach into ``tool.knowledge_retriever_tool``) work
+    unchanged. Callers invoke it directly rather than through ``invoke``: as an
+    internal retrieval step it must not open a tool run of its own, which would
+    show up as a stray card in the chat. Sync ``_run`` hops onto the single persistent loop via
     ``run_async_safe`` (never ``asyncio.run`` — gotcha 5.2); ``_arun`` awaits directly.
     """
 
