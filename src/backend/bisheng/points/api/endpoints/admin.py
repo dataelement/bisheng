@@ -44,9 +44,7 @@ async def list_rules(
 ):
     """列出当前租户的规则。"""
     try:
-        rows = await service.list_rules(
-            resolve_tenant_id(login_user), login_user, rule_type=rule_type, status=status
-        )
+        rows = await service.list_rules(resolve_tenant_id(login_user), login_user, rule_type=rule_type, status=status)
         return resp_200([r.model_dump() for r in rows])
     except BaseErrorCode as exc:
         return exc.return_resp_instance()
@@ -156,6 +154,47 @@ async def list_users(
         return resp_200(data.model_dump())
     except BaseErrorCode as exc:
         return exc.return_resp_instance()
+
+
+@router.get("/admin/users/{user_id}/detail")
+async def get_user_detail(
+    user_id: int,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    from_date: str | None = Query(None, description="流水起始日 YYYY-MM-DD，含当日"),
+    to_date: str | None = Query(None, description="流水结束日 YYYY-MM-DD，含当日"),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    service: PointsQueryService = Depends(get_points_query_service),
+):
+    """用户积分详情：概况卡片 + 指定时间范围内的全量流水。"""
+    from datetime import datetime, timedelta
+
+    def _day_start(value: str | None) -> datetime | None:
+        if not value:
+            return None
+        return datetime.strptime(value, "%Y-%m-%d")
+
+    def _day_end_exclusive(value: str | None) -> datetime | None:
+        start = _day_start(value)
+        return start + timedelta(days=1) if start else None
+
+    try:
+        data = await service.admin_user_detail(
+            resolve_tenant_id(login_user),
+            login_user,
+            user_id,
+            page=page,
+            page_size=page_size,
+            from_time=_day_start(from_date),
+            to_time=_day_end_exclusive(to_date),
+        )
+        return resp_200(data.model_dump())
+    except BaseErrorCode as exc:
+        return exc.return_resp_instance()
+    except ValueError:
+        from bisheng.common.errcode.points import PointsInvalidAdjustError
+
+        return PointsInvalidAdjustError.return_resp(msg="日期格式须为 YYYY-MM-DD")
 
 
 @router.get("/admin/audit-logs")
