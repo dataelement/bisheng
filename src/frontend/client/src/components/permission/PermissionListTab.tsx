@@ -12,7 +12,6 @@ import type {
   RevokeItem,
 } from "~/api/permission";
 import { Avatar, AvatarName } from "~/components/ui/Avatar";
-import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
 import { Building2, RotateCcw, Search, User, Users } from "lucide-react";
 import { LoadingIcon } from "~/components/ui/icon/Loading";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -20,44 +19,7 @@ import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
 import { PermissionLevelMenu } from "./PermissionLevelMenu";
 import { RelationModelOption } from "./RelationSelect";
-
-// Tooltip that only shows when the wrapped element's text is truncated.
-function TruncatedTooltip({
-  content,
-  className,
-  as: Tag = "span",
-  children,
-}: {
-  content: string;
-  className?: string;
-  as?: "span" | "p" | "div";
-  children: React.ReactNode;
-}) {
-  const ref = useRef<HTMLElement | null>(null);
-  const [open, setOpen] = useState(false);
-
-  const handleOpenChange = (next: boolean) => {
-    if (!next) {
-      setOpen(false);
-      return;
-    }
-    const el = ref.current;
-    if (el && (el.scrollWidth > el.clientWidth || el.scrollHeight > el.clientHeight)) {
-      setOpen(true);
-    }
-  };
-
-  return (
-    <Tooltip open={open} onOpenChange={handleOpenChange}>
-      <TooltipTrigger asChild>
-        <Tag ref={ref as React.LegacyRef<any>} className={className}>{children}</Tag>
-      </TooltipTrigger>
-      <TooltipContent side="top" className="z-[120] max-w-xs break-all">
-        {content}
-      </TooltipContent>
-    </Tooltip>
-  );
-}
+import { TruncatedTooltip } from "./TruncatedTooltip";
 
 const SUBJECT_ICONS = {
   user: User,

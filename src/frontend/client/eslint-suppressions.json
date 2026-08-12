@@ -1726,9 +1726,6 @@
     }
   },
   "src/components/permission/PermissionListTab.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
     "no-restricted-syntax": {
       "count": 4
     }

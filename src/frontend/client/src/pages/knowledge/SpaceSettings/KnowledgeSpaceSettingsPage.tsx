@@ -553,7 +553,7 @@ export function KnowledgeSpaceSettingsPage() {
         </div>
 
         <SettingsFooter
-          centered={settings.mode === "create"}
+          centered
           cancelLabel={localize("com_unified_permission.cancel")}
           submitLabel={localize(
             settings.mode === "create"
