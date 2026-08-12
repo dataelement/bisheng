@@ -70,7 +70,7 @@ interface ModelCatalogPanelProps {
   onCreateDraft: (
     changes: PermissionCatalogChange[],
   ) => Promise<PermissionCatalogDraft>
-  onDeleteModel: (modelKey: string) => Promise<void>
+  onDeleteModel: (modelKey: string, wasActive: boolean) => Promise<void>
   onReviewImpact: (draft: PermissionCatalogDraft) => void
 }
 
@@ -228,15 +228,21 @@ export function RolesAndPermissions() {
    *
    * Deleting used to mean deactivate, publish, delete, publish — four steps for
    * one removal, and the middle publish was easy to skip, leaving the model in
-   * place. A deletable model is inactive (the editor will not offer deletion
+   * place. A deletable model is switched off (the editor will not offer deletion
    * otherwise) and referenced by no grant, so there is nothing for a separate
-   * impact review to weigh.
+   * impact review to weigh. When the author has flipped the switch but not yet
+   * published it, that deactivation rides along in this batch — the server
+   * judges the precondition on what the batch publishes, not on the release it
+   * started from.
    */
-  const handleDeleteModel = async (modelKey: string) => {
+  const handleDeleteModel = async (modelKey: string, wasActive: boolean) => {
     if (!catalog) throw new Error("permission Catalog is not loaded")
-    const changes: PermissionCatalogChange[] = [
-      { type: "DELETE_MODEL", model_key: modelKey },
-    ]
+    const changes: PermissionCatalogChange[] = wasActive
+      ? [
+          { type: "SET_MODEL_ACTIVE", model_key: modelKey, active: false },
+          { type: "DELETE_MODEL", model_key: modelKey },
+        ]
+      : [{ type: "DELETE_MODEL", model_key: modelKey }]
     try {
       const draft = await handleCreateDraft(changes)
       await handlePublish(draft.draft_id, {

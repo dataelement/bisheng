@@ -354,10 +354,36 @@ describe("ModelEditor", () => {
     fireEvent.click(screen.getByRole("button", { name: "model.delete" }))
 
     await waitFor(() => {
-      expect(onDeleteModel).toHaveBeenCalledWith(customModel.key)
+      expect(onDeleteModel).toHaveBeenCalledWith(customModel.key, false)
     })
     // No draft is left dangling for someone to publish later.
     expect(onCreateDraft).not.toHaveBeenCalled()
+  })
+
+  it("frees the delete button as soon as the switch is turned off", async () => {
+    // Reading the saved state instead meant flipping the switch changed
+    // nothing until a separate publish — the button just sat there dead. The
+    // unpublished deactivation is handed to the caller to send along.
+    render(
+      <ModelEditor
+        model={customModel}
+        actions={actions}
+        onCreateDraft={onCreateDraft}
+        onDeleteModel={onDeleteModel}
+        onReviewImpact={onReviewImpact}
+      />,
+    )
+
+    expect(screen.getByRole("button", { name: "model.delete" })).toBeDisabled()
+    fireEvent.click(screen.getByLabelText("model.active"))
+
+    const button = screen.getByRole("button", { name: "model.delete" })
+    expect(button).toBeEnabled()
+    fireEvent.click(button)
+
+    await waitFor(() => {
+      expect(onDeleteModel).toHaveBeenCalledWith(customModel.key, true)
+    })
   })
 
   it("blocks invalid custom selections until unavailable actions are removed", () => {

@@ -40,7 +40,7 @@ interface ModelEditorProps {
   onCreateDraft: (
     changes: PermissionCatalogChange[],
   ) => Promise<PermissionCatalogDraft>
-  onDeleteModel: (modelKey: string) => Promise<void>
+  onDeleteModel: (modelKey: string, wasActive: boolean) => Promise<void>
   onReviewImpact: (draft: PermissionCatalogDraft) => void
 }
 
@@ -200,18 +200,21 @@ export function ModelEditor({
   }
 
   const handleDelete = () => {
-    if (disabled || saving || createMode || isStandard || model.active) return
+    if (disabled || saving || createMode || isStandard || active) return
     // Deleting publishes itself — the old deactivate-publish-delete-publish
-    // dance lost people halfway through. Turning the model off is left to the
-    // author though: it is the one precondition they can see and undo, and
-    // doing it for them hid what deletion actually costs.
+    // dance lost people halfway through. Turning the model off stays the
+    // author's move, since it is the one precondition they can see and undo,
+    // but the switch they just flipped counts: gating on the *saved* state
+    // meant flipping it off changed nothing until a separate publish, which
+    // reads as a dead button. `model.active` tells the caller whether that
+    // deactivation still has to ride along in the same batch.
     bsConfirm({
       desc: t("model.confirmDelete", { name: model.name }),
       okTxt: t("model.delete"),
       async onOk(next) {
         setSaving(true)
         try {
-          await onDeleteModel(model.key)
+          await onDeleteModel(model.key, model.active)
         } finally {
           setSaving(false)
           next()
@@ -396,14 +399,14 @@ export function ModelEditor({
                     type="button"
                     variant="outline"
                     className="min-h-11 text-red-700"
-                    disabled={disabled || saving || model.active}
+                    disabled={disabled || saving || active}
                     onClick={handleDelete}
                   >
                     {t("model.delete")}
                   </Button>
                 </span>
               </TooltipTrigger>
-              {model.active && (
+              {active && (
                 <TooltipContent>{t("model.disableBeforeDelete")}</TooltipContent>
               )}
             </Tooltip>
