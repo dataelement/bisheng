@@ -7,6 +7,37 @@ class FileUploadError(BaseErrorCode):
     Msg: str = "Upload Failed"
 
 
+# ---------------------------------------------------------------------------
+# Task-mode FOLDER upload limits (11021–11023). Numbered next to FileUploadError
+# (11020) because they belong to the same upload family. The frontend enforces
+# the same three numbers for instant feedback; these are the server-side gate,
+# so a user normally never sees them.
+# ---------------------------------------------------------------------------
+
+
+class LinsightFolderFileCountExceededError(BaseErrorCode):
+    Code: int = 11021
+    Msg: str = "A folder upload may contain at most 100 files"
+
+
+class LinsightFolderTotalSizeExceededError(BaseErrorCode):
+    Code: int = 11022
+    Msg: str = "A folder upload may not exceed 500MB in total"
+
+
+class LinsightFolderDepthExceededError(BaseErrorCode):
+    Code: int = 11023
+    Msg: str = "Folder nesting may not exceed 10 levels"
+
+
+# Per-file ceiling on the task-mode upload endpoint. It had none until folder
+# upload made the gap material — 100 files arrive in one go, and a frontend-only
+# check is a hint, not a limit.
+class LinsightFileTooLargeError(BaseErrorCode):
+    Code: int = 11024
+    Msg: str = "The file exceeds the upload size limit"
+
+
 # Your Idea has run out of uses, please use the new invite code to activate the Idea feature
 class LinsightUseUpError(BaseErrorCode):
     Code: int = 11030

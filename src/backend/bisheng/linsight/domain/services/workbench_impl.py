@@ -17,6 +17,12 @@ from loguru import logger
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
+from bisheng.common.errcode.linsight import (
+    LinsightFileTooLargeError,
+    LinsightFolderDepthExceededError,
+    LinsightFolderFileCountExceededError,
+    LinsightFolderTotalSizeExceededError,
+)
 from bisheng.common.schemas.telemetry.event_data_schema import NewMessageSessionEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
@@ -93,6 +99,17 @@ class LinsightWorkbenchImpl:
     # this, the .md view is the only thing worth the storage and the download
     # latency on every task start.
     _RAW_KEEP_MAX_BYTES = 50 * 1024 * 1024
+
+    # ---- Folder upload (task mode) ------------------------------------------
+    # A submission that carries any ``relative_path`` is a folder upload and is
+    # gated by these three numbers. The frontend enforces the same values before
+    # a single byte is uploaded (instant feedback, all-or-nothing); these are the
+    # authoritative server-side check, so they are normally never hit.
+    # Depth is counted in DIRECTORY segments, matching knowledge-space
+    # ``MAX_FOLDER_DEPTH``; the file name itself does not count as a level.
+    _FOLDER_MAX_FILES = 100
+    _FOLDER_MAX_TOTAL_BYTES = 500 * 1024 * 1024
+    _FOLDER_MAX_DEPTH = 10
 
     # ``mimetypes`` reads the SYSTEM mime database, which on a stock Linux image
     # (every deploy target, and CI) knows nothing about the OOXML types — xlsx /
@@ -321,6 +338,11 @@ class LinsightWorkbenchImpl:
 
             return message_session, linsight_session_version
 
+        except BaseErrorCode:
+            # A typed business error (e.g. the folder-upload limits) already carries
+            # the code the frontend branches on — re-wrapping it as a generic
+            # LinsightError would launder that away into "submit failed".
+            raise
         except Exception as e:
             logger.error(f"Failed to submit user question: {e!s}")
             raise cls.LinsightError(f"Failed to submit user question: {e!s}")
@@ -403,6 +425,9 @@ class LinsightWorkbenchImpl:
             if file.parsing_status != "completed":
                 raise cls.LinsightError(f"file {file.file_name} status is error: {file.parsing_status}")
 
+        # Folder upload: reject an over-sized batch before any byte is copied.
+        cls._validate_folder_upload(files)
+
         # Daily-bucket files (unified-resource) are parsed on-the-fly; only the
         # linsight-pipeline files need a Redis temp_info lookup.
         linsight_files = [f for f in files if not f.file_url]
@@ -477,6 +502,7 @@ class LinsightWorkbenchImpl:
             return {
                 "file_id": submit_file.file_id,
                 "original_filename": submit_file.file_name,
+                "relative_path": submit_file.relative_path,
                 "parsing_status": "failed",
                 "valid": False,
                 "error_message": f"file download failed: {e}",
@@ -582,6 +608,7 @@ class LinsightWorkbenchImpl:
         entry: dict = {
             "file_id": submit_file.file_id,
             "original_filename": file_name,
+            "relative_path": submit_file.relative_path,
             "parsing_status": "completed",
             "valid": True,
             "markdown_file_path": formal_object,
@@ -652,6 +679,7 @@ class LinsightWorkbenchImpl:
         entry: dict = {
             "file_id": submit_file.file_id,
             "original_filename": file_name,
+            "relative_path": submit_file.relative_path,
             "parsing_status": "failed" if usable else "unsupported",
             "valid": False,
             "error_message": (
@@ -712,6 +740,7 @@ class LinsightWorkbenchImpl:
                 return {
                     "file_id": submit_file.file_id,
                     "original_filename": submit_file.file_name,
+                    "relative_path": submit_file.relative_path,
                     "parsing_status": "expired",
                     "valid": False,
                     "error_message": "file metadata expired, please re-upload",
@@ -728,6 +757,9 @@ class LinsightWorkbenchImpl:
         entry: dict = dict(temp_info) if temp_info else {}
         entry["file_id"] = submit_file.file_id
         entry.setdefault("original_filename", submit_file.file_name)
+        # Always from THIS submission: temp_info is keyed by file_id and predates
+        # the folder pick, so a stale value there must not win.
+        entry["relative_path"] = submit_file.relative_path
         entry["parsing_status"] = "completed"
         entry["valid"] = True
         entry["markdown_file_path"] = formal_object
@@ -814,25 +846,92 @@ class LinsightWorkbenchImpl:
         base = base.replace("..", "_").strip()  # path traversal
         return base or "file"
 
-    @staticmethod
-    def _dedupe_workspace_name(filename: str, used_names: set[str] | None) -> str:
-        """Make ``filename`` unique within one submission (append ``-2``, ``-3`` …).
+    @classmethod
+    def _safe_relpath(cls, relative_path: str | None) -> str:
+        """Sanitized DIRECTORY prefix for a folder-uploaded file, no trailing slash.
 
-        Without this, two distinct files sharing a base name would map to the same
-        ``uploads/<name>`` key and the second would overwrite the first.
+        ``年报/2024/Q1.xlsx`` -> ``年报/2024``. A plain upload (None/empty, or a
+        bare file name) yields ``""``, which keeps the historical flat
+        ``uploads/<name>`` layout untouched.
+
+        This is the counterpart ``_safe_basename`` cannot be: that one collapses
+        separators to ``_``, which is right for a file NAME and fatal for a folder
+        upload. Traversal is neutralized the way ``skill_store._safe_rel_path``
+        does it — every ``.`` / ``..`` / empty segment is dropped, so a crafted
+        path cannot escape ``uploads/`` no matter what the client sends. Each
+        surviving segment then goes through ``_safe_basename``, so control
+        characters and stray separators are handled exactly as in file names.
+
+        Depth is clamped defensively; ``_validate_folder_upload`` already rejects
+        an over-deep batch outright, so clamping here is belt-and-braces rather
+        than the user-facing rule.
+        """
+        raw = (relative_path or "").strip().replace("\\", "/")
+        if not raw:
+            return ""
+        segments = [seg for seg in raw.split("/") if seg and seg not in (".", "..")]
+        # The trailing segment is the file name — it is sanitized separately by the
+        # caller and must never become a directory.
+        dir_segments = segments[:-1][: cls._FOLDER_MAX_DEPTH]
+        return "/".join(cls._safe_basename(seg) for seg in dir_segments)
+
+    @classmethod
+    def _validate_folder_upload(cls, files: list[SubmitFileSchema]) -> None:
+        """Gate a folder upload on file count / total size / nesting depth.
+
+        Only engages when at least one file carries a ``relative_path``; a plain
+        multi-file selection stays unbounded, exactly as before.
+
+        Rejection is all-or-nothing on purpose. Silently truncating to the first
+        100 files would hand the user a workspace that looks complete and is not —
+        the agent would summarize a partial folder without anyone noticing.
+        """
+        if not any((f.relative_path or "").strip() for f in files):
+            return
+
+        if len(files) > cls._FOLDER_MAX_FILES:
+            raise LinsightFolderFileCountExceededError()
+
+        total_bytes = sum(max(f.size or 0, 0) for f in files)
+        if total_bytes > cls._FOLDER_MAX_TOTAL_BYTES:
+            raise LinsightFolderTotalSizeExceededError()
+
+        for file in files:
+            raw = (file.relative_path or "").strip().replace("\\", "/")
+            if not raw:
+                continue
+            segments = [seg for seg in raw.split("/") if seg and seg not in (".", "..")]
+            # Directory levels only; the file name itself is not a level.
+            if len(segments) - 1 > cls._FOLDER_MAX_DEPTH:
+                raise LinsightFolderDepthExceededError()
+
+    @staticmethod
+    def _dedupe_workspace_name(rel_path: str, used_names: set[str] | None) -> str:
+        """Make ``rel_path`` unique within one submission (append ``-2``, ``-3`` …).
+
+        Without this, two distinct files sharing a workspace path would map to the
+        same ``uploads/<path>`` key and the second would overwrite the first.
+
+        The uniqueness namespace is the FULL relative path, so a folder upload
+        keeps ``报告/summary.md`` and ``附件/summary.md`` side by side — only a real
+        collision (same directory, same name) earns a suffix. The suffix always
+        lands on the file name, never on a directory segment, so a directory named
+        ``v1.2`` does not get its "extension" rewritten.
         """
         if used_names is None:
-            return filename
-        if filename not in used_names:
-            used_names.add(filename)
-            return filename
+            return rel_path
+        if rel_path not in used_names:
+            used_names.add(rel_path)
+            return rel_path
+        dir_part, slash, filename = rel_path.rpartition("/")
+        prefix = f"{dir_part}{slash}"
         stem, dot, ext = filename.rpartition(".")
         base = stem if dot else filename
         suffix = f".{ext}" if dot else ""
         i = 2
-        while f"{base}-{i}{suffix}" in used_names:
+        while f"{prefix}{base}-{i}{suffix}" in used_names:
             i += 1
-        unique = f"{base}-{i}{suffix}"
+        unique = f"{prefix}{base}-{i}{suffix}"
         used_names.add(unique)
         return unique
 
@@ -854,6 +953,15 @@ class LinsightWorkbenchImpl:
           - **plus**, for ``_RAW_KEEP_EXTS`` that parsed fine, the ORIGINAL lands
             next to its markdown as ``uploads/<original-name>.<ext>``.
 
+        Folder upload: when the entry carries a ``relative_path``, its directory
+        part is rebuilt underneath ``uploads/`` — ``年报/2024/Q1.xlsx`` lands at
+        ``uploads/年报/2024/Q1.md`` (+ the original beside it). The tree is the
+        user's own organization of the material and often carries meaning the file
+        names alone do not, so flattening it would lose information the agent needs.
+        Everything downstream is already nesting-safe: ``WorkspaceBackend``
+        read/write/ls/glob/grep, the local write-through cache, and the cross-round
+        ``seed_workspace_from_previous`` copy.
+
         The dual-track write is deliberate: markdown is the model's reading view
         (``read_file``, token-cheap), the original is the tool's data
         (``bisheng_code_interpreter`` with pandas / python-docx / fitz). A
@@ -869,12 +977,13 @@ class LinsightWorkbenchImpl:
         from bisheng.linsight.domain.services.workspace_backend import WORKSPACE_PREFIX
 
         safe = cls._safe_basename(entry["original_filename"])
+        rel_dir = cls._safe_relpath(entry.get("relative_path"))
         if as_markdown:
             stem = safe.rsplit(".", 1)[0] if "." in safe else safe
             filename = f"{stem}.md"
         else:
             filename = safe
-        filename = cls._dedupe_workspace_name(filename, used_names)
+        filename = cls._dedupe_workspace_name(f"{rel_dir}/{filename}" if rel_dir else filename, used_names)
         rel_path = f"uploads/{filename}"
         object_key = f"{WORKSPACE_PREFIX}/{chat_id}/{rel_path}"
 
@@ -921,6 +1030,11 @@ class LinsightWorkbenchImpl:
         ``_ingest_daily_file``). Best-effort: a failure here must never sink an
         attachment whose markdown view already landed — the task stays usable,
         just without the precise-data track.
+
+        The original lands in the SAME directory as its markdown view, folder
+        upload included (``uploads/年报/2024/Q1.xlsx`` next to ``…/Q1.md``), because
+        ``prepare_file_list`` hands the model the raw path relative to the code
+        interpreter's working directory and the local prefetch mirrors that layout.
         """
         from bisheng.linsight.domain.services.workspace_backend import WORKSPACE_PREFIX
 
@@ -934,7 +1048,8 @@ class LinsightWorkbenchImpl:
                 logger.warning("original {} is empty/missing; workspace keeps only the markdown view", original_object)
                 return
 
-            raw_filename = cls._dedupe_workspace_name(safe_name, used_names)
+            rel_dir = cls._safe_relpath(entry.get("relative_path"))
+            raw_filename = cls._dedupe_workspace_name(f"{rel_dir}/{safe_name}" if rel_dir else safe_name, used_names)
             rel_path = f"uploads/{raw_filename}"
             content_type = cls._content_type_for(raw_filename)
             await minio_client.put_object(
@@ -1067,6 +1182,12 @@ class LinsightWorkbenchImpl:
         behind ARE announced, so the model does not meet an unreadable binary via
         ``ls`` and try to ``read_file`` it.
 
+        Folder upload changes the rendering, not the contract: pointers are grouped
+        under their directory, and past ``_FILE_LIST_MAX_ITEMS`` attachments the
+        block degrades to a per-directory summary that hands the model ``ls`` /
+        ``glob`` instead of a hundred pointer lines. A flat submission renders
+        exactly as it always did.
+
         Args:
             has_code_interpreter: whether the sandboxed code interpreter is bound
                 this run. Gates the "open the original with Python" guidance —
@@ -1081,13 +1202,18 @@ class LinsightWorkbenchImpl:
         if not session_version.files:
             return []
 
-        items: list[str] = []
+        # (directory, rendered pointer, display name) per announced attachment.
+        # The directory comes from the FOLDER-UPLOAD relative path, never from
+        # parsing ``workspace_path`` — the legacy ``/uploads/<name>/index.md``
+        # fallback shape would otherwise read as a directory that does not exist.
+        records: list[tuple[str, str, str]] = []
         has_raw = False
         has_unparsed = False
         has_media = False
         for file in session_version.files:
             path = file.get("workspace_path") or f"/uploads/{file.get('file_id')}/index.md"
             name = file.get("original_filename", "")
+            rel_dir = cls._safe_relpath(file.get("relative_path"))
 
             if file.get("valid") is False:
                 # Previously skipped outright, which left the model to discover the
@@ -1101,10 +1227,18 @@ class LinsightWorkbenchImpl:
                     # never hears of it. Expired metadata stays skipped — there is
                     # nothing to say beyond "re-upload", which the chip already says.
                     if file.get("parsing_status") == "unsupported":
-                        items.append(f"- name: {name}\n  note: 该格式无法解析，也无法在工作区中读取，本次不可用")
+                        records.append(
+                            (rel_dir, f"- name: {name}\n  note: 该格式无法解析，也无法在工作区中读取，本次不可用", name)
+                        )
                     continue
                 has_unparsed = True
-                items.append(f"- path: {path}\n  name: {name}\n  note: 解析失败，工作区只有原件（不可 read_file）")
+                records.append(
+                    (
+                        rel_dir,
+                        f"- path: {path}\n  name: {name}\n  note: 解析失败，工作区只有原件（不可 read_file）",
+                        name,
+                    )
+                )
                 continue
 
             item = "- path: {path}\n  name: {name}\n  lines: {lines}\n  images: {images}".format(
@@ -1124,12 +1258,19 @@ class LinsightWorkbenchImpl:
             if cls._is_media_filename(name):
                 has_media = True
                 item += "\n  note: 音视频已 ASR 转写；path 为转写文本（.md），name 为原始上传文件名（非扩展名错误）"
-            items.append(item)
+            records.append((rel_dir, item, name))
 
-        if not items:
+        if not records:
             return []
 
         header_parts: list[str] = []
+        has_folder = any(rel_dir for rel_dir, _, _ in records)
+        if has_folder:
+            header_parts.append(
+                "说明（文件夹）：本次上传包含目录结构，下方按目录分组。目录层级是用户自己的组织方式，"
+                "常常带有分类/时间/版本等含义，理解与产出时请保留这一结构。"
+                '需要进一步定位时用 ls("/uploads/<目录>") 或 glob（如 "/uploads/**/*.xlsx"），不要假设文件不存在。\n'
+            )
         if has_media:
             header_parts.append(
                 "说明（音视频）：<uploaded_files> 中 name 为 .mp3/.mp4 等原始上传名，"
@@ -1158,8 +1299,66 @@ class LinsightWorkbenchImpl:
                 )
         header = "".join(header_parts)
 
-        block = "<uploaded_files>\n" + header + "\n".join(items) + "\n</uploaded_files>"
+        if len(records) > cls._FILE_LIST_MAX_ITEMS:
+            body = cls._render_upload_dir_summary(records)
+        else:
+            body = cls._render_upload_pointers(records, grouped=has_folder)
+
+        block = "<uploaded_files>\n" + header + body + "\n</uploaded_files>"
         return [block]
+
+    # Past this many attachments a per-file pointer list stops being an index and
+    # starts being noise that crowds out the user's actual question. A folder
+    # upload is capped at _FOLDER_MAX_FILES, so the summary mode below is what a
+    # large folder actually renders as.
+    _FILE_LIST_MAX_ITEMS = 40
+
+    @staticmethod
+    def _group_upload_records(records: list[tuple[str, str, str]]) -> dict[str, list[tuple[str, str]]]:
+        """Group ``(dir, pointer, name)`` by directory, preserving first-seen order."""
+        grouped: dict[str, list[tuple[str, str]]] = {}
+        for rel_dir, text, name in records:
+            grouped.setdefault(rel_dir, []).append((text, name))
+        return grouped
+
+    @classmethod
+    def _render_upload_pointers(cls, records: list[tuple[str, str, str]], *, grouped: bool) -> str:
+        """Full per-file pointer list, optionally grouped under directory headings."""
+        if not grouped:
+            return "\n".join(text for _, text, _ in records)
+
+        chunks: list[str] = []
+        for rel_dir, entries in cls._group_upload_records(records).items():
+            heading = f"[目录] /uploads/{rel_dir}/" if rel_dir else "[目录] /uploads/"
+            chunks.append(heading + "\n" + "\n".join(text for text, _ in entries))
+        return "\n".join(chunks)
+
+    @classmethod
+    def _render_upload_dir_summary(cls, records: list[tuple[str, str, str]]) -> str:
+        """Directory-level summary used when the per-file list would be too long.
+
+        Emits one entry per directory with a file count and an extension
+        breakdown, and points the model at ``ls`` / ``glob`` for the actual names.
+        The pointer block is an index, not the data — the model reads bodies on
+        demand either way, so a summary loses nothing but the token cost.
+        """
+        lines: list[str] = []
+        total = 0
+        for rel_dir, entries in cls._group_upload_records(records).items():
+            total += len(entries)
+            ext_counts: dict[str, int] = {}
+            for _, name in entries:
+                ext = os.path.splitext(name or "")[1].lower().lstrip(".") or "无扩展名"
+                ext_counts[ext] = ext_counts.get(ext, 0) + 1
+            types = "、".join(f"{ext}×{count}" for ext, count in sorted(ext_counts.items(), key=lambda kv: -kv[1]))
+            path = f"/uploads/{rel_dir}/" if rel_dir else "/uploads/"
+            lines.append(f"- dir: {path}\n  files: {len(entries)}\n  types: {types}")
+        lines.append(
+            f"共 {total} 个文件，数量较多，此处只列目录概览。"
+            '用 ls("/uploads/<目录>") 列出具体文件名，用 glob（如 "/uploads/**/*.xlsx"）按类型定位，'
+            "再对需要的文件 read_file。"
+        )
+        return "\n".join(lines)
 
     @classmethod
     async def prepare_knowledge_list(cls, knowledge_list: list[KnowledgeRead]) -> list[str]:
@@ -1311,10 +1510,20 @@ class LinsightWorkbenchImpl:
         Returns:
             File Information Dictionary
         """
-        # Generate file information
-        file_id = uuid.uuid4().hex[:8]  # Buat8Bit Unique FileID
+        from bisheng.knowledge.domain.upload_file_size import get_max_upload_bytes
+
         # url <g id="Bold">Code</g> decode The file name
         original_filename = unquote(file.filename)
+
+        # Per-file ceiling, shared with the knowledge upload path so documents and
+        # media keep their (configurable) separate limits. Task mode had no
+        # server-side size check at all — tolerable while files arrived one at a
+        # time, not once a folder upload sends a hundred in one go.
+        if file.size is not None and file.size > get_max_upload_bytes(original_filename):
+            raise LinsightFileTooLargeError()
+
+        # Generate file information
+        file_id = uuid.uuid4().hex[:8]  # Buat8Bit Unique FileID
         file_extension = original_filename.split(".")[-1] if "." in original_filename else ""
         unique_filename = f"{file_id}.{file_extension}"
 

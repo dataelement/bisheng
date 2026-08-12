@@ -8,6 +8,7 @@ import {
     getMaxFileSizeMBForFile,
     type UploadSizeLimits,
 } from "../knowledgeUtils";
+import { extractDroppedDirectories, readFolderFilesRecursive } from "~/utils/folderUpload";
 import { useLocalize } from "~/hooks";
 
 // Only react to OS file-upload drags. Internal drags (e.g. F034 move, which
@@ -32,67 +33,6 @@ interface UseFileDragDropOptions {
     uploadSizeLimits?: UploadSizeLimits;
     /** Whether ETL4LM service is deployed; controls which extensions/MIME types are accepted. */
     enableEtl4lm?: boolean;
-}
-
-/**
- * Recursively read every file under a dropped directory (F034 §5.5: nested
- * upload — the backend rebuilds the whole tree). Each returned File gets a
- * synthetic `webkitRelativePath` of `"<dir>/<sub>/<file>"` so it flows through
- * the folder-upload pipeline exactly like the `webkitdirectory` picker.
- * `readEntries` returns in batches, so it must be called repeatedly until it
- * yields an empty list.
- */
-function readFolderFilesRecursive(
-    dirEntry: FileSystemDirectoryEntry,
-    pathPrefix: string,
-): Promise<File[]> {
-    const prefix = pathPrefix ? `${pathPrefix}/${dirEntry.name}` : dirEntry.name;
-    return new Promise((resolve) => {
-        const reader = dirEntry.createReader();
-        const collected: Promise<File[] | File | null>[] = [];
-        const finish = () =>
-            Promise.all(collected).then((parts) =>
-                resolve(parts.flat().filter((f): f is File => f != null)),
-            );
-        const readBatch = () => {
-            reader.readEntries((batch) => {
-                if (batch.length === 0) {
-                    finish();
-                    return;
-                }
-                for (const ent of batch) {
-                    if (ent.isFile) {
-                        const fileEntry = ent as FileSystemFileEntry;
-                        collected.push(
-                            new Promise<File | null>((res) => {
-                                fileEntry.file(
-                                    (f) => {
-                                        try {
-                                            Object.defineProperty(f, "webkitRelativePath", {
-                                                value: `${prefix}/${f.name}`,
-                                                configurable: true,
-                                            });
-                                        } catch {
-                                            // Property locked on this engine; the folder filter
-                                            // then falls back to file.name and drops it — safe.
-                                        }
-                                        res(f);
-                                    },
-                                    () => res(null),
-                                );
-                            }),
-                        );
-                    } else if (ent.isDirectory) {
-                        collected.push(
-                            readFolderFilesRecursive(ent as FileSystemDirectoryEntry, prefix),
-                        );
-                    }
-                }
-                readBatch();
-            }, finish);
-        };
-        readBatch();
-    });
 }
 
 /**
@@ -183,16 +123,8 @@ export function useFileDragDrop({
             // entries must be read out synchronously here — the DataTransferItemList
             // is invalidated once this handler returns, though the FileSystemEntry
             // objects it yields stay valid for the async directory read.
-            const items = e.dataTransfer.items;
-            if (onUploadFolder && items && items.length > 0) {
-                let dirEntry: FileSystemDirectoryEntry | null = null;
-                for (let i = 0; i < items.length; i++) {
-                    const entry = items[i].webkitGetAsEntry?.();
-                    if (entry?.isDirectory) {
-                        dirEntry = entry as FileSystemDirectoryEntry;
-                        break;
-                    }
-                }
+            if (onUploadFolder) {
+                const dirEntry = extractDroppedDirectories(e.dataTransfer)[0] ?? null;
                 if (dirEntry) {
                     // handleUploadFolder owns count cap / hidden / dup-name / silent
                     // filtering, so read the whole tree (nested, F034 §5.5) and hand

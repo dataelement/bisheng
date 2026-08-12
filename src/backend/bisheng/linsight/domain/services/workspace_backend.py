@@ -534,7 +534,11 @@ class WorkspaceBackend(FilesystemBackend):
         rel_prefix = self._ws_rel(path) if path else ""
         object_prefix = f"{WORKSPACE_PREFIX}/{self.svid}/"
         if rel_prefix:
-            object_prefix += rel_prefix
+            # Terminate the prefix at a directory boundary. Without the slash,
+            # ``ls("/uploads/年报")`` also matches a sibling ``年报备份/`` — harmless
+            # when uploads were flat, wrong as soon as a folder upload puts real
+            # sibling directories in there.
+            object_prefix += rel_prefix.rstrip("/") + "/"
         entries: list[FileInfo] = []
         key_prefix = f"{WORKSPACE_PREFIX}/{self.svid}/"
         try:

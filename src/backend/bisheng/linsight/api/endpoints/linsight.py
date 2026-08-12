@@ -15,6 +15,7 @@ from bisheng.api.services.invite_code.invite_code import InviteCodeService
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
 from bisheng.common.errcode.linsight import (
     FileUploadError,
@@ -85,6 +86,10 @@ async def upload_file(
             "file_name": upload_result.get("original_filename"),
             "parsing_status": upload_result.get("parsing_status"),
         }
+    except BaseErrorCode as e:
+        # Typed business errors (e.g. the per-file size ceiling) keep their own
+        # code so the client can tell "too large" apart from a generic failure.
+        return e.return_resp_instance()
     except Exception as e:
         logger.error(f"Upload Failed: {e!s}")
         return FileUploadError.return_resp()
@@ -199,6 +204,11 @@ async def submit_linsight_workbench(
                 "message_session": message_session_model.model_dump(),
                 "linsight_session_version": linsight_session_version_model.model_dump(),
             }
+        except BaseErrorCode as e:
+            # Typed business errors (folder-upload limits, …) keep their own code so
+            # the client can show the right copy instead of a generic submit failure.
+            yield e.to_sse_event_instance()
+            return
         except Exception as e:
             yield LinsightQuestionError(exception=e).to_sse_event_instance()
             return

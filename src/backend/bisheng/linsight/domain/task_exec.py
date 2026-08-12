@@ -756,6 +756,10 @@ class LinsightWorkflowTask:
             raise ValueError("file entry missing markdown_file_path")
         file_name = file_info.get("markdown_filename", os.path.basename(object_name))
         file_path = os.path.join(target_dir, file_name)
+        # ``markdown_filename`` carries the folder-upload sub-path (``年报/2024/Q1.md``)
+        # for files that came in as part of a directory, so the parent dirs have to
+        # exist before the write. os.makedirs on the flat case is a no-op.
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
         minio_client = await get_minio_storage()
         try:
             file_url = await minio_client.get_share_link(object_name, clear_host=False)

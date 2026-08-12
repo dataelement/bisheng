@@ -121,6 +121,8 @@ export function TaskModeInput({ conversationId = 'new', disabled = false, onFoll
 
     // Drag & paste upload support
     const { isDragging, handlePaste } = useFileDropAndPaste({
+        // Task mode: a dropped directory is expanded with its tree preserved.
+        allowFolders: true,
         enabled: !disabled,
         onFilesReceived: (files: FileList | File[]) => {
             inputFilesRef.current?.upload(files);
@@ -234,6 +236,10 @@ export function TaskModeInput({ conversationId = 'new', disabled = false, onFoll
                 file_id: item.file_id,
                 file_name: item.filename || item.file_name || item.name,
                 parsing_status: item.parsing_status || 'completed',
+                // Folder upload: the backend rebuilds this tree under the task
+                // workspace's uploads/ prefix. Undefined for a loose file.
+                relative_path: item.relative_path,
+                size: item.size,
             })),
             question: trimmed,
             tools: submissionTools as any,
@@ -279,10 +285,12 @@ export function TaskModeInput({ conversationId = 'new', disabled = false, onFoll
         setSkills((prev) => prev.filter((s) => s.name !== skill.name));
 
     const handleRemoveFile = (file: any) => {
-        inputFilesRef.current?.removeByName?.(file.name || file.filename);
+        // clientId, not name: a folder upload can carry the same file name in
+        // several subdirectories, and removing by name would take out all of them.
+        inputFilesRef.current?.removeByClientId?.(file.clientId);
         setContext((prev) => ({
             ...prev,
-            files: prev.files.filter((i: any) => (i.file_id || i.name) !== (file.file_id || file.name)),
+            files: prev.files.filter((i: any) => String(i.clientId) !== String(file.clientId)),
         }));
     };
 
@@ -320,6 +328,8 @@ export function TaskModeInput({ conversationId = 'new', disabled = false, onFoll
                                 filename: f.name,
                                 file_name: f.name,
                                 parsing_status: f.parsingStatus,
+                                // Drives the folder chip grouping in ContextChips.
+                                relative_path: f.relativePath,
                             })),
                         );
                     }}
@@ -373,6 +383,7 @@ export function TaskModeInput({ conversationId = 'new', disabled = false, onFoll
                         <PlusMenu
                             disabled={disabled}
                             onUploadFile={() => inputFilesRef.current?.openPicker?.()}
+                            onUploadFolder={() => inputFilesRef.current?.openFolderPicker?.()}
                             taskModeActive
                             onToggleTaskMode={handleExitTaskMode}
                             selectedSkills={skills}

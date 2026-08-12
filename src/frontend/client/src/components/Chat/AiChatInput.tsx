@@ -276,6 +276,9 @@ const AiChatInput = memo(
         // Drag & paste file support (only when not disabled by exclusion)
         const { isDragging, handlePaste } = useFileDropAndPaste({
             enabled: showUpload && !disabled && !filesDisabled,
+            // Task mode only: a dropped directory is expanded with its tree
+            // preserved. Daily chat has no workspace to rebuild a tree in.
+            allowFolders: isLingsi,
             onFilesReceived: (files: FileList | File[]) => {
                 inputFilesRef.current?.upload(files);
             },
@@ -391,8 +394,10 @@ const AiChatInput = memo(
                             kbs={selectedOrgKbs}
                             skills={taskMode ? dailySkills : []}
                             onRemoveFile={(file) => {
-                                inputFilesRef.current?.removeByName?.(file.name);
-                                setChatFiles((prev) => (prev || []).filter((i) => i.name !== file.name));
+                                // clientId, not name: a folder upload can carry the
+                                // same file name in several subdirectories.
+                                inputFilesRef.current?.removeByClientId?.(file.clientId);
+                                setChatFiles((prev) => (prev || []).filter((i) => String(i.clientId) !== String(file.clientId)));
                             }}
                             onRemoveKb={onSelectedOrgKbsChange ? (kb) => {
                                 onSelectedOrgKbsChange(selectedOrgKbs.filter((i) => i.id !== kb.id));
@@ -428,6 +433,8 @@ const AiChatInput = memo(
                                         id: String(f.id),
                                         clientId: String(f.id),
                                         name: String(f.name || ""),
+                                        // Drives the folder chip grouping in AttachmentBar.
+                                        ...(f.relativePath ? { relative_path: f.relativePath } : {}),
                                         ...(f.previewUrl ? { previewUrl: f.previewUrl } : {}),
                                         ...(f.mediaPreviewUrl ? { mediaPreviewUrl: f.mediaPreviewUrl } : {}),
                                         ...(f.mediaCoverUrl ? { mediaCoverUrl: f.mediaCoverUrl } : {}),
@@ -446,6 +453,12 @@ const AiChatInput = memo(
                                         name: f.name,
                                         filename: f.name,
                                         file_name: f.name,
+                                        // Folder upload: kept for the chip grouping AND threaded
+                                        // to the backend so the workspace rebuilds the tree.
+                                        relative_path: f.relativePath && f.relativePath !== f.name
+                                            ? f.relativePath
+                                            : undefined,
+                                        size: f.size,
                                         parsing_status: f.parsingStatus || 'completed',
                                         parsingState:
                                             f.parsingStatus && !['completed', 'failed'].includes(f.parsingStatus)
@@ -531,6 +544,11 @@ const AiChatInput = memo(
                                     showFileUpload={showUpload}
                                     fileUploadDisabled={filesDisabled}
                                     onFileUploadClick={() => inputFilesRef.current?.openPicker?.()}
+                                    // Folder upload is task-mode only: daily chat has no agent
+                                    // workspace to rebuild the directory tree in.
+                                    onFolderUploadClick={isLingsi
+                                        ? () => inputFilesRef.current?.openFolderPicker?.()
+                                        : undefined}
                                     // Task mode toggle present in both modes (plan-mode style).
                                     // Gated by the caller's taskModeEntry feature (role permission in
                                     // ChatView); the legacy global `linsight_entry` switch was retired

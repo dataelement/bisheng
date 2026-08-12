@@ -23,6 +23,11 @@ interface PlusMenuProps {
     disabled?: boolean;
     /** Opens the hidden file picker (InputFiles imperative ref). */
     onUploadFile: () => void;
+    /**
+     * Opens the hidden DIRECTORY picker. Task mode only — omit it and the entry
+     * is hidden, which is what daily mode wants (no workspace, no tree to keep).
+     */
+    onUploadFolder?: () => void;
     taskModeActive: boolean;
     onToggleTaskMode: () => void;
     selectedSkills: TaskModeSkill[];
@@ -34,6 +39,7 @@ interface PlusMenuProps {
 export function PlusMenu({
     disabled = false,
     onUploadFile,
+    onUploadFolder,
     taskModeActive,
     onToggleTaskMode,
     selectedSkills,
@@ -75,6 +81,20 @@ export function PlusMenu({
                         {localize('com_ui_upload_files')}
                     </span>
                 </DropdownMenuItem>
+
+                {/* Upload folder — task mode only; the whole directory tree is
+                    rebuilt inside the task workspace. */}
+                {onUploadFolder && (
+                    <DropdownMenuItem
+                        onSelect={() => onUploadFolder()}
+                        className="flex cursor-pointer items-center gap-3 rounded-xl px-2 py-1.5 outline-none"
+                    >
+                        <Outlined.FolderClose size={16} className="shrink-0 text-slate-600" />
+                        <span className="text-[14px] font-normal text-slate-700">
+                            {localize('com_ui_upload_folder')}
+                        </span>
+                    </DropdownMenuItem>
+                )}
 
                 {/* Divider between upload and the mode entries (spec §1) */}
                 <div className="my-1 h-px bg-slate-100" />

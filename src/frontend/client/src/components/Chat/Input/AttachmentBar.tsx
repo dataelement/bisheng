@@ -29,6 +29,8 @@ import { isMediaChipFile, MediaAttachmentChip } from "~/components/Chat/attachme
 import { FileUploadThumbnail } from "~/components/Chat/attachments/UploadAttachmentThumbnail";
 import { isMediaAttachmentFile } from "~/utils/mediaAttachmentUtils";
 import { resolveKnowledgePreviewUrl } from "~/pages/knowledge/FilePreview/previewUrlUtils";
+import { groupAttachmentsByFolder } from "~/components/Linsight/Input/ContextChips";
+import { useLocalize } from "~/hooks";
 
 /** Fixed card geometry from the design (Figma 12841:47405). */
 const CARD_WIDTH = 148;
@@ -152,6 +154,28 @@ const FileCard = ({ file, onRemove }: { file: any; onRemove?: () => void }) => {
     );
 };
 
+/** One card for a whole uploaded directory (see `groupAttachmentsByFolder`). */
+const FolderCard = ({
+    folderName,
+    fileCount,
+    onRemove,
+}: {
+    folderName: string;
+    fileCount: number;
+    onRemove?: () => void;
+}) => {
+    const localize = useLocalize();
+    const label = `${folderName} (${localize('com_folder_upload_file_count', { 0: fileCount })})`;
+    return (
+        <CardShell
+            icon={<Outlined.FolderClose size={16} />}
+            label={label}
+            title={label}
+            onRemove={onRemove}
+        />
+    );
+};
+
 const SkillCard = ({ skill, onRemove }: { skill: any; onRemove?: () => void }) => (
     <CardShell
         icon={<Outlined.Skill size={16} className="text-blue-500" />}
@@ -224,6 +248,8 @@ interface AttachmentBarProps {
         mediaCoverUrl?: string;
         cover_filepath?: string;
         mediaDurationSec?: number;
+        /** Folder upload: path relative to the picked folder root. */
+        relative_path?: string;
     }>;
     files: any[];
     kbs: any[];
@@ -236,6 +262,7 @@ interface AttachmentBarProps {
 type Entry =
     | { kind: "uploading"; key: string; data: AttachmentBarProps['uploadingFiles'][number] }
     | { kind: "file"; key: string; data: any }
+    | { kind: "folder"; key: string; data: { folderName: string; files: unknown[]; isUploading: boolean } }
     | { kind: "kb"; key: string; data: any }
     | { kind: "skill"; key: string; data: any };
 
@@ -255,23 +282,60 @@ export const AttachmentBar = ({
     const [canRight, setCanRight] = useState(false);
 
     const entries = useMemo<Entry[]>(() => {
-        const completedNames = new Set(
-            files
-                .map((f) => f.name || f.file_name || f.filename)
-                .filter(Boolean),
+        // Match uploading→completed by client id, not by name: a folder upload
+        // routinely carries the same file name in several subdirectories, and a
+        // name-keyed set would hide sibling cards that are still uploading.
+        const completedIds = new Set(
+            files.map((f) => String(f.clientId ?? f.id ?? '')).filter(Boolean),
         );
-        const activeUploads = uploadingFiles.filter((f) => !completedNames.has(f.name));
-        const all: Entry[] = [
+        const activeUploads = uploadingFiles.filter(
+            (f) => !completedIds.has(String(f.clientId ?? f.id ?? '')),
+        );
+
+        // Folder upload: one card per picked DIRECTORY. A folder is capped at 100
+        // files, and a card each would turn this strip into a scroll marathon
+        // where removing the folder costs a hundred clicks.
+        const fileLike = [
             ...activeUploads.map((f) => ({
-                kind: "uploading" as const,
-                key: attachmentSeqKey(f.id) ?? `up-${f.id}`,
-                data: f,
+                clientId: String(f.clientId ?? f.id),
+                name: f.name,
+                isUploading: true,
+                relative_path: f.relative_path,
+                __kind: "uploading" as const,
+                __data: f,
+                __key: attachmentSeqKey(f.id) ?? `up-${f.id}`,
             })),
             ...files.map((f) => ({
-                kind: "file" as const,
-                key: attachmentSeqKey(f.clientId || f.id) ?? `file-${f.file_id || f.filepath || f.name}`,
-                data: f,
+                clientId: String(f.clientId ?? f.id ?? f.file_id ?? f.name),
+                name: f.name || f.file_name || f.filename || '',
+                isUploading: false,
+                relative_path: f.relative_path,
+                __kind: "file" as const,
+                __data: f,
+                __key: attachmentSeqKey(f.clientId || f.id) ?? `file-${f.file_id || f.filepath || f.name}`,
             })),
+        ];
+
+        const fileEntries: Entry[] = groupAttachmentsByFolder(fileLike).map((group) => {
+            if (group.folderName) {
+                return {
+                    kind: "folder" as const,
+                    key: `folder-${group.folderName}`,
+                    data: {
+                        folderName: group.folderName,
+                        files: group.files.map((f) => f.__data),
+                        isUploading: group.isUploading,
+                    },
+                };
+            }
+            const only = group.files[0];
+            return only.__kind === "uploading"
+                ? { kind: "uploading" as const, key: only.__key, data: only.__data }
+                : { kind: "file" as const, key: only.__key, data: only.__data };
+        });
+
+        const all: Entry[] = [
+            ...fileEntries,
             // Knowledge selections are stored newest-first (the picker prepends),
             // the opposite of the file arrays. Feed them in oldest-first so the
             // sequence below means the same thing for every source: without this,
@@ -360,7 +424,7 @@ export const AttachmentBar = ({
                                             file={entry.data}
                                             onRemove={
                                                 onRemoveFile
-                                                    ? () => onRemoveFile({ name: entry.data.name })
+                                                    ? () => onRemoveFile(entry.data)
                                                     : undefined
                                             }
                                         />
@@ -371,6 +435,19 @@ export const AttachmentBar = ({
                                             key={entry.key}
                                             file={entry.data}
                                             onRemove={onRemoveFile ? () => onRemoveFile(entry.data) : undefined}
+                                        />
+                                    );
+                                case "folder":
+                                    return (
+                                        <FolderCard
+                                            key={entry.key}
+                                            folderName={entry.data.folderName}
+                                            fileCount={entry.data.files.length}
+                                            onRemove={
+                                                onRemoveFile && !entry.data.isUploading
+                                                    ? () => entry.data.files.forEach((f) => onRemoveFile(f))
+                                                    : undefined
+                                            }
                                         />
                                     );
                                 case "kb":

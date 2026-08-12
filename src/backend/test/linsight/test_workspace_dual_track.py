@@ -258,7 +258,7 @@ async def test_unsupported_original_is_not_written_to_workspace():
     """An mp3 no parser, no read_file and no code interpreter can open is pure
     cost: storage, a confusing ls entry, and a wasted tool call."""
     minio = FakeMinio({})
-    submit = SimpleNamespace(file_id="f7", file_name="访谈录音.mp3")
+    submit = SimpleNamespace(file_id="f7", file_name="访谈录音.mp3", relative_path=None)
     local = __import__("tempfile").NamedTemporaryFile(suffix=".mp3", delete=False)
     local.write(b"ID3\x03\x00\x00\x00")
     local.close()
@@ -277,7 +277,7 @@ async def test_unsupported_original_is_not_written_to_workspace():
 
 async def test_usable_unparsed_original_still_lands():
     minio = FakeMinio({})
-    submit = SimpleNamespace(file_id="f8", file_name="扫描件.pdf")
+    submit = SimpleNamespace(file_id="f8", file_name="扫描件.pdf", relative_path=None)
     local = __import__("tempfile").NamedTemporaryFile(suffix=".pdf", delete=False)
     local.write(b"%PDF-1.4 broken")
     local.close()

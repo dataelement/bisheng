@@ -2304,6 +2304,10 @@ def _to_linsight_submit(data: APIChatCompletion):
                     file_name=item.get("file_name") or item.get("filename") or item.get("name") or "",
                     parsing_status=item.get("parsing_status") or "completed",
                     file_url=item.get("filepath") or item.get("file_url"),
+                    # Folder upload: the tree the user dropped is rebuilt inside the
+                    # task workspace from this. Absent on a plain single-file pick.
+                    relative_path=item.get("relative_path") or None,
+                    size=int(item.get("size") or 0),
                 )
             )
         submit_files = submit_files or None
