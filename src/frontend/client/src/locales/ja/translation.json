@@ -324,6 +324,7 @@
   "com_files_no_results": "結果がありません。",
   "com_files_number_selected": "選択済み {{0}} / 合計 {{1}} 件",
   "com_folder_upload_file_count": "{{0}} 件",
+  "com_task_mode_files_dropped": "{{0}} を削除しました：このファイル形式はタスクモードのみ対応しています",
   "com_folder_upload_skipped_unsupported": "未対応のファイル {{0}} 件をスキップしました",
   "com_folder_upload_too_deep": "フォルダーの階層が {{0}} 階層の上限を超えています。構造を簡素化して再試行してください。",
   "com_folder_upload_too_large": "フォルダーの合計サイズが 500MB の上限を超えています。減らして再試行してください。",

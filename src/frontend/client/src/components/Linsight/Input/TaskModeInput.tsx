@@ -295,10 +295,15 @@ export function TaskModeInput({ conversationId = 'new', disabled = false, onFoll
     };
 
     const hasText = !!text.trim();
+    // This box only ever runs inside a task, so both task-mode extras apply. `.ofd`
+    // used to be excluded here alone, which made the same file pickable when
+    // starting a task and rejected when following up on it — the backend carries
+    // ofd originals into the workspace either way.
     const accept = buildChatAccept({
         enableMedia: !!(envConfig as any)?.enable_media_upload,
         enableEtl4lm: !!(bsConfig as any)?.enable_etl4lm,
-        includeOfd: false,
+        includeOfd: true,
+        taskMode: true,
     });
     const InputFilesAny = InputFiles as any;
 

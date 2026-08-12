@@ -710,10 +710,18 @@ class LinsightWorkflowTask:
             # still parsing) must be SKIPPED — not crash task startup. (The agent reads
             # uploaded sources through the WorkspaceBackend ``uploads/`` keys anyway, so
             # this local prefetch is best-effort cache warming, not the access path.)
-            downloadable = [f for f in session_model.files if isinstance(f, dict) and f.get("markdown_file_path")]
-            skipped = len(session_model.files) - len(downloadable)
+            entries = [f for f in session_model.files if isinstance(f, dict) and f.get("markdown_file_path")]
+            skipped = len(session_model.files) - len(entries)
             if skipped:
                 logger.warning(f"{skipped} uploaded file(s) without markdown_file_path skipped for local prefetch")
+
+            # A passthrough file has no separate markdown view — its seed object and
+            # its original are the same bytes. It is fetched by the raw track below,
+            # which lands it under ``uploads/`` where the pointer block says it is;
+            # letting it through here as well would ALSO drop a flat copy at the task
+            # root, and the code interpreter's file list (``os.walk``) would show the
+            # same file twice under two different paths.
+            downloadable = [f for f in entries if f.get("ingest_mode") != "passthrough"]
 
             # Concurrent downloads
             download_tasks = [self._download_file(file_info, file_dir) for file_info in downloadable]
@@ -732,7 +740,9 @@ class LinsightWorkflowTask:
             # lands here is invisible to pandas / python-docx / fitz — which is the
             # whole point of keeping it. Best-effort: a miss costs the precise-data
             # track, never the task.
-            raw_files = [f for f in downloadable if f.get("raw_filename") and f.get("original_file_path")]
+            # Selected from ``entries``, not ``downloadable``: passthrough files are
+            # excluded from the markdown track precisely so they arrive here.
+            raw_files = [f for f in entries if f.get("raw_filename") and f.get("original_file_path")]
             if raw_files:
                 raw_results = await asyncio.gather(
                     *[self._download_raw_original(f, file_dir) for f in raw_files], return_exceptions=True

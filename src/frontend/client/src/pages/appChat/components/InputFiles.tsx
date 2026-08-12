@@ -3,6 +3,7 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { uploadChatFile } from "~/api/apps";
 import { checkFileParseStatus } from "~/api/linsight";
+import { isFileNameAccepted } from "~/common/chatAccept";
 import { MediaAttachmentChip } from "~/components/Chat/attachments/MediaAttachmentChip";
 import { FileUploadThumbnail } from "~/components/Chat/attachments/UploadAttachmentThumbnail";
 import { AttachmentIcon } from "~/components/svg";
@@ -90,16 +91,13 @@ const applyParseStatusToFile = (file: any, entry: { parsing_status?: string; cov
 
 const checkFileType = (file, accepts) => {
     if (!accepts || accepts === '*') return true;
-    const fileName = file.name.toLowerCase();
-    const acceptArr = accepts.split(',').map(a => a.trim().toLowerCase());
-
-    // 检查后缀名 (例如 .pdf) 或 MIME type
-    return acceptArr.some(type => {
-        if (type.startsWith('.')) {
-            return fileName.endsWith(type);
-        }
-        return file.type.match(new RegExp(type.replace('*', '.*')));
-    });
+    // 后缀名匹配与「退出任务模式」的附件清理共用同一个匹配器
+    if (isFileNameAccepted(file.name, accepts)) return true;
+    // MIME type (例如 image/*)
+    return accepts
+        .split(',')
+        .map(a => a.trim().toLowerCase())
+        .some(type => !type.startsWith('.') && file.type.match(new RegExp(type.replace('*', '.*'))));
 };
 
 // @accepts '.png,.jpg'

@@ -17,6 +17,7 @@ from loguru import logger
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
+from bisheng.common.errcode.knowledge import KnowledgeFileNotSupportedError
 from bisheng.common.errcode.linsight import (
     LinsightFileTooLargeError,
     LinsightFolderDepthExceededError,
@@ -509,6 +510,38 @@ class LinsightWorkbenchImpl:
             }
 
         file_name = submit_file.file_name or dl_name
+
+        # 1.5) Route before parsing. Two of the three routes never had any business
+        # calling the ETL: a passthrough type has no loader (or a lossy one) and a
+        # ``.py`` would raise KnowledgeFileNotSupportedError purely so the except
+        # branch below could catch it and do what we can do directly — at the cost
+        # of a wasted round-trip and a logger.exception that reads like a real
+        # failure. ``unsupported`` short-circuits for the same reason; the pipeline
+        # would reject it on exactly the same extension check.
+        route = cls._ingest_route(file_name)
+        if route == "passthrough":
+            raw = await cls._read_local_bytes(local_path)
+            if raw is None:
+                return {
+                    "file_id": submit_file.file_id,
+                    "original_filename": file_name,
+                    "relative_path": submit_file.relative_path,
+                    "parsing_status": "failed",
+                    "valid": False,
+                    "error_message": "file bytes unavailable after download",
+                }
+            return await cls._finalize_passthrough(submit_file, file_name, chat_id, minio_client, raw, used_names)
+        if route == "unsupported":
+            return await cls._keep_original_in_workspace(
+                submit_file,
+                file_name,
+                chat_id,
+                minio_client,
+                local_path,
+                KnowledgeFileNotSupportedError(),
+                used_names,
+            )
+
         is_media = cls._is_media_filename(file_name)
         parse_started = time.monotonic()
         if is_media:
@@ -654,16 +687,23 @@ class LinsightWorkbenchImpl:
     ) -> dict:
         """Parse-failure fallback: copy the raw original into the workspace.
 
-        Keeps the user-attached file visible to the agent (``ls``) under its real
-        name + extension (``uploads/<name>.<ext>``) even though it couldn't be
-        converted to markdown. Marked ``valid=False`` so the attachment chip shows
-        a failed state.
+        Three outcomes, by what the workspace can actually do with the original:
 
-        The original always reaches the formal bucket (the user can still download
-        what they uploaded), but it only enters the WORKSPACE when something there
-        could actually consume it — see ``_original_is_usable``. An mp3 that no
-        parser, no ``read_file`` and no code interpreter can open is pure cost:
-        storage, a confusing ``ls`` entry, and a wasted tool call.
+        1. **Text** (``_TEXT_LIKE_EXTS``) -> degrade to a passthrough SUCCESS. The
+           file reads perfectly well as itself, so the parse failure cost nothing
+           and reporting it as failed makes the chip cry wolf. This is what saves
+           a large csv, whose ``ExcelLoader`` hard-fails past 10k chars while the
+           csv sitting in the workspace is exactly what the user wanted analysed.
+        2. **Binary with a consumer** (``_RAW_KEEP_EXTS`` / ``_IMAGE_EXTS``) ->
+           ``failed`` + ``valid=False``. A broken pdf really is broken: there is no
+           text view, and only the code interpreter can do anything with it.
+        3. **Everything else** -> ``unsupported``, and it does not enter the
+           workspace at all. An mp3 that no parser, no ``read_file`` and no code
+           interpreter can open is pure cost: storage, a confusing ``ls`` entry,
+           and a wasted tool call.
+
+        The original always reaches the formal bucket first, so in all three cases
+        the user can still download what they uploaded.
         """
 
         def _read_bytes(path: str) -> bytes:
@@ -671,6 +711,19 @@ class LinsightWorkbenchImpl:
                 return fh.read()
 
         raw = await asyncio.to_thread(_read_bytes, local_path)
+
+        # Case 1. Same shape as a never-parsed passthrough file, so it goes through
+        # the same builder rather than a parallel one that would drift from it.
+        if cls._original_is_text(file_name):
+            logger.info(
+                "parse failed for {} but it is readable as text; using the original directly ({})",
+                file_name,
+                error,
+            )
+            return await cls._finalize_passthrough(
+                submit_file, file_name, chat_id, minio_client, raw, used_names, degraded_from=error
+            )
+
         ext = os.path.splitext(file_name)[1]
         formal_object = f"linsight/{chat_id}/{submit_file.file_id}{ext}"
         await minio_client.put_object(bucket_name=minio_client.bucket, object_name=formal_object, file=raw)
@@ -695,15 +748,168 @@ class LinsightWorkbenchImpl:
             )
         return entry
 
-    # Types whose raw bytes are still worth carrying into the workspace after a
-    # failed parse: text-like ones are directly readable via ``read_file``, and
-    # _RAW_KEEP_EXTS / _IMAGE_EXTS have a consumer (code interpreter, image block).
-    _TEXT_LIKE_EXTS = frozenset(
+    @classmethod
+    async def _finalize_passthrough(
+        cls,
+        submit_file: SubmitFileSchema,
+        file_name: str,
+        chat_id: str,
+        minio_client,
+        raw: bytes,
+        used_names: set[str] | None,
+        *,
+        degraded_from: Exception | None = None,
+    ) -> dict:
+        """Land a file in the workspace AS ITSELF, with no markdown view.
+
+        Used for two situations that look different but produce the same result:
+        a type we never intended to parse (``_ingest_route`` -> ``passthrough``),
+        and a text file whose parse blew up but which is perfectly readable as-is
+        (``degraded_from``). Either way the outcome is a file the agent can
+        ``read_file`` and the code interpreter can open, so it is reported as a
+        SUCCESS — the historical ``failed`` / ``valid=False`` marking made the
+        chip cry wolf about a file that works.
+
+        ``parsing_status`` stays ``"completed"`` on purpose. It is not "which
+        pipeline ran", it is "is ingestion finished / may this be submitted": the
+        frontend treats any other value as still-parsing (disabling send, polling
+        forever) and ``_process_submitted_files`` rejects the submission outright.
+        The pipeline that ran is recorded in the orthogonal ``ingest_mode`` field,
+        which older entries simply lack.
+        """
+        formal_object = cls._formal_original_object(submit_file.file_id, chat_id, file_name)
+        await minio_client.put_object(
+            bucket_name=minio_client.bucket,
+            object_name=formal_object,
+            file=raw,
+            content_type=cls._content_type_for(file_name),
+        )
+
+        entry: dict = {
+            "file_id": submit_file.file_id,
+            "original_filename": file_name,
+            "relative_path": submit_file.relative_path,
+            "parsing_status": "completed",
+            "valid": True,
+            "ingest_mode": "passthrough",
+            # Not markdown, despite the name — see the key's docstring. It is the
+            # workspace SEED object, and three downstream consumers key off it
+            # (local prefetch, the workspace write below, the attachment drawer).
+            "markdown_file_path": formal_object,
+            "original_file_path": formal_object,
+            # Set BEFORE the workspace write: that path only ``setdefault``s a 0
+            # for non-markdown attachments, so a real count has to be there first.
+            "line_count": cls._count_text_lines(raw),
+            "image_count": 0,
+        }
+        if degraded_from is not None:
+            entry["error_message"] = f"parse failed, original used directly: {degraded_from}"
+
+        await cls._write_attachment_to_workspace(entry, chat_id, minio_client, as_markdown=False, used_names=used_names)
+
+        # The raw track points at the same object as the reading track — that IS
+        # what passthrough means. Mirroring it is load-bearing rather than
+        # cosmetic: ``task_exec`` prefetches originals only for entries carrying
+        # both keys, and lands them under ``uploads/`` — the exact path the
+        # pointer block hands the model. Without the mirror the file would be
+        # prefetched flat at the task-dir root and the advertised path would not
+        # exist inside the code interpreter.
+        entry["raw_filename"] = entry.get("markdown_filename")
+        entry["raw_workspace_path"] = entry.get("workspace_path")
+        return entry
+
+    @staticmethod
+    def _count_text_lines(raw: bytes) -> int:
+        """Line count for the pointer block, tolerant of unknown encodings.
+
+        Decoding with ``errors="replace"`` matches what ``WorkspaceBackend`` will
+        do when the agent actually reads the file, so the advertised count and the
+        readable content agree.
+        """
+        if not raw:
+            return 0
+        text = raw.decode("utf-8", errors="replace")
+        return text.count("\n") + 1
+
+    # Types that go into the workspace AS THEMSELVES — no parse attempted, the
+    # original IS the workspace file. They are already in their final form: the
+    # agent reads them with ``read_file`` and the code interpreter opens them with
+    # pandas / json / whatever. Running them through the RAG pipeline would be a
+    # lossy round-trip at best and, for everything the knowledge parser has no
+    # loader for (.py, .json, …), a guaranteed exception whose only outcome is a
+    # misleading "parse failed" chip.
+    #
+    # ``.env`` and ``.pkl`` are deliberately absent: the first would carry
+    # credentials into the workspace and the model's context, the second is an
+    # arbitrary-code deserialization vector.
+    #
+    # Keep in sync with the frontend accept list, ``client/src/common/chatAccept.ts``
+    # (TASK_MODE_DATA_ACCEPT) — that file is what decides whether a user can pick
+    # the file at all.
+    _PASSTHROUGH_TEXT_EXTS = frozenset(
         {
             "txt", "csv", "tsv", "md", "markdown", "json", "jsonl", "xml", "html", "htm",
             "log", "yaml", "yml", "ini", "conf", "toml", "sql", "py", "js", "ts", "sh",
         }
     )  # fmt: skip
+
+    # The overlap between "we could pass this through" and "the parser has a
+    # loader for it", resolved in favour of parsing. This exists so the tie-break
+    # is one greppable declaration instead of an implicit ordering between two
+    # frozensets.
+    #
+    # csv/xls-likes: parsing yields the cheap textual reading view while
+    # ``_RAW_KEEP_EXTS`` keeps the original beside it — strictly more than
+    # passthrough would give. html: markdown conversion is a real transformation.
+    # txt/md: parsing buys nothing (the splitter round-trip can even introduce
+    # paired blank lines, and md goes through the hierarchical splitter which may
+    # rewrite headings), but they parse reliably today, so flipping them is a
+    # separate, independently revertible decision — delete them from this set.
+    # Note ``markdown`` is absent while ``md`` is present: the parser only
+    # registers ``md``, so listing ``markdown`` here would route it to a loader
+    # that does not exist — the exact wasted-ETL-then-fall-back path this whole
+    # mechanism removes. Guarded by a test asserting this set has loaders.
+    _PARSE_WINS_EXTS = frozenset({"csv", "html", "htm", "txt", "md"})
+
+    # Types whose raw bytes are still worth carrying into the workspace after a
+    # failed parse: text-like ones are directly readable via ``read_file``, and
+    # _RAW_KEEP_EXTS / _IMAGE_EXTS have a consumer (code interpreter, image block).
+    # Derived, not hand-maintained, so it can never drift from the routing sets.
+    _TEXT_LIKE_EXTS = _PASSTHROUGH_TEXT_EXTS
+
+    @classmethod
+    def _ingest_route(cls, filename: str) -> str:
+        """Decide how a submitted file enters the workspace.
+
+        Returns one of:
+          - ``"parse"``: run the knowledge ETL and write the markdown view
+            (plus, for ``_RAW_KEEP_EXTS``, the original beside it).
+          - ``"passthrough"``: skip the parser entirely; the original IS the
+            workspace file.
+          - ``"unsupported"``: no loader and no consumer — short-circuit instead
+            of burning an ETL round-trip on a guaranteed failure.
+
+        The order below is an explicit table rather than set precedence, because
+        the sets genuinely overlap (csv is both passthrough-able and parseable)
+        and an implicit ordering is exactly the kind of thing that silently
+        inverts when someone adds a key to ``FileExtensionMap``.
+        """
+        from bisheng.knowledge.rag.base_file_pipeline import FileExtensionMap
+
+        ext = os.path.splitext(filename or "")[1].lower().lstrip(".")
+        if ext in cls._PASSTHROUGH_TEXT_EXTS and ext not in FileExtensionMap:
+            return "passthrough"
+        if ext in cls._PASSTHROUGH_TEXT_EXTS:
+            return "parse" if ext in cls._PARSE_WINS_EXTS else "passthrough"
+        if ext in FileExtensionMap:
+            return "parse"
+        return "unsupported"
+
+    @classmethod
+    def _original_is_text(cls, filename: str) -> bool:
+        """Whether an unparsed original is readable as text via ``read_file``."""
+        ext = os.path.splitext(filename or "")[1].lower().lstrip(".")
+        return ext in cls._TEXT_LIKE_EXTS
 
     @classmethod
     def _original_is_usable(cls, filename: str) -> bool:
@@ -726,7 +932,15 @@ class LinsightWorkbenchImpl:
         session is reused; the temp->formal copy is performed only once.
         """
         # Idempotency: reuse a formal-bucket product produced earlier this session.
-        formal_object = cls._formal_markdown_object(submit_file.file_id, chat_id)
+        # A passthrough file has no markdown product, so its formal object keeps the
+        # real extension — the drawer builds a preview URL straight off this key and
+        # a ``.csv`` served as ``.md`` would be handed to the markdown renderer.
+        is_passthrough = bool(temp_info) and temp_info.get("ingest_mode") == "passthrough"
+        formal_object = (
+            cls._formal_original_object(submit_file.file_id, chat_id, submit_file.file_name)
+            if is_passthrough
+            else cls._formal_markdown_object(submit_file.file_id, chat_id)
+        )
         formal_exists = await minio_client.object_exists(bucket_name=minio_client.bucket, object_name=formal_object)
 
         if not formal_exists:
@@ -780,6 +994,18 @@ class LinsightWorkbenchImpl:
                 )
             entry["original_file_path"] = formal_original
 
+        if is_passthrough:
+            # No markdown view exists: the original IS the workspace file, so it
+            # keeps its real extension and doubles as its own raw track. See
+            # ``_finalize_passthrough`` for why the mirror below is load-bearing.
+            entry["original_file_path"] = formal_object
+            await cls._write_attachment_to_workspace(
+                entry, chat_id, minio_client, as_markdown=False, used_names=used_names
+            )
+            entry["raw_filename"] = entry.get("markdown_filename")
+            entry["raw_workspace_path"] = entry.get("workspace_path")
+            return entry
+
         # Write parsed markdown into the workspace (uploads/<name>.md).
         await cls._write_attachment_to_workspace(entry, chat_id, minio_client, used_names=used_names)
         return entry
@@ -792,6 +1018,19 @@ class LinsightWorkbenchImpl:
         to the same object and ``object_exists`` makes the copy idempotent.
         """
         return f"linsight/{chat_id}/{file_id}.md"
+
+    @staticmethod
+    def _formal_original_object(file_id: str, chat_id: str, filename: str) -> str:
+        """Formal-bucket key for a PASSTHROUGH file — same slot, real extension.
+
+        A passthrough file has no markdown product, so reusing the ``.md`` key
+        above would serve a ``.csv`` under a ``.md`` name; the workspace panel
+        builds its preview URL straight off this key and would hand it to the
+        markdown renderer. Same stability property as the markdown key: one
+        object per (chat_id, file_id), so re-submission stays idempotent.
+        """
+        ext = os.path.splitext(filename or "")[1].lower()
+        return f"linsight/{chat_id}/{file_id}{ext}"
 
     @staticmethod
     async def _read_local_bytes(path: str) -> bytes | None:
@@ -1208,6 +1447,7 @@ class LinsightWorkbenchImpl:
         # fallback shape would otherwise read as a directory that does not exist.
         records: list[tuple[str, str, str]] = []
         has_raw = False
+        has_passthrough = False
         has_unparsed = False
         has_media = False
         for file in session_version.files:
@@ -1235,7 +1475,7 @@ class LinsightWorkbenchImpl:
                 records.append(
                     (
                         rel_dir,
-                        f"- path: {path}\n  name: {name}\n  note: 解析失败，工作区只有原件（不可 read_file）",
+                        f"- path: {path}\n  name: {name}\n  note: 解析失败，工作区只有二进制原件（不可 read_file）",
                         name,
                     )
                 )
@@ -1249,7 +1489,15 @@ class LinsightWorkbenchImpl:
             )
             raw_path = file.get("raw_workspace_path")
             if raw_path:
-                has_raw = True
+                # A passthrough file mirrors its own path into the raw track, so
+                # ``path == raw``. Counting that as ``has_raw`` would trigger the
+                # dual-track wording ("raw holds the precise data, do not read_file
+                # it") about a file whose raw track is plain text the model should
+                # absolutely read.
+                if file.get("ingest_mode") == "passthrough":
+                    has_passthrough = True
+                else:
+                    has_raw = True
                 # Rendered RELATIVE on purpose. The code interpreter resolves paths
                 # against its working directory (the local task dir / sandbox root),
                 # where the original lives at ``uploads/<name>``; a leading slash
@@ -1277,26 +1525,44 @@ class LinsightWorkbenchImpl:
                 "path 为平台 ASR 转写后的 .md 文本视图。请 read_file(path) 获取语音/视频内容；"
                 "这不是扩展名标注错误或误命名，勿在回复中声称「实际是文本文件」。\n"
             )
-        if has_raw or has_unparsed:
-            # Say it once, at the top, instead of repeating per item: markdown is
-            # the reading view, the original is the data. Without this the model
-            # reads the flattened table and "eyeballs" numbers it could compute.
+        # One ``说明：`` paragraph assembled from independent clauses, rather than a
+        # block per file kind. The kinds co-occur freely (a dual-track xlsx, a
+        # passthrough csv and a broken pdf in one submission), and a paragraph each
+        # would both bloat the prompt and contradict itself — the dual-track wording
+        # ends in "do not read_file the original", which is exactly wrong for a
+        # passthrough file whose original is the text.
+        has_binary_original = has_raw or has_unparsed
+        detail_parts: list[str] = []
+        if has_raw:
+            detail_parts.append(
+                "path 指向可直接 read_file 的文本视图；raw 指向同名原件"
+                "（表格/文档的精确数据、单元格、样式、页面结构都在原件里）。"
+            )
+        if has_passthrough:
+            detail_parts.append(
+                "部分条目的 path 与 raw 指向同一个文本原件（.csv/.py/.json 等）——"
+                "它本身就是最终格式，read_file 与代码工具都可直接使用，不必再去找「解析后的版本」。"
+            )
+        if has_unparsed:
+            detail_parts.append("标注「解析失败」的条目在工作区只有二进制原件，不可 read_file。")
+        if has_binary_original:
             if has_code_interpreter:
-                header_parts.append(
-                    "说明：path 指向可直接 read_file 的文本视图；raw 指向同名原件"
-                    "（表格/文档的精确数据、单元格、样式、页面结构都在原件里）。"
-                    "需要精确数值或做数据分析时，用 bisheng_code_interpreter 读 raw 原件"
-                    "（Excel 用 pandas/openpyxl，Word 用 python-docx，PDF 用 fitz），不要 read_file 原件。"
-                    "raw 是相对当前工作目录的路径，在代码里直接用该相对路径打开。\n"
+                detail_parts.append(
+                    "需要精确数值或做数据分析时，用 bisheng_code_interpreter 读原件"
+                    "（Excel 用 pandas/openpyxl，Word 用 python-docx，PDF 用 fitz），不要 read_file 二进制原件。"
+                    "raw 是相对当前工作目录的路径，在代码里直接用该相对路径打开。"
                 )
             else:
-                # No code interpreter this run: the original is unusable, so do not
-                # send the model chasing it. Say what it CAN do instead.
-                header_parts.append(
-                    "说明：path 指向可直接 read_file 的文本视图；raw 是原始二进制文件，"
-                    "本次没有可用的代码执行工具，无法读取原件——请基于文本视图作答，"
-                    "并在结论中说明受原件格式限制的部分。不要对 raw 路径调用 read_file。\n"
+                # No code interpreter this run: the binary original is unusable, so
+                # do not send the model chasing it. Say what it CAN do instead.
+                detail_parts.append(
+                    "本次没有可用的代码执行工具，无法读取二进制原件——请基于文本视图作答，"
+                    "并在结论中说明受原件格式限制的部分。"
                 )
+        elif has_passthrough and has_code_interpreter:
+            detail_parts.append("raw 是相对当前工作目录的路径，在代码里直接用该相对路径打开。")
+        if detail_parts:
+            header_parts.append("说明：" + "".join(detail_parts) + "\n")
         header = "".join(header_parts)
 
         if len(records) > cls._FILE_LIST_MAX_ITEMS:
@@ -1608,6 +1874,37 @@ class LinsightWorkbenchImpl:
         try:
             from bisheng.api.v1.schemas import FileProcessBase
             from bisheng.knowledge.rag.temp_file_pipeline import TempFilePipeline
+
+            # Passthrough types never reach the parser. This branch matters more
+            # here than on the daily path: a parse failure is reported to the
+            # follow-up input as ``failed``, and that input DELETES the attachment
+            # from the box on sight — so without this a ``.py`` could not even be
+            # submitted, let alone used.
+            if cls._ingest_route(original_filename) == "passthrough":
+                raw_bytes = await cls._read_local_bytes(file_path)
+                if raw_bytes is not None:
+                    minio_client = await get_minio_storage()
+                    tmp_key = f"{file_id}{os.path.splitext(original_filename)[1].lower()}"
+                    await minio_client.put_object_tmp(tmp_key, raw_bytes)
+                    return {
+                        "file_id": file_id,
+                        "original_filename": original_filename,
+                        "parsing_status": "completed",
+                        "ingest_mode": "passthrough",
+                        "parse_type": "passthrough",
+                        "markdown_filename": tmp_key,
+                        "markdown_file_path": tmp_key,
+                        "markdown_file_md5": await async_calculate_md5(raw_bytes),
+                        # Counted here, where the bytes are already in hand. The
+                        # workspace write only ``setdefault``s a 0 for non-markdown
+                        # attachments, so a real count has to arrive before it.
+                        "line_count": cls._count_text_lines(raw_bytes),
+                        # Deliberately no ``original_file_path``: ingest promotes
+                        # this same key to the formal bucket, and setting it would
+                        # make it store a second copy of identical bytes.
+                    }
+                # Unreadable local cache file: fall through to the parser so the
+                # failure is reported through the one existing path.
 
             file_rule = FileProcessBase(
                 knowledge_id=0,

@@ -14,7 +14,7 @@ import {
 } from "react";
 import { useNavigate } from "react-router-dom";
 import { useRecoilValue, useRecoilState } from "recoil";
-import { buildChatAccept } from "~/common/chatAccept";
+import { buildChatAccept, isFileNameAccepted } from "~/common/chatAccept";
 import { SkillSelector } from "~/components/Linsight/Input/SkillSelector";
 import { taskModeSkillsState } from "~/store/linsight";
 import AgentToolSelector from "~/components/Chat/Input/AgentToolSelector";
@@ -30,6 +30,7 @@ import SpeechToTextComponent from "~/components/Voice/SpeechToText";
 import { useContainerCompact, TOOLBAR_COMPACT_THRESHOLD } from "~/hooks";
 import { useGetWorkbenchModelsQuery } from "~/hooks/queries/data-provider";
 import useLocalize from "~/hooks/useLocalize";
+import { useToastContext } from "~/Providers";
 import InputFiles from "~/pages/appChat/components/InputFiles";
 import { resolveUploadSizeLimits } from "~/pages/knowledge/knowledgeUtils";
 import { useFileDropAndPaste } from "~/pages/appChat/useFileDropAndPaste";
@@ -48,6 +49,20 @@ export interface AiChatInputFeatures {
     /** F035 Track H: this input IS the task-mode landing. Adds the "添加技能"
      *  entry to the "+" menu; everything else mirrors the daily input. */
     taskMode?: boolean;
+}
+
+/**
+ * The subset of an attachment the leave-task-mode cleanup needs: a display name
+ * (whichever of the four spellings this list happens to use) and an id to remove
+ * it by. Kept structural so it fits both the committed `chatFiles` entries and
+ * the in-flight `uploadingFiles` ones.
+ */
+interface DroppableAttachment {
+    clientId?: string;
+    id?: string;
+    name?: string;
+    file_name?: string;
+    filename?: string;
 }
 
 interface AiChatInputProps {
@@ -144,6 +159,7 @@ const AiChatInput = memo(
         onToggleTaskMode,
     }: AiChatInputProps) => {
         const localize = useLocalize();
+        const { showToast } = useToastContext();
         const {
             modelSelect = true,
             knowledgeBase = true,
@@ -170,18 +186,9 @@ const AiChatInput = memo(
         // selection is refilled as a chip. Keyed 'new' to match the landing page.
         const [dailySkills, setDailySkills] = useRecoilState(taskModeSkillsState('new'));
 
-        // Exiting task mode discards the skill selection so the panel's checkboxes
-        // reset in sync with the (now-hidden) skill chips. Track the previous value
-        // to fire only on a true→false transition, not on mount or re-entry.
         // True while an IME composition is in flight — see handleKeyDown.
         const isComposingRef = useRef(false);
         const prevTaskModeRef = useRef(taskMode);
-        useEffect(() => {
-            if (prevTaskModeRef.current && !taskMode) {
-                setDailySkills((prev) => (prev.length ? [] : prev));
-            }
-            prevTaskModeRef.current = taskMode;
-        }, [taskMode, setDailySkills]);
 
         const isControlled = externalValue !== undefined;
         const [internalText, setInternalText] = useState("");
@@ -251,6 +258,47 @@ const AiChatInput = memo(
             mediaDurationSec?: number;
         }>>([]);
         const inputFilesRef = useRef<any>(null);
+
+        // Leaving task mode drops what only task mode could carry: the skill
+        // selection (so the panel's checkboxes reset in sync with the now-hidden
+        // chips) and any attachment daily chat cannot accept. The latter is not
+        // tidiness — daily chat feeds attachments through the document parser, so a
+        // leftover .py would fail the whole turn instead of just being ignored.
+        // Fires only on a true→false transition, never on mount or re-entry.
+        useEffect(() => {
+            if (prevTaskModeRef.current && !taskMode) {
+                setDailySkills((prev) => (prev.length ? [] : prev));
+
+                const dailyAccept = buildChatAccept({
+                    enableMedia: !!envConfig?.enable_media_upload,
+                    enableEtl4lm: !!bsConfig?.enable_etl4lm,
+                    includeOfd: !isLingsi,
+                });
+                const isKept = (name: string) => isFileNameAccepted(name || "", dailyAccept);
+                const dropped: string[] = [];
+                const collect = (f: DroppableAttachment) => {
+                    const name = f?.name || f?.file_name || f?.filename || "";
+                    if (isKept(name)) return true;
+                    dropped.push(name);
+                    // Drop it inside InputFiles too, otherwise its own list would keep
+                    // re-publishing the file through onFilesStateChange.
+                    inputFilesRef.current?.removeByClientId?.(f?.clientId ?? f?.id);
+                    return false;
+                };
+                setChatFiles((prev) => (prev ? prev.filter(collect) : prev));
+                setUploadingFiles((prev) => prev.filter(collect));
+                if (dropped.length) {
+                    showToast?.({
+                        message: localize("com_task_mode_files_dropped", { 0: dropped.join("、") }),
+                        status: "warning",
+                    });
+                }
+            }
+            prevTaskModeRef.current = taskMode;
+            // envConfig/bsConfig are read only when the transition fires; leaving them
+            // out keeps a config refetch from re-running the cleanup.
+            // eslint-disable-next-line react-hooks/exhaustive-deps
+        }, [taskMode, setDailySkills]);
 
         // Voice input: check if ASR model is available
         const { data: modelData } = useGetWorkbenchModelsQuery();
@@ -414,6 +462,10 @@ const AiChatInput = memo(
                             enableMedia: !!envConfig?.enable_media_upload,
                             enableEtl4lm: !!bsConfig?.enable_etl4lm,
                             includeOfd: !isLingsi,
+                            // Task mode also takes data/config/source files: it has a
+                            // workspace and a code interpreter to use them with. Daily
+                            // chat has neither, and would fail the turn on parse.
+                            taskMode,
                         });
                         return <InputFilesAny
                             ref={inputFilesRef}
