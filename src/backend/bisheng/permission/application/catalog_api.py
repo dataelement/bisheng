@@ -1575,8 +1575,12 @@ class F048CatalogApi:
                 derived = next(item for item in before.model_release.models if item.model_key == model.model_key)
                 references = await self._state.grant_references()
                 try:
+                    # Judge "is it disabled" on the state this batch publishes, not
+                    # on the base release. Reading the base meant a batch that
+                    # deactivates and then deletes was refused for being active,
+                    # forcing two separate publications to remove one model.
                     ensure_model_deletable(
-                        derived,
+                        replace(derived, active=model.active),
                         reference_count=len(references.get(model.model_key, ())),
                     )
                 except ValueError as exc:

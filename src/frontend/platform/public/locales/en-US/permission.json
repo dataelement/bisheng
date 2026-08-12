@@ -100,7 +100,7 @@
       "apply": "Apply Preset",
       "blank": "Blank model (no actions preselected)"
     },
-    "deactivateFirst": "Deactivate and publish first, then delete"
+    "confirmDelete": "Delete the model \"{{name}}\"? This takes effect immediately and cannot be undone."
   },
   "impact": {
     "title": "Confirm Publish Impact",

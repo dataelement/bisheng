@@ -70,6 +70,7 @@ interface ModelCatalogPanelProps {
   onCreateDraft: (
     changes: PermissionCatalogChange[],
   ) => Promise<PermissionCatalogDraft>
+  onDeleteModel: (modelKey: string, wasActive: boolean) => Promise<void>
   onReviewImpact: (draft: PermissionCatalogDraft) => void
 }
 
@@ -90,6 +91,7 @@ function ModelCatalogPanel({
   selectedModelKey,
   onSelectModel,
   onCreateDraft,
+  onDeleteModel,
   onReviewImpact,
 }: ModelCatalogPanelProps) {
   const { t } = useTranslation("permission")
@@ -154,6 +156,7 @@ function ModelCatalogPanel({
           presets={catalog.presets ?? []}
           createMode={creating}
           onCreateDraft={onCreateDraft}
+          onDeleteModel={onDeleteModel}
           onReviewImpact={onReviewImpact}
         />
       ) : (
@@ -219,6 +222,30 @@ export function RolesAndPermissions() {
   const handleReviewImpact = (draft: PermissionCatalogDraft) => {
     setImpactDraft(draft)
     setImpactOpen(true)
+  }
+
+  /** Delete a model in one go: draft the removal and publish it immediately.
+   *
+   * Deleting used to mean deactivate, publish, delete, publish — four steps for
+   * one removal, and the middle publish was easy to skip, leaving the model in
+   * place. A deletable model is inactive and referenced by no grant, so there is
+   * nothing for a separate impact review to weigh.
+   */
+  const handleDeleteModel = async (modelKey: string, wasActive: boolean) => {
+    if (!catalog) throw new Error("permission Catalog is not loaded")
+    const changes: PermissionCatalogChange[] = wasActive
+      ? [
+          { type: "SET_MODEL_ACTIVE", model_key: modelKey, active: false },
+          { type: "DELETE_MODEL", model_key: modelKey },
+        ]
+      : [{ type: "DELETE_MODEL", model_key: modelKey }]
+    const draft = await handleCreateDraft(changes)
+    await handlePublish(draft.draft_id, {
+      expected_current_release_id: catalog.id,
+      idempotency_key: createIdempotencyKey("catalog-publish"),
+      confirmed: true,
+    })
+    setSelectedModelKey(null)
   }
 
   const handlePublish = async (
@@ -299,6 +326,7 @@ export function RolesAndPermissions() {
                   selectedModelKey={selectedModelKey}
                   onSelectModel={setSelectedModelKey}
                   onCreateDraft={handleCreateDraft}
+                  onDeleteModel={handleDeleteModel}
                   onReviewImpact={handleReviewImpact}
                 />
               )}

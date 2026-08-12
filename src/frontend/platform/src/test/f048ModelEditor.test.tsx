@@ -77,8 +77,13 @@ const draft = {
   },
 }
 
+vi.mock("@/components/bs-ui/alertDialog/useConfirm", () => ({
+  bsConfirm: (params: any) => params.onOk?.(() => {}),
+}))
+
 describe("ModelEditor", () => {
   const onCreateDraft = vi.fn()
+  const onDeleteModel = vi.fn()
   const onReviewImpact = vi.fn()
   const onInitializePreset = vi.fn()
 
@@ -93,6 +98,7 @@ describe("ModelEditor", () => {
         model={standardModel}
         actions={actions}
         onCreateDraft={onCreateDraft}
+        onDeleteModel={onDeleteModel}
         onReviewImpact={onReviewImpact}
       />,
     )
@@ -122,6 +128,7 @@ describe("ModelEditor", () => {
         model={customModel}
         actions={actions}
         onCreateDraft={onCreateDraft}
+        onDeleteModel={onDeleteModel}
         onReviewImpact={onReviewImpact}
       />,
     )
@@ -171,6 +178,7 @@ describe("ModelEditor", () => {
         ]}
         onInitializePreset={onInitializePreset}
         onCreateDraft={onCreateDraft}
+        onDeleteModel={onDeleteModel}
         onReviewImpact={onReviewImpact}
       />,
     )
@@ -205,6 +213,7 @@ describe("ModelEditor", () => {
         ]}
         onInitializePreset={onInitializePreset}
         onCreateDraft={onCreateDraft}
+        onDeleteModel={onDeleteModel}
         onReviewImpact={onReviewImpact}
       />,
     )
@@ -231,6 +240,7 @@ describe("ModelEditor", () => {
         presets={[]}
         onInitializePreset={onInitializePreset}
         onCreateDraft={onCreateDraft}
+        onDeleteModel={onDeleteModel}
         onReviewImpact={onReviewImpact}
       />,
     )
@@ -255,6 +265,7 @@ describe("ModelEditor", () => {
         }}
         actions={actions}
         onCreateDraft={onCreateDraft}
+        onDeleteModel={onDeleteModel}
         onReviewImpact={onReviewImpact}
       />,
     )
@@ -282,40 +293,21 @@ describe("ModelEditor", () => {
     })
   })
 
-  it("keeps delete disabled until the deactivation is actually published", () => {
-    // Flipping the switch only changes local state; the server still sees the
-    // model as active and refuses the delete, so enabling the button on the
-    // local value produced "custom model must be inactive before deletion".
-    render(
-      <ModelEditor
-        model={customModel}
-        actions={actions}
-        onCreateDraft={onCreateDraft}
-        onReviewImpact={onReviewImpact}
-      />,
-    )
-
-    expect(screen.getByRole("button", { name: "model.delete" })).toBeDisabled()
-
-    fireEvent.click(screen.getByLabelText("model.active"))
-
-    expect(screen.getByRole("button", { name: "model.delete" })).toBeDisabled()
-    expect(onCreateDraft).not.toHaveBeenCalled()
-  })
-
   it("says a drafted change is unpublished instead of implying it landed", async () => {
-    // Deleting only drafts a DELETE_MODEL change; the model survives a refresh
-    // until the draft is published, and the strip never said so.
+    // Saving drafts the change; nothing lands until it is published, and the
+    // strip used to report only the impact volume.
     render(
       <ModelEditor
         model={{ ...customModel, active: false }}
         actions={actions}
         onCreateDraft={onCreateDraft}
+        onDeleteModel={onDeleteModel}
         onReviewImpact={onReviewImpact}
       />,
     )
 
-    fireEvent.click(screen.getByRole("button", { name: "model.delete" }))
+    fireEvent.click(screen.getByLabelText("model.action.edit"))
+    fireEvent.click(screen.getByRole("button", { name: "model.save" }))
 
     const status = await screen.findByRole("status")
     expect(status).toHaveTextContent("impact.unpublished")
@@ -324,36 +316,44 @@ describe("ModelEditor", () => {
     ).toBeInTheDocument()
   })
 
-  it("allows deletion only after a custom model is inactive", async () => {
-    const { rerender } = render(
+  it("deletes in one action, carrying its own deactivation", async () => {
+    // Deleting used to mean deactivate, publish, delete, publish. The middle
+    // publish was easy to skip, and the model then survived the refresh.
+    render(
       <ModelEditor
         model={customModel}
         actions={actions}
         onCreateDraft={onCreateDraft}
+        onDeleteModel={onDeleteModel}
         onReviewImpact={onReviewImpact}
       />,
     )
 
-    expect(
-      screen.getByRole("button", { name: "model.delete" }),
-    ).toBeDisabled()
+    expect(screen.getByRole("button", { name: "model.delete" })).toBeEnabled()
+    fireEvent.click(screen.getByRole("button", { name: "model.delete" }))
 
-    rerender(
+    await waitFor(() => {
+      expect(onDeleteModel).toHaveBeenCalledWith(customModel.key, true)
+    })
+    // No draft is left dangling for someone to publish later.
+    expect(onCreateDraft).not.toHaveBeenCalled()
+  })
+
+  it("tells an already-inactive model apart so it is not deactivated twice", async () => {
+    render(
       <ModelEditor
         model={{ ...customModel, active: false }}
         actions={actions}
         onCreateDraft={onCreateDraft}
+        onDeleteModel={onDeleteModel}
         onReviewImpact={onReviewImpact}
       />,
     )
+
     fireEvent.click(screen.getByRole("button", { name: "model.delete" }))
+
     await waitFor(() => {
-      expect(onCreateDraft).toHaveBeenCalledWith([
-        {
-          type: "DELETE_MODEL",
-          model_key: "collaborator",
-        },
-      ])
+      expect(onDeleteModel).toHaveBeenCalledWith(customModel.key, false)
     })
   })
 
@@ -367,6 +367,7 @@ describe("ModelEditor", () => {
         }}
         actions={actions}
         onCreateDraft={onCreateDraft}
+        onDeleteModel={onDeleteModel}
         onReviewImpact={onReviewImpact}
       />,
     )

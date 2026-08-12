@@ -100,7 +100,7 @@
       "apply": "应用预设",
       "blank": "空白模型（不预选动作）"
     },
-    "deactivateFirst": "请先停用并发布，之后才能删除"
+    "confirmDelete": "确认删除模型「{{name}}」？删除后立即生效，不可恢复。"
   },
   "impact": {
     "title": "发布影响确认",

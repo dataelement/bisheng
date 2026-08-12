@@ -933,3 +933,76 @@ async def test_a_later_change_in_the_batch_wins_over_an_earlier_one(
             )
         ).scalar_one()
     assert row.level == 4
+
+
+async def test_deactivate_and_delete_in_one_batch(
+    session_factory: SessionFactory,
+) -> None:
+    """Removing a model must not need two publications.
+
+    Deletability was judged against the base release, so a batch that deactivates
+    a model and then deletes it was refused for being active — forcing
+    deactivate, publish, delete, publish for one removal.
+    """
+
+    fga = InMemoryCatalogFGA()
+    marker = FakeCatalogMarker()
+    current = await _seed_current(session_factory, fga)
+    api = _api(session_factory, fga, marker)
+
+    draft = await api.create_draft(
+        request=CatalogDraftRequest(
+            idempotency_key="deactivate-then-delete",
+            base_release_id=int(current.id),
+            changes=(
+                CatalogChangeRequest(
+                    type=CatalogChangeType.SET_MODEL_ACTIVE,
+                    model_key="collaborator",
+                    active=False,
+                ),
+                CatalogChangeRequest(
+                    type=CatalogChangeType.DELETE_MODEL,
+                    model_key="collaborator",
+                ),
+            ),
+        ),
+        operator_id=7,
+    )
+
+    async with session_factory() as session:
+        rows = list(
+            (
+                await session.execute(
+                    select(PermissionModel).where(PermissionModel.catalog_release_id == draft["draft_id"])
+                )
+            ).scalars()
+        )
+    assert "collaborator" not in {row.model_key for row in rows}
+
+
+async def test_an_active_model_alone_is_still_refused(
+    session_factory: SessionFactory,
+) -> None:
+    """The guard itself stays: deleting a live model needs the deactivation."""
+
+    from bisheng.common.errcode.permission import PermissionModelStateConflictError
+
+    fga = InMemoryCatalogFGA()
+    marker = FakeCatalogMarker()
+    current = await _seed_current(session_factory, fga)
+    api = _api(session_factory, fga, marker)
+
+    with pytest.raises(PermissionModelStateConflictError):
+        await api.create_draft(
+            request=CatalogDraftRequest(
+                idempotency_key="delete-while-active",
+                base_release_id=int(current.id),
+                changes=(
+                    CatalogChangeRequest(
+                        type=CatalogChangeType.DELETE_MODEL,
+                        model_key="collaborator",
+                    ),
+                ),
+            ),
+            operator_id=7,
+        )

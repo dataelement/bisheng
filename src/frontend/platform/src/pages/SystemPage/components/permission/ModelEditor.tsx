@@ -18,6 +18,7 @@ import type {
 import { ShieldAlert } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
 import { actionLabel } from "./actionLabels"
 
 const BLANK_PRESET_KEY = "__blank__"
@@ -38,6 +39,7 @@ interface ModelEditorProps {
   onCreateDraft: (
     changes: PermissionCatalogChange[],
   ) => Promise<PermissionCatalogDraft>
+  onDeleteModel: (modelKey: string, wasActive: boolean) => Promise<void>
   onReviewImpact: (draft: PermissionCatalogDraft) => void
 }
 
@@ -59,6 +61,7 @@ export function ModelEditor({
   disabled = false,
   onInitializePreset,
   onCreateDraft,
+  onDeleteModel,
   onReviewImpact,
 }: ModelEditorProps) {
   const { t } = useTranslation("permission")
@@ -195,22 +198,24 @@ export function ModelEditor({
     onInitializePreset?.(initializedPreset)
   }
 
-  const handleDelete = async () => {
-    // `active` is the local switch; the server still sees the published value and
-    // refuses to delete a model that is active there. Flipping the switch made
-    // the button clickable and the call then failed.
-    if (disabled || saving || createMode || isStandard || model.active) return
-    setSaving(true)
-    try {
-      setDraft(await onCreateDraft([
-        {
-          type: "DELETE_MODEL",
-          model_key: model.key,
-        },
-      ]))
-    } finally {
-      setSaving(false)
-    }
+  const handleDelete = () => {
+    if (disabled || saving || createMode || isStandard) return
+    // Deletion carries its own deactivation and publishes itself: the model is
+    // referenced by no grant, so there is nothing to review, and the old
+    // deactivate-publish-delete-publish dance lost people halfway through.
+    bsConfirm({
+      desc: t("model.confirmDelete", { name: model.name }),
+      okTxt: t("model.delete"),
+      async onOk(next) {
+        setSaving(true)
+        try {
+          await onDeleteModel(model.key, model.active)
+        } finally {
+          setSaving(false)
+          next()
+        }
+      },
+    })
   }
 
   return (
@@ -383,9 +388,8 @@ export function ModelEditor({
             type="button"
             variant="outline"
             className="min-h-11 text-red-700"
-            disabled={disabled || saving || model.active}
-            title={model.active ? t("model.deactivateFirst") : undefined}
-            onClick={() => void handleDelete()}
+            disabled={disabled || saving}
+            onClick={handleDelete}
           >
             {t("model.delete")}
           </Button>
