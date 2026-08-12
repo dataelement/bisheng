@@ -99,7 +99,8 @@
       "select": "プリセットを選択",
       "apply": "プリセットを適用",
       "blank": "空のモデル（アクション未選択）"
-    }
+    },
+    "deactivateFirst": "先に無効化して公開してから削除してください"
   },
   "impact": {
     "title": "公開影響の確認",
@@ -117,7 +118,9 @@
     "cancel": "キャンセル",
     "publish": "公開を確認",
     "publishing": "公開中…",
-    "publishFailed": "公開に失敗しました。再読み込みしてお試しください。"
+    "publishFailed": "公開に失敗しました。再読み込みしてお試しください。",
+    "unpublished": "この変更はまだ公開されていません",
+    "publishChanges": "変更を公開"
   },
   "mode": {
     "label": "権限モード",

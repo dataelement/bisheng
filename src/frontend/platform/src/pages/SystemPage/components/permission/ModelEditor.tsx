@@ -196,7 +196,10 @@ export function ModelEditor({
   }
 
   const handleDelete = async () => {
-    if (disabled || saving || createMode || isStandard || active) return
+    // `active` is the local switch; the server still sees the published value and
+    // refuses to delete a model that is active there. Flipping the switch made
+    // the button clickable and the call then failed.
+    if (disabled || saving || createMode || isStandard || model.active) return
     setSaving(true)
     try {
       setDraft(await onCreateDraft([
@@ -356,6 +359,8 @@ export function ModelEditor({
           >
             <ShieldAlert aria-hidden="true" className="size-4 shrink-0" />
             <span className="flex-1">
+              {t("impact.unpublished")}
+              {" · "}
               {t("impact.pending", {
                 resources: draft.impact.resource_count,
                 grants: draft.impact.grant_count,
@@ -363,11 +368,10 @@ export function ModelEditor({
             </span>
             <Button
               type="button"
-              variant="outline"
-              className="min-h-11 bg-background"
+              className="min-h-11"
               onClick={() => onReviewImpact(draft)}
             >
-              {t("impact.review")}
+              {t("impact.publishChanges")}
             </Button>
           </div>
         )}
@@ -379,7 +383,8 @@ export function ModelEditor({
             type="button"
             variant="outline"
             className="min-h-11 text-red-700"
-            disabled={disabled || saving || active}
+            disabled={disabled || saving || model.active}
+            title={model.active ? t("model.deactivateFirst") : undefined}
             onClick={() => void handleDelete()}
           >
             {t("model.delete")}

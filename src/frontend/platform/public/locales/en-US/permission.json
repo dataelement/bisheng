@@ -99,7 +99,8 @@
       "select": "Select a preset",
       "apply": "Apply Preset",
       "blank": "Blank model (no actions preselected)"
-    }
+    },
+    "deactivateFirst": "Deactivate and publish first, then delete"
   },
   "impact": {
     "title": "Confirm Publish Impact",
@@ -117,7 +118,9 @@
     "cancel": "Cancel",
     "publish": "Confirm Publish",
     "publishing": "Publishing…",
-    "publishFailed": "Publish failed. Refresh and try again."
+    "publishFailed": "Publish failed. Refresh and try again.",
+    "unpublished": "This change is not published yet",
+    "publishChanges": "Publish changes"
   },
   "mode": {
     "label": "Permission Mode",

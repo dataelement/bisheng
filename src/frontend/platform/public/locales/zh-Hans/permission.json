@@ -99,7 +99,8 @@
       "select": "选择预设",
       "apply": "应用预设",
       "blank": "空白模型（不预选动作）"
-    }
+    },
+    "deactivateFirst": "请先停用并发布，之后才能删除"
   },
   "impact": {
     "title": "发布影响确认",
@@ -117,7 +118,9 @@
     "cancel": "取消",
     "publish": "确认发布",
     "publishing": "正在发布…",
-    "publishFailed": "发布失败，请刷新后重试"
+    "publishFailed": "发布失败，请刷新后重试",
+    "unpublished": "此变更尚未发布，发布后生效",
+    "publishChanges": "发布更改"
   },
   "mode": {
     "label": "权限模式",

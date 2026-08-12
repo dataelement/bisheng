@@ -282,6 +282,48 @@ describe("ModelEditor", () => {
     })
   })
 
+  it("keeps delete disabled until the deactivation is actually published", () => {
+    // Flipping the switch only changes local state; the server still sees the
+    // model as active and refuses the delete, so enabling the button on the
+    // local value produced "custom model must be inactive before deletion".
+    render(
+      <ModelEditor
+        model={customModel}
+        actions={actions}
+        onCreateDraft={onCreateDraft}
+        onReviewImpact={onReviewImpact}
+      />,
+    )
+
+    expect(screen.getByRole("button", { name: "model.delete" })).toBeDisabled()
+
+    fireEvent.click(screen.getByLabelText("model.active"))
+
+    expect(screen.getByRole("button", { name: "model.delete" })).toBeDisabled()
+    expect(onCreateDraft).not.toHaveBeenCalled()
+  })
+
+  it("says a drafted change is unpublished instead of implying it landed", async () => {
+    // Deleting only drafts a DELETE_MODEL change; the model survives a refresh
+    // until the draft is published, and the strip never said so.
+    render(
+      <ModelEditor
+        model={{ ...customModel, active: false }}
+        actions={actions}
+        onCreateDraft={onCreateDraft}
+        onReviewImpact={onReviewImpact}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole("button", { name: "model.delete" }))
+
+    const status = await screen.findByRole("status")
+    expect(status).toHaveTextContent("impact.unpublished")
+    expect(
+      screen.getByRole("button", { name: "impact.publishChanges" }),
+    ).toBeInTheDocument()
+  })
+
   it("allows deletion only after a custom model is inactive", async () => {
     const { rerender } = render(
       <ModelEditor

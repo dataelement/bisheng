@@ -50,8 +50,13 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
     const [permTarget, setPermTarget] = useState<{ id: string; name: string } | null>(null);
     const toolIds = allData.map((el: any) => String(el.id));
     const { actions } = useResourceActions('tool', toolIds, ['manage_permission']);
+    // Built-in tools have no per-resource permissions to manage: the server only
+    // recognises `visible` and `use` for them and rejects anything else. The
+    // actions hook waves admins through without asking, so the entry appeared and
+    // the dialog then failed on `grantable-models`.
+    const isBuiltinTool = type === "";
     const canManageTool = (id: string | number) =>
-        hasResourceAction(actions, id, 'manage_permission');
+        !isBuiltinTool && hasResourceAction(actions, id, 'manage_permission');
 
     const loadData = async (_type = "custom") => {
         await getToolsApi(_type, { action: 'visible' }).then((res) => {
