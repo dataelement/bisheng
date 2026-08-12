@@ -70,7 +70,7 @@ interface ModelCatalogPanelProps {
   onCreateDraft: (
     changes: PermissionCatalogChange[],
   ) => Promise<PermissionCatalogDraft>
-  onDeleteModel: (modelKey: string, wasActive: boolean) => Promise<void>
+  onDeleteModel: (modelKey: string) => Promise<void>
   onReviewImpact: (draft: PermissionCatalogDraft) => void
 }
 
@@ -228,17 +228,15 @@ export function RolesAndPermissions() {
    *
    * Deleting used to mean deactivate, publish, delete, publish — four steps for
    * one removal, and the middle publish was easy to skip, leaving the model in
-   * place. A deletable model is inactive and referenced by no grant, so there is
-   * nothing for a separate impact review to weigh.
+   * place. A deletable model is inactive (the editor will not offer deletion
+   * otherwise) and referenced by no grant, so there is nothing for a separate
+   * impact review to weigh.
    */
-  const handleDeleteModel = async (modelKey: string, wasActive: boolean) => {
+  const handleDeleteModel = async (modelKey: string) => {
     if (!catalog) throw new Error("permission Catalog is not loaded")
-    const changes: PermissionCatalogChange[] = wasActive
-      ? [
-          { type: "SET_MODEL_ACTIVE", model_key: modelKey, active: false },
-          { type: "DELETE_MODEL", model_key: modelKey },
-        ]
-      : [{ type: "DELETE_MODEL", model_key: modelKey }]
+    const changes: PermissionCatalogChange[] = [
+      { type: "DELETE_MODEL", model_key: modelKey },
+    ]
     try {
       const draft = await handleCreateDraft(changes)
       await handlePublish(draft.draft_id, {
@@ -247,13 +245,19 @@ export function RolesAndPermissions() {
         confirmed: true,
       })
       setSelectedModelKey(null)
-    } catch {
+    } catch (error) {
       // Nothing else reports this: the request layer only auto-toasts a couple of
       // special codes, and a failed publish would otherwise close the dialog and
-      // leave the model in place with no explanation.
+      // leave the model in place with no explanation. 25004 covers several model
+      // -state conflicts, so name the one in the way — "state does not allow
+      // this" leaves the author with nothing to act on.
+      const detail = (error as { data?: { reason?: string; reference_count?: number } })?.data
       message({
         variant: "error",
-        description: t("model.deleteFailed"),
+        description:
+          detail?.reason === "referenced_by_grants"
+            ? t("model.deleteBlockedByGrants", { count: detail.reference_count ?? 0 })
+            : t("model.deleteFailed"),
       })
     }
   }

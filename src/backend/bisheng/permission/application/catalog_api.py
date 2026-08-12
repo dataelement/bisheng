@@ -1574,6 +1574,7 @@ class F048CatalogApi:
                 model = self._custom_model(change.model_key, custom_by_key)
                 derived = next(item for item in before.model_release.models if item.model_key == model.model_key)
                 references = await self._state.grant_references()
+                reference_count = len(references.get(model.model_key, ()))
                 try:
                     # Judge "is it disabled" on the state this batch publishes, not
                     # on the base release. Reading the base meant a batch that
@@ -1581,12 +1582,18 @@ class F048CatalogApi:
                     # forcing two separate publications to remove one model.
                     ensure_model_deletable(
                         replace(derived, active=model.active),
-                        reference_count=len(references.get(model.model_key, ())),
+                        reference_count=reference_count,
                     )
                 except ValueError as exc:
+                    # 25004 covers several model-state conflicts, so its generic
+                    # copy cannot name the blocker. Say which one it is, and how
+                    # much is in the way, or the caller only learns "state does
+                    # not allow this".
                     raise PermissionModelStateConflictError(
                         exception=exc,
                         msg=str(exc),
+                        reason="referenced_by_grants" if reference_count else "model_is_active",
+                        reference_count=reference_count,
                     ) from exc
                 del custom_by_key[model.model_key]
             elif kind == CatalogChangeType.SET_ALLOW_SAME_LEVEL:

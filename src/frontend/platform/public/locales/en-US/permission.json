@@ -101,7 +101,9 @@
       "blank": "Blank model (no actions preselected)"
     },
     "confirmDelete": "Delete the model \"{{name}}\"? This takes effect immediately and cannot be undone.",
-    "deleteFailed": "Delete failed. Refresh and try again"
+    "deleteFailed": "Delete failed. Refresh and try again",
+    "deleteBlockedByGrants": "{{count}} grant(s) still use this permission model. Move them to another model before deleting it.",
+    "disableBeforeDelete": "Turn the model off before deleting it"
   },
   "impact": {
     "title": "Confirm Publish Impact",
