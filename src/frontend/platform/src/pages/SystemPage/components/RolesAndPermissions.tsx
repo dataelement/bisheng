@@ -239,13 +239,23 @@ export function RolesAndPermissions() {
           { type: "DELETE_MODEL", model_key: modelKey },
         ]
       : [{ type: "DELETE_MODEL", model_key: modelKey }]
-    const draft = await handleCreateDraft(changes)
-    await handlePublish(draft.draft_id, {
-      expected_current_release_id: catalog.id,
-      idempotency_key: createIdempotencyKey("catalog-publish"),
-      confirmed: true,
-    })
-    setSelectedModelKey(null)
+    try {
+      const draft = await handleCreateDraft(changes)
+      await handlePublish(draft.draft_id, {
+        expected_current_release_id: catalog.id,
+        idempotency_key: createIdempotencyKey("catalog-publish"),
+        confirmed: true,
+      })
+      setSelectedModelKey(null)
+    } catch {
+      // Nothing else reports this: the request layer only auto-toasts a couple of
+      // special codes, and a failed publish would otherwise close the dialog and
+      // leave the model in place with no explanation.
+      message({
+        variant: "error",
+        description: t("model.deleteFailed"),
+      })
+    }
   }
 
   const handlePublish = async (

@@ -100,7 +100,8 @@
       "apply": "应用预设",
       "blank": "空白模型（不预选动作）"
     },
-    "confirmDelete": "确认删除模型「{{name}}」？删除后立即生效，不可恢复。"
+    "confirmDelete": "确认删除模型「{{name}}」？删除后立即生效，不可恢复。",
+    "deleteFailed": "删除失败，请刷新后重试"
   },
   "impact": {
     "title": "发布影响确认",

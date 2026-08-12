@@ -100,7 +100,8 @@
       "apply": "Apply Preset",
       "blank": "Blank model (no actions preselected)"
     },
-    "confirmDelete": "Delete the model \"{{name}}\"? This takes effect immediately and cannot be undone."
+    "confirmDelete": "Delete the model \"{{name}}\"? This takes effect immediately and cannot be undone.",
+    "deleteFailed": "Delete failed. Refresh and try again"
   },
   "impact": {
     "title": "Confirm Publish Impact",
