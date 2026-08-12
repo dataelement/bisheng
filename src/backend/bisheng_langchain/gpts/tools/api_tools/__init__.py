@@ -3,6 +3,7 @@ from typing import Any, Callable, Dict, List, Tuple
 # from .eastmoney import
 from bisheng_langchain.gpts.tools.api_tools.firecrawl import FireCrawl
 from bisheng_langchain.gpts.tools.api_tools.jina import JinaTool
+from bisheng_langchain.gpts.tools.api_tools.minimax_image import MiniMaxImage
 from bisheng_langchain.gpts.tools.api_tools.silicon_flow import SiliconFlow
 from bisheng_langchain.gpts.tools.message.dingding import DingdingMessageTool
 from bisheng_langchain.gpts.tools.message.email import EmailMessageTool
@@ -74,6 +75,9 @@ _SILICON_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[str]]] = 
     'silicon_stable_diffusion': (SiliconFlow.get_api_tool, ['siliconflow_api_key']),
     'silicon_flux': (SiliconFlow.get_api_tool, ['siliconflow_api_key'])
 }
+_MINIMAX_IMAGE_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[str]]] = {
+    "minimax_image_generation": (MiniMaxImage.get_api_tool, ["minimax_api_key", "minimax_base_url"])
+}
 dingding_class_methods = [
     method for method in DingdingMessageTool.__dict__
     if isinstance(DingdingMessageTool.__dict__[method], classmethod)
@@ -120,6 +124,7 @@ ALL_API_TOOLS.update(_TMP_TOOLS)
 ALL_API_TOOLS.update(_FIRE_TOOLS)
 ALL_API_TOOLS.update(_JINA_TOOLS)
 ALL_API_TOOLS.update(_SILICON_TOOLS)
+ALL_API_TOOLS.update(_MINIMAX_IMAGE_TOOLS)
 ALL_API_TOOLS.update(_DING_TOOLS)
 ALL_API_TOOLS.update(_EMAIL_TOOLS)
 ALL_API_TOOLS.update(_FEISHU_TOOLS)

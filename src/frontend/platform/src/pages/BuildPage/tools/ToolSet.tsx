@@ -10,6 +10,7 @@ import Dalle3ToolForm from "./builtInTool/Dalle3";
 import EmailConfigForm from "./builtInTool/EmailConfig";
 import FeishuConfigForm from "./builtInTool/FeishuConfig";
 import JinaApiKeyForm from "./builtInTool/JinaConfig";
+import { MiniMaxConfig } from "./builtInTool/MiniMaxConfig";
 import SiliconFlowApiKeyForm from "./builtInTool/SiliconFlowApiKey";
 import TianyanchaToolForm from "./builtInTool/Tianyancha";
 import WebSearchForm from "./builtInTool/WebSearchFrom";
@@ -102,6 +103,8 @@ const ToolSet = forwardRef(function ToolSet({ onChange }, ref) {
                 return <JinaApiKeyForm formData={formData} onSubmit={handleSubmit} />;
             case 'SiliconFlow':
                 return <SiliconFlowApiKeyForm formData={formData} onSubmit={handleSubmit} />;
+            case 'MiniMax':
+                return <MiniMaxConfig formData={formData} onSubmit={handleSubmit} />;
             case '发送邮件':
                 return <EmailConfigForm formData={formData} onSubmit={handleSubmit} />;
             case '飞书消息':
