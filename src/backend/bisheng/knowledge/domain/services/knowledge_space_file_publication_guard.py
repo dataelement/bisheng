@@ -40,8 +40,8 @@ class KnowledgeSpaceFilePublicationGuard:
     """F046 publication gate layered after the caller's normal ReBAC check.
 
     This guard never grants resource access. It only hides formal rows created
-    for approved uploads until the request, parser and all durable publication
-    steps have reached their authoritative success states.
+    for approved uploads until formal registration, permission writes and the
+    regular parser handoff have completed.
     """
 
     _MANIFEST_KEY = "formal_resource_ids"
@@ -134,7 +134,7 @@ class KnowledgeSpaceFilePublicationGuard:
             requests = await request_repository.list_unpublished_upload_candidates(
                 tenant_id=int(tenant_id),
                 space_ids=normalized_space_ids,
-                required_step_codes=UploadExecutionStepCode.ALL,
+                required_step_codes=UploadExecutionStepCode.BUSINESS_REQUIRED,
             )
             resources = self._resources_by_id(requests)
             created_folder_ids = {

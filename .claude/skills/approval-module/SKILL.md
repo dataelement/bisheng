@@ -121,7 +121,7 @@ task/sibling/instance/log/exception/outbox 状态迁移。提交后才执行 out
 | `worker/approval/file_change_tasks.py` | F046 动态审批人及 Deferred/step/stage/delete 补偿：单次 Beat 跨租户 coordinator、显式 tenant header 的 keyset 分页任务和 token-bound owner 任务（走默认 `celery` 队列） | `reconcile_all_file_change_approvers`、`watchdog_all_file_change_executions`、`compensate_all_file_change_execution_steps`、`cleanup_all_file_change_residue` |
 | `knowledge/domain/services/knowledge_space_file_change_scenario_handler.py` | F046 runtime handler：严格 owner/manager、候选发现、详情可见性、固定异常策略、Deferred resume/dispatch 与终态清理 | `discover_candidate_instances()`、`reconcile_pending_approvers()`、`exception_action_policy()`、`prepare_resume()`、`dispatch_deferred_execution()` |
 | `knowledge/domain/services/knowledge_space_file_change_policy_service.py` | F046 当前租户策略与单空间设置；Platform 多项保存使用一个事务，拒绝跨租户空间并整体回滚 | `save_configuration()`、`is_approval_required()`、`get_space_settings_page()` |
-| `knowledge/domain/services/knowledge_space_file_change_execution_coordinator.py` | F046 durable step dispatch/ack、heartbeat、Deferred complete/fail/resume 与业务状态投影 | `reconcile()`、`prepare_resume_in_uow()`、`get_business_status_projection()` |
+| `knowledge/domain/services/knowledge_space_file_change_execution_coordinator.py` | F046 durable step dispatch/ack、heartbeat、Deferred complete/fail/resume 与业务状态投影；upload 在正式记录、FGA 与普通解析调度交接完成后结束审批执行 | `reconcile()`、`prepare_resume_in_uow()`、`get_business_status_projection()` |
 | `knowledge/domain/services/knowledge_space_upload_stage_service.py` | F046 opaque stage：登记临时桶对象、申请绑定后幂等复制到永久桶、预览与终态清理 | `create_stage()`、`retain_bound_stage()`、`cleanup()`、`reconcile_expired_orphan()` |
 | `knowledge/domain/services/knowledge_space_mutation_executor.py` | F046 mutation owner 编排入口：从持久化 request/step/token 恢复并校验后执行或补偿 | `execute_and_verify_step()`、`continue_compensation()`、`continue_post_cutover_cleanup()` |
 | `knowledge/domain/services/knowledge_space_mutation_step_owner.py` | rename/move 外部副作用的稳定 owner 协议；具体实现可演进，但 worker 只经 executor 调用该协议 | `MutationStepOwner` |
@@ -203,7 +203,9 @@ task/sibling/instance/log/exception/outbox 状态迁移。提交后才执行 out
 - **异常策略**：只允许 `retry` 与 `cancel`。`approver_empty` retry 重新解析完整当前集合，
   `execute_failed` retry 进入 token-bound Deferred resume；禁止 assign/assign-flow/skip/mark-complete
 - **执行**：审批通过后可返回 `Deferred`；只有 durable step 的权威读后校验满足完成判据，才能把
-  outbox/instance 置 success/executed。上传、rename/move transition 和 delete purge 的补偿由默认队列任务持续处理
+  outbox/instance 置 success/executed。upload 的完成判据固定为正式文件图已提交、OpenFGA 权限写入成功且普通文件
+  解析调度已接收；之后的解析、索引、向量化成功或失败只属于文件生命周期，不回写或回退审批状态。
+  upload 业务交接、rename/move transition 和 delete purge 的补偿由默认队列任务持续处理
 
 ---
 
@@ -273,8 +275,11 @@ FGA/MinIO/ES/Milvus purge 不回滚已完成的逻辑删除；每类必须对 im
 guard footprint。普通 dict、task id 或仅 DB cutover 均不得作为成功证据。
 
 F046 rename/move/upload 的异步执行使用 token-bound Deferred generation。通用 step dispatcher 只处理
-`applying` 的当前 token，并按动作依赖逐步开放外部步骤；queue task id 只表示已派发，只有 owner
-Service 的 read-after-verify 结果可以 ack succeeded。`execute_failed` 异常的 retry 不进入动态审批人
+`applying` 的当前 token，并按动作依赖逐步开放外部步骤。rename/move 的 queue task id 只表示已派发，只有 owner
+Service 的 read-after-verify 结果可以 ack succeeded；upload 则以正式文件图提交、OpenFGA 权限权威写入和
+`enqueue_or_dispatch()` 成功接收为审批业务完成证据，调度时不得再携带 F046 parser terminal callback 上下文。
+解析任务后续按普通用户上传流程独立更新文件状态，解析、索引或向量化失败不得将已经完成的审批改为
+`execute_failed`。`execute_failed` 异常的 retry 不进入动态审批人
 对账，而是由 `ApprovalOutboxService.resume_deferred_execution()` 在 instance/outbox 锁事务内调用
 handler `prepare_resume()`，原子生成新 token 并复位未完成业务步骤；提交后通过 handler 的
 `dispatch_resumed_execution()` 携带显式 `tenant_id` header 补投 coordinator。旧 token、FAILED、

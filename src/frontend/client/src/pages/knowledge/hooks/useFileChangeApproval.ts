@@ -8,7 +8,6 @@ import {
 import {
     cleanupUploadFileChangeApi,
     getFileChangeDetailApi,
-    getFileChangePreviewApi,
     listPendingUploadFileChangesApi,
     retryFileChangeIngestApi,
     type FileChangeApprovalStatus,
@@ -171,7 +170,6 @@ export function useFileChangeApproval({
     });
 
     const closeDetail = useCallback(() => setDetailRequestId(null), []);
-    const preview = useCallback((requestId: number) => getFileChangePreviewApi(spaceId!, requestId), [spaceId]);
     const refreshFormalFiles = useCallback(() => {
         if (spaceId) {
             window.dispatchEvent(new CustomEvent("knowledge-space-files:refresh", {
@@ -195,7 +193,6 @@ export function useFileChangeApproval({
         closeDetail,
         detail: detailQuery.data,
         detailLoading: detailQuery.isLoading,
-        preview,
         retryIngest: retryMutation.mutateAsync,
         retrying: retryMutation.isPending,
         cleanup: cleanupMutation.mutateAsync,

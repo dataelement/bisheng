@@ -289,7 +289,7 @@ async def test_worker_entry_resolves_current_deferred_identity_without_approval_
     )
 
 
-async def test_upload_terminal_ack_reads_formal_file_and_completes_real_pipeline(coordinator_engine):
+async def test_legacy_upload_terminal_ack_completes_parser_handoff_only(coordinator_engine):
     set_current_tenant_id(42)
     request_id, file_id = await _seed_upload(
         coordinator_engine,
@@ -328,17 +328,19 @@ async def test_upload_terminal_ack_reads_formal_file_and_completes_real_pipeline
 
     assert status == ExecutionReconcileStatus.COMPLETED
     by_code = {row.step_code: row for row in await _steps(coordinator_engine, request_id)}
-    for code in (UploadExecutionStepCode.PARSE, UploadExecutionStepCode.INDEX, UploadExecutionStepCode.VECTOR):
-        assert by_code[code].state == KnowledgeSpaceFileChangeExecutionStepState.SUCCEEDED
-        assert by_code[code].result_digest.startswith(f"file:{file_id}:status:2:")
+    assert by_code[UploadExecutionStepCode.PARSE].state == KnowledgeSpaceFileChangeExecutionStepState.SUCCEEDED
+    assert by_code[UploadExecutionStepCode.PARSE].result_digest == f"legacy-parser-handoff:file:{file_id}"
+    for code in (UploadExecutionStepCode.INDEX, UploadExecutionStepCode.VECTOR):
+        assert by_code[code].state == KnowledgeSpaceFileChangeExecutionStepState.PENDING
     outbox.complete_deferred_execution.assert_awaited_once()
 
 
-async def test_upload_terminal_failure_uses_authoritative_file_status_and_fails_generation(coordinator_engine):
+async def test_upload_terminal_failure_does_not_regress_completed_business_handoff(coordinator_engine):
     set_current_tenant_id(42)
     request_id, file_id = await _seed_upload(
         coordinator_engine,
         file_status=KnowledgeFileStatus.FAILED.value,
+        step_state=KnowledgeSpaceFileChangeExecutionStepState.SUCCEEDED,
     )
     outbox_row = SimpleNamespace(
         id=201,
@@ -357,10 +359,11 @@ async def test_upload_terminal_failure_uses_authoritative_file_status_and_fails_
         file_id=file_id,
     )
 
-    assert status == ExecutionReconcileStatus.FAILED
-    outbox.fail_deferred_execution.assert_awaited_once()
+    assert status == ExecutionReconcileStatus.COMPLETED
+    outbox.complete_deferred_execution.assert_awaited_once()
+    outbox.fail_deferred_execution.assert_not_awaited()
     assert (await _request(coordinator_engine, request_id)).execution_state == (
-        KnowledgeSpaceFileChangeExecutionState.FAILED
+        KnowledgeSpaceFileChangeExecutionState.APPLIED
     )
 
 
@@ -664,7 +667,7 @@ async def test_duplicate_verified_ack_is_idempotent(coordinator_engine):
     assert parse.result_digest == "parse:v1"
 
 
-async def test_upload_only_completes_after_file_and_every_publication_step_are_authoritative(coordinator_engine):
+async def test_upload_completes_after_permission_and_parser_handoff_are_authoritative(coordinator_engine):
     set_current_tenant_id(42)
     request_id, file_id = await _seed_upload(
         coordinator_engine,
@@ -688,7 +691,7 @@ async def test_upload_only_completes_after_file_and_every_publication_step_are_a
     assert file_id > 0
 
 
-async def test_processing_upload_heartbeats_and_never_completes(coordinator_engine):
+async def test_processing_upload_completes_approval_after_business_handoff(coordinator_engine):
     set_current_tenant_id(42)
     request_id, _ = await _seed_upload(
         coordinator_engine,
@@ -699,32 +702,34 @@ async def test_processing_upload_heartbeats_and_never_completes(coordinator_engi
 
     status = await coordinator.reconcile(identity=_identity(request_id))
 
-    assert status == ExecutionReconcileStatus.RUNNING
-    outbox.heartbeat_deferred_execution.assert_awaited_once()
-    outbox.complete_deferred_execution.assert_not_awaited()
+    assert status == ExecutionReconcileStatus.COMPLETED
+    outbox.heartbeat_deferred_execution.assert_not_awaited()
+    outbox.complete_deferred_execution.assert_awaited_once()
     assert (await _request(coordinator_engine, request_id)).execution_state == (
-        KnowledgeSpaceFileChangeExecutionState.APPLYING
+        KnowledgeSpaceFileChangeExecutionState.APPLIED
     )
 
 
-async def test_parse_failure_marks_request_and_deferred_outbox_failed(coordinator_engine):
+async def test_parse_failure_does_not_fail_approval_after_business_handoff(coordinator_engine):
     set_current_tenant_id(42)
     request_id, _ = await _seed_upload(
         coordinator_engine,
         file_status=KnowledgeFileStatus.FAILED.value,
+        step_state=KnowledgeSpaceFileChangeExecutionStepState.SUCCEEDED,
     )
     coordinator, outbox = _coordinator(coordinator_engine)
 
     status = await coordinator.reconcile(identity=_identity(request_id))
 
-    assert status == ExecutionReconcileStatus.FAILED
+    assert status == ExecutionReconcileStatus.COMPLETED
     request = await _request(coordinator_engine, request_id)
-    assert request.execution_state == KnowledgeSpaceFileChangeExecutionState.FAILED
-    assert request.execution_checkpoint["failure_reason"] == "file parsing failed"
-    outbox.fail_deferred_execution.assert_awaited_once()
+    assert request.execution_state == KnowledgeSpaceFileChangeExecutionState.APPLIED
+    assert "failure_reason" not in request.execution_checkpoint
+    outbox.complete_deferred_execution.assert_awaited_once()
+    outbox.fail_deferred_execution.assert_not_awaited()
 
 
-async def test_projection_has_one_business_status_and_forbids_executed_plus_parsing(coordinator_engine):
+async def test_projection_uses_business_execution_status_without_parser_states(coordinator_engine):
     set_current_tenant_id(42)
     request_id, _ = await _seed_upload(
         coordinator_engine,
@@ -744,7 +749,7 @@ async def test_projection_has_one_business_status_and_forbids_executed_plus_pars
     running = await coordinator.get_business_status_projection(instance=running_instance, request=request)
     inconsistent = await coordinator.get_business_status_projection(instance=executed_instance, request=request)
 
-    assert running["status"] == "parsing"
+    assert running["status"] == "executing"
     assert inconsistent["status"] == "execute_failed"
     assert inconsistent["failure_reason"] == "business execution is incomplete"
 

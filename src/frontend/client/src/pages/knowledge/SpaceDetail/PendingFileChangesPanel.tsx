@@ -29,18 +29,16 @@ interface PendingFileChangesPanelProps {
 
 const FILTERS: FileChangeApprovalStatus[] = [
     "pending",
-    "parsing",
-    "parse_failed",
     "execute_failed",
 ];
 
 function isRetryable(item: PendingUploadFileChange): boolean {
-    return item.status === "parse_failed" || item.status === "execute_failed";
+    return item.status === "execute_failed";
 }
 
 function isCleanable(item: PendingUploadFileChange): boolean {
     return [
-        "pending", "approver_empty", "rejected", "withdrawn", "cancelled", "parse_failed", "execute_failed",
+        "pending", "approver_empty", "execute_failed",
     ].includes(item.status);
 }
 

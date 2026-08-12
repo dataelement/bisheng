@@ -35,12 +35,12 @@ const rowLabelKeys = {
 } as const;
 
 function canRetry(detail: FileChangeDetail): boolean {
-    return detail.action === "upload" && ["parse_failed", "execute_failed"].includes(detail.status);
+    return detail.action === "upload" && detail.status === "execute_failed";
 }
 
 function canCleanup(detail: FileChangeDetail): boolean {
     return detail.action === "upload" && [
-        "pending", "approver_empty", "rejected", "withdrawn", "cancelled", "parse_failed", "execute_failed",
+        "pending", "approver_empty", "execute_failed",
     ].includes(detail.status);
 }
 

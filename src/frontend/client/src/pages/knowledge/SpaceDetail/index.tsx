@@ -828,13 +828,14 @@ export function KnowledgeSpaceContent({
         spaceId: space.id,
         onFormalFilesRefresh: () => onDeleteFile(""),
     });
-    const handleFileChangePreview = async (requestId: number) => {
-        try {
-            const result = await fileChangeApproval.preview(requestId);
-            window.open(result.previewUrl, "_blank", "noopener,noreferrer");
-        } catch {
+    const handleFileChangePreview = (requestId: number) => {
+        const pendingFile = fileChangeApproval.pendingItems.find((item) => item.requestId === requestId);
+        if (!pendingFile) {
             showToast({ message: localize("com_knowledge.file_change_preview_failed"), status: "error" });
+            return;
         }
+        const url = `${__APP_ENV__.BASE_URL}/knowledge/file-change/${requestId}?name=${encodeURIComponent(pendingFile.fileName)}&spaceId=${encodeURIComponent(space.id)}`;
+        window.open(url, "_blank", "noopener,noreferrer");
     };
     const handleFileChangeCleanup = async (requestId: number) => {
         try {
@@ -1388,7 +1389,7 @@ export function KnowledgeSpaceContent({
                 statusFilter={fileChangeApproval.statusFilter}
                 onStatusFilterChange={fileChangeApproval.setStatusFilter}
                 onOpenDetail={fileChangeApproval.openDetail}
-                onPreview={(requestId) => { void handleFileChangePreview(requestId); }}
+                onPreview={handleFileChangePreview}
                 onCleanup={(requestId) => { void handleFileChangeCleanup(requestId); }}
                 onRetry={(requestId) => { void handleFileChangeRetry(requestId); }}
                 onBatchApprove={(requestIds) => { void handleBatchApproveFileChanges(requestIds); }}

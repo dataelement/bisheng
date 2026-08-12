@@ -57,6 +57,7 @@ class UploadExecutionStepCode:
     VECTOR = "upload.vector"
 
     ALL = (FGA, PARSE, INDEX, VECTOR)
+    BUSINESS_REQUIRED = (FGA, PARSE)
 
 
 @dataclass(frozen=True, slots=True)
@@ -155,10 +156,11 @@ class KnowledgeSpaceMutationExecutor:
 
     Formal Knowledge rows, their request link and the four durable steps share
     one DB commit. OpenFGA and parser dispatch only start after that commit.
-    Parser enqueue is not completion: index/vector remain pending until the
-    coordinator records authoritative acknowledgements. Rename/move external
-    steps only accept read-after-verified results; absent a runner they remain
-    Deferred, and the user-visible DB name/location is cut over last.
+    For uploads, successful OpenFGA writes plus scheduler acceptance complete
+    the approval-owned business handoff; parsing/indexing/vectorization then
+    follow the ordinary file lifecycle. Rename/move external steps only accept
+    read-after-verified results; absent a runner they remain Deferred, and the
+    user-visible DB name/location is cut over last.
     """
 
     def __init__(
@@ -718,9 +720,8 @@ class KnowledgeSpaceMutationExecutor:
                 ):
                     raise RuntimeError("stale F046 delete cutover attempt")
                 checkpoint = dict(request.execution_checkpoint or {})
-                if (
-                    checkpoint.get(DELETE_PHASE_CHECKPOINT_KEY) == DELETE_PHASE_PURGING
-                    and bool(checkpoint.get("deletion_cutover_active"))
+                if checkpoint.get(DELETE_PHASE_CHECKPOINT_KEY) == DELETE_PHASE_PURGING and bool(
+                    checkpoint.get("deletion_cutover_active")
                 ):
                     return True
                 manifest = checkpoint.get("delete_manifest")
@@ -1629,6 +1630,14 @@ class KnowledgeSpaceMutationExecutor:
             VerifiedExecutionStepResult,
         )
 
+        if str(broker_context.action) == KnowledgeSpaceFileChangeAction.UPLOAD:
+            durable_upload = await self._load_durable_upload_step_context(broker_context)
+            effect = (
+                self.authorize_file if durable_upload.step_code == UploadExecutionStepCode.FGA else self.dispatch_parse
+            )
+            digest = await self._invoke_side_effect(effect, durable_upload)
+            return VerifiedExecutionStepResult(result_digest=digest or durable_upload.idempotency_key)
+
         durable = await self._load_durable_mutation_step_context(broker_context)
         result = await self.mutation_step_owner.execute_and_verify(durable)
         digest = self._owner_result_digest(result)
@@ -1846,6 +1855,59 @@ class KnowledgeSpaceMutationExecutor:
                     ),
                     str(row.step_code),
                     str(row.idempotency_key),
+                )
+
+    async def _load_durable_upload_step_context(self, broker_context) -> UploadStepDispatchContext:
+        tenant_id = self._tenant_id()
+        if int(broker_context.tenant_id) != tenant_id:
+            raise RuntimeError("F046 broker tenant does not match the restored tenant context")
+        async with self.session_factory() as session:
+            async with session.begin():
+                request = await KnowledgeSpaceFileChangeRequestRepository(session).get_by_id(
+                    tenant_id=tenant_id,
+                    request_id=int(broker_context.request_id),
+                    for_update=True,
+                )
+                if (
+                    request is None
+                    or int(request.approval_instance_id or 0) != int(broker_context.instance_id)
+                    or request.execution_token != str(broker_context.execution_token)
+                    or request.execution_state != KnowledgeSpaceFileChangeExecutionState.APPLYING
+                    or request.action != KnowledgeSpaceFileChangeAction.UPLOAD
+                    or request.executed_resource_id is None
+                ):
+                    raise RuntimeError("F046 broker payload does not identify a current upload generation")
+                row = await KnowledgeSpaceFileChangeExecutionStepRepository(session).lock_step(
+                    tenant_id=tenant_id,
+                    request_id=int(request.id),
+                    step_code=str(broker_context.step_code),
+                )
+                if (
+                    row is None
+                    or row.step_code not in UploadExecutionStepCode.BUSINESS_REQUIRED
+                    or row.attempt_token != str(broker_context.execution_token)
+                    or str(broker_context.action) != str(request.action)
+                    or str(broker_context.idempotency_key) != str(row.idempotency_key)
+                    or row.state
+                    not in {
+                        KnowledgeSpaceFileChangeExecutionStepState.PENDING,
+                        KnowledgeSpaceFileChangeExecutionStepState.DISPATCHED,
+                    }
+                ):
+                    raise RuntimeError("F046 broker payload does not match the durable upload step identity")
+                checkpoint = dict(request.execution_checkpoint or {})
+                return UploadStepDispatchContext(
+                    tenant_id=tenant_id,
+                    request_id=int(request.id),
+                    instance_id=int(request.approval_instance_id),
+                    execution_token=str(request.execution_token),
+                    step_code=str(row.step_code),
+                    idempotency_key=str(row.idempotency_key),
+                    file_id=int(request.executed_resource_id),
+                    file_name=str(request.file_name or request.executed_resource_id),
+                    applicant_user_id=int(request.applicant_user_id),
+                    space_id=int(request.space_id),
+                    checkpoint=checkpoint,
                 )
 
     @staticmethod
@@ -2132,20 +2194,17 @@ class KnowledgeSpaceMutationExecutor:
                         raise RuntimeError("stale F046 FGA acknowledgement")
 
         parse_state, parse_key = dispatch_states[UploadExecutionStepCode.PARSE]
-        if parse_state not in {
-            KnowledgeSpaceFileChangeExecutionStepState.DISPATCHED,
-            KnowledgeSpaceFileChangeExecutionStepState.SUCCEEDED,
-        }:
+        if parse_state != KnowledgeSpaceFileChangeExecutionStepState.SUCCEEDED:
             context = self._step_context(base_context, UploadExecutionStepCode.PARSE, parse_key)
-            task_id = await self._invoke_side_effect(self.dispatch_parse, context)
+            digest = await self._invoke_side_effect(self.dispatch_parse, context)
             async with self.session_factory() as session:
                 async with session.begin():
-                    marked = await KnowledgeSpaceFileChangeExecutionStepRepository(session).mark_dispatched(
+                    marked = await KnowledgeSpaceFileChangeExecutionStepRepository(session).mark_succeeded(
                         tenant_id=context.tenant_id,
                         request_id=context.request_id,
                         step_code=context.step_code,
                         attempt_token=context.execution_token,
-                        task_id=task_id,
+                        result_digest=digest,
                     )
                     if not marked:
                         raise RuntimeError("stale F046 parse dispatch acknowledgement")
@@ -2469,7 +2528,7 @@ class KnowledgeSpaceMutationExecutor:
                 for resource in resources
             ],
             "fga_resources": resources,
-            "publication_required_steps": list(UploadExecutionStepCode.ALL),
+            "publication_required_steps": list(UploadExecutionStepCode.BUSINESS_REQUIRED),
         }
 
     @staticmethod
@@ -2526,10 +2585,9 @@ class KnowledgeSpaceMutationExecutor:
             ),
             callback_url=None,
             idempotency_key=context.idempotency_key,
-            file_change_request_id=context.request_id,
-            file_change_execution_token=context.execution_token,
         )
-        # Scheduler acceptance is dispatch evidence only, never parse/index ack.
+        # Scheduler acceptance completes the approval-owned handoff. Parsing,
+        # indexing and vectorization continue through the regular upload flow.
         return f"scheduler:{context.idempotency_key}"
 
     @staticmethod

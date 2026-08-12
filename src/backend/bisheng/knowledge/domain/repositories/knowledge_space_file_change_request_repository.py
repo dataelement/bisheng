@@ -18,7 +18,7 @@ from bisheng.approval.domain.models.approval_instance import (
     ApprovalTaskStatus,
 )
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
-from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile, KnowledgeFileStatus
+from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 from bisheng.knowledge.domain.models.knowledge_space_file_change_execution_step import (
     KnowledgeSpaceFileChangeExecutionStep,
     KnowledgeSpaceFileChangeExecutionStepState,
@@ -447,14 +447,6 @@ class KnowledgeSpaceFileChangeRequestRepository:
         intentionally not inspected by SQL.
         """
         normalized_space_ids = sorted({int(space_id) for space_id in space_ids})
-        published_file_exists = exists(
-            select(KnowledgeFile.id).where(
-                KnowledgeFile.tenant_id == int(tenant_id),
-                KnowledgeFile.knowledge_id == KnowledgeSpaceFileChangeRequest.space_id,
-                KnowledgeFile.id == KnowledgeSpaceFileChangeRequest.executed_resource_id,
-                KnowledgeFile.status == KnowledgeFileStatus.SUCCESS.value,
-            )
-        )
         missing_step_conditions = []
         for step_code in required_step_codes:
             succeeded_step_exists = exists(
@@ -475,7 +467,6 @@ class KnowledgeSpaceFileChangeRequestRepository:
                 KnowledgeSpaceFileChangeRequest.executed_resource_id.is_not(None),
                 or_(
                     KnowledgeSpaceFileChangeRequest.execution_state != KnowledgeSpaceFileChangeExecutionState.APPLIED,
-                    ~published_file_exists,
                     *missing_step_conditions,
                 ),
             )

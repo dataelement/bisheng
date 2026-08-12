@@ -16,7 +16,6 @@ from bisheng.approval.domain.repositories.approval_instance_repository import Ap
 from bisheng.approval.domain.services.approval_outbox_service import ApprovalOutboxService, Deferred
 from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.core.database import get_async_db_session
-from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileStatus
 from bisheng.knowledge.domain.models.knowledge_space_file_change_execution_step import (
     KnowledgeSpaceFileChangeExecutionStep,
     KnowledgeSpaceFileChangeExecutionStepState,
@@ -32,6 +31,7 @@ from bisheng.knowledge.domain.repositories.knowledge_space_file_change_execution
 from bisheng.knowledge.domain.repositories.knowledge_space_file_change_request_repository import (
     KnowledgeSpaceFileChangeRequestRepository,
 )
+from bisheng.knowledge.domain.services.knowledge_space_mutation_executor import UploadExecutionStepCode
 
 SessionFactory = Callable[[], AbstractAsyncContextManager[AsyncSession]]
 
@@ -102,14 +102,6 @@ class KnowledgeSpaceFileChangeExecutionCoordinator:
     idempotency key, while a callback from an older generation is ignored
     before any external verification is attempted.
     """
-
-    _UPLOAD_FAILURE_STATUSES = frozenset(
-        {
-            KnowledgeFileStatus.FAILED.value,
-            KnowledgeFileStatus.TIMEOUT.value,
-            KnowledgeFileStatus.VIOLATION.value,
-        }
-    )
 
     def __init__(
         self,
@@ -243,11 +235,12 @@ class KnowledgeSpaceFileChangeExecutionCoordinator:
         execution_token: str,
         file_id: int,
     ) -> ExecutionReconcileStatus:
-        """Translate the formal file's authoritative terminal state into acks.
+        """Accept a legacy parser callback without coupling parsing to approval.
 
-        The parser task only reports which request generation finished. This
-        method reads the formal file itself; no task id or caller-provided
-        success flag can publish the upload.
+        New upload jobs do not carry F046 callback context. This path only
+        upgrades an already-dispatched legacy parse step to the scheduler
+        handoff acknowledgement required by the current business boundary.
+        The file's parse result is intentionally not inspected.
         """
 
         identity = await self.load_identity_by_request(
@@ -257,7 +250,6 @@ class KnowledgeSpaceFileChangeExecutionCoordinator:
         )
         if identity is None:
             return ExecutionReconcileStatus.IGNORED
-        file_status: int | None = None
         async with self.session_factory() as session:
             async with session.begin():
                 request_repository = KnowledgeSpaceFileChangeRequestRepository(session)
@@ -273,45 +265,32 @@ class KnowledgeSpaceFileChangeExecutionCoordinator:
                     or int(request.executed_resource_id or 0) != int(file_id)
                 ):
                     return ExecutionReconcileStatus.IGNORED
-                file_status = await request_repository.get_executed_file_status(
+                parse_step = await KnowledgeSpaceFileChangeExecutionStepRepository(session).lock_step(
                     tenant_id=int(tenant_id),
-                    request=request,
+                    request_id=int(request_id),
+                    step_code=UploadExecutionStepCode.PARSE,
                 )
-                if file_status == KnowledgeFileStatus.SUCCESS.value:
-                    step_repository = KnowledgeSpaceFileChangeExecutionStepRepository(session)
-                    steps = await step_repository.list_by_request(
-                        tenant_id=int(tenant_id),
-                        request_id=int(request_id),
-                        for_update=True,
-                    )
-                    by_code = {row.step_code: row for row in steps}
-                    pipeline_codes = ("upload.parse", "upload.index", "upload.vector")
-                    if any(
-                        code not in by_code
-                        or by_code[code].attempt_token != str(execution_token)
-                        or by_code[code].state
-                        not in {
-                            KnowledgeSpaceFileChangeExecutionStepState.PENDING,
-                            KnowledgeSpaceFileChangeExecutionStepState.DISPATCHED,
-                            KnowledgeSpaceFileChangeExecutionStepState.SUCCEEDED,
-                        }
-                        for code in pipeline_codes
-                    ):
-                        return ExecutionReconcileStatus.IGNORED
-                    for code in pipeline_codes:
-                        marked = await step_repository.mark_succeeded(
-                            tenant_id=int(tenant_id),
-                            request_id=int(request_id),
-                            step_code=code,
-                            attempt_token=str(execution_token),
-                            result_digest=f"file:{int(file_id)}:status:{int(file_status)}:{code}",
-                        )
-                        if not marked:
-                            return ExecutionReconcileStatus.IGNORED
-        if file_status in self._UPLOAD_FAILURE_STATUSES or file_status == KnowledgeFileStatus.SUCCESS.value:
-            return await self.reconcile(identity=identity)
-        await self.heartbeat(identity=identity)
-        return ExecutionReconcileStatus.RUNNING
+                if (
+                    parse_step is None
+                    or parse_step.attempt_token != str(execution_token)
+                    or parse_step.state
+                    not in {
+                        KnowledgeSpaceFileChangeExecutionStepState.PENDING,
+                        KnowledgeSpaceFileChangeExecutionStepState.DISPATCHED,
+                        KnowledgeSpaceFileChangeExecutionStepState.SUCCEEDED,
+                    }
+                ):
+                    return ExecutionReconcileStatus.IGNORED
+                marked = await KnowledgeSpaceFileChangeExecutionStepRepository(session).mark_succeeded(
+                    tenant_id=int(tenant_id),
+                    request_id=int(request_id),
+                    step_code=UploadExecutionStepCode.PARSE,
+                    attempt_token=str(execution_token),
+                    result_digest=f"legacy-parser-handoff:file:{int(file_id)}",
+                )
+                if not marked:
+                    return ExecutionReconcileStatus.IGNORED
+        return await self.reconcile(identity=identity)
 
     async def coordinate_outbox_execution(
         self,
@@ -481,22 +460,11 @@ class KnowledgeSpaceFileChangeExecutionCoordinator:
                     result = ExecutionReconcileStatus.FAILED
                     failure_reason = self._failure_reason(request, "business execution failed")
                 elif request.action == KnowledgeSpaceFileChangeAction.UPLOAD:
-                    file_status = await request_repository.get_executed_file_status(
-                        tenant_id=identity.tenant_id,
-                        request=request,
-                    )
-                    if file_status in self._UPLOAD_FAILURE_STATUSES:
-                        failure_reason = self._upload_failure_reason(file_status)
-                        self._mark_request_failed(request, failure_reason)
-                        await request_repository.save(request)
-                        result = ExecutionReconcileStatus.FAILED
-                    elif file_status == KnowledgeFileStatus.SUCCESS.value and self._all_succeeded(
-                        required, required_codes
-                    ):
+                    if self._upload_business_handoff_succeeded(required):
                         request.execution_state = KnowledgeSpaceFileChangeExecutionState.APPLIED
                         checkpoint = dict(request.execution_checkpoint or {})
                         checkpoint.pop("failure_reason", None)
-                        checkpoint["published_at"] = datetime.now(UTC).isoformat()
+                        checkpoint["formalized_at"] = datetime.now(UTC).isoformat()
                         request.execution_checkpoint = checkpoint
                         await request_repository.save(request)
                         result = ExecutionReconcileStatus.COMPLETED
@@ -517,9 +485,8 @@ class KnowledgeSpaceFileChangeExecutionCoordinator:
                     and self._all_succeeded(required, self._external_step_codes(request.action))
                 ):
                     should_cutover = True
-                elif (
-                    request.action == KnowledgeSpaceFileChangeAction.DELETE
-                    and self._all_succeeded(required, ("delete.db_cutover",))
+                elif request.action == KnowledgeSpaceFileChangeAction.DELETE and self._all_succeeded(
+                    required, ("delete.db_cutover",)
                 ):
                     should_purge_delete = True
                 elif (
@@ -749,9 +716,8 @@ class KnowledgeSpaceFileChangeExecutionCoordinator:
             required_codes,
         )
         if request.action == KnowledgeSpaceFileChangeAction.UPLOAD:
-            complete = (
-                complete
-                and file_status == KnowledgeFileStatus.SUCCESS.value
+            complete = request.execution_state == KnowledgeSpaceFileChangeExecutionState.APPLIED and (
+                cls._upload_business_handoff_succeeded(required)
             )
 
         if complete:
@@ -767,24 +733,9 @@ class KnowledgeSpaceFileChangeExecutionCoordinator:
             }
             or instance_status == ApprovalInstanceStatus.EXECUTE_FAILED
         ):
-            parse_failure = request.action == KnowledgeSpaceFileChangeAction.UPLOAD and (
-                file_status in cls._UPLOAD_FAILURE_STATUSES
-                or any(
-                    row.state == KnowledgeSpaceFileChangeExecutionStepState.FAILED
-                    and row.step_code
-                    in {
-                        "upload.parse",
-                        "upload.index",
-                        "upload.vector",
-                    }
-                    for row in required.values()
-                )
-            )
-            status = "parse_failed" if parse_failure else "execute_failed"
-        elif (
-            request.execution_state == KnowledgeSpaceFileChangeExecutionState.APPLYING
-        ):
-            status = "parsing" if request.action == KnowledgeSpaceFileChangeAction.UPLOAD else "executing"
+            status = "execute_failed"
+        elif request.execution_state == KnowledgeSpaceFileChangeExecutionState.APPLYING:
+            status = "executing"
         else:
             status = "pending"
         return {
@@ -846,7 +797,7 @@ class KnowledgeSpaceFileChangeExecutionCoordinator:
     @staticmethod
     def _required_step_codes(action: str) -> tuple[str, ...]:
         if action == KnowledgeSpaceFileChangeAction.UPLOAD:
-            return ("upload.fga", "upload.parse", "upload.index", "upload.vector")
+            return UploadExecutionStepCode.BUSINESS_REQUIRED
         if action == KnowledgeSpaceFileChangeAction.RENAME:
             return ("rename.index_shadow", "rename.verify", "rename.db_cutover")
         if action == KnowledgeSpaceFileChangeAction.MOVE:
@@ -868,6 +819,19 @@ class KnowledgeSpaceFileChangeExecutionCoordinator:
                 "delete.milvus_purge",
             )
         raise ValueError(f"unsupported F046 action: {action}")
+
+    @staticmethod
+    def _upload_business_handoff_succeeded(
+        required: dict[str, KnowledgeSpaceFileChangeExecutionStep],
+    ) -> bool:
+        fga = required.get(UploadExecutionStepCode.FGA)
+        parse_handoff = required.get(UploadExecutionStepCode.PARSE)
+        return bool(
+            fga is not None
+            and fga.state == KnowledgeSpaceFileChangeExecutionStepState.SUCCEEDED
+            and parse_handoff is not None
+            and parse_handoff.state == KnowledgeSpaceFileChangeExecutionStepState.SUCCEEDED
+        )
 
     @classmethod
     def _ready_dispatch_step_codes(
@@ -977,14 +941,6 @@ class KnowledgeSpaceFileChangeExecutionCoordinator:
         checkpoint["failure_reason"] = str(reason)[:1000]
         request.execution_checkpoint = checkpoint
         request.execution_state = KnowledgeSpaceFileChangeExecutionState.FAILED
-
-    @staticmethod
-    def _upload_failure_reason(file_status: int | None) -> str:
-        if file_status == KnowledgeFileStatus.TIMEOUT.value:
-            return "file parsing timed out"
-        if file_status == KnowledgeFileStatus.VIOLATION.value:
-            return "file content policy violation"
-        return "file parsing failed"
 
     @staticmethod
     def _request_id(instance) -> int:

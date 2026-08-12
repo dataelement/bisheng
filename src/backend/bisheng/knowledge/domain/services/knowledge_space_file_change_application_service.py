@@ -58,6 +58,13 @@ class KnowledgeSpaceFileChangeApplicationService:
 
     _CURSOR_CONTEXT = "knowledge-space-file-change-uploads:v1"
     _MAX_UPLOAD_SCAN_BATCHES = 5
+    _DEFAULT_UPLOAD_WORKLIST_STATUSES = (
+        "pending",
+        "approver_empty",
+        "approved",
+        "executing",
+        "execute_failed",
+    )
     _STATUS_TO_INSTANCE = {
         "pending": (ApprovalInstanceStatus.PENDING,),
         "approver_empty": (ApprovalInstanceStatus.EXCEPTION,),
@@ -218,7 +225,7 @@ class KnowledgeSpaceFileChangeApplicationService:
         requested_statuses = [str(value) for value in (statuses or ()) if value]
         if status:
             requested_statuses.append(str(status))
-        normalized_statuses = tuple(dict.fromkeys(requested_statuses))
+        normalized_statuses = tuple(dict.fromkeys(requested_statuses)) or self._DEFAULT_UPLOAD_WORKLIST_STATUSES
         if any(value not in self._STATUS_TO_INSTANCE for value in normalized_statuses):
             raise SpaceFileChangeInvalidStateError()
         instance_statuses = tuple(
@@ -626,7 +633,6 @@ class KnowledgeSpaceFileChangeApplicationService:
                 "exception",
                 "approver_empty",
                 "execute_failed",
-                "parse_failed",
             }:
                 retryable = True
             items.append(

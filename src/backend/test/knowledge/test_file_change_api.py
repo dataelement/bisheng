@@ -485,8 +485,8 @@ async def test_upload_list_uses_one_batch_projection_for_multiple_rows_without_p
     per_row_loader = AsyncMock(side_effect=AssertionError("list projection must be batched"))
     batch_loader = AsyncMock(
         return_value={
-            41: {"status": "parsing"},
-            42: {"status": "parse_failed", "failure_reason": "parser failed"},
+            41: {"status": "executing"},
+            42: {"status": "execute_failed", "failure_reason": "business execution failed"},
         }
     )
     service = KnowledgeSpaceFileChangeApplicationService(
@@ -510,9 +510,16 @@ async def test_upload_list_uses_one_batch_projection_for_multiple_rows_without_p
         page_size=20,
     )
 
-    assert [row.status for row in result.data] == ["parsing", "parse_failed"]
+    assert [row.status for row in result.data] == ["executing", "execute_failed"]
     batch_loader.assert_awaited_once_with([first, second])
     per_row_loader.assert_not_awaited()
+    assert repository.list_upload_request_views.await_args.kwargs["instance_statuses"] == (
+        "pending",
+        "exception",
+        "approved",
+        "executing",
+        "execute_failed",
+    )
 
 
 async def test_upload_list_hides_cleanup_success_even_if_repository_returns_stale_row():

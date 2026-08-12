@@ -378,7 +378,7 @@ async def test_publication_guard_hides_manifest_until_every_authoritative_truth_
         file_status=KnowledgeFileStatus.FAILED.value,
         step_states=_all_steps(KnowledgeSpaceFileChangeExecutionStepState.SUCCEEDED),
     )
-    assert await guard.list_unpublished_ids(tenant_id=42, space_ids=[8]) == {201, 202, file_id}
+    assert await guard.list_unpublished_ids(tenant_id=42, space_ids=[8]) == set()
 
     await _set_upload_truth(
         visibility_engine,
@@ -391,7 +391,7 @@ async def test_publication_guard_hides_manifest_until_every_authoritative_truth_
             UploadExecutionStepCode.VECTOR: KnowledgeSpaceFileChangeExecutionStepState.DISPATCHED,
         },
     )
-    assert await guard.list_unpublished_ids(tenant_id=42, space_ids=[8]) == {201, 202, file_id}
+    assert await guard.list_unpublished_ids(tenant_id=42, space_ids=[8]) == set()
 
     await _set_upload_truth(
         visibility_engine,
@@ -414,7 +414,7 @@ async def test_publication_guard_hides_manifest_until_every_authoritative_truth_
     assert await guard.list_unpublished_ids(tenant_id=42, space_ids=[8]) == set()
 
 
-async def test_publication_guard_keeps_failed_or_non_success_formal_files_unpublished(visibility_engine):
+async def test_publication_guard_keeps_business_execution_failures_unpublished(visibility_engine):
     set_current_tenant_id(42)
     _request_id, file_id = await _seed_upload(
         visibility_engine,

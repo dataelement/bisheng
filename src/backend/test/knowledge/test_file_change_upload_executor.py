@@ -42,6 +42,7 @@ from bisheng.knowledge.domain.models.knowledge_space_upload_stage import (
 from bisheng.knowledge.domain.services.knowledge_space_mutation_executor import (
     KnowledgeSpaceMutationExecutor,
     UploadExecutionStepCode,
+    UploadStepDispatchContext,
 )
 
 
@@ -541,7 +542,7 @@ async def test_knowledge_owner_allows_custom_non_edit_relation_with_upload_file_
     )
 
 
-async def test_parse_dispatch_is_not_publication_ack_and_index_vector_remain_pending(upload_engine):
+async def test_parse_scheduler_handoff_completes_business_step_while_pipeline_steps_remain_pending(upload_engine):
     set_current_tenant_id(42)
     request_id, _stage_id = await _seed_upload_bundle(upload_engine)
     side_effects = _SideEffects(upload_engine)
@@ -555,11 +556,48 @@ async def test_parse_dispatch_is_not_publication_ack_and_index_vector_remain_pen
     assert isinstance(result, Deferred)
     step_by_code = {step.step_code: step for step in await _rows(upload_engine, KnowledgeSpaceFileChangeExecutionStep)}
     assert step_by_code[UploadExecutionStepCode.FGA].state == KnowledgeSpaceFileChangeExecutionStepState.SUCCEEDED
-    assert step_by_code[UploadExecutionStepCode.PARSE].state == KnowledgeSpaceFileChangeExecutionStepState.DISPATCHED
+    assert step_by_code[UploadExecutionStepCode.PARSE].state == KnowledgeSpaceFileChangeExecutionStepState.SUCCEEDED
     assert step_by_code[UploadExecutionStepCode.INDEX].state == KnowledgeSpaceFileChangeExecutionStepState.PENDING
     assert step_by_code[UploadExecutionStepCode.VECTOR].state == KnowledgeSpaceFileChangeExecutionStepState.PENDING
     request = (await _rows(upload_engine, KnowledgeSpaceFileChangeRequest))[0]
     assert request.execution_state == KnowledgeSpaceFileChangeExecutionState.APPLYING
+
+
+async def test_parse_dispatch_hands_off_to_regular_upload_without_approval_callback():
+    context = UploadStepDispatchContext(
+        tenant_id=42,
+        request_id=41,
+        instance_id=31,
+        execution_token="attempt-token-1",
+        step_code=UploadExecutionStepCode.PARSE,
+        idempotency_key="f046:41:upload.parse",
+        file_id=701,
+        file_name="quarterly.pdf",
+        applicant_user_id=7,
+        space_id=8,
+        checkpoint={},
+    )
+
+    with (
+        patch("bisheng.worker.knowledge.scheduler.enqueue_or_dispatch") as enqueue,
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceService.get_preview_cache_key",
+            return_value="preview-cache",
+        ),
+    ):
+        result = await KnowledgeSpaceMutationExecutor._dispatch_parse(context)
+
+    assert result == "scheduler:f046:41:upload.parse"
+    enqueue.assert_called_once_with(
+        user_id=7,
+        file_id=701,
+        file_name="quarterly.pdf",
+        preview_cache_key="preview-cache",
+        callback_url=None,
+        idempotency_key="f046:41:upload.parse",
+    )
+    assert "file_change_request_id" not in enqueue.call_args.kwargs
+    assert "file_change_execution_token" not in enqueue.call_args.kwargs
 
 
 async def test_folder_upload_checkpoint_has_guard_manifest_for_new_directories_and_file(upload_engine):
