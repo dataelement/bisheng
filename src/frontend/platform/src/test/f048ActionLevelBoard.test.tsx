@@ -1,5 +1,6 @@
 import { ActionLevelBoard } from "@/pages/SystemPage/components/permission/ActionLevelBoard"
-import { fireEvent, render, screen, selectOption, waitFor } from "@/test/test-utils"
+import { fireEvent, render, screen, selectMenuOption, waitFor, within } from "@/test/test-utils"
+import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const actions = [
@@ -91,7 +92,7 @@ describe("ActionLevelBoard", () => {
       />,
     )
 
-    await selectOption("actionLevel.change.edit", 3)
+    await selectMenuOption("actionLevel.change.edit", 3)
     expect(
       screen.getByTestId("action-level-zone-3"),
     ).toContainElement(screen.getByTestId("permission-action-edit"))
@@ -137,11 +138,11 @@ describe("ActionLevelBoard", () => {
       />,
     )
 
-    await selectOption("actionLevel.change.visible", 3)
+    await selectMenuOption("actionLevel.change.visible", 3)
     expect(screen.getByRole("status")).toBeInTheDocument()
 
     // Re-query: moving zones remounts the card, so the old node is detached.
-    await selectOption("actionLevel.change.visible", 1)
+    await selectMenuOption("actionLevel.change.visible", 1)
     expect(screen.queryByRole("status")).not.toBeInTheDocument()
     expect(
       screen.getByRole("button", { name: "actionLevel.publishChanges" }),
@@ -157,7 +158,7 @@ describe("ActionLevelBoard", () => {
       />,
     )
 
-    await selectOption("actionLevel.change.edit", 3)
+    await selectMenuOption("actionLevel.change.edit", 3)
     fireEvent.click(screen.getByLabelText("actionLevel.active.delete"))
     expect(screen.getByRole("status")).toBeInTheDocument()
 
@@ -182,7 +183,7 @@ describe("ActionLevelBoard", () => {
       />,
     )
 
-    await selectOption("actionLevel.change.edit", 3)
+    await selectMenuOption("actionLevel.change.edit", 3)
     fireEvent.click(
       screen.getByRole("button", { name: "actionLevel.publishChanges" }),
     )
@@ -193,7 +194,9 @@ describe("ActionLevelBoard", () => {
     expect(onReviewImpact).not.toHaveBeenCalled()
   })
 
-  it("shows resource scope and the inactive marker", () => {
+  it("shows resource scope on demand and the inactive marker on the card", async () => {
+    // The card carries only what the author scans for — name and on/off. The
+    // scope is one hover away rather than a row of chips on every card.
     render(
       <ActionLevelBoard
         actions={actions}
@@ -202,12 +205,14 @@ describe("ActionLevelBoard", () => {
       />,
     )
 
-    expect(screen.getByTestId("permission-action-visible")).toHaveTextContent(
-      "workflow",
-    )
-    expect(screen.getByTestId("permission-action-visible")).toHaveTextContent(
-      "dashboard",
-    )
+    const card = screen.getByTestId("permission-action-visible")
+    expect(card).not.toHaveTextContent("workflow")
+
+    await userEvent.hover(within(card).getByText("actionName.visible"))
+    const tip = await screen.findByRole("tooltip")
+    expect(tip).toHaveTextContent("resourceTypeName.workflow")
+    expect(tip).toHaveTextContent("resourceTypeName.dashboard")
+
     expect(screen.getByTestId("permission-action-delete")).toHaveTextContent(
       "actionLevel.inactive",
     )
@@ -218,7 +223,7 @@ describe("action labels", () => {
   const onCreateDraft = vi.fn()
   const onReviewImpact = vi.fn()
 
-  it("labels actions and resource types by code, not by the stored English name", () => {
+  it("labels actions and resource types by code, not by the stored English name", async () => {
     // The catalog seeds `name` to the code itself, so the panel used to render
     // "manage_permission" / "knowledge_file" at users. One column cannot serve
     // three languages, so the label is resolved from the code.
@@ -241,9 +246,15 @@ describe("action labels", () => {
 
     const card = screen.getByTestId("permission-action-manage_permission")
     expect(card).toHaveTextContent("actionName.manage_permission")
-    expect(card).toHaveTextContent("resourceTypeName.knowledge_file")
-    expect(card).toHaveTextContent("resourceTypeName.folder")
-    // The raw code stays visible underneath as the technical identifier.
-    expect(card).toHaveTextContent("manage_permission")
+
+    // The raw code and the resource scope moved into the tooltip: both are
+    // reference detail, not something to scan a column for.
+    await userEvent.hover(
+      within(card).getByText("actionName.manage_permission"),
+    )
+    const tip = await screen.findByRole("tooltip")
+    expect(tip).toHaveTextContent("resourceTypeName.knowledge_file")
+    expect(tip).toHaveTextContent("resourceTypeName.folder")
+    expect(tip).toHaveTextContent("manage_permission")
   })
 })

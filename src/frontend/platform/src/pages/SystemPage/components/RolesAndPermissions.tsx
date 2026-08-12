@@ -52,7 +52,7 @@ function CatalogState({ loading, error, onRetry }: CatalogStateProps) {
         <Button
           type="button"
           variant="outline"
-          className="min-h-11 bg-background"
+          className="bg-background"
           onClick={onRetry}
         >
           {t("catalog.retry")}
@@ -119,7 +119,7 @@ function ModelCatalogPanel({
           <Button
             type="button"
             variant="outline"
-            className="min-h-10 px-2"
+            className="px-2"
             aria-pressed={creating}
             onClick={() => setCreating(true)}
           >
@@ -138,11 +138,20 @@ function ModelCatalogPanel({
                 setCreating(false)
                 onSelectModel(model.key)
               }}
-              className="min-h-11 rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-muted aria-pressed:bg-primary aria-pressed:text-primary-foreground"
+              // Two lines of text in a fixed-height row sat against the top edge;
+              // centre them so the selected block reads as one item.
+              className="flex min-h-[52px] flex-col justify-center rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-muted aria-pressed:bg-primary aria-pressed:text-primary-foreground"
             >
               <span className="block truncate font-medium">{model.name}</span>
+              {/* The row used to repeat only "standard / custom". What the author
+                  actually looks for is the tier and whether it is switched on. */}
               <span className="block truncate text-xs opacity-70">
                 {t(`model.kind.${model.kind.toLowerCase()}`)}
+                {" · "}
+                {model.derived_level === null
+                  ? t("actionLevel.unassigned")
+                  : t("actionLevel.level", { level: model.derived_level })}
+                {!model.active && ` · ${t("model.inactive")}`}
               </span>
             </button>
           ))}

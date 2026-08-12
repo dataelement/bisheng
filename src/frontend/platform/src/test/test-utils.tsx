@@ -59,6 +59,26 @@ export async function selectOption(
   await user.click(target);
 }
 
+/**
+ * Pick an item from a bs-ui (Radix) DropdownMenu radio group — the items carry
+ * role="menuitemradio", not role="option", so `selectOption` cannot see them.
+ *
+ * Usage:
+ *   await selectMenuOption('actionLevel.change.edit', 3);
+ */
+export async function selectMenuOption(
+  triggerLabel: string,
+  option: string | RegExp | number
+) {
+  const user = userEvent.setup();
+  await user.click(screen.getByLabelText(triggerLabel));
+  const target =
+    typeof option === 'number'
+      ? (await screen.findAllByRole('menuitemradio'))[option]
+      : await screen.findByRole('menuitemradio', { name: option });
+  await user.click(target);
+}
+
 // Re-export everything from @testing-library/react
 export * from '@testing-library/react';
 // Override render with the custom version

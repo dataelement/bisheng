@@ -134,7 +134,7 @@ describe("ModelEditor", () => {
       />,
     )
 
-    expect(screen.getByTestId("model-derived-level")).toHaveTextContent("3")
+    expect(screen.getByTestId("model-derived-level")).toHaveAttribute("data-level", "3")
     expect(screen.queryByLabelText("model.action.unassigned")).not.toBeInTheDocument()
 
     fireEvent.change(screen.getByLabelText("model.name"), {
@@ -142,7 +142,7 @@ describe("ModelEditor", () => {
     })
     fireEvent.click(screen.getByLabelText("model.action.edit"))
     fireEvent.click(screen.getByLabelText("model.action.manage_permission"))
-    expect(screen.getByTestId("model-derived-level")).toHaveTextContent("2")
+    expect(screen.getByTestId("model-derived-level")).toHaveAttribute("data-level", "2")
     fireEvent.click(screen.getByLabelText("model.active"))
     fireEvent.click(screen.getByRole("button", { name: "model.save" }))
 
@@ -158,7 +158,7 @@ describe("ModelEditor", () => {
         },
       ])
     })
-    expect(screen.getByTestId("model-derived-level")).toHaveTextContent("2")
+    expect(screen.getByTestId("model-derived-level")).toHaveAttribute("data-level", "2")
   })
 
   it("disables same-level without manage_permission and copies preset actions", async () => {
@@ -195,7 +195,7 @@ describe("ModelEditor", () => {
       action_codes: ["visible", "edit"],
     })
     expect(screen.getByLabelText("model.action.edit")).toBeChecked()
-    expect(screen.getByTestId("model-derived-level")).toHaveTextContent("2")
+    expect(screen.getByTestId("model-derived-level")).toHaveAttribute("data-level", "2")
   })
 
   it("offers a blank preset that clears the selection", async () => {
