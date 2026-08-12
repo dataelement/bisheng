@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import react from '@vitejs/plugin-react';
 import * as http from 'node:http';
 import path from 'path';
@@ -96,6 +97,19 @@ function minioFileProxyPlugin(minioTarget: string): Plugin {
 }
 
 // https://vitejs.dev/config/
+/**
+ * Build stamp shown on the crash screen: package version plus the minute the
+ * bundle was built, e.g. `v2.6.0 (20260806-1432)`. Local time on purpose — it is
+ * read by whoever built it, alongside a release log kept in the same zone.
+ */
+function buildVersion(): string {
+  const pkg = JSON.parse(readFileSync(path.join(__dirname, 'package.json'), 'utf-8'));
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, '0');
+  const stamp = `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`;
+  return `v${pkg.version} (${stamp})`;
+}
+
 export default defineConfig(({ command, mode }) => {
   const env = loadEnv(mode, path.join(__dirname, '..'));
   // MinIO object proxy for bucket paths (/bisheng/...): these must reach MinIO,
@@ -114,6 +128,10 @@ export default defineConfig(({ command, mode }) => {
       // which sets VITE_ENABLE_VCONSOLE=true). A plain `npm run build` never
       // bundles the debug console — do not hardcode this back to 'true'.
       __VCONSOLE_ENABLED__: JSON.stringify(env.VITE_ENABLE_VCONSOLE === 'true'),
+      // Stamped at build time so a crash report names the exact build it came
+      // from. /api/v1/env carries a hardcoded version and cannot be trusted for
+      // this; the package version plus the build minute can.
+      __APP_VERSION__: JSON.stringify(buildVersion()),
     },
     server: {
       host: '0.0.0.0',

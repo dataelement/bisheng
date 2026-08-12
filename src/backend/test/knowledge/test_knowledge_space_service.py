@@ -3388,6 +3388,87 @@ class TestTupleLifecycle:
         mock_delete_members.assert_awaited_once_with(1)
 
     @pytest.mark.asyncio
+    async def test_private_cleanup_failure_does_not_persist_visibility(self, service):
+        public_space = _make_space(auth_type=AuthTypeEnum.PUBLIC)
+
+        with (
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id",
+                new_callable=AsyncMock,
+                return_value=public_space,
+            ),
+            patch.object(service, "_require_permission_id", new_callable=AsyncMock),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_space",
+                new_callable=AsyncMock,
+                return_value=public_space,
+            ) as mock_update_space,
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_get_members_by_space",
+                new_callable=AsyncMock,
+                return_value=[],
+            ),
+            patch.object(service, "_authorized_space_user_ids", new_callable=AsyncMock, return_value=set()),
+            patch.object(service, "_list_space_child_resources", new_callable=AsyncMock, return_value=[]),
+            patch.object(
+                service.__class__,
+                "clear_space_authorization_for_private",
+                new_callable=AsyncMock,
+                side_effect=RuntimeError("FGA cleanup failed"),
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service."
+                "SpaceChannelMemberDao.async_delete_non_creator_members",
+                new_callable=AsyncMock,
+            ) as mock_delete_members,
+        ):
+            with pytest.raises(RuntimeError, match="FGA cleanup failed"):
+                await service.update_knowledge_space(1, auth_type=AuthTypeEnum.PRIVATE)
+
+        mock_update_space.assert_not_awaited()
+        mock_delete_members.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_explicit_private_retry_replays_cleanup_when_already_private(self, service):
+        private_space = _make_space(auth_type=AuthTypeEnum.PRIVATE)
+
+        with (
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id",
+                new_callable=AsyncMock,
+                return_value=private_space,
+            ),
+            patch.object(service, "_require_permission_id", new_callable=AsyncMock),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_space",
+                new_callable=AsyncMock,
+                return_value=private_space,
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_get_members_by_space",
+                new_callable=AsyncMock,
+                return_value=[],
+            ),
+            patch.object(service, "_authorized_space_user_ids", new_callable=AsyncMock, return_value=set()),
+            patch.object(service, "_list_space_child_resources", new_callable=AsyncMock, return_value=[]),
+            patch.object(
+                service.__class__,
+                "clear_space_authorization_for_private",
+                new_callable=AsyncMock,
+            ) as mock_clear_permissions,
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service."
+                "SpaceChannelMemberDao.async_delete_non_creator_members",
+                new_callable=AsyncMock,
+            ) as mock_delete_members,
+            patch.object(service, "_send_space_event_notification", new_callable=AsyncMock),
+        ):
+            await service.update_knowledge_space(1, auth_type=AuthTypeEnum.PRIVATE)
+
+        mock_clear_permissions.assert_awaited_once()
+        mock_delete_members.assert_awaited_once_with(1)
+
+    @pytest.mark.asyncio
     async def test_public_to_private_notifies_authorized_users_not_only_member_rows(self, service):
         public_space = _make_space(auth_type=AuthTypeEnum.PUBLIC)
         private_space = _make_space(auth_type=AuthTypeEnum.PRIVATE)
@@ -3640,12 +3721,12 @@ class TestTupleLifecycle:
                 return_value=True,
             ),
             patch(
-                "bisheng.permission.api.endpoints.resource_permission._get_bindings",
+                "bisheng.permission.domain.services.relation_model_store.get_bindings",
                 new_callable=AsyncMock,
                 return_value=[],
             ),
             patch(
-                "bisheng.permission.api.endpoints.resource_permission._save_bindings",
+                "bisheng.permission.domain.services.relation_model_store.save_bindings",
                 new_callable=AsyncMock,
             ) as mock_save_bindings,
             patch(
@@ -3711,12 +3792,12 @@ class TestTupleLifecycle:
                 return_value=True,
             ) as mock_delete_member,
             patch(
-                "bisheng.permission.api.endpoints.resource_permission._get_bindings",
+                "bisheng.permission.domain.services.relation_model_store.get_bindings",
                 new_callable=AsyncMock,
                 return_value=[stale_binding, other_binding],
             ),
             patch(
-                "bisheng.permission.api.endpoints.resource_permission._save_bindings",
+                "bisheng.permission.domain.services.relation_model_store.save_bindings",
                 new_callable=AsyncMock,
             ) as mock_save_bindings,
             patch(
@@ -3769,12 +3850,12 @@ class TestTupleLifecycle:
                 new_callable=AsyncMock,
             ) as mock_delete_member,
             patch(
-                "bisheng.permission.api.endpoints.resource_permission._get_bindings",
+                "bisheng.permission.domain.services.relation_model_store.get_bindings",
                 new_callable=AsyncMock,
                 return_value=[],
             ),
             patch(
-                "bisheng.permission.api.endpoints.resource_permission._save_bindings",
+                "bisheng.permission.domain.services.relation_model_store.save_bindings",
                 new_callable=AsyncMock,
             ) as mock_save_bindings,
             patch(
@@ -3829,12 +3910,12 @@ class TestTupleLifecycle:
                 new_callable=AsyncMock,
             ) as mock_delete_member,
             patch(
-                "bisheng.permission.api.endpoints.resource_permission._get_bindings",
+                "bisheng.permission.domain.services.relation_model_store.get_bindings",
                 new_callable=AsyncMock,
                 return_value=[target_binding],
             ),
             patch(
-                "bisheng.permission.api.endpoints.resource_permission._save_bindings",
+                "bisheng.permission.domain.services.relation_model_store.save_bindings",
                 new_callable=AsyncMock,
             ) as mock_save_bindings,
             patch(

@@ -1,40 +1,50 @@
 from fastapi import Depends
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from bisheng.channel.domain.repositories.implementations.channel_info_source_repository_impl import \
-    ChannelInfoSourceRepositoryImpl
+from bisheng.channel.domain.repositories.implementations.article_read_repository_impl import (
+    ArticleReadRepositoryImpl,
+)
+from bisheng.channel.domain.repositories.implementations.channel_info_source_repository_impl import (
+    ChannelInfoSourceRepositoryImpl,
+)
 from bisheng.channel.domain.repositories.implementations.channel_repository_impl import ChannelRepositoryImpl
+from bisheng.channel.domain.repositories.interfaces.article_read_repository import ArticleReadRepository
 from bisheng.channel.domain.repositories.interfaces.channel_info_source_repository import ChannelInfoSourceRepository
 from bisheng.channel.domain.repositories.interfaces.channel_repository import ChannelRepository
 from bisheng.channel.domain.services.article_es_service import ArticleEsService
 from bisheng.channel.domain.services.channel_authorization_service import ChannelAuthorizationService
+from bisheng.channel.domain.services.channel_creation_application_service import (
+    ChannelCreationApplicationService,
+)
 from bisheng.channel.domain.services.channel_service import ChannelService
 from bisheng.common.dependencies.core_deps import get_db_session
-from bisheng.channel.domain.repositories.implementations.article_read_repository_impl import ArticleReadRepositoryImpl
-from bisheng.channel.domain.repositories.interfaces.article_read_repository import ArticleReadRepository
-from bisheng.common.repositories.implementations.space_channel_member_repository_impl import \
-    SpaceChannelMemberRepositoryImpl
+from bisheng.common.repositories.implementations.space_channel_member_repository_impl import (
+    SpaceChannelMemberRepositoryImpl,
+)
 from bisheng.common.repositories.interfaces.space_channel_member_repository import SpaceChannelMemberRepository
 from bisheng.message.api.dependencies import get_message_service as _get_message_service
+from bisheng.permission.domain.services.grant_subject_query_service import (
+    GrantSubjectQueryService,
+)
 
 
 async def get_channel_repository(
-        session: AsyncSession = Depends(get_db_session),
+    session: AsyncSession = Depends(get_db_session),
 ) -> ChannelRepository:
     """Adaptation ChannelRepositoryInstance Dependencies"""
     return ChannelRepositoryImpl(session)
 
 
 async def get_space_channel_member_repository(
-        session: AsyncSession = Depends(get_db_session),
-) -> 'SpaceChannelMemberRepository':
+    session: AsyncSession = Depends(get_db_session),
+) -> "SpaceChannelMemberRepository":
     """Adaptation SpaceChannelMemberRepositoryInstance Dependencies"""
     return SpaceChannelMemberRepositoryImpl(session)
 
 
 async def get_channel_info_source_repository(
-        session: AsyncSession = Depends(get_db_session),
-) -> 'ChannelInfoSourceRepository':
+    session: AsyncSession = Depends(get_db_session),
+) -> "ChannelInfoSourceRepository":
     """Adaptation ChannelInfoSourceRepository Dependencies"""
     return ChannelInfoSourceRepositoryImpl(session)
 
@@ -43,16 +53,17 @@ def get_article_es_service() -> ArticleEsService:
     """Get ArticleEsService instance"""
     return ArticleEsService()
 
+
 async def get_article_read_repository(
-        session: AsyncSession = Depends(get_db_session),
+    session: AsyncSession = Depends(get_db_session),
 ) -> ArticleReadRepository:
     """Adaptation ArticleReadRepository Dependencies"""
     return ArticleReadRepositoryImpl(session)
 
 
 async def get_channel_service(
-        session: AsyncSession = Depends(get_db_session),
-) -> 'ChannelService':
+    session: AsyncSession = Depends(get_db_session),
+) -> "ChannelService":
     """Adaptation ChannelServiceInstance Dependencies"""
 
     channel_repository = await get_channel_repository(session)
@@ -73,11 +84,22 @@ async def get_channel_service(
 
 
 async def get_channel_authorization_service(
-        session: AsyncSession = Depends(get_db_session),
+    session: AsyncSession = Depends(get_db_session),
 ) -> ChannelAuthorizationService:
     channel_repository = await get_channel_repository(session)
     space_channel_member_repository = await get_space_channel_member_repository(session)
     return ChannelAuthorizationService(
         channel_repository=channel_repository,
         space_channel_member_repository=space_channel_member_repository,
+    )
+
+
+async def get_channel_creation_application_service(
+    channel_service: ChannelService = Depends(get_channel_service),
+    channel_authorization_service: ChannelAuthorizationService = Depends(get_channel_authorization_service),
+) -> ChannelCreationApplicationService:
+    return ChannelCreationApplicationService(
+        channel_service=channel_service,
+        grant_subject_query_service=GrantSubjectQueryService(),
+        channel_authorization_service=channel_authorization_service,
     )

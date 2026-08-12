@@ -8,6 +8,7 @@ from bisheng.chat_session.domain.chat import ChatSessionService
 from bisheng.chat_session.domain.services.chat_message_service import ChatMessageService
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import UnAuthorizedError
+from bisheng.core.context.tenant import bypass_tenant_filter_if
 from bisheng.share_link.api.dependencies import header_share_token_parser
 from bisheng.share_link.domain.models.share_link import ShareLink
 from bisheng.utils import get_request_ip
@@ -51,7 +52,8 @@ async def get_chat_message(
     login_user: UserPayload = Depends(UserPayload.get_login_user),
     share_link: Union["ShareLink", None] = Depends(header_share_token_parser),
 ):
-    history = await ChatSessionService.get_chat_history(chat_id, flow_id, id, page_size)
+    with bypass_tenant_filter_if(share_link is not None):
+        history = await ChatSessionService.get_chat_history(chat_id, flow_id, id, page_size)
 
     if history and login_user.user_id != history[0].user_id:
         if not share_link or share_link.resource_id != chat_id:
@@ -60,9 +62,18 @@ async def get_chat_message(
 
 
 @router.get("/chat/info")
-async def get_chat_info(chat_id: str = Query(..., description="Session Uniqueid，chat_id")):
-    """Get session details by chat_id."""
-    res = await ChatSessionService.get_session_info(chat_id)
+async def get_chat_info(
+    chat_id: str = Query(..., description="Session Uniqueid，chat_id"),
+    share_link: Union["ShareLink", None] = Depends(header_share_token_parser),
+):
+    """Get session details by chat_id.
+
+    ``message_session`` is tenant-aware, so a share recipient in another child
+    tenant would read None and see the fallback "New Chat" title instead of the
+    conversation's real name.
+    """
+    with bypass_tenant_filter_if(share_link is not None):
+        res = await ChatSessionService.get_session_info(chat_id)
     return resp_200(res)
 
 

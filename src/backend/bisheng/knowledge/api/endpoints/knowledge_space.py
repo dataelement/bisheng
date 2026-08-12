@@ -10,6 +10,7 @@ from bisheng.common.errcode.http_error import ServerError
 from bisheng.common.schemas.api import SSEResponse, resp_200
 from bisheng.knowledge.api.dependencies import (
     get_knowledge_space_chat_service,
+    get_knowledge_space_creation_application_service,
     get_knowledge_space_service,
 )
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
@@ -36,6 +37,9 @@ from bisheng.knowledge.domain.services.department_knowledge_space_service import
 from bisheng.knowledge.domain.services.knowledge_space_chat_service import (
     KnowledgeSpaceChatService,
 )
+from bisheng.knowledge.domain.services.knowledge_space_creation_application_service import (
+    KnowledgeSpaceCreationApplicationService,
+)
 from bisheng.knowledge.domain.services.knowledge_space_service import (
     KnowledgeSpaceService,
 )
@@ -52,19 +56,10 @@ router = APIRouter(prefix="/knowledge/space", tags=["knowledge_space"])
 @require_quota(QuotaResourceType.KNOWLEDGE_SPACE)
 async def create_space(
     req: KnowledgeSpaceCreateReq,
-    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+    svc: KnowledgeSpaceCreationApplicationService = Depends(get_knowledge_space_creation_application_service),
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ) -> Any:
-    space = await svc.create_knowledge_space(
-        name=req.name,
-        description=req.description,
-        icon=req.icon,
-        auth_type=req.auth_type,
-        is_released=req.is_released,
-        auto_tag_enabled=req.auto_tag_enabled,
-        auto_tag_library_id=req.auto_tag_library_id,
-        auto_tag_custom_tags=req.auto_tag_custom_tags,
-    )
+    space = await svc.create(req=req, login_user=login_user)
     return resp_200(space)
 
 

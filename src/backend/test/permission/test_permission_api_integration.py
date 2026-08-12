@@ -924,22 +924,8 @@ class TestPermissionApiIntegration:
 
         with (
             patch(
-                "bisheng.permission.api.endpoints.resource_permission._has_resource_permission_management_access",
-                new_callable=AsyncMock,
-                return_value=True,
-            ),
-            patch(
-                "bisheng.permission.api.endpoints.resource_permission._resolve_grant_subject_tenant_id",
-                new_callable=AsyncMock,
-                return_value=3,
-            ),
-            patch(
-                "bisheng.permission.api.endpoints.resource_permission._resolve_department_space_scope",
-                new_callable=AsyncMock,
-                return_value=None,
-            ),
-            patch(
-                "bisheng.permission.api.endpoints.resource_permission._list_knowledge_space_grant_users",
+                "bisheng.permission.api.endpoints.resource_permission."
+                "GrantSubjectQueryService.query_resource_users",
                 new_callable=AsyncMock,
                 return_value=[
                     {
@@ -959,13 +945,10 @@ class TestPermissionApiIntegration:
 
         assert body["status_code"] == 200
         assert body["data"][0]["user_name"] == "Alice"
-        mock_list_users.assert_awaited_once_with(
-            tenant_id=3,
-            keyword="Ali",
-            page=1,
-            page_size=1000,
-            restrict_dept_path=None,
-        )
+        mock_list_users.assert_awaited_once()
+        assert mock_list_users.await_args.kwargs["resource_type"] == "knowledge_space"
+        assert mock_list_users.await_args.kwargs["resource_id"] == "1"
+        assert mock_list_users.await_args.kwargs["keyword"] == "Ali"
 
     async def test_list_grant_users_resolves_paths_without_whole_department_table(self):
         """F038 perf regression: the primary-department full-path label must be resolved
@@ -1044,17 +1027,8 @@ class TestPermissionApiIntegration:
 
         with (
             patch(
-                "bisheng.permission.api.endpoints.resource_permission._has_resource_permission_management_access",
-                new_callable=AsyncMock,
-                return_value=True,
-            ),
-            patch(
-                "bisheng.permission.api.endpoints.resource_permission._resolve_grant_subject_tenant_id",
-                new_callable=AsyncMock,
-                return_value=3,
-            ),
-            patch(
-                "bisheng.permission.api.endpoints.resource_permission._list_knowledge_space_grant_user_groups",
+                "bisheng.permission.api.endpoints.resource_permission."
+                "GrantSubjectQueryService.query_resource_user_groups",
                 new_callable=AsyncMock,
                 return_value=[
                     {
@@ -1074,7 +1048,8 @@ class TestPermissionApiIntegration:
         assert body["status_code"] == 200
         assert body["data"][0]["group_name"] == "产品组"
         mock_list_groups.assert_awaited_once()
-        assert mock_list_groups.await_args.kwargs["tenant_id"] == 3
+        assert mock_list_groups.await_args.kwargs["resource_type"] == "knowledge_space"
+        assert mock_list_groups.await_args.kwargs["resource_id"] == "1"
         assert mock_list_groups.await_args.kwargs["keyword"] == "产品"
         assert mock_list_groups.await_args.kwargs["login_user"].user_id == 7
 
@@ -1116,7 +1091,7 @@ class TestPermissionApiIntegration:
                 return_value=[9],
             ),
             patch(
-                "bisheng.user_group.domain.services.user_group_service._can_view_all_groups",
+                "bisheng.permission.domain.services.permission_service.PermissionService.check",
                 new_callable=AsyncMock,
                 return_value=False,
             ),
@@ -1128,9 +1103,9 @@ class TestPermissionApiIntegration:
             )
 
         assert data == [{"id": 5, "group_name": "产品组"}]
-        stmt_text = str(captured_stmt).lower()
-        assert "group.visibility" in stmt_text
-        assert "group.create_user" in stmt_text
+        where_text = str(captured_stmt.whereclause).lower().replace('"', "")
+        assert "group.visibility" in where_text
+        assert "group.create_user" in where_text
 
     @pytest.mark.asyncio
     async def test_grant_subject_user_groups_helper_allows_all_for_tenant_admin(self):
@@ -1165,7 +1140,7 @@ class TestPermissionApiIntegration:
                 side_effect=_session_cm,
             ),
             patch(
-                "bisheng.user_group.domain.services.user_group_service._can_view_all_groups",
+                "bisheng.permission.domain.services.permission_service.PermissionService.check",
                 new_callable=AsyncMock,
                 return_value=True,
             ),
@@ -1177,7 +1152,8 @@ class TestPermissionApiIntegration:
             )
 
         assert data == [{"id": 8, "group_name": "私密组"}]
-        assert "group.visibility" not in str(captured_stmt).lower()
+        where_text = str(captured_stmt.whereclause).lower().replace('"', "")
+        assert "group.visibility" not in where_text
 
     def test_permissions_list_reads_workflow_permissions_after_fine_grained_allow(self):
         app = _make_app(_ViewerUser)
@@ -1516,6 +1492,16 @@ class TestPermissionApiIntegration:
                 "bisheng.permission.api.endpoints.resource_permission._get_bindings",
                 new_callable=AsyncMock,
                 return_value=[],
+            ),
+            patch(
+                "bisheng.knowledge.domain.models.department_knowledge_space."
+                "DepartmentKnowledgeSpaceDao.aget_by_space_id",
+                new=AsyncMock(return_value=None),
+            ),
+            patch(
+                "bisheng.permission.domain.services.grant_subject_query_service."
+                "GrantSubjectQueryService.validate_resource_grants",
+                new_callable=AsyncMock,
             ),
             patch(
                 "bisheng.permission.domain.services.permission_service.PermissionService.get_permission_level",

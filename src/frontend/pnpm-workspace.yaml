@@ -15,10 +15,11 @@ catalog:
   '@types/react': ^18.2.11
   '@types/react-dom': ^18.2.4
   '@radix-ui/react-slot': ^1.1.0
-  bisheng-icons: ^0.2.29
+  bisheng-icons: ^0.2.30
   class-variance-authority: ^0.6.0
   clsx: ^1.2.1
   tailwind-merge: ^1.14.0
+  qrcode.react: ^4.2.0
   tailwindcss: ^3.4.1
   postcss: ^8.4.31
   autoprefixer: ^10.4.20

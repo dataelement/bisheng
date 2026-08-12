@@ -180,7 +180,9 @@ const Nav = ({
                     />
                     <div
                       className={cn(
-                        '-mr-2 min-h-0 flex-1 flex-col overflow-y-auto scroll-no-hover pr-2 pb-3 max-[767px]:-mr-0 max-[767px]:pr-0',
+                        // -ml-1/pl-1 widens the scrollport past the rows' left
+                        // edge so the rename ring (3px shadow) isn't clipped.
+                        '-mr-2 -ml-1 min-h-0 flex-1 flex-col overflow-y-auto scroll-no-hover pr-2 pl-1 pb-3 max-[767px]:-mr-0 max-[767px]:pr-0',
                       )}
                       ref={containerRef}
                       onScroll={updateScrollShadows}

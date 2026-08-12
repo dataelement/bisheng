@@ -86,7 +86,7 @@ export function SubChannelBlock({
     };
 
     return (
-        <div className="overflow-hidden">
+        <div className="overflow-hidden bg-white">
             <div className="h-12 flex items-center justify-between gap-2 px-3 bg-[#F8F8F8]">
                 <button
                     type="button"
@@ -106,7 +106,7 @@ export function SubChannelBlock({
                         onChange={(e) => handleNameChange(e.target.value)}
                         onBlur={handleSave}
                         onKeyDown={(e) => e.key === "Enter" && handleSave()}
-                        className="h-[26px] flex-1 min-w-0 px-2 text-[14px] text-[#212121] placeholder:text-[#999999] border border-[#E5E6EB] rounded focus:outline-none focus:border-[#DDDDDD] focus:ring-2 focus:ring-[#F1F5F9]"
+                        className="h-[26px] min-w-0 flex-1 rounded border border-[#E5E6EB] bg-white px-2 text-[14px] text-[#212121] placeholder:text-[#999999] focus:border-[#DDDDDD] focus:outline-none focus:ring-2 focus:ring-[#F1F5F9]"
                         placeholder={localize("com_subscription.sub_channel_name")}
                     />
                 ) : (

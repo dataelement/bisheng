@@ -10,7 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getSelectableSkills } from '~/api/linsight';
 import { DropdownMenuItem, Input } from '~/components/ui';
-import { useFreezePanelWidth, useLocalize } from '~/hooks';
+import { useLocalize } from '~/hooks';
 import type { TaskModeSkill } from '~/store/linsight';
 import { cn } from '~/utils';
 
@@ -22,18 +22,12 @@ interface SkillSelectorProps {
 export function SkillSelector({ selected, onChange }: SkillSelectorProps) {
     const localize = useLocalize();
     const [keyword, setKeyword] = useState('');
-    const { data: skills = [], isFetching, isFetched } = useQuery({
+    const { data: skills = [], isFetching } = useQuery({
         queryKey: ['linsightSelectableSkills'],
         queryFn: getSelectableSkills,
         refetchOnWindowFocus: false,
         refetchOnReconnect: false,
     });
-
-    // The hosting submenu popup auto-fits its content between min/max clamps;
-    // freeze that width once the first skill batch renders so search filtering
-    // can't resize the open panel. This component mounts fresh per open (Radix
-    // unmounts sub-content on close), so no `open` reset is needed.
-    const freeze = useFreezePanelWidth(isFetched);
 
     const filtered = useMemo(() => {
         const kw = keyword.trim().toLowerCase();
@@ -71,20 +65,15 @@ export function SkillSelector({ selected, onChange }: SkillSelectorProps) {
     };
 
     return (
-        <div ref={freeze.ref} style={freeze.style} className="flex min-h-0 w-full flex-1 flex-col gap-1">
-            {/* Panel title — mirrors the knowledge panel header for visual consistency */}
-            <p className="mb-1 shrink-0 px-2 py-[5px] text-[14px] font-medium leading-[22px] text-[#1A1A1A]">
-                {localize('com_linsight_skill_title')}
-            </p>
-
+        <div className="flex min-h-0 flex-1 flex-col gap-1">
+            {/* No panel heading: every surface that opens this list already
+                labels it — the desktop submenu hangs off the "添加技能" row, the
+                mobile drill panel has it in the back-navigation row. */}
             {/* Search — stopPropagation so typing isn't hijacked by the Radix menu's type-ahead */}
             <div className="relative shrink-0">
                 <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
                 <Input
-                    className="h-[28px] rounded-[6px] border border-[#ECECEC] bg-white pl-8 text-sm focus-visible:ring-1 focus-visible:ring-blue-500/20"
-                    // size=1 kills the input's ~180px intrinsic width so it can't
-                    // floor the content-fit popup above its min-w; still renders 100%.
-                    size={1}
+                    className="h-[28px] rounded-md border border-[#ECECEC] bg-white pl-8 text-sm focus-visible:ring-1 focus-visible:ring-blue-500/20"
                     placeholder={localize('com_linsight_skill_search')}
                     value={keyword}
                     onChange={(e) => setKeyword(e.target.value)}
@@ -136,7 +125,7 @@ export function SkillSelector({ selected, onChange }: SkillSelectorProps) {
                                     e.preventDefault();
                                     handleToggle(skill);
                                 }}
-                                className="flex cursor-pointer items-start gap-2 rounded-[6px] px-2 py-[5px] outline-none transition-colors data-[highlighted]:bg-[#f2f3f5] focus:bg-[#f2f3f5]"
+                                className="flex cursor-pointer items-start gap-2 rounded-md px-2 py-[5px] outline-none transition-colors data-[highlighted]:bg-[#f2f3f5] focus:bg-[#f2f3f5]"
                             >
                                 <div
                                     className={cn(

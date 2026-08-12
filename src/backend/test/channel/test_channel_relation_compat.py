@@ -114,6 +114,7 @@ async def test_create_channel_writes_owner_relation_for_creator():
 async def test_channel_detail_returns_current_user_relation():
     channel = SimpleNamespace(
         id="channel-1",
+        user_id=1,
         name="资讯频道",
         description="",
         source_list=[],
@@ -146,6 +147,49 @@ async def test_channel_detail_returns_current_user_relation():
         detail = await service.get_channel_detail("channel-1", _LoginUser())
 
     assert detail.relation == ChannelRelationEnum.MANAGER
+
+
+@pytest.mark.asyncio
+async def test_channel_detail_does_not_return_creator_sync_to_granted_owner():
+    channel = SimpleNamespace(
+        id="channel-1",
+        user_id=1,
+        name="资讯频道",
+        description="",
+        source_list=[],
+        visibility=ChannelVisibilityEnum.PUBLIC,
+        filter_rules=[],
+        is_released=True,
+        latest_article_update_time=None,
+        create_time=None,
+    )
+    granted_owner = SimpleNamespace(
+        status=MembershipStatusEnum.ACTIVE,
+        user_role=UserRoleEnum.CREATOR,
+        relation=ChannelRelationEnum.OWNER,
+        grant_subject_type="user",
+        grant_subject_id=7,
+        update_time=None,
+    )
+    creator = SimpleNamespace(user_id=1)
+    channel_repository = SimpleNamespace(find_channels_by_ids=AsyncMock(return_value=[channel]))
+    member_repository = SimpleNamespace(
+        find_membership=AsyncMock(return_value=granted_owner),
+        find_membership_split=AsyncMock(return_value=(granted_owner, granted_owner)),
+        find_members_by_role=AsyncMock(return_value=[creator]),
+        count_channel_members=AsyncMock(return_value=2),
+    )
+    service = _service(channel_repository, member_repository)
+    service._load_knowledge_sync = AsyncMock()
+
+    with patch(
+        "bisheng.channel.domain.services.channel_service.UserDao.aget_user_by_ids",
+        new=AsyncMock(return_value=[SimpleNamespace(user_name="creator")]),
+    ):
+        detail = await service.get_channel_detail("channel-1", _LoginUser())
+
+    assert detail.knowledge_sync is None
+    service._load_knowledge_sync.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -199,6 +243,7 @@ async def test_channel_member_list_returns_four_level_relation_order():
 async def test_editor_can_update_channel_settings():
     channel = SimpleNamespace(
         id="channel-1",
+        user_id=1,
         name="旧频道",
         description="旧描述",
         source_list=[],
@@ -567,6 +612,7 @@ async def test_followed_channels_include_private_organization_grant_channel():
 async def test_switch_private_revokes_all_non_owner_relations():
     channel = SimpleNamespace(
         id="channel-1",
+        user_id=1,
         name="频道",
         description="",
         source_list=[],
@@ -579,31 +625,26 @@ async def test_switch_private_revokes_all_non_owner_relations():
         user_role=UserRoleEnum.MEMBER,
         relation=ChannelRelationEnum.EDITOR,
     )
-    owner = SimpleNamespace(user_id=1)
     channel_repository = SimpleNamespace(
         find_by_id=AsyncMock(return_value=channel),
         update=AsyncMock(side_effect=lambda item: item),
     )
     member_repository = SimpleNamespace(
         find_membership=AsyncMock(return_value=current_member),
-        find_members_by_role=AsyncMock(return_value=[owner]),
-        remove_non_creator_members=AsyncMock(return_value=None),
+        find_all=AsyncMock(return_value=[]),
+        delete=AsyncMock(return_value=True),
     )
     service = _service(channel_repository, member_repository)
 
     with (
         patch(
-            "bisheng.channel.domain.services.channel_service.OwnerService.delete_non_owner_resource_tuples",
-            new=AsyncMock(return_value=3),
-        ) as mock_delete_non_owner,
-        patch(
             "bisheng.channel.domain.services.channel_service.OwnerService.write_owner_tuple",
             new=AsyncMock(),
         ) as mock_write_owner,
         patch(
-            "bisheng.channel.domain.services.channel_authorization_service.ChannelAuthorizationService.clear_non_owner_bindings",
+            "bisheng.channel.domain.services.channel_authorization_service.ChannelAuthorizationService.clear_authorization_for_private",
             new=AsyncMock(return_value=2),
-        ) as mock_clear_bindings,
+        ) as mock_clear_authorization,
         patch(
             "bisheng.channel.domain.services.channel_service.get_bisheng_information_client",
             new=AsyncMock(return_value=SimpleNamespace()),
@@ -619,17 +660,20 @@ async def test_switch_private_revokes_all_non_owner_relations():
             _LoginUser(),
         )
 
-    member_repository.find_members_by_role.assert_awaited_once_with("channel-1", UserRoleEnum.CREATOR)
-    member_repository.remove_non_creator_members.assert_awaited_once_with("channel-1")
-    mock_delete_non_owner.assert_awaited_once_with("channel", "channel-1")
-    mock_clear_bindings.assert_awaited_once_with("channel-1")
-    mock_write_owner.assert_awaited_once_with(1, "channel", "channel-1")
+    member_repository.find_all.assert_awaited_once_with(
+        business_id="channel-1",
+        business_type=BusinessTypeEnum.CHANNEL,
+    )
+    member_repository.delete.assert_not_awaited()
+    mock_clear_authorization.assert_awaited_once_with("channel-1", 1)
+    mock_write_owner.assert_awaited_once_with(1, "channel", "channel-1", enforce_fga_success=True)
 
 
 @pytest.mark.asyncio
 async def test_switch_review_to_private_revokes_all_non_owner_relations():
     channel = SimpleNamespace(
         id="channel-1",
+        user_id=1,
         name="频道",
         description="",
         source_list=[],
@@ -642,31 +686,26 @@ async def test_switch_review_to_private_revokes_all_non_owner_relations():
         user_role=UserRoleEnum.CREATOR,
         relation=ChannelRelationEnum.OWNER,
     )
-    owner = SimpleNamespace(user_id=1)
     channel_repository = SimpleNamespace(
         find_by_id=AsyncMock(return_value=channel),
         update=AsyncMock(side_effect=lambda item: item),
     )
     member_repository = SimpleNamespace(
         find_membership=AsyncMock(return_value=current_member),
-        find_members_by_role=AsyncMock(return_value=[owner]),
-        remove_non_creator_members=AsyncMock(return_value=None),
+        find_all=AsyncMock(return_value=[]),
+        delete=AsyncMock(return_value=True),
     )
     service = _service(channel_repository, member_repository)
 
     with (
         patch(
-            "bisheng.channel.domain.services.channel_service.OwnerService.delete_non_owner_resource_tuples",
-            new=AsyncMock(return_value=1),
-        ) as mock_delete_non_owner,
-        patch(
             "bisheng.channel.domain.services.channel_service.OwnerService.write_owner_tuple",
             new=AsyncMock(),
         ),
         patch(
-            "bisheng.channel.domain.services.channel_authorization_service.ChannelAuthorizationService.clear_non_owner_bindings",
+            "bisheng.channel.domain.services.channel_authorization_service.ChannelAuthorizationService.clear_authorization_for_private",
             new=AsyncMock(return_value=0),
-        ) as mock_clear_bindings,
+        ) as mock_clear_authorization,
         patch(
             "bisheng.channel.domain.services.channel_service.get_bisheng_information_client",
             new=AsyncMock(return_value=SimpleNamespace()),
@@ -682,9 +721,12 @@ async def test_switch_review_to_private_revokes_all_non_owner_relations():
             _LoginUser(),
         )
 
-    member_repository.remove_non_creator_members.assert_awaited_once_with("channel-1")
-    mock_delete_non_owner.assert_awaited_once_with("channel", "channel-1")
-    mock_clear_bindings.assert_awaited_once_with("channel-1")
+    member_repository.find_all.assert_awaited_once_with(
+        business_id="channel-1",
+        business_type=BusinessTypeEnum.CHANNEL,
+    )
+    member_repository.delete.assert_not_awaited()
+    mock_clear_authorization.assert_awaited_once_with("channel-1", 1)
 
 
 @pytest.mark.asyncio
