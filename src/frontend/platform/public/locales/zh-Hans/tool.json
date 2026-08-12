@@ -387,6 +387,8 @@
     "fieldCannotBeEmpty": "{{label}} 不能为空",
     "jinaApiKeyLabel": "Jina API 密钥",
     "siliconflowApiKeyLabel": "SiliconFlow API 密钥",
+    "minimaxApiKeyLabel": "MiniMax API Key",
+    "minimaxApiBaseUrlLabel": "MiniMax API Base URL",
     "uploadFile": "上传文件",
     "organizeKnowledgeBase": "组织知识库",
     "个人知识库": "个人知识库",

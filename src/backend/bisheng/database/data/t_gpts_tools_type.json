@@ -1,5 +1,21 @@
 [
   {
+    "id": 17,
+    "name": "MiniMax",
+    "logo": "",
+    "description": "Generate images from text prompts with MiniMax image models",
+    "server_host": "",
+    "auth_method": 0,
+    "api_key": "",
+    "auth_type": "basic",
+    "is_preset": 1,
+    "user_id": null,
+    "is_delete": 0,
+    "create_time": "2026-08-12 00:00:00",
+    "update_time": "2026-08-12 00:00:00",
+    "openapi_schema": null
+  },
+  {
     "id": 1,
     "name": "时间",
     "logo": null,

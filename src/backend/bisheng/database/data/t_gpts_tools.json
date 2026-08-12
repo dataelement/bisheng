@@ -1,5 +1,83 @@
 [
   {
+    "name": "MiniMax Image Generation",
+    "logo": null,
+    "desc": "Generate images from a text prompt with MiniMax",
+    "api_params": [
+      {
+        "in": "query",
+        "name": "prompt",
+        "schema": {"type": "string"},
+        "required": true,
+        "description": "Text description of the image"
+      },
+      {
+        "in": "query",
+        "name": "model",
+        "schema": {"type": "string", "enum": ["image-01", "image-01-live"], "default": "image-01"},
+        "required": false,
+        "description": "MiniMax image model"
+      },
+      {
+        "in": "query",
+        "name": "aspect_ratio",
+        "schema": {"type": "string"},
+        "required": false,
+        "description": "Generated image aspect ratio"
+      },
+      {
+        "in": "query",
+        "name": "width",
+        "schema": {"type": "integer", "minimum": 512, "maximum": 2048, "multipleOf": 8},
+        "required": false,
+        "description": "Generated image width"
+      },
+      {
+        "in": "query",
+        "name": "height",
+        "schema": {"type": "integer", "minimum": 512, "maximum": 2048, "multipleOf": 8},
+        "required": false,
+        "description": "Generated image height"
+      },
+      {
+        "in": "query",
+        "name": "response_format",
+        "schema": {"type": "string", "enum": ["url", "base64"], "default": "url"},
+        "required": false,
+        "description": "Image response format"
+      },
+      {
+        "in": "query",
+        "name": "seed",
+        "schema": {"type": "integer"},
+        "required": false,
+        "description": "Seed for deterministic generation"
+      },
+      {
+        "in": "query",
+        "name": "n",
+        "schema": {"type": "integer", "minimum": 1, "maximum": 9, "default": 1},
+        "required": false,
+        "description": "Number of images to generate"
+      },
+      {
+        "in": "query",
+        "name": "prompt_optimizer",
+        "schema": {"type": "boolean", "default": false},
+        "required": false,
+        "description": "Enable prompt optimization"
+      }
+    ],
+    "tool_key": "minimax_image_generation",
+    "type": 17,
+    "is_preset": 1,
+    "is_delete": 0,
+    "user_id": 1,
+    "create_time": "2026-08-12 00:00:00",
+    "update_time": "2026-08-12 00:00:00",
+    "id": 39
+  },
+  {
     "name": "时间",
     "logo": null,
     "desc": "返回当前时间，如果未指定时区，将使用 UTC+8 时间",

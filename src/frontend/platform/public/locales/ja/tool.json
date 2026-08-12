@@ -387,6 +387,8 @@
     "fieldCannotBeEmpty": "{{label}}は空にできません",
     "jinaApiKeyLabel": "Jina API Key",
     "siliconflowApiKeyLabel": "SiliconFlow API Key",
+    "minimaxApiKeyLabel": "MiniMax API Key",
+    "minimaxApiBaseUrlLabel": "MiniMax API Base URL",
     "uploadFile": "ファイルをアップロード",
     "organizeKnowledgeBase": "ナレッジベース整理",
     "个人知识库": "個人ナレッジベース",
