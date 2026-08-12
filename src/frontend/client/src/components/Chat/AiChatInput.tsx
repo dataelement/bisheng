@@ -278,7 +278,7 @@ const AiChatInput = memo(
             enabled: showUpload && !disabled && !filesDisabled,
             // Task mode only: a dropped directory is expanded with its tree
             // preserved. Daily chat has no workspace to rebuild a tree in.
-            allowFolders: isLingsi,
+            allowFolders: taskMode,
             onFilesReceived: (files: FileList | File[]) => {
                 inputFilesRef.current?.upload(files);
             },
@@ -424,6 +424,7 @@ const AiChatInput = memo(
                             hideTrigger
                             hideList
                             uploadMode={isLingsi ? 'linsight' : 'workstation'}
+                            allowFolderUpload={taskMode}
                             uploadSizeLimits={resolveUploadSizeLimits(envConfig)}
                             size={envConfig?.uploaded_files_maximum_size || 50}
                             onFilesStateChange={(currentFiles: any[] = []) => {
@@ -546,7 +547,7 @@ const AiChatInput = memo(
                                     onFileUploadClick={() => inputFilesRef.current?.openPicker?.()}
                                     // Folder upload is task-mode only: daily chat has no agent
                                     // workspace to rebuild the directory tree in.
-                                    onFolderUploadClick={isLingsi
+                                    onFolderUploadClick={taskMode
                                         ? () => inputFilesRef.current?.openFolderPicker?.()
                                         : undefined}
                                     // Task mode toggle present in both modes (plan-mode style).

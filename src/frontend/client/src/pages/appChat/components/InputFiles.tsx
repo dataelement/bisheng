@@ -105,7 +105,7 @@ const checkFileType = (file, accepts) => {
 // @accepts '.png,.jpg'
 // `hideTrigger` hides the built-in attachment icon; caller invokes
 // `openPicker()` via the imperative ref (e.g. from the "+" menu).
-const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, uploadSizeLimits, onChange, onFilesStateChange, uploadMode, hideTrigger = false, hideList = false }, ref) => {
+const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, uploadSizeLimits, onChange, onFilesStateChange, uploadMode, allowFolderUpload = false, hideTrigger = false, hideList = false }, ref) => {
     const t = useLocalize()
     const [files, setFiles] = useState([]);
     const filesRef = useRef([]);
@@ -135,10 +135,12 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
         }
         return uploadMode === 'linsight';
     };
-    // Folder upload is task-mode only. Daily chat has no agent workspace to
-    // rebuild a directory tree in, and its upload channel keys MinIO objects by
-    // raw filename — nested keys there would make an existing collision worse.
-    const supportsFolderUpload = uploadMode === 'linsight';
+    // Folder upload is task-mode only — daily chat has no agent workspace to
+    // rebuild a directory tree in. It is NOT inferable from `uploadMode`: task
+    // mode inside a conversation still uploads through the shared ('workstation')
+    // endpoint and only becomes a task at submit time. The caller knows whether
+    // task mode is on; this component does not.
+    const supportsFolderUpload = !!allowFolderUpload;
     const getUploadedFileIds = () => filesRef.current
         .filter((f) => f.id && !f.isUploading && f.filePath)
         .map((f) => ({

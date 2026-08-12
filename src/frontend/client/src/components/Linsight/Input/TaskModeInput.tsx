@@ -315,6 +315,7 @@ export function TaskModeInput({ conversationId = 'new', disabled = false, onFoll
                     hideTrigger
                     hideList
                     uploadMode="linsight"
+                    allowFolderUpload
                     uploadSizeLimits={resolveUploadSizeLimits(envConfig as any)}
                     size={(envConfig as any)?.uploaded_files_maximum_size || 50}
                     onFilesStateChange={(currentFiles: any[] = []) => {
