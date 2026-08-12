@@ -131,9 +131,9 @@ export function ActionLevelBoard({
   return (
     <section
       aria-label={t("actionLevel.title")}
-      className="flex min-h-0 flex-col gap-4"
+      className="flex h-full min-h-0 flex-col gap-4"
     >
-      <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="flex shrink-0 flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-base font-semibold text-foreground">
             {t("actionLevel.title")}
@@ -165,7 +165,7 @@ export function ActionLevelBoard({
 
       {pendingChanges.length > 0 && (
         <div
-          className="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900"
+          className="flex shrink-0 items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900"
           role="status"
         >
           <ShieldAlert aria-hidden="true" className="size-4 shrink-0" />
@@ -179,14 +179,15 @@ export function ActionLevelBoard({
 
       {draftFailed && (
         <p
-          className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900"
+          className="shrink-0 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900"
           role="alert"
         >
           {t("actionLevel.draftFailed")}
         </p>
       )}
 
-      <div className="grid min-h-0 gap-3 xl:grid-cols-5">
+      {/* The only scroll area on this tab: the level columns, header and banners stay put. */}
+      <div className="grid min-h-0 flex-1 gap-3 overflow-y-auto pr-1 xl:grid-cols-5">
         {LEVELS.map((level) => {
           const key = levelKey(level)
           const zoneActions = normalizedActions.filter(

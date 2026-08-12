@@ -105,10 +105,10 @@ function ModelCatalogPanel({
   }, [catalog.id])
 
   return (
-    <div className="grid min-h-0 gap-4 lg:grid-cols-[16rem_minmax(0,1fr)]">
+    <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[16rem_minmax(0,1fr)]">
       <aside
         aria-label={t("model.list")}
-        className="min-h-0 rounded-xl border bg-muted/20 p-3"
+        className="flex min-h-0 flex-col rounded-xl border bg-muted/20 p-3"
       >
         <div className="flex items-center justify-between gap-2 px-2 pb-3">
           <h2 className="text-sm font-semibold text-foreground">
@@ -125,7 +125,8 @@ function ModelCatalogPanel({
             {t("model.create")}
           </Button>
         </div>
-        <div className="flex max-h-[60vh] flex-col gap-1 overflow-y-auto">
+        {/* The list scrolls on its own so the editor beside it keeps its own scrollbar. */}
+        <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto">
           {catalog.models.map((model: PermissionCatalogModel) => (
             <button
               key={model.key}
@@ -156,7 +157,7 @@ function ModelCatalogPanel({
           onReviewImpact={onReviewImpact}
         />
       ) : (
-        <p className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
+        <p className="min-h-0 rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
           {t("model.empty")}
         </p>
       )}
@@ -264,9 +265,11 @@ export function RolesAndPermissions() {
 
         {isPlatformSuperAdmin && (
           <>
+            {/* overflow-hidden, not auto: each board owns its single scroll area,
+                otherwise the tab pane scrolls on top of it. */}
             <TabsContent
               value="actions"
-              className="min-h-0 flex-1 overflow-auto py-2"
+              className="flex min-h-0 flex-1 flex-col overflow-hidden py-2"
             >
               <CatalogState
                 loading={loading}
@@ -283,7 +286,7 @@ export function RolesAndPermissions() {
             </TabsContent>
             <TabsContent
               value="models"
-              className="min-h-0 flex-1 overflow-auto py-2"
+              className="flex min-h-0 flex-1 flex-col overflow-hidden py-2"
             >
               <CatalogState
                 loading={loading}
