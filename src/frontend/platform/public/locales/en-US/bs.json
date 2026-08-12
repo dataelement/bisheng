@@ -557,7 +557,8 @@
       "flowOffline": "{{name}} is offline",
       "flowDeleted": "The skill has been deleted, its name is unavailable",
       "toolDeleted": "The tool has been deleted, its name is unavailable",
-      "knowledgeDeleted": "The knowledge base has been deleted, its name is unavailable"
+      "knowledgeDeleted": "The knowledge base has been deleted, its name is unavailable",
+      "interrupted": "The tool call returned no result (the session ended)"
     }
   },
   "importLinsight": {

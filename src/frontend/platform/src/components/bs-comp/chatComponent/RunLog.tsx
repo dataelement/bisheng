@@ -20,6 +20,9 @@ export default function RunLog({ data }) {
     const assistantState = useAssistantStore(state => state.assistantState)
 
     const [title, lost] = useMemo(() => {
+        // Settled by the session closing rather than by its own end frame — say so
+        // instead of showing a success tick the call never earned.
+        if (data.interrupted) return [t('chat.runLog.interrupted'), true]
         let lost = false
         let title = ''
         const status = data.end ? t('chat.runLog.used') : t('chat.runLog.using')

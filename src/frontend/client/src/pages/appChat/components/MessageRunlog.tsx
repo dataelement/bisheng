@@ -16,6 +16,9 @@ export default function MessageRunlog({ data }) {
     }, [_chatsState, data])
 
     const [title, lost] = useMemo(() => {
+        // Settled by the session closing rather than by its own end frame — say so
+        // instead of showing a success tick the call never earned.
+        if (data.interrupted) return [t('com_runlog_interrupted'), true]
         let lost = false
         let title = ''
         const status = data.end ? t('com_runlog_used') : t('com_runlog_using')

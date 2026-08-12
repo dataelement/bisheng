@@ -698,6 +698,7 @@
   "com_runlog_done": "Done",
   "com_runlog_flow_deleted": "The skill has been deleted and the name cannot be retrieved",
   "com_runlog_knowledge_deleted": "The knowledge base has been deleted and the name cannot be retrieved",
+  "com_runlog_interrupted": "The tool call returned no result (the session ended)",
   "com_runlog_offline": "Offline",
   "com_runlog_searched": "Searched",
   "com_runlog_searching": "Searching",

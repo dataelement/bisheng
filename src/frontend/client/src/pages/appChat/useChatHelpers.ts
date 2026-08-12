@@ -8,7 +8,7 @@ import { Chat } from "~/@types/chat"
 import { baseMsgItem } from "~/api/apps"
 import { formatDate, generateUUID } from "~/utils"
 import { FLOW_TYPES } from "."
-import { SkillMethod } from "./appUtils/skillMethod"
+import { runLogsTypes, SkillMethod } from "./appUtils/skillMethod"
 import { bishengConfState, chatApiVersionState, chatIdState, chatsState, currentChatState, currentRunningState, runningState } from "./store/atoms"
 import { emitAreaTextEvent, EVENT_TYPE } from "./useAreaText"
 
@@ -341,6 +341,20 @@ export default function useChatHelpers() {
             )
         },
         skillCloseMsg: () => {
+            // A tool card only closes when its `end` frame arrives. Lose one — a
+            // serialization failure, a dropped socket — and it spins forever with
+            // nothing to recover it: the round is over and nothing was persisted.
+            // Settle what is still open, marked interrupted rather than wearing a
+            // success tick it never earned.
+            setChats((prev) =>
+                updateChatMessages(prev, chatId, (messages) =>
+                    messages.map((msg) =>
+                        runLogsTypes.includes(msg.category) && !msg.end
+                            ? { ...msg, end: true, interrupted: true }
+                            : msg
+                    )
+                )
+            )
             setRunningState((prev) => {
                 return {
                     ...prev,

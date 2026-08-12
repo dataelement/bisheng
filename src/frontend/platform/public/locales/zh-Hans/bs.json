@@ -552,7 +552,8 @@
       "flowOffline": "{{name}} 已下线",
       "flowDeleted": "技能已被删除，无法获取技能名",
       "toolDeleted": "工具已被删除，无法获取工具名",
-      "knowledgeDeleted": "知识库已被删除，无法获取知识库名"
+      "knowledgeDeleted": "知识库已被删除，无法获取知识库名",
+      "interrupted": "工具调用未返回结果（会话已结束）"
     }
   },
   "model": {

@@ -29,7 +29,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
 
     const { isLoading: audioOpening } = useAudioStore()
 
-    const { messages, hisMessages, chatId, createSendMsg, createWsMsg, updateCurrentMessage, destory, setShowGuideQuestion } = useMessageStore()
+    const { messages, hisMessages, chatId, createSendMsg, createWsMsg, updateCurrentMessage, closeDanglingRunLogs, destory, setShowGuideQuestion } = useMessageStore()
     const currentChatIdRef = useRef(null)
     const inputRef = useRef(null)
     const continueRef = useRef(false)
@@ -256,6 +256,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
 
             if (!msgClosedRef.current) msgClosedRef.current = true
         } else if (data.type === "close") {
+            closeDanglingRunLogs()
             setStop({ show: false, disable: false })
             setInputLock((prev) => (prev.reason ? prev : { locked: false, reason: '' }))
         }

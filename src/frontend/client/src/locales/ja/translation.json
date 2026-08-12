@@ -679,6 +679,7 @@
   "com_runlog_done": "完了",
   "com_runlog_flow_deleted": "スキルが削除されたため、スキル名を取得できません",
   "com_runlog_knowledge_deleted": "ナレッジベースが削除されたため、名称を取得できません",
+  "com_runlog_interrupted": "ツール呼び出しは結果を返しませんでした（セッション終了）",
   "com_runlog_offline": "オフライン",
   "com_runlog_searched": "検索済み",
   "com_runlog_searching": "検索中",
