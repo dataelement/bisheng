@@ -7,7 +7,7 @@ Expert QA Database Models - SQLModel ORM
 from datetime import datetime
 from typing import Optional, List, TYPE_CHECKING
 from sqlmodel import SQLModel, Field, Relationship, Column, String
-from bisheng.core.database.dialect_helpers import JsonType
+from bisheng.core.database.dialect_helpers import JsonType, LargeText
 
 if TYPE_CHECKING:
     from bisheng.database.models.user_link import User
@@ -68,13 +68,17 @@ class Question(SQLModel, table=True):
     description: str
     business_domain: str = Field(index=True)
     status: int = Field(default=0, index=True)  # 0: 未解决, 1: 已解决, 2: 已关闭 3.待采纳
-    attachments: Optional[str] = Field(default=None, description="附件列表")
+    attachments: Optional[str] = Field(
+        default=None,
+        sa_column=Column(LargeText),
+        description="分号分隔的持久化附件引用或业务 ID",
+    )
     related_docs: Optional[str] = Field(default=None, description="关联文档 ID 列表")
     invited_experts: Optional[str] = Field(default=None, description="被邀请的专家 ID 列表")
     
     experts_names: Optional[str] = Field(default=None, description="邀请专家名称，多个用分号;分割")
-    image_url: Optional[str] = Field(default=None, max_length=1024, schema_extra={"comment": "图片URL"})
-    file_url: Optional[str] = Field(default=None, max_length=1024, schema_extra={"comment": "文件URL"})
+    image_url: Optional[str] = Field(default=None, max_length=1024, schema_extra={"comment": "持久化图片引用"})
+    file_url: Optional[str] = Field(default=None, max_length=1024, schema_extra={"comment": "持久化附件引用"})
     file_name: Optional[str] = Field(default=None, max_length=512, schema_extra={"comment": "文件名"})
     # 采纳的最佳回答
     adopted_answer_id: Optional[int] = None
@@ -107,7 +111,8 @@ class Answer(SQLModel, table=True):
     # 附件和关联文档
     attachments: Optional[str] = Field(
         default=None,
-        description="附件列表"
+        sa_column=Column(LargeText),
+        description="分号分隔的持久化附件引用或业务 ID",
     )
     related_docs: Optional[str] = Field(
         default=None,
@@ -116,8 +121,8 @@ class Answer(SQLModel, table=True):
     )
     images_url: Optional[str] = Field(
         default=None,
-       
-        description="图片URL列表"
+        sa_column=Column(LargeText),
+        description="分号分隔的持久化图片引用"
     )
     # 统计字段
     vote_count: int = Field(default=0)
@@ -215,4 +220,3 @@ class QANotification(SQLModel, table=True):
     # 时间戳
     created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
     
-
