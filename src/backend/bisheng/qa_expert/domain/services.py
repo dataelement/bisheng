@@ -419,10 +419,9 @@ class QuestionService:
         if not any(values.values()):
             return question
         resolved = await (await self._assets()).resolve_fields(entity_type="question", values=values)
-        response = question.model_copy(deep=True)
-        for field_name, value in resolved.items():
-            setattr(response, field_name, value)
-        return response
+        response_data = question.model_dump()
+        response_data.update(resolved)
+        return Question.model_validate(response_data)
 
     async def create_question(
         self,
@@ -842,10 +841,9 @@ class AnswerService:
         if not any(values.values()):
             return answer
         resolved = await (await self._assets()).resolve_fields(entity_type="answer", values=values)
-        response = answer.model_copy(deep=True)
-        for field_name, value in resolved.items():
-            setattr(response, field_name, value)
-        return response
+        response_data = answer.model_dump()
+        response_data.update(resolved)
+        return Answer.model_validate(response_data)
 
     async def create_answer(
         self,

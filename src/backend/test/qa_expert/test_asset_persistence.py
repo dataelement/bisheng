@@ -7,6 +7,9 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from fastapi import UploadFile
 from PIL import Image
+from sqlalchemy import create_engine
+from sqlalchemy import inspect as sa_inspect
+from sqlalchemy.orm import Session
 from starlette.datastructures import Headers
 
 from bisheng.core.storage.base import ObjectMetadata
@@ -88,6 +91,66 @@ class FakeStorage:
     ) -> str:
         self.sign_calls.append((bucket, object_name, response_headers))
         return f"https://files.example.com/{bucket}/{object_name}?X-Amz-Signature=fresh"
+
+
+@pytest.mark.parametrize(
+    ("model_type", "service_type", "resolver_name", "model_values", "field_name"),
+    [
+        (
+            Answer,
+            AnswerService,
+            "_resolve_answer",
+            {
+                "question_id": 2,
+                "expert_id": 3,
+                "expert_name": "expert",
+                "content": "answer",
+                "images_url": "qa-expert/1/answer/image/1/a.png",
+            },
+            "images_url",
+        ),
+        (
+            Question,
+            QuestionService,
+            "_resolve_question",
+            {
+                "user_id": 1,
+                "title": "question",
+                "description": "description",
+                "business_domain": "domain",
+                "created_by": "user",
+                "image_url": "qa-expert/1/question/image/1/a.png",
+            },
+            "image_url",
+        ),
+    ],
+)
+async def test_committed_orm_asset_resolution_has_independent_state(
+    model_type,
+    service_type,
+    resolver_name: str,
+    model_values: dict[str, object],
+    field_name: str,
+) -> None:
+    engine = create_engine("sqlite:///:memory:")
+    model_type.__table__.create(engine)
+    with Session(engine, expire_on_commit=False) as session:
+        original = model_type(**model_values)
+        session.add(original)
+        session.commit()
+
+    permanent_key = getattr(original, field_name)
+    signed_url = f"https://files.example.com/bisheng/{permanent_key}?fresh"
+    asset_service = AsyncMock()
+    asset_service.resolve_fields.return_value = {field_name: signed_url}
+    service = service_type(asset_service=asset_service)
+
+    response = await getattr(service, resolver_name)(original)
+
+    assert getattr(response, field_name) == signed_url
+    assert getattr(original, field_name) == permanent_key
+    assert sa_inspect(response) is not sa_inspect(original)
+    assert sa_inspect(response).obj() is response
 
 
 def test_minio_stat_object_maps_size_and_content_type_without_download() -> None:

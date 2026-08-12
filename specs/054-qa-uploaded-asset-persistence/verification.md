@@ -2,7 +2,7 @@
 
 ## 阅读摘要
 - 代码实现、字段迁移 contract、历史修复脚本和本地模块回归已通过。
-- `T001-T011`、`T013-T015` 已完成；`T012` 需要 staging 的真实 MinIO/数据库与浏览器 smoke，当前本机未执行任何 DDL、对象复制或历史数据 apply。
+- `T001-T011`、`T013-T017` 已完成；`T012` 需要 staging 的真实 MinIO/数据库与浏览器 smoke，当前本机未执行任何 DDL、对象复制或历史数据 apply。
 - `f083` 仍直接衔接 `f082_department_short_name`，未为其他分支 revision 占位。
 
 ## 元信息 Metadata
@@ -16,16 +16,16 @@
 
 ## 验证摘要 Verification Summary
 - Overall status: `MANUAL_VERIFY_REQUIRED`
-- Completed tasks: `T001-T011, T013-T015`
+- Completed tasks: `T001-T011, T013-T017`
 - Remaining tasks: `T012`
 - Blocked tasks: `none`
 
 ## 验证证据 Evidence
 | Evidence ID | Code State | Command / Step | Purpose | Result |
 |---|---|---|---|---|
-| E-054-001 | 当前 worktree | `uv run pytest test/qa_expert/test_asset_persistence.py test/scripts/test_migrate_qa_uploaded_assets.py test/qa_expert/test_answer_images_url_migration.py -q` | codec、转正、补偿、MIME/内联签名、上传响应、历史修复与 migration contract | PASS (`42 passed`) |
+| E-054-001 | 当前 worktree | `uv run pytest test/qa_expert/test_asset_persistence.py test/scripts/test_migrate_qa_uploaded_assets.py test/qa_expert/test_answer_images_url_migration.py -q` | codec、转正、补偿、MIME/内联签名、上传响应、ORM resolver、历史修复与 migration contract | PASS (`44 passed`) |
 | E-054-002 | 当前 worktree | `uv run pytest test/qa_expert/test_answer_images_url_migration.py -q` | 三个多值字段的 MySQL/达梦类型、upgrade/downgrade 与幂等保护 | PASS (`11 passed`) |
-| E-054-003 | 当前 worktree | `uv run pytest test/qa_expert test/test_qa_expert_rich_text.py test/test_tenant_storage.py test/test_tenant_storage_listing.py test/scripts/test_migrate_qa_uploaded_assets.py -q` | QA 与受影响存储模块回归 | PASS (`72 passed`) |
+| E-054-003 | 当前 worktree | `uv run pytest test/qa_expert test/test_qa_expert_rich_text.py test/test_tenant_storage.py test/test_tenant_storage_listing.py test/scripts/test_migrate_qa_uploaded_assets.py -q` | QA 与受影响存储模块回归 | PASS (`74 passed`) |
 | E-054-004 | 当前 worktree | 新增 Python 实现/测试执行完整 `ruff check`；既有风格文件执行 `--select F --ignore F841` | 新增代码完整静态检查；既有文件排除原有未使用变量基线后检查 undefined-name | PASS |
 | E-054-005 | 当前 worktree | `python -m compileall -q ...` | 受影响 Python 文件语法检查 | PASS |
 | E-054-006 | 当前 worktree | `uv run alembic heads` 与 `uv run alembic history -r f082_department_short_name:f083_qa_answer_images_url_longtext` | migration graph | PASS；唯一 head 为 `f083`，链为 `f082 -> f083` |
@@ -35,6 +35,8 @@
 | E-054-010 | 门户当前 worktree | `npm run build` | 门户 TypeScript 与生产构建 | PASS；Vite 提示当前 Node 20.13.1 低于建议版本，但构建成功 |
 | E-054-011 | 门户当前 worktree | `npx eslint src/components/QaAssetPreviewModal.tsx src/utils/qaAssetPreview.ts tests/qaAssetPreview.test.ts tests/previewWatermark.test.ts` | 本次新增前端模块及复用水印测试静态检查 | PASS |
 | E-054-012 | 门户当前 worktree | `npm test -- --test-name-pattern=...` | 项目聚合测试入口 | BLOCKED；被本次范围外既存测试类型错误阻断，新增用例已由 E-054-009 独立验证 |
+| E-054-013 | 修复前 worktree | `uv run pytest test/qa_expert/test_asset_persistence.py::test_committed_orm_asset_resolution_has_independent_state -q` | 复现 clean ORM 深拷贝状态缺陷 | EXPECTED_FAIL；Answer 与 Question 两个参数均抛出 `ObjectDereferencedError` |
+| E-054-014 | 当前 worktree | 同一 committed ORM 定向回归 | 验证独立响应 state、签名字段与原 ORM 不变 | PASS (`2 passed`) |
 
 ## 验收覆盖 Acceptance Coverage
 | Acceptance ID | Evidence | Status |
@@ -69,6 +71,8 @@
 | AC-REQ-007-03 | E-054-009, E-054-010 | PASS |
 | AC-REQ-007-04 | E-054-009, E-054-010, E-054-008 | MANUAL_VERIFY_REQUIRED |
 | AC-REQ-007-05 | E-054-009, E-054-010, E-054-008 | MANUAL_VERIFY_REQUIRED |
+| AC-REQ-008-01 | E-054-013, E-054-014, E-054-003 | PASS |
+| AC-REQ-008-02 | E-054-014 | PASS |
 
 ## staging 手工门禁 Manual Gate
 1. 先升级测试库到 `f083_qa_answer_images_url_longtext`，确认三个目标字段为大文本类型。

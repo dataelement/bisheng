@@ -143,6 +143,22 @@
   - _Depends: T009, T011, T015_
   - _Boundary: staging + `specs/054-qa-uploaded-asset-persistence/verification.md`; production mutations excluded_
 
+- [x] T016 建立 clean ORM resolver 回归测试
+  - Done when: 使用实际 Session 提交后的 Question/Answer 复现 `model_copy(deep=True)` 状态缺陷，并断言 resolver 输出与原 ORM 隔离。
+  - _Requirements: REQ-008_
+  - _Acceptance: AC-REQ-008-01, AC-REQ-008-02_
+  - _Verification: V-AC-REQ-008-01, V-AC-REQ-008-02, EG-009_
+  - _Depends: T008_
+  - _Boundary: `test/qa_expert/test_asset_persistence.py` resolver regression only_
+
+- [x] T017 修复 Question/Answer 响应对象构造
+  - Done when: 两个 resolver 不再调用 ORM `model_copy(deep=True)`，改用纯字段快照构造独立响应对象；原 ORM 永久 key 不变。
+  - _Requirements: REQ-008_
+  - _Acceptance: AC-REQ-008-01, AC-REQ-008-02_
+  - _Verification: V-AC-REQ-008-01, V-AC-REQ-008-02, EG-009_
+  - _Depends: T016_
+  - _Boundary: Question/Answer resolver in `qa_expert/domain/services.py` only_
+
 ## 覆盖矩阵 Coverage Matrix
 | Requirement | Acceptance Criteria | Tasks | Verification |
 |---|---|---|---|
@@ -153,6 +169,7 @@
 | REQ-005 | AC-REQ-005-01..04 | T010, T011, T012 | V-AC-REQ-005-01..04 |
 | REQ-006 | AC-REQ-006-01..04 | T001, T002, T003, T004, T010, T011, T012 | V-AC-REQ-006-01..04 |
 | REQ-007 | AC-REQ-007-01..05 | T013, T014, T015, T012 | V-AC-REQ-007-01..05, EG-008 |
+| REQ-008 | AC-REQ-008-01..02 | T016, T017 | V-AC-REQ-008-01..02, EG-009 |
 
 ## 任务质量门 Task Quality Gate
 - [x] Every task references at least one requirement ID.
