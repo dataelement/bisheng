@@ -682,6 +682,7 @@
   "com_runlog_done": "完成",
   "com_runlog_flow_deleted": "技能已被删除，无法获取技能名",
   "com_runlog_knowledge_deleted": "知识库已被删除，无法获取知识库名",
+  "com_runlog_interrupted": "工具调用未返回结果（会话已结束）",
   "com_runlog_offline": "已下线",
   "com_runlog_searched": "已搜索",
   "com_runlog_searching": "正在搜索",

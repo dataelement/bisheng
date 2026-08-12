@@ -1,6 +1,6 @@
 import { formatDate } from "~/utils";
 
-const runLogsTypes = ['tool', 'flow', 'knowledge']
+export const runLogsTypes = ['tool', 'flow', 'knowledge']
 // 兼容处理技能和助手
 export const SkillMethod = {
     /** 获取input发送参数 */

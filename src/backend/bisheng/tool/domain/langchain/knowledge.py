@@ -1,9 +1,9 @@
-from typing import Any, Type, List, Optional
+from typing import Any
 
 from langchain_classic.chains.combine_documents import create_stuff_documents_chain
-from langchain_core.documents import Document, BaseDocumentCompressor
+from langchain_core.documents import BaseDocumentCompressor, Document
 from langchain_core.language_models import BaseChatModel
-from langchain_core.prompts import SystemMessagePromptTemplate, HumanMessagePromptTemplate, ChatPromptTemplate
+from langchain_core.prompts import ChatPromptTemplate, HumanMessagePromptTemplate, SystemMessagePromptTemplate
 from langchain_core.retrievers import BaseRetriever
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, Field
@@ -34,17 +34,17 @@ class ToolInputSchema(BaseModel):
 class KnowledgeRetrieverTool(BaseTool):
     name: str = "knowledge_retriever_tool"
     description: str = "在知识库中检索与查询相关的文档内容。"
-    args_schema: Type[BaseModel] = ToolInputSchema
+    args_schema: type[BaseModel] = ToolInputSchema
 
-    vector_retriever: Optional[BaseRetriever] = None
-    elastic_retriever: Optional[BaseRetriever] = None
-    rerank: Optional[BaseDocumentCompressor] = None
+    vector_retriever: BaseRetriever | None = None
+    elastic_retriever: BaseRetriever | None = None
+    rerank: BaseDocumentCompressor | None = None
     max_content: int = Field(default=15000, description="The max length of the combined document content.")
     sort_by_source_and_index: bool = Field(default=False, description="Sort by document name & chunk index.")
-    rrf_weights: List[float] = Field(default=None)
+    rrf_weights: list[float] = Field(default=None)
     rrf_remove_zero_score: bool = Field(default=False)
 
-    def _run(self, query: str, **kwargs: Any) -> List[Document]:
+    def _run(self, query: str, **kwargs: Any) -> list[Document]:
         milvus_docs, es_docs = [], []
         if self.vector_retriever:
             milvus_docs = self.vector_retriever.invoke(query)
@@ -57,7 +57,7 @@ class KnowledgeRetrieverTool(BaseTool):
             finally_docs = self.rerank.compress_documents(finally_docs, query)
         return finally_docs
 
-    async def _arun(self, query: str, **kwargs: Any) -> List[Document]:
+    async def _arun(self, query: str, **kwargs: Any) -> list[Document]:
         milvus_docs, es_docs = [], []
         if self.vector_retriever:
             milvus_docs = await self.vector_retriever.ainvoke(query)
@@ -70,7 +70,7 @@ class KnowledgeRetrieverTool(BaseTool):
             finally_docs = await self.rerank.acompress_documents(finally_docs, query)
         return finally_docs
 
-    def _rrf_rerank(self, milvus_docs: List[Document], es_docs: List[Document], query: str) -> List[Document]:
+    def _rrf_rerank(self, milvus_docs: list[Document], es_docs: list[Document], query: str) -> list[Document]:
         if not milvus_docs and not es_docs:
             return []
         rrf_rerank = RRFRerank(
@@ -103,16 +103,16 @@ class KnowledgeRetrieverTool(BaseTool):
 class KnowledgeRagTool(BaseTool):
     name: str
     description: str
-    args_schema: Type[BaseModel] = ToolInputSchema
+    args_schema: type[BaseModel] = ToolInputSchema
 
     llm: BaseChatModel
-    chat_prompt: Optional[ChatPromptTemplate] = CHAT_PROMPT
+    chat_prompt: ChatPromptTemplate | None = CHAT_PROMPT
 
-    vector_retriever: Optional[BaseRetriever] = None
-    elastic_retriever: Optional[BaseRetriever] = None
+    vector_retriever: BaseRetriever | None = None
+    elastic_retriever: BaseRetriever | None = None
     max_content: int = Field(default=15000, description="The max length of the combined document content.")
     sort_by_source_and_index: bool = Field(default=False, description="Sort by document name & chunk index.")
-    rrf_weights: List[float] = Field(default=None)
+    rrf_weights: list[float] = Field(default=None)
     rrf_remove_zero_score: bool = Field(default=False)
 
     knowledge_retriever_tool: KnowledgeRetrieverTool = None
@@ -121,7 +121,10 @@ class KnowledgeRagTool(BaseTool):
     def init_knowledge_rag_tool(cls, name: str, description: str, **kwargs) -> BaseTool:
         llm = kwargs.pop("llm")
         chat_prompt = kwargs.pop("chat_prompt", CHAT_PROMPT)
-        # cancel assistant deep callback
+        # The retriever is an internal step of this tool, not a tool call of its
+        # own — it must stay invisible to the caller's callbacks. Dropping them
+        # here is not enough on its own (LangChain also inherits handlers from
+        # the ambient run context), so `_run`/`_arun` bypass `invoke` as well.
         kwargs.pop("callbacks", None)
         knowledge_retriever_tool = KnowledgeRetrieverTool(**kwargs)
         return cls(
@@ -134,14 +137,18 @@ class KnowledgeRagTool(BaseTool):
         )
 
     def _run(self, query: str) -> Any:
-        # 1. retrieve documents
-        retrieval_result = self.knowledge_retriever_tool.invoke({"query": query})
+        # 1. retrieve documents — called directly rather than through `invoke`,
+        # which would open a nested tool run. The chat then showed a second card
+        # per search, named after the retriever instead of the knowledge base
+        # ("知识库已被删除"), and it never closed because the retriever answers
+        # with Document objects that the run-log frame could not serialize.
+        retrieval_result = self.knowledge_retriever_tool._run(query)
         llm_inputs = self._get_llm_inputs(query, retrieval_result)
         qa_chain = create_stuff_documents_chain(llm=self.llm, prompt=self.chat_prompt)
         return qa_chain.invoke(llm_inputs)
 
     async def _arun(self, query: str) -> Any:
-        retrieval_result = await self.knowledge_retriever_tool.ainvoke({"query": query})
+        retrieval_result = await self.knowledge_retriever_tool._arun(query)
         llm_inputs = self._get_llm_inputs(query, retrieval_result)
         qa_chain = create_stuff_documents_chain(llm=self.llm, prompt=self.chat_prompt)
         return await qa_chain.ainvoke(llm_inputs)
