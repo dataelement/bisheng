@@ -394,7 +394,10 @@ class F048ResourcePermissionApi:
             "draft_id": draft.draft_id,
             "target_mode": draft.target_mode,
             "impact_checksum": draft.impact_checksum,
-            "affected_assignees": len(draft.snapshot_sources),
+            # Either direction disturbs people: CUSTOM copies the inherited members
+            # down, INHERIT drops the local ones. Counting only the copies reported
+            # zero for a switch that was about to remove grants.
+            "affected_assignees": (len(draft.snapshot_sources) + len(draft.discarded_sources)),
             "expires_at": (datetime.now(UTC) + timedelta(minutes=10)).isoformat(),
         }
 

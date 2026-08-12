@@ -168,7 +168,11 @@
     "inherited": "継承元",
     "shared": "共有元",
     "system": "システム元",
-    "includeChildren": "サブ部門を含む"
+    "includeChildren": "サブ部門を含む",
+    "snapshot_from_parent": "継承時にコピー",
+    "space_membership": "スペースメンバー",
+    "channel_membership": "チャンネルメンバー",
+    "other": "その他"
   },
   "grant": {
     "existing": "現在の付与",

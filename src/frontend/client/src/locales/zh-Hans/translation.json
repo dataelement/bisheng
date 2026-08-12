@@ -2018,7 +2018,11 @@
       "inherited": "继承来源",
       "shared": "共享来源",
       "system": "系统来源",
-      "include_children": "包含子部门"
+      "include_children": "包含子部门",
+      "snapshot_from_parent": "继承时复制",
+      "space_membership": "空间成员",
+      "channel_membership": "频道成员",
+      "other": "其他来源"
     },
     "subject": {
       "user": "用户",

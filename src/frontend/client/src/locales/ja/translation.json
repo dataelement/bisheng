@@ -2012,7 +2012,11 @@
       "inherited": "継承元",
       "shared": "共有元",
       "system": "システム元",
-      "include_children": "サブ部門を含む"
+      "include_children": "サブ部門を含む",
+      "snapshot_from_parent": "継承時にコピー",
+      "space_membership": "スペースメンバー",
+      "channel_membership": "チャンネルメンバー",
+      "other": "その他"
     },
     "subject": {
       "user": "ユーザー",

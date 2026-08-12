@@ -168,7 +168,11 @@
     "inherited": "Inherited Source",
     "shared": "Shared Source",
     "system": "System Source",
-    "includeChildren": "Include sub-departments"
+    "includeChildren": "Include sub-departments",
+    "snapshot_from_parent": "Copied on inherit",
+    "space_membership": "Space member",
+    "channel_membership": "Channel member",
+    "other": "Other source"
   },
   "grant": {
     "existing": "Current Grants",
