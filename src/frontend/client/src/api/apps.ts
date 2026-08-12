@@ -252,6 +252,8 @@ export async function uploadChatFile(
     onProgress,
     uploadMode?: 'linsight' | 'workstation',
     fileName?: string,
+    /** Aborts the request when the user removes the attachment mid-upload. */
+    signal?: AbortSignal,
 ): Promise<any> {
     const resolvedName = fileName ?? (file instanceof File ? file.name : 'upload');
     const formData = new FormData();
@@ -273,6 +275,7 @@ export async function uploadChatFile(
         headers: {
             "Content-Type": "multipart/form-data"
         },
+        signal,
         onUploadProgress: (progressEvent) => {
             // Calculate progress percentage
             if (progressEvent.total) {

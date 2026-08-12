@@ -110,6 +110,15 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
     const [files, setFiles] = useState([]);
     const filesRef = useRef([]);
     const remainingUploadsRef = useRef(0);
+    // Attachments removed while their upload was still running. An in-flight
+    // upload's progress/success callbacks close over a snapshot taken before the
+    // removal, so without this they write the file straight back into the list
+    // and the X button looks dead — the card stays, and stays even after the
+    // upload finishes. Consulted by every upload callback before it touches state.
+    const removedIdsRef = useRef<Set<string>>(new Set());
+    // One controller per in-flight upload so removing an attachment also stops
+    // the transfer instead of letting a 40MB body finish into a discarded slot.
+    const uploadControllersRef = useRef<Map<string, AbortController>>(new Map());
     const { showToast } = useToastContext();
 
     const fileInputRef = useRef(null);
@@ -247,12 +256,14 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
             };
         });
 
-        setFiles(prevFiles => {
-            const res = [...prevFiles, ...filesWithProgress];
-            filesRef.current = res;
-            onFilesStateChange?.(res);
-            return res;
-        });
+        // filesRef mirrors the committed list, so the next list is derived from it
+        // rather than inside a setFiles updater: an updater runs during render, and
+        // notifying the parent from there updates it mid-render (React drops that
+        // update — see the note below).
+        const nextFiles = [...filesRef.current, ...filesWithProgress];
+        filesRef.current = nextFiles;
+        setFiles(nextFiles);
+        onFilesStateChange?.(nextFiles);
 
         // Duration comes from the local file, so it is read as soon as the file
         // is picked rather than after the upload returns: it is what the hover
@@ -286,6 +297,8 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
             const uploadPayload = createUploadPayload(file);
             logUploadStage(file.name, 'queue', uploadStartedAt, { size: file.size, type: file.type });
             let lastLoggedProgress = -1;
+            const controller = new AbortController();
+            uploadControllersRef.current.set(id, controller);
             return uploadChatFile(v, uploadPayload, (progress) => {
                 if (progress >= 100 && lastLoggedProgress < 100) {
                     logUploadStage(file.name, 'xhr_upload_complete', uploadStartedAt, { progress });
@@ -294,19 +307,27 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
                     logUploadStage(file.name, 'xhr_progress', uploadStartedAt, { progress });
                     lastLoggedProgress = progress;
                 }
-                // Update progress for each file individually
-                setFiles((prevFiles) => {
-                    const updatedFiles = prevFiles.map(f => {
-                        if (f.id === id) {
-                            return { ...f, progress }; // Update progress for the specific file
-                        }
-                        return f;
-                    });
-                    filesRef.current = updatedFiles;
-                    onFilesStateChange?.(updatedFiles);
-                    return updatedFiles;
-                });
-            }, uploadMode, file.name).then(response => {
+                // The user removed this attachment while it was uploading; writing
+                // progress back would resurrect the card they just dismissed.
+                if (removedIdsRef.current.has(id)) {
+                    return;
+                }
+                // Update progress for each file individually. Derived from filesRef
+                // (not a setFiles updater) so the parent notification below happens
+                // outside render — see the note in the selection handler.
+                const updatedFiles = filesRef.current.map(f => (
+                    f.id === id ? { ...f, progress } : f
+                ));
+                filesRef.current = updatedFiles;
+                setFiles(updatedFiles);
+                onFilesStateChange?.(updatedFiles);
+            }, uploadMode, file.name, controller.signal).then(response => {
+                if (removedIdsRef.current.has(id)) {
+                    // Removed mid-flight: the upload landed, but the attachment is
+                    // gone from the user's list and must not come back.
+                    logUploadStage(file.name, 'discarded_after_remove', uploadStartedAt);
+                    return;
+                }
                 logUploadStage(file.name, 'api_response', uploadStartedAt, {
                     status_code: response?.status_code,
                 });
@@ -356,12 +377,23 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
                 notifyUploadedFiles(getUploadedFileIds, onChange);
                 logUploadStage(file.name, 'state_committed', uploadStartedAt);
             }).catch((e) => {
+                if (removedIdsRef.current.has(id)) {
+                    // The abort below is the user's own removal, not a failure:
+                    // the card is already gone and the counter already decremented,
+                    // so an error toast here would be a lie and a second
+                    // handleFileRemove would decrement twice.
+                    logUploadStage(file.name, 'aborted_by_remove', uploadStartedAt);
+                    return;
+                }
                 logUploadStage(file.name, 'failed', uploadStartedAt, { error: String(e) });
                 console.log('e :>> ', e);
                 showToast({ message: t('com_inputfiles_upload_failed', { 0: file.name }), status: 'error' })
                 handleFileRemove(id);
                 remainingUploadsRef.current -= 1; // Decrease the remaining uploads count
                 notifyUploadedFiles(getUploadedFileIds, onChange);
+            }).finally(() => {
+                uploadControllersRef.current.delete(id);
+                removedIdsRef.current.delete(id);
             });
         };
 
@@ -435,31 +467,31 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
             handleFileRemove(clientId);
         },
         updateParsingStatus: (statusMap) => {
-            setFiles((prevFiles) => {
-                const updatedFiles = prevFiles.reduce((result, file) => {
-                    const fileId = file.fileId || file.file_id;
-                    const entry = normalizeParseStatusEntry(statusMap?.get?.(fileId));
+            // Same rule as everywhere else in this file: derive from filesRef and
+            // notify the parent AFTER setFiles, never from inside an updater.
+            const updatedFiles = filesRef.current.reduce((result, file) => {
+                const fileId = file.fileId || file.file_id;
+                const entry = normalizeParseStatusEntry(statusMap?.get?.(fileId));
 
-                    if (!entry) {
-                        result.push(file);
-                        return result;
-                    }
-
-                    if (entry.parsing_status === 'failed') {
-                        return result;
-                    }
-
-                    const nextFile = applyParseStatusToFile(file, entry);
-                    if (nextFile) {
-                        result.push(nextFile);
-                    }
+                if (!entry) {
+                    result.push(file);
                     return result;
-                }, []);
+                }
 
-                filesRef.current = updatedFiles;
-                onFilesStateChange?.(updatedFiles);
-                return updatedFiles;
-            });
+                if (entry.parsing_status === 'failed') {
+                    return result;
+                }
+
+                const nextFile = applyParseStatusToFile(file, entry);
+                if (nextFile) {
+                    result.push(nextFile);
+                }
+                return result;
+            }, []);
+
+            filesRef.current = updatedFiles;
+            setFiles(updatedFiles);
+            onFilesStateChange?.(updatedFiles);
         },
         openPicker: () => {
             if (disabled) return;
@@ -496,36 +528,38 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
     const mergeParseStatusUpdates = useCallback((updates: Map<string, { parsing_status?: string; cover_filepath?: string }>) => {
         if (!updates.size) return;
 
-        setFiles((prevFiles) => {
-            let changed = false;
-            const nextFiles = prevFiles.reduce((result, file) => {
-                const fileId = file.fileId || file.file_id;
-                const entry = updates.get(fileId);
-                if (!entry) {
-                    result.push(file);
-                    return result;
-                }
-                if (entry.parsing_status === 'failed') {
-                    changed = true;
-                    return result;
-                }
-                const nextFile = applyParseStatusToFile(file, entry);
-                if (!nextFile) {
-                    return result;
-                }
-                changed = changed
-                    || nextFile.parsingStatus !== file.parsingStatus
-                    || nextFile.cover_filepath !== file.cover_filepath;
-                result.push(nextFile);
+        // Derived from filesRef, not inside a setFiles updater: updaters run during
+        // render, and the parent notifications below would then update AiChatInput
+        // mid-render — React warns ("Cannot update a component while rendering a
+        // different component") and drops the update.
+        let changed = false;
+        const nextFiles = filesRef.current.reduce((result, file) => {
+            const fileId = file.fileId || file.file_id;
+            const entry = updates.get(fileId);
+            if (!entry) {
+                result.push(file);
                 return result;
-            }, []);
+            }
+            if (entry.parsing_status === 'failed') {
+                changed = true;
+                return result;
+            }
+            const nextFile = applyParseStatusToFile(file, entry);
+            if (!nextFile) {
+                return result;
+            }
+            changed = changed
+                || nextFile.parsingStatus !== file.parsingStatus
+                || nextFile.cover_filepath !== file.cover_filepath;
+            result.push(nextFile);
+            return result;
+        }, []);
 
-            if (!changed) return prevFiles;
-            filesRef.current = nextFiles;
-            onFilesStateChange?.(nextFiles);
-            notifyUploadedFiles(getUploadedFileIds, onChange);
-            return nextFiles;
-        });
+        if (!changed) return;
+        filesRef.current = nextFiles;
+        setFiles(nextFiles);
+        onFilesStateChange?.(nextFiles);
+        notifyUploadedFiles(getUploadedFileIds, onChange);
     }, [onChange, onFilesStateChange]);
 
     // Poll linsight upload parse status (ASR, etc.) until completed.
@@ -564,6 +598,13 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
     // summary.pdf" would then take both out.
     const handleFileRemove = (clientId) => {
         const removed = filesRef.current.find(file => String(file.id) === String(clientId));
+        // Claim the id BEFORE touching state: an upload still in flight has
+        // callbacks queued that would otherwise write this attachment straight
+        // back in, which is what made the X button look dead mid-upload.
+        if (removed?.isUploading) {
+            removedIdsRef.current.add(String(clientId));
+            uploadControllersRef.current.get(String(clientId))?.abort();
+        }
         if (removed?.previewUrl) URL.revokeObjectURL(removed.previewUrl);
         if (removed?.mediaPreviewUrl) URL.revokeObjectURL(removed.mediaPreviewUrl);
         if (removed?.mediaCoverUrl?.startsWith('blob:')) URL.revokeObjectURL(removed.mediaCoverUrl);
