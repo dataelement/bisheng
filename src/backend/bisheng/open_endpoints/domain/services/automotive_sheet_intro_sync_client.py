@@ -17,10 +17,15 @@ class AutomotiveSheetIntroSyncClient:
         api_url: str,
         method: Literal["GET", "POST"],
         timeout_seconds: int,
+        api_ssl_verify: bool = True,
     ) -> bytes:
         timeout = httpx.Timeout(max(float(timeout_seconds), 1.0))
         try:
-            async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+            async with httpx.AsyncClient(
+                timeout=timeout,
+                follow_redirects=True,
+                verify=api_ssl_verify,
+            ) as client:
                 response = await client.request(method, api_url)
         except httpx.TimeoutException as exc:
             raise AutomotiveSheetIntroUpstreamError(msg="upstream PDF request timed out") from exc

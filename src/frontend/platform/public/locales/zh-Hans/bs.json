@@ -271,6 +271,8 @@
         "enabled": "启用定时同步",
         "apiUrl": "接口地址",
         "apiUrlPlaceholder": "https://example.com/automotive-sheet-intro.pdf",
+        "apiSslVerify": "校验 HTTPS 证书",
+        "apiSslVerifyHint": "访问 https 上游且证书与地址不匹配（如使用 IP）时可关闭；内网环境请谨慎使用。",
         "apiMethod": "HTTP 方法",
         "developerToken": "关联 Token",
         "selectToken": "请选择 Token",

@@ -37,6 +37,7 @@ describe("automotive sheet intro sync API client", () => {
       api_url: "https://example.com/x.pdf",
       api_method: "GET",
       api_timeout_seconds: 120,
+      api_ssl_verify: false,
       developer_token_id: 10,
       file_name: "汽车板介绍.pdf",
       external_file_id: "automotive_sheet_intro",

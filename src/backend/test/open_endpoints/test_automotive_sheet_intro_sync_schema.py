@@ -25,6 +25,7 @@ def test_default_config_values():
     assert config.external_file_id == DEFAULT_AUTOMOTIVE_SHEET_EXTERNAL_FILE_ID
     assert config.api_method == "GET"
     assert config.api_timeout_seconds == 120
+    assert config.api_ssl_verify is True
 
 
 def test_disabled_config_allows_minimal_payload():

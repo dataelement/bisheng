@@ -33,7 +33,26 @@ async def test_fetch_pdf_success():
         body = await client.fetch_pdf(api_url="https://example.com/a.pdf", method="GET", timeout_seconds=30)
 
     assert body == _PDF_BODY
+    client_cls.assert_called_once_with(timeout=httpx.Timeout(30.0), follow_redirects=True, verify=True)
     mock_http.request.assert_awaited_once_with("GET", "https://example.com/a.pdf")
+
+
+@pytest.mark.asyncio
+async def test_fetch_pdf_can_disable_ssl_verify():
+    client = AutomotiveSheetIntroSyncClient()
+    mock_http = AsyncMock()
+    mock_http.request = AsyncMock(return_value=_mock_response())
+
+    with patch("bisheng.open_endpoints.domain.services.automotive_sheet_intro_sync_client.httpx.AsyncClient") as client_cls:
+        client_cls.return_value.__aenter__.return_value = mock_http
+        await client.fetch_pdf(
+            api_url="https://192.168.1.1/a.pdf",
+            method="GET",
+            timeout_seconds=30,
+            api_ssl_verify=False,
+        )
+
+    client_cls.assert_called_once_with(timeout=httpx.Timeout(30.0), follow_redirects=True, verify=False)
 
 
 @pytest.mark.asyncio

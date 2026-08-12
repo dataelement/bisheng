@@ -271,6 +271,8 @@
         "enabled": "Enable scheduled sync",
         "apiUrl": "API URL",
         "apiUrlPlaceholder": "https://example.com/automotive-sheet-intro.pdf",
+        "apiSslVerify": "Verify HTTPS certificate",
+        "apiSslVerifyHint": "Disable when the upstream https URL uses an IP or a hostname that does not match the certificate. Use with caution on internal networks.",
         "apiMethod": "HTTP method",
         "developerToken": "Bound token",
         "selectToken": "Select a token",

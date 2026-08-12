@@ -26,6 +26,7 @@ export function defaultAutomotiveSheetIntroSyncConfig(): AutomotiveSheetIntroSyn
     api_url: null,
     api_method: "GET",
     api_timeout_seconds: 120,
+    api_ssl_verify: true,
     developer_token_id: null,
     file_name: "汽车板介绍.pdf",
     external_file_id: "automotive_sheet_intro",
@@ -39,6 +40,7 @@ export function normalizeAutomotiveSheetIntroSyncConfig(
     ...config,
     api_url: config.api_url?.trim() || null,
     file_name: config.file_name.trim(),
+    api_ssl_verify: config.api_ssl_verify ?? true,
   }
 }
 

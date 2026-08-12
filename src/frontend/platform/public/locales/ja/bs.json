@@ -270,6 +270,8 @@
         "enabled": "定期同期を有効化",
         "apiUrl": "API URL",
         "apiUrlPlaceholder": "https://example.com/automotive-sheet-intro.pdf",
+        "apiSslVerify": "HTTPS 証明書を検証",
+        "apiSslVerifyHint": "https の上流 URL が IP や証明書と一致しないホスト名の場合は無効にできます。社内ネットワークでは慎重に使用してください。",
         "apiMethod": "HTTP メソッド",
         "developerToken": "関連 Token",
         "selectToken": "Token を選択",
