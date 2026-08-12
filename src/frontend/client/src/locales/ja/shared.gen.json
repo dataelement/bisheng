@@ -15,7 +15,8 @@
       "previewFailed": "プレビュー失敗",
       "downloadOriginal": "元ファイルをダウンロード",
       "imageLoadFailed": "画像の読み込みに失敗しました",
-      "imageRef": "画像参照"
+      "imageRef": "画像参照",
+      "imagesOutsideTable": "表領域外の画像"
     }
   }
 }
