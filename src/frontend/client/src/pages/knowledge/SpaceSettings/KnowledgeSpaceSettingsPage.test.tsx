@@ -279,6 +279,27 @@ describe("KnowledgeSpaceSettingsPage", () => {
     mockedAuthorize.mockResolvedValue(null);
   });
 
+  it("fills the available content area without a fixed page width", async () => {
+    renderPage("/knowledge/create");
+
+    const settingsPage = await screen.findByTestId(
+      "knowledge-space-settings-page",
+    );
+    const settingsSurface = settingsPage.firstElementChild;
+    expect(settingsSurface?.className).toContain("w-full");
+    expect(settingsSurface?.className).not.toContain("max-w-[1368px]");
+    expect(
+      screen.getByPlaceholderText(
+        "com_subscription.enter_knowledge_space_name",
+      ).className,
+    ).toContain("bg-white");
+    expect(
+      screen.getByPlaceholderText(
+        "com_subscription.enter_knowledge_space_description",
+      ).className,
+    ).toContain("bg-white");
+  });
+
   it("uses server capabilities for manager, editor-only, and read-only visibility", async () => {
     mockEditCapabilities(true, true);
     const manager = renderPage("/knowledge/space/7/settings");
@@ -314,10 +335,12 @@ describe("KnowledgeSpaceSettingsPage", () => {
     renderPage("/knowledge/create");
     expect(await screen.findByTestId("authorization-list")).not.toBeNull();
     expect(
-      screen.getByRole("switch", {
-        name: "com_unified_permission.review_join",
-      }),
-    ).toBeChecked();
+      (
+        screen.getByRole("switch", {
+          name: "com_unified_permission.review_join",
+        }) as HTMLButtonElement
+      ).getAttribute("aria-checked"),
+    ).toBe("true");
 
     fireEvent.click(
       screen.getByRole("radio", {
@@ -332,10 +355,12 @@ describe("KnowledgeSpaceSettingsPage", () => {
       }),
     );
     expect(
-      screen.getByRole("switch", {
-        name: "com_unified_permission.review_join",
-      }),
-    ).toBeChecked();
+      (
+        screen.getByRole("switch", {
+          name: "com_unified_permission.review_join",
+        }) as HTMLButtonElement
+      ).getAttribute("aria-checked"),
+    ).toBe("true");
   });
 
   it("applies the model selected in the reused authorization dialog", async () => {

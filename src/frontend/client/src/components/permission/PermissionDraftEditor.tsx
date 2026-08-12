@@ -68,7 +68,7 @@ export function PermissionDraftEditor({
               <span className="min-w-0 truncate text-body text-text-1">{row.subjectName}</span>
             </div>
             {row.immutableCreator ? (
-              <span className="px-2 text-body text-text-3">{localize("creator")}</span>
+              <span className="px-2 text-body text-[#999999]">{localize("creator")}</span>
             ) : (
               <RelationSelect
                 value={row.modelId ?? row.relation}

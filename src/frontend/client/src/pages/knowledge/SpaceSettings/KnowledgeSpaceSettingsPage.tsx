@@ -235,7 +235,7 @@ export function KnowledgeSpaceSettingsPage() {
       className="flex h-full min-h-0 bg-fill-2 p-2"
       data-testid="knowledge-space-settings-page"
     >
-      <div className="mx-auto flex min-h-0 w-full max-w-[1368px] flex-1 flex-col rounded-xl bg-fill-1 px-4 pt-4">
+      <div className="flex min-h-0 w-full flex-1 flex-col rounded-xl bg-fill-1 px-4 pt-4">
         <header className="flex h-8 shrink-0 items-center gap-3">
           <button
             type="button"
@@ -299,9 +299,9 @@ export function KnowledgeSpaceSettingsPage() {
                       placeholder={localize(
                         "com_subscription.enter_knowledge_space_name",
                       )}
-                      className="h-8 rounded-md pr-14"
+                      className="h-8 rounded-md bg-white pr-14 placeholder:text-[#999999]"
                     />
-                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-body-sm text-text-3">
+                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-body-sm text-[#999999]">
                       {Math.ceil(getFullWidthLength(settings.form.name))}/
                       {MAX_NAME_LENGTH}
                     </span>
@@ -341,7 +341,7 @@ export function KnowledgeSpaceSettingsPage() {
                     placeholder={localize(
                       "com_subscription.enter_knowledge_space_description",
                     )}
-                    className="min-h-20 resize-none rounded-md shadow-none"
+                    className="min-h-20 resize-none rounded-md bg-white shadow-none placeholder:text-[#999999]"
                   />
                 </div>
               </div>
@@ -461,7 +461,7 @@ export function KnowledgeSpaceSettingsPage() {
                           placeholder={localize(
                             "com_knowledge.auto_tag_custom_tags_placeholder",
                           )}
-                          className="min-h-28 resize-none"
+                          className="min-h-28 resize-none bg-white placeholder:text-[#999999]"
                         />
                       </TabsContent>
                     </Tabs>

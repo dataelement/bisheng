@@ -84,7 +84,7 @@ export function AccessModeSelector({
             <RadioGroup.Indicator className="size-1 rounded-full bg-fill-1" />
           </RadioGroup.Item>
           <span className="font-medium">{option.label}</span>
-          <span className="min-w-0 truncate text-text-3">
+          <span className="min-w-0 truncate text-[#999999]">
             {option.description}
           </span>
         </label>
@@ -120,7 +120,7 @@ export function SettingsSwitchRow({
           {label}
         </span>
         {description && (
-          <span className="truncate text-text-3">{description}</span>
+          <span className="truncate text-[#999999]">{description}</span>
         )}
         {children}
       </div>

@@ -241,9 +241,9 @@ export function AddSourceDropdown({
                     onKeyDown={(e) => e.key === "Enter" && onExpandChange(true)}
                 >
                     <div className="flex shrink-0 items-center gap-2 bg-[#F7F7F7] px-4 py-3">
-                        <Outlined.Plus className="size-4 flex-shrink-0 text-[#86909C]" />
-                        <span className="flex-1 text-[14px] text-[#86909C] text-left">{localize("com_subscription.add_official_accounts_and_webpages")}</span>
-                        <span className="flex-shrink-0 text-[12px] text-[#86909C]">
+                        <Outlined.Plus className="size-4 flex-shrink-0 text-[#999999]" />
+                        <span className="flex-1 text-left text-[14px] text-[#999999]">{localize("com_subscription.add_official_accounts_and_webpages")}</span>
+                        <span className="flex-shrink-0 text-[12px] text-[#999999]">
                             {sources.length}/{MAX_SOURCES}
                         </span>
                     </div>
@@ -316,7 +316,7 @@ export function AddSourceDropdown({
             {expanded && (
                 <div className="flex items-center gap-2 h-[46px]">
                     <div className="flex-1" />
-                    <span className="flex-shrink-0 text-[12px] text-[#86909C]">
+                    <span className="flex-shrink-0 text-[12px] text-[#999999]">
                         {mgr.pendingSources.length}/{MAX_SOURCES}
                     </span>
                 </div>
@@ -475,7 +475,7 @@ export function AddSourceDropdown({
                         {mgr.viewMode === "list" && (
                             <>
                                 {displayList.length === 0 ? (
-                                    <div className="flex min-h-full items-center justify-center p-8 text-center text-[14px] text-[#86909C]">{localize("com_subscription.no_data")}</div>
+                                    <div className="flex min-h-full items-center justify-center p-8 text-center text-[14px] text-[#999999]">{localize("com_subscription.no_data")}</div>
                                 ) : (
                                     <div className="">
                                         {displayList.map((source) => {
@@ -488,7 +488,7 @@ export function AddSourceDropdown({
                                                     className={cn(
                                                         "grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 cursor-pointer",
                                                         dis && "opacity-60 cursor-not-allowed",
-                                                        sel && "bg-blue-50"
+                                                        sel && "bg-[#FBFBFB]"
                                                     )}
                                                 >
                                                     <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#F2F3F5]">
@@ -546,7 +546,7 @@ export function AddSourceDropdown({
                     </div>
                     {mgr.viewMode === "list" && (
                         <div className="relative z-[221] flex shrink-0 items-center justify-between border-t border-[#E5E6EB] bg-white px-4 py-3 touch-mobile:flex-col touch-mobile:items-stretch touch-mobile:gap-2">
-                            <span className="text-[12px] text-[#86909C]">{localize("com_subscription.total_channel_sources")}{mgr.pendingSources.length}/{MAX_SOURCES}
+                            <span className="text-[12px] text-[#999999]">{localize("com_subscription.total_channel_sources")}{mgr.pendingSources.length}/{MAX_SOURCES}
                             </span>
                             <div className="flex gap-2 touch-mobile:w-full">
                                 <Button
