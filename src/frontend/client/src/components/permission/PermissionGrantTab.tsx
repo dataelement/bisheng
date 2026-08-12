@@ -142,34 +142,34 @@ export function PermissionGrantTab({
     setSelectedSubjects([]);
   }, [fixedSubjectType, resourceId]);
 
+  // Anyone already holding a grant here is checked and locked, whichever model
+  // it is. Granting them again under a second model produced a duplicate row in
+  // the roster — two permissions for one person, of which only the higher one
+  // means anything. Changing someone's model is the roster's job, not this
+  // panel's.
   const disabledSubjectIds = useMemo(
     () => [
       ...assignees
         .filter(
           (assignee) =>
-            assignee.subject.type === subjectType &&
-            assignee.model.key === selectedModelKey,
+            assignee.subject.type === subjectType && assignee.scope === "LOCAL",
         )
         .map((assignee) => Number(assignee.subject.id))
         .filter(Number.isFinite),
       ...queuedAdds
         .filter(
-          (change) =>
-            change.op === "ADD" &&
-            change.model_key === selectedModelKey &&
-            change.subject.type === subjectType,
+          (change) => change.op === "ADD" && change.subject.type === subjectType,
         )
         .map((change) =>
           change.op === "ADD" ? Number(change.subject.id) : Number.NaN,
         )
         .filter(Number.isFinite),
     ],
-    [assignees, queuedAdds, selectedModelKey, subjectType],
+    [assignees, queuedAdds, subjectType],
   );
 
-  // A subject may hold several models at once, so an existing grant does not
-  // always disable the row. Label it with the model it already holds instead —
-  // otherwise a person granted under another model looks untouched here.
+  // The badge names which model they already hold, so a locked row explains
+  // itself rather than just refusing to be clicked.
   const grantedModelLabels = useMemo(() => {
     const names: Record<string, string[]> = {};
     for (const assignee of assignees) {
