@@ -69,6 +69,36 @@ class AwardOutcome:
     skipped: bool = True
     reason: str | None = None
     result: LedgerResult | None = None
+    # 入账成功后供 hooks 发站内信；skip / 重放时保持空。
+    notify_user_id: int | None = None
+    rule_code: str | None = None
+    rule_name: str | None = None
+
+    @property
+    def should_notify(self) -> bool:
+        """是否应在账本 commit 后发送积分变动站内信。"""
+        if self.skipped or self.notify_user_id is None or self.result is None:
+            return False
+        if self.result.replayed or self.result.skipped_cap:
+            return False
+        return int(self.result.applied_delta) > 0
+
+    @staticmethod
+    def success(
+        *,
+        result: LedgerResult,
+        user_id: int,
+        rule_code: str,
+        rule_name: str | None,
+    ) -> AwardOutcome:
+        """构造可通知的成功入账结果。"""
+        return AwardOutcome(
+            skipped=False,
+            result=result,
+            notify_user_id=int(user_id),
+            rule_code=rule_code,
+            rule_name=rule_name or rule_code,
+        )
 
 
 class PointsAwardFacade:
@@ -167,7 +197,12 @@ class PointsAwardFacade:
         if result.skipped_cap:
             logger.info("points.award.rejected reason=daily_cap code=%s key=%s", rule_code, key)
             return AwardOutcome(skipped=True, reason="daily_cap", result=result)
-        return AwardOutcome(skipped=False, result=result)
+        return AwardOutcome.success(
+            result=result,
+            user_id=payee,
+            rule_code=rule_code,
+            rule_name=rule.name or rule_code,
+        )
 
     async def _award_document_shared(self, event: DocumentSharedEvent) -> AwardOutcome:
         rule = await self.repository.get_rule(event.tenant_id, "G7")
@@ -201,7 +236,12 @@ class PointsAwardFacade:
         )
         if result.skipped_cap:
             return AwardOutcome(skipped=True, reason="daily_cap", result=result)
-        return AwardOutcome(skipped=False, result=result)
+        return AwardOutcome.success(
+            result=result,
+            user_id=payee,
+            rule_code="G7",
+            rule_name=rule.name or "G7",
+        )
 
     async def _award_favorite_tier(self, event: FavoriteChangedEvent) -> AwardOutcome:
         rule = await self.repository.get_rule(event.tenant_id, "G3")
@@ -239,7 +279,12 @@ class PointsAwardFacade:
                 highest_tier=highest_tier,
                 points_granted_total=s_target,
             )
-        return AwardOutcome(skipped=False, result=result)
+        return AwardOutcome.success(
+            result=result,
+            user_id=payee,
+            rule_code="G3",
+            rule_name=rule.name or "G3",
+        )
 
     async def _award_answer_adopted(self, event: AnswerAdoptedEvent) -> AwardOutcome:
         rule = await self.repository.get_rule(event.tenant_id, "G4")
@@ -266,7 +311,12 @@ class PointsAwardFacade:
         )
         if result.skipped_cap:
             return AwardOutcome(skipped=True, reason="daily_cap", result=result)
-        return AwardOutcome(skipped=False, result=result)
+        return AwardOutcome.success(
+            result=result,
+            user_id=payee,
+            rule_code="G4",
+            rule_name=rule.name or "G4",
+        )
 
     async def _should_skip_payee(self, payee: int, manager_ids: frozenset[int]) -> str | None:
         """P7=B：受益人是相关库 creator/admin，或平台超管 → skip。"""
