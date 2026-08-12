@@ -29,6 +29,8 @@ interface SubjectSearchDepartmentProps {
   includeChildren: boolean;
   onSelectionSummaryChange?: (v: SelectedSubject[]) => void;
   disabledIds?: number[];
+  /** subjectId -> the permission model(s) that subject already holds here. */
+  grantedLabels?: Record<string, string>;
   departmentChildrenApi?: typeof getDepartmentChildren;
   departmentSearchApi?: typeof searchDepartments;
 }
@@ -41,6 +43,7 @@ export function SubjectSearchDepartment({
   includeChildren,
   onSelectionSummaryChange,
   disabledIds = [],
+  grantedLabels = {},
   departmentChildrenApi,
   departmentSearchApi,
 }: SubjectSearchDepartmentProps) {
@@ -145,6 +148,7 @@ export function SubjectSearchDepartment({
               selectedIdSet={selectedIdSet}
               isImplicit={isImplicit}
               disabledIdSet={disabledIdSet}
+              grantedLabels={grantedLabels}
               onToggle={toggle}
             />
           ))}
@@ -166,6 +170,7 @@ function DepartmentRow({
   selectedIdSet,
   isImplicit,
   disabledIdSet,
+  grantedLabels,
   onToggle,
 }: {
   node: GrantDepartmentNode;
@@ -175,6 +180,7 @@ function DepartmentRow({
   selectedIdSet: Set<number>;
   isImplicit: (n: GrantDepartmentNode) => boolean;
   disabledIdSet: Set<number>;
+  grantedLabels: Record<string, string>;
   onToggle: (n: GrantDepartmentNode) => void;
 }) {
   const localize = useLocalize();
@@ -188,8 +194,11 @@ function DepartmentRow({
   const isLoading = tree.loadingIds.has(node.id);
   const explicit = selectedIdSet.has(node.id);
   const granted = disabledIdSet.has(node.id);
+  const grantedLabel = grantedLabels[String(node.id)];
   const implicit = !explicit && !granted && isImplicit(node);
-  const isChecked = explicit || implicit;
+  // Already-granted nodes read as checked too — an empty box next to the
+  // "already granted" badge reads as a bug.
+  const isChecked = explicit || implicit || granted;
   const isDisabled = granted || implicit;
 
   const handleActivate = () => {
@@ -235,9 +244,13 @@ function DepartmentRow({
         />
         <Building2 className="h-4 w-4 text-gray-400" />
         <span className="min-w-0 truncate text-sm">{node.name}</span>
-        {granted && (
+        {(grantedLabel || granted) && (
           <span className="ml-auto shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">
-            {localize("com_permission.already_granted")}
+            {grantedLabel
+              ? localize("com_permission.already_granted_as", {
+                  model: grantedLabel,
+                })
+              : localize("com_permission.already_granted")}
           </span>
         )}
       </div>
@@ -253,6 +266,7 @@ function DepartmentRow({
             selectedIdSet={selectedIdSet}
             isImplicit={isImplicit}
             disabledIdSet={disabledIdSet}
+            grantedLabels={grantedLabels}
             onToggle={onToggle}
           />
         ))}

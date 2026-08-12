@@ -22,12 +22,19 @@ jest.mock("./SubjectSearchUser", () => ({
   SubjectSearchUser: ({
     onChange,
     disabledIds,
+    grantedLabels,
   }: {
     onChange: (subjects: Array<{ type: "user"; id: number; name: string }>) => void;
     disabledIds?: number[];
+    grantedLabels?: Record<string, string>;
   }) => (
     <>
       <span data-testid="disabled-user-ids">{disabledIds?.join(",")}</span>
+      <span data-testid="granted-user-labels">
+        {Object.entries(grantedLabels ?? {})
+          .map(([id, label]) => `${id}=${label}`)
+          .join(",")}
+      </span>
       <button
         type="button"
         onClick={() => onChange([{ type: "user", id: 99, name: "New User" }])}
@@ -263,6 +270,26 @@ describe("F048 Client PermissionGrantTab", () => {
       { target: { value: "editor" } },
     );
     expect(screen.getByTestId("disabled-user-ids")).toBeEmptyDOMElement();
+    // Still selectable under another model, but the picker has to say the
+    // subject already holds one — otherwise an existing grant looks untouched.
+    expect(screen.getByTestId("granted-user-labels")).toHaveTextContent(
+      "99=Viewer",
+    );
+  });
+
+  it("does not label a subject whose only grant is inherited", async () => {
+    render(
+      <PermissionGrantTab
+        resourceType="channel"
+        resourceId="channel-1"
+        context={context}
+        assignees={[existing("77", { scope: "INHERITED" })]}
+        onSuccess={jest.fn()}
+      />,
+    );
+
+    await screen.findByTestId("granted-user-labels");
+    expect(screen.getByTestId("granted-user-labels")).toBeEmptyDOMElement();
   });
 
   it("submits the canonical department userset relation", async () => {

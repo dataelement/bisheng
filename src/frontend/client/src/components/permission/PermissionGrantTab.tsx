@@ -155,6 +155,23 @@ export function PermissionGrantTab({
     [assignees, queuedAdds, selectedModelKey, subjectType],
   );
 
+  // A subject may hold several models at once, so an existing grant does not
+  // always disable the row. Label it with the model it already holds instead —
+  // otherwise a person granted under another model looks untouched here.
+  const grantedModelLabels = useMemo(() => {
+    const names: Record<string, string[]> = {};
+    for (const assignee of assignees) {
+      if (assignee.subject.type !== subjectType) continue;
+      if (assignee.scope !== "LOCAL") continue;
+      const id = String(assignee.subject.id);
+      const modelName = assignee.model.name || assignee.model.key;
+      (names[id] ??= []).push(modelName);
+    }
+    return Object.fromEntries(
+      Object.entries(names).map(([id, list]) => [id, list.join(", ")]),
+    ) as Record<string, string>;
+  }, [assignees, subjectType]);
+
   const pendingChanges = useMemo<PermissionGrantMutationChange[]>(() => {
     const changes: PermissionGrantMutationChange[] = [];
     for (const assignee of assignees) {
@@ -248,6 +265,7 @@ export function PermissionGrantTab({
           resourceType={resourceType}
           resourceId={resourceId}
           disabledIds={disabledSubjectIds}
+          grantedLabels={grantedModelLabels}
         />
       )}
       {subjectType === "department" && (
@@ -258,6 +276,7 @@ export function PermissionGrantTab({
           resourceId={resourceId}
           includeChildren={includeChildren}
           disabledIds={disabledSubjectIds}
+          grantedLabels={grantedModelLabels}
         />
       )}
       {subjectType === "user_group" && (
@@ -267,6 +286,7 @@ export function PermissionGrantTab({
           resourceType={resourceType}
           resourceId={resourceId}
           disabledIds={disabledSubjectIds}
+          grantedLabels={grantedModelLabels}
         />
       )}
     </>
