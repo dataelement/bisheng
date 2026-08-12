@@ -9,6 +9,12 @@ import type {
 } from "~/api/permission";
 import { PermissionGrantTab } from "./PermissionGrantTab";
 
+jest.mock("~/hooks/AuthContext", () => ({
+  // Not the creator of anything in these fixtures: the top-tier guard reads the
+  // viewer from the roster, and none of them carry a CREATOR row.
+  useAuthContext: () => ({ user: { id: "auth-user" } }),
+}));
+
 jest.mock("~/api/permission", () => ({
   getGrantablePermissionModels: jest.fn(),
   mutateResourceGrants: jest.fn(),

@@ -27,8 +27,10 @@ import type {
 } from "~/api/permission";
 import { Button } from "~/components/ui";
 import { useLocalize } from "~/hooks";
+import { useAuthContext } from "~/hooks/AuthContext";
 import { useConfirm } from "~/Providers";
 import { SourceBadge } from "./SourceBadge";
+import { canManageLevel, viewerIsCreator } from "./topTierGuard";
 
 interface PermissionListTabProps {
   resourceType: ResourceType;
@@ -56,13 +58,16 @@ function createMutationIdempotencyKey(): string {
 function canEditAssignee(
   assignee: PermissionGrantAssignee,
   context: ResourcePermissionContext,
+  isCreator: boolean,
 ): boolean {
   return (
     context.mode === "CUSTOM" &&
     context.can_manage_permission &&
     assignee.scope === "LOCAL" &&
     assignee.editable &&
-    !assignee.protected
+    !assignee.protected &&
+    // Top-tier grants stay with the creator; an owner does not manage owners.
+    canManageLevel(assignee.model.level, isCreator)
   );
 }
 
@@ -76,6 +81,7 @@ interface RosterRowProps {
   context: ResourcePermissionContext;
   models: GrantablePermissionModel[];
   pending: boolean;
+  isCreator: boolean;
   onMove: (assignee: PermissionGrantAssignee, modelKey: string) => void;
   onRemove: (assignee: PermissionGrantAssignee) => void;
 }
@@ -85,12 +91,13 @@ function RosterRow({
   context,
   models,
   pending,
+  isCreator,
   onMove,
   onRemove,
 }: RosterRowProps) {
   const localize = useLocalize();
   const SubjectIcon = SUBJECT_ICONS[assignee.subject.type];
-  const editable = canEditAssignee(assignee, context);
+  const editable = canEditAssignee(assignee, context, isCreator);
   const displayName =
     assignee.subject.name ||
     `${assignee.subject.type}:${assignee.subject.id}`;
@@ -138,15 +145,17 @@ function RosterRow({
       <div className="flex w-[176px] shrink-0 items-center justify-end gap-1 max-[560px]:w-[132px]">
         {editable ? (
           <>
-            {/* The native select arrow is painted over right-aligned text, so hide it and
-                reserve room for our own chevron. */}
+            {/* The native select arrow is painted over right-aligned text, so hide
+                it and reserve room for our own chevron. `bg-none` also drops the
+                chevron the global `select` rule paints as a background image —
+                without it the row showed two overlapping arrows. */}
             <div className="relative flex min-w-0 flex-1 items-center">
               <select
                 aria-label={`grant.model.${assignee.assignee_id}`}
                 value={assignee.model.key}
                 disabled={pending}
                 onChange={(event) => onMove(assignee, event.target.value)}
-                className="h-8 w-full min-w-0 cursor-pointer appearance-none rounded-md border-0 bg-transparent pl-2 pr-6 text-right text-sm text-[#4E5969] outline-none hover:bg-black/[0.03] focus-visible:ring-2 focus-visible:ring-blue-500/40 disabled:cursor-not-allowed disabled:opacity-50"
+                className="h-8 w-full min-w-0 cursor-pointer appearance-none rounded-md border-0 bg-transparent bg-none pl-2 pr-6 text-right text-sm text-[#4E5969] outline-none hover:bg-black/[0.03] focus-visible:ring-2 focus-visible:ring-blue-500/40 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {!currentIsGrantable && (
                   <option value={assignee.model.key}>
@@ -225,6 +234,7 @@ export function PermissionListTab({
 }: PermissionListTabProps) {
   const localize = useLocalize();
   const confirm = useConfirm();
+  const { user } = useAuthContext();
   const [assignees, setAssignees] = useState<PermissionGrantAssignee[]>([]);
   const [models, setModels] = useState<GrantablePermissionModel[]>([]);
   const [summary, setSummary] = useState<MyResourcePermissions | null>(null);
@@ -327,6 +337,11 @@ export function PermissionListTab({
     resourceId,
     resourceType,
   ]);
+
+  const isCreator = useMemo(
+    () => viewerIsCreator(assignees, user?.id),
+    [assignees, user?.id],
+  );
 
   const visibleAssignees = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -461,6 +476,7 @@ export function PermissionListTab({
               context={context}
               models={models}
               pending={pendingAssigneeId === assignee.assignee_id}
+              isCreator={isCreator}
               onMove={(item, modelKey) =>
                 void mutateAssignee(item, {
                   op: "MOVE",
