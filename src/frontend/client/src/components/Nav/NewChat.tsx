@@ -158,7 +158,7 @@ export default function NewChat({
           <div>
             <div className="pb-0">
               <div className="flex items-center pl-3">
-                <span className="text-base font-bold leading-8 text-[#1A1A1A]">{menuNames.home}</span>
+                <span className="text-base font-semibold leading-8 text-[#1A1A1A]">{menuNames.home}</span>
               </div>
               <div className="py-3 flex w-full flex-col gap-1">
                 {/* Create chat button */}

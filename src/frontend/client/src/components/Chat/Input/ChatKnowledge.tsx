@@ -15,8 +15,6 @@ import {
   DropdownMenuTrigger,
 } from "~/components/ui";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "~/components/ui/Tooltip2";
-import BookOpen from "~/components/ui/icon/BookOpen";
-import BooksIcon from "~/components/ui/icon/Books";
 import { useGetOrgToolList } from "~/hooks/queries/data-provider";
 import { BsConfig } from "~/types/chat";
 import { useCategorizedKnowledgeSpaces, useLocalize, useMediaQuery } from "~/hooks";

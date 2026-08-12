@@ -423,7 +423,7 @@ export function KnowledgeSpaceSidebar({
                         mobileDrawerMode && "hidden"
                     )}>
                         {!collapsed && !mobileDrawerMode && <div className="flex justify-between items-center pl-3">
-                            <span className="text-base font-bold leading-8 text-[#1A1A1A]">{menuNames.knowledge}</span>
+                            <span className="text-base font-semibold leading-8 text-[#1A1A1A]">{menuNames.knowledge}</span>
                         </div>}
                     </div>
                 </div>

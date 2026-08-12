@@ -373,7 +373,7 @@
       "count": 11
     },
     "@typescript-eslint/no-unused-vars": {
-      "count": 6
+      "count": 4
     }
   },
   "src/components/Chat/Input/Files/FileFormWrapper.tsx": {
