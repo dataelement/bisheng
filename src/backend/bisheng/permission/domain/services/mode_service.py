@@ -69,6 +69,11 @@ class PermissionModeDraft:
     snapshot_sources: tuple[GrantSourceRecord, ...]
     staging_deltas: tuple[ProjectionTupleDelta, ...]
     result_grants: tuple[GrantSnapshot, ...]
+    # Ordinary local sources this switch discards. Switching to INHERIT drops
+    # every non-protected local grant, but only the CUSTOM direction produced
+    # snapshot_sources, so the confirmation reported "0 affected" while it was
+    # about to remove people.
+    discarded_sources: tuple[GrantSourceRecord, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -168,12 +173,19 @@ class ModeService:
     ) -> PermissionModeDraft:
         target_mode = target_mode.upper()
         self._validate_switch(context, target_mode)
+        discarded_sources: tuple[GrantSourceRecord, ...] = ()
         if target_mode == "CUSTOM":
             result_grants, snapshot_sources, staging = await self._snapshot_inherited(context)
         else:
             result_grants = self._protected_only(context.local_grants)
             snapshot_sources = ()
             staging = ()
+            discarded_sources = tuple(
+                source
+                for grant in context.local_grants
+                for source in grant.sources
+                if source.active and not source.protected
+            )
 
         context_checksum = self._context_checksum(context)
         impact_payload = {
@@ -199,6 +211,7 @@ class ModeService:
             context_checksum=context_checksum,
             impact_checksum=impact_checksum,
             snapshot_sources=snapshot_sources,
+            discarded_sources=discarded_sources,
             staging_deltas=staging,
             result_grants=result_grants,
         )

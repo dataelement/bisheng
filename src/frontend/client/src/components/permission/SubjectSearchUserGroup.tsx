@@ -16,12 +16,17 @@ interface SubjectSearchUserGroupProps {
   resourceType?: ResourceType;
   resourceId?: string;
   disabledIds?: number[];
+  /** subjectId -> the permission model(s) that subject already holds here. */
+  grantedLabels?: Record<string, string>;
 }
 
 export function SubjectSearchUserGroup({
   value,
   onChange,
+  resourceType,
+  resourceId,
   disabledIds = [],
+  grantedLabels = {},
 }: SubjectSearchUserGroupProps) {
   const localize = useLocalize();
   const [groups, setGroups] = useState<UserGroup[]>([]);
@@ -30,7 +35,10 @@ export function SubjectSearchUserGroup({
 
   useEffect(() => {
     const controller = new AbortController();
-    const request = getUserGroups({ signal: controller.signal });
+    if (!resourceType || !resourceId) return;
+    const request = getUserGroups(resourceType, resourceId, {
+      signal: controller.signal,
+    });
 
     setLoading(true);
     request
@@ -44,7 +52,7 @@ export function SubjectSearchUserGroup({
       });
 
     return () => controller.abort();
-  }, []);
+  }, [resourceId, resourceType]);
 
   const filtered = useMemo(() => {
     if (!keyword) return groups;
@@ -93,6 +101,7 @@ export function SubjectSearchUserGroup({
         {!loading &&
           filtered.map((group) => {
             const isDisabled = disabledIdSet.has(group.id);
+            const grantedLabel = grantedLabels[String(group.id)];
             return (
               <div
                 key={group.id}
@@ -105,14 +114,18 @@ export function SubjectSearchUserGroup({
               >
                 <Checkbox
                   className="border-[#D9D9D9] data-[state=checked]:border-primary data-[state=indeterminate]:border-primary"
-                  checked={selectedIds.has(group.id)}
+                  checked={selectedIds.has(group.id) || isDisabled}
                   disabled={isDisabled}
                 />
                 <Users className="h-4 w-4 text-gray-400" />
                 <span className="min-w-0 flex-1 truncate text-sm">{group.group_name}</span>
-                {isDisabled && (
+                {(grantedLabel || isDisabled) && (
                   <span className="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">
-                    {localize("com_permission.already_granted")}
+                    {grantedLabel
+                      ? localize("com_permission.already_granted_as", {
+                          model: grantedLabel,
+                        })
+                      : localize("com_permission.already_granted")}
                   </span>
                 )}
               </div>

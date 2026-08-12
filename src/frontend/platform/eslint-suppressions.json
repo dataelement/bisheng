@@ -269,11 +269,6 @@
       "count": 1
     }
   },
-  "src/components/bs-comp/chatComponent/RunLog.tsx": {
-    "no-restricted-syntax": {
-      "count": 10
-    }
-  },
   "src/components/bs-comp/chatComponent/citationUtils.ts": {
     "@typescript-eslint/no-explicit-any": {
       "count": 7
@@ -3691,10 +3686,10 @@
   },
   "src/test/subjectSearchUser.test.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 13
+      "count": 8
     },
     "no-restricted-syntax": {
-      "count": 3
+      "count": 1
     }
   },
   "src/test/systemDepartmentsArchivedDelete.test.tsx": {

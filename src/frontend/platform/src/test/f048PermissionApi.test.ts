@@ -36,11 +36,13 @@ describe("F048 Platform permission API", () => {
     await createPermissionCatalogDraftApi({
       idempotency_key: "draft-1",
       base_release_id: 12,
-      change: {
-        type: "ASSIGN_ACTION_LEVEL",
-        action_code: "edit",
-        level: 2,
-      },
+      changes: [
+        {
+          type: "ASSIGN_ACTION_LEVEL",
+          action_code: "edit",
+          level: 2,
+        },
+      ],
     })
     await getPermissionCatalogDraftApi(13)
     await publishPermissionCatalogDraftApi(13, {
@@ -103,13 +105,13 @@ describe("F048 Platform permission API", () => {
         },
         {
           op: "MOVE",
-          assignee_id: 91,
+          assignee_id: "91",
           expected_assignee_version: 2,
           target_model_key: "editor",
         },
         {
           op: "REMOVE",
-          assignee_id: 92,
+          assignee_id: "92",
           expected_assignee_version: 3,
         },
       ],

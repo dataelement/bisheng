@@ -1,10 +1,6 @@
 import { SubjectSearchUser } from "@/components/bs-comp/permission/SubjectSearchUser";
 import { userContext } from "@/contexts/userContext";
-import {
-  getGroupUsersApi,
-  getUserMembershipGroupsApi,
-  getUsersApi,
-} from "@/controllers/API/user";
+import { getGrantSubjectUsersApi } from "@/controllers/API/permission";
 import { render, screen, waitFor } from "@/test/test-utils";
 import { act, fireEvent } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -15,10 +11,8 @@ vi.mock("react-i18next", () => ({
   }),
 }));
 
-vi.mock("@/controllers/API/user", () => ({
-  getUsersApi: vi.fn(),
-  getGroupUsersApi: vi.fn(),
-  getUserMembershipGroupsApi: vi.fn(),
+vi.mock("@/controllers/API/permission", () => ({
+  getGrantSubjectUsersApi: vi.fn(),
 }));
 
 vi.mock("@/components/bs-ui/input", () => ({
@@ -31,49 +25,19 @@ vi.mock("@/components/bs-ui/checkBox", () => ({
   Checkbox: ({ checked }: any) => <input type="checkbox" readOnly checked={checked} />,
 }));
 
-const mockedGetUsersApi = vi.mocked(getUsersApi);
-const mockedGetGroupUsersApi = vi.mocked(getGroupUsersApi);
-const mockedGetUserMembershipGroupsApi = vi.mocked(getUserMembershipGroupsApi);
+const mockedGrantSubjectUsers = vi.mocked(getGrantSubjectUsersApi);
 
 describe("SubjectSearchUser", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockedGrantSubjectUsers.mockResolvedValue({ data: [], total: 0 } as any);
   });
 
-  it("falls back to current user's group peers when managed user search returns empty", async () => {
-    mockedGetUsersApi.mockResolvedValue({ data: [], total: 0 } as any);
-    mockedGetUserMembershipGroupsApi.mockResolvedValue([
-      { id: 101, group_name: "研发组" },
-    ] as any);
-    mockedGetGroupUsersApi.mockResolvedValue([
-      { user_id: 8, user_name: "Alice", external_id: "alice-001" },
-      { user_id: 9, user_name: "Bob", external_id: "bob-001" },
-    ] as any);
-
-    render(
-      <userContext.Provider value={{ user: { user_id: 7 } } as any}>
-        <SubjectSearchUser value={[]} onChange={vi.fn()} />
-      </userContext.Provider>,
-    );
-
-    await waitFor(() => {
-      expect(screen.getByText("Alice")).toBeInTheDocument();
-    });
-
-    expect(mockedGetUserMembershipGroupsApi).toHaveBeenCalledWith(7, {
-      signal: expect.any(AbortSignal),
-    });
-    expect(mockedGetGroupUsersApi).toHaveBeenCalledWith(101);
-  });
-
-  it("keeps subject discovery in the user domain for knowledge-space grants", async () => {
-    mockedGetUsersApi.mockResolvedValue({
-      data: [
-        { user_id: 11, user_name: "Carol", primary_department_path: "总部/产品部" },
-      ],
+  it("asks who may be granted this resource, not who the caller administers", async () => {
+    mockedGrantSubjectUsers.mockResolvedValue({
+      data: [{ user_id: 11, user_name: "Carol", primary_department_path: "总部/产品部" }],
       total: 1,
     } as any);
-    mockedGetUserMembershipGroupsApi.mockResolvedValue([] as any);
 
     render(
       <userContext.Provider value={{ user: { user_id: 7 } } as any}>
@@ -90,35 +54,51 @@ describe("SubjectSearchUser", () => {
       expect(screen.getByText("Carol")).toBeInTheDocument();
     });
 
-    expect(mockedGetUsersApi).toHaveBeenCalledWith(
-      { name: "", page: 1, pageSize: 50 },
+    expect(mockedGrantSubjectUsers).toHaveBeenCalledWith(
+      "knowledge_space",
+      "88",
+      { keyword: "", page: 1, pageSize: 50 },
       { signal: expect.any(AbortSignal) },
     );
-    expect(mockedGetUserMembershipGroupsApi).toHaveBeenCalledWith(7, {
-      signal: expect.any(AbortSignal),
-    });
   });
 
-  it("filters same-group peers by keyword on subsequent search", async () => {
-    mockedGetUsersApi.mockResolvedValue({ data: [], total: 0 } as any);
-    mockedGetUserMembershipGroupsApi.mockResolvedValue([
-      { id: 101, group_name: "研发组" },
-    ] as any);
-    mockedGetGroupUsersApi.mockResolvedValue([
-      { user_id: 8, user_name: "Alice", external_id: "alice-001" },
-      { user_id: 9, user_name: "Bob", external_id: "bob-001" },
-    ] as any);
+  it("asks for nobody until it knows which resource is being granted", async () => {
+    render(
+      <userContext.Provider value={{ user: { user_id: 7 } } as any}>
+        <SubjectSearchUser value={[]} onChange={vi.fn()} />
+      </userContext.Provider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText("search.user")).toBeInTheDocument();
+    });
+    // No resource means no scope to authorize against — asking anyway would be a
+    // guaranteed permission error.
+    expect(mockedGrantSubjectUsers).not.toHaveBeenCalled();
+  });
+
+  it("sends the keyword to the server rather than filtering a loaded page", async () => {
+    mockedGrantSubjectUsers.mockResolvedValue({
+      data: [{ user_id: 8, user_name: "Alice", external_id: "alice-001" }],
+      total: 1,
+    } as any);
 
     vi.useFakeTimers();
     try {
       render(
         <userContext.Provider value={{ user: { user_id: 7 } } as any}>
-          <SubjectSearchUser value={[]} onChange={vi.fn()} />
+          <SubjectSearchUser
+            value={[]}
+            onChange={vi.fn()}
+            resourceType="knowledge_space"
+            resourceId="88"
+          />
         </userContext.Provider>,
       );
 
-      const input = screen.getByPlaceholderText("search.user");
-      fireEvent.change(input, { target: { value: "ali" } });
+      fireEvent.change(screen.getByPlaceholderText("search.user"), {
+        target: { value: "ali" },
+      });
       await act(async () => {
         vi.advanceTimersByTime(300);
         await Promise.resolve();
@@ -126,7 +106,12 @@ describe("SubjectSearchUser", () => {
       });
 
       expect(screen.getByText("Alice")).toBeInTheDocument();
-      expect(screen.queryByText("Bob")).not.toBeInTheDocument();
+      expect(mockedGrantSubjectUsers).toHaveBeenLastCalledWith(
+        "knowledge_space",
+        "88",
+        { keyword: "ali", page: 1, pageSize: 50 },
+        { signal: expect.any(AbortSignal) },
+      );
     } finally {
       vi.useRealTimers();
     }

@@ -79,8 +79,8 @@ export function PermissionGrantTab({
   );
   const [selectedModelKey, setSelectedModelKey] = useState("");
   const [internalIncludeChildren, setInternalIncludeChildren] = useState(false);
-  const [targetModels, setTargetModels] = useState<Record<number, string>>({});
-  const [removedIds, setRemovedIds] = useState<Set<number>>(new Set());
+  const [targetModels, setTargetModels] = useState<Record<string, string>>({});
+  const [removedIds, setRemovedIds] = useState<Set<string>>(new Set());
   const [queuedAdds, setQueuedAdds] = useState<
     PermissionGrantMutationChange[]
   >([]);
@@ -154,6 +154,23 @@ export function PermissionGrantTab({
     ],
     [assignees, queuedAdds, selectedModelKey, subjectType],
   );
+
+  // A subject may hold several models at once, so an existing grant does not
+  // always disable the row. Label it with the model it already holds instead —
+  // otherwise a person granted under another model looks untouched here.
+  const grantedModelLabels = useMemo(() => {
+    const names: Record<string, string[]> = {};
+    for (const assignee of assignees) {
+      if (assignee.subject.type !== subjectType) continue;
+      if (assignee.scope !== "LOCAL") continue;
+      const id = String(assignee.subject.id);
+      const modelName = assignee.model.name || assignee.model.key;
+      (names[id] ??= []).push(modelName);
+    }
+    return Object.fromEntries(
+      Object.entries(names).map(([id, list]) => [id, list.join(", ")]),
+    ) as Record<string, string>;
+  }, [assignees, subjectType]);
 
   const pendingChanges = useMemo<PermissionGrantMutationChange[]>(() => {
     const changes: PermissionGrantMutationChange[] = [];
@@ -248,6 +265,7 @@ export function PermissionGrantTab({
           resourceType={resourceType}
           resourceId={resourceId}
           disabledIds={disabledSubjectIds}
+          grantedLabels={grantedModelLabels}
         />
       )}
       {subjectType === "department" && (
@@ -258,6 +276,7 @@ export function PermissionGrantTab({
           resourceId={resourceId}
           includeChildren={includeChildren}
           disabledIds={disabledSubjectIds}
+          grantedLabels={grantedModelLabels}
         />
       )}
       {subjectType === "user_group" && (
@@ -267,6 +286,7 @@ export function PermissionGrantTab({
           resourceType={resourceType}
           resourceId={resourceId}
           disabledIds={disabledSubjectIds}
+          grantedLabels={grantedModelLabels}
         />
       )}
     </>
@@ -304,7 +324,7 @@ export function PermissionGrantTab({
             </label>
           )}
 
-        <div className="mt-4 flex h-10 shrink-0 items-center gap-4 overflow-hidden">
+        <div className="mt-4 flex h-10 shrink-0 items-center gap-4 pr-1">
           <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
             <span className="shrink-0 text-sm font-normal leading-[22px] text-[#999999]">
               {`${localize("com_permission.selected_prefix")}${subjectLabel}:`}
@@ -323,7 +343,7 @@ export function PermissionGrantTab({
               value={selectedModelKey}
               disabled={modelsLoading || models.length === 0}
               onChange={(event) => setSelectedModelKey(event.target.value)}
-              className="h-8 w-[132px] rounded-md border-0 bg-white px-1 text-sm leading-[22px] text-[#212121] outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 disabled:opacity-60"
+              className="h-8 w-[132px] rounded-md border-0 bg-white px-1 text-sm leading-[22px] text-[#212121] outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500/40 disabled:opacity-60"
             >
               {models.map((model) => (
                 <option key={model.key} value={model.key}>

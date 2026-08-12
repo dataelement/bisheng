@@ -93,6 +93,29 @@ describe("F048 Client PermissionDialog", () => {
     });
   });
 
+  it("opens without parking focus on the close button", async () => {
+    // Radix focuses the first focusable child on open, which here is the X, so
+    // every open showed a focus ring sitting on the close button.
+    render(
+      <PermissionDialog
+        open
+        onOpenChange={jest.fn()}
+        resourceType="knowledge_file"
+        resourceId="file-1"
+        resourceName="Policy.pdf"
+      />,
+    );
+
+    await screen.findByText("roster:CUSTOM");
+
+    const closeButtons = screen
+      .getAllByRole("button")
+      .filter((node) => node.textContent?.includes("Close"));
+    for (const button of closeButtons) {
+      expect(button).not.toHaveFocus();
+    }
+  });
+
   it("keeps the legacy subject tabs and opens add permission in a separate dialog", async () => {
     render(
       <PermissionDialog

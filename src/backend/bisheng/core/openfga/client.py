@@ -268,6 +268,12 @@ class FGAClient:
     ) -> list[dict]:
         """Read tuples matching the given filter.
 
+        Pass no filter at all to walk the whole Store. Any other combination must
+        satisfy the Read API: the object type is mandatory, and the object id and
+        the user cannot both be empty. Callers used to learn this the hard way —
+        the server answers a filter it dislikes with a generic validation_error,
+        which surfaced as a 500 only after the surrounding work had already run.
+
         Returns list of {"key": {"user": ..., "relation": ..., "object": ...}, "timestamp": ...}.
         """
         tuple_key: dict[str, str] = {}
@@ -277,6 +283,12 @@ class FGAClient:
             tuple_key["relation"] = relation
         if object:
             tuple_key["object"] = object
+        if tuple_key:
+            object_type, separator, object_id = (object or "").partition(":")
+            if not object_type or not separator:
+                raise ValueError(f"OpenFGA read filter needs an object type, got object={object!r}")
+            if not object_id and not user:
+                raise ValueError("OpenFGA read filter needs an object id or a user, got neither")
         tuples: list[dict] = []
         continuation_token: str | None = None
         while True:

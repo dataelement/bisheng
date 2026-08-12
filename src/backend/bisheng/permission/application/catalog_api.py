@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator, Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from dataclasses import dataclass, replace
@@ -78,6 +79,7 @@ SessionFactory = Callable[[], AbstractAsyncContextManager[AsyncSession]]
 ZERO_CHECKSUM = "0" * 64
 HIGHER_CONSISTENCY = "HIGHER_CONSISTENCY"
 CATALOG_STAGE_BATCH_SIZE = 80
+CATALOG_READ_CONCURRENCY = 8
 ACTIVE_OPERATION_STATUSES = (
     "PREPARED",
     "STAGING",
@@ -1087,10 +1089,7 @@ class OpenFGACatalogProjector:
     ) -> None:
         expected = self._expected_tuples(draft)
         await self._persist_plan(draft.release_id, expected)
-        present = {
-            (row["user"], row["relation"], row["object"])
-            for row in await self._client.read_tuples(consistency=HIGHER_CONSISTENCY)
-        }
+        present = await self._read_present(expected)
         missing = [row for row in expected if (row["user"], row["relation"], row["object"]) not in present]
         for index in range(0, len(missing), CATALOG_STAGE_BATCH_SIZE):
             batch = missing[index : index + CATALOG_STAGE_BATCH_SIZE]
@@ -1102,16 +1101,42 @@ class OpenFGACatalogProjector:
         self,
         draft: CatalogDraftSnapshot,
     ) -> None:
-        expected = {(row["user"], row["relation"], row["object"]) for row in self._expected_tuples(draft)}
-        present = {
-            (row["user"], row["relation"], row["object"])
-            for row in await self._client.read_tuples(consistency=HIGHER_CONSISTENCY)
-        }
+        planned = self._expected_tuples(draft)
+        expected = {(row["user"], row["relation"], row["object"]) for row in planned}
+        present = await self._read_present(planned)
         missing = expected - present
         if missing:
             raise PermissionProjectionFailedError(msg=f"Catalog staged tuple verification failed: {len(missing)}")
         if draft.model_release is None:
             raise PermissionPublishNotReadyError(msg="Catalog model release is missing")
+
+    async def _read_present(
+        self,
+        planned: list[dict[str, str]],
+    ) -> set[tuple[str, str, str]]:
+        """Read only the tuples this plan touches, one concrete object at a time.
+
+        An unfiltered Read walks the whole Store at 100 tuples per request, so
+        checking a few hundred Catalog tuples against a 77k-tuple Store cost
+        ~774 round trips — twice per publish, at HIGHER_CONSISTENCY. Scoping the
+        reads to the planned objects makes the cost proportional to the plan
+        instead of the Store, and the objects are independent so they overlap.
+        """
+
+        objects = sorted({row["object"] for row in planned})
+        if not objects:
+            return set()
+        semaphore = asyncio.Semaphore(CATALOG_READ_CONCURRENCY)
+
+        async def read(object_key: str) -> list[dict]:
+            async with semaphore:
+                return await self._client.read_tuples(
+                    object=object_key,
+                    consistency=HIGHER_CONSISTENCY,
+                )
+
+        pages = await asyncio.gather(*(read(key) for key in objects))
+        return {(row["user"], row["relation"], row["object"]) for page in pages for row in page}
 
     async def arm_recent_marker(
         self,
@@ -1149,9 +1174,12 @@ class OpenFGACatalogProjector:
         return _commit_checksum(changes)
 
     async def read_active_release_keys(self) -> frozenset[str]:
+        # OpenFGA rejects a tuple_key without an object type, so the filter has
+        # to name the type even though the prefix check below already does.
         rows = await self._client.read_tuples(
             user="user:*",
             relation="active",
+            object="permission_catalog_release:",
             consistency=HIGHER_CONSISTENCY,
         )
         prefix = "permission_catalog_release:"
@@ -1320,8 +1348,8 @@ class F048CatalogApi:
         before = await self._state.load_snapshot(reservation.predecessor_id)
         if before.action_release is None or before.model_release is None:
             raise PermissionPublishNotReadyError()
-        actions, customs, standard_policy = await self._apply_change(
-            request.change,
+        actions, customs, standard_policy = await self._apply_changes(
+            request.changes,
             before,
         )
         try:
@@ -1454,15 +1482,22 @@ class F048CatalogApi:
             "published_at": (_as_utc(row.published_at).isoformat() if row.published_at is not None else None),
         }
 
-    async def _apply_change(
+    async def _apply_changes(
         self,
-        change: CatalogChangeRequest,
+        changes: tuple[CatalogChangeRequest, ...],
         before: CatalogDraftSnapshot,
     ) -> tuple[
         tuple[CatalogAction, ...],
         tuple[CustomModelSelection, ...],
         dict[str, bool],
     ]:
+        """Fold the whole edit batch onto the base release, then validate once.
+
+        Validation runs on the resulting state rather than after each change: a
+        batch may pass through an intermediate arrangement it never publishes,
+        and only the state that actually ships has to hold.
+        """
+
         assert before.action_release is not None
         assert before.model_release is not None
         actions = list(before.action_release.actions)
@@ -1480,90 +1515,99 @@ class F048CatalogApi:
         }
         standard_by_key = {model.model_key: model for model in before.model_release.models if model.kind == "STANDARD"}
         standard_policy = {key: model.allow_same_level for key, model in standard_by_key.items()}
-        kind = change.type
-        if kind in {
-            CatalogChangeType.ASSIGN_ACTION_LEVEL,
-            CatalogChangeType.SET_ACTION_ACTIVE,
-        }:
-            index = next(
-                (index for index, action in enumerate(actions) if action.code == change.action_code),
-                None,
-            )
-            if index is None:
-                raise InvalidCatalogActionError()
-            if kind == CatalogChangeType.ASSIGN_ACTION_LEVEL:
-                actions[index] = replace(
-                    actions[index],
-                    level=(int(change.level) if change.level is not None else None),
+        touched_standard_keys: set[str] = set()
+        for change in changes:
+            kind = change.type
+            if kind in {
+                CatalogChangeType.ASSIGN_ACTION_LEVEL,
+                CatalogChangeType.SET_ACTION_ACTIVE,
+            }:
+                index = next(
+                    (index for index, action in enumerate(actions) if action.code == change.action_code),
+                    None,
                 )
-            elif change.active is None:
-                raise InvalidCatalogActionError()
-            else:
-                actions[index] = replace(
-                    actions[index],
-                    active=change.active,
+                if index is None:
+                    raise InvalidCatalogActionError()
+                if kind == CatalogChangeType.ASSIGN_ACTION_LEVEL:
+                    actions[index] = replace(
+                        actions[index],
+                        level=(int(change.level) if change.level is not None else None),
+                    )
+                elif change.active is None:
+                    raise InvalidCatalogActionError()
+                else:
+                    actions[index] = replace(
+                        actions[index],
+                        active=change.active,
+                    )
+            elif kind == CatalogChangeType.CREATE_MODEL:
+                key = change.model_key or uuid4().hex
+                if key in custom_by_key or key in standard_by_key or not change.name or not change.action_codes:
+                    raise PermissionModelStateConflictError()
+                custom_by_key[key] = CustomModelSelection(
+                    model_key=key,
+                    name=change.name,
+                    action_codes=change.action_codes,
+                    active=change.active is not False,
+                    allow_same_level=bool(change.allow_same_level),
                 )
-        elif kind == CatalogChangeType.CREATE_MODEL:
-            key = change.model_key or uuid4().hex
-            if key in custom_by_key or key in standard_by_key or not change.name or not change.action_codes:
-                raise PermissionModelStateConflictError()
-            custom_by_key[key] = CustomModelSelection(
-                model_key=key,
-                name=change.name,
-                action_codes=change.action_codes,
-                active=change.active is not False,
-                allow_same_level=bool(change.allow_same_level),
-            )
-        elif kind == CatalogChangeType.UPDATE_MODEL:
-            model = self._custom_model(change.model_key, custom_by_key)
-            custom_by_key[model.model_key] = replace(
-                model,
-                name=change.name if change.name is not None else model.name,
-                action_codes=(change.action_codes if change.action_codes is not None else model.action_codes),
-                active=(change.active if change.active is not None else model.active),
-                allow_same_level=(
-                    change.allow_same_level if change.allow_same_level is not None else model.allow_same_level
-                ),
-            )
-        elif kind == CatalogChangeType.SET_MODEL_ACTIVE:
-            if change.active is None:
-                raise PermissionModelStateConflictError()
-            model = self._custom_model(change.model_key, custom_by_key)
-            custom_by_key[model.model_key] = replace(
-                model,
-                active=change.active,
-            )
-        elif kind == CatalogChangeType.DELETE_MODEL:
-            model = self._custom_model(change.model_key, custom_by_key)
-            derived = next(item for item in before.model_release.models if item.model_key == model.model_key)
-            references = await self._state.grant_references()
-            try:
-                ensure_model_deletable(
-                    derived,
-                    reference_count=len(references.get(model.model_key, ())),
-                )
-            except ValueError as exc:
-                raise PermissionModelStateConflictError(
-                    exception=exc,
-                    msg=str(exc),
-                ) from exc
-            del custom_by_key[model.model_key]
-        elif kind == CatalogChangeType.SET_ALLOW_SAME_LEVEL:
-            if change.allow_same_level is None or not change.model_key:
-                raise PermissionModelStateConflictError()
-            if change.model_key in standard_by_key:
-                standard_policy[change.model_key] = change.allow_same_level
-            else:
-                model = self._custom_model(
-                    change.model_key,
-                    custom_by_key,
-                )
+            elif kind == CatalogChangeType.UPDATE_MODEL:
+                model = self._custom_model(change.model_key, custom_by_key)
                 custom_by_key[model.model_key] = replace(
                     model,
-                    allow_same_level=change.allow_same_level,
+                    name=change.name if change.name is not None else model.name,
+                    action_codes=(change.action_codes if change.action_codes is not None else model.action_codes),
+                    active=(change.active if change.active is not None else model.active),
+                    allow_same_level=(
+                        change.allow_same_level if change.allow_same_level is not None else model.allow_same_level
+                    ),
                 )
-        else:
-            raise InvalidCatalogActionError()
+            elif kind == CatalogChangeType.SET_MODEL_ACTIVE:
+                if change.active is None:
+                    raise PermissionModelStateConflictError()
+                model = self._custom_model(change.model_key, custom_by_key)
+                custom_by_key[model.model_key] = replace(
+                    model,
+                    active=change.active,
+                )
+            elif kind == CatalogChangeType.DELETE_MODEL:
+                model = self._custom_model(change.model_key, custom_by_key)
+                derived = next(item for item in before.model_release.models if item.model_key == model.model_key)
+                references = await self._state.grant_references()
+                try:
+                    # Judge "is it disabled" on the state this batch publishes, not
+                    # on the base release. Reading the base meant a batch that
+                    # deactivates and then deletes was refused for being active,
+                    # forcing two separate publications to remove one model.
+                    ensure_model_deletable(
+                        replace(derived, active=model.active),
+                        reference_count=len(references.get(model.model_key, ())),
+                    )
+                except ValueError as exc:
+                    raise PermissionModelStateConflictError(
+                        exception=exc,
+                        msg=str(exc),
+                    ) from exc
+                del custom_by_key[model.model_key]
+            elif kind == CatalogChangeType.SET_ALLOW_SAME_LEVEL:
+                if change.allow_same_level is None or not change.model_key:
+                    raise PermissionModelStateConflictError()
+                if change.model_key in standard_by_key:
+                    standard_policy[change.model_key] = change.allow_same_level
+                else:
+                    model = self._custom_model(
+                        change.model_key,
+                        custom_by_key,
+                    )
+                    custom_by_key[model.model_key] = replace(
+                        model,
+                        allow_same_level=change.allow_same_level,
+                    )
+            else:
+                raise InvalidCatalogActionError()
+            if change.model_key and change.model_key in standard_by_key:
+                if change.type is not CatalogChangeType.SET_ALLOW_SAME_LEVEL:
+                    touched_standard_keys.add(change.model_key)
         try:
             action_release = derive_action_release(actions)
             derive_permission_models(
@@ -1572,7 +1616,7 @@ class F048CatalogApi:
                 standard_allow_same_level=standard_policy,
             )
         except ValueError as exc:
-            if change.model_key in standard_by_key and kind not in {CatalogChangeType.SET_ALLOW_SAME_LEVEL}:
+            if touched_standard_keys:
                 raise ImmutableStandardModelError(
                     exception=exc,
                     msg=str(exc),

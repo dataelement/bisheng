@@ -9,6 +9,26 @@ if (!(globalThis as any).__APP_ENV__) {
   (globalThis as any).__APP_ENV__ = { BASE_URL: '' };
 }
 
+// Radix primitives (Select, Popover, …) drive their popups with pointer capture,
+// scrollIntoView and ResizeObserver, none of which jsdom implements. Stub them so
+// component tests can open a bs-ui Select.
+const globalScope = globalThis as { ResizeObserver?: unknown };
+if (!globalScope.ResizeObserver) {
+  globalScope.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+}
+if (!Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = vi.fn();
+}
+if (!Element.prototype.hasPointerCapture) {
+  Element.prototype.hasPointerCapture = vi.fn(() => false) as never;
+  Element.prototype.setPointerCapture = vi.fn();
+  Element.prototype.releasePointerCapture = vi.fn();
+}
+
 // Mock react-i18next (matching client/test/setupTests.js pattern)
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({

@@ -1,4 +1,5 @@
 import { locationContext } from "@/contexts/locationContext"
+import { userContext } from "@/contexts/userContext"
 import { getMyResourcePermissionsApi } from "@/controllers/API/permission"
 import { DashboardDetail } from "@/pages/Dashboard/components/dashboard/DashboardDetail"
 import {
@@ -67,7 +68,10 @@ const dashboard = {
   components: [],
 } as Dashboard
 
-function renderItem(permissionActions: string[]) {
+function renderItem(
+  permissionActions: string[],
+  { visible = true, privileged = false } = {},
+) {
   const callbacks = {
     onSelect: vi.fn(),
     onRename: vi.fn(),
@@ -85,6 +89,8 @@ function renderItem(permissionActions: string[]) {
         dashboard={dashboard}
         selected={false}
         permissionActions={permissionActions}
+        visible={visible}
+        privileged={privileged}
         {...callbacks}
       />
     </locationContext.Provider>,
@@ -92,16 +98,27 @@ function renderItem(permissionActions: string[]) {
   return callbacks
 }
 
-function PermissionProbe({ ids }: { ids: string[] }) {
+function Probe({ ids }: { ids: string[] }) {
   const result = useDashboardPermissions(ids)
   const permissions: DashboardPermissionMap = result.permissions
   return (
     <div>
       <span>{result.loading ? "loading" : "ready"}</span>
+      <span data-testid="privileged">{result.privileged ? "yes" : "no"}</span>
       <span data-testid="dashboard-1-actions">
         {(permissions["dashboard-1"] ?? []).join(",")}
       </span>
     </div>
+  )
+}
+
+function PermissionProbe({ ids, admin = false }: { ids: string[]; admin?: boolean }) {
+  return (
+    <userContext.Provider
+      value={{ user: { user_id: 7, role: admin ? "admin" : "user" } } as never}
+    >
+      <Probe ids={ids} />
+    </userContext.Provider>
   )
 }
 
@@ -110,21 +127,23 @@ describe("F048 dashboard permission UI", () => {
     vi.clearAllMocks()
     vi.mocked(getMyResourcePermissionsApi).mockResolvedValue({
       mode: "CUSTOM",
-      actions: ["visible", "edit"],
+      actions: ["edit"],
       sources: [{ type: "DIRECT", include_children: false }],
       roster_complete: false,
     })
   })
 
-  it("fails closed and never renders a dashboard without visible", () => {
-    renderItem(["edit", "delete", "manage_permission"])
+  it("fails closed and never renders a dashboard it was not told is visible", () => {
+    renderItem(["edit", "delete", "manage_permission"], { visible: false })
 
     expect(screen.queryByText("Operations")).toBeNull()
     expect(screen.queryByRole("button", { name: "dashboard.actions" })).toBeNull()
   })
 
-  it("keeps share, default, and copy behind visible without implying edit", () => {
-    const callbacks = renderItem(["visible"])
+  it("keeps share, default, and copy behind visibility without implying edit", () => {
+    // Visible with no granted action at all — the case an action list can never
+    // express, and the one that used to hide every dashboard.
+    const callbacks = renderItem([])
 
     expect(screen.getByText("share")).toBeInTheDocument()
     expect(screen.getByText("setAsDefault")).toBeInTheDocument()
@@ -138,7 +157,7 @@ describe("F048 dashboard permission UI", () => {
   })
 
   it("uses distinct edit, delete, and manage_permission actions", () => {
-    renderItem(["visible", "edit", "delete", "manage_permission"])
+    renderItem(["edit", "delete", "manage_permission"])
 
     expect(screen.getByText("rename")).toBeInTheDocument()
     expect(screen.getByText("delete")).toBeInTheDocument()
@@ -148,7 +167,7 @@ describe("F048 dashboard permission UI", () => {
   it("uses visible for details and edit only for mutations", async () => {
     vi.mocked(getMyResourcePermissionsApi).mockResolvedValue({
       mode: "CUSTOM",
-      actions: ["visible"],
+      actions: [],
       sources: [],
       roster_complete: false,
     })
@@ -176,6 +195,17 @@ describe("F048 dashboard permission UI", () => {
     expect(screen.getByText("share")).toBeInTheDocument()
     expect(screen.queryByText("publish")).toBeNull()
     expect(screen.queryByText("editDashboard")).toBeNull()
+  })
+
+  it("opens every control for an admin, who holds no grants to read", () => {
+    // The server waves admins through on identity alone, so their action list
+    // comes back empty — reading capability off it hid the whole board.
+    renderItem([], { privileged: true })
+
+    expect(screen.getByText("share")).toBeInTheDocument()
+    expect(screen.getByText("rename")).toBeInTheDocument()
+    expect(screen.getByText("delete")).toBeInTheDocument()
+    expect(screen.getByText("managePermission")).toBeInTheDocument()
   })
 
   it("does not retain dashboard.write as an editor authorization source", () => {
@@ -207,7 +237,7 @@ describe("F048 dashboard permission UI", () => {
     vi.mocked(getMyResourcePermissionsApi)
       .mockResolvedValueOnce({
         mode: "CUSTOM",
-        actions: ["visible", "edit"],
+        actions: ["edit"],
         sources: [],
         roster_complete: false,
       })
@@ -216,9 +246,7 @@ describe("F048 dashboard permission UI", () => {
     render(<PermissionProbe ids={["dashboard-1", "dashboard-2"]} />)
 
     await waitFor(() => expect(screen.getByText("ready")).toBeInTheDocument())
-    expect(screen.getByTestId("dashboard-1-actions")).toHaveTextContent(
-      "visible,edit",
-    )
+    expect(screen.getByTestId("dashboard-1-actions")).toHaveTextContent("edit")
     expect(getMyResourcePermissionsApi).toHaveBeenNthCalledWith(
       1,
       "dashboard",
@@ -229,6 +257,15 @@ describe("F048 dashboard permission UI", () => {
       "dashboard",
       "dashboard-2",
     )
+  })
+
+  it("asks the server for nothing when the user is an admin", async () => {
+    render(<PermissionProbe ids={["dashboard-1", "dashboard-2"]} admin />)
+
+    await waitFor(() => expect(screen.getByText("ready")).toBeInTheDocument())
+    expect(screen.getByTestId("privileged")).toHaveTextContent("yes")
+    // One request per dashboard is the whole cost model here; an admin needs none.
+    expect(getMyResourcePermissionsApi).not.toHaveBeenCalled()
   })
 
   it("deduplicates concurrent action summaries for the same dashboard", async () => {

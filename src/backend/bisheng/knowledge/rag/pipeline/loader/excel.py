@@ -1,10 +1,15 @@
 import os
+import re
 
 from langchain_core.documents import Document
 
 from bisheng.common.constants.knowledge import KNOWLEDGE_MAX_CHUNK_CHARS
 from bisheng.common.errcode.knowledge import KnowledgeExcelChunkMaxError
 from bisheng.knowledge.rag.pipeline.loader.base import BaseBishengLoader
+from bisheng.knowledge.rag.pipeline.loader.utils.excel_images import (
+    ExcelImage,
+    extract_excel_images,
+)
 from bisheng.knowledge.rag.pipeline.loader.utils.md_from_excel import (
     ExcelRowTooLongError,
     convert_file_to_markdown,
@@ -17,6 +22,16 @@ DEFAULT_SEPARATOR = ["\n\n", "\n", "。", "\\."]
 DEFAULT_SEPARATOR_RULE = ["after", "after", "after", "after"]
 DEFAULT_CHUNK_SIZE = 1000
 DEFAULT_CHUNK_OVERLAP = 100
+
+# Only the OPC package carries drawings. Legacy .xls is an OLE container, and
+# .et is handled by the xinchuang delegate loader before it reaches markdown.
+IMAGE_CAPABLE_EXTENSIONS = frozenset({"xlsx"})
+
+
+def _safe_media_name(name: str) -> str:
+    """Keep the staged file name MinIO/URL safe, per the BaseBishengLoader contract."""
+    cleaned = re.sub(r"[^A-Za-z0-9._-]", "_", os.path.basename(name))
+    return cleaned or "image"
 
 
 class ExcelLoader(BaseBishengLoader):
@@ -71,6 +86,66 @@ class ExcelLoader(BaseBishengLoader):
         )
         return splitter.split_text(text)
 
+    def _build_document(self, content: str, chunk_index: int) -> Document:
+        metadata = self.file_metadata.copy()
+        metadata["chunk_index"] = chunk_index
+        metadata["bbox"] = ""
+        metadata["page"] = 0
+        return Document(page_content=content, metadata=metadata)
+
+    def _emit_image_documents(self, images: list[ExcelImage], start_chunk_index: int) -> list[Document]:
+        """Stage embedded pictures and turn them into their own markdown chunks.
+
+        Pictures live outside the cell grid and cannot be folded into the table
+        markdown: a sheet holding nothing but a drawing (report exporters do
+        this) produces no markdown at all, and the renderer's sheet numbering
+        skips empty sheets, so there is no chunk to attach them to. Each sheet's
+        pictures therefore become their own chunk, captioned with the sheet name
+        so the segment still carries some retrievable context.
+
+        Only the bytes are staged on local disk here; ImageUploadTransformer
+        performs the MinIO upload, per the image contract in BaseBishengLoader.
+        """
+        if not images:
+            return []
+
+        image_dir = self.ensure_local_image_dir()
+        by_sheet: dict[str, list[ExcelImage]] = {}
+        for image in images:
+            by_sheet.setdefault(image.sheet_name, []).append(image)
+
+        staged: set[str] = set()
+        documents: list[Document] = []
+        chunk_index = start_chunk_index
+
+        for sheet_name, sheet_images in by_sheet.items():
+            heading = f"## {sheet_name}"
+            refs: list[str] = []
+            for image in sheet_images:
+                filename = _safe_media_name(image.media_name)
+                # The same media part may be anchored on several sheets; stage once.
+                if filename not in staged:
+                    with open(os.path.join(image_dir, filename), "wb") as f:
+                        f.write(image.content)
+                    staged.add(filename)
+                refs.append(f"![{filename}]({self.build_image_url(filename)})")
+
+            block = heading
+            for ref in refs:
+                candidate = f"{block}\n\n{ref}"
+                # Keep the heading on every chunk when a sheet has enough pictures
+                # to overflow one segment.
+                if len(candidate) > self.max_chunk_limit and block != heading:
+                    documents.append(self._build_document(block, chunk_index))
+                    chunk_index += 1
+                    block = f"{heading}\n\n{ref}"
+                else:
+                    block = candidate
+            documents.append(self._build_document(block, chunk_index))
+            chunk_index += 1
+
+        return documents
+
     def load(self) -> list[Document]:
         if os.path.exists(self.file_path):
             self.preview_file_path = self.file_path
@@ -100,14 +175,13 @@ class ExcelLoader(BaseBishengLoader):
             full_file_name = f"{md_file_path}/{file_name}"
             with open(full_file_name, encoding="utf-8") as f:
                 content = f.read()
-                one_metadata = self.file_metadata.copy()
-                one_metadata["chunk_index"] = chunk_index
-                one_metadata["bbox"] = ""
-                one_metadata["page"] = 0
                 # Defensive: the char budget above should have prevented this. If it
                 # ever fires, the budget math has drifted from the renderer.
                 if len(content) > self.max_chunk_limit:
                     raise KnowledgeExcelChunkMaxError()
-                documents.append(Document(page_content=content, metadata=one_metadata))
+                documents.append(self._build_document(content, chunk_index))
+
+        if self.file_extension.lower().lstrip(".") in IMAGE_CAPABLE_EXTENSIONS:
+            documents.extend(self._emit_image_documents(extract_excel_images(self.file_path), len(documents)))
 
         return documents

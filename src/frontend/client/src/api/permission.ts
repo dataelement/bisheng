@@ -45,13 +45,14 @@ export interface PermissionGrantSource {
 }
 
 export interface PermissionGrantAssignee {
-  assignee_id: number;
+  assignee_id: string;
   assignee_version: number;
   subject: PermissionGrantSubject;
   model: GrantablePermissionModel;
   source: PermissionGrantSource;
   scope: "LOCAL" | "INHERITED";
   inherited_from: string | null;
+  inherited_from_name?: string | null;
   protected: boolean;
   editable: boolean;
 }
@@ -85,13 +86,13 @@ export type PermissionGrantMutationChange =
     }
   | {
       op: "MOVE";
-      assignee_id: number;
+      assignee_id: string;
       expected_assignee_version: number;
       target_model_key: string;
     }
   | {
       op: "REMOVE";
-      assignee_id: number;
+      assignee_id: string;
       expected_assignee_version: number;
     };
 
@@ -312,26 +313,32 @@ export interface GrantUser {
   primary_department_path?: string | null;
 }
 
+// Scoped to the resource, not to the org chart: "who may be granted THIS
+// resource" is answered by holding manage_permission on it, while the user-admin
+// list answers "whom do I administer" — which a space manager may not be at all,
+// so it came back empty for exactly the people allowed to grant.
 export async function searchUsers(
+  resourceType: ResourceType,
+  resourceId: string,
   name: string,
   params?: { page?: number; pageSize?: number },
   config?: { signal?: AbortSignal }
-): Promise<{ data: { user_id: number; user_name: string }[]; total: number }> {
-  const res = await request.get(`/api/v1/user/list`, {
-    params: {
-      name,
-      page_num: params?.page ?? 1,
-      page_size: params?.pageSize ?? 50,
-    },
-    ...withPermissionRequestOptions(config),
-  });
+): Promise<{ data: GrantUser[]; total: number }> {
+  const res = await request.get(
+    `${permissionResourcePath(resourceType, resourceId)}/grant-subjects/users`,
+    {
+      params: {
+        keyword: name,
+        page: params?.page ?? 1,
+        page_size: params?.pageSize ?? 50,
+      },
+      ...withPermissionRequestOptions(config),
+    }
+  );
   const data = unwrap<any>(res);
-  const rows = data?.data ?? data?.list ?? data?.records ?? data;
+  const rows = data?.data ?? data;
   const list = Array.isArray(rows) ? rows : [];
-  return {
-    data: list,
-    total: Number(data?.total ?? list.length),
-  };
+  return { data: list, total: Number(data?.total ?? list.length) };
 }
 
 // ── Lazy organization-department tree ────────────────
@@ -370,11 +377,13 @@ const EMPTY_DEPARTMENT_SEARCH_RESULT: GrantDepartmentSearchResult = {
 };
 
 export async function getDepartmentChildren(
+  resourceType: ResourceType,
+  resourceId: string,
   parentId: number | null,
   config?: { signal?: AbortSignal }
 ): Promise<GrantDepartmentNode[]> {
   const res = await request.get(
-    `/api/v1/departments/children`,
+    `${permissionResourcePath(resourceType, resourceId)}/grant-subjects/departments/children`,
     {
       params: { parent_id: parentId ?? undefined },
       ...withPermissionRequestOptions(config),
@@ -384,12 +393,14 @@ export async function getDepartmentChildren(
 }
 
 export async function searchDepartments(
+  resourceType: ResourceType,
+  resourceId: string,
   keyword: string,
   limit = 50,
   config?: { signal?: AbortSignal }
 ): Promise<GrantDepartmentSearchResult> {
   const res = await request.get(
-    `/api/v1/departments/search`,
+    `${permissionResourcePath(resourceType, resourceId)}/grant-subjects/departments/search`,
     {
       params: { keyword, limit },
       ...withPermissionRequestOptions(config),
@@ -402,13 +413,20 @@ export async function searchDepartments(
 // and the permission list reads the backend-resolved full-path subject_name.)
 
 export async function getUserGroups(
+  resourceType: ResourceType,
+  resourceId: string,
   config?: { signal?: AbortSignal }
-): Promise<any[]> {
+): Promise<{ id: number; group_name: string }[]> {
   const res = await request.get(
-    `/api/v1/group/list`,
-    withPermissionRequestOptions(config)
+    `${permissionResourcePath(resourceType, resourceId)}/grant-subjects/user-groups`,
+    {
+      params: { page: 1, page_size: 200 },
+      ...withPermissionRequestOptions(config),
+    }
   );
   const data = unwrap<any>(res);
-  const rows = data?.records ?? data;
-  return Array.isArray(rows) ? rows : [];
+  const rows = data?.data ?? data;
+  return Array.isArray(rows)
+    ? rows.map((row: any) => ({ id: row.id, group_name: row.name ?? row.group_name }))
+    : [];
 }

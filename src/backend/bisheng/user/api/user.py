@@ -453,9 +453,11 @@ async def list_user(
                 org_scoped_ids.update(tenant_scoped_ids)
 
         if not managed_groups:
-            # 仅部门 / 子租户管理员：仅能看其管辖范围内用户
-            if org_scoped_ids is None:
-                raise HTTPException(status_code=500, detail="Quit that! You don't have rights to view this.")
+            # 仅部门 / 子租户管理员：仅能看其管辖范围内用户。
+            # 「没有组织管辖范围」和「管辖范围为空」对调用方是同一件事——通过这个
+            # 接口你看不到任何人——所以同样返回空页，而不是 500。原先前者报错，
+            # 让持有资源 manage_permission 但不属于任何组织管理员角色的用户
+            # （例如知识空间管理员）在授权选人时直接拿到 500，对话框整个用不了。
             if not org_scoped_ids:
                 return resp_200({"data": [], "total": 0})
             user_ids = list(org_scoped_ids)

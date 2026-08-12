@@ -14,7 +14,7 @@ import { CirclePause } from "lucide-react";
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import GuideQuestions from "./GuideQuestions";
-import { resolveChatErrorMessage } from "./chatErrorMessage";
+import { isBlockingChatError, resolveChatErrorMessage } from "./chatErrorMessage";
 import { useMessageStore } from "./messageStore";
 
 export default function ChatInput({ clear, form, questions, inputForm, wsUrl, onBeforSend, onClickClear }) {
@@ -148,23 +148,24 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                     // console.log(`WebSocket get: ${Date.now()} 毫秒；与send差值${Date.now() - diffRef.current}毫秒`);
                     const data = JSON.parse(event.data);
 
-                    let errorMsg = ''
                     if (data.category === 'error') {
-                        errorMsg = resolveChatErrorMessage(data.message, t)
+                        const errorMsg = resolveChatErrorMessage(data.message, t)
                         toast({
                             variant: 'error',
                             description: errorMsg
                         })
-                    }
-                    // 异常类型处理，提示
-                    if (errorMsg) {
                         updateCurrentMessage({
                             type: 'end_cover',
                             category: 'tool',
                             message: "{}"
                         }, true)
                         setStop({ show: false, disable: false })
-                        return setInputLock({ locked: true, reason: errorMsg })
+                        // A runtime failure (model auth, tool error) is retryable: keep the input
+                        // usable instead of parking the raw error in its placeholder. Only a dead
+                        // conversation (assistant deleted / offline) locks the input.
+                        return setInputLock(isBlockingChatError(data.message)
+                            ? { locked: true, reason: errorMsg }
+                            : { locked: false, reason: '' })
                     }
                     // 拦截会话串台情况
                     if (currentChatIdRef.current && currentChatIdRef.current !== data.chat_id) return

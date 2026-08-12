@@ -1,4 +1,5 @@
 import axios from "@/controllers/request"
+import type { DepartmentSearchResult, DepartmentTreeNode } from "@/types/api/department"
 
 export type PermissionSubjectType = "user" | "department" | "user_group"
 
@@ -83,7 +84,7 @@ export interface PermissionCatalogChange {
 export interface CreatePermissionCatalogDraftRequest {
   idempotency_key: string
   base_release_id: number
-  change: PermissionCatalogChange
+  changes: PermissionCatalogChange[]
 }
 
 export interface PermissionCatalogImpact {
@@ -145,13 +146,14 @@ export interface PermissionGrantSource {
 }
 
 export interface PermissionGrantAssignee {
-  assignee_id: number
+  assignee_id: string
   assignee_version: number
   subject: PermissionGrantSubject
   model: GrantablePermissionModel
   source: PermissionGrantSource
   scope: "LOCAL" | "INHERITED"
   inherited_from: string | null
+  inherited_from_name?: string | null
   protected: boolean
   editable: boolean
 }
@@ -185,13 +187,13 @@ export type PermissionGrantMutationChange =
     }
   | {
       op: "MOVE"
-      assignee_id: number
+      assignee_id: string
       expected_assignee_version: number
       target_model_key: string
     }
   | {
       op: "REMOVE"
-      assignee_id: number
+      assignee_id: string
       expected_assignee_version: number
     }
 
@@ -354,4 +356,96 @@ export async function checkResourceActionApi(
   payload: CheckResourceActionRequest,
 ): Promise<{ allowed: boolean }> {
   return await axios.post(`/api/v1/permissions/check`, payload)
+}
+
+/**
+ * Grant-subject pickers.
+ *
+ * These ask "who may I grant this resource to", so the resource is part of the
+ * path and the predicate is `manage_permission` on it. Asking the
+ * org-management endpoints instead — which answer "which users do I
+ * administer" — left a space manager with an empty user list and a permission
+ * error on the department tree.
+ */
+
+export interface GrantSubjectUser {
+  user_id: number
+  user_name: string
+}
+
+export interface GrantSubjectUserGroup {
+  id: number
+  name: string
+}
+
+// The department picker's tree renders whatever the org-management tree returns,
+// so these endpoints answer in that same node shape and no adapter is needed.
+export type GrantSubjectDepartment = DepartmentTreeNode
+
+export async function getGrantSubjectUsersApi(
+  resourceType: PermissionResourceType,
+  resourceId: string,
+  params: { keyword?: string; page?: number; pageSize?: number } = {},
+  config: { signal?: AbortSignal } = {},
+): Promise<{ data: GrantSubjectUser[]; total: number }> {
+  return await axios.get(
+    `${permissionResourcePath(resourceType, resourceId)}/grant-subjects/users`,
+    {
+      params: {
+        keyword: params.keyword ?? "",
+        page: params.page ?? 1,
+        page_size: params.pageSize ?? 50,
+      },
+      signal: config.signal,
+    },
+  )
+}
+
+export async function getGrantSubjectUserGroupsApi(
+  resourceType: PermissionResourceType,
+  resourceId: string,
+  params: { keyword?: string; page?: number; pageSize?: number } = {},
+): Promise<{ data: GrantSubjectUserGroup[]; total: number }> {
+  return await axios.get(
+    `${permissionResourcePath(resourceType, resourceId)}/grant-subjects/user-groups`,
+    {
+      params: {
+        keyword: params.keyword ?? "",
+        page: params.page ?? 1,
+        page_size: params.pageSize ?? 50,
+      },
+    },
+  )
+}
+
+export async function getGrantSubjectDepartmentChildrenApi(
+  resourceType: PermissionResourceType,
+  resourceId: string,
+  parentId: number | null,
+): Promise<GrantSubjectDepartment[]> {
+  return await axios.get(
+    `${permissionResourcePath(resourceType, resourceId)}/grant-subjects/departments/children`,
+    { params: { parent_id: parentId ?? undefined } },
+  )
+}
+
+export async function searchGrantSubjectDepartmentsApi(
+  resourceType: PermissionResourceType,
+  resourceId: string,
+  keyword: string,
+): Promise<DepartmentSearchResult> {
+  return await axios.get(
+    `${permissionResourcePath(resourceType, resourceId)}/grant-subjects/departments/search`,
+    { params: { keyword } },
+  )
+}
+
+export async function getGrantSubjectDepartmentPathTreeApi(
+  resourceType: PermissionResourceType,
+  resourceId: string,
+  deptId: number,
+): Promise<DepartmentSearchResult> {
+  return await axios.get(
+    `${permissionResourcePath(resourceType, resourceId)}/grant-subjects/departments/${deptId}/path-tree`,
+  )
 }

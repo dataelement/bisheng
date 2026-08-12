@@ -2,6 +2,7 @@ import { Checkbox } from "@/components/bs-ui/checkBox"
 import { getUserGroupsApi } from "@/controllers/API/user"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { Search, Users } from "lucide-react"
+import { getGrantSubjectUserGroupsApi } from "@/controllers/API/permission"
 import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { ResourceType, SelectedSubject } from "./types"
@@ -22,6 +23,8 @@ interface SubjectSearchUserGroupProps {
 export function SubjectSearchUserGroup({
   value,
   onChange,
+  resourceType,
+  resourceId,
   disabledIds = [],
 }: SubjectSearchUserGroupProps) {
   const { t } = useTranslation('permission')
@@ -31,12 +34,20 @@ export function SubjectSearchUserGroup({
 
   useEffect(() => {
     setLoading(true)
-    const request = getUserGroupsApi({})
+    // Scoped to the resource when we know it: the org-management list answers
+    // "which groups do I administer", which a resource manager may administer
+    // none of.
+    const request =
+      resourceType && resourceId
+        ? getGrantSubjectUserGroupsApi(resourceType, resourceId, { pageSize: 200 }).then((res) =>
+            (res?.data || []).map((row) => ({ id: row.id, group_name: row.name })),
+          )
+        : getUserGroupsApi({})
     captureAndAlertRequestErrorHoc(request).then((res) => {
       if (res) setGroups(Array.isArray(res) ? res : [])
       setLoading(false)
     })
-  }, [])
+  }, [resourceId, resourceType])
 
   const filtered = useMemo(() => {
     if (!keyword) return groups

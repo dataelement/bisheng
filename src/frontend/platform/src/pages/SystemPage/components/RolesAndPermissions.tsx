@@ -68,8 +68,9 @@ interface ModelCatalogPanelProps {
   selectedModelKey: string | null
   onSelectModel: (modelKey: string) => void
   onCreateDraft: (
-    change: PermissionCatalogChange,
+    changes: PermissionCatalogChange[],
   ) => Promise<PermissionCatalogDraft>
+  onDeleteModel: (modelKey: string, wasActive: boolean) => Promise<void>
   onReviewImpact: (draft: PermissionCatalogDraft) => void
 }
 
@@ -90,6 +91,7 @@ function ModelCatalogPanel({
   selectedModelKey,
   onSelectModel,
   onCreateDraft,
+  onDeleteModel,
   onReviewImpact,
 }: ModelCatalogPanelProps) {
   const { t } = useTranslation("permission")
@@ -105,10 +107,10 @@ function ModelCatalogPanel({
   }, [catalog.id])
 
   return (
-    <div className="grid min-h-0 gap-4 lg:grid-cols-[16rem_minmax(0,1fr)]">
+    <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[16rem_minmax(0,1fr)]">
       <aside
         aria-label={t("model.list")}
-        className="min-h-0 rounded-xl border bg-muted/20 p-3"
+        className="flex min-h-0 flex-col rounded-xl border bg-muted/20 p-3"
       >
         <div className="flex items-center justify-between gap-2 px-2 pb-3">
           <h2 className="text-sm font-semibold text-foreground">
@@ -125,7 +127,8 @@ function ModelCatalogPanel({
             {t("model.create")}
           </Button>
         </div>
-        <div className="flex max-h-[60vh] flex-col gap-1 overflow-y-auto">
+        {/* The list scrolls on its own so the editor beside it keeps its own scrollbar. */}
+        <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto">
           {catalog.models.map((model: PermissionCatalogModel) => (
             <button
               key={model.key}
@@ -153,10 +156,11 @@ function ModelCatalogPanel({
           presets={catalog.presets ?? []}
           createMode={creating}
           onCreateDraft={onCreateDraft}
+          onDeleteModel={onDeleteModel}
           onReviewImpact={onReviewImpact}
         />
       ) : (
-        <p className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
+        <p className="min-h-0 rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
           {t("model.empty")}
         </p>
       )}
@@ -205,19 +209,53 @@ export function RolesAndPermissions() {
   }, [isPlatformSuperAdmin, loadCatalog])
 
   const handleCreateDraft = async (
-    change: PermissionCatalogChange,
+    changes: PermissionCatalogChange[],
   ): Promise<PermissionCatalogDraft> => {
     if (!catalog) throw new Error("permission Catalog is not loaded")
     return await createPermissionCatalogDraftApi({
       idempotency_key: createIdempotencyKey("catalog-draft"),
       base_release_id: catalog.id,
-      change,
+      changes,
     })
   }
 
   const handleReviewImpact = (draft: PermissionCatalogDraft) => {
     setImpactDraft(draft)
     setImpactOpen(true)
+  }
+
+  /** Delete a model in one go: draft the removal and publish it immediately.
+   *
+   * Deleting used to mean deactivate, publish, delete, publish — four steps for
+   * one removal, and the middle publish was easy to skip, leaving the model in
+   * place. A deletable model is inactive and referenced by no grant, so there is
+   * nothing for a separate impact review to weigh.
+   */
+  const handleDeleteModel = async (modelKey: string, wasActive: boolean) => {
+    if (!catalog) throw new Error("permission Catalog is not loaded")
+    const changes: PermissionCatalogChange[] = wasActive
+      ? [
+          { type: "SET_MODEL_ACTIVE", model_key: modelKey, active: false },
+          { type: "DELETE_MODEL", model_key: modelKey },
+        ]
+      : [{ type: "DELETE_MODEL", model_key: modelKey }]
+    try {
+      const draft = await handleCreateDraft(changes)
+      await handlePublish(draft.draft_id, {
+        expected_current_release_id: catalog.id,
+        idempotency_key: createIdempotencyKey("catalog-publish"),
+        confirmed: true,
+      })
+      setSelectedModelKey(null)
+    } catch {
+      // Nothing else reports this: the request layer only auto-toasts a couple of
+      // special codes, and a failed publish would otherwise close the dialog and
+      // leave the model in place with no explanation.
+      message({
+        variant: "error",
+        description: t("model.deleteFailed"),
+      })
+    }
   }
 
   const handlePublish = async (
@@ -264,9 +302,11 @@ export function RolesAndPermissions() {
 
         {isPlatformSuperAdmin && (
           <>
+            {/* overflow-hidden, not auto: each board owns its single scroll area,
+                otherwise the tab pane scrolls on top of it. */}
             <TabsContent
               value="actions"
-              className="min-h-0 flex-1 overflow-auto py-2"
+              className="flex min-h-0 flex-1 flex-col overflow-hidden py-2"
             >
               <CatalogState
                 loading={loading}
@@ -283,7 +323,7 @@ export function RolesAndPermissions() {
             </TabsContent>
             <TabsContent
               value="models"
-              className="min-h-0 flex-1 overflow-auto py-2"
+              className="flex min-h-0 flex-1 flex-col overflow-hidden py-2"
             >
               <CatalogState
                 loading={loading}
@@ -296,6 +336,7 @@ export function RolesAndPermissions() {
                   selectedModelKey={selectedModelKey}
                   onSelectModel={setSelectedModelKey}
                   onCreateDraft={handleCreateDraft}
+                  onDeleteModel={handleDeleteModel}
                   onReviewImpact={handleReviewImpact}
                 />
               )}

@@ -1,6 +1,6 @@
 import { ImpactDialog } from "@/pages/SystemPage/components/permission/ImpactDialog"
 import { ModelEditor } from "@/pages/SystemPage/components/permission/ModelEditor"
-import { fireEvent, render, screen, waitFor } from "@/test/test-utils"
+import { fireEvent, render, screen, selectOption, waitFor } from "@/test/test-utils"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const actions = [
@@ -77,8 +77,14 @@ const draft = {
   },
 }
 
+vi.mock("@/components/bs-ui/alertDialog/useConfirm", () => ({
+  bsConfirm: (params: { onOk?: (next: () => void) => void }) =>
+    params.onOk?.(() => {}),
+}))
+
 describe("ModelEditor", () => {
   const onCreateDraft = vi.fn()
+  const onDeleteModel = vi.fn()
   const onReviewImpact = vi.fn()
   const onInitializePreset = vi.fn()
 
@@ -93,6 +99,7 @@ describe("ModelEditor", () => {
         model={standardModel}
         actions={actions}
         onCreateDraft={onCreateDraft}
+        onDeleteModel={onDeleteModel}
         onReviewImpact={onReviewImpact}
       />,
     )
@@ -106,11 +113,13 @@ describe("ModelEditor", () => {
     fireEvent.click(screen.getByRole("button", { name: "model.save" }))
 
     await waitFor(() => {
-      expect(onCreateDraft).toHaveBeenCalledWith({
-        type: "SET_ALLOW_SAME_LEVEL",
-        model_key: "manager",
-        allow_same_level: true,
-      })
+      expect(onCreateDraft).toHaveBeenCalledWith([
+        {
+          type: "SET_ALLOW_SAME_LEVEL",
+          model_key: "manager",
+          allow_same_level: true,
+        },
+      ])
     })
   })
 
@@ -120,6 +129,7 @@ describe("ModelEditor", () => {
         model={customModel}
         actions={actions}
         onCreateDraft={onCreateDraft}
+        onDeleteModel={onDeleteModel}
         onReviewImpact={onReviewImpact}
       />,
     )
@@ -137,19 +147,21 @@ describe("ModelEditor", () => {
     fireEvent.click(screen.getByRole("button", { name: "model.save" }))
 
     await waitFor(() => {
-      expect(onCreateDraft).toHaveBeenCalledWith({
-        type: "UPDATE_MODEL",
-        model_key: "collaborator",
-        name: "Workflow collaborator",
-        action_codes: ["visible", "edit"],
-        active: false,
-        allow_same_level: false,
-      })
+      expect(onCreateDraft).toHaveBeenCalledWith([
+        {
+          type: "UPDATE_MODEL",
+          model_key: "collaborator",
+          name: "Workflow collaborator",
+          action_codes: ["visible", "edit"],
+          active: false,
+          allow_same_level: false,
+        },
+      ])
     })
     expect(screen.getByTestId("model-derived-level")).toHaveTextContent("2")
   })
 
-  it("disables same-level without manage_permission and copies preset actions", () => {
+  it("disables same-level without manage_permission and copies preset actions", async () => {
     render(
       <ModelEditor
         model={{
@@ -167,14 +179,13 @@ describe("ModelEditor", () => {
         ]}
         onInitializePreset={onInitializePreset}
         onCreateDraft={onCreateDraft}
+        onDeleteModel={onDeleteModel}
         onReviewImpact={onReviewImpact}
       />,
     )
 
     expect(screen.getByLabelText("model.allowSameLevel")).toBeDisabled()
-    fireEvent.change(screen.getByLabelText("model.preset.label"), {
-      target: { value: "reviewer" },
-    })
+    await selectOption("model.preset.label", "Reviewer")
     fireEvent.click(
       screen.getByRole("button", { name: "model.preset.apply" }),
     )
@@ -185,6 +196,60 @@ describe("ModelEditor", () => {
     })
     expect(screen.getByLabelText("model.action.edit")).toBeChecked()
     expect(screen.getByTestId("model-derived-level")).toHaveTextContent("2")
+  })
+
+  it("offers a blank preset that clears the selection", async () => {
+    // Picking the placeholder only disabled the button, so a model could gain
+    // actions from a preset but never be emptied again.
+    render(
+      <ModelEditor
+        model={{
+          ...customModel,
+          action_codes: ["visible", "edit"],
+          derived_level: 2,
+        }}
+        actions={actions}
+        presets={[
+          { key: "reviewer", name: "Reviewer", action_codes: ["visible", "edit"] },
+        ]}
+        onInitializePreset={onInitializePreset}
+        onCreateDraft={onCreateDraft}
+        onDeleteModel={onDeleteModel}
+        onReviewImpact={onReviewImpact}
+      />,
+    )
+
+    expect(screen.getByLabelText("model.action.edit")).toBeChecked()
+
+    await selectOption("model.preset.label", "model.preset.blank")
+    fireEvent.click(screen.getByRole("button", { name: "model.preset.apply" }))
+
+    expect(screen.getByLabelText("model.action.edit")).not.toBeChecked()
+    expect(screen.getByLabelText("model.action.visible")).not.toBeChecked()
+    expect(onInitializePreset).toHaveBeenCalledWith({
+      key: "__blank__",
+      name: "model.preset.blank",
+      action_codes: [],
+    })
+  })
+
+  it("offers the blank preset even when the server ships none", async () => {
+    render(
+      <ModelEditor
+        model={{ ...customModel, action_codes: ["edit"], derived_level: 2 }}
+        actions={actions}
+        presets={[]}
+        onInitializePreset={onInitializePreset}
+        onCreateDraft={onCreateDraft}
+        onDeleteModel={onDeleteModel}
+        onReviewImpact={onReviewImpact}
+      />,
+    )
+
+    await selectOption("model.preset.label", "model.preset.blank")
+    fireEvent.click(screen.getByRole("button", { name: "model.preset.apply" }))
+
+    expect(screen.getByLabelText("model.action.edit")).not.toBeChecked()
   })
 
   it("creates only a non-empty custom model", async () => {
@@ -201,6 +266,7 @@ describe("ModelEditor", () => {
         }}
         actions={actions}
         onCreateDraft={onCreateDraft}
+        onDeleteModel={onDeleteModel}
         onReviewImpact={onReviewImpact}
       />,
     )
@@ -216,44 +282,79 @@ describe("ModelEditor", () => {
     fireEvent.click(save)
 
     await waitFor(() => {
-      expect(onCreateDraft).toHaveBeenCalledWith({
-        type: "CREATE_MODEL",
-        name: "Reviewer",
-        action_codes: ["visible"],
-        active: true,
-        allow_same_level: false,
-      })
+      expect(onCreateDraft).toHaveBeenCalledWith([
+        {
+          type: "CREATE_MODEL",
+          name: "Reviewer",
+          action_codes: ["visible"],
+          active: true,
+          allow_same_level: false,
+        },
+      ])
     })
   })
 
-  it("allows deletion only after a custom model is inactive", async () => {
-    const { rerender } = render(
-      <ModelEditor
-        model={customModel}
-        actions={actions}
-        onCreateDraft={onCreateDraft}
-        onReviewImpact={onReviewImpact}
-      />,
-    )
-
-    expect(
-      screen.getByRole("button", { name: "model.delete" }),
-    ).toBeDisabled()
-
-    rerender(
+  it("says a drafted change is unpublished instead of implying it landed", async () => {
+    // Saving drafts the change; nothing lands until it is published, and the
+    // strip used to report only the impact volume.
+    render(
       <ModelEditor
         model={{ ...customModel, active: false }}
         actions={actions}
         onCreateDraft={onCreateDraft}
+        onDeleteModel={onDeleteModel}
         onReviewImpact={onReviewImpact}
       />,
     )
+
+    fireEvent.click(screen.getByLabelText("model.action.edit"))
+    fireEvent.click(screen.getByRole("button", { name: "model.save" }))
+
+    const status = await screen.findByRole("status")
+    expect(status).toHaveTextContent("impact.unpublished")
+    expect(
+      screen.getByRole("button", { name: "impact.publishChanges" }),
+    ).toBeInTheDocument()
+  })
+
+  it("deletes in one action, carrying its own deactivation", async () => {
+    // Deleting used to mean deactivate, publish, delete, publish. The middle
+    // publish was easy to skip, and the model then survived the refresh.
+    render(
+      <ModelEditor
+        model={customModel}
+        actions={actions}
+        onCreateDraft={onCreateDraft}
+        onDeleteModel={onDeleteModel}
+        onReviewImpact={onReviewImpact}
+      />,
+    )
+
+    expect(screen.getByRole("button", { name: "model.delete" })).toBeEnabled()
     fireEvent.click(screen.getByRole("button", { name: "model.delete" }))
+
     await waitFor(() => {
-      expect(onCreateDraft).toHaveBeenCalledWith({
-        type: "DELETE_MODEL",
-        model_key: "collaborator",
-      })
+      expect(onDeleteModel).toHaveBeenCalledWith(customModel.key, true)
+    })
+    // No draft is left dangling for someone to publish later.
+    expect(onCreateDraft).not.toHaveBeenCalled()
+  })
+
+  it("tells an already-inactive model apart so it is not deactivated twice", async () => {
+    render(
+      <ModelEditor
+        model={{ ...customModel, active: false }}
+        actions={actions}
+        onCreateDraft={onCreateDraft}
+        onDeleteModel={onDeleteModel}
+        onReviewImpact={onReviewImpact}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole("button", { name: "model.delete" }))
+
+    await waitFor(() => {
+      expect(onDeleteModel).toHaveBeenCalledWith(customModel.key, false)
     })
   })
 
@@ -267,6 +368,7 @@ describe("ModelEditor", () => {
         }}
         actions={actions}
         onCreateDraft={onCreateDraft}
+        onDeleteModel={onDeleteModel}
         onReviewImpact={onReviewImpact}
       />,
     )

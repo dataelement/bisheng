@@ -138,15 +138,21 @@ class NodeManager:
             await asyncio.sleep(self.interval)
 
     async def register_task_ownership(self, session_version_id):
-        """Register task ownership to this node"""
+        """Register task ownership to this node.
+
+        The key is never deleted explicitly — it expires via its TTL, and a
+        re-queued task (resume / follow-up) overwrites it with the node that
+        picked it up. Do NOT add a release-on-park counterpart: park-and-release
+        frees the concurrency semaphore, not the ownership key. Deleting the key
+        while the session row is still IN_PROGRESS makes the worker-startup sweep
+        (``check_and_terminate_incomplete_tasks``) hit its ``not owner_node_id``
+        branch and fail the task with "Worker node crash detected". Parked tasks
+        stay out of that sweep via the WAITING_FOR_USER_INPUT session status
+        instead (see ``task_exec._handle_need_user_input``).
+        """
         key = f"linsight:task:owner:{session_version_id}"
         # Set the node ID as the owner of the task with a TTL
         await self.redis.aset(key, self.node_id, expiration=86400)  # 1 day expiration
-
-    async def release_task_ownership(self, session_version_id):
-        """Release task ownership"""
-        key = f"linsight:task:owner:{session_version_id}"
-        await self.redis.adelete(key)
 
     async def is_node_alive(self, target_node_id):
         """Check if a target node is alive based on its heartbeat"""

@@ -541,7 +541,19 @@
     "confirmed": "已确认",
     "confirm": "确认",
     "runNewWorkflow": "开启新会话",
-    "chatEndMessage": "本轮会话已结束"
+    "chatEndMessage": "本轮会话已结束",
+    "runLog": {
+      "used": "已使用",
+      "using": "正在使用",
+      "searched": "已搜索",
+      "searching": "正在搜索",
+      "done": "完成",
+      "thinking": "思考中",
+      "flowOffline": "{{name}} 已下线",
+      "flowDeleted": "技能已被删除，无法获取技能名",
+      "toolDeleted": "工具已被删除，无法获取工具名",
+      "knowledgeDeleted": "知识库已被删除，无法获取知识库名"
+    }
   },
   "model": {
     "addSuccess": "添加成功",

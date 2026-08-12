@@ -1,6 +1,20 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { resolveChatErrorMessage } from "@/components/bs-comp/chatComponent/chatErrorMessage";
+import { isBlockingChatError, resolveChatErrorMessage } from "@/components/bs-comp/chatComponent/chatErrorMessage";
+
+describe("isBlockingChatError", () => {
+    it("treats a deleted or offline assistant as blocking", () => {
+        expect(isBlockingChatError({ status_code: 10420 })).toBe(true);
+        expect(isBlockingChatError({ status_code: 10421 })).toBe(true);
+    });
+
+    it("treats runtime failures as retryable", () => {
+        expect(isBlockingChatError({ status_code: 10499 })).toBe(false);
+        expect(isBlockingChatError({ status_code: 10401 })).toBe(false);
+        expect(isBlockingChatError({ status_message: "Connection failed" })).toBe(false);
+        expect(isBlockingChatError(null)).toBe(false);
+    });
+});
 
 describe("resolveChatErrorMessage", () => {
     it("uses the localized status-code message instead of the backend language", () => {

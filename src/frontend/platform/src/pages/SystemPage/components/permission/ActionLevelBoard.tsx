@@ -1,4 +1,11 @@
 import { Button } from "@/components/bs-ui/button"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/bs-ui/select"
 import { Switch } from "@/components/bs-ui/switch"
 import type {
   PermissionActionLevel,
@@ -10,12 +17,13 @@ import { cn } from "@/utils"
 import { GripVertical, ShieldAlert } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { actionLabel, resourceTypeLabel } from "./actionLabels"
 
 interface ActionLevelBoardProps {
   actions: PermissionCatalogAction[]
   disabled?: boolean
   onCreateDraft: (
-    change: PermissionCatalogChange,
+    changes: PermissionCatalogChange[],
   ) => Promise<PermissionCatalogDraft>
   onReviewImpact: (draft: PermissionCatalogDraft) => void
 }
@@ -50,10 +58,10 @@ export function ActionLevelBoard({
   const normalizedActions = useMemo(() => uniqueActions(actions), [actions])
   const [levels, setLevels] = useState<Record<string, ActionLevelValue>>({})
   const [activeStates, setActiveStates] = useState<Record<string, boolean>>({})
-  const [pendingCode, setPendingCode] = useState<string | null>(null)
-  const [draft, setDraft] = useState<PermissionCatalogDraft | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+  const [draftFailed, setDraftFailed] = useState(false)
 
-  useEffect(() => {
+  const resetToRelease = () => {
     setLevels(
       Object.fromEntries(
         normalizedActions.map((action) => [action.code, action.level]),
@@ -64,64 +72,68 @@ export function ActionLevelBoard({
         normalizedActions.map((action) => [action.code, action.active]),
       ),
     )
-    setDraft(null)
-  }, [normalizedActions])
-
-  const createDraft = async (
-    actionCode: string,
-    change: PermissionCatalogChange,
-    applyLocalState: () => void,
-  ) => {
-    if (disabled || pendingCode) return
-    setPendingCode(actionCode)
-    try {
-      const nextDraft = await onCreateDraft(change)
-      applyLocalState()
-      setDraft(nextDraft)
-    } finally {
-      setPendingCode(null)
-    }
+    setDraftFailed(false)
   }
 
-  const handleLevelChange = (
-    actionCode: string,
-    level: ActionLevelValue,
-  ) => {
-    if (levels[actionCode] === level) return
-    void createDraft(
-      actionCode,
-      {
-        type: "ASSIGN_ACTION_LEVEL",
-        action_code: actionCode,
-        level,
-      },
-      () => setLevels((current) => ({ ...current, [actionCode]: level })),
-    )
+  useEffect(resetToRelease, [normalizedActions])
+
+  // Derived from the diff against the published release rather than accumulated
+  // per edit, so moving a card back where it came from drops the change instead
+  // of queueing a second one.
+  const pendingChanges = useMemo<PermissionCatalogChange[]>(() => {
+    const changes: PermissionCatalogChange[] = []
+    for (const action of normalizedActions) {
+      const level = levels[action.code]
+      if (level !== undefined && level !== action.level) {
+        changes.push({
+          type: "ASSIGN_ACTION_LEVEL",
+          action_code: action.code,
+          level,
+        })
+      }
+      const active = activeStates[action.code]
+      if (active !== undefined && active !== action.active) {
+        changes.push({
+          type: "SET_ACTION_ACTIVE",
+          action_code: action.code,
+          active,
+        })
+      }
+    }
+    return changes
+  }, [normalizedActions, levels, activeStates])
+
+  const handleLevelChange = (actionCode: string, level: ActionLevelValue) => {
+    if (disabled || submitting || levels[actionCode] === level) return
+    setDraftFailed(false)
+    setLevels((current) => ({ ...current, [actionCode]: level }))
   }
 
   const handleActiveChange = (actionCode: string, active: boolean) => {
-    if (activeStates[actionCode] === active) return
-    void createDraft(
-      actionCode,
-      {
-        type: "SET_ACTION_ACTIVE",
-        action_code: actionCode,
-        active,
-      },
-      () =>
-        setActiveStates((current) => ({
-          ...current,
-          [actionCode]: active,
-        })),
-    )
+    if (disabled || submitting || activeStates[actionCode] === active) return
+    setDraftFailed(false)
+    setActiveStates((current) => ({ ...current, [actionCode]: active }))
+  }
+
+  const handlePublishChanges = async () => {
+    if (submitting || pendingChanges.length === 0) return
+    setSubmitting(true)
+    setDraftFailed(false)
+    try {
+      onReviewImpact(await onCreateDraft(pendingChanges))
+    } catch {
+      setDraftFailed(true)
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
     <section
       aria-label={t("actionLevel.title")}
-      className="flex min-h-0 flex-col gap-4"
+      className="flex h-full min-h-0 flex-col gap-4"
     >
-      <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="flex shrink-0 flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-base font-semibold text-foreground">
             {t("actionLevel.title")}
@@ -130,33 +142,52 @@ export function ActionLevelBoard({
             {t("actionLevel.description")}
           </p>
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          className="min-h-11"
-          disabled={!draft || Boolean(pendingCode)}
-          onClick={() => draft && onReviewImpact(draft)}
-        >
-          {t("impact.review")}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-11"
+            disabled={pendingChanges.length === 0 || submitting}
+            onClick={resetToRelease}
+          >
+            {t("actionLevel.discardChanges")}
+          </Button>
+          <Button
+            type="button"
+            className="min-h-11"
+            disabled={pendingChanges.length === 0 || submitting}
+            onClick={() => void handlePublishChanges()}
+          >
+            {t("actionLevel.publishChanges")}
+          </Button>
+        </div>
       </div>
 
-      {draft && (
+      {pendingChanges.length > 0 && (
         <div
-          className="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900"
+          className="flex shrink-0 items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900"
           role="status"
         >
           <ShieldAlert aria-hidden="true" className="size-4 shrink-0" />
           <span>
-            {t("impact.pending", {
-              resources: draft.impact.resource_count,
-              grants: draft.impact.grant_count,
+            {t("actionLevel.pendingChanges", {
+              count: pendingChanges.length,
             })}
           </span>
         </div>
       )}
 
-      <div className="grid min-h-0 gap-3 xl:grid-cols-5">
+      {draftFailed && (
+        <p
+          className="shrink-0 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900"
+          role="alert"
+        >
+          {t("actionLevel.draftFailed")}
+        </p>
+      )}
+
+      {/* The only scroll area on this tab: the level columns, header and banners stay put. */}
+      <div className="grid min-h-0 flex-1 gap-3 overflow-y-auto pr-1 xl:grid-cols-5">
         {LEVELS.map((level) => {
           const key = levelKey(level)
           const zoneActions = normalizedActions.filter(
@@ -202,20 +233,19 @@ export function ActionLevelBoard({
               <div className="flex flex-col gap-2">
                 {zoneActions.map((action) => {
                   const active = activeStates[action.code] ?? action.active
-                  const pending = pendingCode === action.code
                   return (
                     <article
                       key={action.code}
                       data-testid={`permission-action-${action.code}`}
                       data-model-eligible={String(level !== null && active)}
-                      draggable={!disabled && !pendingCode}
+                      draggable={!disabled && !submitting}
                       onDragStart={(event) => {
                         event.dataTransfer.effectAllowed = "move"
                         event.dataTransfer.setData("text/plain", action.code)
                       }}
                       className={cn(
                         "rounded-lg border bg-background p-3 shadow-sm transition-opacity",
-                        pending && "opacity-60",
+                        submitting && "opacity-60",
                       )}
                     >
                       <div className="flex items-start gap-2">
@@ -227,7 +257,7 @@ export function ActionLevelBoard({
                           <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0">
                               <p className="truncate text-sm font-medium text-foreground">
-                                {action.name}
+                                {actionLabel(t, action.code, action.name)}
                               </p>
                               <p className="truncate text-xs text-muted-foreground">
                                 {action.code}
@@ -236,7 +266,7 @@ export function ActionLevelBoard({
                             <Switch
                               aria-label={`${t("actionLevel.active")}.${action.code}`}
                               checked={active}
-                              disabled={disabled || pending}
+                              disabled={disabled || submitting}
                               onCheckedChange={(checked) =>
                                 handleActiveChange(action.code, checked)
                               }
@@ -255,41 +285,44 @@ export function ActionLevelBoard({
                                 key={resourceType}
                                 className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground"
                               >
-                                {resourceType}
+                                {resourceTypeLabel(t, resourceType)}
                               </span>
                             ))}
                           </div>
 
-                          <label className="mt-3 block text-xs font-medium text-muted-foreground">
-                            <span className="sr-only">
-                              {`${t("actionLevel.change")}.${action.code}`}
-                            </span>
-                            <select
-                              aria-label={`${t("actionLevel.change")}.${action.code}`}
-                              value={level ?? "UNASSIGNED"}
-                              disabled={disabled || pending}
-                              onChange={(event) =>
+                          <div className="mt-3">
+                            <Select
+                              value={String(level ?? "UNASSIGNED")}
+                              disabled={disabled || submitting}
+                              onValueChange={(value) =>
                                 handleLevelChange(
                                   action.code,
-                                  event.target.value === "UNASSIGNED"
+                                  value === "UNASSIGNED"
                                     ? null
                                     : (Number(
-                                        event.target.value,
+                                        value,
                                       ) as PermissionActionLevel),
                                 )
                               }
-                              className="min-h-11 w-full rounded-md border border-input bg-background px-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                             >
-                              <option value="UNASSIGNED">
-                                {t("actionLevel.unassigned")}
-                              </option>
-                              {[1, 2, 3, 4].map((value) => (
-                                <option key={value} value={value}>
-                                  {t("actionLevel.level", { level: value })}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
+                              <SelectTrigger
+                                aria-label={`${t("actionLevel.change")}.${action.code}`}
+                                className="min-h-11 w-full bg-background"
+                              >
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="UNASSIGNED">
+                                  {t("actionLevel.unassigned")}
+                                </SelectItem>
+                                {[1, 2, 3, 4].map((value) => (
+                                  <SelectItem key={value} value={String(value)}>
+                                    {t("actionLevel.level", { level: value })}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
                         </div>
                       </div>
                     </article>

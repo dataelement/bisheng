@@ -546,7 +546,19 @@
     "confirmed": "Confirmed",
     "confirm": "Confirm",
     "runNewWorkflow": "Run New Chat",
-    "chatEndMessage": "This chat has ended"
+    "chatEndMessage": "This chat has ended",
+    "runLog": {
+      "used": "Used",
+      "using": "Using",
+      "searched": "Searched",
+      "searching": "Searching",
+      "done": "Done",
+      "thinking": "Thinking",
+      "flowOffline": "{{name}} is offline",
+      "flowDeleted": "The skill has been deleted, its name is unavailable",
+      "toolDeleted": "The tool has been deleted, its name is unavailable",
+      "knowledgeDeleted": "The knowledge base has been deleted, its name is unavailable"
+    }
   },
   "importLinsight": {
     "title": "Import Guidebook from Run Records",

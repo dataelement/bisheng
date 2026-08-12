@@ -58,6 +58,18 @@ class PermissionSubjectDirectoryPort(Protocol):
         subjects: tuple[tuple[str, str], ...],
     ) -> dict[tuple[str, str], str]: ...
 
+    async def resource_display_names(
+        self,
+        resources: tuple[tuple[str, str], ...],
+    ) -> dict[tuple[str, str], str]: ...
+
+
+
+def _split_resource_key(resource_key: str) -> tuple[str, str]:
+    """Split "knowledge_space:3377" into its type and id."""
+
+    resource_type, _, resource_id = resource_key.partition(":")
+    return resource_type, resource_id
 
 def _encode_cursor(payload: dict[str, object]) -> str:
     raw = json.dumps(
@@ -180,10 +192,19 @@ class F048ResourcePermissionApi:
         names = await self._subjects.display_names(
             tuple(dict.fromkeys((row.subject_type, row.subject_id) for row in selected))
         )
+        # The permission layer holds a resource's identity, never its label — the
+        # roster used to render "knowledge_space:3377" at users. Resolved through
+        # the business side, the same way subject names already are.
+        parents = tuple(
+            dict.fromkeys(
+                _split_resource_key(row.inherited_from) for row in selected if row.inherited_from
+            )
+        )
+        parent_names = await self._subjects.resource_display_names(parents) if parents else {}
         model_names = {item.snapshot.model_key: item.name for item in catalog.models}
         data = [
             {
-                "assignee_id": row.source_id,
+                "assignee_id": str(row.source_id),
                 "assignee_version": row.source_version,
                 "subject": {
                     "type": row.subject_type,
@@ -205,6 +226,9 @@ class F048ResourcePermissionApi:
                 },
                 "scope": row.scope,
                 "inherited_from": row.inherited_from,
+                "inherited_from_name": (
+                    parent_names.get(_split_resource_key(row.inherited_from)) if row.inherited_from else None
+                ),
                 "protected": row.protected,
                 "editable": row.editable,
             }
@@ -294,7 +318,7 @@ class F048ResourcePermissionApi:
                     operation=change.op.value,
                     model_key=change.model_key,
                     source=source,
-                    assignee_id=change.assignee_id,
+                    assignee_id=change.assignee_row_id,
                     expected_assignee_version=(change.expected_assignee_version),
                     target_model_key=change.target_model_key,
                 )
@@ -309,7 +333,7 @@ class F048ResourcePermissionApi:
         )
         items = [
             {
-                "assignee_id": source.source_id,
+                "assignee_id": str(source.source_id),
                 "assignee_version": source.version,
                 "subject": {
                     "type": source.subject_type,
@@ -370,7 +394,10 @@ class F048ResourcePermissionApi:
             "draft_id": draft.draft_id,
             "target_mode": draft.target_mode,
             "impact_checksum": draft.impact_checksum,
-            "affected_assignees": len(draft.snapshot_sources),
+            # Either direction disturbs people: CUSTOM copies the inherited members
+            # down, INHERIT drops the local ones. Counting only the copies reported
+            # zero for a switch that was about to remove grants.
+            "affected_assignees": (len(draft.snapshot_sources) + len(draft.discarded_sources)),
             "expires_at": (datetime.now(UTC) + timedelta(minutes=10)).isoformat(),
         }
 

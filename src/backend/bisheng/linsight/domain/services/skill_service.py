@@ -24,6 +24,7 @@ from bisheng.common.errcode.linsight import (
 )
 from bisheng.common.schemas.api import PageData
 from bisheng.linsight.domain.models.linsight_skill import (
+    SKILL_SOURCE_BUILTIN,
     SKILL_SOURCE_MANUAL,
     LinsightSkill,
     LinsightSkillDao,
@@ -199,6 +200,18 @@ class SkillService:
         detail.normalized_from = meta.normalized_from
         return detail
 
+    @staticmethod
+    def _mark_forked(skill) -> None:
+        """An edited built-in skill becomes this tenant's own copy.
+
+        The startup seeder refreshes ``source='builtin'`` rows from the image on
+        every boot. Leaving the marker on an edited skill would silently revert
+        the customer's changes at the next upgrade, so the first edit opts that
+        copy out of re-seeding for good.
+        """
+        if skill.source == SKILL_SOURCE_BUILTIN:
+            skill.source = SKILL_SOURCE_MANUAL
+
     async def update_from_form(self, tenant_id: int, name: str, form: SkillCreateForm) -> SkillDetail:
         skill = await self._get_or_404(name)
         if form.name != name:
@@ -213,6 +226,7 @@ class SkillService:
         files[SKILL_MD] = new_md
         size = self.store.write_bundle(tenant_id, name, files)
         skill.display_name, skill.description, skill.size = form.display_name, form.description, size
+        self._mark_forked(skill)
         await LinsightSkillDao.update(skill)
         return await self.get_detail(tenant_id, name)
 
@@ -225,6 +239,7 @@ class SkillService:
         await self._check_duplicate(name, meta.display_name, exclude_id=skill.id)
         size = self.store.write_bundle(tenant_id, name, files)
         skill.display_name, skill.description, skill.size = meta.display_name, meta.description, size
+        self._mark_forked(skill)
         await LinsightSkillDao.update(skill)
         detail = await self.get_detail(tenant_id, name)
         detail.normalized_from = meta.normalized_from

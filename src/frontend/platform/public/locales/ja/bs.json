@@ -536,7 +536,19 @@
     "confirmed": "確定済み",
     "confirm": "確定",
     "runNewWorkflow": "新しい会話を開始",
-    "chatEndMessage": "この会話は終了しました"
+    "chatEndMessage": "この会話は終了しました",
+    "runLog": {
+      "used": "使用済み",
+      "using": "使用中",
+      "searched": "検索済み",
+      "searching": "検索中",
+      "done": "完了",
+      "thinking": "思考中",
+      "flowOffline": "{{name}} はオフラインです",
+      "flowDeleted": "スキルが削除されているため、スキル名を取得できません",
+      "toolDeleted": "ツールが削除されているため、ツール名を取得できません",
+      "knowledgeDeleted": "ナレッジベースが削除されているため、名称を取得できません"
+    }
   },
   "model": {
     "addSuccess": "追加に成功しました",

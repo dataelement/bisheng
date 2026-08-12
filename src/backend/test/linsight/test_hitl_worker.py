@@ -190,7 +190,6 @@ def _make_worker(queue, fake_redis):
     node_manager = MagicMock()
     node_manager.node_id = "node-test"
     node_manager.register_task_ownership = AsyncMock()
-    node_manager.release_task_ownership = AsyncMock()
     worker.node_manager = node_manager
     return worker
 

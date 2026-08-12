@@ -1236,6 +1236,31 @@ class DepartmentService:
         return {"roots": roots, "total_matches": 1, "truncated": False}
 
     @classmethod
+    async def abuild_forest_within_subtree(
+        cls,
+        seeds,
+        matched_ids: set[int],
+        *,
+        confined_to_path: str | None = None,
+        include_archived: bool = False,
+    ) -> list[dict]:
+        """The same pruned-forest assembly, for a caller whose scope is a
+        department subtree rather than an administrator's scope.
+
+        The grant-subject pickers (F048) ask "who may be granted this resource",
+        so their visibility is the resource's own department binding — not who
+        the caller administers. ``confined_to_path=None`` means the whole tenant.
+        """
+
+        return await cls._abuild_pruned_forest(
+            seeds,
+            matched_ids,
+            confined_to_path is None,
+            {confined_to_path} if confined_to_path else set(),
+            include_archived,
+        )
+
+    @classmethod
     async def _abuild_pruned_forest(
         cls, seeds, matched_ids: set[int], is_sys_admin: bool, admin_paths: set[str], include_archived: bool
     ) -> list[dict]:

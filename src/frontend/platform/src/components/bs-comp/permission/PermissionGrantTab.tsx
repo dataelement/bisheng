@@ -11,9 +11,11 @@ import {
   type ResourcePermissionContext,
 } from "@/controllers/API/permission"
 import { LockKeyhole } from "lucide-react"
-import { useEffect, useMemo, useState } from "react"
+import { userContext } from "@/contexts/userContext"
+import { useContext, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { SourceBadge } from "./SourceBadge"
+import { canManageLevel, viewerIsCreator } from "./topTierGuard"
 import { SubjectSearchDepartment } from "./SubjectSearchDepartment"
 import { SubjectSearchUser } from "./SubjectSearchUser"
 import { SubjectSearchUserGroup } from "./SubjectSearchUserGroup"
@@ -162,6 +164,11 @@ export function PermissionGrantTab({
   onSuccess,
 }: PermissionGrantTabProps) {
   const { t } = useTranslation("permission")
+  const { user } = useContext(userContext)
+  const isCreator = useMemo(
+    () => viewerIsCreator(assignees, user?.user_id),
+    [assignees, user?.user_id],
+  )
   const [models, setModels] = useState<GrantablePermissionModel[]>([])
   const [subjectType, setSubjectType] = useState<SubjectType>(
     fixedSubjectType ?? "user",
@@ -185,7 +192,11 @@ export function PermissionGrantTab({
     void getGrantablePermissionModelsApi(resourceType, resourceId)
       .then((result) => {
         if (cancelled) return
-        const activeModels = result.filter((model) => model.active)
+        // Hiding the edit control on existing owner rows would be pointless if
+        // the same viewer could still grant a fresh one here.
+        const activeModels = result.filter(
+          (model) => model.active && canManageLevel(model.level, isCreator),
+        )
         setModels(activeModels)
         setSelectedModelKey((current) =>
           activeModels.some((model) => model.key === current)
@@ -202,7 +213,7 @@ export function PermissionGrantTab({
     return () => {
       cancelled = true
     }
-  }, [resourceId, resourceType])
+  }, [resourceId, resourceType, isCreator])
 
   useEffect(() => {
     if (fixedSubjectType) setSubjectType(fixedSubjectType)

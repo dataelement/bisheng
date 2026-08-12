@@ -437,7 +437,21 @@ class CatalogService:
         original_error: Exception,
         allow_retry: bool,
     ) -> CatalogPublishOutcome:
-        active = await self._projector.read_active_release_keys()
+        try:
+            active = await self._projector.read_active_release_keys()
+        except Exception as exc:
+            # Reading the pointer is how this path tells "committed" from "never
+            # committed". If that read itself fails the publication is
+            # unresolvable, so land it in the fenced terminal state instead of
+            # letting the error escape — an escaping error leaves the CURRENT
+            # release fenced with no FAILED_CLOSED marker and no event, which is
+            # invisible until a restart takes the whole permission runtime down.
+            return await self._fail_closed(
+                context,
+                reason=(
+                    f"Catalog active pointer is unreadable after commit: error={exc}, original_error={original_error}"
+                ),
+            )
         old_key = context.current_release_key
         new_key = context.draft.release_key
 
@@ -467,9 +481,29 @@ class CatalogService:
                     reconciled=True,
                 )
 
-        reason = (
-            f"Catalog active pointer invariant violated after commit: active={sorted(active)}, error={original_error}"
+        await self._fail_closed(
+            context,
+            reason=(
+                f"Catalog active pointer invariant violated after commit: "
+                f"active={sorted(active)}, error={original_error}"
+            ),
         )
+
+    async def _fail_closed(
+        self,
+        context: CatalogPublishContext,
+        *,
+        reason: str,
+    ) -> CatalogPublishOutcome:
+        """Record the fenced terminal state, then raise.
+
+        Publishing fences the CURRENT release and only a resolved commit lifts
+        that fence, so an unresolvable publication is meant to stay fenced. What
+        it must never do is stay fenced *unlabelled*: the release has to end up
+        FAILED_CLOSED with a reason, or the next process restart refuses to serve
+        permissions with nothing on record explaining why.
+        """
+
         await self._state.fail_closed(context, reason=reason)
         await self._emit(
             context,

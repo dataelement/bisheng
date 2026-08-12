@@ -186,7 +186,10 @@ class CatalogChangeRequest(StrictRequestModel):
 class CatalogDraftRequest(StrictRequestModel):
     idempotency_key: str = Field(min_length=1, max_length=64)
     base_release_id: int = Field(gt=0)
-    change: CatalogChangeRequest
+    # A draft carries the whole edit batch. One change per draft forced the UI to
+    # open a fresh draft off the CURRENT release for every edit, so publishing
+    # applied only the last one and silently dropped the rest.
+    changes: tuple[CatalogChangeRequest, ...] = Field(min_length=1, max_length=50)
 
 
 class CatalogImpactDTO(BaseModel):
@@ -225,9 +228,15 @@ class GrantMutationChange(StrictRequestModel):
     op: GrantMutationOperation
     model_key: str | None = Field(default=None, max_length=64)
     subject: GrantSubjectInput | None = None
-    assignee_id: int | None = Field(default=None, gt=0)
+    # Carried as a decimal string: row ids are 60-62 bit, past the 2^53 that a
+    # JSON number survives in a browser, and a rounded id matches no assignee.
+    assignee_id: str | None = Field(default=None, pattern=r"^[1-9][0-9]{0,19}$")
     expected_assignee_version: int | None = Field(default=None, ge=0)
     target_model_key: str | None = Field(default=None, max_length=64)
+
+    @property
+    def assignee_row_id(self) -> int | None:
+        return None if self.assignee_id is None else int(self.assignee_id)
 
     @model_validator(mode="after")
     def validate_operation_shape(self) -> GrantMutationChange:
@@ -279,13 +288,14 @@ class GrantSourceDTO(BaseModel):
 
 
 class GrantAssigneeDTO(BaseModel):
-    assignee_id: int
+    assignee_id: str
     assignee_version: int
     subject: GrantSubjectDTO
     model: GrantModelDTO
     source: GrantSourceDTO
     scope: Literal["LOCAL", "INHERITED"]
     inherited_from: str | None = None
+    inherited_from_name: str | None = None
     protected: bool
     editable: bool
 

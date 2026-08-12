@@ -133,7 +133,10 @@ export function PermissionDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className={dialogClassName}>
+        <DialogContent
+          className={dialogClassName}
+          onOpenAutoFocus={(event) => event.preventDefault()}
+        >
           <DialogHeader className="shrink-0 px-5 pb-4 pt-5 text-left max-[768px]:px-4">
             <DialogTitle className="text-left">
               {localize("f048_permission.dialog.title")} - {resourceName}
@@ -231,6 +234,7 @@ export function PermissionDialog({
         <Dialog open={grantDialogOpen} onOpenChange={setGrantDialogOpen}>
           <DialogContent
             className={`${dialogClassName} !p-5 max-[768px]:!p-4`}
+            onOpenAutoFocus={(event) => event.preventDefault()}
           >
             <DialogHeader className="shrink-0 text-left">
               <DialogTitle className="text-left">

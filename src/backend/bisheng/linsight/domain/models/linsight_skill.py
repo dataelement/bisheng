@@ -16,14 +16,20 @@ from bisheng.database.base import async_get_count
 # Skill source markers (C3/C7 contract).
 SKILL_SOURCE_MANUAL = "manual"
 SKILL_SOURCE_SOP_MIGRATED = "sop_migrated"
+# Shipped with the kernel and seeded into every tenant at startup
+# (services/builtin_skill_seeder.py). Editing one through the API flips it to
+# ``manual``, which permanently opts that tenant's copy out of re-seeding.
+SKILL_SOURCE_BUILTIN = "builtin"
 
 
 class LinsightSkillBase(SQLModelSerializable):
     """Tenant-scoped custom skill metadata (F035).
 
     The skill body lives on disk under ``SKILLS_ROOT/data/skills/{tenant_id}/<name>/SKILL.md``
-    (see design §7.1); this table only owns the metadata. Built-in skills are
-    never persisted here and never exposed through the ``/skill`` API.
+    (see design §7.1); this table only owns the metadata. Kernel built-in skills
+    are seeded into this same table (``source='builtin'``) so they share one
+    runtime path with uploaded ones — the picker, the enable/disable toggle and
+    ``materialize_session_skills`` need no special case for them.
     """
 
     tenant_id: int = Field(
@@ -52,7 +58,7 @@ class LinsightSkillBase(SQLModelSerializable):
     )
     source: str = Field(
         default=SKILL_SOURCE_MANUAL,
-        description="manual | sop_migrated",
+        description="manual | sop_migrated | builtin",
         sa_column=Column(
             String(32), nullable=False, server_default=text(f"'{SKILL_SOURCE_MANUAL}'"), comment="Skill origin"
         ),

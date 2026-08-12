@@ -307,3 +307,6 @@ docs-ui-refactor/
 /.ds-sync/
 /.design-sync/
 /src/frontend/client/.ds-sync-gen/
+
+# Packaged Linsight skill bundles (scripts/pack_linsight_skill.sh output)
+/dist/

@@ -1867,6 +1867,7 @@
     "empty_search": "No matching users",
     "empty_user_groups": "No user groups found",
     "already_granted": "Granted",
+    "already_granted_as": "Granted: {{model}}",
     "error_grant_failed": "Failed to grant permissions. Please try again.",
     "error_last_owner": "At least one owner must remain. You cannot remove the last owner.",
     "error_permission_denied": "Failed to load permission entries",
@@ -2089,7 +2090,11 @@
       "inherited": "Inherited Source",
       "shared": "Shared Source",
       "system": "System Source",
-      "include_children": "Include sub-departments"
+      "include_children": "Include sub-departments",
+      "snapshot_from_parent": "Copied on inherit",
+      "space_membership": "Space member",
+      "channel_membership": "Channel member",
+      "other": "Other source"
     },
     "subject": {
       "user": "User",

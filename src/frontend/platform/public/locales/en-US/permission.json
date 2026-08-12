@@ -68,7 +68,12 @@
     "change": "Change action level",
     "active": "Action status",
     "inactive": "Inactive",
-    "empty": "No actions in this area"
+    "empty": "No actions in this area",
+    "pendingChanges_one": "1 change is not published yet",
+    "pendingChanges_other": "{{count}} changes are not published yet",
+    "publishChanges": "Publish changes",
+    "discardChanges": "Discard changes",
+    "draftFailed": "Could not prepare the change draft. Try again."
   },
   "model": {
     "title": "Permission Model",
@@ -92,8 +97,11 @@
     "preset": {
       "label": "Initialization Preset",
       "select": "Select a preset",
-      "apply": "Apply Preset"
-    }
+      "apply": "Apply Preset",
+      "blank": "Blank model (no actions preselected)"
+    },
+    "confirmDelete": "Delete the model \"{{name}}\"? This takes effect immediately and cannot be undone.",
+    "deleteFailed": "Delete failed. Refresh and try again"
   },
   "impact": {
     "title": "Confirm Publish Impact",
@@ -111,7 +119,9 @@
     "cancel": "Cancel",
     "publish": "Confirm Publish",
     "publishing": "Publishing…",
-    "publishFailed": "Publish failed. Refresh and try again."
+    "publishFailed": "Publish failed. Refresh and try again.",
+    "unpublished": "This change is not published yet",
+    "publishChanges": "Publish changes"
   },
   "mode": {
     "label": "Permission Mode",
@@ -158,7 +168,11 @@
     "inherited": "Inherited Source",
     "shared": "Shared Source",
     "system": "System Source",
-    "includeChildren": "Include sub-departments"
+    "includeChildren": "Include sub-departments",
+    "snapshot_from_parent": "Copied on inherit",
+    "space_membership": "Space member",
+    "channel_membership": "Channel member",
+    "other": "Other source"
   },
   "grant": {
     "existing": "Current Grants",
@@ -181,5 +195,30 @@
     "manageGrants": "Manage Grants",
     "loading": "Loading resource permissions…",
     "loadFailed": "Failed to load resource permissions"
+  },
+  "actionName": {
+    "create_folder": "Create folder",
+    "delete": "Delete",
+    "download": "Download",
+    "edit": "Edit",
+    "manage_permission": "Manage permissions",
+    "move": "Move",
+    "publish": "Publish",
+    "rename": "Rename",
+    "share": "Share",
+    "unpublish": "Unpublish",
+    "upload_file": "Upload file",
+    "use": "Use"
+  },
+  "resourceTypeName": {
+    "assistant": "Assistant",
+    "channel": "Channel",
+    "dashboard": "Dashboard",
+    "folder": "Folder",
+    "knowledge_file": "File",
+    "knowledge_library": "Knowledge base",
+    "knowledge_space": "Knowledge space",
+    "tool": "Tool",
+    "workflow": "Workflow"
   }
 }

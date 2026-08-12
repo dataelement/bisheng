@@ -68,7 +68,12 @@
     "change": "调整动作等级",
     "active": "动作状态",
     "inactive": "已停用",
-    "empty": "此区域暂无动作"
+    "empty": "此区域暂无动作",
+    "pendingChanges_one": "有 1 项改动尚未发布",
+    "pendingChanges_other": "有 {{count}} 项改动尚未发布",
+    "publishChanges": "发布更改",
+    "discardChanges": "放弃更改",
+    "draftFailed": "生成变更草案失败，请重试"
   },
   "model": {
     "title": "权限模型",
@@ -92,8 +97,11 @@
     "preset": {
       "label": "初始化预设",
       "select": "选择预设",
-      "apply": "应用预设"
-    }
+      "apply": "应用预设",
+      "blank": "空白模型（不预选动作）"
+    },
+    "confirmDelete": "确认删除模型「{{name}}」？删除后立即生效，不可恢复。",
+    "deleteFailed": "删除失败，请刷新后重试"
   },
   "impact": {
     "title": "发布影响确认",
@@ -111,7 +119,9 @@
     "cancel": "取消",
     "publish": "确认发布",
     "publishing": "正在发布…",
-    "publishFailed": "发布失败，请刷新后重试"
+    "publishFailed": "发布失败，请刷新后重试",
+    "unpublished": "此变更尚未发布，发布后生效",
+    "publishChanges": "发布更改"
   },
   "mode": {
     "label": "权限模式",
@@ -158,7 +168,11 @@
     "inherited": "继承来源",
     "shared": "共享来源",
     "system": "系统来源",
-    "includeChildren": "包含子部门"
+    "includeChildren": "包含子部门",
+    "snapshot_from_parent": "继承时复制",
+    "space_membership": "空间成员",
+    "channel_membership": "频道成员",
+    "other": "其他来源"
   },
   "grant": {
     "existing": "当前授权",
@@ -181,5 +195,30 @@
     "manageGrants": "管理授权",
     "loading": "正在加载资源权限…",
     "loadFailed": "资源权限加载失败"
+  },
+  "actionName": {
+    "create_folder": "新建文件夹",
+    "delete": "删除",
+    "download": "下载",
+    "edit": "编辑",
+    "manage_permission": "权限管理",
+    "move": "移动",
+    "publish": "发布",
+    "rename": "重命名",
+    "share": "分享",
+    "unpublish": "取消发布",
+    "upload_file": "上传文件",
+    "use": "使用"
+  },
+  "resourceTypeName": {
+    "assistant": "助手",
+    "channel": "频道",
+    "dashboard": "看板",
+    "folder": "文件夹",
+    "knowledge_file": "文件",
+    "knowledge_library": "知识库",
+    "knowledge_space": "知识空间",
+    "tool": "工具",
+    "workflow": "工作流"
   }
 }

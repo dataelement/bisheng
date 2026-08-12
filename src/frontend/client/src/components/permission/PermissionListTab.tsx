@@ -1,3 +1,4 @@
+import { Outlined } from "bisheng-icons";
 import {
   AlertTriangle,
   Building2,
@@ -24,17 +25,9 @@ import type {
   ResourceType,
   SubjectType,
 } from "~/api/permission";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  Button,
-} from "~/components/ui";
+import { Button } from "~/components/ui";
 import { useLocalize } from "~/hooks";
+import { useConfirm } from "~/Providers";
 import { SourceBadge } from "./SourceBadge";
 
 interface PermissionListTabProps {
@@ -135,7 +128,7 @@ function RosterRow({
             {assignee.inherited_from && (
               <span className="truncate">
                 · {localize("f048_permission.roster.inherited_from")}: {" "}
-                {assignee.inherited_from}
+                {assignee.inherited_from_name || assignee.inherited_from}
               </span>
             )}
           </div>
@@ -145,24 +138,32 @@ function RosterRow({
       <div className="flex w-[176px] shrink-0 items-center justify-end gap-1 max-[560px]:w-[132px]">
         {editable ? (
           <>
-            <select
-              aria-label={`grant.model.${assignee.assignee_id}`}
-              value={assignee.model.key}
-              disabled={pending}
-              onChange={(event) => onMove(assignee, event.target.value)}
-              className="h-8 min-w-0 flex-1 cursor-pointer rounded-md border-0 bg-transparent px-2 text-right text-sm text-[#4E5969] outline-none hover:bg-black/[0.03] focus-visible:ring-2 focus-visible:ring-blue-500/40 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {!currentIsGrantable && (
-                <option value={assignee.model.key}>
-                  {assignee.model.name}
-                </option>
-              )}
-              {models.map((model) => (
-                <option key={model.key} value={model.key}>
-                  {model.name}
-                </option>
-              ))}
-            </select>
+            {/* The native select arrow is painted over right-aligned text, so hide it and
+                reserve room for our own chevron. */}
+            <div className="relative flex min-w-0 flex-1 items-center">
+              <select
+                aria-label={`grant.model.${assignee.assignee_id}`}
+                value={assignee.model.key}
+                disabled={pending}
+                onChange={(event) => onMove(assignee, event.target.value)}
+                className="h-8 w-full min-w-0 cursor-pointer appearance-none rounded-md border-0 bg-transparent pl-2 pr-6 text-right text-sm text-[#4E5969] outline-none hover:bg-black/[0.03] focus-visible:ring-2 focus-visible:ring-blue-500/40 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {!currentIsGrantable && (
+                  <option value={assignee.model.key}>
+                    {assignee.model.name}
+                  </option>
+                )}
+                {models.map((model) => (
+                  <option key={model.key} value={model.key}>
+                    {model.name}
+                  </option>
+                ))}
+              </select>
+              <Outlined.Down
+                aria-hidden="true"
+                className="pointer-events-none absolute right-1.5 size-3.5 text-[#86909C]"
+              />
+            </div>
             <button
               type="button"
               aria-label={`${localize("f048_permission.grant.remove")}.${
@@ -223,6 +224,7 @@ export function PermissionListTab({
   onMutationSuccess,
 }: PermissionListTabProps) {
   const localize = useLocalize();
+  const confirm = useConfirm();
   const [assignees, setAssignees] = useState<PermissionGrantAssignee[]>([]);
   const [models, setModels] = useState<GrantablePermissionModel[]>([]);
   const [summary, setSummary] = useState<MyResourcePermissions | null>(null);
@@ -231,11 +233,9 @@ export function PermissionListTab({
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [pendingAssigneeId, setPendingAssigneeId] = useState<number | null>(
+  const [pendingAssigneeId, setPendingAssigneeId] = useState<string | null>(
     null,
   );
-  const [removeTarget, setRemoveTarget] =
-    useState<PermissionGrantAssignee | null>(null);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
@@ -382,8 +382,18 @@ export function PermissionListTab({
       setFailed(true);
     } finally {
       setPendingAssigneeId(null);
-      setRemoveTarget(null);
     }
+  };
+
+  const handleRemove = async (assignee: PermissionGrantAssignee) => {
+    const confirmed = await confirm({
+      variant: "destructive",
+      title: localize("com_permission.confirm_revoke"),
+      description: assignee.subject.name || assignee.subject.id,
+      confirmText: localize("com_permission.action_revoke"),
+    });
+    if (!confirmed) return;
+    await mutateAssignee(assignee, { op: "REMOVE" });
   };
 
   const handleLoadMore = async () => {
@@ -457,7 +467,7 @@ export function PermissionListTab({
                   target_model_key: modelKey,
                 })
               }
-              onRemove={setRemoveTarget}
+              onRemove={(item) => void handleRemove(item)}
             />
           ))}
           {visibleAssignees.length === 0 && (
@@ -484,33 +494,6 @@ export function PermissionListTab({
           )}
         </div>
       </div>
-
-      <AlertDialog
-        open={removeTarget !== null}
-        onOpenChange={(nextOpen) => {
-          if (!nextOpen) setRemoveTarget(null);
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {localize("com_permission.confirm_revoke")}
-            </AlertDialogTitle>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>{localize("cancel")}</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                if (removeTarget) {
-                  void mutateAssignee(removeTarget, { op: "REMOVE" });
-                }
-              }}
-            >
-              {localize("confirm")}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </>
   );
 }

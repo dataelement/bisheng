@@ -1,6 +1,13 @@
 import { Button } from "@/components/bs-ui/button"
 import { Checkbox } from "@/components/bs-ui/checkBox"
 import { Input } from "@/components/bs-ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/bs-ui/select"
 import { Switch } from "@/components/bs-ui/switch"
 import type {
   PermissionCatalogAction,
@@ -11,6 +18,10 @@ import type {
 import { ShieldAlert } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
+import { actionLabel } from "./actionLabels"
+
+const BLANK_PRESET_KEY = "__blank__"
 
 interface PermissionModelPreset {
   key: string
@@ -26,8 +37,9 @@ interface ModelEditorProps {
   disabled?: boolean
   onInitializePreset?: (preset: PermissionModelPreset) => void
   onCreateDraft: (
-    change: PermissionCatalogChange,
+    changes: PermissionCatalogChange[],
   ) => Promise<PermissionCatalogDraft>
+  onDeleteModel: (modelKey: string, wasActive: boolean) => Promise<void>
   onReviewImpact: (draft: PermissionCatalogDraft) => void
 }
 
@@ -49,6 +61,7 @@ export function ModelEditor({
   disabled = false,
   onInitializePreset,
   onCreateDraft,
+  onDeleteModel,
   onReviewImpact,
 }: ModelEditorProps) {
   const { t } = useTranslation("permission")
@@ -155,13 +168,24 @@ export function ModelEditor({
 
     setSaving(true)
     try {
-      setDraft(await onCreateDraft(change))
+      setDraft(await onCreateDraft([change]))
     } finally {
       setSaving(false)
     }
   }
 
   const handleApplyPreset = () => {
+    // The blank option is the only way back to an empty selection: picking the
+    // placeholder just disabled the button, so a model could gain actions from a
+    // preset but never be cleared again.
+    if (selectedPreset === BLANK_PRESET_KEY) {
+      const blank = { key: BLANK_PRESET_KEY, name: t("model.preset.blank"), action_codes: [] }
+      setSelected(new Set())
+      setAllowSameLevel(false)
+      setDraft(null)
+      onInitializePreset?.(blank)
+      return
+    }
     const preset = presets.find((item) => item.key === selectedPreset)
     if (!preset) return
     const initializedPreset = {
@@ -174,25 +198,32 @@ export function ModelEditor({
     onInitializePreset?.(initializedPreset)
   }
 
-  const handleDelete = async () => {
-    if (disabled || saving || createMode || isStandard || active) return
-    setSaving(true)
-    try {
-      setDraft(await onCreateDraft({
-        type: "DELETE_MODEL",
-        model_key: model.key,
-      }))
-    } finally {
-      setSaving(false)
-    }
+  const handleDelete = () => {
+    if (disabled || saving || createMode || isStandard) return
+    // Deletion carries its own deactivation and publishes itself: the model is
+    // referenced by no grant, so there is nothing to review, and the old
+    // deactivate-publish-delete-publish dance lost people halfway through.
+    bsConfirm({
+      desc: t("model.confirmDelete", { name: model.name }),
+      okTxt: t("model.delete"),
+      async onOk(next) {
+        setSaving(true)
+        try {
+          await onDeleteModel(model.key, model.active)
+        } finally {
+          setSaving(false)
+          next()
+        }
+      },
+    })
   }
 
   return (
     <section
       aria-label={t("model.title")}
-      className="flex min-h-0 flex-col gap-5 rounded-xl border bg-background p-5"
+      className="flex h-full min-h-0 flex-col rounded-xl border bg-background"
     >
-      <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="flex shrink-0 flex-wrap items-start justify-between gap-3 border-b p-5">
         <div>
           <h2 className="text-base font-semibold text-foreground">
             {t("model.title")}
@@ -209,143 +240,156 @@ export function ModelEditor({
         </span>
       </div>
 
-      {presets.length > 0 && !isStandard && (
-        <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
-          <label className="text-sm font-medium text-foreground">
-            <span className="mb-1 block">{t("model.preset.label")}</span>
-            <select
-              aria-label={t("model.preset.label")}
-              value={selectedPreset}
-              disabled={disabled}
-              onChange={(event) => setSelectedPreset(event.target.value)}
-              className="min-h-11 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      {/* Only the form scrolls, so the title and the save bar stay in place while
+          the action list — the tall part — moves. */}
+      <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto p-5">
+        {!isStandard && (
+          <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+            <div className="text-sm font-medium text-foreground">
+              <span className="mb-1 block">{t("model.preset.label")}</span>
+              <Select
+                value={selectedPreset}
+                disabled={disabled}
+                onValueChange={setSelectedPreset}
+              >
+                <SelectTrigger
+                  aria-label={t("model.preset.label")}
+                  className="min-h-11 w-full bg-background"
+                >
+                  <SelectValue placeholder={t("model.preset.select")} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={BLANK_PRESET_KEY}>
+                    {t("model.preset.blank")}
+                  </SelectItem>
+                  {presets.map((preset) => (
+                    <SelectItem key={preset.key} value={preset.key}>
+                      {preset.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-11 self-end"
+              disabled={disabled || !selectedPreset}
+              onClick={handleApplyPreset}
             >
-              <option value="">{t("model.preset.select")}</option>
-              {presets.map((preset) => (
-                <option key={preset.key} value={preset.key}>
-                  {preset.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <Button
-            type="button"
-            variant="outline"
-            className="min-h-11 self-end"
-            disabled={disabled || !selectedPreset}
-            onClick={handleApplyPreset}
-          >
-            {t("model.preset.apply")}
-          </Button>
-        </div>
-      )}
+              {t("model.preset.apply")}
+            </Button>
+          </div>
+        )}
 
-      <label className="text-sm font-medium text-foreground">
-        <span className="mb-1 block">{t("model.name")}</span>
-        <Input
-          aria-label={t("model.name")}
-          value={name}
-          disabled={disabled || isStandard}
-          className="min-h-11"
-          onChange={(event) => setName(event.target.value)}
-        />
-      </label>
-
-      <fieldset className="grid gap-2">
-        <legend className="mb-1 text-sm font-medium text-foreground">
-          {t("model.actions")}
-        </legend>
-        {eligibleActions.map((action) => {
-          const isChecked = selected.has(action.code)
-          const actionDisabled =
-            disabled || isStandard || (!action.active && !isChecked)
-          return (
-            <label
-              key={action.code}
-              className="flex min-h-11 items-center gap-3 rounded-lg border px-3 py-2 text-sm"
-            >
-              <Checkbox
-                aria-label={`${t("model.action")}.${action.code}`}
-                checked={isChecked}
-                disabled={actionDisabled}
-                onCheckedChange={(checked) =>
-                  handleActionChange(action.code, checked === true)
-                }
-              />
-              <span className="min-w-0 flex-1">
-                <span className="block font-medium text-foreground">
-                  {action.name}
-                </span>
-                <span className="block truncate text-xs text-muted-foreground">
-                  {action.code}
-                </span>
-              </span>
-              {action.level === null ? (
-                <span className="text-xs font-medium text-amber-700">
-                  {t("actionLevel.unassigned")}
-                </span>
-              ) : !action.active && (
-                <span className="text-xs font-medium text-red-700">
-                  {t("actionLevel.inactive")}
-                </span>
-              )}
-            </label>
-          )
-        })}
-      </fieldset>
-
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="flex min-h-11 items-center justify-between gap-3 rounded-lg border px-3 text-sm font-medium">
-          <span>{t("model.active")}</span>
-          <Switch
-            aria-label={t("model.active")}
-            checked={active}
+        <label className="text-sm font-medium text-foreground">
+          <span className="mb-1 block">{t("model.name")}</span>
+          <Input
+            aria-label={t("model.name")}
+            value={name}
             disabled={disabled || isStandard}
-            onCheckedChange={setActive}
+            className="min-h-11"
+            onChange={(event) => setName(event.target.value)}
           />
         </label>
-        <label className="flex min-h-11 items-center justify-between gap-3 rounded-lg border px-3 text-sm font-medium">
-          <span>{t("model.allowSameLevel")}</span>
-          <Switch
-            aria-label={t("model.allowSameLevel")}
-            checked={allowSameLevel}
-            disabled={disabled || !canAllowSameLevel}
-            onCheckedChange={setAllowSameLevel}
-          />
-        </label>
+
+        <fieldset className="grid gap-2">
+          <legend className="mb-1 text-sm font-medium text-foreground">
+            {t("model.actions")}
+          </legend>
+          {eligibleActions.map((action) => {
+            const isChecked = selected.has(action.code)
+            const actionDisabled =
+              disabled || isStandard || (!action.active && !isChecked)
+            return (
+              <label
+                key={action.code}
+                className="flex min-h-11 items-center gap-3 rounded-lg border px-3 py-2 text-sm"
+              >
+                <Checkbox
+                  aria-label={`${t("model.action")}.${action.code}`}
+                  checked={isChecked}
+                  disabled={actionDisabled}
+                  onCheckedChange={(checked) =>
+                    handleActionChange(action.code, checked === true)
+                  }
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="block font-medium text-foreground">
+                    {actionLabel(t, action.code, action.name)}
+                  </span>
+                  <span className="block truncate text-xs text-muted-foreground">
+                    {action.code}
+                  </span>
+                </span>
+                {action.level === null ? (
+                  <span className="text-xs font-medium text-amber-700">
+                    {t("actionLevel.unassigned")}
+                  </span>
+                ) : !action.active && (
+                  <span className="text-xs font-medium text-red-700">
+                    {t("actionLevel.inactive")}
+                  </span>
+                )}
+              </label>
+            )
+          })}
+        </fieldset>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="flex min-h-11 items-center justify-between gap-3 rounded-lg border px-3 text-sm font-medium">
+            <span>{t("model.active")}</span>
+            <Switch
+              aria-label={t("model.active")}
+              checked={active}
+              disabled={disabled || isStandard}
+              onCheckedChange={setActive}
+            />
+          </label>
+          <label className="flex min-h-11 items-center justify-between gap-3 rounded-lg border px-3 text-sm font-medium">
+            <span>{t("model.allowSameLevel")}</span>
+            <Switch
+              aria-label={t("model.allowSameLevel")}
+              checked={allowSameLevel}
+              disabled={disabled || !canAllowSameLevel}
+              onCheckedChange={setAllowSameLevel}
+            />
+          </label>
+        </div>
+
+        {draft && (
+          <div
+            className="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900"
+            role="status"
+          >
+            <ShieldAlert aria-hidden="true" className="size-4 shrink-0" />
+            <span className="flex-1">
+              {t("impact.unpublished")}
+              {" · "}
+              {t("impact.pending", {
+                resources: draft.impact.resource_count,
+                grants: draft.impact.grant_count,
+              })}
+            </span>
+            <Button
+              type="button"
+              className="min-h-11"
+              onClick={() => onReviewImpact(draft)}
+            >
+              {t("impact.publishChanges")}
+            </Button>
+          </div>
+        )}
       </div>
 
-      {draft && (
-        <div
-          className="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900"
-          role="status"
-        >
-          <ShieldAlert aria-hidden="true" className="size-4 shrink-0" />
-          <span className="flex-1">
-            {t("impact.pending", {
-              resources: draft.impact.resource_count,
-              grants: draft.impact.grant_count,
-            })}
-          </span>
-          <Button
-            type="button"
-            variant="outline"
-            className="min-h-11 bg-background"
-            onClick={() => onReviewImpact(draft)}
-          >
-            {t("impact.review")}
-          </Button>
-        </div>
-      )}
-
-      <div className="flex flex-wrap justify-end gap-2">
+      <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t p-4">
         {!isStandard && !createMode && (
           <Button
             type="button"
             variant="outline"
             className="min-h-11 text-red-700"
-            disabled={disabled || saving || active}
-            onClick={() => void handleDelete()}
+            disabled={disabled || saving}
+            onClick={handleDelete}
           >
             {t("model.delete")}
           </Button>

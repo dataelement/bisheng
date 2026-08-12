@@ -1790,6 +1790,7 @@
     "empty_search": "一致するユーザーがいません",
     "empty_user_groups": "ユーザーグループがありません",
     "already_granted": "付与済み",
+    "already_granted_as": "付与済み：{{model}}",
     "error_grant_failed": "権限付与に失敗しました。再試行してください",
     "error_last_owner": "少なくとも 1 人の所有者を残す必要があります。最後の所有者は削除できません。",
     "error_permission_denied": "権限一覧の読み込みに失敗しました",
@@ -2012,7 +2013,11 @@
       "inherited": "継承元",
       "shared": "共有元",
       "system": "システム元",
-      "include_children": "サブ部門を含む"
+      "include_children": "サブ部門を含む",
+      "snapshot_from_parent": "継承時にコピー",
+      "space_membership": "スペースメンバー",
+      "channel_membership": "チャンネルメンバー",
+      "other": "その他"
     },
     "subject": {
       "user": "ユーザー",

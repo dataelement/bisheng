@@ -54,10 +54,13 @@ export function DashboardDetail({
     const {
         permissions,
         loading: permissionsLoading,
+        privileged,
     } = useDashboardPermissions(dashboardId ? [dashboardId] : [])
     const permissionActions = permissions[dashboardId] ?? []
-    const canView = permissionActions.includes("visible")
-    const canEdit = permissionActions.includes("edit")
+    // A successful my-permissions lookup is the visibility signal; the endpoint
+    // refuses the request outright when the resource is not visible.
+    const canView = privileged || Object.hasOwn(permissions, dashboardId)
+    const canEdit = privileged || permissionActions.includes("edit")
 
     useEffect(() => {
         if (dashboard) {

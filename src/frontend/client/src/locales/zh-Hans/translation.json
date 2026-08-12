@@ -1796,6 +1796,7 @@
     "empty_search": "暂无匹配用户",
     "empty_user_groups": "暂无用户组",
     "already_granted": "已授权",
+    "already_granted_as": "已授权：{{model}}",
     "error_grant_failed": "授权失败，请重试",
     "error_last_owner": "至少保留一个所有者，无法移除最后一个所有者",
     "error_permission_denied": "权限记录加载失败",
@@ -2018,7 +2019,11 @@
       "inherited": "继承来源",
       "shared": "共享来源",
       "system": "系统来源",
-      "include_children": "包含子部门"
+      "include_children": "包含子部门",
+      "snapshot_from_parent": "继承时复制",
+      "space_membership": "空间成员",
+      "channel_membership": "频道成员",
+      "other": "其他来源"
     },
     "subject": {
       "user": "用户",

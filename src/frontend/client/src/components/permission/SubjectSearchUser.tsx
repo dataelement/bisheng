@@ -11,6 +11,8 @@ interface SubjectSearchUserProps {
   resourceType?: ResourceType;
   resourceId?: string;
   disabledIds?: number[];
+  /** subjectId -> the permission model(s) that subject already holds here. */
+  grantedLabels?: Record<string, string>;
 }
 
 type UserRow = GrantUser;
@@ -20,7 +22,10 @@ const PAGE_SIZE = 50;
 export function SubjectSearchUser({
   value,
   onChange,
+  resourceType,
+  resourceId,
   disabledIds = [],
+  grantedLabels = {},
 }: SubjectSearchUserProps) {
   const localize = useLocalize();
   const [keyword, setKeyword] = useState("");
@@ -49,7 +54,10 @@ export function SubjectSearchUser({
       pageNum: number,
       signal: AbortSignal,
     ): Promise<UserRow[]> => {
+      if (!resourceType || !resourceId) return [];
       const res = await searchUsers(
+        resourceType,
+        resourceId,
         name,
         { page: pageNum, pageSize: PAGE_SIZE },
         { signal },
@@ -57,7 +65,7 @@ export function SubjectSearchUser({
       if (signal.aborted) return [];
       return res.data || [];
     },
-    [],
+    [resourceId, resourceType],
   );
 
   const resetAndLoad = useCallback(
@@ -208,6 +216,7 @@ export function SubjectSearchUser({
         {!loading &&
           results.map((user) => {
             const isDisabled = disabledIdSet.has(user.user_id);
+            const grantedLabel = grantedLabels[String(user.user_id)];
             // User id (external_id) renders right after the username; the dedicated
             // column shows only the org/department path.
             const departmentPath = user.primary_department_path ?? "";
@@ -224,7 +233,9 @@ export function SubjectSearchUser({
               >
                 <Checkbox
                   className="border-[#D9D9D9] data-[state=checked]:border-primary data-[state=indeterminate]:border-primary"
-                  checked={selectedIds.has(user.user_id)}
+                  // Already-granted rows read as checked: the picker shows who holds
+                  // the resource, so an empty box next to the badge reads as a bug.
+                  checked={selectedIds.has(user.user_id) || isDisabled}
                   disabled={isDisabled}
                 />
                 {/* Name column: username + user id (external_id) after it; the next
@@ -241,9 +252,13 @@ export function SubjectSearchUser({
                   {/* "Already granted" badge sits right after the name/id; it stays at
                       full width while the username truncates, so it never crowds the
                       department column on the right. */}
-                  {isDisabled && (
+                  {(grantedLabel || isDisabled) && (
                     <span className="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">
-                      {localize("com_permission.already_granted")}
+                      {grantedLabel
+                        ? localize("com_permission.already_granted_as", {
+                            model: grantedLabel,
+                          })
+                        : localize("com_permission.already_granted")}
                     </span>
                   )}
                 </div>
