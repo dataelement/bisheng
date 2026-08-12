@@ -13,14 +13,16 @@ from loguru import logger
 
 from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.core.database import get_async_db_session
+from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.department import DepartmentDao
 from bisheng.database.models.qa_expert import Answer, Comment, Expert, QANotification, Question
-from bisheng.dictionary.domain.repositories.implementations.system_dictionary_repository_impl import (
-    SystemDictionaryRepositoryImpl,
-)
 from bisheng.department.domain.services.department_display_service import (
     build_department_name_projection,
 )
+from bisheng.dictionary.domain.repositories.implementations.system_dictionary_repository_impl import (
+    SystemDictionaryRepositoryImpl,
+)
+from bisheng.qa_expert.domain.asset_service import QaAssetService, new_owner_stable_id
 from bisheng.qa_expert.domain.repositories import (
     AnswerRepository,
     CommentRepository,
@@ -396,11 +398,31 @@ class ExpertService:
 class QuestionService:
     """问题业务逻辑"""
 
-    def __init__(self):
+    def __init__(self, asset_service: QaAssetService | None = None):
         self.repository = QuestionRepository()
         self.expert_repo = ExpertRepository()
         self.answer_repo = AnswerRepository()
         self.notification_repo = NotificationRepository()
+        self.asset_service = asset_service
+
+    async def _assets(self) -> QaAssetService:
+        if self.asset_service is None:
+            self.asset_service = QaAssetService(await get_minio_storage())
+        return self.asset_service
+
+    async def _resolve_question(self, question: Question) -> Question:
+        values = {
+            "image_url": question.image_url,
+            "file_url": question.file_url,
+            "attachments": question.attachments,
+        }
+        if not any(values.values()):
+            return question
+        resolved = await (await self._assets()).resolve_fields(entity_type="question", values=values)
+        response = question.model_copy(deep=True)
+        for field_name, value in resolved.items():
+            setattr(response, field_name, value)
+        return response
 
     async def create_question(
         self,
@@ -410,22 +432,43 @@ class QuestionService:
         tenant_id: int | None = None,
     ) -> Question:
         """创建问题"""
+        asset_values = {
+            "image_url": request.image_url,
+            "file_url": request.file_url,
+            "attachments": request.attachments,
+        }
+        promotion = None
+        if any(asset_values.values()):
+            promotion = await (await self._assets()).promote_fields(
+                tenant_id=tenant_id,
+                entity_type="question",
+                owner_stable_id=new_owner_stable_id(),
+                values=asset_values,
+            )
+            asset_values.update(promotion.values)
         question = Question(
             user_id=user_id,
             title=request.title,
             description=request.description,
             business_domain=request.business_domain,
-            attachments=request.attachments,
+            attachments=asset_values["attachments"],
             related_docs=request.related_docs,
             invited_experts=request.invited_experts,
             experts_names=request.experts_names,
-            image_url=request.image_url,
-            file_url=request.file_url,
+            image_url=asset_values["image_url"],
+            file_url=asset_values["file_url"],
             file_name=request.file_name,
             created_by=user_name,
         )
 
-        question = await self.repository.create(question)
+        try:
+            question = await self.repository.create(question)
+        except Exception:
+            if promotion is not None:
+                await (await self._assets()).compensate(promotion)
+            raise
+        if promotion is not None:
+            await (await self._assets()).cleanup_sources(promotion)
         # 发送邀请通知
         await self._send_expert_invitation_inbox_notice(question, user_id, user_name)
 
@@ -448,7 +491,7 @@ class QuestionService:
             )
 
         logger.info(f"Question created: {question.id} by user {user_id}")
-        return question
+        return await self._resolve_question(question)
 
     async def list_questions(
         self,
@@ -481,7 +524,7 @@ class QuestionService:
             for question in questions:
                 vote_count = await self.answer_repo.get_answer_vote_count(question.id)
                 question.vote_count = vote_count
-        return questions, total
+        return [await self._resolve_question(question) for question in questions], total
 
     async def get_question_detail(self, question_id: int, user_id: int | None = None) -> Question:
         """获取问题详情"""
@@ -492,7 +535,7 @@ class QuestionService:
         # 增加浏览数
         question.view_count += 1
         await self.repository.update(question_id, view_count=question.view_count)
-        return question
+        return await self._resolve_question(question)
 
     async def adopt_answer(self, question_id: int, answer_id: int, operator_id: int) -> Question:
         """采纳最佳回答：同题最多 3 条；已采纳幂等；G4 按同题同回答者只发一次。"""
@@ -672,19 +715,42 @@ class QuestionService:
                 )
         return deleted
 
-    async def update_question(self, question_id: int, request: QuestionUpdateRequest) -> Question:
+    async def update_question(
+        self,
+        question_id: int,
+        request: QuestionUpdateRequest,
+        tenant_id: int | None = None,
+    ) -> Question:
         """更新问题信息"""
         question = await self.repository.get_by_id(question_id)
         if not question:
             raise QuestionNotFoundError()
 
         update_data = request.model_dump(exclude_unset=True)
-        new_question = await self.repository.update(question_id, **update_data)
+        asset_fields = {"image_url", "file_url", "attachments"}
+        requested_assets = {name: update_data[name] for name in asset_fields if name in update_data}
+        promotion = None
+        if any(value for value in requested_assets.values()):
+            promotion = await (await self._assets()).promote_fields(
+                tenant_id=tenant_id,
+                entity_type="question",
+                owner_stable_id=str(question_id),
+                values=requested_assets,
+            )
+            update_data.update(promotion.values)
+        try:
+            new_question = await self.repository.update(question_id, **update_data)
+        except Exception:
+            if promotion is not None:
+                await (await self._assets()).compensate(promotion)
+            raise
+        if promotion is not None:
+            await (await self._assets()).cleanup_sources(promotion)
         # 发送邀请通知
         # await self._send_expert_invitation_inbox_notice(new_question, user_id,user_name)
 
         # logger.info(f"Question updated: {new_question.id} by user {user_id}")
-        return new_question
+        return await self._resolve_question(new_question)
 
     async def _send_expert_invitation_inbox_notice(
         self,
@@ -759,16 +825,33 @@ class QuestionService:
 class AnswerService:
     """回答业务逻辑"""
 
-    def __init__(self):
+    def __init__(self, asset_service: QaAssetService | None = None):
         self.repository = AnswerRepository()
         self.question_repo = QuestionRepository()
         self.expert_repo = ExpertRepository()
         self.notification_repo = NotificationRepository()
+        self.asset_service = asset_service
+
+    async def _assets(self) -> QaAssetService:
+        if self.asset_service is None:
+            self.asset_service = QaAssetService(await get_minio_storage())
+        return self.asset_service
+
+    async def _resolve_answer(self, answer: Answer) -> Answer:
+        values = {"images_url": answer.images_url, "attachments": answer.attachments}
+        if not any(values.values()):
+            return answer
+        resolved = await (await self._assets()).resolve_fields(entity_type="answer", values=values)
+        response = answer.model_copy(deep=True)
+        for field_name, value in resolved.items():
+            setattr(response, field_name, value)
+        return response
 
     async def create_answer(
         self,
         user_id: int,
         request: AnswerCreateRequest,
+        tenant_id: int | None = None,
     ) -> Answer:
         """发布回答"""
         question = await self.question_repo.get_by_id(request.question_id)
@@ -780,17 +863,35 @@ class AnswerService:
         if not expert:
             raise ExpertNotFoundError(message="Only verified experts can answer questions")
 
+        asset_values = {"attachments": request.attachments, "images_url": request.images_url}
+        promotion = None
+        if any(asset_values.values()):
+            promotion = await (await self._assets()).promote_fields(
+                tenant_id=tenant_id,
+                entity_type="answer",
+                owner_stable_id=new_owner_stable_id(),
+                values=asset_values,
+            )
+            asset_values.update(promotion.values)
+
         answer = Answer(
             question_id=request.question_id,
             expert_id=expert.id,
             content=request.content,
-            attachments=request.attachments,
+            attachments=asset_values["attachments"],
             related_docs=request.related_docs,
-            images_url=request.images_url,
+            images_url=asset_values["images_url"],
             expert_name=expert.expert_name,
         )
 
-        answer = await self.repository.create(answer)
+        try:
+            answer = await self.repository.create(answer)
+        except Exception:
+            if promotion is not None:
+                await (await self._assets()).compensate(promotion)
+            raise
+        if promotion is not None:
+            await (await self._assets()).cleanup_sources(promotion)
 
         # 更新问题的回答计数
         question.answer_count += 1
@@ -802,13 +903,16 @@ class AnswerService:
         await self._send_answer_notification(question, answer)
 
         logger.info(f"Answer created: {answer.id} for question {request.question_id}")
-        return answer
+        return await self._resolve_answer(answer)
 
     async def get_answers(
         self, question_id: int, skip: int = 0, limit: int = 100, sort_by: str | None = None
     ) -> tuple[list[Answer], int]:
         """获取问题的回答列表"""
-        return await self.repository.get_by_question_id(question_id, skip=skip, limit=limit, sort_by=sort_by)
+        answers, total = await self.repository.get_by_question_id(
+            question_id, skip=skip, limit=limit, sort_by=sort_by
+        )
+        return [await self._resolve_answer(answer) for answer in answers], total
 
     async def get_by_expertname(
         self,
@@ -816,23 +920,27 @@ class AnswerService:
         question_id: int,
     ) -> Answer | None:
         """获取问题的回答列表"""
-        return await self.repository.get_by_expertname(expert_name, question_id)
+        answer = await self.repository.get_by_expertname(expert_name, question_id)
+        return await self._resolve_answer(answer) if answer else None
 
     async def update_answer(
         self,
         answer_id: int,
         operator_id: int,
         content: str | None = None,
-        attachments: list[str] | None = None,
-        related_docs: list[int] | None = None,
+        attachments: str | list[str] | None = None,
+        related_docs: str | list[int] | None = None,
+        images_url: str | None = None,
+        tenant_id: int | None = None,
     ) -> Answer:
         """更新回答"""
         answer = await self.repository.get_by_id(answer_id)
         if not answer:
             raise AnswerNotFoundError()
 
-        # 只有回答者可以编辑
-        if answer.user_id != operator_id:
+        # 只有回答对应的专家用户可以编辑
+        expert = await self.expert_repo.get_by_id(answer.expert_id) if answer.expert_id is not None else None
+        if not expert or expert.user_id != operator_id:
             raise PermissionDeniedError(message="Only answer author can edit")
 
         update_data = {}
@@ -842,8 +950,33 @@ class AnswerService:
             update_data["attachments"] = attachments
         if related_docs is not None:
             update_data["related_docs"] = related_docs
-
-        return await self.repository.update(answer_id, **update_data)
+        if images_url is not None:
+            update_data["images_url"] = images_url
+        requested_assets = {}
+        if attachments is not None:
+            requested_assets["attachments"] = attachments
+        if images_url is not None:
+            requested_assets["images_url"] = images_url
+        promotion = None
+        if any(value for value in requested_assets.values()):
+            promotion = await (await self._assets()).promote_fields(
+                tenant_id=tenant_id,
+                entity_type="answer",
+                owner_stable_id=str(answer_id),
+                values=requested_assets,
+            )
+            update_data.update(promotion.values)
+        try:
+            updated = await self.repository.update(answer_id, **update_data)
+        except Exception:
+            if promotion is not None:
+                await (await self._assets()).compensate(promotion)
+            raise
+        if promotion is not None:
+            await (await self._assets()).cleanup_sources(promotion)
+        if updated is None:
+            raise AnswerNotFoundError()
+        return await self._resolve_answer(updated)
 
     async def delete_answer(self, answer_id: int, operator_id: int) -> bool:
         """删除回答"""

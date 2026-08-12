@@ -1,6 +1,15 @@
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Union, BinaryIO
+
+
+@dataclass(frozen=True)
+class ObjectMetadata:
+    """对象存储元数据供业务在下载前执行大小和类型校验。"""
+
+    size: int
+    content_type: str | None = None
 
 
 class BaseStorage(ABC):
@@ -78,14 +87,26 @@ class BaseStorage(ABC):
         pass
 
     @abstractmethod
+    async def stat_object(self, bucket_name: str, object_name: str) -> ObjectMetadata:
+        """Read object metadata without downloading its content."""
+        pass
+
+    @abstractmethod
+    def stat_object_sync(self, bucket_name: str, object_name: str) -> ObjectMetadata:
+        """Read object metadata without downloading its content (synchronous)."""
+        pass
+
+    @abstractmethod
     async def copy_object(self, source_bucket: str, source_object: str,
-                          dest_bucket: str, dest_object: str) -> None:
+                          dest_bucket: str, dest_object: str,
+                          content_type: str | None = None) -> None:
         """Copy an object from one storage bucket to another."""
         pass
 
     @abstractmethod
     def copy_object_sync(self, source_bucket: str, source_object: str,
-                         dest_bucket: str, dest_object: str) -> None:
+                         dest_bucket: str, dest_object: str,
+                         content_type: str | None = None) -> None:
         """Copy an object from one storage bucket to another (synchronous)."""
         pass
 
