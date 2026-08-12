@@ -1,3 +1,4 @@
+import { Outlined } from "bisheng-icons";
 import {
   AlertTriangle,
   Building2,
@@ -137,24 +138,32 @@ function RosterRow({
       <div className="flex w-[176px] shrink-0 items-center justify-end gap-1 max-[560px]:w-[132px]">
         {editable ? (
           <>
-            <select
-              aria-label={`grant.model.${assignee.assignee_id}`}
-              value={assignee.model.key}
-              disabled={pending}
-              onChange={(event) => onMove(assignee, event.target.value)}
-              className="h-8 min-w-0 flex-1 cursor-pointer rounded-md border-0 bg-transparent px-2 text-right text-sm text-[#4E5969] outline-none hover:bg-black/[0.03] focus-visible:ring-2 focus-visible:ring-blue-500/40 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {!currentIsGrantable && (
-                <option value={assignee.model.key}>
-                  {assignee.model.name}
-                </option>
-              )}
-              {models.map((model) => (
-                <option key={model.key} value={model.key}>
-                  {model.name}
-                </option>
-              ))}
-            </select>
+            {/* The native select arrow is painted over right-aligned text, so hide it and
+                reserve room for our own chevron. */}
+            <div className="relative flex min-w-0 flex-1 items-center">
+              <select
+                aria-label={`grant.model.${assignee.assignee_id}`}
+                value={assignee.model.key}
+                disabled={pending}
+                onChange={(event) => onMove(assignee, event.target.value)}
+                className="h-8 w-full min-w-0 cursor-pointer appearance-none rounded-md border-0 bg-transparent pl-2 pr-6 text-right text-sm text-[#4E5969] outline-none hover:bg-black/[0.03] focus-visible:ring-2 focus-visible:ring-blue-500/40 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {!currentIsGrantable && (
+                  <option value={assignee.model.key}>
+                    {assignee.model.name}
+                  </option>
+                )}
+                {models.map((model) => (
+                  <option key={model.key} value={model.key}>
+                    {model.name}
+                  </option>
+                ))}
+              </select>
+              <Outlined.Down
+                aria-hidden="true"
+                className="pointer-events-none absolute right-1.5 size-3.5 text-[#86909C]"
+              />
+            </div>
             <button
               type="button"
               aria-label={`${localize("f048_permission.grant.remove")}.${
