@@ -47,6 +47,8 @@ from bisheng.workstation.domain.schemas.tag_console_schema import (
     TagConsoleSearchReq,
     TagConsoleSearchResp,
     TagConsoleSourceFile,
+    TagConsoleSourceKnowledge,
+    TagConsoleSourceKnowledgeResp,
 )
 from bisheng.workstation.domain.services.workstation_tags_service import WorkStationTagsService
 
@@ -249,6 +251,22 @@ class TagConsoleService:
             TagConsoleReviewSearchReq(), tenant_id=tenant_id, space_ids=space_ids
         )
         return pending
+
+    async def list_source_knowledges(
+        self,
+        tenant_id: int,
+        keyword: str | None = None,
+    ) -> TagConsoleSourceKnowledgeResp:
+        """Options for the 标签来源库 filter.
+
+        Only knowledge bases that actually produced a tag, so the dropdown does
+        not fill up with every user's personal space and 『我的收藏』.
+        """
+        await self._ensure_can_manage_tags()
+        rows = await self.repository.list_source_knowledges(tenant_id=tenant_id, keyword=keyword)
+        return TagConsoleSourceKnowledgeResp(
+            data=[TagConsoleSourceKnowledge(id=knowledge_id, name=name) for knowledge_id, name in rows]
+        )
 
     async def review_detail(self, ref: TagConsoleReviewRef, tenant_id: int) -> TagConsoleReviewItem:
         space_ids = await self.tags_service.resolve_reviewable_space_ids()

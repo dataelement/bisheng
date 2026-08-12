@@ -365,3 +365,20 @@ export async function batchRejectTagConsoleApi(
 export async function getTagConsolePendingCountApi(): Promise<{ pending_count: number }> {
   return await axios.get("/api/v1/workstation/tags/console/review/pending-count")
 }
+
+export interface TagConsoleSourceKnowledge {
+  id: number
+  name: string
+}
+
+/**
+ * Options for the 标签来源库 filter: only knowledge bases that actually produced
+ * a tag, distinct by id and without 『我的收藏』.
+ */
+export async function listTagConsoleSourceKnowledgesApi(
+  keyword?: string,
+): Promise<{ data: TagConsoleSourceKnowledge[] }> {
+  return await axios.get("/api/v1/workstation/tags/console/source-knowledges", {
+    params: keyword ? { keyword } : {},
+  })
+}
