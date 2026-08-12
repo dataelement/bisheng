@@ -1,6 +1,13 @@
 import { Button } from "@/components/bs-ui/button"
 import { Checkbox } from "@/components/bs-ui/checkBox"
 import { Input } from "@/components/bs-ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/bs-ui/select"
 import { Switch } from "@/components/bs-ui/switch"
 import type {
   PermissionCatalogAction,
@@ -227,24 +234,31 @@ export function ModelEditor({
 
       {!isStandard && (
         <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
-          <label className="text-sm font-medium text-foreground">
+          <div className="text-sm font-medium text-foreground">
             <span className="mb-1 block">{t("model.preset.label")}</span>
-            <select
-              aria-label={t("model.preset.label")}
+            <Select
               value={selectedPreset}
               disabled={disabled}
-              onChange={(event) => setSelectedPreset(event.target.value)}
-              className="min-h-11 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              onValueChange={setSelectedPreset}
             >
-              <option value="">{t("model.preset.select")}</option>
-              <option value={BLANK_PRESET_KEY}>{t("model.preset.blank")}</option>
-              {presets.map((preset) => (
-                <option key={preset.key} value={preset.key}>
-                  {preset.name}
-                </option>
-              ))}
-            </select>
-          </label>
+              <SelectTrigger
+                aria-label={t("model.preset.label")}
+                className="min-h-11 w-full bg-background"
+              >
+                <SelectValue placeholder={t("model.preset.select")} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={BLANK_PRESET_KEY}>
+                  {t("model.preset.blank")}
+                </SelectItem>
+                {presets.map((preset) => (
+                  <SelectItem key={preset.key} value={preset.key}>
+                    {preset.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <Button
             type="button"
             variant="outline"

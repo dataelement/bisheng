@@ -1,4 +1,11 @@
 import { Button } from "@/components/bs-ui/button"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/bs-ui/select"
 import { Switch } from "@/components/bs-ui/switch"
 import type {
   PermissionActionLevel,
@@ -282,36 +289,39 @@ export function ActionLevelBoard({
                             ))}
                           </div>
 
-                          <label className="mt-3 block text-xs font-medium text-muted-foreground">
-                            <span className="sr-only">
-                              {`${t("actionLevel.change")}.${action.code}`}
-                            </span>
-                            <select
-                              aria-label={`${t("actionLevel.change")}.${action.code}`}
-                              value={level ?? "UNASSIGNED"}
+                          <div className="mt-3">
+                            <Select
+                              value={String(level ?? "UNASSIGNED")}
                               disabled={disabled || submitting}
-                              onChange={(event) =>
+                              onValueChange={(value) =>
                                 handleLevelChange(
                                   action.code,
-                                  event.target.value === "UNASSIGNED"
+                                  value === "UNASSIGNED"
                                     ? null
                                     : (Number(
-                                        event.target.value,
+                                        value,
                                       ) as PermissionActionLevel),
                                 )
                               }
-                              className="min-h-11 w-full rounded-md border border-input bg-background px-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                             >
-                              <option value="UNASSIGNED">
-                                {t("actionLevel.unassigned")}
-                              </option>
-                              {[1, 2, 3, 4].map((value) => (
-                                <option key={value} value={value}>
-                                  {t("actionLevel.level", { level: value })}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
+                              <SelectTrigger
+                                aria-label={`${t("actionLevel.change")}.${action.code}`}
+                                className="min-h-11 w-full bg-background"
+                              >
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="UNASSIGNED">
+                                  {t("actionLevel.unassigned")}
+                                </SelectItem>
+                                {[1, 2, 3, 4].map((value) => (
+                                  <SelectItem key={value} value={String(value)}>
+                                    {t("actionLevel.level", { level: value })}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
                         </div>
                       </div>
                     </article>

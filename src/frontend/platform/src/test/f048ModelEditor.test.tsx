@@ -1,6 +1,6 @@
 import { ImpactDialog } from "@/pages/SystemPage/components/permission/ImpactDialog"
 import { ModelEditor } from "@/pages/SystemPage/components/permission/ModelEditor"
-import { fireEvent, render, screen, waitFor } from "@/test/test-utils"
+import { fireEvent, render, screen, selectOption, waitFor } from "@/test/test-utils"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const actions = [
@@ -153,7 +153,7 @@ describe("ModelEditor", () => {
     expect(screen.getByTestId("model-derived-level")).toHaveTextContent("2")
   })
 
-  it("disables same-level without manage_permission and copies preset actions", () => {
+  it("disables same-level without manage_permission and copies preset actions", async () => {
     render(
       <ModelEditor
         model={{
@@ -176,9 +176,7 @@ describe("ModelEditor", () => {
     )
 
     expect(screen.getByLabelText("model.allowSameLevel")).toBeDisabled()
-    fireEvent.change(screen.getByLabelText("model.preset.label"), {
-      target: { value: "reviewer" },
-    })
+    await selectOption("model.preset.label", "Reviewer")
     fireEvent.click(
       screen.getByRole("button", { name: "model.preset.apply" }),
     )
@@ -191,7 +189,7 @@ describe("ModelEditor", () => {
     expect(screen.getByTestId("model-derived-level")).toHaveTextContent("2")
   })
 
-  it("offers a blank preset that clears the selection", () => {
+  it("offers a blank preset that clears the selection", async () => {
     // Picking the placeholder only disabled the button, so a model could gain
     // actions from a preset but never be emptied again.
     render(
@@ -213,9 +211,7 @@ describe("ModelEditor", () => {
 
     expect(screen.getByLabelText("model.action.edit")).toBeChecked()
 
-    fireEvent.change(screen.getByLabelText("model.preset.label"), {
-      target: { value: "__blank__" },
-    })
+    await selectOption("model.preset.label", "model.preset.blank")
     fireEvent.click(screen.getByRole("button", { name: "model.preset.apply" }))
 
     expect(screen.getByLabelText("model.action.edit")).not.toBeChecked()
@@ -227,7 +223,7 @@ describe("ModelEditor", () => {
     })
   })
 
-  it("offers the blank preset even when the server ships none", () => {
+  it("offers the blank preset even when the server ships none", async () => {
     render(
       <ModelEditor
         model={{ ...customModel, action_codes: ["edit"], derived_level: 2 }}
@@ -239,9 +235,7 @@ describe("ModelEditor", () => {
       />,
     )
 
-    fireEvent.change(screen.getByLabelText("model.preset.label"), {
-      target: { value: "__blank__" },
-    })
+    await selectOption("model.preset.label", "model.preset.blank")
     fireEvent.click(screen.getByRole("button", { name: "model.preset.apply" }))
 
     expect(screen.getByLabelText("model.action.edit")).not.toBeChecked()

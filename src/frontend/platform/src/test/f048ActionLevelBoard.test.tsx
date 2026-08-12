@@ -1,5 +1,5 @@
 import { ActionLevelBoard } from "@/pages/SystemPage/components/permission/ActionLevelBoard"
-import { fireEvent, render, screen, waitFor } from "@/test/test-utils"
+import { fireEvent, render, screen, selectOption, waitFor } from "@/test/test-utils"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const actions = [
@@ -91,9 +91,7 @@ describe("ActionLevelBoard", () => {
       />,
     )
 
-    fireEvent.change(screen.getByLabelText("actionLevel.change.edit"), {
-      target: { value: "3" },
-    })
+    await selectOption("actionLevel.change.edit", 3)
     expect(
       screen.getByTestId("action-level-zone-3"),
     ).toContainElement(screen.getByTestId("permission-action-edit"))
@@ -130,7 +128,7 @@ describe("ActionLevelBoard", () => {
     expect(onReviewImpact).toHaveBeenCalledWith(draft)
   })
 
-  it("drops a change once the action is moved back where it started", () => {
+  it("drops a change once the action is moved back where it started", async () => {
     render(
       <ActionLevelBoard
         actions={actions}
@@ -139,22 +137,18 @@ describe("ActionLevelBoard", () => {
       />,
     )
 
-    fireEvent.change(screen.getByLabelText("actionLevel.change.visible"), {
-      target: { value: "3" },
-    })
+    await selectOption("actionLevel.change.visible", 3)
     expect(screen.getByRole("status")).toBeInTheDocument()
 
     // Re-query: moving zones remounts the card, so the old node is detached.
-    fireEvent.change(screen.getByLabelText("actionLevel.change.visible"), {
-      target: { value: "1" },
-    })
+    await selectOption("actionLevel.change.visible", 1)
     expect(screen.queryByRole("status")).not.toBeInTheDocument()
     expect(
       screen.getByRole("button", { name: "actionLevel.publishChanges" }),
     ).toBeDisabled()
   })
 
-  it("discards every pending change back to the published release", () => {
+  it("discards every pending change back to the published release", async () => {
     render(
       <ActionLevelBoard
         actions={actions}
@@ -163,9 +157,7 @@ describe("ActionLevelBoard", () => {
       />,
     )
 
-    fireEvent.change(screen.getByLabelText("actionLevel.change.edit"), {
-      target: { value: "3" },
-    })
+    await selectOption("actionLevel.change.edit", 3)
     fireEvent.click(screen.getByLabelText("actionLevel.active.delete"))
     expect(screen.getByRole("status")).toBeInTheDocument()
 
@@ -190,9 +182,7 @@ describe("ActionLevelBoard", () => {
       />,
     )
 
-    fireEvent.change(screen.getByLabelText("actionLevel.change.edit"), {
-      target: { value: "3" },
-    })
+    await selectOption("actionLevel.change.edit", 3)
     fireEvent.click(
       screen.getByRole("button", { name: "actionLevel.publishChanges" }),
     )
