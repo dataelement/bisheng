@@ -5,6 +5,11 @@ import {
   getDepartmentPathTreeApi,
   searchDepartmentsApi,
 } from "@/controllers/API/department"
+import {
+  getGrantSubjectDepartmentChildrenApi,
+  getGrantSubjectDepartmentPathTreeApi,
+  searchGrantSubjectDepartmentsApi,
+} from "@/controllers/API/permission"
 import type { DepartmentTreeNode } from "@/types/api/department"
 import { useEffect, useRef } from "react"
 import { useTranslation } from "react-i18next"
@@ -49,16 +54,29 @@ export function SubjectSearchDepartment({
   const { t } = useTranslation("permission")
   const disabledIdSet = new Set(disabledIds)
 
-  // Subject discovery belongs to the organization domain. The permission API
-  // validates the selected subject when applying the Grant, but never queries
-  // organization tables to populate this picker.
+  // Scoped to the resource: the org-management tree answers "which departments
+  // do I administer", which a space manager may administer none of — it replied
+  // "no permission" and the picker stayed empty. These ask who may be granted
+  // THIS resource, and narrow to the bound department for a department space.
+  const scoped = Boolean(resourceType && resourceId)
   const tree = useLazyDepartmentTree(
     {
-      autoLoad: Boolean(resourceType && resourceId) || allowOrganizationTree,
-      cacheKey: "permission-subject-departments",
-      fetchChildren: (p) => getDepartmentChildrenApi(p, false),
-      fetchSearch: (kw) => searchDepartmentsApi(kw, false),
-      fetchPathTree: (id) => getDepartmentPathTreeApi(id, false),
+      autoLoad: scoped || allowOrganizationTree,
+      cacheKey: scoped
+        ? `permission-subject-departments:${resourceType}:${resourceId}`
+        : "permission-subject-departments",
+      fetchChildren: (p) =>
+        scoped
+          ? getGrantSubjectDepartmentChildrenApi(resourceType!, resourceId!, p)
+          : getDepartmentChildrenApi(p, false),
+      fetchSearch: (kw) =>
+        scoped
+          ? searchGrantSubjectDepartmentsApi(resourceType!, resourceId!, kw)
+          : searchDepartmentsApi(kw, false),
+      fetchPathTree: (id) =>
+        scoped
+          ? getGrantSubjectDepartmentPathTreeApi(resourceType!, resourceId!, id)
+          : getDepartmentPathTreeApi(id, false),
     }
   )
 

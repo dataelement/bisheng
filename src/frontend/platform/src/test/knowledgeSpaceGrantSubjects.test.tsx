@@ -6,6 +6,12 @@ import {
   searchDepartmentsApi,
 } from "@/controllers/API/department";
 import {
+  getGrantSubjectDepartmentChildrenApi,
+  getGrantSubjectDepartmentPathTreeApi,
+  getGrantSubjectUserGroupsApi,
+  searchGrantSubjectDepartmentsApi,
+} from "@/controllers/API/permission";
+import {
   getUserGroupsApi,
 } from "@/controllers/API/user";
 import { render, screen, waitFor, within } from "@/test/test-utils";
@@ -26,6 +32,13 @@ vi.mock("@/controllers/API/department", () => ({
 
 vi.mock("@/controllers/API/user", () => ({
   getUserGroupsApi: vi.fn(),
+}));
+
+vi.mock("@/controllers/API/permission", () => ({
+  getGrantSubjectDepartmentChildrenApi: vi.fn(),
+  searchGrantSubjectDepartmentsApi: vi.fn(),
+  getGrantSubjectDepartmentPathTreeApi: vi.fn(),
+  getGrantSubjectUserGroupsApi: vi.fn(),
 }));
 
 vi.mock("@/controllers/request", () => ({
@@ -59,6 +72,10 @@ const mockedDeptChildren = vi.mocked(getDepartmentChildrenApi);
 const mockedDeptSearch = vi.mocked(searchDepartmentsApi);
 const mockedDeptPathTree = vi.mocked(getDepartmentPathTreeApi);
 const mockedUserGroups = vi.mocked(getUserGroupsApi);
+const mockedScopedChildren = vi.mocked(getGrantSubjectDepartmentChildrenApi);
+const mockedScopedSearch = vi.mocked(searchGrantSubjectDepartmentsApi);
+const mockedScopedPathTree = vi.mocked(getGrantSubjectDepartmentPathTreeApi);
+const mockedScopedUserGroups = vi.mocked(getGrantSubjectUserGroupsApi);
 
 const node = (
   id: number,
@@ -93,10 +110,14 @@ describe("permission subject discovery business boundary", () => {
     mockedDeptSearch.mockResolvedValue({ roots: [], total_matches: 0, truncated: false } as any);
     mockedDeptPathTree.mockResolvedValue({ roots: [], total_matches: 0, truncated: false } as any);
     mockedUserGroups.mockResolvedValue([] as any);
+    mockedScopedChildren.mockResolvedValue([]);
+    mockedScopedSearch.mockResolvedValue({ roots: [], total_matches: 0, truncated: false });
+    mockedScopedPathTree.mockResolvedValue({ roots: [], total_matches: 0, truncated: false });
+    mockedScopedUserGroups.mockResolvedValue({ data: [], total: 0 });
   });
 
-  it("loads grant departments from the organization API without member counts", async () => {
-    mockedDeptChildren.mockResolvedValue([node(10, "研发部", null, "/10/", false)] as any);
+  it("asks the resource who may be granted it, not the org chart", async () => {
+    mockedScopedChildren.mockResolvedValue([node(10, "研发部", null, "/10/", false)] as any);
 
     render(
       <SubjectSearchDepartment
@@ -108,13 +129,16 @@ describe("permission subject discovery business boundary", () => {
     );
 
     await screen.findByText("研发部");
-    expect(mockedDeptChildren).toHaveBeenCalledWith(null, false);
+    expect(mockedScopedChildren).toHaveBeenCalledWith("knowledge_space", "88", null);
+    // The org-management tree would answer "no permission" for a space manager
+    // who administers no department, which is what emptied this picker.
+    expect(mockedDeptChildren).not.toHaveBeenCalled();
     // member_count was removed (F038 / reversed F027) — no "(N)" suffix renders.
     expect(screen.queryByText(/\(\d+\)/)).not.toBeInTheDocument();
   });
 
-  it("uses the same organization API for workflow grants", async () => {
-    mockedDeptChildren.mockResolvedValue([node(10, "研发部", null, "/10/", false)] as any);
+  it("scopes to whichever resource is being granted", async () => {
+    mockedScopedChildren.mockResolvedValue([node(10, "研发部", null, "/10/", false)] as any);
 
     render(
       <SubjectSearchDepartment
@@ -126,7 +150,7 @@ describe("permission subject discovery business boundary", () => {
     );
 
     await screen.findByText("研发部");
-    expect(mockedDeptChildren).toHaveBeenCalledWith(null, false);
+    expect(mockedScopedChildren).toHaveBeenCalledWith("workflow", "wf-1", null);
   });
 
   it("browses the plain org tree when allowOrganizationTree and no resource is given", async () => {
@@ -139,10 +163,10 @@ describe("permission subject discovery business boundary", () => {
   });
 
   it("marks descendants checked + disabled (implicit) when an ancestor is selected with include-children — decision 9 (path-based)", async () => {
-    mockedDeptChildren.mockResolvedValue([node(10, "研发部", null, "/10/", true)] as any);
+    mockedScopedChildren.mockResolvedValue([node(10, "研发部", null, "/10/", true)] as any);
     // Search returns the backend's pruned tree (rendered fully expanded), so the
     // descendant 平台组 becomes visible under its selected ancestor 研发部.
-    mockedDeptSearch.mockResolvedValue({
+    mockedScopedSearch.mockResolvedValue({
       roots: [
         { ...node(10, "研发部", null, "/10/", true), children: [node(11, "平台组", 10, "/10/11/", false, true)] },
       ],
@@ -171,7 +195,7 @@ describe("permission subject discovery business boundary", () => {
   });
 
   it("summarizes only the explicit picks, never the materialized subtree — decision 10", async () => {
-    mockedDeptChildren.mockResolvedValue([node(10, "研发部", null, "/10/", true)] as any);
+    mockedScopedChildren.mockResolvedValue([node(10, "研发部", null, "/10/", true)] as any);
     const onSelectionSummaryChange = vi.fn();
 
     render(
@@ -193,7 +217,7 @@ describe("permission subject discovery business boundary", () => {
   });
 
   it("shows already-granted departments as checked and disabled", async () => {
-    mockedDeptChildren.mockResolvedValue([node(10, "研发部", null, "/10/", false)] as any);
+    mockedScopedChildren.mockResolvedValue([node(10, "研发部", null, "/10/", false)] as any);
 
     render(
       <SubjectSearchDepartment
@@ -212,7 +236,7 @@ describe("permission subject discovery business boundary", () => {
   });
 
   it("adds a department carrying the current include-children flag when toggled on", async () => {
-    mockedDeptChildren.mockResolvedValue([node(10, "研发部", null, "/10/", false)] as any);
+    mockedScopedChildren.mockResolvedValue([node(10, "研发部", null, "/10/", false)] as any);
     const onChange = vi.fn();
 
     render(
@@ -233,8 +257,11 @@ describe("permission subject discovery business boundary", () => {
     ]);
   });
 
-  it("loads user groups from the user-group business API", async () => {
-    mockedUserGroups.mockResolvedValue([{ id: 3, group_name: "产品组" }] as any);
+  it("loads the user groups grantable on this resource", async () => {
+    mockedScopedUserGroups.mockResolvedValue({
+      data: [{ id: 3, name: "产品组" }],
+      total: 1,
+    } as any);
 
     render(
       <SubjectSearchUserGroup
@@ -249,6 +276,9 @@ describe("permission subject discovery business boundary", () => {
       expect(screen.getByText("产品组")).toBeInTheDocument();
     });
 
-    expect(mockedUserGroups).toHaveBeenCalledWith({});
+    expect(mockedScopedUserGroups).toHaveBeenCalledWith("knowledge_space", "88", {
+      pageSize: 200,
+    });
+    expect(mockedUserGroups).not.toHaveBeenCalled();
   });
 });

@@ -109,3 +109,65 @@ def test_scope_carries_the_resource_tenant_not_the_caller_s() -> None:
     scope = GrantSubjectScope(tenant_id=42, department_path=None)
     assert scope.tenant_id == 42
     assert scope.department_path is None
+
+
+async def test_the_department_answers_carry_the_org_tree_shape(monkeypatch) -> None:
+    """The picker renders either source, so both must speak the same node shape.
+
+    The layer endpoint returns nodes with `children`, and reveal/search return
+    the pruned `{roots, …}` forest — a flat ancestor list would render the
+    hierarchy as unrelated top-level rows.
+    """
+
+    from bisheng.department.domain.services import department_service as org
+    from bisheng.permission.domain.services import grant_subject_service
+
+    node = org._dept_node_dict(
+        type(
+            "D",
+            (),
+            {
+                "id": 7,
+                "dept_id": "D7",
+                "name": "sales",
+                "parent_id": None,
+                "path": "/7/",
+                "sort_order": 0,
+                "source": "local",
+                "status": "active",
+            },
+        )()
+    )
+    assert "children" in node and "has_children" in node
+
+    async def one_department(*args, **kwargs):
+        del args, kwargs
+        return type("D", (), {"id": 7, "tenant_id": 1, "path": "/7/"})()
+
+    async def forest(*args, **kwargs):
+        del args, kwargs
+        return [node]
+
+    monkeypatch.setattr(grant_subject_service.DepartmentDao, "aget_by_id", one_department)
+    monkeypatch.setattr(grant_subject_service.DepartmentService, "abuild_forest_within_subtree", forest)
+
+    revealed = await grant_subject_service.get_candidate_department_path(
+        GrantSubjectScope(tenant_id=1, department_path=None), dept_id=7
+    )
+    assert set(revealed) == {"roots", "total_matches", "truncated"}
+    assert revealed["roots"] == [node]
+
+
+async def test_a_department_bound_space_reveals_nothing_outside_its_subtree(monkeypatch) -> None:
+    from bisheng.permission.domain.services import grant_subject_service
+
+    async def elsewhere(*args, **kwargs):
+        del args, kwargs
+        return type("D", (), {"id": 9, "tenant_id": 1, "path": "/1/9/"})()
+
+    monkeypatch.setattr(grant_subject_service.DepartmentDao, "aget_by_id", elsewhere)
+
+    revealed = await grant_subject_service.get_candidate_department_path(
+        GrantSubjectScope(tenant_id=1, department_path="/2/"), dept_id=9
+    )
+    assert revealed["roots"] == []

@@ -22,6 +22,8 @@ const PAGE_SIZE = 50;
 export function SubjectSearchUser({
   value,
   onChange,
+  resourceType,
+  resourceId,
   disabledIds = [],
   grantedLabels = {},
 }: SubjectSearchUserProps) {
@@ -52,7 +54,10 @@ export function SubjectSearchUser({
       pageNum: number,
       signal: AbortSignal,
     ): Promise<UserRow[]> => {
+      if (!resourceType || !resourceId) return [];
       const res = await searchUsers(
+        resourceType,
+        resourceId,
         name,
         { page: pageNum, pageSize: PAGE_SIZE },
         { signal },
@@ -60,7 +65,7 @@ export function SubjectSearchUser({
       if (signal.aborted) return [];
       return res.data || [];
     },
-    [],
+    [resourceId, resourceType],
   );
 
   const resetAndLoad = useCallback(

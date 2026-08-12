@@ -3686,10 +3686,10 @@
   },
   "src/test/subjectSearchUser.test.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 13
+      "count": 8
     },
     "no-restricted-syntax": {
-      "count": 3
+      "count": 1
     }
   },
   "src/test/systemDepartmentsArchivedDelete.test.tsx": {

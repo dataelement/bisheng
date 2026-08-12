@@ -54,9 +54,20 @@ export function SubjectSearchDepartment({
   const fetchSearch = departmentSearchApi ?? searchDepartments;
   const tree = useGrantDepartmentTree({
     fetchChildren: (parentId, signal) =>
-      fetchChildren(parentId, signal ? { signal } : undefined),
+      fetchChildren(
+        resourceType,
+        resourceId,
+        parentId,
+        signal ? { signal } : undefined,
+      ),
     fetchSearch: (keyword, signal) =>
-      fetchSearch(keyword, 50, signal ? { signal } : undefined),
+      fetchSearch(
+        resourceType,
+        resourceId,
+        keyword,
+        50,
+        signal ? { signal } : undefined,
+      ),
   });
 
   // Remember each selected dept's path at pick time so implicit selection can be

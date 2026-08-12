@@ -23,6 +23,8 @@ interface SubjectSearchUserGroupProps {
 export function SubjectSearchUserGroup({
   value,
   onChange,
+  resourceType,
+  resourceId,
   disabledIds = [],
   grantedLabels = {},
 }: SubjectSearchUserGroupProps) {
@@ -33,7 +35,10 @@ export function SubjectSearchUserGroup({
 
   useEffect(() => {
     const controller = new AbortController();
-    const request = getUserGroups({ signal: controller.signal });
+    if (!resourceType || !resourceId) return;
+    const request = getUserGroups(resourceType, resourceId, {
+      signal: controller.signal,
+    });
 
     setLoading(true);
     request
@@ -47,7 +52,7 @@ export function SubjectSearchUserGroup({
       });
 
     return () => controller.abort();
-  }, []);
+  }, [resourceId, resourceType]);
 
   const filtered = useMemo(() => {
     if (!keyword) return groups;

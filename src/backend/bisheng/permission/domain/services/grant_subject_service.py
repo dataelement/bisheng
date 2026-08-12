@@ -23,6 +23,10 @@ from bisheng.core.database import get_async_db_session
 from bisheng.database.models.department import Department, DepartmentDao, UserDepartment
 from bisheng.database.models.group import Group
 from bisheng.database.models.tenant import UserTenant
+from bisheng.department.domain.services.department_service import (
+    DepartmentService,
+    _dept_node_dict,
+)
 from bisheng.knowledge.domain.models.department_knowledge_space import (
     DepartmentKnowledgeSpaceDao,
 )
@@ -82,7 +86,7 @@ async def list_candidate_users(
                 .exists()
             )
             statement = (
-                select(User.user_id, User.user_name)
+                select(User.user_id, User.user_name, User.external_id)
                 .where(User.delete == 0, in_tenant)
                 .order_by(col(User.user_id).desc())
             )
@@ -103,7 +107,52 @@ async def list_candidate_users(
                 # wildcard forced a full scan of a 150k-row table (F038).
                 statement = statement.where(col(User.user_name).like(f"{keyword}%"))
             rows = (await session.exec(statement.offset((page - 1) * page_size).limit(page_size))).all()
-    return [{"user_id": int(row.user_id), "user_name": row.user_name} for row in rows]
+    # The picker prints the staff id after the name and the department under it,
+    # so people with the same display name can be told apart.
+    paths = await _primary_department_paths([int(row.user_id) for row in rows])
+    return [
+        {
+            "user_id": int(row.user_id),
+            "user_name": row.user_name,
+            "external_id": row.external_id,
+            "primary_department_path": paths.get(int(row.user_id)),
+        }
+        for row in rows
+    ]
+
+
+async def _primary_department_paths(user_ids: list[int]) -> dict[int, str]:
+    """Each user's primary department as a readable name chain, in one round trip."""
+
+    if not user_ids:
+        return {}
+    with bypass_tenant_filter():
+        async with get_async_db_session() as session:
+            rows = (
+                await session.exec(
+                    select(UserDepartment.user_id, Department.path)
+                    .join(Department, Department.id == UserDepartment.department_id)
+                    .where(
+                        col(UserDepartment.user_id).in_(user_ids),
+                        UserDepartment.is_primary == 1,
+                        Department.status == "active",
+                    )
+                )
+            ).all()
+    if not rows:
+        return {}
+    needed: set[int] = set()
+    for row in rows:
+        needed.update(int(part) for part in str(row.path).strip("/").split("/") if part.isdigit())
+    names = {int(d.id): d.name for d in await DepartmentDao.aget_by_ids(list(needed)) if d.id is not None}
+    resolved: dict[int, str] = {}
+    for row in rows:
+        chain = [
+            names[int(part)] for part in str(row.path).strip("/").split("/") if part.isdigit() and int(part) in names
+        ]
+        if chain:
+            resolved[int(row.user_id)] = "/".join(chain)
+    return resolved
 
 
 async def list_candidate_user_groups(
@@ -148,7 +197,7 @@ async def list_candidate_department_layer(
                 if scope.department_path is not None:
                     statement = statement.where(col(Department.path).like(f"{scope.department_path}%"))
             rows = (await session.exec(statement.order_by(col(Department.id)))).all()
-    return await _with_children_flags(rows)
+    return await _as_tree_nodes(rows)
 
 
 async def search_candidate_departments(
@@ -171,41 +220,38 @@ async def search_candidate_departments(
             rows = (await session.exec(statement.order_by(col(Department.id)).limit(limit + 1))).all()
     truncated = len(rows) > limit
     matches = list(rows[:limit])
-    return {
-        "roots": await _with_children_flags(matches),
-        "total_matches": len(matches),
-        "truncated": truncated,
-    }
+    roots = await DepartmentService.abuild_forest_within_subtree(
+        matches,
+        {int(row.id) for row in matches if row.id is not None},
+        confined_to_path=None if scope.department_path is None else scope.department_path,
+    )
+    return {"roots": roots, "total_matches": len(matches), "truncated": truncated}
 
 
-async def get_candidate_department_path(scope: GrantSubjectScope, *, dept_id: int) -> list[dict]:
-    """The ancestor chain of one department, so the picker can reveal it."""
+async def get_candidate_department_path(scope: GrantSubjectScope, *, dept_id: int) -> dict:
+    """Reveal one department: the pruned tree from the root down to it.
 
+    Same envelope as the org-management locate endpoint, because the picker's
+    tree renders the two interchangeably.
+    """
+
+    empty = {"roots": [], "total_matches": 0, "truncated": False}
     department = await DepartmentDao.aget_by_id(dept_id)
     if department is None or int(department.tenant_id) != scope.tenant_id:
-        return []
+        return empty
     if scope.department_path is not None and not str(department.path).startswith(scope.department_path):
-        return []
-    ancestor_ids = [int(part) for part in str(department.path).strip("/").split("/") if part.isdigit()]
-    if not ancestor_ids:
-        return []
-    rows = await DepartmentDao.aget_by_ids(ancestor_ids)
-    by_id = {int(row.id): row for row in rows if row.id is not None}
-    return await _with_children_flags([by_id[dept] for dept in ancestor_ids if dept in by_id])
+        return empty
+    roots = await DepartmentService.abuild_forest_within_subtree(
+        [department],
+        {int(department.id)},
+        confined_to_path=scope.department_path,
+    )
+    return {"roots": roots, "total_matches": 1, "truncated": False}
 
 
-async def _with_children_flags(rows: list) -> list[dict]:
-    """Attach `has_children` for one rendered layer in a single query (F038)."""
+async def _as_tree_nodes(rows: list) -> list[dict]:
+    """One rendered layer, in the org tree's node shape (`has_children` batched)."""
 
     ids = [int(row.id) for row in rows if row.id is not None]
     with_children = await DepartmentDao.aget_children_existence(ids) if ids else set()
-    return [
-        {
-            "id": int(row.id),
-            "name": row.name,
-            "parent_id": int(row.parent_id) if row.parent_id is not None else None,
-            "path": str(row.path),
-            "has_children": int(row.id) in with_children,
-        }
-        for row in rows
-    ]
+    return [_dept_node_dict(row, has_children=int(row.id) in with_children) for row in rows]

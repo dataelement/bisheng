@@ -1753,11 +1753,6 @@
       "count": 1
     }
   },
-  "src/components/permission/SubjectSearchDepartment.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 2
-    }
-  },
   "src/components/svg/DownIcon.tsx": {
     "@typescript-eslint/no-unused-vars": {
       "count": 1
