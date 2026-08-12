@@ -48,18 +48,18 @@ const MOBILE_MENU_COLLISION = {
 } as const;
 
 /**
- * Compute an alignOffset so the sub-content top aligns with the parent menu top,
- * and clamp maxH so the sub-content never overflows the viewport on either side.
+ * Clamp maxH so the sub-content never overflows the viewport on either side.
+ * Vertical placement itself is Radix's job (`align="center"` on the sub-content
+ * centers it on its trigger row); we only cap the height it may take.
  *
  * After the sub-content is rendered by Radix, we also observe its real position
  * and re-clamp maxH based on the actual top (handles Radix collision shifting).
  */
 function useSubMenuLayout(menuRef: React.RefObject<HTMLDivElement | null>, triggerKey: string, open: boolean) {
-  const [alignOffset, setAlignOffset] = useState(0);
   const [maxH, setMaxH] = useState<number>(MAX_SUB_HEIGHT);
   const subContentRef = useRef<HTMLElement | null>(null);
 
-  // Phase 1 — compute alignOffset & an initial maxH from parent menu rect
+  // Phase 1 — initial maxH estimate from the parent menu rect
   useLayoutEffect(() => {
     if (!open) return;
 
@@ -68,14 +68,6 @@ function useSubMenuLayout(menuRef: React.RefObject<HTMLDivElement | null>, trigg
       if (!menuEl) return;
 
       const menuRect = menuEl.getBoundingClientRect();
-
-      const trigger = menuEl.querySelector<HTMLElement>(`[data-sub-key="${triggerKey}"]`);
-      if (trigger) {
-        const triggerRect = trigger.getBoundingClientRect();
-        setAlignOffset(Math.round(menuRect.top - triggerRect.top));
-      } else {
-        setAlignOffset(0);
-      }
 
       // Initial estimate — will be refined in Phase 2
       const spaceBelow = window.innerHeight - menuRect.top - BOTTOM_GAP;
@@ -87,7 +79,7 @@ function useSubMenuLayout(menuRef: React.RefObject<HTMLDivElement | null>, trigg
     requestAnimationFrame(update);
     window.addEventListener('resize', update);
     return () => window.removeEventListener('resize', update);
-  }, [open, menuRef, triggerKey]);
+  }, [open, menuRef]);
 
   // Phase 2 — once Radix renders the actual sub-content, observe its real
   // position and clamp maxH so it stays within the viewport.
@@ -144,7 +136,7 @@ function useSubMenuLayout(menuRef: React.RefObject<HTMLDivElement | null>, trigg
     };
   }, [open, menuRef, triggerKey]);
 
-  return { alignOffset, maxH };
+  return { maxH };
 }
 
 // --- main ---
@@ -495,35 +487,19 @@ export const ChatKnowledge = ({
           </DropdownMenuItem>
         )}
 
-        {/* Knowledge pill (mobile): show the SPACES list directly — no drill.
-            Matches the desktop layout (title + list) so both surfaces feel the
-            same; only the outer width / position adapt to the smaller screen. */}
-        {variant === 'knowledge' && isMobile && (
+        {/* Knowledge pill: show the SPACES list directly — no drill, no sub.
+            Same layout on both surfaces; only the outer width / position adapt
+            to the smaller screen, plus the mobile-only heading below. */}
+        {variant === 'knowledge' && (
           <div className="flex min-h-0 w-full flex-1 flex-col">
-            <p className="mb-1 shrink-0 px-2 py-[5px] text-[14px] font-medium leading-[22px] text-[#1A1A1A]">
-              {localize('com_ui_knowledge_space')}
-            </p>
-            <KnowledgeListPanel
-              placeholder={localize('com_chat_knowledge_placeholder_search_space')}
-              keyword={spaceKeyword}
-              setKeyword={setSpaceKeyword}
-              groups={spaceListGroups}
-              selectedItems={selectedKnowledgeSpaces}
-              onToggle={(item) => handleToggle(item, 'space')}
-              isFetching={spaceFetching}
-              hasMore={false}
-              onLoadMore={() => { }}
-              emptyText={localize('com_chat_knowledge_empty_no_spaces')}
-            />
-          </div>
-        )}
-
-        {/* Knowledge pill (desktop): show the SPACES list directly — no sub. */}
-        {variant === 'knowledge' && !isMobile && (
-          <div className="flex min-h-0 w-full flex-1 flex-col">
-            <p className="mb-1 shrink-0 px-2 py-[5px] text-[14px] font-medium leading-[22px] text-[#1A1A1A]">
-              {localize('com_ui_knowledge_space')}
-            </p>
+            {/* Mobile keeps the heading: the narrow toolbar can collapse the pill
+                trigger to icon-only (`compact`), leaving this as the only place
+                the name shows. On desktop the trigger reads "知识空间" beside it. */}
+            {isMobile && (
+              <p className="mb-1 shrink-0 px-2 py-[5px] text-[14px] font-medium leading-[22px] text-[#1A1A1A]">
+                {localize('com_ui_knowledge_space')}
+              </p>
+            )}
             <KnowledgeListPanel
               placeholder={localize('com_chat_knowledge_placeholder_search_space')}
               keyword={spaceKeyword}
@@ -566,8 +542,10 @@ export const ChatKnowledge = ({
               </div>
             </DropdownMenuSubTrigger>
 
+            {/* `align="center"` centers the panel vertically on the trigger row
+                (same placement rule as the skill panel below). */}
             <DropdownMenuSubContent
-              alignOffset={orgLayout.alignOffset}
+              align="center"
               collisionPadding={BOTTOM_GAP}
               className="ml-2 flex w-[240px] flex-col overflow-hidden rounded-lg border-slate-100 bg-white pt-2 px-2 pb-0 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]"
               style={
@@ -578,9 +556,9 @@ export const ChatKnowledge = ({
                 } as React.CSSProperties
               }
             >
-              <p className="mb-1 shrink-0 px-2 py-[5px] text-[14px] font-medium leading-[22px] text-[#1A1A1A]">
-                {localize('com_tools_org_knowledge')}
-              </p>
+              {/* No heading here: this panel hangs off the "组织知识库" row, which
+                  stays visible next to it. The mobile drill panel keeps its own
+                  heading — there it is the back row's label. */}
               <KnowledgeListPanel
                 placeholder={localize('com_tools_knowledge_base_search')}
                 keyword={orgKeyword}
@@ -693,8 +671,14 @@ export const ChatKnowledge = ({
                       </span>
                     </div>
                   </DropdownMenuSubTrigger>
-                  {/* Layout mirrors the knowledge panel shell (variant === 'knowledge' above). */}
-                  <DropdownMenuSubContent className="ml-2 flex max-h-[256px] w-[240px] flex-col gap-0 overflow-hidden rounded-lg border-0 bg-white px-2 pb-0 pt-2 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]">
+                  {/* Layout mirrors the knowledge panel shell (variant === 'knowledge' above).
+                      `align="center"` centers the panel vertically on the trigger row
+                      instead of aligning their top edges. */}
+                  <DropdownMenuSubContent
+                    align="center"
+                    collisionPadding={BOTTOM_GAP}
+                    className="ml-2 flex max-h-[440px] w-[280px] flex-col gap-0 overflow-hidden rounded-lg border-0 bg-white px-2 pb-0 pt-2 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]"
+                  >
                     {renderSkillSubmenu(() => setRootOpen(false))}
                   </DropdownMenuSubContent>
                 </DropdownMenuSub>

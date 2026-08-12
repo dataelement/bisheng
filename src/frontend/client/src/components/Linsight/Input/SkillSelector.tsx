@@ -66,11 +66,9 @@ export function SkillSelector({ selected, onChange }: SkillSelectorProps) {
 
     return (
         <div className="flex min-h-0 flex-1 flex-col gap-1">
-            {/* Panel title — mirrors the knowledge panel header for visual consistency */}
-            <p className="mb-1 shrink-0 px-2 py-[5px] text-[14px] font-medium leading-[22px] text-[#1A1A1A]">
-                {localize('com_linsight_skill_title')}
-            </p>
-
+            {/* No panel heading: every surface that opens this list already
+                labels it — the desktop submenu hangs off the "添加技能" row, the
+                mobile drill panel has it in the back-navigation row. */}
             {/* Search — stopPropagation so typing isn't hijacked by the Radix menu's type-ahead */}
             <div className="relative shrink-0">
                 <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
