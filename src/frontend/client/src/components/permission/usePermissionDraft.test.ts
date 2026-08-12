@@ -122,6 +122,52 @@ describe("permissionDraftReducer", () => {
       }],
     });
   });
+
+  it("omits department scope from user revokes even when the API returned null", () => {
+    const viewerWithNullScope = {
+      ...viewer,
+      includeChildren: null,
+    } as unknown as PermissionDraftRow;
+    let state = createPermissionDraft([viewerWithNullScope]);
+
+    state = permissionDraftReducer(state, {
+      type: "remove",
+      key: getPermissionDraftRowKey(viewerWithNullScope),
+    });
+
+    expect(getPermissionDraftDiff(state).revokes).toEqual([
+      {
+        subject_type: "user",
+        subject_id: 2,
+        relation: "viewer",
+      },
+    ]);
+  });
+
+  it("serializes department scope as a boolean", () => {
+    const department: PermissionDraftRow = {
+      subjectType: "department",
+      subjectId: 8,
+      subjectName: "Platform",
+      relation: "viewer",
+      includeChildren: false,
+    };
+    let state = createPermissionDraft([department]);
+
+    state = permissionDraftReducer(state, {
+      type: "remove",
+      key: getPermissionDraftRowKey(department),
+    });
+
+    expect(getPermissionDraftDiff(state).revokes).toEqual([
+      {
+        subject_type: "department",
+        subject_id: 8,
+        relation: "viewer",
+        include_children: false,
+      },
+    ]);
+  });
 });
 
 describe("usePermissionDraft", () => {
