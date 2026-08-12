@@ -39,10 +39,26 @@ interface SidebarItemProps {
 }
 
 function SidebarItem({ icon, activeIcon, to, active, label, showLabel = false, onNavigate }: SidebarItemProps) {
+  const location = useLocation();
+  // Re-navigating to the path we are already on is a no-op the user cannot see,
+  // but react-router still mints a fresh location.key and every effect keyed on
+  // it re-runs. The 首页 entry points at `lastSectionPaths.home`, which IS the
+  // current `/c/<id>` while a chat is open — so an idle click used to churn chat
+  // state for nothing. Swallow it here, the way Convo does for the conversation
+  // list.
+  const handleClick = (event: React.MouseEvent<HTMLAnchorElement>) => {
+    // Still fires on a same-path click: collapsing the H5 drawer is what the
+    // user asked for, only the redundant navigation is dropped.
+    onNavigate?.();
+    if (to === location.pathname) {
+      event.preventDefault();
+    }
+  };
+
   return (
     <NavLink
       to={to}
-      onClick={onNavigate}
+      onClick={handleClick}
       className={cn(
         'flex cursor-pointer rounded-lg transition-colors hover:bg-[#f2f3f5]',
         showLabel

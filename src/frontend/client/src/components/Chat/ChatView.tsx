@@ -7,6 +7,7 @@ import { useRecoilState } from 'recoil';
 import { getRecommendedAppsApi } from '~/api/apps';
 import { writeAppChatOrigin, writeAppChatReturnTo } from '~/pages/appChat/appChatOrigin';
 import AiChatInput from '~/components/Chat/AiChatInput';
+import { resolveTaskModeOnNavigation } from '~/components/Chat/resolveTaskMode';
 import AiChatMessages from '~/components/Chat/AiChatMessages';
 import { PinnedTaskPanel } from '~/components/Linsight/Execution/PinnedTaskPanel';
 import { WorkspacePanel } from '~/components/Linsight/Artifacts/WorkspacePanel';
@@ -251,47 +252,16 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
 
   // F035: distinguishes the post-submit URL self-rewrite (same conversation
   // just got its real id — keep the composing mode) from a genuine navigation
-  // to a different existing conversation (drop task mode). Set right before the
-  // self-rewrite navigate below, consumed by the reset effect it triggers.
+  // to a different existing conversation (derive the mode from its history).
+  // Set right before the self-rewrite navigate below, consumed by the mode
+  // effect once the rewritten URL has landed.
   const keepTaskModeOnRewriteRef = useRef(false);
-
-  // F035: sync the local task-mode toggle to navigation. ChatView is NOT
-  // remounted across `/c/:id` param changes (same route element), so the
-  // useState initializer above only runs on first mount. This effect picks up
-  // subsequent navigations:
-  //  - sidebar "新建任务" lands on /c/new with state.taskMode=true → enter task mode.
-  //  - the first submit on /c/new self-rewrites the URL to the real id; that is
-  //    the SAME conversation, so the user's chosen mode is preserved (they can
-  //    keep composing task turns, or toggle off manually).
-  //  - any OTHER navigation to an existing conversation (id !== 'new') defaults
-  //    to off HERE, before history loads (so a stale mode from another tab can't
-  //    leak in). The restore effect below re-enters task mode once the loaded
-  //    history proves this is a task conversation — a daily chat stays off.
-  // location.key changes on every navigation so re-entering /c/new with the
-  // same state still re-triggers.
-  useEffect(() => {
-    if (conversationId !== 'new') {
-      // Post-submit self-rewrite: keep whatever mode the user is composing in.
-      if (keepTaskModeOnRewriteRef.current) {
-        keepTaskModeOnRewriteRef.current = false;
-        return;
-      }
-      setTaskMode(false);
-      return;
-    }
-    // On /c/new both sidebar entries set the atom themselves before navigating
-    // ("新建任务" → true, "新建对话" → false), so this only has to honour a
-    // navigation that actually declares a mode. Reading an absent state as
-    // "daily" used to drop the user's choice: `newConversation` runs an async
-    // chain that fires its own state-less `navigate('/c/new')` a tick after
-    // ours, and that second landing reset the toggle the button had just set —
-    // the intermittent "新建任务 opens a daily chat, click it again and it works".
-    const navTaskMode = (location.state as { taskMode?: boolean } | null)?.taskMode;
-    if (navTaskMode !== undefined) {
-      setTaskMode(!!navTaskMode);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.key, conversationId]);
+  // Set when the user flips the toggle by hand. A manual choice has to survive
+  // the navigations that happen WITHIN one conversation (see the mode effect
+  // below, which otherwise re-derives the mode from the loaded history on every
+  // navigation); it is cleared as soon as the conversation itself changes.
+  const userToggledRef = useRef(false);
+  const lastConversationIdRef = useRef<string | undefined>(conversationId);
 
   // Sync URL: ONLY when we were on /new and the hook just assigned a real ID.
   // Do NOT navigate if the user is clicking around in the sidebar (that changes
@@ -420,18 +390,64 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
     [messages, conversationId],
   );
 
-  // F035: restore task mode when returning to a task conversation. The reset
-  // effect above defaults every existing conversation to off before its history
-  // loads (so a stale mode from another tab doesn't leak in); this re-enables
-  // the toggle once the history resolves and proves this is a task conversation,
-  // so the user can keep composing task turns without re-toggling. Not gated on
-  // the toggle itself — an explicit manual off within a visit stays off (it
-  // doesn't change these deps), but a fresh navigation back re-enters task mode.
+  // F035: sync the task-mode toggle to navigation. ChatView is NOT remounted
+  // across `/c/:id` param changes (same route element), so the atom's initial
+  // value only applies on first mount. This effect picks up subsequent
+  // navigations:
+  //  - sidebar "新建任务" lands on /c/new with state.taskMode=true → enter task mode.
+  //  - the first submit on /c/new self-rewrites the URL to the real id; that is
+  //    the SAME conversation, so the user's chosen mode is preserved (they can
+  //    keep composing task turns, or toggle off manually).
+  //  - any OTHER navigation to an existing conversation (id !== 'new') DERIVES
+  //    the mode from that conversation's own history (isTaskConversation), so a
+  //    stale mode from another tab can't leak in AND a task conversation keeps
+  //    its mode.
+  // Deriving and resetting MUST stay in one effect. They used to be two: the
+  // reset (`setTaskMode(false)`) ran on every location.key change, while the
+  // restore's deps — [conversationId, isTaskConversation, canUseTaskMode] — are
+  // all constant within a visit, so it could never fire a second time. A single
+  // in-conversation navigation (e.g. the sidebar 首页 link, whose target IS the
+  // current pathname) therefore parked the toggle on off for good, and
+  // `taskMode || taskRunning` below kept the button lit until the running task
+  // ended — so the drop was invisible and the NEXT turn silently went daily.
+  // Placed after isTaskConversation on purpose: it is in the dep array.
   useEffect(() => {
-    if (conversationId === 'new') return;
-    if (isTaskConversation && canUseTaskMode) setTaskMode(true);
+    // A manual toggle only binds to the conversation it was made in.
+    if (lastConversationIdRef.current !== conversationId) {
+      lastConversationIdRef.current = conversationId;
+      userToggledRef.current = false;
+    }
+    // Only consumable once we are ON the rewritten URL. This effect is declared
+    // AFTER the effect that raises the flag (it has to be — isTaskConversation is
+    // in its dep array), so within the commit that raises it we would otherwise
+    // eat the flag while still on /c/new and then derive `false` on the real
+    // landing, knocking the user out of the mode they just submitted in.
+    const isSelfRewrite = conversationId !== 'new' && keepTaskModeOnRewriteRef.current;
+    if (isSelfRewrite) {
+      keepTaskModeOnRewriteRef.current = false;
+    }
+
+    const next = resolveTaskModeOnNavigation({
+      conversationId,
+      isTaskConversation,
+      canUseTaskMode,
+      navTaskMode: (location.state as { taskMode?: boolean } | null)?.taskMode,
+      isSelfRewrite,
+      userToggled: userToggledRef.current,
+    });
+    if (next !== null) {
+      setTaskMode(next);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [conversationId, isTaskConversation, canUseTaskMode]);
+  }, [location.key, conversationId, isTaskConversation, canUseTaskMode]);
+
+  // Flipping the toggle by hand pins the mode for the rest of this conversation
+  // — without the flag, the effect above would re-derive it from the history on
+  // the next navigation and undo the user's choice.
+  const handleToggleTaskMode = useCallback(() => {
+    userToggledRef.current = true;
+    setTaskMode((v) => !v);
+  }, [setTaskMode]);
 
   // F035: workspace drawer for the chat-embedded task mode. Lifted to ChatView
   // (the task turn renders inline per message, but the entry button lives in the
@@ -702,7 +718,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                               // ClarifyCard in the stream above, not this input.
                               taskRunning={taskRunning && !awaitingUserInput}
                               features={{ taskModeEntry: canUseTaskMode, taskMode: (taskMode || taskRunning) && canUseTaskMode }}
-                              onToggleTaskMode={() => setTaskMode((v) => !v)}
+                              onToggleTaskMode={handleToggleTaskMode}
                               placeholder={awaitingUserInput
                                 ? t('com_linsight_awaiting_reply')
                                 : taskMode
@@ -874,7 +890,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                             isStreaming={isStreaming}
                             isParsingMedia={isParsingMedia}
                             features={{ taskModeEntry: canUseTaskMode, taskMode: taskMode && canUseTaskMode }}
-                            onToggleTaskMode={() => setTaskMode((v) => !v)}
+                            onToggleTaskMode={handleToggleTaskMode}
                             placeholder={taskMode
                               ? ((bsConfig as any)?.linsightConfig?.input_placeholder || t('com_linsight_input_placeholder'))
                               : undefined}

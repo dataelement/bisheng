@@ -1274,6 +1274,18 @@ async def _agent_initialize_chat(data: APIChatCompletion, login_user: UserPayloa
 # parse failure. Mirrors the task-mode failure card's transient/terminal split.
 _TRANSIENT_PARSE_ERRORS = frozenset({ErrorType.RATE_LIMIT, ErrorType.NETWORK_TIMEOUT, ErrorType.SERVICE_UNAVAILABLE})
 
+# Extracted document text is hard-cut at ``maxTokens`` CHARACTERS. Silently
+# handing the model a prefix makes it read the fragment as the whole document:
+# a 1072-page tender truncated to 15k chars still "answers" questions about
+# tables that live on page 400, complete with fabricated page citations. Naming
+# the cut is what lets the model say "I only have the first N characters".
+_TRUNCATION_NOTICE = (
+    "\n\n[TRUNCATED] Only the first {shown} of {total} characters of the uploaded file(s) appear above; "
+    "the remainder was NOT provided to you. Do not state or infer anything about the omitted part, and do "
+    "not cite page, section or table numbers that are not visible in the text above. If answering needs "
+    "the full document, say so plainly instead of guessing."
+)
+
 
 async def _extract_doc_text(filepath: str, filename: str, invoke_user_id: int) -> str:
     """Extract one attachment's text, turning a parser failure into a domain error.
@@ -1331,7 +1343,10 @@ async def _process_agent_files(data: APIChatCompletion, model_info, login_user, 
     annotated_valid = await _annotate_agent_files_with_video_covers(valid_files, downloaded_files)
     merged_files = _merge_agent_file_covers(data.files, valid_files, annotated_valid)
     max_token = getattr(ws_config, "maxTokens", 15000) or 15000
-    file_context = "\n".join(doc_results)[:max_token]
+    joined_docs = "\n".join(doc_results)
+    file_context = joined_docs[:max_token]
+    if len(joined_docs) > max_token:
+        file_context += _TRUNCATION_NOTICE.format(shown=len(file_context), total=len(joined_docs))
     logger.info(
         f"[process_agent_files] docs={len(doc_results)} visuals={len(visual_results)}"
         f" file_context_len={len(file_context)} max_token={max_token}"
@@ -1680,12 +1695,13 @@ async def _agent_stream_chat_completion(
                     "{cur_date}",
                     datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 )
-            # Citation-rule backstop: inject only when knowledge/citation tools are in play
-            # and the admin prompt doesn't already carry the rules (the default does), so
-            # existing configs keep citations and updated prompts aren't duplicated.
-            has_citation_tool = knowledge_bases_info or any(
-                isinstance(tool, DailyChatCitationToolWrapper) for tool in langchain_tools
-            )
+            # No citation-rule backstop here on purpose: the default daily-chat
+            # system prompt (platform locales, `chatConfig.systemPrompt2`) already
+            # carries the full marker spec — source-id format, the private-use
+            # delimiters and the "never invent an id" rule — making it a superset
+            # of CITATION_PROMPT_RULES. A backstop was declared here once but the
+            # flag was never read, so it never ran; injecting it now would only
+            # duplicate rules the prompt already states.
             llm_messages = list(history) + [HumanMessage(content=content_payload)]
 
             logger.info(
