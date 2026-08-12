@@ -232,6 +232,7 @@ async def _run_payload_sync(payload: dict[str, Any]) -> None:
             return await facade.on_answer_adopted(
                 AnswerAdoptedEvent(
                     tenant_id=int(payload["tenant_id"]),
+                    question_id=int(payload["question_id"]),
                     answer_id=int(payload["answer_id"]),
                     answerer_id=int(payload["answerer_id"]),
                 )
@@ -349,24 +350,27 @@ async def notify_favorite_changed(
 async def notify_answer_adopted(
     *,
     tenant_id: int,
+    question_id: int,
     answer_id: int,
     answerer_id: int,
 ) -> None:
-    """问答采纳成功后触发 G4。"""
+    """问答采纳成功后触发 G4（同题同回答者幂等一次）。"""
     try:
-        if not answer_id or not answerer_id:
+        if not question_id or not answer_id or not answerer_id:
             return
         await _dispatch(
             "answer_adopted",
             {
                 "tenant_id": int(tenant_id),
+                "question_id": int(question_id),
                 "answer_id": int(answer_id),
                 "answerer_id": int(answerer_id),
             },
         )
     except Exception:
         logger.exception(
-            "points.award.hooks answer_adopted_failed answer_id=%s",
+            "points.award.hooks answer_adopted_failed question_id=%s answer_id=%s",
+            question_id,
             answer_id,
         )
 

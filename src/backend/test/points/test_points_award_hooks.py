@@ -70,10 +70,11 @@ async def test_dispatch_falls_back_to_sync_when_enqueue_fails():
     ):
         await hooks._dispatch(
             "answer_adopted",
-            {"tenant_id": 1, "answer_id": 2, "answerer_id": 4},
+            {"tenant_id": 1, "question_id": 9, "answer_id": 2, "answerer_id": 4},
         )
     sync.assert_awaited_once()
     assert sync.await_args.args[0]["event_type"] == "answer_adopted"
+    assert sync.await_args.args[0]["question_id"] == 9
 
 
 def test_resolve_award_queue_defaults_to_points_award_celery(monkeypatch):
