@@ -332,15 +332,17 @@ def test_ingest_route_truth_table():
     assert Impl._ingest_route("table.tsv") == "passthrough"
     assert Impl._ingest_route("SETUP.SH") == "passthrough"  # case-insensitive
 
-    # Parseable AND passthrough-able -> the parse carve-out wins, because the
-    # markdown view is a cheap extra on top of the original, not a replacement.
-    assert Impl._ingest_route("data.csv") == "parse"
-    assert Impl._ingest_route("page.html") == "parse"
-    assert Impl._ingest_route("notes.txt") == "parse"
-    assert Impl._ingest_route("readme.md") == "parse"
-    # ...but only where a loader actually exists: the parser registers `md`, not
-    # `markdown`, so the long spelling passes through instead of failing a parse.
+    # Already-final text stays untouched even though a loader exists for it: the
+    # csv loader is a RAG chunker, and the txt/md round-trip rejoins split chunks
+    # with a blank line. Parsing these can only subtract.
+    assert Impl._ingest_route("data.csv") == "passthrough"
+    assert Impl._ingest_route("notes.txt") == "passthrough"
+    assert Impl._ingest_route("readme.md") == "passthrough"
     assert Impl._ingest_route("readme.markdown") == "passthrough"
+
+    # Markup is the one carve-out: stripping tags is a real conversion.
+    assert Impl._ingest_route("page.html") == "parse"
+    assert Impl._ingest_route("page.htm") == "parse"
 
     # Parser-only types are untouched by any of this.
     assert Impl._ingest_route("book.xlsx") == "parse"
@@ -397,24 +399,24 @@ async def test_passthrough_entry_is_reported_as_success():
 
 
 async def test_text_parse_failure_degrades_to_passthrough():
-    """A large csv hard-fails ExcelLoader past 10k chars, yet the csv sitting in
-    the workspace is exactly what the user wanted analysed."""
+    """A parse failure on a TEXT file costs nothing: the file reads perfectly well
+    as itself, so reporting it as failed would make the chip cry wolf."""
     minio = FakeMinio({})
-    submit = SimpleNamespace(file_id="f10", file_name="big.csv", relative_path=None)
-    local = __import__("tempfile").NamedTemporaryFile(suffix=".csv", delete=False)
-    local.write(b"a,b\n1,2\n")
+    submit = SimpleNamespace(file_id="f10", file_name="page.html", relative_path=None)
+    local = __import__("tempfile").NamedTemporaryFile(suffix=".html", delete=False)
+    local.write(b"<html><body>hi</body></html>")
     local.close()
 
     entry = await Impl._keep_original_in_workspace(
-        submit, "big.csv", "chat1", minio, local.name, RuntimeError("chunk too large"), set()
+        submit, "page.html", "chat1", minio, local.name, RuntimeError("loader exploded"), set()
     )
 
     assert entry["parsing_status"] == "completed"
     assert entry["valid"] is True
     assert entry["ingest_mode"] == "passthrough"
-    assert entry["workspace_path"] == "/uploads/big.csv"
+    assert entry["workspace_path"] == "/uploads/page.html"
     # The cause is kept for diagnosis even though the outcome is a success.
-    assert "chunk too large" in entry["error_message"]
+    assert "loader exploded" in entry["error_message"]
 
 
 async def test_binary_parse_failure_still_reports_failure():

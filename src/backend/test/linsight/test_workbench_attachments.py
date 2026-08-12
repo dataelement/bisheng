@@ -543,25 +543,15 @@ async def test_daily_unsupported_type_short_circuits_the_parser(tmp_path):
     assert not [k for (_b, k) in fake_minio.store if k.startswith("workspace/")]
 
 
-async def test_daily_csv_still_parses_into_dual_track(tmp_path):
-    """REGRESSION: csv is parseable AND passthrough-able. Parsing must win, so the
-    model keeps the cheap markdown reading view beside the original for pandas."""
+async def test_daily_csv_passes_through_as_one_file(tmp_path):
+    """csv has a loader, but that loader is a RAG chunker: it slices every N rows
+    and repeats the header per chunk. The csv is already plain text the model can
+    read_file directly, so the "reading view" would be a reshuffle of something
+    already readable, stored twice."""
 
-    class _Doc:
-        def __init__(self, content):
-            self.page_content = content
-
-    class _Result:
-        documents = [_Doc("| a | b |\n| 1 | 2 |\n")]
-
-    calls = []
-
-    class _FakePipeline:
+    class _ExplodingPipeline:
         def __init__(self, *args, **kwargs):
-            calls.append(kwargs.get("file_name"))
-
-        async def arun(self):
-            return _Result()
+            raise AssertionError("csv must not be chunked by the RAG loader")
 
     local = tmp_path / "data.csv"
     local.write_text("a,b\n1,2\n", encoding="utf-8")
@@ -583,13 +573,64 @@ async def test_daily_csv_still_parses_into_dual_track(tmp_path):
             "bisheng.core.cache.utils.async_file_download",
             new=AsyncMock(return_value=(str(local), "data.csv")),
         ),
-        patch("bisheng.knowledge.rag.temp_file_pipeline.TempFilePipeline", _FakePipeline),
+        patch("bisheng.knowledge.rag.temp_file_pipeline.TempFilePipeline", _ExplodingPipeline),
     ):
         result = await LinsightWorkbenchImpl._process_submitted_files([submit], "svid11", user_id=7)
 
-    assert calls == ["data.csv"]
+    entry = result[0]
+    assert entry["ingest_mode"] == "passthrough"
+    assert entry["valid"] is True
+    assert entry["workspace_path"] == "/uploads/data.csv"
+    # One file, not a .md view plus a copy of the original.
+    ws_keys = sorted(k for (_b, k) in fake_minio.store if k.startswith("workspace/svid11/uploads/"))
+    assert ws_keys == ["workspace/svid11/uploads/data.csv"]
+
+
+async def test_daily_html_still_parses(tmp_path):
+    """REGRESSION: markup is the one carve-out — stripping tags is a real
+    conversion, and raw HTML is genuinely worse to read than the text inside."""
+
+    class _Doc:
+        def __init__(self, content):
+            self.page_content = content
+
+    class _Result:
+        documents = [_Doc("# Title\nbody\n")]
+
+    calls = []
+
+    class _FakePipeline:
+        def __init__(self, *args, **kwargs):
+            calls.append(kwargs.get("file_name"))
+
+        async def arun(self):
+            return _Result()
+
+    local = tmp_path / "page.html"
+    local.write_text("<html><body>body</body></html>", encoding="utf-8")
+    fake_minio = FakeMinio()
+    submit = SubmitFileSchema(
+        file_id="p4",
+        file_name="page.html",
+        parsing_status="completed",
+        file_url="/tmp-dir/page.html?X-Amz-Algorithm=AWS4",
+    )
+
+    with (
+        patch(
+            "bisheng.linsight.domain.services.workbench_impl.get_minio_storage",
+            new=AsyncMock(return_value=fake_minio),
+        ),
+        patch.object(LinsightWorkbenchImpl, "_get_redis", return_value=AsyncMock()),
+        patch(
+            "bisheng.core.cache.utils.async_file_download",
+            new=AsyncMock(return_value=(str(local), "page.html")),
+        ),
+        patch("bisheng.knowledge.rag.temp_file_pipeline.TempFilePipeline", _FakePipeline),
+    ):
+        result = await LinsightWorkbenchImpl._process_submitted_files([submit], "svid12", user_id=7)
+
+    assert calls == ["page.html"]
     entry = result[0]
     assert entry.get("ingest_mode") is None
-    assert entry["workspace_path"] == "/uploads/data.md"
-    ws_keys = sorted(k for (_b, k) in fake_minio.store if k.startswith("workspace/svid11/uploads/"))
-    assert ws_keys == ["workspace/svid11/uploads/data.csv", "workspace/svid11/uploads/data.md"]
+    assert entry["workspace_path"] == "/uploads/page.md"

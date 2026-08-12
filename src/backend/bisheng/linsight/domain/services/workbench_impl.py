@@ -858,18 +858,21 @@ class LinsightWorkbenchImpl:
     # is one greppable declaration instead of an implicit ordering between two
     # frozensets.
     #
-    # csv/xls-likes: parsing yields the cheap textual reading view while
-    # ``_RAW_KEEP_EXTS`` keeps the original beside it — strictly more than
-    # passthrough would give. html: markdown conversion is a real transformation.
-    # txt/md: parsing buys nothing (the splitter round-trip can even introduce
-    # paired blank lines, and md goes through the hierarchical splitter which may
-    # rewrite headings), but they parse reliably today, so flipping them is a
-    # separate, independently revertible decision — delete them from this set.
-    # Note ``markdown`` is absent while ``md`` is present: the parser only
-    # registers ``md``, so listing ``markdown`` here would route it to a loader
-    # that does not exist — the exact wasted-ETL-then-fall-back path this whole
-    # mechanism removes. Guarded by a test asserting this set has loaders.
-    _PARSE_WINS_EXTS = frozenset({"csv", "html", "htm", "txt", "md"})
+    # Only html/htm qualify: stripping tags is a real conversion, and raw markup
+    # is genuinely worse to read than the text inside it.
+    #
+    # Everything else that could be here is already in its final form, so parsing
+    # can only subtract:
+    #   - csv -> ``ExcelLoader`` is a RAG chunker (slices every ``data_rows``,
+    #     repeats the header per chunk, hard-fails past a size ceiling). A csv is
+    #     plain text that ``read_file`` reads directly, with offset/limit for a
+    #     cheap peek at the head — the "reading view" it would build is a reshuffle
+    #     of something already readable, stored twice.
+    #   - txt/md -> the loader decodes, the splitter chunks, and the ingest rejoins
+    #     the chunks with a blank line, so the file the model reads is not quite the
+    #     file the user uploaded. The only thing it buys is encoding detection, and
+    #     ``WorkspaceBackend`` already falls back to cchardet on read.
+    _PARSE_WINS_EXTS = frozenset({"html", "htm"})
 
     # Types whose raw bytes are still worth carrying into the workspace after a
     # failed parse: text-like ones are directly readable via ``read_file``, and
