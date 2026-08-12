@@ -295,6 +295,7 @@ class GrantAssigneeDTO(BaseModel):
     source: GrantSourceDTO
     scope: Literal["LOCAL", "INHERITED"]
     inherited_from: str | None = None
+    inherited_from_name: str | None = None
     protected: bool
     editable: bool
 

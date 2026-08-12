@@ -372,6 +372,12 @@ class SqlPermissionControlState:
                     limit=fetch_limit,
                     protected_only=False,
                 )
+                # The parent's creator carries no authority here — this resource
+                # has its own protected creator row, and the inherited copy only
+                # showed up as a second, identical entry that cannot be acted on.
+                inherited_rows = [
+                    (row, model_key) for row, model_key in inherited_rows if row.source_type != "CREATOR"
+                ]
         combined = sorted(
             (
                 *((row, model_key, "LOCAL") for row, model_key in local_rows),

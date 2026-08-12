@@ -58,6 +58,18 @@ class PermissionSubjectDirectoryPort(Protocol):
         subjects: tuple[tuple[str, str], ...],
     ) -> dict[tuple[str, str], str]: ...
 
+    async def resource_display_names(
+        self,
+        resources: tuple[tuple[str, str], ...],
+    ) -> dict[tuple[str, str], str]: ...
+
+
+
+def _split_resource_key(resource_key: str) -> tuple[str, str]:
+    """Split "knowledge_space:3377" into its type and id."""
+
+    resource_type, _, resource_id = resource_key.partition(":")
+    return resource_type, resource_id
 
 def _encode_cursor(payload: dict[str, object]) -> str:
     raw = json.dumps(
@@ -180,6 +192,15 @@ class F048ResourcePermissionApi:
         names = await self._subjects.display_names(
             tuple(dict.fromkeys((row.subject_type, row.subject_id) for row in selected))
         )
+        # The permission layer holds a resource's identity, never its label — the
+        # roster used to render "knowledge_space:3377" at users. Resolved through
+        # the business side, the same way subject names already are.
+        parents = tuple(
+            dict.fromkeys(
+                _split_resource_key(row.inherited_from) for row in selected if row.inherited_from
+            )
+        )
+        parent_names = await self._subjects.resource_display_names(parents) if parents else {}
         model_names = {item.snapshot.model_key: item.name for item in catalog.models}
         data = [
             {
@@ -205,6 +226,9 @@ class F048ResourcePermissionApi:
                 },
                 "scope": row.scope,
                 "inherited_from": row.inherited_from,
+                "inherited_from_name": (
+                    parent_names.get(_split_resource_key(row.inherited_from)) if row.inherited_from else None
+                ),
                 "protected": row.protected,
                 "editable": row.editable,
             }

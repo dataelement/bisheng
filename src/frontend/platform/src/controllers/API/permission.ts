@@ -152,6 +152,7 @@ export interface PermissionGrantAssignee {
   source: PermissionGrantSource
   scope: "LOCAL" | "INHERITED"
   inherited_from: string | null
+  inherited_from_name?: string | null
   protected: boolean
   editable: boolean
 }

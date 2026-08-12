@@ -115,3 +115,34 @@ class TenantPermissionSubjectDirectory:
             **{("department", str(row.id)): row.name for row in departments if row.id is not None},
             **{("user_group", str(row.id)): row.group_name for row in groups if row.id is not None},
         }
+
+    async def resource_display_names(
+        self,
+        resources: tuple[tuple[str, str], ...],
+    ) -> dict[tuple[str, str], str]:
+        """Label the resources a grant can be inherited from.
+
+        The permission layer knows a resource's identity, never its name, so the
+        roster reported inheritance as "knowledge_space:3377". Only the container
+        types can be a permission parent, and both live in the knowledge table.
+        Anything else resolves to nothing and the caller keeps showing the id.
+        """
+
+        from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
+
+        knowledge_ids = [
+            int(resource_id)
+            for resource_type, resource_id in resources
+            if resource_type in {"knowledge_space", "knowledge_library"} and resource_id.isdigit()
+        ]
+        if not knowledge_ids:
+            return {}
+        rows = await KnowledgeDao.aget_list_by_ids(knowledge_ids)
+        by_id = {int(row.id): row.name for row in rows or () if row.id is not None}
+        return {
+            (resource_type, resource_id): by_id[int(resource_id)]
+            for resource_type, resource_id in resources
+            if resource_type in {"knowledge_space", "knowledge_library"}
+            and resource_id.isdigit()
+            and int(resource_id) in by_id
+        }

@@ -128,7 +128,7 @@ function RosterRow({
             {assignee.inherited_from && (
               <span className="truncate">
                 · {localize("f048_permission.roster.inherited_from")}: {" "}
-                {assignee.inherited_from}
+                {assignee.inherited_from_name || assignee.inherited_from}
               </span>
             )}
           </div>

@@ -126,7 +126,8 @@ function RosterRow({
             <span>{t(`scope.${assignee.scope.toLowerCase()}`)}</span>
             {assignee.inherited_from && (
               <span className="truncate">
-                · {t("roster.inheritedFrom")}: {assignee.inherited_from}
+                · {t("roster.inheritedFrom")}:{" "}
+                {assignee.inherited_from_name || assignee.inherited_from}
               </span>
             )}
           </div>
