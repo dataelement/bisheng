@@ -421,7 +421,7 @@ class QuestionService:
         resolved = await (await self._assets()).resolve_fields(entity_type="question", values=values)
         response_data = question.model_dump()
         response_data.update(resolved)
-        return Question.model_validate(response_data)
+        return Question(**response_data)
 
     async def create_question(
         self,
@@ -843,7 +843,7 @@ class AnswerService:
         resolved = await (await self._assets()).resolve_fields(entity_type="answer", values=values)
         response_data = answer.model_dump()
         response_data.update(resolved)
-        return Answer.model_validate(response_data)
+        return Answer(**response_data)
 
     async def create_answer(
         self,

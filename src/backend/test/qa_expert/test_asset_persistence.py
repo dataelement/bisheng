@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi import UploadFile
+from fastapi.encoders import jsonable_encoder
 from PIL import Image
 from sqlalchemy import create_engine
 from sqlalchemy import inspect as sa_inspect
@@ -140,7 +141,8 @@ async def test_committed_orm_asset_resolution_has_independent_state(
         session.commit()
 
     permanent_key = getattr(original, field_name)
-    signed_url = f"https://files.example.com/bisheng/{permanent_key}?fresh"
+    signed_url = f"https://files.example.com/bisheng/{permanent_key}?signature={'x' * 1100}"
+    assert len(signed_url) > 1024
     asset_service = AsyncMock()
     asset_service.resolve_fields.return_value = {field_name: signed_url}
     service = service_type(asset_service=asset_service)
@@ -151,6 +153,9 @@ async def test_committed_orm_asset_resolution_has_independent_state(
     assert getattr(original, field_name) == permanent_key
     assert sa_inspect(response) is not sa_inspect(original)
     assert sa_inspect(response).obj() is response
+    assert jsonable_encoder(response)[field_name] == signed_url
+    if model_type is Question:
+        assert Question.__table__.c.image_url.type.length == 1024
 
 
 def test_minio_stat_object_maps_size_and_content_type_without_download() -> None:

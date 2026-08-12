@@ -159,6 +159,14 @@
   - _Depends: T016_
   - _Boundary: Question/Answer resolver in `qa_expert/domain/services.py` only_
 
+- [x] T018 修复超长动态签名 URL 的响应校验冲突
+  - Done when: committed Question resolver 可返回超过 1024 字符的服务端签名 URL，同时保持独立 ORM state、原永久 key 和持久化字段长度约束不变。
+  - _Requirements: REQ-008_
+  - _Acceptance: AC-REQ-008-01, AC-REQ-008-02, AC-REQ-008-03_
+  - _Verification: V-AC-REQ-008-01, V-AC-REQ-008-02, V-AC-REQ-008-03, EG-009_
+  - _Depends: T017_
+  - _Boundary: Question/Answer resolver response construction and existing committed ORM regression only_
+
 ## 覆盖矩阵 Coverage Matrix
 | Requirement | Acceptance Criteria | Tasks | Verification |
 |---|---|---|---|
@@ -169,7 +177,7 @@
 | REQ-005 | AC-REQ-005-01..04 | T010, T011, T012 | V-AC-REQ-005-01..04 |
 | REQ-006 | AC-REQ-006-01..04 | T001, T002, T003, T004, T010, T011, T012 | V-AC-REQ-006-01..04 |
 | REQ-007 | AC-REQ-007-01..05 | T013, T014, T015, T012 | V-AC-REQ-007-01..05, EG-008 |
-| REQ-008 | AC-REQ-008-01..02 | T016, T017 | V-AC-REQ-008-01..02, EG-009 |
+| REQ-008 | AC-REQ-008-01..03 | T016, T017, T018 | V-AC-REQ-008-01..03, EG-009 |
 
 ## 任务质量门 Task Quality Gate
 - [x] Every task references at least one requirement ID.

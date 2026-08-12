@@ -175,12 +175,14 @@
 #### 验收标准 Acceptance Criteria
 - `AC-REQ-008-01`: GIVEN `Question` 或 `Answer` 是数据库提交/加载后的 clean ORM 实例且包含资源字段 WHEN 读取 resolver 生成动态签名响应 THEN 系统 SHALL 不抛出 `ObjectDereferencedError`，并返回签名后的资源字段。
 - `AC-REQ-008-02`: WHEN resolver 构造响应 THEN 系统 SHALL 不修改原 ORM 实例，也不得复制或复用其 `_sa_instance_state`。
+- `AC-REQ-008-03`: GIVEN 数据库中的永久资源 key 符合持久化字段长度限制 WHEN 动态签名 URL 超过 1024 字符 THEN 响应构造 SHALL 成功；持久化字段的写入长度约束 SHALL 保持不变。
 
 #### 验证方式 Verification Methods
 | Acceptance ID | Verification ID | Method | Evidence Target |
 |---|---|---|---|
 | AC-REQ-008-01 | V-AC-REQ-008-01 | committed ORM regression test | Answer/Question clean instance 均成功 resolve，不再复现原异常 |
 | AC-REQ-008-02 | V-AC-REQ-008-02 | state isolation assertion | 响应拥有独立有效 ORM state，原字段仍为永久 key |
+| AC-REQ-008-03 | V-AC-REQ-008-03 | long signed URL regression test | Question 的签名 URL 超过 1024 字符仍能构造响应，ORM 字段约束不变 |
 
 ## 非功能需求 Non-Functional Requirements
 - `NFR-001`: 所有 MinIO 同步 I/O 必须通过现有 async 包装，不阻塞事件循环。
