@@ -22,8 +22,6 @@ import {
 } from "react";
 import { Loader2 } from "lucide-react";
 import { Outlined } from "bisheng-icons";
-import BookOpen from "~/components/ui/icon/BookOpen";
-import BooksIcon from "~/components/ui/icon/Books";
 import type { FileType } from "~/components/ui/icon/File/FileIcon";
 import { OGDialog, OGDialogContent } from "~/components/ui";
 import { cn } from "~/utils";
@@ -115,8 +113,8 @@ const CardShell = ({
 const KbCard = ({ kb, onRemove }: { kb: any; onRemove?: () => void }) => (
     <CardShell
         icon={kb.type === "space"
-            ? <BookOpen className="size-4" />
-            : <BooksIcon className="size-4" />}
+            ? <Outlined.Book size={16} />
+            : <Outlined.Books size={16} />}
         label={kb.name ?? ""}
         onRemove={onRemove}
     />

@@ -21,8 +21,9 @@ export default function MessageButtons({ id, text, onCopy, data, children = null
     // switches back to this conversation, so the new verdict must be written back
     // to the cached message or the highlight is lost on conversation switch.
     const handleLike = (liked: number) => {
-        likeChatApi(id, liked)
-        if (!chatId) return
+        // returned so the confirmation toast waits for the request
+        const pending = likeChatApi(id, liked)
+        if (!chatId) return pending
         setChats((prev) => {
             const chat = prev[chatId]
             if (!chat?.messages) return prev
@@ -36,6 +37,7 @@ export default function MessageButtons({ id, text, onCopy, data, children = null
                 },
             }
         })
+        return pending
     }
 
     const handleCopy = (e) => {

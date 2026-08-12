@@ -61,7 +61,8 @@ export function ResultPanel({ children, messageId, liked, allowFeedback, onLiked
                         liked={liked}
                         onLike={(l) => {
                             onLikedChange?.(l);
-                            likeChatApi(messageId, l);
+                            // returned so the confirmation toast waits for the request
+                            return likeChatApi(messageId, l);
                         }}
                         onDislikeComment={(c) => disLikeCommentApi(messageId, c)}
                     />

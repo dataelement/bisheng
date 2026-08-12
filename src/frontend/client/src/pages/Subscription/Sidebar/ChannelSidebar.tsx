@@ -184,7 +184,7 @@ export function ChannelSidebar({
                 {!mobileDrawerMode ? (
                 <div className={collapsed ? "px-0 py-5" : "px-3 py-5"}>
                     <div className={collapsed ? "flex items-center justify-center h-7" : "border-b border-[#e5e6eb] space-y-4 pb-4"}>
-                        {!collapsed && <div className="px-2 flex justify-between items-center text-[16px] font-medium">
+                        {!collapsed && <div className="px-2 flex justify-between items-center text-[16px] font-semibold">
                             <span>{menuNames.channel}</span>
                         </div>}
                         {!collapsed && (
