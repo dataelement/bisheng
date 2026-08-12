@@ -490,7 +490,7 @@ class ShougangPortalFileBrowseReq(BaseModel):
         description="Server-derived portal discovery scope",
     )
     tag: str | None = Field(default=None, description="Space tag name")
-    space_ids: list[int] = Field(default_factory=list, max_length=1000, description="Candidate knowledge space IDs")
+    space_ids: list[int] = Field(default_factory=list, description="Candidate knowledge space IDs")
     space_level: KnowledgeSpaceLevelEnum | None = Field(default=None, description="Knowledge space level filter")
     file_ext: str | None = Field(default=None, description="File extension filter")
     document_type: str | None = Field(default=None, description="Document type code from file_encoding segment 2")

@@ -2396,8 +2396,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
         explicit_file_space_by_id: dict[int, int] = {}
         grant_parent_space_ids: set[int] = set()
         if scope == "portal_configured":
-            if bool(self.login_user.is_admin()):
-                explicit_space_ids.update(space_kind_by_id)
+            is_global_admin = bool(self.login_user.is_admin())
+            if is_global_admin:
+                memberships = await SpaceChannelMemberDao.async_get_user_space_members(
+                    int(self.login_user.user_id)
+                )
+                readable_ids: list[str] = []
+                manageable_ids: list[str] = []
             else:
                 memberships, readable_ids, manageable_ids = await asyncio.gather(
                     SpaceChannelMemberDao.async_get_user_space_members(
@@ -2416,17 +2421,44 @@ class KnowledgeSpaceService(KnowledgeUtils):
                         login_user=self.login_user,
                     ),
                 )
-                explicit_space_ids.update(
-                    int(member.business_id)
-                    for member in memberships
-                    if str(getattr(member, "business_id", "")).isdigit()
-                    and int(member.business_id) in scope_by_space_id
+
+            explicit_space_ids.update(
+                int(member.business_id)
+                for member in memberships
+                if str(getattr(member, "business_id", "")).isdigit()
+                and int(member.business_id) in scope_by_space_id
+                and (
+                    not is_global_admin
+                    or space_kind_by_id.get(int(member.business_id)) != "personal"
                 )
-                explicit_space_ids.update(
-                    int(item.space_id)
-                    for item in scopes
-                    if int(getattr(item, "created_by", 0) or 0) == int(self.login_user.user_id)
+            )
+            explicit_space_ids.update(
+                int(item.space_id)
+                for item in scopes
+                if int(getattr(item, "created_by", 0) or 0)
+                == int(self.login_user.user_id)
+            )
+
+            if is_global_admin:
+                binding_candidate_ids = sorted(
+                    {
+                        space_id
+                        for space_id, kind in space_kind_by_id.items()
+                        if kind != "personal"
+                    }
+                    - discoverable_space_ids
+                    - explicit_space_ids
                 )
+                if binding_candidate_ids:
+                    explicit_space_ids.update(
+                        int(space_id)
+                        for space_id in await FineGrainedPermissionService.filter_object_ids_by_explicit_binding_async(
+                            self.login_user,
+                            "knowledge_space",
+                            binding_candidate_ids,
+                        )
+                    )
+            else:
                 manageable_space_ids = {
                     int(space_id)
                     for space_id in manageable_ids or []
