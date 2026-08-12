@@ -26,7 +26,7 @@ export function SettingsSectionHeader({
 }: SettingsSectionHeaderProps) {
   const Icon = SECTION_ICONS[kind];
   return (
-    <div className="flex h-8 items-center gap-2 rounded-md bg-fill-2 px-3 text-body-sm font-medium text-text-1">
+    <div className="flex h-8 items-center gap-2 rounded-md bg-fill-1 px-3 text-body-sm font-medium text-text-1">
       <Icon className="size-4 text-blue-500" />
       <span>{title}</span>
     </div>

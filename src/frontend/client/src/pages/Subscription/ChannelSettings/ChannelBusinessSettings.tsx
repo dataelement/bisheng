@@ -1,4 +1,5 @@
-import { Outlined } from "bisheng-icons";
+// bisheng-icons has no boxed plus; SquarePlus matches the sibling "add condition" button.
+import { SquarePlus } from "lucide-react";
 import type { ComponentProps } from "react";
 import { NotificationSeverity } from "~/common";
 import {
@@ -183,7 +184,7 @@ export function ChannelBusinessSettings({
             />
             {form.createSubChannel && (
               <div
-                className="overflow-hidden rounded-lg border border-border-base bg-white"
+                className="divide-y divide-border-base overflow-hidden rounded-lg border border-border-base bg-white"
                 data-testid="sub-channel-list"
               >
                 {form.subChannels.map((subChannel) => (
@@ -219,9 +220,12 @@ export function ChannelBusinessSettings({
                   <button
                     type="button"
                     onClick={form.handleAddSubChannel}
-                    className="flex h-12 w-full items-center gap-2 bg-fill-2 px-4 text-body text-text-2 hover:bg-fill-3"
+                    className="flex h-12 w-full items-center gap-3 bg-[#F8F8F8] px-4 text-left text-body text-text-1 transition-colors hover:bg-fill-2"
                   >
-                    <Outlined.Plus className="size-4" />
+                    <SquarePlus
+                      className="size-4 shrink-0 text-text-2"
+                      strokeWidth={1.5}
+                    />
                     {settings.localize("com_subscription.add_sub_channel")}
                   </button>
                 )}
