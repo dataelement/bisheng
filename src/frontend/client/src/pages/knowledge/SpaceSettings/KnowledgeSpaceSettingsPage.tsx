@@ -232,10 +232,10 @@ export function KnowledgeSpaceSettingsPage() {
 
   return (
     <main
-      className="flex h-full min-h-0 bg-fill-2 p-2"
+      className="flex h-full min-h-0 bg-white p-2"
       data-testid="knowledge-space-settings-page"
     >
-      <div className="flex min-h-0 w-full flex-1 flex-col rounded-xl bg-fill-1 px-4 pt-4">
+      <div className="flex min-h-0 w-full flex-1 flex-col rounded-xl bg-white px-4 pt-4">
         <header className="flex h-8 shrink-0 items-center gap-3">
           <button
             type="button"
