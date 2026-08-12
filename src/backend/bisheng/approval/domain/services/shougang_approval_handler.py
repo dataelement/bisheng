@@ -613,6 +613,30 @@ class KnowledgeSpaceFilePublishApprovalHandler:
             result.target_space_id,
             result.idempotent,
         )
+        # 积分旁路：发布入库按目标库 level 发分；幂等重放由账本键兜底。
+        try:
+            from bisheng.points.domain.services.points_award_hooks import notify_space_files_ready
+
+            source_entry = await KnowledgeFileDao.query_by_id(
+                int(payload_snapshot["source_entry_id"])
+            )
+            uploader_id = (
+                int(source_entry.user_id)
+                if source_entry is not None and getattr(source_entry, "user_id", None)
+                else int(payload_snapshot["applicant_user_id"])
+            )
+            await notify_space_files_ready(
+                tenant_id=int(payload_snapshot["tenant_id"]),
+                space_id=int(result.target_space_id),
+                files=[SimpleNamespace(id=int(result.manager_file_id))],
+                uploader_id=uploader_id,
+                publisher_id=int(payload_snapshot["applicant_user_id"]),
+            )
+        except Exception:
+            logger.exception(
+                "points.award.hooks publish notify failed document_id=%s",
+                result.document_id,
+            )
         return {
             "document_id": result.document_id,
             "file_id": result.manager_file_id,
@@ -798,6 +822,24 @@ class KnowledgeSpaceFilePublishApprovalHandler:
             tenant_id=int(payload_snapshot["tenant_id"]),
         )
         await self._enqueue_content_statistics([int(copied_file.id)])
+        # 积分旁路：旧版复制发布成功后按目标库发分。
+        try:
+            from bisheng.points.domain.services.points_award_hooks import notify_space_files_ready
+
+            await notify_space_files_ready(
+                tenant_id=int(payload_snapshot["tenant_id"]),
+                space_id=int(target_space_id),
+                files=[copied_file],
+                uploader_id=int(source_file.user_id)
+                if getattr(source_file, "user_id", None)
+                else int(payload_snapshot["applicant_user_id"]),
+                publisher_id=int(payload_snapshot["applicant_user_id"]),
+            )
+        except Exception:
+            logger.exception(
+                "points.award.hooks legacy publish notify failed file_id=%s",
+                copied_file.id,
+            )
         return {
             "file_id": int(copied_file.id),
             "target_space_id": target_space_id,
@@ -1008,6 +1050,31 @@ class KnowledgeSpaceFileShareApprovalHandler:
             result.target_space_id,
             result.idempotent,
         )
+        # 积分旁路：库间 SHARE（非外链）走 G7。
+        try:
+            from bisheng.points.domain.services.points_award_hooks import notify_document_shared
+
+            source_entry = await KnowledgeFileDao.query_by_id(
+                int(payload_snapshot["source_entry_id"])
+            )
+            uploader_id = (
+                int(source_entry.user_id)
+                if source_entry is not None and getattr(source_entry, "user_id", None)
+                else int(payload_snapshot["applicant_user_id"])
+            )
+            await notify_document_shared(
+                tenant_id=int(payload_snapshot["tenant_id"]),
+                share_entry_id=int(result.share_entry_id),
+                source_space_id=int(payload_snapshot["source_space_id"]),
+                target_space_id=int(result.target_space_id),
+                uploader_id=uploader_id,
+                sharer_id=int(payload_snapshot["applicant_user_id"]),
+            )
+        except Exception:
+            logger.exception(
+                "points.award.hooks share notify failed share_entry_id=%s",
+                result.share_entry_id,
+            )
         return {
             "document_id": result.document_id,
             "file_id": result.share_entry_id,

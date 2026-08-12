@@ -430,6 +430,19 @@ class AnswerRepository:
 
             return result.first()
 
+    async def count_adopted_by_question_id(self, question_id: int) -> int:
+        """统计同题未软删且已采纳的回答数（用于最多 3 个最佳答案上限）。"""
+        async with get_async_db_session() as session:
+            stmt = select(func.count()).select_from(Answer).where(
+                and_(
+                    Answer.question_id == question_id,
+                    Answer.adopted.is_(True),
+                    Answer.status != 3,
+                )
+            )
+            result = await session.exec(stmt)
+            return int(result.one() or 0)
+
     async def get_by_question_id(
         self, question_id: int, skip: int = 0, limit: int = 100, sort_by: str | None = None
     ) -> tuple[list[Answer], int]:
@@ -472,14 +485,15 @@ class AnswerRepository:
             return answer
 
     async def delete(self, answer_id: int) -> bool:
-        """删除回答"""
+        """软删除回答（status=3）。"""
         async with get_async_db_session() as session:
-            answer = await self.get_by_id(answer_id)
+            answer = (await session.exec(select(Answer).where(Answer.id == answer_id))).first()
             if not answer:
                 return False
-            answer.status = "deleted"
+            # ORM: 1=normal, 2=adopted, 3=deleted — 勿写字符串
+            answer.status = 3
             session.add(answer)
-            await session.flush()
+            await session.commit()
             return True
 
     async def get_answer_vote_count(self, question_id: int) -> int:
@@ -502,6 +516,33 @@ class CommentRepository:
             await session.commit()
             await session.flush(comment)
             return comment
+
+    async def get_by_id(self, comment_id: int) -> Comment | None:
+        """按主键读取评论/追问。"""
+        async with get_async_db_session() as session:
+            return (await session.exec(select(Comment).where(Comment.id == comment_id))).first()
+
+    async def delete(self, comment_id: int) -> bool:
+        """硬删除评论/追问。"""
+        async with get_async_db_session() as session:
+            comment = (await session.exec(select(Comment).where(Comment.id == comment_id))).first()
+            if not comment:
+                return False
+            await session.delete(comment)
+            await session.commit()
+            return True
+
+    async def delete_by_answer_id(self, answer_id: int) -> int:
+        """硬删除某回答下全部评论/追问。返回删除条数。"""
+        async with get_async_db_session() as session:
+            rows = (
+                await session.exec(select(Comment).where(Comment.answer_id == answer_id))
+            ).all()
+            for comment in rows:
+                await session.delete(comment)
+            if rows:
+                await session.commit()
+            return len(rows)
 
     async def get_by_answer_id(
         self, answer_id: int, question_id: int | None = None, skip: int = 0, limit: int = 100
